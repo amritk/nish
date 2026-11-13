@@ -12526,6 +12526,10 @@ const P256_POINT_SIZE: i32 = 65 [exported]
 const P256_SIGNATURE_SIZE: i32 = 64 [exported]
 const P256_FROM: i32 = 0
 const P256_ENTRY: i32 = 24
+const P256_COMB_TEETH: i32 = 6
+const P256_COMB_SPACING: i32 = 4
+const P256_COMBS: i32 = 11
+const P256_COMB_ENTRIES: i32 = 32
 const P256_BASE_ENTRY: i32 = 16
 const P256_WNAF_WIDTH: i32 = 5
 const P256_WNAF_BITS: i32 = 256
@@ -12537,7 +12541,7 @@ struct P256ProjectivePoint (class) size=24 align=8
   field y: u32[] index=1 offset=8
   field z: u32[] index=2 offset=16
   constructor -> @nish.P256ProjectivePoint.constructor
-struct P256PointScratch (class) size=64 align=8
+struct P256PointScratch (class) size=72 align=8
   field t0: u32[] index=0 offset=0
   field t1: u32[] index=1 offset=8
   field t2: u32[] index=2 offset=16
@@ -12545,7 +12549,8 @@ struct P256PointScratch (class) size=64 align=8
   field t4: u32[] index=4 offset=32
   field sum: P256ProjectivePoint index=5 offset=40
   field entry: P256ProjectivePoint index=6 offset=48
-  field b: u32[] index=7 offset=56
+  field comb: u32[] index=7 offset=56
+  field b: u32[] index=8 offset=64
   constructor -> @nish.P256PointScratch.constructor
 struct P256SignScratch (class) size=144 align=8 exported
   field kt: u32[] index=0 offset=0
@@ -16974,11 +16979,6 @@ function p256FiatScalarAdd(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish
   callee -2:20 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
   local -1:9 x42: u32 (const)
   callee -1:20 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-function p256FiatScalarSetOne(out1: u32[]): void -> @nish.p256FiatScalarSetOne
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  pointer out1: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
 function p256SetLimbs(out: u32[], l0: u32, l1: u32, l2: u32, l3: u32, l4: u32, l5: u32, l6: u32, l7: u32): void -> @nish.p256SetLimbs
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -17002,14 +17002,21 @@ function p256Prime(): u32[] -> @nish.p256Prime
   local +0:9 out: u32[] (const)
   callee +0:22 p256Limbs -> @nish.p256Limbs
   callee +1:3 p256SetLimbs -> @nish.p256SetLimbs
+function p256SetOrder(out: u32[]): void -> @nish.p256SetOrder
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SetLimbs
+  calls: nish.p256SetLimbs
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256SetLimbs#0
+  stackSites=0 stackLocals=0
+  callee +0:3 p256SetLimbs -> @nish.p256SetLimbs
 function p256Order(): u32[] -> @nish.p256Order
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.p256SetLimbs
-  calls: nish.p256Limbs nish.p256SetLimbs
+  sharedWrite: via nish.p256SetOrder
+  calls: nish.p256Limbs nish.p256SetOrder
   stackSites=0 stackLocals=0
   local +0:9 out: u32[] (const)
   callee +0:22 p256Limbs -> @nish.p256Limbs
-  callee +1:3 p256SetLimbs -> @nish.p256SetLimbs
+  callee +1:3 p256SetOrder -> @nish.p256SetOrder
 function p256FieldR2(): u32[] -> @nish.p256FieldR2
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SetLimbs
@@ -17101,28 +17108,6 @@ function p256ReduceOnce(out: u32[], a: u32[], m: u32[]): void -> @nish.p256Reduc
   local +0:9 d: u32[] (const)
   callee +1:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
   callee +1:26 p256SubBorrow -> @nish.p256SubBorrow
-function p256Bit(e: u32[], i: i32): boolean -> @nish.p256Bit
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer e: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 limb: i32 (const)
-function p256ScalarInvert(out: u32[], a: u32[]): void -> @nish.p256ScalarInvert
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  calls: nish.p256Bit nish.p256Copy nish.p256FiatScalarMul nish.p256FiatScalarSetOne nish.p256Limbs nish.p256Order nish_arena_mark nish_arena_release nish_panic_index
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256Copy#0
-  pointer a: size=0 writesThrough=true captured=false passedTo=nish.p256FiatScalarMul#2
-  stackSites=0 stackLocals=0
-  local -1:9 e: u32[] (const)
-  callee -1:20 p256Order -> @nish.p256Order
-  local +1:9 acc: u32[] (const)
-  callee +1:22 p256Limbs -> @nish.p256Limbs
-  callee +2:3 p256FiatScalarSetOne -> @nish.p256FiatScalarSetOne
-  local +3:12 i: i32 (let)
-  callee +4:5 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +5:9 p256Bit -> @nish.p256Bit
-  callee +6:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +9:3 p256Copy -> @nish.p256Copy
 function p256Wide(a: u32): u64 -> @nish.p256Wide
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -17355,7 +17340,7 @@ function P256PointScratch.constructor(this: P256PointScratch): void -> @nish.P25
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.P256ProjectivePoint.constructor
   calls: nish.P256ProjectivePoint.constructor nish.p256CurveB nish.p256Limbs nish_alloc_struct
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:15 p256Limbs -> @nish.p256Limbs
   callee +1:15 p256Limbs -> @nish.p256Limbs
@@ -17364,7 +17349,8 @@ function P256PointScratch.constructor(this: P256PointScratch): void -> @nish.P25
   callee +4:15 p256Limbs -> @nish.p256Limbs
   callee +5:16 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   callee +6:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +7:14 p256CurveB -> @nish.p256CurveB
+  callee +7:17 p256Limbs -> @nish.p256Limbs
+  callee +8:14 p256CurveB -> @nish.p256CurveB
 function p256WipePoint(p: P256ProjectivePoint): void -> @nish.p256WipePoint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u32
@@ -17378,7 +17364,7 @@ function p256WipeScratch(s: P256PointScratch): void -> @nish.p256WipeScratch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u32
   calls: nish.p256WipePoint nish.wipe$arr.u32
-  pointer s: size=64 writesThrough=false captured=false
+  pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +1:3 wipe<u32[]> -> @nish.wipe$arr.u32
@@ -17387,6 +17373,7 @@ function p256WipeScratch(s: P256PointScratch): void -> @nish.p256WipeScratch
   callee +4:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +5:3 p256WipePoint -> @nish.p256WipePoint
   callee +6:3 p256WipePoint -> @nish.p256WipePoint
+  callee +7:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function p256PointCopy(out: P256ProjectivePoint, p: P256ProjectivePoint): void -> @nish.p256PointCopy
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256Copy
@@ -17413,7 +17400,7 @@ function p256PointAdd(out: P256ProjectivePoint, p: P256ProjectivePoint, q: P256P
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#0
   pointer p: size=24 writesThrough=false captured=false
   pointer q: size=24 writesThrough=false captured=false
-  pointer s: size=64 writesThrough=false captured=false
+  pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 t0: u32[] (const)
   local +1:9 t1: u32[] (const)
@@ -17473,7 +17460,7 @@ function p256PointDouble(out: P256ProjectivePoint, p: P256ProjectivePoint, s: P2
   calls: nish.p256FiatAdd nish.p256FiatMul nish.p256FiatSquare nish.p256FiatSub nish.p256PointCopy
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#0
   pointer p: size=24 writesThrough=false captured=false
-  pointer s: size=64 writesThrough=false captured=false
+  pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 t0: u32[] (const)
   local +1:9 t1: u32[] (const)
@@ -17541,7 +17528,7 @@ function p256TableBuild(table: u32[], p: P256ProjectivePoint, s: P256PointScratc
   calls: nish.p256PointAdd nish.p256PointCopy nish.p256SetIdentity nish.p256TableStorePoint
   pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableStorePoint#0 nish.p256TableStorePoint#0 nish.p256TableStorePoint#0
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#1 nish.p256PointAdd#2
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256PointAdd#3
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256PointAdd#3
   pointer acc: size=24 writesThrough=false captured=false passedTo=nish.p256SetIdentity#0 nish.p256TableStorePoint#2 nish.p256PointCopy#0 nish.p256TableStorePoint#2 nish.p256PointAdd#0 nish.p256PointAdd#1 nish.p256TableStorePoint#2
   stackSites=0 stackLocals=0
   callee +0:3 p256SetIdentity -> @nish.p256SetIdentity
@@ -17590,7 +17577,7 @@ function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoin
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256PointCopy#0
   pointer k: size=0 writesThrough=false captured=false
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256TableBuild#1
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256TableBuild#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointAdd#3
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256TableBuild#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointAdd#3
   stackSites=2 stackLocals=2
   local +0:9 table: u32[] (const)
   local +1:9 acc: P256ProjectivePoint (const)
@@ -17627,41 +17614,87 @@ function p256Generator(): P256ProjectivePoint -> @nish.p256Generator
   callee +24:3 p256FiatMul -> @nish.p256FiatMul
   callee +25:3 p256FiatMul -> @nish.p256FiatMul
   callee +26:3 p256FiatSetOne -> @nish.p256FiatSetOne
+function p256BaseOffset(out: u32[]): void -> @nish.p256BaseOffset
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SetLimbs
+  calls: nish.p256SetLimbs
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256SetLimbs#0
+  stackSites=0 stackLocals=0
+  callee +0:3 p256SetLimbs -> @nish.p256SetLimbs
+function p256BaseHalf(out: u32[]): void -> @nish.p256BaseHalf
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256SetLimbs
+  calls: nish.p256SetLimbs
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256SetLimbs#0
+  stackSites=0 stackLocals=0
+  callee +0:3 p256SetLimbs -> @nish.p256SetLimbs
 function p256BaseTable(): u32[] -> @nish.p256BaseTable
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function p256BaseDigit(k: u8[], i: i32): u32 -> @nish.p256BaseDigit
-  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer k: size=0 writesThrough=false captured=false
+function p256BaseRecode(m: u32[], k: u8[], s: P256PointScratch): void -> @nish.p256BaseRecode
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.p256LimbsFromBytes
+  calls: nish.p256BaseHalf nish.p256BaseOffset nish.p256FiatScalarAdd nish.p256FiatScalarMul nish.p256FiatSelectznz nish.p256LimbsFromBytes nish.p256SetOrder nish.p256SubBorrow
+  pointer m: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsFromBytes#0 nish.p256FiatSelectznz#0 nish.p256SubBorrow#1 nish.p256FiatSelectznz#3 nish.p256FiatScalarAdd#0 nish.p256FiatScalarAdd#1 nish.p256FiatScalarMul#0 nish.p256FiatScalarMul#1
+  pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256LimbsFromBytes#1
+  pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 kLength: i32 (const)
-  local +1:7 digit: u32 (let)
-  local +2:12 b: i32 (let)
-  local +3:11 bit: i32 (const)
-  local +4:11 from: i32 (const)
-  local +5:11 at: i32 (const)
-  local +6:11 byte: u32 (const)
-function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u32): void -> @nish.p256BaseSelect
+  callee +0:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +1:3 p256SetOrder -> @nish.p256SetOrder
+  callee +2:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
+  callee +2:24 p256SubBorrow -> @nish.p256SubBorrow
+  callee +3:3 p256BaseOffset -> @nish.p256BaseOffset
+  callee +4:3 p256FiatScalarAdd -> @nish.p256FiatScalarAdd
+  callee +5:3 p256BaseHalf -> @nish.p256BaseHalf
+  callee +6:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
+function p256BaseDigit(m: u32[], c: i32, i: i32): u32 -> @nish.p256BaseDigit
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer m: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 digit: u32 (let)
+  local +1:12 j: i32 (let)
+  local +2:11 bit: i32 (const)
+  local +3:11 limb: i32 (const)
+  local +6:11 at: i32 (const)
+  local +7:11 word: u32 (const)
+function p256BaseMove(out: P256ProjectivePoint, table: u32[], at: i32, mask: u32): void -> @nish.p256BaseMove
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index
+  pointer out: size=24 writesThrough=false captured=false
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -7:9 x: u32[] (const)
+  local -6:9 y: u32[] (const)
+  local -2:9 p: u32 (const)
+  local -1:12 i: u32 (let)
+function p256BaseSelect(out: P256ProjectivePoint, table: u32[], c: i32, digit: u32, s: P256PointScratch): void -> @nish.p256BaseSelect
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SetZero
-  calls: nish.p256SetZero nish.p256TableMove
-  pointer out: size=24 writesThrough=false captured=false
-  pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256TableMove#1 nish.p256TableMove#1
+  calls: nish.p256BaseMove nish.p256FiatSelectznz nish.p256FiatSub nish.p256SetZero nish_panic_overflow
+  pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256BaseMove#0
+  pointer table: size=0 writesThrough=false captured=false passedTo=nish.p256BaseMove#1
+  pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:3 p256SetZero -> @nish.p256SetZero
-  callee +1:3 p256SetZero -> @nish.p256SetZero
-  local +2:12 j: i32 (let)
-  local +3:11 hit: u32 (const)
-  local +4:11 at: i32 (const)
-  callee +5:5 p256TableMove -> @nish.p256TableMove
-  callee +6:5 p256TableMove -> @nish.p256TableMove
+  local +0:9 entries: i32 (const)
+  local +1:9 low: u32 (const)
+  local +2:9 top: u32 (const)
+  local +3:9 u: u32 (const)
+  callee +4:3 p256SetZero -> @nish.p256SetZero
+  callee +5:3 p256SetZero -> @nish.p256SetZero
+  local +6:12 j: i32 (let)
+  callee +7:5 p256BaseMove -> @nish.p256BaseMove
+  callee +9:3 p256SetZero -> @nish.p256SetZero
+  callee +10:3 p256FiatSub -> @nish.p256FiatSub
+  callee +11:3 p256FiatSelectznz -> @nish.p256FiatSelectznz
 function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P256PointScratch): void -> @nish.p256PointAddMixed
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256FiatMul
   calls: nish.p256FiatAdd nish.p256FiatMul nish.p256FiatSub
   pointer p: size=24 writesThrough=false captured=false
   pointer q: size=24 writesThrough=false captured=false
-  pointer s: size=64 writesThrough=false captured=false
+  pointer s: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 t0: u32[] (const)
   local +1:9 t1: u32[] (const)
@@ -17707,47 +17740,37 @@ function p256PointAddMixed(p: P256ProjectivePoint, q: P256ProjectivePoint, s: P2
   callee +41:3 p256FiatMul -> @nish.p256FiatMul
   callee +42:3 p256FiatMul -> @nish.p256FiatMul
   callee +43:3 p256FiatAdd -> @nish.p256FiatAdd
-function p256BaseKeep(acc: u32[], sum: u32[], digit: u32): void -> @nish.p256BaseKeep
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: digit
-  calls: nish.p256FiatCmovznzU32
-  pointer acc: size=0 writesThrough=true captured=false
-  pointer sum: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -1:12 i: i32 (let)
-  callee +0:14 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
 function p256BaseMult(out: P256ProjectivePoint, k: u8[], s: P256PointScratch): void -> @nish.p256BaseMult
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.p256BaseMultWith
   calls: nish.p256BaseMultWith nish.p256BaseTable nish_arena_mark nish_arena_release
   pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256BaseMultWith#0
   pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256BaseMultWith#1
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256BaseMultWith#2
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256BaseMultWith#2
   stackSites=0 stackLocals=0
   local +0:9 table: u32[] (const)
   callee +0:24 p256BaseTable -> @nish.p256BaseTable
   callee +1:3 p256BaseMultWith -> @nish.p256BaseMultWith
 function p256BaseMultWith(out: P256ProjectivePoint, k: u8[], s: P256PointScratch, table: u32[]): void -> @nish.p256BaseMultWith
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.p256SetIdentity
-  calls: nish.p256BaseDigit nish.p256BaseKeep nish.p256BaseSelect nish.p256PointAddMixed nish.p256PointDouble nish.p256SetIdentity nish.p256WipePoint
-  pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256SetIdentity#0 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointAddMixed#0
-  pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256BaseDigit#0
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256PointDouble#2 nish.p256PointAddMixed#2
-  pointer table: size=0 writesThrough=true captured=false passedTo=nish.p256BaseSelect#1
+  sharedWrite: via nish.p256BaseRecode
+  calls: nish.p256BaseDigit nish.p256BaseRecode nish.p256BaseSelect nish.p256PointAddMixed nish.p256PointCopy nish.p256PointDouble nish.p256SetIdentity nish.p256WipePoint nish.wipe$arr.u32
+  pointer out: size=24 writesThrough=false captured=false passedTo=nish.p256SetIdentity#0 nish.p256PointDouble#0 nish.p256PointDouble#1 nish.p256PointAddMixed#0 nish.p256PointCopy#0
+  pointer k: size=0 writesThrough=false captured=false passedTo=nish.p256BaseRecode#1
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256BaseRecode#2 nish.p256PointDouble#2 nish.p256BaseSelect#4 nish.p256PointAddMixed#2
+  pointer table: size=0 writesThrough=false captured=false passedTo=nish.p256BaseSelect#1
   stackSites=0 stackLocals=0
-  callee +0:3 p256SetIdentity -> @nish.p256SetIdentity
-  local +1:12 r: i32 (let)
-  callee +3:7 p256PointDouble -> @nish.p256PointDouble
-  local +5:14 c: i32 (let)
-  local +6:13 digit: u32 (const)
-  callee +6:26 p256BaseDigit -> @nish.p256BaseDigit
-  callee +7:7 p256BaseSelect -> @nish.p256BaseSelect
-  callee +8:7 p256PointAddMixed -> @nish.p256PointAddMixed
-  callee +9:7 p256BaseKeep -> @nish.p256BaseKeep
-  callee +10:7 p256BaseKeep -> @nish.p256BaseKeep
-  callee +11:7 p256BaseKeep -> @nish.p256BaseKeep
+  local +0:9 m: u32[] (const)
+  callee +1:3 p256BaseRecode -> @nish.p256BaseRecode
+  callee +2:3 p256SetIdentity -> @nish.p256SetIdentity
+  local +3:12 i: i32 (let)
+  callee +5:7 p256PointDouble -> @nish.p256PointDouble
+  local +7:14 c: i32 (let)
+  callee +8:7 p256BaseSelect -> @nish.p256BaseSelect
+  callee +8:41 p256BaseDigit -> @nish.p256BaseDigit
+  callee +9:7 p256PointAddMixed -> @nish.p256PointAddMixed
+  callee +10:7 p256PointCopy -> @nish.p256PointCopy
+  callee +13:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +14:3 p256WipePoint -> @nish.p256WipePoint
 function p256AffineX(x: u32[], p: P256ProjectivePoint): void -> @nish.p256AffineX
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
@@ -18104,7 +18127,7 @@ function p256OddMultiples(table: P256ProjectivePoint[], p: P256ProjectivePoint, 
   calls: nish.P256ProjectivePoint.constructor nish.p256PointAdd nish.p256PointCopy nish.p256PointDouble nish_panic_index
   pointer table: size=0 writesThrough=true captured=false
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256PointDouble#1 nish.p256PointCopy#1
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256PointDouble#2 nish.p256PointAdd#3
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256PointDouble#2 nish.p256PointAdd#3
   stackSites=1 stackLocals=1
   local +0:9 twice: P256ProjectivePoint (const)
   callee +0:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
@@ -18119,7 +18142,7 @@ function p256WnafAdd(acc: P256ProjectivePoint, table: P256ProjectivePoint[], dig
   pointer acc: size=24 writesThrough=false captured=false passedTo=nish.p256PointAdd#0 nish.p256PointAdd#1 nish.p256PointAdd#0 nish.p256PointAdd#1
   pointer table: size=0 writesThrough=true captured=false
   pointer neg: size=24 writesThrough=false captured=false passedTo=nish.p256PointAdd#2
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256PointAdd#3 nish.p256PointAdd#3
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256PointAdd#3 nish.p256PointAdd#3
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
   callee +5:5 p256PointAdd -> @nish.p256PointAdd
@@ -18136,7 +18159,7 @@ function p256DoubleMultPublic(out: P256ProjectivePoint, a: u8[], b: u8[], q: P25
   pointer a: size=0 writesThrough=false captured=false passedTo=nish.p256Wnaf#1
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.p256Wnaf#1
   pointer q: size=24 writesThrough=false captured=false passedTo=nish.p256OddMultiples#1
-  pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256OddMultiples#2 nish.p256OddMultiples#2 nish.p256PointDouble#2 nish.p256WnafAdd#4 nish.p256WnafAdd#4
+  pointer s: size=72 writesThrough=false captured=false passedTo=nish.p256OddMultiples#2 nish.p256OddMultiples#2 nish.p256PointDouble#2 nish.p256WnafAdd#4 nish.p256WnafAdd#4
   stackSites=3 stackLocals=3
   local +0:9 wa: i32[] (const)
   local +1:9 wb: i32[] (const)
@@ -18161,7 +18184,7 @@ function p256DoubleMultPublic(out: P256ProjectivePoint, a: u8[], b: u8[], q: P25
 function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Verify [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256DecodePoint
-  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256DecodePoint nish.p256DigestScalar nish.p256DoubleMultPublic nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInvert nish.p256ScalarR2 nish.timingSafeEqual
+  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256AffineX nish.p256DecodePoint nish.p256DigestScalar nish.p256DoubleMultPublic nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256Limbs nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256Order nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ScalarR2 nish.timingSafeEqual
   pointer pub: size=0 writesThrough=false captured=false passedTo=nish.p256DecodePoint#0
   pointer digest: size=0 writesThrough=false captured=false passedTo=nish.p256DigestScalar#1
   pointer sig: size=0 writesThrough=false captured=false
@@ -18187,7 +18210,7 @@ function p256Verify(pub: u8[], digest: u8[], sig: u8[]): boolean -> @nish.p256Ve
   callee +19:3 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
   callee +20:3 p256DigestScalar -> @nish.p256DigestScalar
   callee +23:3 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +24:3 p256ScalarInvert -> @nish.p256ScalarInvert
+  callee +24:3 p256ScalarInverse -> @nish.p256ScalarInverse
   local +25:9 u1: u32[] (const)
   callee +25:21 p256Limbs -> @nish.p256Limbs
   local +26:9 u2: u32[] (const)
@@ -18349,7 +18372,7 @@ function p256WindowFits(length: i32, at: i32, len: i32): boolean -> @nish.p256Wi
 function P256SignScratch.constructor(this: P256SignScratch): void -> @nish.P256SignScratch.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.p256Order
-  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256BaseTable nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct nish_panic
+  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct nish_panic
   pointer this: size=144 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:17 p256Limbs -> @nish.p256Limbs
@@ -18360,7 +18383,6 @@ function P256SignScratch.constructor(this: P256SignScratch): void -> @nish.P256S
   callee +12:14 p256Order -> @nish.p256Order
   callee +13:15 p256ScalarR2 -> @nish.p256ScalarR2
   callee +14:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +15:18 p256BaseTable -> @nish.p256BaseTable
   callee +16:19 new P256PointScratch -> @nish.P256PointScratch.constructor
 function p256SignMac(sc: P256SignScratch, out: u8[], message: u8[], len: i32): void -> @nish.p256SignMac
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -18439,45 +18461,46 @@ function p256WipeSignScratch(sc: P256SignScratch): void -> @nish.p256WipeSignScr
   callee +4:3 p256WipePoint -> @nish.p256WipePoint
   callee +5:3 p256WipeScratch -> @nish.p256WipeScratch
 function p256SignSha256Into(sc: P256SignScratch, priv: Secret<u8[]>, msg: u8[], off: i32, len: i32, out: u8[], at: i32): boolean -> @nish.p256SignSha256Into [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256BaseMultWith nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256WindowFits nish.p256WipeSignScratch nish_arena_mark nish_arena_release nish_panic nish_panic_overflow
-  pointer sc: size=144 writesThrough=false captured=false passedTo=nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256WipeSignScratch#0 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0
+  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256BaseMultWith nish.p256BaseTable nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256WindowFits nish.p256WipeSignScratch nish_arena_release nish_panic nish_panic_overflow
+  pointer sc: size=144 writesThrough=true captured=false passedTo=nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256WipeSignScratch#0 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange#0 nish.p256SignNonceKey#1 nish.p256SignNonceKey#1 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#0
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsToBytes#0 nish.p256LimbsToBytes#0
   stackSites=0 stackLocals=0
-  callee -14:8 p256WindowFits -> @nish.p256WindowFits
-  callee -11:8 p256WindowFits -> @nish.p256WindowFits
-  local -8:9 _scope: i64 (const)
-  callee -7:8 expose<u8[], boolean, p256ScalarInRange> -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange
-  callee -4:3 p256ShaInto -> @nish.p256ShaInto
-  callee -3:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee -2:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  local -1:12 i: i32 (let)
-  callee +3:3 p256SignNonceKey -> @nish.p256SignNonceKey
-  callee +4:3 p256SignMac -> @nish.p256SignMac
-  callee +5:3 p256SignNonceKey -> @nish.p256SignNonceKey
-  callee +6:3 p256SignMac -> @nish.p256SignMac
-  callee +8:5 p256SignMac -> @nish.p256SignMac
-  callee +9:9 p256ScalarInRange -> @nish.p256ScalarInRange
-  callee +10:7 p256BaseMultWith -> @nish.p256BaseMultWith
-  callee +11:7 p256AffineX -> @nish.p256AffineX
-  callee +12:7 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee +13:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +14:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +15:7 p256ScalarInverse -> @nish.p256ScalarInverse
-  local +16:13 s: u32[] (const)
-  callee +16:24 exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed
-  callee +17:11 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +17:42 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +18:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +19:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +20:9 p256WipeSignScratch -> @nish.p256WipeSignScratch
-  callee +25:5 p256NonceSeparated -> @nish.p256NonceSeparated
-  callee +26:5 p256SignMac -> @nish.p256SignMac
-  callee +27:5 p256SignMac -> @nish.p256SignMac
+  callee -9:8 p256WindowFits -> @nish.p256WindowFits
+  callee -6:8 p256WindowFits -> @nish.p256WindowFits
+  callee +0:16 p256BaseTable -> @nish.p256BaseTable
+  local +2:9 _scope: i64 (const)
+  callee +3:8 expose<u8[], boolean, p256ScalarInRange> -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange
+  callee +6:3 p256ShaInto -> @nish.p256ShaInto
+  callee +7:3 p256DigestScalar -> @nish.p256DigestScalar
+  callee +8:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local +9:12 i: i32 (let)
+  callee +13:3 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee +14:3 p256SignMac -> @nish.p256SignMac
+  callee +15:3 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee +16:3 p256SignMac -> @nish.p256SignMac
+  callee +18:5 p256SignMac -> @nish.p256SignMac
+  callee +19:9 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee +20:7 p256BaseMultWith -> @nish.p256BaseMultWith
+  callee +21:7 p256AffineX -> @nish.p256AffineX
+  callee +22:7 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee +23:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +24:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +25:7 p256ScalarInverse -> @nish.p256ScalarInverse
+  local +26:13 s: u32[] (const)
+  callee +26:24 exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed
+  callee +27:11 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +27:42 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +28:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +29:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +30:9 p256WipeSignScratch -> @nish.p256WipeSignScratch
+  callee +35:5 p256NonceSeparated -> @nish.p256NonceSeparated
+  callee +36:5 p256SignMac -> @nish.p256SignMac
+  callee +37:5 p256SignMac -> @nish.p256SignMac
 module std/crypto/x25519.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith
@@ -27240,6 +27263,10 @@ const H3_FLAG_LATE: i32 = 512
 const H3_FLAG_CHARGED: i32 = 1024
 const H3_STATE_OPEN: i32 = 0
 const H3_STATE_FAILED: i32 = 1
+const H3_CLOCK_OFF: i32 = -1
+const H3_CLOCK_IDLE: i32 = 0
+const H3_CLOCK_HEAD: i32 = 1
+const H3_CLOCK_BUSY: i32 = 2
 const H3_CONTINUE: i32 = -1
 const H3_SKIP_TYPE: i64 = -1
 const H3_FILLER_TYPE: i32 = 33
@@ -27252,14 +27279,16 @@ const H3_DIGIT_ZERO: i32 = 48
 const H3_MAX_CHUNK: i32 = 1048576
 const H3_FIELD_CLASSES: i32 = 24
 const H3_HEAD: i32 = 16
-struct Http3Config (class) size=24 align=4 exported
+struct Http3Config (class) size=32 align=4 exported
   field maxFieldSectionSize: i32 index=0 offset=0 initialized
   field bodyChunk: i32 index=1 offset=4 initialized
   field writeChunk: i32 index=2 offset=8 initialized
   field webtransportSessions: i32 index=3 offset=12 initialized
-  field extendedConnect: boolean index=4 offset=16 initialized
-  field resetBudget: i32 index=5 offset=20 initialized
-struct Http3Connection (class) size=512 align=8 exported
+  field idleTimeout: i32 index=4 offset=16 initialized
+  field headTimeout: i32 index=5 offset=20 initialized
+  field extendedConnect: boolean index=6 offset=24 initialized
+  field resetBudget: i32 index=7 offset=28 initialized
+struct Http3Connection (class) size=544 align=8 exported
   field config: Http3Config index=0 offset=0
   field quic: QuicConnection index=1 offset=8
   field decoder: QpackDecoder index=2 offset=16
@@ -27316,29 +27345,36 @@ struct Http3Connection (class) size=512 align=8 exported
   field errorCode: i64 index=53 offset=424 initialized
   field lastStreamId: i64 index=54 offset=432 initialized
   field session: i64 index=55 offset=440 initialized
-  field slot: i32 index=56 offset=448 initialized
-  field dataStart: i32 index=57 offset=452 initialized
-  field dataLength: i32 index=58 offset=456 initialized
-  field controlFill: i32 index=59 offset=460 initialized
-  field dataUsed: i32 index=60 offset=464 initialized
-  field state: i32 index=61 offset=468 initialized
-  field live: i32 index=62 offset=472 initialized
-  field rejected: i32 index=63 offset=476 initialized
-  field tooLarge: i32 index=64 offset=480 initialized
-  field streamErrors: i32 index=65 offset=484 initialized
-  field resetCredit: i32 index=66 offset=488 initialized
-  field againHead: i32 index=67 offset=492 initialized
-  field againCount: i32 index=68 offset=496 initialized
-  field waitCount: i32 index=69 offset=500 initialized
-  field generation: i32 index=70 offset=504 initialized
-  field settingsSeen: boolean index=71 offset=508 initialized
-  field resetByPeer: boolean index=72 offset=509 initialized
-  field connect: boolean index=73 offset=510 initialized
-  field webtransport: boolean index=74 offset=511 initialized
+  field clockSince: i64 index=56 offset=448 initialized
+  field headSince: i64 index=57 offset=456 initialized
+  field slot: i32 index=58 offset=464 initialized
+  field dataStart: i32 index=59 offset=468 initialized
+  field dataLength: i32 index=60 offset=472 initialized
+  field controlFill: i32 index=61 offset=476 initialized
+  field dataUsed: i32 index=62 offset=480 initialized
+  field state: i32 index=63 offset=484 initialized
+  field live: i32 index=64 offset=488 initialized
+  field rejected: i32 index=65 offset=492 initialized
+  field tooLarge: i32 index=66 offset=496 initialized
+  field streamErrors: i32 index=67 offset=500 initialized
+  field resetCredit: i32 index=68 offset=504 initialized
+  field againHead: i32 index=69 offset=508 initialized
+  field againCount: i32 index=70 offset=512 initialized
+  field waitCount: i32 index=71 offset=516 initialized
+  field heads: i32 index=72 offset=520 initialized
+  field clockHeads: i32 index=73 offset=524 initialized
+  field clockMode: i32 index=74 offset=528 initialized
+  field generation: i32 index=75 offset=532 initialized
+  field settingsSeen: boolean index=76 offset=536 initialized
+  field resetByPeer: boolean index=77 offset=537 initialized
+  field connect: boolean index=78 offset=538 initialized
+  field webtransport: boolean index=79 offset=539 initialized
   constructor -> @nish.Http3Connection.constructor
   method restart -> @nish.Http3Connection.restart
   method fail -> @nish.Http3Connection.fail
   method isDone -> @nish.Http3Connection.isDone
+  method clock -> @nish.Http3Connection.clock
+  method awaitsHead -> @nish.Http3Connection.awaitsHead
   method writeNew -> @nish.Http3Connection.writeNew
   method start -> @nish.Http3Connection.start
   method next -> @nish.Http3Connection.next
@@ -27436,8 +27472,8 @@ function Http3Connection.constructor(this: Http3Connection, config: Http3Config,
   sharedWrite: via nish.quicStreamGrowFree
   escaping: config quic
   calls: nish.BufferPool.constructor nish.Http3Connection.restart nish.Http3Settings.constructor nish.HttpFields.constructor nish.QpackDecoder.constructor nish.QpackEncoder.constructor nish.QuicDatagramQueue.capacity nish.http3CheckCap nish.httpFieldBytes nish.quicStreamGrowFree nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow nish_str_concat nish_str_from_i64
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.restart#0
-  pointer config: size=24 writesThrough=true captured=true
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.restart#0
+  pointer config: size=32 writesThrough=true captured=true
   pointer quic: size=760 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:11 buffer: i32 (const)
@@ -27449,27 +27485,29 @@ function Http3Connection.constructor(this: Http3Connection, config: Http3Config,
   callee +16:5 http3CheckCap -> @nish.http3CheckCap
   callee +17:5 http3CheckCap -> @nish.http3CheckCap
   callee +18:5 http3CheckCap -> @nish.http3CheckCap
-  local +20:11 datagrams: boolean (const)
-  callee +20:32 QuicDatagramQueue.capacity -> @nish.QuicDatagramQueue.capacity
-  callee +31:20 new QpackDecoder -> @nish.QpackDecoder.constructor
-  callee +32:20 new QpackEncoder -> @nish.QpackEncoder.constructor
-  callee +33:19 new HttpFields -> @nish.HttpFields.constructor
-  callee +34:17 new Http3Settings -> @nish.Http3Settings.constructor
-  callee +39:21 new BufferPool -> @nish.BufferPool.constructor
-  callee +40:24 new BufferPool -> @nish.BufferPool.constructor
-  callee +41:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
-  callee +42:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
-  local +48:14 j: i32 (let)
-  local +49:13 pool: u8[][] (const)
-  callee +55:23 httpFieldBytes -> @nish.httpFieldBytes
-  callee +58:21 httpFieldBytes -> @nish.httpFieldBytes
-  local +77:11 n: i32 (const)
-  callee +94:5 Http3Connection.restart -> @nish.Http3Connection.restart
+  callee +19:5 http3CheckCap -> @nish.http3CheckCap
+  callee +20:5 http3CheckCap -> @nish.http3CheckCap
+  local +22:11 datagrams: boolean (const)
+  callee +22:32 QuicDatagramQueue.capacity -> @nish.QuicDatagramQueue.capacity
+  callee +33:20 new QpackDecoder -> @nish.QpackDecoder.constructor
+  callee +34:20 new QpackEncoder -> @nish.QpackEncoder.constructor
+  callee +35:19 new HttpFields -> @nish.HttpFields.constructor
+  callee +36:17 new Http3Settings -> @nish.Http3Settings.constructor
+  callee +41:21 new BufferPool -> @nish.BufferPool.constructor
+  callee +42:24 new BufferPool -> @nish.BufferPool.constructor
+  callee +43:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
+  callee +44:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
+  local +50:14 j: i32 (let)
+  local +51:13 pool: u8[][] (const)
+  callee +57:23 httpFieldBytes -> @nish.httpFieldBytes
+  callee +60:21 httpFieldBytes -> @nish.httpFieldBytes
+  local +79:11 n: i32 (const)
+  callee +96:5 Http3Connection.restart -> @nish.Http3Connection.restart
 function Http3Connection.restart(this: Http3Connection): void -> @nish.Http3Connection.restart [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http3Connection.giveBack nish.Http3Settings.reset nish.HttpFields.clear nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.giveBack#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.giveBack#0
   stackSites=0 stackLocals=0
   callee -1:5 Http3Connection.giveBack -> @nish.Http3Connection.giveBack
   callee +15:5 HttpFields.clear -> @nish.HttpFields.clear
@@ -27479,20 +27517,43 @@ function Http3Connection.fail(this: Http3Connection, code: i64): i32 -> @nish.Ht
   sharedWrite: +0:7
   escaping: code
   calls: nish.QuicConnection.close
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +2:7 QuicConnection.close -> @nish.QuicConnection.close
 function Http3Connection.isDone(this: Http3Connection): boolean -> @nish.Http3Connection.isDone [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 streams: QuicStreams (const)
+function Http3Connection.clock(this: Http3Connection, now: i64): i64 -> @nish.Http3Connection.clock [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: now
+  calls: nish.Http3Connection.awaitsHead nish.QuicConnection.close nish.QuicConnection.closed nish.http3Min nish_panic_overflow
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.awaitsHead#0
+  stackSites=0 stackLocals=0
+  callee -11:44 QuicConnection.closed -> @nish.QuicConnection.closed
+  local -8:9 mode: i32 (let)
+  callee -5:16 Http3Connection.awaitsHead -> @nish.Http3Connection.awaitsHead
+  local -2:11 finished: boolean (const)
+  local +13:9 due: i64 (let)
+  callee +15:13 http3Min -> @nish.http3Min
+  callee +20:5 QuicConnection.close -> @nish.QuicConnection.close
+function Http3Connection.awaitsHead(this: Http3Connection): boolean -> @nish.Http3Connection.awaitsHead [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.http3IsRequest nish_panic_index
+  pointer this: size=544 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 skip: i32 (const)
+  local +1:14 k: i32 (let)
+  local +2:13 flags: i32 (const)
+  callee +7:9 http3IsRequest -> @nish.http3IsRequest
 function Http3Connection.writeNew(this: Http3Connection, id: i64, buf: u8[], n: i32): boolean -> @nish.Http3Connection.writeNew [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.streamWrite
   escaping: id n
   calls: nish.QuicConnection.streamWrite
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.QuicConnection.streamWrite#2
   stackSites=0 stackLocals=0
   callee +0:21 QuicConnection.streamWrite -> @nish.QuicConnection.streamWrite
@@ -27500,7 +27561,7 @@ function Http3Connection.start(this: Http3Connection): void -> @nish.Http3Connec
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http3Connection.fail nish.Http3Connection.writeNew nish.QuicConnection.openStream nish.h3PutSettings nish.h3PutVarint
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeNew#0 nish.Http3Connection.fail#0 nish.Http3Connection.writeNew#0 nish.Http3Connection.fail#0 nish.Http3Connection.writeNew#0 nish.Http3Connection.fail#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeNew#0 nish.Http3Connection.fail#0 nish.Http3Connection.writeNew#0 nish.Http3Connection.fail#0 nish.Http3Connection.writeNew#0 nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
   local -6:11 end: i32 (const)
   local -4:13 id: i64 (const)
@@ -27525,7 +27586,7 @@ function Http3Connection.next(this: Http3Connection): i32 -> @nish.Http3Connecti
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3Connection.nextEvent
   calls: nish.Http3Connection.giveData nish.Http3Connection.nextEvent
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.nextEvent#0 nish.Http3Connection.giveData#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.nextEvent#0 nish.Http3Connection.giveData#0
   stackSites=0 stackLocals=0
   local +0:11 event: i32 (const)
   callee +0:24 Http3Connection.nextEvent -> @nish.Http3Connection.nextEvent
@@ -27535,7 +27596,7 @@ function Http3Connection.share(this: Http3Connection, data: BufferPool, section:
   sharedWrite: +0:5
   escaping: data section
   calls: nish.Http3Connection.giveBack nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.giveBack#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.giveBack#0
   pointer data: size=32 writesThrough=true captured=true
   pointer section: size=32 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -27544,7 +27605,7 @@ function Http3Connection.release(this: Http3Connection): void -> @nish.Http3Conn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.release
   calls: nish.Http3Connection.giveBack nish.QuicConnection.release
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.giveBack#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.giveBack#0
   stackSites=0 stackLocals=0
   callee +0:5 QuicConnection.release -> @nish.QuicConnection.release
   callee +1:5 Http3Connection.giveBack -> @nish.Http3Connection.giveBack
@@ -27552,7 +27613,7 @@ function Http3Connection.giveBack(this: Http3Connection): void -> @nish.Http3Con
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3Connection.giveData
   calls: nish.Http3Connection.giveData nish.Http3Connection.giveSection
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.giveData#0 nish.Http3Connection.giveSection#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.giveData#0 nish.Http3Connection.giveSection#0
   stackSites=0 stackLocals=0
   callee +0:5 Http3Connection.giveData -> @nish.Http3Connection.giveData
   callee +1:5 Http3Connection.giveSection -> @nish.Http3Connection.giveSection
@@ -27560,14 +27621,14 @@ function Http3Connection.borrowData(this: Http3Connection): u8[] -> @nish.Http3C
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.BufferPool.take
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:19 BufferPool.take -> @nish.BufferPool.take
 function Http3Connection.giveData(this: Http3Connection): void -> @nish.Http3Connection.giveData [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.BufferPool.give
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:7 BufferPool.give -> @nish.BufferPool.give
 function Http3Connection.readData(this: Http3Connection, id: i64, want: i32): i32 -> @nish.Http3Connection.readData [exported method]
@@ -27575,7 +27636,7 @@ function Http3Connection.readData(this: Http3Connection, id: i64, want: i32): i3
   sharedWrite: +0:7
   escaping: id want
   calls: nish.Http3Connection.borrowData nish.QuicConnection.streamRead
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.borrowData#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.borrowData#0
   stackSites=0 stackLocals=0
   local -2:11 n: i32 (const)
   callee -2:20 QuicConnection.streamRead -> @nish.QuicConnection.streamRead
@@ -27584,7 +27645,7 @@ function Http3Connection.borrowSection(this: Http3Connection): u8[] -> @nish.Htt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.BufferPool.take
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:22 BufferPool.take -> @nish.BufferPool.take
 function Http3Connection.giveSection(this: Http3Connection, used: i32): void -> @nish.Http3Connection.giveSection [exported method]
@@ -27592,28 +27653,28 @@ function Http3Connection.giveSection(this: Http3Connection, used: i32): void -> 
   sharedWrite: +0:7
   escaping: used
   calls: nish.BufferPool.give
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:7 BufferPool.give -> @nish.BufferPool.give
 function Http3Connection.nextEvent(this: Http3Connection): i32 -> @nish.Http3Connection.nextEvent [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http3Connection.fail nish.Http3Connection.start nish.Http3Connection.step nish.Http3Connection.takeAgain nish.QuicConnection.closed nish.QuicConnection.fail nish.QuicConnection.nextStreamEvent nish_str_eq
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.start#0 nish.Http3Connection.takeAgain#0 nish.Http3Connection.step#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.start#0 nish.Http3Connection.takeAgain#0 nish.Http3Connection.step#0
   stackSites=0 stackLocals=0
   callee -1:9 QuicConnection.closed -> @nish.QuicConnection.closed
   callee +10:9 QuicConnection.fail -> @nish.QuicConnection.fail
   callee +11:16 Http3Connection.fail -> @nish.Http3Connection.fail
-  callee +13:7 Http3Connection.start -> @nish.Http3Connection.start
-  callee +17:45 Http3Connection.takeAgain -> @nish.Http3Connection.takeAgain
-  callee +17:64 QuicConnection.nextStreamEvent -> @nish.QuicConnection.nextStreamEvent
-  local +22:13 event: i32 (const)
-  callee +22:26 Http3Connection.step -> @nish.Http3Connection.step
+  callee +19:7 Http3Connection.start -> @nish.Http3Connection.start
+  callee +23:45 Http3Connection.takeAgain -> @nish.Http3Connection.takeAgain
+  callee +23:64 QuicConnection.nextStreamEvent -> @nish.QuicConnection.nextStreamEvent
+  local +28:13 event: i32 (const)
+  callee +28:26 Http3Connection.step -> @nish.Http3Connection.step
 function Http3Connection.takeAgain(this: Http3Connection): i64 -> @nish.Http3Connection.takeAgain [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicStreams.slotOf nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 size: i32 (const)
   local -1:11 id: i64 (const)
@@ -27624,7 +27685,7 @@ function Http3Connection.stepAgain(this: Http3Connection, k: i32, id: i64): void
   sharedWrite: +0:5
   escaping: id k
   calls: nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 size: i32 (const)
 function Http3Connection.step(this: Http3Connection, id: i64): i32 -> @nish.Http3Connection.step [exported method]
@@ -27632,7 +27693,7 @@ function Http3Connection.step(this: Http3Connection, id: i64): i32 -> @nish.Http
   sharedWrite: +0:5
   escaping: id
   calls: nish.Http3Connection.open nish.Http3Connection.ownStream nish.Http3Connection.requestStep nish.Http3Connection.uniStep nish.Http3Connection.wtStep nish.QuicStreams.slotOf nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.wtStep#0 nish.Http3Connection.ownStream#0 nish.Http3Connection.open#0 nish.Http3Connection.uniStep#0 nish.Http3Connection.requestStep#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.wtStep#0 nish.Http3Connection.ownStream#0 nish.Http3Connection.open#0 nish.Http3Connection.uniStep#0 nish.Http3Connection.requestStep#0
   stackSites=0 stackLocals=0
   local -4:11 k: i32 (const)
   callee -4:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
@@ -27648,7 +27709,7 @@ function Http3Connection.open(this: Http3Connection, k: i32, id: i64): void -> @
   sharedWrite: +0:5
   escaping: id k
   calls: nish.Http3Connection.reject nish.http3IsRequest nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.reject#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.reject#0
   stackSites=0 stackLocals=0
   callee +11:10 http3IsRequest -> @nish.http3IsRequest
   callee +22:7 Http3Connection.reject -> @nish.Http3Connection.reject
@@ -27657,7 +27718,7 @@ function Http3Connection.reject(this: Http3Connection, k: i32, id: i64): void ->
   sharedWrite: +0:5
   escaping: id k
   calls: nish.QuicConnection.streamReset nish.QuicConnection.streamStopSending nish.h3Count nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -2:5 QuicConnection.streamReset -> @nish.QuicConnection.streamReset
   callee -1:5 QuicConnection.streamStopSending -> @nish.QuicConnection.streamStopSending
@@ -27667,7 +27728,7 @@ function Http3Connection.ownStream(this: Http3Connection, k: i32): i32 -> @nish.
   sharedWrite: via nish.Http3Connection.fail
   escaping: k
   calls: nish.Http3Connection.fail nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: QuicStream (const)
   callee +2:14 Http3Connection.fail -> @nish.Http3Connection.fail
@@ -27676,7 +27737,7 @@ function Http3Connection.settle(this: Http3Connection, k: i32): void -> @nish.Ht
   sharedWrite: +0:7
   escaping: k
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 done: i32 (const)
 function Http3Connection.mark(this: Http3Connection, k: i32, bits: i32): void -> @nish.Http3Connection.mark [exported method]
@@ -27684,7 +27745,7 @@ function Http3Connection.mark(this: Http3Connection, k: i32, bits: i32): void ->
   sharedWrite: +0:5
   escaping: k
   calls: nish.Http3Connection.settle nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.settle#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.settle#0
   stackSites=0 stackLocals=0
   callee +1:5 Http3Connection.settle -> @nish.Http3Connection.settle
 function Http3Connection.readHeader(this: Http3Connection, k: i32, id: i64): i32 -> @nish.Http3Connection.readHeader [exported method]
@@ -27692,7 +27753,7 @@ function Http3Connection.readHeader(this: Http3Connection, k: i32, id: i64): i32
   sharedWrite: +0:7
   escaping: id k
   calls: nish.QuicConnection.streamRead nish.h3ReadFrameHeader nish.h3VarintLength nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -16:11 base: i32 (const)
   local -14:13 have: i32 (const)
@@ -27708,7 +27769,7 @@ function Http3Connection.uniStep(this: Http3Connection, k: i32, id: i64): i32 ->
   sharedWrite: +0:13
   escaping: id k
   calls: nish.Http3Connection.controlStep nish.Http3Connection.discard nish.Http3Connection.fail nish.Http3Connection.readData nish.Http3Connection.typed nish.QpackDecoder.receiveEncoderStream nish.QpackEncoder.receiveDecoderStream nish.QuicConnection.streamRead nish.h3ReadVarint nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.typed#0 nish.Http3Connection.controlStep#0 nish.Http3Connection.readData#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.discard#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.typed#0 nish.Http3Connection.controlStep#0 nish.Http3Connection.readData#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.discard#0
   stackSites=0 stackLocals=0
   local -7:13 phase: i32 (const)
   local -5:15 base: i32 (const)
@@ -27732,7 +27793,7 @@ function Http3Connection.typed(this: Http3Connection, k: i32, id: i64, type: i64
   sharedWrite: +0:7
   escaping: id k
   calls: nish.Http3Connection.fail nish.Http3Connection.wtStep nish.QuicConnection.streamStopSending nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.wtStep#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.wtStep#0
   stackSites=0 stackLocals=0
   callee -2:16 Http3Connection.fail -> @nish.Http3Connection.fail
   callee +6:16 Http3Connection.fail -> @nish.Http3Connection.fail
@@ -27745,7 +27806,7 @@ function Http3Connection.controlStep(this: Http3Connection, k: i32, id: i64): i3
   sharedWrite: +0:9
   escaping: id k
   calls: nish.Http3Connection.controlFrame nish.Http3Connection.fail nish.Http3Connection.readData nish.Http3Connection.readHeader nish.QuicConnection.streamRead nish.h3ReservedHttp2Frame nish.http3Min nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.readHeader#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.readData#0 nish.Http3Connection.fail#0 nish.Http3Connection.controlFrame#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.readHeader#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.readData#0 nish.Http3Connection.fail#0 nish.Http3Connection.controlFrame#0
   stackSites=0 stackLocals=0
   local -29:15 got: i32 (const)
   callee -29:26 Http3Connection.readHeader -> @nish.Http3Connection.readHeader
@@ -27771,7 +27832,7 @@ function Http3Connection.controlFrame(this: Http3Connection, type: i64): i32 -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http3Connection.fail nish.Http3Connection.stepAgain nish.QuicStreams.slotOf nish.h3ReadIdPayload nish.h3ReadSettings nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.stepAgain#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.stepAgain#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
   local -8:13 result: i64 (const)
   callee -8:27 h3ReadSettings -> @nish.h3ReadSettings
@@ -27793,7 +27854,7 @@ function Http3Connection.discard(this: Http3Connection, k: i32, id: i64): i32 ->
   sharedWrite: +0:7
   escaping: id k
   calls: nish.Http3Connection.drop nish.Http3Connection.mark nish.Http3Connection.writable nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.drop#0 nish.Http3Connection.mark#0 nish.Http3Connection.writable#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.drop#0 nish.Http3Connection.mark#0 nish.Http3Connection.writable#0
   stackSites=0 stackLocals=0
   local -2:11 n: i32 (const)
   callee -2:20 Http3Connection.drop -> @nish.Http3Connection.drop
@@ -27804,7 +27865,7 @@ function Http3Connection.drop(this: Http3Connection, id: i64): i32 -> @nish.Http
   sharedWrite: via nish.Http3Connection.readData
   escaping: id
   calls: nish.Http3Connection.readData
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.readData#0 nish.Http3Connection.readData#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.readData#0 nish.Http3Connection.readData#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (let)
   callee +0:18 Http3Connection.readData -> @nish.Http3Connection.readData
@@ -27814,7 +27875,7 @@ function Http3Connection.held(this: Http3Connection, k: i32, id: i64, session: i
   sharedWrite: +0:7
   escaping: id k session
   calls: nish.Http3Connection.abandon nish.Http3Connection.fail nish.Http3Connection.stopReading nish.h3Count nish.http3IsRequest nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.abandon#0 nish.Http3Connection.stopReading#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0 nish.Http3Connection.abandon#0 nish.Http3Connection.stopReading#0
   stackSites=0 stackLocals=0
   callee -7:10 http3IsRequest -> @nish.http3IsRequest
   callee -6:14 Http3Connection.fail -> @nish.Http3Connection.fail
@@ -27826,7 +27887,7 @@ function Http3Connection.wtStep(this: Http3Connection, k: i32, id: i64): i32 -> 
   sharedWrite: +0:7
   escaping: id k
   calls: nish.Http3Connection.discard nish.Http3Connection.held nish.Http3Connection.mark nish.Http3Connection.readData nish.Http3Connection.resetEvent nish.Http3Connection.writable nish.QuicConnection.streamRead nish.h3ReadVarint nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.held#0 nish.Http3Connection.readData#0 nish.Http3Connection.mark#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.writable#0 nish.Http3Connection.discard#0 nish.Http3Connection.writable#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.held#0 nish.Http3Connection.readData#0 nish.Http3Connection.mark#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.writable#0 nish.Http3Connection.discard#0 nish.Http3Connection.writable#0
   stackSites=0 stackLocals=0
   local -3:11 stream: QuicStream (const)
   callee -1:7 Http3Connection.mark -> @nish.Http3Connection.mark
@@ -27850,7 +27911,7 @@ function Http3Connection.wtSlot(this: Http3Connection, id: i64): i32 -> @nish.Ht
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.slotOf nish_panic_index
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
@@ -27859,7 +27920,7 @@ function Http3Connection.acceptStream(this: Http3Connection, id: i64): i32 -> @n
   sharedWrite: +0:5
   escaping: id
   calls: nish.Http3Connection.stepAgain nish.Http3Connection.wtSlot nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.stepAgain#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.stepAgain#0
   stackSites=0 stackLocals=0
   local -4:11 k: i32 (const)
   callee -4:20 Http3Connection.wtSlot -> @nish.Http3Connection.wtSlot
@@ -27869,7 +27930,7 @@ function Http3Connection.refuseStream(this: Http3Connection, id: i64, code: i64)
   sharedWrite: via nish.Http3Connection.abandon
   escaping: code id
   calls: nish.Http3Connection.abandon nish.Http3Connection.stopReading nish.Http3Connection.wtSlot
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.abandon#0 nish.Http3Connection.stopReading#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.abandon#0 nish.Http3Connection.stopReading#0
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 Http3Connection.wtSlot -> @nish.Http3Connection.wtSlot
@@ -27880,7 +27941,7 @@ function Http3Connection.stopReading(this: Http3Connection, k: i32, id: i64, cod
   sharedWrite: +0:7
   escaping: code id k
   calls: nish.Http3Connection.stepAgain nish.QuicConnection.streamStopSending nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.stepAgain#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.stepAgain#0
   stackSites=0 stackLocals=0
   callee -1:7 QuicConnection.streamStopSending -> @nish.QuicConnection.streamStopSending
   callee +1:7 Http3Connection.stepAgain -> @nish.Http3Connection.stepAgain
@@ -27889,7 +27950,7 @@ function Http3Connection.openStream(this: Http3Connection, session: i64, bidirec
   sharedWrite: +0:5
   escaping: bidirectional session
   calls: nish.Http3Connection.drain nish.Http3Connection.mark nish.Http3Connection.open nish.Http3Connection.owe nish.QuicConnection.openStream nish.QuicStreams.slotOf nish.h3PutVarint nish.http3IsRequest nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.open#0 nish.Http3Connection.owe#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.open#0 nish.Http3Connection.owe#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0
   stackSites=0 stackLocals=0
   callee -10:66 http3IsRequest -> @nish.http3IsRequest
   local -7:11 id: i64 (const)
@@ -27909,7 +27970,7 @@ function Http3Connection.writeStream(this: Http3Connection, id: i64, buf: u8[], 
   sharedWrite: via nish.Http3Connection.drain
   escaping: fin id len off
   calls: nish.Http3Connection.drain nish.Http3Connection.mark nish.Http3Connection.wtSlot nish.QuicConnection.streamWrite nish.h3CheckWindow nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.mark#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.mark#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.QuicConnection.streamWrite#2
   stackSites=0 stackLocals=0
   callee +0:5 h3CheckWindow -> @nish.h3CheckWindow
@@ -27926,7 +27987,7 @@ function Http3Connection.resetStream(this: Http3Connection, id: i64, code: i64):
   sharedWrite: via nish.Http3Connection.abandon
   escaping: code id
   calls: nish.Http3Connection.abandon nish.Http3Connection.wtSlot
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.abandon#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.abandon#0
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 Http3Connection.wtSlot -> @nish.Http3Connection.wtSlot
@@ -27936,7 +27997,7 @@ function Http3Connection.stopStream(this: Http3Connection, id: i64, code: i64): 
   sharedWrite: via nish.Http3Connection.stopReading
   escaping: code id
   calls: nish.Http3Connection.stopReading nish.Http3Connection.wtSlot
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.stopReading#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.wtSlot#0 nish.Http3Connection.stopReading#0
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 Http3Connection.wtSlot -> @nish.Http3Connection.wtSlot
@@ -27946,7 +28007,7 @@ function Http3Connection.requestStep(this: Http3Connection, k: i32, id: i64): i3
   sharedWrite: +0:13
   escaping: id k
   calls: nish.Http3Connection.answerTooLarge nish.Http3Connection.borrowSection nish.Http3Connection.chargeReset nish.Http3Connection.discard nish.Http3Connection.ended nish.Http3Connection.fail nish.Http3Connection.fieldSection nish.Http3Connection.giveSection nish.Http3Connection.mark nish.Http3Connection.readData nish.Http3Connection.requestFrame nish.Http3Connection.resetEvent nish.Http3Connection.streamError nish.Http3Connection.writable nish.QuicConnection.streamRead nish.QuicStream.readable nish.http3Min nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.writable#0 nish.Http3Connection.discard#0 nish.Http3Connection.requestFrame#0 nish.Http3Connection.writable#0 nish.Http3Connection.fail#0 nish.Http3Connection.writable#0 nish.Http3Connection.borrowSection#0 nish.Http3Connection.giveSection#0 nish.Http3Connection.ended#0 nish.Http3Connection.giveSection#0 nish.Http3Connection.writable#0 nish.Http3Connection.fieldSection#0 nish.Http3Connection.giveSection#0 nish.Http3Connection.readData#0 nish.Http3Connection.writable#0 nish.Http3Connection.fail#0 nish.Http3Connection.ended#0 nish.Http3Connection.streamError#0 nish.Http3Connection.answerTooLarge#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.writable#0 nish.Http3Connection.discard#0 nish.Http3Connection.requestFrame#0 nish.Http3Connection.writable#0 nish.Http3Connection.fail#0 nish.Http3Connection.writable#0 nish.Http3Connection.borrowSection#0 nish.Http3Connection.giveSection#0 nish.Http3Connection.ended#0 nish.Http3Connection.giveSection#0 nish.Http3Connection.writable#0 nish.Http3Connection.fieldSection#0 nish.Http3Connection.giveSection#0 nish.Http3Connection.readData#0 nish.Http3Connection.writable#0 nish.Http3Connection.fail#0 nish.Http3Connection.ended#0 nish.Http3Connection.streamError#0 nish.Http3Connection.answerTooLarge#0
   stackSites=0 stackLocals=0
   local -13:11 stream: QuicStream (const)
   local -11:13 phase: i32 (const)
@@ -27990,7 +28051,7 @@ function Http3Connection.requestFrame(this: Http3Connection, k: i32, id: i64): i
   sharedWrite: +0:7
   escaping: id k
   calls: nish.Http3Connection.dropped nish.Http3Connection.ended nish.Http3Connection.fail nish.Http3Connection.fieldSection nish.Http3Connection.held nish.Http3Connection.readHeader nish.Http3Connection.reject nish.Http3Connection.streamError nish.h3ReservedHttp2Frame nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.readHeader#0 nish.Http3Connection.fail#0 nish.Http3Connection.reject#0 nish.Http3Connection.dropped#0 nish.Http3Connection.ended#0 nish.Http3Connection.fail#0 nish.Http3Connection.held#0 nish.Http3Connection.reject#0 nish.Http3Connection.dropped#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.streamError#0 nish.Http3Connection.fieldSection#0 nish.Http3Connection.fail#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.readHeader#0 nish.Http3Connection.fail#0 nish.Http3Connection.reject#0 nish.Http3Connection.dropped#0 nish.Http3Connection.ended#0 nish.Http3Connection.fail#0 nish.Http3Connection.held#0 nish.Http3Connection.reject#0 nish.Http3Connection.dropped#0 nish.Http3Connection.fail#0 nish.Http3Connection.fail#0 nish.Http3Connection.streamError#0 nish.Http3Connection.fieldSection#0 nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
   local -25:11 stream: QuicStream (const)
   local -24:11 resetCode: i64 (const)
@@ -28018,8 +28079,8 @@ function Http3Connection.fieldSection(this: Http3Connection, k: i32, id: i64, le
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: id k length
-  calls: nish.Http3Connection.answerTooLarge nish.Http3Connection.copyFields nish.Http3Connection.fail nish.Http3Connection.streamError nish.HttpFields.readRequest nish.HttpFields.readTrailers nish.QpackDecoder.decode nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.answerTooLarge#0 nish.Http3Connection.streamError#0 nish.Http3Connection.fail#0 nish.Http3Connection.copyFields#0 nish.Http3Connection.streamError#0 nish.Http3Connection.streamError#0
+  calls: nish.Http3Connection.answerTooLarge nish.Http3Connection.copyFields nish.Http3Connection.fail nish.Http3Connection.streamError nish.HttpFields.readRequest nish.HttpFields.readTrailers nish.QpackDecoder.decode nish_panic_index nish_panic_overflow
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.answerTooLarge#0 nish.Http3Connection.streamError#0 nish.Http3Connection.fail#0 nish.Http3Connection.copyFields#0 nish.Http3Connection.streamError#0 nish.Http3Connection.streamError#0
   stackSites=0 stackLocals=0
   local -13:11 result: i64 (const)
   callee -13:25 QpackDecoder.decode -> @nish.QpackDecoder.decode
@@ -28036,7 +28097,7 @@ function Http3Connection.copyFields(this: Http3Connection): void -> @nish.Http3C
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http3Connection.copyOf nish.http3EmptyList nish_array_grow nish_panic_index
-  pointer this: size=512 writesThrough=false captured=false passedTo=nish.Http3Connection.copyOf#0 nish.Http3Connection.copyOf#0
+  pointer this: size=544 writesThrough=false captured=false passedTo=nish.Http3Connection.copyOf#0 nish.Http3Connection.copyOf#0
   stackSites=0 stackLocals=0
   local -3:11 d: QpackDecoder (const)
   callee -2:5 http3EmptyList -> @nish.http3EmptyList
@@ -28049,7 +28110,7 @@ function Http3Connection.copyOf(this: Http3Connection, d: QpackDecoder, start: i
   sharedWrite: +0:7
   escaping: start
   calls: nish.http3Empty nish_array_grow nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   pointer d: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -8:9 j: i32 (let)
@@ -28065,7 +28126,7 @@ function Http3Connection.ended(this: Http3Connection, k: i32, id: i64, n: i32, r
   sharedWrite: +0:5
   escaping: id k resetCode
   calls: nish.Http3Connection.abandon nish.Http3Connection.chargeReset nish.Http3Connection.dropped nish.Http3Connection.mark nish.Http3Connection.resetEvent nish.h3Count nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.dropped#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.dropped#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.dropped#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.dropped#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0
   stackSites=0 stackLocals=0
   local -1:11 phase: i32 (const)
   callee +1:5 Http3Connection.mark -> @nish.Http3Connection.mark
@@ -28090,7 +28151,7 @@ function Http3Connection.abandon(this: Http3Connection, k: i32, id: i64, code: i
   sharedWrite: via nish.QuicConnection.streamReset
   escaping: code id k
   calls: nish.Http3Connection.mark nish.QuicConnection.streamReset nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0
   stackSites=0 stackLocals=0
   callee +0:7 QuicConnection.streamReset -> @nish.QuicConnection.streamReset
   callee +2:5 Http3Connection.mark -> @nish.Http3Connection.mark
@@ -28099,7 +28160,7 @@ function Http3Connection.streamError(this: Http3Connection, k: i32, id: i64, cod
   sharedWrite: +0:5
   escaping: code id k
   calls: nish.Http3Connection.abandon nish.Http3Connection.chargeReset nish.Http3Connection.dropped nish.Http3Connection.resetEvent nish.QuicConnection.streamStopSending nish.h3Count nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.dropped#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.resetEvent#0 nish.Http3Connection.dropped#0
   stackSites=0 stackLocals=0
   callee +0:25 h3Count -> @nish.h3Count
   callee +1:5 Http3Connection.abandon -> @nish.Http3Connection.abandon
@@ -28113,7 +28174,7 @@ function Http3Connection.chargeReset(this: Http3Connection, k: i32): i32 -> @nis
   sharedWrite: +0:5
   escaping: k
   calls: nish.Http3Connection.fail nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.fail#0
   stackSites=0 stackLocals=0
   callee +2:35 Http3Connection.fail -> @nish.Http3Connection.fail
 function Http3Connection.answered(this: Http3Connection, k: i32): void -> @nish.Http3Connection.answered [exported method]
@@ -28121,27 +28182,27 @@ function Http3Connection.answered(this: Http3Connection, k: i32): void -> @nish.
   sharedWrite: +0:7
   escaping: k
   calls: nish.Http3Connection.mark nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0
   stackSites=0 stackLocals=0
   callee -2:5 Http3Connection.mark -> @nish.Http3Connection.mark
 function Http3Connection.dropped(this: Http3Connection, id: i64): i32 -> @nish.Http3Connection.dropped [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: id
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http3Connection.resetEvent(this: Http3Connection, id: i64, code: i64, byPeer: boolean): i32 -> @nish.Http3Connection.resetEvent [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: byPeer code id
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http3Connection.answerTooLarge(this: Http3Connection, k: i32, id: i64): i32 -> @nish.Http3Connection.answerTooLarge [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: id k
   calls: nish.Http3Connection.abandon nish.Http3Connection.chargeReset nish.Http3Connection.dropped nish.Http3Connection.writeHead nish.QuicConnection.streamStopSending nish.h3Count nish.http3EmptyList nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeHead#0 nish.Http3Connection.writeHead#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.dropped#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeHead#0 nish.Http3Connection.writeHead#0 nish.Http3Connection.abandon#0 nish.Http3Connection.chargeReset#0 nish.Http3Connection.dropped#0
   stackSites=0 stackLocals=0
   callee +0:21 h3Count -> @nish.h3Count
   local +1:11 empty: u8[][] (const)
@@ -28159,7 +28220,7 @@ function Http3Connection.writable(this: Http3Connection, k: i32, id: i64): i32 -
   sharedWrite: +0:5
   escaping: id k
   calls: nish.Http3Connection.drain nish.QuicStream.room nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.drain#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.drain#0
   stackSites=0 stackLocals=0
   callee -3:10 Http3Connection.drain -> @nish.Http3Connection.drain
   callee -3:31 QuicStream.room -> @nish.QuicStream.room
@@ -28167,7 +28228,7 @@ function Http3Connection.writeSlot(this: Http3Connection, id: i64): i32 -> @nish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.slotOf nish.http3IsRequest nish_panic_index
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:44 http3IsRequest -> @nish.http3IsRequest
   local +3:11 k: i32 (const)
@@ -28178,7 +28239,7 @@ function Http3Connection.drain(this: Http3Connection, k: i32, id: i64): boolean 
   sharedWrite: +0:7
   escaping: id k
   calls: nish.QuicConnection.streamWrite nish.http3Min nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:11 base: i32 (const)
   local -4:13 n: i32 (const)
@@ -28192,7 +28253,7 @@ function Http3Connection.owe(this: Http3Connection, k: i32, buf: u8[], n: i32): 
   sharedWrite: +0:7
   escaping: k n
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 base: i32 (const)
@@ -28202,7 +28263,7 @@ function Http3Connection.arm(this: Http3Connection, k: i32, id: i64): void -> @n
   sharedWrite: +0:7
   escaping: id k
   calls: nish.Http3Connection.drain nish.Http3Connection.mark nish.Http3Connection.owe nish.QuicConnection.streamWrite nish.QuicStream.room nish.quicVarintPut nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.owe#0 nish.Http3Connection.drain#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.mark#0 nish.Http3Connection.owe#0 nish.Http3Connection.drain#0
   stackSites=0 stackLocals=0
   local -16:11 stream: QuicStream (const)
   local -15:11 room: i64 (const)
@@ -28221,7 +28282,7 @@ function Http3Connection.writeHead(this: Http3Connection, k: i32, id: i64, statu
   sharedWrite: +0:7
   escaping: fin id k
   calls: nish.Http3Connection.answered nish.Http3Connection.arm nish.Http3Connection.drain nish.Http3Connection.mark nish.QpackEncoder.beginSection nish.QpackEncoder.encodeField nish.QuicConnection.streamWrite nish.QuicStream.room nish.h3FrameHeaderSize nish.h3PutFrameHeader nish.http3Empty nish.http3NamesHoldDate nish.httpFieldSensitive nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.arm#0 nish.Http3Connection.answered#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.arm#0 nish.Http3Connection.answered#0
   pointer names: size=0 writesThrough=false captured=false passedTo=nish.http3NamesHoldDate#0
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -28263,7 +28324,7 @@ function Http3Connection.respond(this: Http3Connection, id: i64, status: i32, na
   sharedWrite: via nish.Http3Connection.writeHead
   escaping: endStream id status
   calls: nish.Http3Connection.writeHead nish.Http3Connection.writeSlot nish.httpFieldsCheckOutgoing nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.writeHead#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.writeHead#0
   pointer names: size=0 writesThrough=false captured=false passedTo=nish.httpFieldsCheckOutgoing#0 nish.Http3Connection.writeHead#4
   pointer values: size=0 writesThrough=false captured=false passedTo=nish.httpFieldsCheckOutgoing#1 nish.Http3Connection.writeHead#5
   stackSites=0 stackLocals=0
@@ -28276,7 +28337,7 @@ function Http3Connection.writeTrailers(this: Http3Connection, id: i64, names: u8
   sharedWrite: via nish.Http3Connection.writeHead
   escaping: id
   calls: nish.Http3Connection.writeHead nish.Http3Connection.writeSlot nish.httpFieldsCheckOutgoing nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.writeHead#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.writeHead#0
   pointer names: size=0 writesThrough=false captured=false passedTo=nish.httpFieldsCheckOutgoing#0 nish.Http3Connection.writeHead#4
   pointer values: size=0 writesThrough=false captured=false passedTo=nish.httpFieldsCheckOutgoing#1 nish.Http3Connection.writeHead#5
   stackSites=0 stackLocals=0
@@ -28289,7 +28350,7 @@ function Http3Connection.writeData(this: Http3Connection, id: i64, buf: u8[], of
   sharedWrite: +0:9
   escaping: id len off
   calls: nish.Http3Connection.answered nish.Http3Connection.drain nish.Http3Connection.mark nish.Http3Connection.owe nish.Http3Connection.writeSlot nish.QuicConnection.streamWrite nish.h3CheckWindow nish.h3PutFrameHeader nish.http3Min nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.answered#0 nish.Http3Connection.owe#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.answered#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.answered#0 nish.Http3Connection.owe#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.mark#0 nish.Http3Connection.answered#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.QuicConnection.streamWrite#2
   stackSites=0 stackLocals=0
   callee -33:5 h3CheckWindow -> @nish.h3CheckWindow
@@ -28319,7 +28380,7 @@ function Http3Connection.writeDataWhole(this: Http3Connection, id: i64, buf: u8[
   sharedWrite: via nish.Http3Connection.drain
   escaping: fin id len off
   calls: nish.Http3Connection.answered nish.Http3Connection.arm nish.Http3Connection.drain nish.Http3Connection.mark nish.Http3Connection.writeSlot nish.QuicConnection.streamWrite nish.QuicStream.room nish.h3CheckWindow nish.h3FrameHeaderSize nish.h3PutFrameHeader nish_panic_index nish_panic_overflow
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.arm#0 nish.Http3Connection.answered#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.drain#0 nish.Http3Connection.mark#0 nish.Http3Connection.arm#0 nish.Http3Connection.answered#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.QuicConnection.streamWrite#2
   stackSites=0 stackLocals=0
   callee +0:5 h3CheckWindow -> @nish.h3CheckWindow
@@ -28342,7 +28403,7 @@ function Http3Connection.reset(this: Http3Connection, id: i64, code: i64): i32 -
   sharedWrite: +0:7
   escaping: code id
   calls: nish.Http3Connection.abandon nish.Http3Connection.writeSlot nish.QuicConnection.streamStopSending nish_panic_index
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.abandon#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.writeSlot#0 nish.Http3Connection.abandon#0
   stackSites=0 stackLocals=0
   local -7:11 k: i32 (const)
   callee -7:20 Http3Connection.writeSlot -> @nish.Http3Connection.writeSlot
@@ -28352,7 +28413,7 @@ function Http3Connection.awaitsRequest(this: Http3Connection, id: i64): boolean 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.slotOf nish.http3IsRequest nish_panic_index
-  pointer this: size=512 writesThrough=false captured=false
+  pointer this: size=544 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:10 http3IsRequest -> @nish.http3IsRequest
   local +3:11 k: i32 (const)
@@ -28363,7 +28424,7 @@ function Http3Connection.discardRequest(this: Http3Connection, id: i64, code: i6
   sharedWrite: via nish.Http3Connection.stopReading
   escaping: code id
   calls: nish.Http3Connection.stopReading nish.QuicStreams.slotOf nish.http3IsRequest
-  pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.stopReading#0
+  pointer this: size=544 writesThrough=true captured=false passedTo=nish.Http3Connection.stopReading#0
   stackSites=0 stackLocals=0
   callee +0:44 http3IsRequest -> @nish.http3IsRequest
   local +3:11 k: i32 (const)
@@ -28373,7 +28434,7 @@ function Http3Connection.goaway(this: Http3Connection): i32 -> @nish.Http3Connec
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicConnection.streamWrite nish.QuicStream.room nish.QuicStreams.slotOf nish.h3PutIdFrame
-  pointer this: size=512 writesThrough=true captured=false
+  pointer this: size=544 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -15:9 id: i64 (let)
   local -7:11 n: i32 (const)
@@ -28672,7 +28733,7 @@ function Http3Server.constructor(this: Http3Server, quicConfig: QuicServerConfig
   calls: nish.BufferPool.constructor nish.Http3CidIndex.constructor nish.Http3Wheel.constructor nish.HttpDate.constructor nish.HttpDate.current nish.QuicListener.constructor nish.QuicListenerAnswer.constructor nish.QuicStreamPools.constructor nish.TlsP256Signer.constructor nish.quicStreamGrowFree nish_alloc_struct nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=280 writesThrough=true captured=false
   pointer quicConfig: size=120 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1
-  pointer config: size=24 writesThrough=true captured=true
+  pointer config: size=32 writesThrough=true captured=true
   pointer listenerEntropy: size=0 writesThrough=true captured=false passedTo=nish.Http3CidIndex.constructor#2 nish.QuicListener.constructor#2
   stackSites=0 stackLocals=0
   callee +0:18 new Http3CidIndex -> @nish.Http3CidIndex.constructor
@@ -28735,7 +28796,7 @@ function Http3Server.holds(this: Http3Server, slot: i32): boolean -> @nish.Http3
   pointer this: size=280 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http3Server.connection(this: Http3Server, slot: i32): Http3Connection -> @nish.Http3Server.connection [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=512
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=544
   sharedWrite: via nish.HttpDate.current
   escaping: slot
   calls: nish.Http3Server.slotAt nish.HttpDate.current nish_panic_index
@@ -28938,37 +28999,40 @@ function Http3Server.flushSlot(this: Http3Server, slot: i32, now: i64): void -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now slot
-  calls: nish.Http3Connection.isDone nish.Http3Server.refile nish.Http3Server.release nish.Http3Server.send nish.Http3Wheel.file nish.QuicConnection.close nish.QuicConnection.closed nish.QuicConnection.deadline nish.QuicConnection.sendAddress nish.QuicConnection.takeDatagramInto nish.QuicConnection.takeProbeInto nish.quicListenerFlightTime nish.quicListenerTakeFlight nish_panic_index
+  calls: nish.Http3Connection.clock nish.Http3Connection.isDone nish.Http3Server.refile nish.Http3Server.release nish.Http3Server.send nish.Http3Wheel.file nish.QuicConnection.close nish.QuicConnection.closed nish.QuicConnection.deadline nish.QuicConnection.sendAddress nish.QuicConnection.takeDatagramInto nish.QuicConnection.takeProbeInto nish.quicListenerFlightTime nish.quicListenerTakeFlight nish_panic_index
   pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.send#0 nish.Http3Server.release#0 nish.Http3Server.refile#0
   stackSites=0 stackLocals=0
   local -1:11 quic: QuicConnection (const)
-  callee +1:9 Http3Connection.isDone -> @nish.Http3Connection.isDone
-  callee +1:39 QuicConnection.closed -> @nish.QuicConnection.closed
-  callee +2:7 QuicConnection.close -> @nish.QuicConnection.close
-  local +8:11 probe: i32 (const)
-  callee +8:24 QuicConnection.takeProbeInto -> @nish.QuicConnection.takeProbeInto
-  callee +10:7 Http3Server.send -> @nish.Http3Server.send
-  local +12:11 to: u8[] (const)
-  local +14:13 current: u8[] (const)
-  callee +14:29 QuicConnection.sendAddress -> @nish.QuicConnection.sendAddress
-  local +15:16 k: i32 (let)
-  local +19:9 retried: boolean (let)
-  local +20:14 guard: i32 (let)
-  local +21:13 n: i32 (const)
-  callee +21:22 quicListenerTakeFlight -> @nish.quicListenerTakeFlight
-  local +38:13 segment: i32 (const)
-  callee +39:12 Http3Server.send -> @nish.Http3Server.send
-  callee +44:9 QuicConnection.closed -> @nish.QuicConnection.closed
-  local +46:13 n: i32 (const)
-  callee +46:22 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
-  callee +48:9 Http3Server.send -> @nish.Http3Server.send
-  callee +50:7 Http3Server.release -> @nish.Http3Server.release
-  callee +53:5 Http3Server.refile -> @nish.Http3Server.refile
-  local +56:9 due: i64 (let)
-  callee +56:20 QuicConnection.deadline -> @nish.QuicConnection.deadline
-  local +57:11 paced: i64 (const)
-  callee +57:24 quicListenerFlightTime -> @nish.quicListenerFlightTime
-  callee +61:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  local +1:11 conn: Http3Connection (const)
+  callee +2:9 Http3Connection.isDone -> @nish.Http3Connection.isDone
+  callee +2:27 QuicConnection.closed -> @nish.QuicConnection.closed
+  callee +3:7 QuicConnection.close -> @nish.QuicConnection.close
+  local +6:11 clocked: i64 (const)
+  callee +6:26 Http3Connection.clock -> @nish.Http3Connection.clock
+  local +11:11 probe: i32 (const)
+  callee +11:24 QuicConnection.takeProbeInto -> @nish.QuicConnection.takeProbeInto
+  callee +13:7 Http3Server.send -> @nish.Http3Server.send
+  local +15:11 to: u8[] (const)
+  local +17:13 current: u8[] (const)
+  callee +17:29 QuicConnection.sendAddress -> @nish.QuicConnection.sendAddress
+  local +18:16 k: i32 (let)
+  local +22:9 retried: boolean (let)
+  local +23:14 guard: i32 (let)
+  local +24:13 n: i32 (const)
+  callee +24:22 quicListenerTakeFlight -> @nish.quicListenerTakeFlight
+  local +41:13 segment: i32 (const)
+  callee +42:12 Http3Server.send -> @nish.Http3Server.send
+  callee +47:9 QuicConnection.closed -> @nish.QuicConnection.closed
+  local +49:13 n: i32 (const)
+  callee +49:22 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
+  callee +51:9 Http3Server.send -> @nish.Http3Server.send
+  callee +53:7 Http3Server.release -> @nish.Http3Server.release
+  callee +56:5 Http3Server.refile -> @nish.Http3Server.refile
+  local +59:9 due: i64 (let)
+  callee +59:20 QuicConnection.deadline -> @nish.QuicConnection.deadline
+  local +60:11 paced: i64 (const)
+  callee +60:24 quicListenerFlightTime -> @nish.quicListenerFlightTime
+  callee +67:5 Http3Wheel.file -> @nish.Http3Wheel.file
 function Http3Server.unindex(this: Http3Server, slot: i32): void -> @nish.Http3Server.unindex [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3CidIndex.remove
@@ -46453,7 +46517,7 @@ function WebTransport.constructor(this: WebTransport, config: WebTransportConfig
   calls: nish.WebTransport.restart nish.WebTransportWaiting.constructor nish.httpFieldBytes nish.webtransportCheckCap nish_alloc_struct nish_monotonic_nanos nish_panic nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
   pointer config: size=16 writesThrough=true captured=true
-  pointer h3: size=512 writesThrough=true captured=true
+  pointer h3: size=544 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:11 sessions: i32 (const)
   callee +5:5 webtransportCheckCap -> @nish.webtransportCheckCap
