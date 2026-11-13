@@ -14,6 +14,7 @@ import emitOffset from "./emit-arrays" -> function @emitOffset
 import emitRangeCheck from "./emit-arrays" -> function @emitRangeCheck
 import loadData from "./emit-arrays" -> function @loadData
 import loadLength from "./emit-arrays" -> function @loadLength
+import emitFfiNullTest from "./emit-builtins" -> function @emitFfiNullTest
 import emitPanicTail from "./emit-builtins" -> function @emitPanicTail
 import panicTailCallees from "./emit-builtins" -> function @panicTailCallees
 import templateParts from "./emit-util" -> function @templateParts
@@ -591,40 +592,36 @@ function emitCStringCopy(emitter: Emitter, value: string): string -> @emitCStrin
   callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitForeignStringResult(emitter: Emitter, callee: FunctionSig, value: string): string -> @emitForeignStringResult [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via IRFunction.emitValue
+  sharedWrite: via emitFfiNullTest
   escaping: value
-  calls: Emitter.stringConstant IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitCStringCopy emitPanicTail nish_str_concat
-  pointer emitter: size=376 writesThrough=false captured=false passedTo=emitPanicTail#0 Emitter.stringConstant#0 emitCStringCopy#0 emitCStringCopy#0
+  calls: IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitCStringCopy emitFfiNullTest nish_str_concat
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=emitFfiNullTest#0 emitCStringCopy#0 emitCStringCopy#0
   pointer callee: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 fn: IRFunction (const)
-  local +1:9 nullable: boolean (const)
-  callee +1:20 TypeTable.isNullable -> @TypeTable.isNullable
-  local +2:9 isNull: string (const)
-  callee +2:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local +3:9 nullBlock: IRBlock (const)
-  callee +3:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local +4:9 someBlock: IRBlock (const)
-  callee +4:21 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +5:3 IRFunction.emit -> @IRFunction.emit
-  callee +7:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +8:11 message: string (const)
-  callee +9:5 emitPanicTail -> @emitPanicTail
-  callee +9:28 Emitter.stringConstant -> @Emitter.stringConstant
-  callee +10:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +11:12 emitCStringCopy -> @emitCStringCopy
-  local +13:9 join: IRBlock (const)
-  callee +13:16 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +14:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +15:9 copied: string (const)
-  callee +15:18 emitCStringCopy -> @emitCStringCopy
-  local +16:9 copiedFrom: IRBlock (const)
-  callee +16:22 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee +17:3 IRFunction.emit -> @IRFunction.emit
-  callee +18:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +19:3 IRFunction.emit -> @IRFunction.emit
-  callee +20:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +21:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +0:8 TypeTable.isNullable -> @TypeTable.isNullable
+  local +1:11 message: string (const)
+  callee +2:5 emitFfiNullTest -> @emitFfiNullTest
+  callee +3:12 emitCStringCopy -> @emitCStringCopy
+  local +5:9 fn: IRFunction (const)
+  local +6:9 isNull: string (const)
+  callee +6:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +7:9 nullBlock: IRBlock (const)
+  callee +7:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local +8:9 someBlock: IRBlock (const)
+  callee +8:21 IRFunction.newBlock -> @IRFunction.newBlock
+  callee +9:3 IRFunction.emit -> @IRFunction.emit
+  local +10:9 join: IRBlock (const)
+  callee +10:16 IRFunction.newBlock -> @IRFunction.newBlock
+  callee +11:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +12:9 copied: string (const)
+  callee +12:18 emitCStringCopy -> @emitCStringCopy
+  local +13:9 copiedFrom: IRBlock (const)
+  callee +13:22 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee +14:3 IRFunction.emit -> @IRFunction.emit
+  callee +15:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +16:3 IRFunction.emit -> @IRFunction.emit
+  callee +17:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +18:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitStrictEquality(emitter: Emitter, expr: Node): string -> @emitStrictEquality [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
