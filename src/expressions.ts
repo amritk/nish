@@ -2486,23 +2486,12 @@ export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
 const stampMembers = (ctx: CheckContext, enumType: i32, current: i32[], first: i32[], second: i32[]): i32 => {
   const program = ctx.program
   const marks = program.memberMarks
-  for (const member of current) {
-    if (!ctx.table.isMemberOf(member, enumType)) {
-      return 0
-    }
-    while (marks.length <= member) {
-      marks.push(0)
-    }
-  }
-  for (const member of first) {
-    if (!ctx.table.isMemberOf(member, enumType)) {
-      return 0
-    }
-  }
-  for (const member of second) {
-    if (!ctx.table.isMemberOf(member, enumType)) {
-      return 0
-    }
+  if (
+    !allMembersOf(ctx, current, enumType) ||
+    !allMembersOf(ctx, first, enumType) ||
+    !allMembersOf(ctx, second, enumType)
+  ) {
+    return 0
   }
   program.memberStamp = program.memberStamp + 1
   const stamp = program.memberStamp
@@ -2513,6 +2502,16 @@ const stampMembers = (ctx: CheckContext, enumType: i32, current: i32[], first: i
     markMember(marks, member, stamp)
   }
   return stamp
+}
+
+/** Whether every type in `members` is a member of the enum `enumType`. */
+const allMembersOf = (ctx: CheckContext, members: i32[], enumType: i32): boolean => {
+  for (const member of members) {
+    if (!ctx.table.isMemberOf(member, enumType)) {
+      return false
+    }
+  }
+  return true
 }
 
 /** Mark `member` with `stamp`. */

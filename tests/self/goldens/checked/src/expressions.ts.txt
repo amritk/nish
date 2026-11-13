@@ -1590,27 +1590,33 @@ function enumMembersOf(ctx: CheckContext, enumType: i32): i32[] -> @enumMembersO
   callee -6:65 EnumInfo.memberNameOf -> @EnumInfo.memberNameOf
 function stampMembers(ctx: CheckContext, enumType: i32, current: i32[], first: i32[], second: i32[]): i32 -> @stampMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:3
   escaping: enumType
-  calls: TypeTable.isMemberOf markMember nish_array_grow nish_panic_overflow
-  pointer ctx: size=336 writesThrough=false captured=false
-  pointer current: size=0 writesThrough=false captured=false
-  pointer first: size=0 writesThrough=false captured=false
-  pointer second: size=0 writesThrough=false captured=false
+  calls: allMembersOf markMember nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=allMembersOf#0 allMembersOf#0 allMembersOf#0
+  pointer current: size=0 writesThrough=false captured=false passedTo=allMembersOf#1
+  pointer first: size=0 writesThrough=false captured=false passedTo=allMembersOf#1
+  pointer second: size=0 writesThrough=false captured=false passedTo=allMembersOf#1
   stackSites=0 stackLocals=0
-  local -7:9 program: CheckedProgram (const)
-  local -6:9 marks: i32[] (const)
-  local -5:14 member: i32 (const)
-  callee -4:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
-  local +3:14 member: i32 (const)
-  callee +4:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
-  local +8:14 member: i32 (const)
-  callee +9:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
-  local +14:9 stamp: i32 (const)
-  local +15:14 member: i32 (const)
-  callee +16:5 markMember -> @markMember
-  local +18:14 member: i32 (const)
-  callee +19:5 markMember -> @markMember
+  local -9:9 program: CheckedProgram (const)
+  local -8:9 marks: i32[] (const)
+  callee -6:6 allMembersOf -> @allMembersOf
+  callee -5:6 allMembersOf -> @allMembersOf
+  callee -4:6 allMembersOf -> @allMembersOf
+  local +1:9 stamp: i32 (const)
+  local +2:14 member: i32 (const)
+  callee +3:5 markMember -> @markMember
+  local +5:14 member: i32 (const)
+  callee +6:5 markMember -> @markMember
+function allMembersOf(ctx: CheckContext, members: i32[], enumType: i32): boolean -> @allMembersOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: enumType
+  calls: TypeTable.isMemberOf
+  pointer ctx: size=336 writesThrough=false captured=false
+  pointer members: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 member: i32 (const)
+  callee +1:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
 function markMember(marks: i32[], member: i32, stamp: i32): void -> @markMember
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
