@@ -2449,7 +2449,10 @@ On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
 Every row times the whole binary, so **load** and **direct** include the
 parse. In wall clock, parse plus load is 1.77x the parse alone and direct is
 1.53x, 1.15x faster than parse plus load (1.04x between the slower direct
-binary and the faster load one). Under `valgrind --tool=callgrind`, a document
+binary and the faster load one). The wall-clock gain is near the noise on
+this container: a second 15-round run gave parse 16.645 ms (2.1%), load
+28.046 ms (1.2%) and direct 27.160 ms (4.7%), 1.03x, inside direct's band, so
+the instruction counts are the steadier measure. Under `valgrind --tool=callgrind`, a document
 is 135M instructions to parse, 298M to parse and load (2.21x) and 278M to load
 directly (2.06x): the sweep's build step is 143M against `load`'s 163M. What
 is left is building the values themselves (scalar decoding, the alias copies
