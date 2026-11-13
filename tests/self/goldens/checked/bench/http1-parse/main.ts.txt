@@ -608,9 +608,9 @@ function http1SkipOws(bytes: u8[], from: i32, to: i32): i32 -> @nish.http1SkipOw
   local +0:7 i: i32 (let)
   callee +1:57 http1IsOws -> @nish.http1IsOws
 function http1ChunkExtValid(bytes: u8[], from: i32, to: i32): boolean -> @nish.http1ChunkExtValid [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
-  calls: nish.http1IsTokenByte nish.http1QuotedStringEnd nish.http1SkipOws nish_panic_index
+  calls: nish.http1IsTokenByte nish.http1QuotedStringEnd nish.http1SkipOws
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.http1SkipOws#0 nish.http1SkipOws#0 nish.http1SkipOws#0 nish.http1SkipOws#0 nish.http1QuotedStringEnd#0
   stackSites=0 stackLocals=0
   local +0:9 end: i32 (const)
@@ -618,13 +618,13 @@ function http1ChunkExtValid(bytes: u8[], from: i32, to: i32): boolean -> @nish.h
   callee +3:9 http1SkipOws -> @nish.http1SkipOws
   callee +7:9 http1SkipOws -> @nish.http1SkipOws
   local +8:11 nameStart: i32 (const)
-  callee +9:33 http1IsTokenByte -> @nish.http1IsTokenByte
+  callee +9:60 http1IsTokenByte -> @nish.http1IsTokenByte
   local +15:11 nameEnd: i32 (const)
   callee +16:9 http1SkipOws -> @nish.http1SkipOws
   callee +18:11 http1SkipOws -> @nish.http1SkipOws
   callee +20:13 http1QuotedStringEnd -> @nish.http1QuotedStringEnd
   local +25:15 valueStart: i32 (const)
-  callee +26:37 http1IsTokenByte -> @nish.http1IsTokenByte
+  callee +26:64 http1IsTokenByte -> @nish.http1IsTokenByte
 function http1ChunkSize(p: Http1Parser): i32 -> @nish.http1ChunkSize
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

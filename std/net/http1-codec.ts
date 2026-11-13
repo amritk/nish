@@ -1678,12 +1678,12 @@ export const http1ChunkExtValid = (bytes: u8[], from: i32, to: i32): boolean => 
   let i: i32 = from
   while (i >= 0 && i < end) {
     i = http1SkipOws(bytes, i, end)
-    if (i < 0 || i >= end || toI32(bytes[i]) !== 59) {
+    if (i < 0 || i >= end || i >= toI32(bytes.length) || toI32(bytes[i]) !== 59) {
       return false
     }
     i = http1SkipOws(bytes, i + 1, end)
     const nameStart: i32 = i
-    while (i >= 0 && i < end && http1IsTokenByte(toI32(bytes[i]))) {
+    while (i >= 0 && i < end && i < toI32(bytes.length) && http1IsTokenByte(toI32(bytes[i]))) {
       i += 1
     }
     if (i === nameStart) {
@@ -1691,16 +1691,16 @@ export const http1ChunkExtValid = (bytes: u8[], from: i32, to: i32): boolean => 
     }
     const nameEnd: i32 = i
     i = http1SkipOws(bytes, i, end)
-    if (i >= 0 && i < end && toI32(bytes[i]) === 61) {
+    if (i >= 0 && i < end && i < toI32(bytes.length) && toI32(bytes[i]) === 61) {
       i = http1SkipOws(bytes, i + 1, end)
-      if (i >= 0 && i < end && toI32(bytes[i]) === 34) {
+      if (i >= 0 && i < end && i < toI32(bytes.length) && toI32(bytes[i]) === 34) {
         i = http1QuotedStringEnd(bytes, i, end)
         if (i < 0) {
           return false
         }
       } else {
         const valueStart: i32 = i
-        while (i >= 0 && i < end && http1IsTokenByte(toI32(bytes[i]))) {
+        while (i >= 0 && i < end && i < toI32(bytes.length) && http1IsTokenByte(toI32(bytes[i]))) {
           i += 1
         }
         if (i === valueStart) {
