@@ -1,3 +1,4 @@
 This `===` is always false: `(this).k` is `Kind.A` and `Kind.B` is `Kind.B`, which share no member
 This `===` is always false: `(h.s).k` is `Kind.A` and `Kind.B` is `Kind.B`, which share no member
 This `===` is always false: `((h).s).k` is `Kind.A` and `Kind.C` is `Kind.C`, which share no member
+This `===` is always false: `hs[0].k` is `Kind.A` and `Kind.B` is `Kind.B`, which share no member

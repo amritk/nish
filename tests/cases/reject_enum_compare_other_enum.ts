@@ -1,5 +1,5 @@
-// A narrowed variable compared with a member of another enum is refused as
-// any comparison across two enums is.
+// A member of another enum never reaches enum narrowing: `===` across two
+// enums is refused by the type check first, narrowed variable or not.
 enum Kind {
   A,
   B,
