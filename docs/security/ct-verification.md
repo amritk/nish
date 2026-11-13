@@ -618,8 +618,7 @@ review.
   (`aesBitslicedRound` with the helpers it inlines, `ghashMultiply` and
   `aesGcmTagMask` are read as copies, with `loops` `aesEncryptBatch`, and
   as `branches` `aesPack`, `aesUnpack` and `aesSubWord`.)
-- **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FieldInvert`, `p256ScalarInvert`,
-  `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
+- **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FieldInvert`, `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
   `p256ScalarInverse` with its safegcd helpers `p256Safegcd`, `p256ToSigned30`,
   `p256FromSigned30`, `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`,
   `p256AddModulus30` and `p256Normalize30` (shared with `p256FieldInvert`
