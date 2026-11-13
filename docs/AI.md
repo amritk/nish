@@ -303,8 +303,9 @@ compatible only when their types are identical.
 the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
 numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
-The sixth export, `readCString`, copies a C string out of a `CPtr`
-([Calling C](#calling-c)). Calling one without the import is NL2456. No flag turns the checks off for a
+Two more, `readCString` and `readStruct`, copy a C string or a C struct
+out of a `CPtr`, and the eighth, `cErrno()`, reads the errno the last C call
+left ([Calling C](#calling-c)). Calling one without the import is NL2456. No flag turns the checks off for a
 whole program: `--unchecked-indexing` and `--wrapping` were removed before 1.0
 and are refused with exit 2.
 
@@ -1618,6 +1619,18 @@ export const main = (): i32 => {
   `p` into a new string; a dangling or unterminated `p` is undefined
   behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
   `CPtr | null` with `!== null` first.
+- **A struct C owns is copied out with `readStruct` from `nish:unsafe`.**
+  `const lc: Lconv = readStruct(p)` copies the bytes at `p` into a new
+  instance of the `declare class` the context names; write the annotation,
+  since `readStruct<Lconv>(p)` is refused (NL2763) and a call with no context
+  is NL2764. A `NULL` `p` panics (`ffi-null`) before the copy, so
+  `--deny-panics` refuses the call; a dangling `p`, or a class that does not
+  match C's fields, is undefined behaviour.
+- **errno is read with `cErrno()` from `nish:unsafe`.** It answers the errno
+  the most recent `declare function` call on this thread left; naming it makes
+  every C call in the program zero errno before and save it after, so read it
+  straight after the call you are checking. It is refused on wasm32 without
+  `--profile wasi`.
 - **A `CPtr | null` parameter takes the literal `null` or a narrowed pointer.**
   `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
   is NL2539, so C is never handed a `NULL` by accident.

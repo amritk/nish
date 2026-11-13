@@ -51,6 +51,14 @@ export const ARENA_GLOBAL_TLS: string =
  */
 export const ARGV_GLOBAL: string = "@nish_argv = external global %struct.nish_array*, align 8"
 /**
+ * WP27 S5 (`docs/wp27-ffi.md` §10): `int32_t nish_errno_slot` in runtime.c,
+ * where a program naming `cErrno` saves errno right after every foreign call.
+ * Per thread under `--threads`, as the arena is, and for the same reason.
+ */
+export const ERRNO_SLOT_GLOBAL: string = "@nish_errno_slot = external global i32, align 4"
+export const ERRNO_SLOT_GLOBAL_TLS: string =
+  "@nish_errno_slot = external thread_local(initialexec) global i32, align 4"
+/**
  * The 128-bit key every `Map` and `Set` string hash reads (JSON-13):
  * `uint64_t nish_hash_key[2]` in runtime.c, filled before `main` by the
  * constructor `src/emit-map.ts` registers beside the first string hash.
@@ -320,6 +328,9 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP27 S5: `&errno`, this thread's; the caller stores 0 through it before
+    // a foreign call and reads it after (`Emitter.zeroErrno`).
+    this.add(plain("nish_errno_ptr", "declare nonnull i32* @nish_errno_ptr()", EFFECT_NONE))
     // Reads the offset, and writes nothing, as `nish_arena_mark` does.
     this.addWrites(
       WRITES_NOTHING,

@@ -1,0 +1,4 @@
+{"functions":[
+{"name":"present","symbol":"present","module":"tests/cases/panics_ffi_read_struct_null.ts","line":15,"panics":[{"kind":"ffi-null","line":16,"column":19,"proven":false},{"kind":"oom","line":16,"column":19,"allowed":true},{"kind":"overflow","line":17,"column":10,"proven":false}]},
+{"name":"absent","symbol":"absent","module":"tests/cases/panics_ffi_read_struct_null.ts","line":20,"panics":[{"kind":"ffi-null","line":21,"column":19,"proven":false},{"kind":"oom","line":21,"column":19,"allowed":true}]}
+]}

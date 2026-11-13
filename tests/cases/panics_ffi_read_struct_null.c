@@ -1,0 +1,46 @@
+/* Driver for panics_ffi_read_struct_null: the read of a real struct in this
+   process, the read of NULL in a child whose stderr is this process's stdout,
+   so the panic message and the exit status land in the .out file. */
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int32_t present(void);
+int32_t absent(void);
+
+struct Pair {
+  int32_t first;
+  int32_t second;
+};
+
+static struct Pair pair = {40, 2};
+
+void *pairPtr(void) {
+  return &pair;
+}
+
+void *nullPtr(void) {
+  return NULL;
+}
+
+static void expectPanic(const char *name, int32_t (*run)(void)) {
+  fflush(stdout);
+  pid_t pid = fork();
+  if (pid == 0) {
+    dup2(1, 2);
+    printf("%s returned %d\n", name, run());
+    fflush(stdout);
+    _exit(0);
+  }
+  int status = 0;
+  waitpid(pid, &status, 0);
+  printf("%s exit %d\n", name, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+}
+
+int main(void) {
+  printf("%d\n", present());
+  expectPanic("absent", absent);
+  return 0;
+}

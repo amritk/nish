@@ -62,9 +62,13 @@ export const isNishSpecifier = (specifier: string): boolean => specifier.startsW
  * `nish:unsafe`: the functions whose behaviour depends on the program being
  * right, where every other builtin checks. An unchecked element access is
  * undefined behaviour out of range, a wrapping operation is defined where
- * the operator it replaces is not, and `readCString` (WP27 S3.3) reads a C
- * address until a `NUL` nothing proves is there, so a call to any of them has
- * to be visible where it is written: the six are reached only through an import of this module
+ * the operator it replaces is not, `readCString` (WP27 S3.3) reads a C
+ * address until a `NUL` nothing proves is there, and `readStruct` (S4.2)
+ * copies a struct's worth of bytes from one (after a `NULL` test that panics
+ * with `ffi-null`; nothing checks the size), so a call to any of them has
+ * to be visible where it is written. `cErrno` (WP27 S5) checks nothing either:
+ * it answers whatever the last foreign call left, which is only meaningful
+ * where C documents that it sets errno. The eight are reached only through an import of this module
  * (`isUnsafeExport`, and `checkBuiltinFunction` for the global spelling).
  */
 export const unsafeModule = (): string => `${BUILTIN_SCHEME}unsafe`
@@ -76,7 +80,9 @@ export const isUnsafeExport = (name: string): boolean =>
   name === "wrappingAdd" ||
   name === "wrappingSub" ||
   name === "wrappingMul" ||
-  name === "readCString"
+  name === "readCString" ||
+  name === "readStruct" ||
+  name === "cErrno"
 
 /**
  * `nish:simd` (WP38 S3, docs/LANGUAGE.md, "Vectors"): the six 128-bit vector
@@ -292,7 +298,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter"
   }
   if (specifier === unsafeModule()) {
-    return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
+    return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString, readStruct, cErrno"
   }
   return "write, writeError, writeBytes, panic"
 }

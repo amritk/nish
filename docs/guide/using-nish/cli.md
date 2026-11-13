@@ -397,8 +397,8 @@ runtime has no regions to allocate into yet, so keep that program native.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:
 `uncheckedGet`, `uncheckedSet` and the `wrapping*` arithmetic run under Node,
-and `readCString`, which reads C memory, has no export, so a program that
-calls it does not run under Node.
+and `readCString` and `readStruct`, which read C memory, have no export, so
+a program that calls either does not run under Node.
 
 The `nish:term` functions are written as imports from `nish/runtime` too, and
 they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
@@ -664,6 +664,11 @@ leaves the IR unchanged.
 
   Use it for a simulation a server and a browser both run and must agree on
   ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
+- **`--compat`** selects the compatibility dialect, which will accept more of
+  TypeScript than Nish does by default. It accepts nothing more yet: a program
+  compiles to the same bytes with it, and a refused program is refused in the
+  same words. The flag takes no value, and `--compat=<anything>` is a usage
+  error (exit 2). `nish run` and `--fix` take it too.
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
