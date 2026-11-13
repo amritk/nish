@@ -19,6 +19,10 @@ S2's `--cpu` flag is built (#660): S0's figures missed its bar, a
 re-measurement against the noise met it, and the owner decided on 2026-10-16
 to build it with one value, `x86-64-v3` (§7; §8, Q7), in
 [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
+`x86-64-v4`, `armv8.2-a` and `armv8.4-a+crypto` have been measured, and
+none is built: the AArch64 levels miss the bar, and `x86-64-v4` gains nothing
+over `x86-64-v3`, so the owner decided on 2026-11-12 to keep it out
+(#1432; §7; §8, Q11).
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
 small a part of the bootstrap to move it (§7). S7, crediting an offset index
 from the test that bounds it, turned out to be built already, by #561 (§7, S7).
@@ -1650,7 +1654,7 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Superseded by S6c; never built.** S6c re-aimed the same classifier at `JsonTokenizer`, and S6c's callgrind gate and S6d measured it not reachable (below). |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). **Built (`d835d40` in #660)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). **Built (`d835d40` in #660)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). **Later levels measured, not built (#1432)**: `x86-64-v4` clears the bar against the baseline but gains nothing over `x86-64-v3`, so it is not built (**Decided 2026-11-12, Q11**), and `armv8.2-a` and `armv8.4-a+crypto` nothing over the AArch64 baseline. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Decided 2026-10-30 (Q10): build it**, on S3a's figures, with the surface in §3.2. Built in three stages: the types with load, store, splat and lanes; the masks and the rest of the operations; then the two bar kernels written with it and measured against this bar. **Bar met**: see below. Tracking issue #1064. |
 | **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Landed (#658)**, taken at `46a1e4d` in #658 (§2.3, S3a): the C vector form beats Nish checked by 1.65x on mat-vec and by 1.81x and 3.51x on the two depth documents at the median, outside a noise band within 5%, so both kernels clear 1.5x on x86-64; no AArch64 machine was at hand. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
@@ -1782,7 +1786,8 @@ call `runtimeChecks`.
 `--cpu x86-64-v3`, and refuse every other, `native` included. Only `x86-64-v3`
 has met the bar; the bar is per level, and a value with no measurement behind
 it is a promise without evidence. An AArch64 level or `x86-64-v4` comes later,
-each on its own measurement and its own pass of both checkers. The level
+each on its own measurement and its own pass of both checkers; both have since
+been measured, and neither is built ("S2's later levels", below). The level
 applies to the module and the runtime alike, as §3.4 says. Compiling only the
 module at the level would leave the runtime's kernels at the baseline, but it
 is not exact under the speed profile's LTO, where a baseline runtime function
@@ -1808,6 +1813,66 @@ What it costs, one pull request:
   checked goldens, as every `src/` change does.
 
 S7, which was to come first, is already built (#561).
+
+**S2's later levels: `x86-64-v4` and AArch64, measured, not built (#1432).**
+Each level was put to the same bar on its own machine: `node
+bench/simd-s0.mjs --only nbody,vec3,spectral --self --runs 15`, which now takes
+`--level` (repeatable) and times every level in the same rotating rounds as the
+baseline and its byte-identical copy. The copy's spread is the band; figures are
+minimum / median, as a change against the baseline.
+
+`x86-64-v4` was taken at `6074c2fe` on an Intel Xeon at 2.30 GHz with
+AVX-512 F, BW, CD, DQ, IFMA, VBMI and VL, with `--level x86-64-v3 --level
+x86-64-v4`, in two samples:
+
+| Program | copy | `x86-64-v3` | `x86-64-v4` | v4 against v3 |
+| --- | --- | --- | --- | --- |
+| spectral | −0.4% / +0.2%; +2.1% / +0.4% | +20.3% / +21.1%; +23.1% / +18.6% | +15.2% / +15.2%; +17.9% / +15.6% | −6.4% / −7.4%; −6.7% / −3.6% |
+| vec3 | +2.2% / +0.8%; −3.1% / −0.4% | −0.4% / −1.1%; −2.0% / −2.3% | −1.6% / −2.4%; −2.6% / −3.0% | −1.2% / −1.3%; −0.6% / −0.7% |
+| nbody | −1.3% / −0.5%; −0.9% / −0.1% | 0.0% / +0.7%; +1.6% / +2.7% | +0.1% / +0.3%; −1.1% / +1.5% | +0.1% / −0.4%; −2.8% / −1.3% |
+
+Against the baseline, `x86-64-v4` meets S2's bar as written. Spectral's
++15.2% / +17.9% on the minimum clears 10%, and vec3's minima (−1.6%, −2.6%) sit
+inside the copy's own spread (+2.2%, −3.1%). Its vec3 medians (−2.4%, −3.0%)
+fall outside the copy's (+0.8%, −0.4%), but so do shipped `x86-64-v3`'s
+(−1.1%, −2.3%), so that is not what separates the two levels.
+
+What keeps `x86-64-v4` out is a second criterion, which the bar does not
+contain: **a level above one that ships is judged against that level, not the
+baseline.** Every machine that runs v4 code runs v3 code, and v3 already ships,
+so a v4 value of the flag is worth only what it adds over v3. It adds nothing:
+spectral is 3.6–7.4% slower than at v3, outside the copy's band of about 2%,
+and neither other program gains. **Decided 2026-11-12 (Q11): `x86-64-v4` is
+not built.** A level must add over the one already shipped, and v4 is 3.6–7.4%
+slower than `x86-64-v3` on spectral.
+
+The AArch64 levels were taken on CI's `ubuntu-24.04-arm` runner (its
+`/proc/cpuinfo` names no model) at merge commit `d5b07b8e`, run 43120020334,
+with `--runs 15 --level armv8.2-a --level armv8.4-a+crypto`, two samples, in a
+step added to the `simd-arm64` job for that run and then taken out. That run's
+log is the source of this table, in ms, minimum / median, one sample on each
+side of the semicolon:
+
+| Program | baseline | copy | `armv8.2-a` | `armv8.4-a+crypto` |
+| --- | --- | --- | --- | --- |
+| spectral | 533.1 / 533.4; 533.1 / 533.3 | 533.2 / 533.4; 533.1 / 533.3 | 533.1 / 533.4; 533.1 / 533.3 | 533.1 / 533.3; 533.1 / 533.3 |
+| vec3 | 410.9 / 411.3; 411.2 / 411.5 | 411.1 / 411.4; 411.2 / 411.5 | 411.0 / 411.3; 410.9 / 411.4 | 411.0 / 411.5; 410.8 / 411.4 |
+| nbody | 1297.2 / 1302.1; 1299.3 / 1301.9 | 1300.0 / 1301.8; 1295.6 / 1301.7 | 1297.4 / 1301.9; 1296.1 / 1301.6 | 1301.5 / 1302.2; 1298.1 / 1302.3 |
+
+Every level is within ±0.3% of the baseline, and the copy is too. The 533.1 ms
+in every spectral column is what four binaries running the same instructions
+on a quiet machine read: the assembly is the same. `clang -O3
+--target=aarch64-unknown-linux-gnu -ffp-contract=off` on each program's `.ll`
+gives the same code at `armv8.2-a` as at the baseline, and `armv8.4-a+crypto`
+differs only in pointer authentication (`paciasp` and `retaa` for the hint
+forms). The baseline already has the 128-bit NEON code these loops vectorise
+to, and neither level adds an instruction they use. Neither clears 10%, so
+neither is built.
+
+So `--cpu` still accepts `x86-64-v3` alone, `src/` is unchanged, and the
+levels `ct_asm` reads are unchanged (CT-16). A later level (an SVE level is
+out while the checkers cannot pass it, and `native` stays out for good) comes
+on its own measurement, with this command.
 
 **S3: what stands in front of it (Q8, decided).** §3.2.1 already shows scalar
 Nish reaching the vector code for a float kernel. A four-accumulator dot
@@ -2745,7 +2810,7 @@ first; S6c waits for both, because its bar is a ratio against what they leave.
 
 ## 8. Decisions
 
-The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. Q10 came with S3a's figures, and the owner took it on 2026-10-30. The reason
+The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. Q10 came with S3a's figures, and the owner took it on 2026-10-30. Q11 came with S2's later levels, and the owner took it on 2026-11-12. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -2762,6 +2827,7 @@ builds anything else.
 | Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **S3a, then decide** (2026-10-16). S7 was already built (#561), so scalar Nish reaches the vector loop for a float kernel with checked indexing; the byte half overlaps S6c's classifier; the surface is large and permanent. S3a is planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
 | Q9 | S7, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Ahead of both** (2026-10-16), and found built: #561 had landed it on 2026-10-10 (§7, S7). |
 | Q10 | S3, `nish:simd`, on S3a's figures | build it with §3.2's surface; decline it into §9 | **Build it** (2026-10-30). Both bar kernels cleared 1.5x in S3a (#658), and the byte half is not reachable by S6c's runtime classifier (§7, S6c). The surface is §3.2 as revised: `u16x8` for `i16x8`, four value-only mask types and the operation table. Built in three stages, the last measuring S3's bar (§7, S3). |
+| Q11 | `x86-64-v4` for `--cpu`, which clears S2's bar against the baseline but not against `x86-64-v3` | build it; keep it out | **Keep it out** (2026-11-12). A level must add over the one already shipped, and v4 is 3.6–7.4% slower than `x86-64-v3` on spectral and gains on neither nbody nor vec3 (§7, *S2's later levels*). |
 
 ---
 

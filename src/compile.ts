@@ -852,6 +852,16 @@ export const main = (): number => {
       opts.optimizeAttributes = false
     } else if (value === "--deterministic") {
       opts.deterministic = true
+    } else if (value === "--compat") {
+      opts.compat = true
+    } else if (value.startsWith("--compat=")) {
+      // The dialect takes no value yet: a feature list is a later release's,
+      // and a value read as a bare `--compat` would compile today and mean
+      // something else then.
+      console.error(
+        `compile: \`--compat\` takes no value, and \`${value}\` gives it one: the compatibility dialect accepts nothing yet, so write a bare \`--compat\``
+      )
+      return 2
     } else if (value === "--strict-exports") {
       opts.strictExports = true
     } else if (value === "--no-strict-exports") {

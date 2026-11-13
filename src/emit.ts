@@ -253,6 +253,8 @@ import {
   ARENA_GLOBAL_TLS,
   ARENA_TYPE,
   ARGV_GLOBAL,
+  ERRNO_SLOT_GLOBAL,
+  ERRNO_SLOT_GLOBAL_TLS,
   ARRAY_TYPE,
   inlineAllocator,
   inlineAllocatorAttrs,
@@ -809,6 +811,10 @@ export class Emitter {
     if (callee.foreign() && this.table.stripNull(callee.returnType) === T_STRING) {
       return false
     }
+    // WP27 S5: errno is saved after the call, so neither is it the last thing.
+    if (callee.foreign() && this.program.capturesErrno) {
+      return false
+    }
     const argTypes: i32[] = []
     for (const arg of inner.children[1].children) {
       argTypes.push(this.typeOf(arg))
@@ -1121,6 +1127,34 @@ export class Emitter {
     const declared = `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
     const origin = sig.origin
     return origin !== null && origin.host ? this.hostDeclarationFor(sig) : declared
+  }
+
+  /**
+   * WP27 S5 (`docs/wp27-ffi.md` §10): `errno = 0` ahead of a foreign call, and
+   * the address of this thread's errno, which `saveErrno` reads after it. The
+   * compiler never names `__errno_location` or `__error`: the runtime takes
+   * `&errno` in C, so each libc keeps its own definition.
+   */
+  zeroErrno(): string {
+    const errno = this.fn.emitValue(`call i32* ${this.useRuntime("nish_errno_ptr")}()`)
+    this.fn.emit(`store i32 0, i32* ${errno}${this.opts.optimizeAttributes ? ", align 4" : ""}`)
+    return errno
+  }
+
+  /** Copies errno into `@nish_errno_slot` right after the call; "" means no capture. */
+  saveErrno(errno: string): void {
+    if (errno === "") {
+      return
+    }
+    const align = this.opts.optimizeAttributes ? ", align 4" : ""
+    const value = this.fn.emitValue(`load i32, i32* ${errno}${align}`)
+    this.fn.emit(`store i32 ${value}, i32* ${this.errnoSlot()}${align}`)
+  }
+
+  /** `@nish_errno_slot`, declared per thread under `--threads` (`ERRNO_SLOT_GLOBAL_TLS`). */
+  errnoSlot(): string {
+    this.declareGlobal(this.opts.threads ? ERRNO_SLOT_GLOBAL_TLS : ERRNO_SLOT_GLOBAL)
+    return "@nish_errno_slot"
   }
 
   /**
@@ -2024,9 +2058,13 @@ export class Emitter {
     if (sig.foreign()) {
       emitForeignBuffers(this, expr, sig, operands, operandValues)
     }
+    // WP27 S5: in a program naming `cErrno`, errno is 0 going into C and
+    // saved coming out, before the result is marshalled.
+    const errno = sig.foreign() && !hostFunction(sig) && this.program.capturesErrno ? this.zeroErrno() : ""
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)
+      this.saveErrno(errno)
       if (kernelJoin !== null) {
         this.fn.emit(`br label %${kernelJoin.label}`)
         this.fn.placeBlock(kernelJoin)
@@ -2039,6 +2077,7 @@ export class Emitter {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
     let answer = this.fn.emitValue(call)
+    this.saveErrno(errno)
     if (sumKernel.length > 0) {
       answer = this.joinSumArms(sumKernel, answer)
     }
