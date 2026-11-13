@@ -315,12 +315,12 @@ const H3_FLAG_LATE: i32 = 512
 
 /** The connection's states. */
 const H3_STATE_OPEN: i32 = 0
+const H3_STATE_FAILED: i32 = 1
 
 /** What `clock` saw: no request in hand, a request short of its head, or every request past its head. */
 const H3_CLOCK_IDLE: i32 = 0
 const H3_CLOCK_HEAD: i32 = 1
 const H3_CLOCK_BUSY: i32 = 2
-const H3_STATE_FAILED: i32 = 1
 
 /** What `requestFrame` answers when it read a frame header and the stream has more to read. */
 const H3_CONTINUE: i32 = -1
