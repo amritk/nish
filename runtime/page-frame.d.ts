@@ -27,8 +27,11 @@ export interface PresenterOptions {
    * @param from - the tier given up
    * @param to - the tier tried next
    * @param reason - why `from` was given up
+   * @param canvas - the canvas `to` builds on: a fresh one when `from` had
+   *   taken a context, the place to add the page's listeners again (during
+   *   `createPresenter`, before `presenter` exists, the only way to reach it)
    */
-  onFallback?(from: Backend, to: Backend, reason: string): void;
+  onFallback?(from: Backend, to: Backend, reason: string, canvas: HTMLCanvasElement): void;
 }
 
 /** Draws a framebuffer on a canvas, letterboxed to keep its aspect, nearest-neighbour scaled. */
@@ -40,7 +43,9 @@ export interface Presenter {
   /**
    * The canvas presented on. A fallback after a tier has taken a context puts
    * a fresh canvas in the old one's place (same attributes, no listeners), so
-   * read this again after `onFallback`.
+   * read this again after `onFallback`. A canvas outside the document has no
+   * place to give: its fresh canvas is outside the document too, for the page
+   * to put where it wants.
    */
   readonly canvas: HTMLCanvasElement;
   /**
@@ -54,14 +59,16 @@ export interface Presenter {
    */
   present(pixels: Int32Array, width: number, height: number): void;
   /**
-   * Sizes the canvas's drawing buffer to its CSS size in device pixels.
+   * Sizes the canvas's drawing buffer to its CSS size in device pixels, at
+   * least 1 by 1. A size that is not finite or is below 0, or a ratio that is
+   * not above 0, is a `RangeError`.
    *
    * @param cssWidth - the canvas's width in CSS pixels
    * @param cssHeight - the canvas's height in CSS pixels
    * @param devicePixelRatio - device pixels per CSS pixel
    */
   resize(cssWidth: number, cssHeight: number, devicePixelRatio: number): void;
-  /** Releases the tier's device or context; `present` then draws nothing. */
+  /** Releases the tier's device or context; `present` then draws nothing, and no fallback follows. */
   destroy(): void;
 }
 

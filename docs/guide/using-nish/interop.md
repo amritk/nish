@@ -269,9 +269,15 @@ moves to the next tier down before the next frame and calls `onFallback`.
 A canvas keeps the first kind of context it hands out, so the next tier
 gets a fresh `<canvas>`: a copy of the element made by `cloneNode`, put in
 the old one's place. It has the same id, classes, style and size, but not
-the event listeners added to the old one. Read `presenter.canvas` to reach
-the element on screen, as `fit` does above, and add those listeners again
-in `onFallback`.
+the event listeners added to the old one. `onFallback` gets that canvas as
+its fourth argument, `(from, to, reason, canvas)`: add those listeners again
+there. It is the only way to reach it while `createPresenter` is still
+running; after, `presenter.canvas` is the element on screen, as `fit` reads
+it above. A canvas not in the document has no place for the copy to take,
+so the copy is not in the document either: put `presenter.canvas` where you
+want it. The tier given up releases its device or context as it goes.
+`presenter.resize` throws a `RangeError` on a size that is not a finite
+number of at least 0, or a pixel ratio that is not above 0.
 
 The pixels are read as little-endian words, the byte order of wasm memory.
 The top byte of each word is ignored and every pixel is drawn opaque.

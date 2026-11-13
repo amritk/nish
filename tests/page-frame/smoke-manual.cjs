@@ -9,7 +9,8 @@
 // both GPU contexts refused), reads the canvas back, and prints the pixels it
 // expected and found at the centre of each pattern cell, plus the letterbox,
 // read from a screenshot of the canvas. A WebGPU whose queue never completes
-// work (some headless builds) is reported, its pixels not checked.
+// work (some headless builds) is reported, its pixels not checked, and a
+// browser with no WebGPU at all has that run reported as skipped.
 // A last run loses the WebGL 2 context and checks the fall to Canvas 2D.
 
 const http = require("node:http");
@@ -140,7 +141,7 @@ HTMLCanvasElement.prototype.getContext = function (type, options) {
 };`;
 
 const runs = [
-  { name: "WebGPU", init: "", prefer: "webgpu" },
+  { name: "WebGPU", init: "", prefer: "webgpu", needs: "webgpu" },
   { name: "navigator.gpu hidden (WebGL 2, then its context lost)", init: HIDE_GPU, prefer: "webgpu" },
   { name: "both GPU contexts refused (Canvas 2D)", init: REFUSE_GPU_CONTEXTS, prefer: "webgpu" },
 ];
@@ -180,6 +181,16 @@ const main = async () => {
     await page.waitForFunction(() => window.ready === true);
     const broken = await page.evaluate(() => window.gpuQueueBroken());
     const started = await page.evaluate((prefer) => window.start(prefer), run.prefer);
+    // A browser without the tier this run is for has nothing of it to check:
+    // the tier it fell to is the other runs' to check.
+    if (run.needs !== undefined && started.backend !== run.needs) {
+      console.log(`## ${run.name}`);
+      console.log(`skipped: no ${run.name} in this browser (it presented with ${started.backend})`);
+      console.log(`attempts: ${started.attempts.join(" | ")}`);
+      console.log("");
+      await page.close();
+      continue;
+    }
     const read = async () => {
       // Two animation frames, so the frame presented is the one composited.
       await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));

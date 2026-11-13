@@ -43,8 +43,9 @@ class FakeCanvas {
 
   replaceWith(node) {
     const parent = this.parent;
+    // A node with no parent ignores replaceWith, as the DOM standard has it.
     if (parent === null) {
-      throw new Error("replaceWith on a canvas outside the document");
+      return;
     }
     parent.children[parent.children.indexOf(this)] = node;
     node.parent = parent;
@@ -174,9 +175,26 @@ const makeGl = (world, canvas) => {
       gl.calls.push(["drawArrays", ...args]);
     },
     deleteTexture: () => {
+      if (world.glDeleteThrows) {
+        throw new Error("fake deleteTexture error");
+      }
       world.count.glDeleted++;
     },
-    deleteProgram: () => undefined,
+    deleteShader: () => {
+      world.count.glShadersDeleted++;
+    },
+    deleteProgram: () => {
+      world.count.glProgramsDeleted++;
+    },
+    getExtension: (name) =>
+      name === "WEBGL_lose_context"
+        ? {
+            loseContext: () => {
+              gl.lost = true;
+              world.count.glContextsLost++;
+            },
+          }
+        : null,
   };
   return gl;
 };
@@ -191,8 +209,10 @@ const makeGpuContext = (world) => {
       }
       context.configured = config;
     },
+    unconfigured: 0,
     unconfigure: () => {
       context.configured = null;
+      context.unconfigured++;
     },
     getCurrentTexture: () => ({ createView: () => view }),
   };
@@ -321,8 +341,8 @@ const makeDevice = (world) => {
  * `programLinks: false` fail the WebGL 2 shader and program,
  * `glLostAtStart` hands out a WebGL 2 context already lost,
  * `offscreen2d: false` makes the framebuffer-sized canvas refuse a 2D
- * context, and `contexts` lists the context types the page's canvas will hand
- * out.
+ * context, `contexts` lists the context types the page's canvas will hand
+ * out, and `glDeleteThrows` makes `deleteTexture` throw.
  */
 export class World {
   constructor(settings) {
@@ -339,8 +359,10 @@ export class World {
     this.programLinks = s.programLinks !== false;
     this.glLostAtStart = s.glLostAtStart === true;
     this.offscreen2d = s.offscreen2d !== false;
+    this.glDeleteThrows = s.glDeleteThrows === true;
     this.contexts = new Set(s.contexts || ["webgpu", "webgl2", "2d"]);
-    this.count = { createTexture: 0, createBindGroup: 0, createImageData: 0, texImage2D: 0, glDeleted: 0 };
+    this.count = { createTexture: 0, createBindGroup: 0, createImageData: 0, texImage2D: 0, glDeleted: 0,
+      glShadersDeleted: 0, glProgramsDeleted: 0, glContextsLost: 0 };
     this.requests = { adapter: 0, device: 0 };
     this.canvases = [];
     this.device = null;

@@ -75,6 +75,15 @@ const refuse = (reason) => {
   throw new Error(reason);
 };
 
+/** Passes an error the presenter catches but cannot act on to the page's error reporting. */
+const report = (error) => {
+  if (typeof globalThis.reportError === "function") {
+    globalThis.reportError(error);
+  } else {
+    console.error(error);
+  }
+};
+
 /** The message of anything a browser API threw or rejected with. */
 const messageOf = (error) => (error instanceof Error ? error.message : String(error));
 
@@ -145,11 +154,20 @@ const buildWebGpu = async (state) => {
   device.lost.then((info) => {
     end(`WebGPU device lost (${info.reason}): ${info.message}`);
   });
+  let context = null;
+  // A refusal gives back what was made: the context's configuration, then the device.
   const drop = () => {
     device.removeEventListener("uncapturederror", onError);
+    if (context !== null) {
+      try {
+        context.unconfigure();
+      } catch (error) {
+        report(error);
+      }
+    }
     device.destroy();
   };
-  const context = state.canvas.getContext("webgpu");
+  context = state.canvas.getContext("webgpu");
   if (context === null) {
     drop();
     refuse('getContext("webgpu") answered null');
@@ -246,11 +264,22 @@ const buildWebGl2 = (state) => {
     refuse('getContext("webgl2") answered null');
   }
   state.touched = true;
+  // Browsers cap the live WebGL contexts a page holds, so a context this tier
+  // gives up is lost on purpose rather than left on the abandoned canvas.
+  const loseContext = () => {
+    const extension = gl.getExtension("WEBGL_lose_context");
+    if (extension !== null && !gl.isContextLost()) {
+      extension.loseContext();
+    }
+  };
   if (gl.isContextLost()) {
     refuse("the WebGL 2 context was lost before it was used");
   }
+  const shaders = [];
+  const program = gl.createProgram();
   const compile = (kind, source) => {
     const shader = gl.createShader(kind);
+    shaders.push(shader);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (gl.getShaderParameter(shader, gl.COMPILE_STATUS) !== true) {
@@ -258,12 +287,24 @@ const buildWebGl2 = (state) => {
     }
     return shader;
   };
-  const program = gl.createProgram();
-  gl.attachShader(program, compile(gl.VERTEX_SHADER, GLSL_VERTEX));
-  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, GLSL_FRAGMENT));
-  gl.linkProgram(program);
-  if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
-    refuse(`the WebGL 2 program did not link: ${gl.getProgramInfoLog(program)}`);
+  try {
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, GLSL_VERTEX));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, GLSL_FRAGMENT));
+    gl.linkProgram(program);
+    if (gl.getProgramParameter(program, gl.LINK_STATUS) !== true) {
+      refuse(`the WebGL 2 program did not link: ${gl.getProgramInfoLog(program)}`);
+    }
+  } catch (error) {
+    for (const shader of shaders) {
+      gl.deleteShader(shader);
+    }
+    gl.deleteProgram(program);
+    loseContext();
+    throw error;
+  }
+  // A linked program keeps what it needs: the shaders can go now.
+  for (const shader of shaders) {
+    gl.deleteShader(shader);
   }
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -312,6 +353,7 @@ const buildWebGl2 = (state) => {
       if (!gl.isContextLost()) {
         gl.deleteTexture(texture);
         gl.deleteProgram(program);
+        loseContext();
       }
     },
   };
@@ -386,8 +428,10 @@ const BUILDERS = { webgpu: buildWebGpu, webgl2: buildWebGl2, canvas2d: buildCanv
  * a context and is then refused or lost, the next tier is built on a fresh
  * canvas: `canvas.cloneNode(false)`, put in the old one's place in the
  * document. The clone keeps the element's attributes (id, classes, style,
- * size) but not its event listeners; read `presenter.canvas` after a
- * fallback to rebind them.
+ * size) but not its event listeners; `onFallback` is passed it, and
+ * `presenter.canvas` reads it after. A canvas outside the document has no
+ * place to take, so its fresh canvas is outside the document too: put
+ * `presenter.canvas` where it is wanted.
  *
  * @param canvas - the canvas to present on
  * @param options - `prefer`, the tier to start from (the tiers above it are
@@ -420,7 +464,12 @@ export const createPresenter = async (canvas, options) => {
       }
       current = null;
       attempts.push({ backend: tier.backend, reason });
-      tier.release();
+      // A release that throws must not keep the next tier from building.
+      try {
+        tier.release();
+      } catch (error) {
+        report(error);
+      }
       // Every tier below WebGPU builds synchronously, so a fallback is over
       // before the next frame is presented.
       buildFrom(TIERS.indexOf(tier.backend) + 1, tier.backend, reason);
@@ -439,19 +488,16 @@ export const createPresenter = async (canvas, options) => {
   };
 
   // A callback that throws is reported, not let through: the fallback it
-  // was told about still has to happen.
+  // was told about still has to happen. It gets the canvas the next tier
+  // builds on, since at creation `presenter` does not exist yet.
   const fellBack = (from, to, reason) => {
     if (onFallback === undefined) {
       return;
     }
     try {
-      onFallback(from, to, reason);
+      onFallback(from, to, reason, state.canvas);
     } catch (error) {
-      if (typeof globalThis.reportError === "function") {
-        globalThis.reportError(error);
-      } else {
-        console.error(error);
-      }
+      report(error);
     }
   };
 
@@ -459,7 +505,7 @@ export const createPresenter = async (canvas, options) => {
   // for the hand-over from `from` and for each refusal after it. Answers
   // either the tier or a promise of it: WebGPU is the only asynchronous one.
   const buildFrom = (at, from, reason) => {
-    if (at >= TIERS.length) {
+    if (at >= TIERS.length || destroyed) {
       return null;
     }
     // The fresh canvas goes in first, so `onFallback` can reach it through
@@ -472,6 +518,12 @@ export const createPresenter = async (canvas, options) => {
     }
     const backend = TIERS[at];
     const accept = (tier) => {
+      // Destroyed while this tier built (inside `onFallback`, say): it is
+      // given back at once rather than installed.
+      if (destroyed) {
+        tier.release();
+        return null;
+      }
       // A device lost or erring while its pipeline built (or in the moment
       // before this ran) has already ended the tier.
       const ended = tier.ended === undefined ? null : tier.ended();
@@ -526,6 +578,18 @@ export const createPresenter = async (canvas, options) => {
       }
     },
     resize(cssWidth, cssHeight, devicePixelRatio) {
+      if (
+        !Number.isFinite(cssWidth) ||
+        !Number.isFinite(cssHeight) ||
+        !Number.isFinite(devicePixelRatio) ||
+        cssWidth < 0 ||
+        cssHeight < 0 ||
+        devicePixelRatio <= 0
+      ) {
+        throw new RangeError(
+          `nish/page/frame: resize takes finite sizes of at least 0 and a ratio above 0, not ${cssWidth}x${cssHeight} at ${devicePixelRatio}`
+        );
+      }
       const width = Math.max(1, Math.round(cssWidth * devicePixelRatio));
       const height = Math.max(1, Math.round(cssHeight * devicePixelRatio));
       cssSize = { width, height };
@@ -567,7 +631,8 @@ const FPS_WINDOW_MS = 500;
  *
  * @param options - `stepsPerSecond`, `maxStepsPerFrame` (8 by default), and
  *   the `step` and `render` callbacks; `render` gets the alpha in [0, 1) and
- *   the frame's length in milliseconds, after the clamp (0 on the first frame)
+ *   the frame's length in milliseconds, after the clamp (0 on the first frame
+ *   and on a clock that ran backwards)
  * @returns the running loop: `stop()` cancels its next frame, `refreshHz` is
  *   the display's rate as read from the fastest recent frame intervals (0
  *   until a frame has passed), and `fps` the renders per second over the last
@@ -610,7 +675,8 @@ export const runFixedStep = (options) => {
         intervals[recorded % INTERVALS] = elapsed;
         recorded++;
       }
-      frameMs = elapsed > LONGEST_FRAME_MS ? LONGEST_FRAME_MS : elapsed;
+      // A clock that ran backwards (a faked one) counts as no time at all.
+      frameMs = elapsed <= 0 ? 0 : elapsed > LONGEST_FRAME_MS ? LONGEST_FRAME_MS : elapsed;
       accumulator += frameMs;
       let steps = 0;
       while (!stopped && accumulator >= interval && steps < maxSteps) {

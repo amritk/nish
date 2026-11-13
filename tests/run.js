@@ -34804,13 +34804,16 @@ if (!only || "page-frame".includes(only)) {
   })
   // Each line is `ok <name>` or `not ok <name>\t<detail>`, and the last
   // `checks: <n>`: a run that stopped early prints fewer lines than it counts,
-  // or no count at all.
+  // or no count at all. The count is pinned, so a check that goes missing
+  // (a block skipped, a loop that ran short) is caught too; a check added or
+  // removed moves it.
+  const PAGE_FRAME_CHECKS = 114
   const out = res.stdout.split("\n")
   const lines = out.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = out.find((line) => line.startsWith("checks: "))
   check(
     "page-frame: the checks ran to the end",
-    res.status === 0 && counted === `checks: ${lines.length}` && lines.length >= 100,
+    res.status === 0 && counted === `checks: ${lines.length}` && lines.length === PAGE_FRAME_CHECKS,
     shown(res)
   )
   for (const line of lines) {

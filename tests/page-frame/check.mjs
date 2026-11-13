@@ -38,7 +38,11 @@ const reasons = (presenter) => presenter.attempts.map((a) => [a.backend, a.reaso
   const { presenter, falls } = await open(world);
   check("tier order: WebGPU first when everything works", presenter.backend === "webgpu", presenter.backend);
   check("tier order: nothing refused, nothing reported", presenter.attempts.length === 0 && falls.length === 0);
-  check("webgpu: the context is opaque, in the preferred format", same(world.gpuContext.configured.alphaMode, "opaque"));
+  check(
+    "webgpu: the context is opaque, in the preferred format",
+    world.gpuContext.configured.alphaMode === "opaque" && world.gpuContext.configured.format === "bgra8unorm",
+    JSON.stringify(world.gpuContext.configured)
+  );
   check(
     "webgpu: nearest sampling",
     world.sampler.magFilter === "nearest" && world.sampler.minFilter === "nearest",
@@ -97,6 +101,53 @@ for (const [name, settings, reason] of refusals) {
     presenter.attempts[0].reason.includes("fake pipeline error"),
     presenter.attempts[0].reason
   );
+  check(
+    "refusal after getContext: the refused WebGPU context is unconfigured and its device destroyed",
+    world.gpuContext.unconfigured === 1 && world.gpuContext.configured === null && world.device.destroyed
+  );
+}
+
+{
+  // At creation `presenter` does not exist yet: the callback's own argument
+  // is how it reaches the fresh canvas.
+  const world = new World({ pipelineFails: true }).install();
+  const seen = [];
+  const presenter = await createPresenter(world.canvas, {
+    onFallback: (from, to, reason, canvas) => {
+      seen.push([from, to, canvas]);
+    },
+  });
+  check(
+    "onFallback at creation: passed the fresh canvas the next tier builds on",
+    seen.length === 1 &&
+      seen[0][0] === "webgpu" &&
+      seen[0][1] === "webgl2" &&
+      seen[0][2] === world.current &&
+      seen[0][2] !== world.canvas &&
+      presenter.canvas === seen[0][2]
+  );
+}
+
+{
+  // A canvas outside the document: the fresh one is outside it too.
+  const world = new World({ pipelineFails: true }).install();
+  world.page.children = [];
+  world.canvas.parent = null;
+  let passed = null;
+  const presenter = await createPresenter(world.canvas, {
+    onFallback: (from, to, reason, canvas) => {
+      passed = canvas;
+    },
+  });
+  check(
+    "a canvas with no parent: the fallback builds on a detached fresh canvas",
+    presenter.backend === "webgl2" &&
+      presenter.canvas !== world.canvas &&
+      presenter.canvas.parent === null &&
+      presenter.canvas.mode === "webgl2" &&
+      passed === presenter.canvas,
+    presenter.backend
+  );
 }
 
 {
@@ -141,6 +192,14 @@ for (const [name, settings, reason] of refusals) {
       world.current !== world.canvas &&
       presenter.canvas === world.current,
     JSON.stringify(falls)
+  );
+  check(
+    "refusal after a WebGL 2 context: its shaders and program are deleted and the context is lost",
+    world.count.glShadersDeleted === 2 &&
+      world.count.glProgramsDeleted === 1 &&
+      world.count.glContextsLost === 1 &&
+      world.canvas.context.isContextLost(),
+    JSON.stringify(world.count)
   );
 }
 
@@ -356,7 +415,10 @@ const pattern = Int32Array.of(
   check("webgpu: letterboxed to the framebuffer's aspect", same(viewport, ["setViewport", 0, 50, 400, 200, 0, 1]), JSON.stringify(viewport));
   check(
     "webgpu: one triangle, over a black clear",
-    pass.calls.some((c) => c[0] === "draw" && c[1] === 3) && pass.descriptor.colorAttachments[0].loadOp === "clear"
+    pass.calls.some((c) => c[0] === "draw" && c[1] === 3) &&
+      pass.descriptor.colorAttachments[0].loadOp === "clear" &&
+      same(pass.descriptor.colorAttachments[0].clearValue, { r: 0, g: 0, b: 0, a: 1 }),
+    JSON.stringify(pass.descriptor.colorAttachments[0])
   );
   presenter.present(pattern, 4, 2);
   presenter.present(pattern, 4, 2);
@@ -417,6 +479,22 @@ const pattern = Int32Array.of(
     same(glTexels, Array.from(pattern)),
     glTexels.map((t) => t.toString(16)).join(" ")
   );
+  const copy = Int32Array.from(pattern);
+  presenter.present(copy, 4, 2);
+  const again = gl.calls[gl.calls.length - 1];
+  const sized = gl.calls.filter((c) => c[0] === "texSubImage2D").pop();
+  check(
+    "webgl2: a new buffer at the same size gets a new view of its own bytes",
+    sized[9] !== bytes && sized[9].buffer === copy.buffer && again[0] === "drawArrays",
+    JSON.stringify(sized.slice(0, 9))
+  );
+  presenter.present(new Int32Array(6), 3, 2);
+  const resized = gl.calls.filter((c) => c[0] === "texImage2D");
+  check(
+    "webgl2: a new size uploads with texImage2D again",
+    resized.length === 2 && resized[1][4] === 3 && resized[1][5] === 2 && resized[1][9].length === 24,
+    JSON.stringify(resized.map((c) => c.slice(4, 6)))
+  );
   check("webgl2: the fragment shader is highp", gl.sources.some((s) => s.includes("precision highp float;")));
   check(
     "webgl2: the fragment shader swizzles .bgr and forces alpha to 1",
@@ -429,6 +507,18 @@ const pattern = Int32Array.of(
   );
   const viewports = gl.calls.filter((c) => c[0] === "viewport");
   check("webgl2: letterboxed to the framebuffer's aspect", same(viewports[1], ["viewport", 0, 50, 400, 200]), JSON.stringify(viewports));
+  const drawn = gl.calls.length;
+  presenter.destroy();
+  presenter.present(pattern, 4, 2);
+  check(
+    "webgl2: destroy deletes the texture and program, loses the context and draws nothing after",
+    world.count.glDeleted === 1 &&
+      world.count.glProgramsDeleted === 1 &&
+      world.count.glContextsLost === 1 &&
+      (world.canvas.listeners.get("webglcontextlost") || []).length === 0 &&
+      gl.calls.length === drawn,
+    JSON.stringify(world.count)
+  );
 }
 
 {
@@ -466,6 +556,10 @@ const pattern = Int32Array.of(
   );
   presenter.present(Int32Array.of(0x00ff00 | (0x7f << 24)), 1, 1);
   check("canvas2d: the top byte is ignored", same(source.lastPut, [0, 255, 0, 255]), JSON.stringify(source.lastPut));
+  const drawn = ctx.calls.length;
+  presenter.destroy();
+  presenter.present(pattern, 4, 2);
+  check("canvas2d: destroy, then present draws nothing", ctx.calls.length === drawn);
 }
 
 {
@@ -486,6 +580,19 @@ const pattern = Int32Array.of(
   );
   presenter.resize(200, 100, 2);
   check("resize: the drawing buffer is the CSS size in device pixels", world.canvas.width === 400 && world.canvas.height === 200);
+  const refused = [
+    [Number.NaN, 100, 1],
+    [200, Number.POSITIVE_INFINITY, 1],
+    [-1, 100, 1],
+    [200, 100, 0],
+    [200, 100, -2],
+    [200, 100, Number.NaN],
+  ].filter(([w, h, dpr]) => thrown(() => presenter.resize(w, h, dpr)) instanceof RangeError);
+  check(
+    "resize: a size that is not finite or below 0, or a ratio not above 0, is a RangeError",
+    refused.length === 6 && world.canvas.width === 400 && world.canvas.height === 200,
+    String(refused.length)
+  );
 }
 
 // --- Runtime loss ---------------------------------------------------------------
@@ -613,6 +720,45 @@ const pattern = Int32Array.of(
   check("destroy: present then draws nothing", world.device.writes.length === 0);
 }
 
+{
+  // Destroyed from inside a runtime onFallback: the tier that builds after
+  // it is given back, not installed.
+  const world = new World().install();
+  let presenter = null;
+  presenter = await createPresenter(world.canvas, {
+    onFallback: () => {
+      presenter.destroy();
+    },
+  });
+  world.device.raise("fake validation error");
+  const glCanvas = world.current;
+  presenter.present(pattern, 4, 2);
+  check(
+    "destroy inside onFallback: the next tier is released and nothing draws",
+    glCanvas.mode === "webgl2" &&
+      world.count.glContextsLost === 1 &&
+      world.count.glProgramsDeleted === 1 &&
+      (glCanvas.listeners.get("webglcontextlost") || []).length === 0 &&
+      glCanvas.context.calls.every((c) => c[0] !== "texImage2D"),
+    JSON.stringify(world.count)
+  );
+}
+
+{
+  // A release that throws is reported, and the fallback goes on.
+  const world = new World({ gpu: false, glDeleteThrows: true });
+  const { presenter, falls } = await open(world);
+  const reported = [];
+  globalThis.reportError = (e) => reported.push(e.message);
+  world.current.dispatch("webglcontextlost", { preventDefault: () => undefined });
+  delete globalThis.reportError;
+  check(
+    "a release that throws: reported, and the fallback still happens",
+    presenter.backend === "canvas2d" && falls.length === 2 && same(reported, ["fake deleteTexture error"]),
+    JSON.stringify(reported)
+  );
+}
+
 // --- The loop --------------------------------------------------------------------
 
 /** Runs a loop on a scripted clock and answers what it did at each frame time. */
@@ -665,6 +811,22 @@ const loop = (settings, times) => {
   }
   const { frames } = loop({ stepsPerSecond: 60 }, times);
   check("loop: renders on every animation frame, faster than it steps", frames.length === 9 && frames[8].steps === 2, JSON.stringify(frames));
+}
+
+{
+  const { frames } = loop({ stepsPerSecond: 100 }, [1000, 990, 1000]);
+  check(
+    "loop: a clock that runs backwards is a frame of 0 ms, with no step",
+    same(
+      frames.map((f) => [f.steps, f.frameMs]),
+      [
+        [0, 0],
+        [0, 0],
+        [1, 10],
+      ]
+    ),
+    JSON.stringify(frames)
+  );
 }
 
 {
