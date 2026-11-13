@@ -22,8 +22,15 @@ a pair the module makes, which the loader reads inside memory or not at all,
 and the module's reader holds every count against its buffer (see "A string
 crosses as bytes inside memory" below).
 
-There are nine findings. Eight are fixed by the stage that found them, and
-WH-8 is recorded open:
+WP55 (`docs/wp55-persistent-root.md`) adds root storage: after each export
+call the loader hands the arena to `nish_root_keep`, which traces the object
+graph the roots reach from compiler-written descriptors, slides it down and
+rewrites every pointer to it. It adds WH-10: the trace follows whatever the
+slots hold, and the page can write any byte of memory (see "The kept graph is
+the compiler's" below).
+
+There are ten findings. Eight are fixed by the stage that found them, and
+WH-8 and WH-10 are recorded open:
 
 - **WH-1 (High):** a window's `at + n`, added in 32 bits, wraps, so a host
   call is lent memory past the end of the array.
@@ -42,6 +49,8 @@ WH-8 is recorded open:
   ranged or `boolean` storage element can hold a value outside its type.
 - **WH-9 (Low):** a string's `(p, n)` or `{ i64 len }` header the module
   places outside memory.
+- **WH-10 (Low, open):** a pointer the page forges into the kept graph is
+  traced, and the slot that holds it rewritten, by the next compaction.
 
 ## Scope
 
@@ -58,6 +67,9 @@ WH-8 is recorded open:
 | `src/emit-strings.ts` | `emitHostString`: a string argument as its data pointer and byte count |
 | `src/module-storage.ts` | lending a `u8[]` storage array to a function's `u8[]` parameter |
 | `std/host/text.ts` | `textRead`, `textWrite`, `textWriteInt`, `textWriteF64` |
+| `runtime/runtime-wasm.c` | root storage's keep under `NISH_WASM_HOST` (WP55): `nish_runtime_root_keep`, `nish_root_compact` and the trace it runs (`nish_slot`, `nish_visit`, `nish_block`, `nish_moved`), its scratch (`nish_scratch`, `nish_words_push`, `nish_seen_add`), and `nish_roots_clear` in `nish_reset_arena` and `nish_free_arena` |
+| `src/emit-root.ts` | the trace descriptors, the root table and `nish_root_keep` the compiler writes |
+| `src/interop-wasm.ts` | `guardLoader`'s keep: `raw.nish_root_keep(mark)` in place of `raw.nish_arena_release(mark)` in a program with root storage, and `layoutLoader`'s leaving root storage out of `layout` |
 
 Out of scope:
 
@@ -107,6 +119,7 @@ code, and the guide says to read only `[at, at + n)`.
 | WH-6 | Low | `runtime/page.mjs:20`–`:65` (`HostTable`) | A handle the program forged, 0, a fraction or a taken slot read as `undefined`, which a host function would pass on. | **Fixed.** `#check` throws a `RangeError` for each, which inside an import kills the module (WH-3), and slot 0 is never handed out ("page: HostTable hands out 1 and up, never 0, reuses a taken slot, and throws on a taken, zero, forged or fractional handle"). A stale handle kept after `take` names the newer object once its slot is reused: the program is trusted (threat model), so that is its bug, not a win, and the table carries no generation count. |
 | WH-7 | Low | `src/interop-wasm.ts:750`–`:756` (`payloadIn`), `:757`–`:775` (`resultIn`), `:1088`–`:1114` (`arrayIn`) | Only a number of the wrong type was refused before the module ran. A malformed `Result`, a payload of the wrong JavaScript type, or a Proxy or re-prototyped `DataView` passed as a typed array threw from inside `guarded`, which then marked the module dead: one bad call from the page ended it for good. | **Fixed.** Every argument is checked before the call: a `Result` must be an object whose `ok` is a boolean and whose payload has its arm's JavaScript type, read once through a `try` so a throwing getter is the caller's error; an array must pass the `%TypedArray%` brand getter and is measured with the `length` getter, neither of which runs caller code. A typed array over a detached buffer is not refused: `length` reads 0, so it is copied in as an empty array and the call runs (pinned: the check expects `ok 0`). Each refusal is a `TypeError` tagged so `guarded` lets it through and the module stays alive ("panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive", whose lines include a BigInt given to an `i32`; "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive"). |
 | WH-8 | Low | module storage, as the module reads it | The page can write any bits into storage, so an enum, ranged or `boolean` storage element may hold a value outside its type, and the module reads it as written. | **Open.** The page is trusted (threat model), so a value it forged is its own bug; a program that reads storage the page writes checks the value where it matters, as `std/host/ring` does (WH-2). See "Storage holds what the module wrote" below. |
+| WH-10 | Low | `runtime/runtime-wasm.c`, `nish_slot` and `nish_visit` under `nish_root_compact` | The trace believes the graph: a root slot, an object's pointer field, an array's `len`, `cap` or `data`, a string's length. The page holds all of memory, so it can write any of them, and the next compaction follows a forged pointer, reads a forged length and rewrites the slot holding a pointer into the region. | **Open.** The page is trusted (threat model): a forged graph is its bug, as a forged storage value is (WH-8). Two things bound the damage a mistake does: `layout` leaves root storage out, so no `views()` row names a root slot ("persist: world's loader hands each call's arena to nish_root_keep, not nish_arena_release" reads the loader; `src/interop-wasm.ts`, `layoutLoader`), and a block is clamped at `off` (`nish_block`), so a forged `cap` or length moves nothing past the region. |
 | WH-9 | Low | `src/interop-wasm.ts:1144`–`:1153` (`guardLoader`'s `stringOut`), `:1355`–`:1365` (`hostImportsOf`'s `text`), lines at `cc201043` | A string crosses as a pair the module makes: `(p, n)` for a host import's argument, a `{ i64 len, data }` header for an export's result. A pair past the end of memory, or one whose address wraps, would read the wrong bytes or none, and bytes that are not UTF-8 would reach the page as whatever a decoder makes of them. Only the module makes these pairs, so this is hardening, the shape of WH-5. | **Fixed** (stage 4, by construction): each pair is read as `u32` into `new Uint8Array(buffer, p, n)` or a `DataView`, which throw a `RangeError` for any view past the end, so nothing outside memory is read; inside an export that error kills the module (WH-3); `TextDecoder` reads bytes that are not UTF-8 as U+FFFD ("host-import-text: WH-9: a forged string pair or header past the end of memory is a RangeError, and bytes that are not UTF-8 read as U+FFFD", which forges both through the adapter and through a string export). |
 
 ## Properties verified
@@ -209,6 +222,28 @@ Tests:
 
 All of them are in `tests/run.js`.
 
+**The kept graph is the compiler's.** Root storage is module storage whose
+element is `C | null`; the checker refuses one whose class reaches a type the
+trace has no descriptor for (NL2766), one that is exported (NL2767), and one
+in a program whose threads or regions allocate from arenas of their own
+(NL2768), so every pointer the trace meets has a descriptor the compiler
+wrote. What it reaches stays put and answers right for 100,000 calls, with
+linear memory and the kept region flat after warm-up ("persist: world answers
+right for 100,000 steps with memory and the kept heap flat", "persist:
+director answers right for 100,000 steps with memory and the kept heap flat").
+
+**A deep graph does not exhaust the stack.** The trace keeps its work list,
+the blocks it reached and the slots to rewrite in scratch above `off`, and
+sorts with a heapsort, so nothing in it recurses: "persist: chain keeps a
+200,000-node list through every compaction" traces one list 200,000 nodes
+long. The scratch is linear in the graph: that list, 1.6 MB, peaks memory at
+19.9 MB, which the next call's allocations reuse. A module that cannot grow
+memory for it panics `memory`, as an allocation would.
+
+**An emptied arena empties the roots.** `nish_reset_arena` and
+`nish_free_arena` clear every root slot first, so no root is left pointing at
+memory the next call hands out again.
+
 ## Divergences from the native build
 
 - **A panic.** A native panic prints and ends the process. Under
@@ -220,3 +255,6 @@ All of them are in `tests/run.js`.
   pointer and a length, and C could read past either; the page gets a view of
   all of memory and an index, and could too. Both are the trusted side's
   code.
+- **Root storage.** A native program never hands its arena back between
+  calls, so its root storage is ordinary module storage and nothing is traced
+  or moved; only a page module compacts what the roots reach (WH-10).

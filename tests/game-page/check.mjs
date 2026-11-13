@@ -131,6 +131,7 @@ const makeWorld = (settings) => {
   proto.getBoundingClientRect ??= () => ({ left: 0, top: 0, width: 640, height: 360 });
   proto.focus ??= function () {
     this.focused = (this.focused ?? 0) + 1;
+    world.document.activeElement = this;
   };
   proto.hasAttribute ??= function (name) {
     return name in this.attributes;
@@ -299,6 +300,12 @@ const start = async (settings, options) => {
   run(5);
   check("keys: a hidden page releases them too", paddle() === hidden, `${hidden} -> ${paddle()}`);
   world.document.visibilityState = "visible";
+  world.document.dispatch("visibilitychange", {});
+  check(
+    "keys: a page shown again gives the game its focus back",
+    queued(game).some((r) => r[0] === 4 && r[1] === 1),
+    JSON.stringify(queued(game))
+  );
 
   // --- Sound -----------------------------------------------------------------
   check("sound: the first key press makes the AudioContext", audio.made === 1, audio.made);
@@ -320,16 +327,30 @@ const start = async (settings, options) => {
   run(1);
   canvas.dispatch("keyup", key(" ", "Space"));
   check("serve: Space serves", state().SCORE[2] === 0, state().SCORE[2]);
-  run(120);
-  check(
-    "sound: the wall sound plays when the ball reaches the top",
-    audio.started.some((s) => s.buffer === audio.buffers[1] && s.to?.kind === "destination"),
-    audio.started.length
-  );
+  // Frame by frame until the ball turns down at the top wall: only the top turns it so.
+  let topped = null;
+  for (let i = 0; i < 240 && topped === null; i++) {
+    const rising = state().BALL[3] < 0;
+    const was = audio.started.length;
+    run(1);
+    if (rising && state().BALL[3] > 0) {
+      topped = audio.started.slice(was).filter((s) => s.buffer === audio.buffers[1] && s.to?.kind === "destination").length;
+    }
+  }
+  check("sound: the wall sound plays as the ball turns at the top", topped === 1, topped);
+  // Muted, the game still asks for sounds: each bounce or miss is one, seen as
+  // the ball turning or parking, and none of them is played.
   const heard = audio.started.length;
   game.muted = true;
-  run(300);
-  check("sound: muted plays nothing", audio.started.length === heard, `${heard} -> ${audio.started.length}`);
+  let asked = 0;
+  for (let i = 0; i < 300; i++) {
+    const [dx, dy, waiting] = [state().BALL[2], state().BALL[3], state().SCORE[2]];
+    run(1);
+    const turned = dx * state().BALL[2] < 0 || dy * state().BALL[3] < 0;
+    asked += turned || (waiting === 0 && state().SCORE[2] === 1) ? 1 : 0;
+  }
+  check("sound: muted plays nothing the game asks for", asked > 0 && audio.started.length === heard,
+    `${asked} asked, ${heard} -> ${audio.started.length}`);
   check("sound: muted reads back", game.muted === true);
 
   // --- Stop --------------------------------------------------------------------
@@ -400,7 +421,9 @@ const start = async (settings, options) => {
   canvas.dispatch("pointerdown", { pointerType: "mouse", pointerId: 9, button: 0, clientX: 100, clientY: 180 });
   check("mouse: a press captures the pointer", JSON.stringify(canvas.captured) === "[9]", JSON.stringify(canvas.captured));
   check("sound: a context the browser refuses is not kept", audio.made === made, audio.made);
-  run(1);
+  // Two frames: a display frame of exactly one step's length can, by rounding, hold none.
+  run(2);
+  check("mouse: a press serves", state().SCORE[2] === 0, state().SCORE[2]);
   canvas.dispatch("blur", {});
   check(
     "mouse: blur releases the button held",
@@ -409,6 +432,22 @@ const start = async (settings, options) => {
   );
   canvas.dispatch("click", {});
   check("sound: the next gesture makes it again", audio.made === made + 1, audio.made);
+  // A cancel or a context menu carries button 0 or -1, not the one held, and lets go of it.
+  for (const [what, name, fields] of [
+    ["a pointercancel", "pointercancel", { pointerType: "mouse", pointerId: 9, button: -1, clientX: 0, clientY: 0 }],
+    ["a context menu", "contextmenu", {}],
+  ]) {
+    canvas.dispatch("focus", {});
+    canvas.dispatch("pointerdown", { pointerType: "mouse", pointerId: 9, button: 2, clientX: 100, clientY: 180 });
+    run(1);
+    canvas.dispatch(name, fields);
+    check(
+      `mouse: ${what} releases the button held`,
+      queued(game).some((r) => r[0] === 2 && r[1] === 3 && r[4] === 3),
+      JSON.stringify(queued(game))
+    );
+    run(1);
+  }
   game.stop();
 }
 
@@ -537,6 +576,9 @@ const without = (strip) => ({
     await refusal("game.wasm", { keys: "ArrowLeft" }),
     await refusal("game.wasm", { touch: { zones: [{ x: 0, y: 0, width: 1, height: 1 }] } }),
     await refusal("game.wasm", { onError: "log" }),
+    await refusal("game.wasm", { prefer: "webgl" }),
+    await refusal("game.wasm", { seed: 1.5 }),
+    await refusal("game.wasm", { sound: true }),
   ];
   check("options: malformed ones reject before any fetch", bad.every((m) => m !== null) && fetched === before,
     `${JSON.stringify(bad)} ${fetched - before}`);

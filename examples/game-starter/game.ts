@@ -133,7 +133,9 @@ export const step = (nowMs: f64): void => {
     if (e.type === EVENT_MOUSE && (e.action === ACTION_MOVE || e.action === ACTION_PRESS)) {
       BALL[PADDLE] = toF64(e.px)
     }
-    if (e.type === EVENT_KEY && e.action === ACTION_PRESS && (e.key === KEY_SPACE || e.key === KEY_ENTER)) {
+    // Space, Enter (a tap on a touch screen) or a click serves.
+    const key = e.type === EVENT_KEY && (e.key === KEY_SPACE || e.key === KEY_ENTER)
+    if (e.action === ACTION_PRESS && (key || e.type === EVENT_MOUSE)) {
       serve = true
     }
   }
@@ -210,7 +212,7 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   const score = `${SCORE[0]}  best ${SCORE[1]}`
   rasterText(GAME_FRAME, w, h, w - rasterTextWidth(score, 1) - 6, 6, 1, score, 0xa0a0c0)
   if (SCORE[2] === 1) {
-    const hint = "space or tap to serve"
+    const hint = "space, click or tap to serve"
     rasterText(GAME_FRAME, w, h, (w - rasterTextWidth(hint, 1)) / 2, 90, 1, hint, 0xf0f0f0)
   }
 }

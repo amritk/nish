@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 757 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 760 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14428,4 +14428,96 @@ The message of an error contains:
 
 ```text
 `readStruct(p)` copies into a `declare class` layout, and …
+```
+
+## NL2766
+
+The message of an error contains:
+
+```text
+…: the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_map.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a `Map` it cannot.
+class Cache {
+  names: Map<string, i32>
+
+  constructor() {
+    this.names = new Map<string, i32>()
+  }
+}
+
+const cache = new Array<Cache | null>(1)
+
+export const size = (): i32 => {
+  const c = cache[0]
+  return c === null ? 0 : c.names.size
+}
+```
+
+```text
+Root storage `cache` cannot keep
+```
+
+## NL2767
+
+The message of an error contains:
+
+```text
+` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
+```
+
+[`nl2767_root_storage_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2767_root_storage_export.ts):
+
+```ts
+// Root storage moves its objects between calls, so a page cannot read it.
+class World {
+  tick: i32 = 0
+}
+
+export const world = new Array<World | null>(1)
+
+export const tick = (): i32 => {
+  const w = world[0]
+  return w === null ? -1 : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be exported
+```
+
+## NL2768
+
+The message of an error contains:
+
+```text
+` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+[`nl2768_root_storage_threads.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_threads.ts):
+
+```ts
+// A thread allocates from an arena of its own, which a root could outlive.
+import { AtomicI32 } from "nish/threads"
+
+class World {
+  tick: i32 = 0
+}
+
+const world = new Array<World | null>(1)
+
+export const tick = (): i32 => {
+  const count = new AtomicI32(0)
+  count.add(1)
+  const w = world[0]
+  return w === null ? count.load() : w.tick
+}
+```
+
+```text
+` cannot be kept in a program that loads `nish/threads` or `nish:region`
 ```

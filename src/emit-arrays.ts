@@ -42,6 +42,7 @@ import {
 } from "./emit-ops"
 import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
+import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
 import { isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
@@ -2096,11 +2097,19 @@ const bytePointer = (emitter: Emitter, arr: string, at: string): string => {
  * symbol, `nish_storage_<module>_<name>` (`Compilation.nameStorage`), is the
  * program's alone. The header is `internal` unless another module imports it.
  */
-export const storageGlobals = (emitter: Emitter, info: ConstInfo): void => {
+export const storageGlobals = (emitter: Emitter, info: ConstInfo, traces: RootTraces): void => {
   const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
   const data = `[${info.intValue} x ${slot}]`
   emitter.declareType(ARRAY_TYPE)
-  emitter.declareGlobal(`@${info.storageSymbol}.data = global ${data} zeroinitializer, align 16`)
+  // WP55: a page reads no root storage, so its data stays internal and is
+  // reached through the root table instead (`src/emit-root.ts`).
+  const kept = info.root && emitter.opts.rootSymbols.length > 0
+  emitter.declareGlobal(
+    `@${info.storageSymbol}.data = ${kept ? "internal " : ""}global ${data} zeroinitializer, align 16`
+  )
+  if (kept) {
+    rootTable(emitter, traces, info, data)
+  }
   emitter.declareGlobal(
     `@${info.storageSymbol} = ${info.exported ? "" : "internal "}global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
   )

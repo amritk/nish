@@ -1811,7 +1811,9 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  * than about what the body does:
  *
  *  - **Memory older than the call is reachable only from the parameters.** The
- *    one mutable global is module storage, whose elements are pointer-free;
+ *    one mutable global is module storage, whose elements are pointer-free
+ *    unless it is root storage (WP55), and a program that declares any is
+ *    never asked this (`Options.holdsRoots`);
  *    every other module constant is a scalar or a string, a class has no
  *    `static` member, and `process.argv` refuses every store and `push`
  *    (`reject_argv_assign`, `reject_argv_push`). A callee can

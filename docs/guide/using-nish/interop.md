@@ -461,6 +461,60 @@ It differs from the wasm build in five places:
 - An export never refuses an argument the way the loader's `TypeError` does:
   the type checker is the guard.
 
+### Keeping objects between calls: root storage
+
+Typed arrays are enough for a few numbers. For a whole object graph — a game
+world, a document, a list — declare module storage whose element is a class
+or `null`. Each slot is a *root*: the object in it, and everything that
+object reaches, outlives the call that built it.
+
+```ts nish:ok --target wasm32
+class Node {
+  value: i32
+  next: Node | null = null
+
+  constructor(value: i32) {
+    this.value = value
+  }
+}
+
+const head = new Array<Node | null>(1)
+
+export const push = (value: i32): void => {
+  const n = new Node(value)
+  n.next = head[0]
+  head[0] = n
+}
+
+export const total = (): i32 => {
+  let sum: i32 = 0
+  let n = head[0]
+  while (n !== null) {
+    sum = sum + n.value
+    n = n.next
+  }
+  return sum
+}
+```
+
+After each export call, the loader keeps what the roots reach and frees the
+rest of what the call allocated. Once the kept objects take more than twice
+the room they need (and 64 KiB), the runtime moves them together and rewrites
+every pointer to them, so memory stays bounded however long the page runs:
+200,000 calls to `push` above leave a 1.6 MB list in about 20 MB of memory.
+
+- What a root reaches must be numbers, booleans, enums, strings, arrays,
+  classes and unions of classes. A `Map`, a `Set`, an interface or a C type
+  is refused with NL2766.
+- Root storage is not exported and has no `layout` entry: its objects move,
+  so the page reads them through exported functions (NL2767).
+- A program that loads `nish/threads` or `nish:region` cannot have root
+  storage (NL2768).
+- A native build keeps root storage like any module storage, with nothing
+  to free between calls.
+
+The rules and the IR: [LANGUAGE.md → Root storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#root-storage-an-object-graph-kept-between-calls).
+
 ### Lending an array to the page
 
 A host function may take an array as a *buffer window*: the array, then two
