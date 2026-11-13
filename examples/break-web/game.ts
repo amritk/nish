@@ -28,15 +28,9 @@ import {
   sizeBreakFramebuffer,
   stepBreakDirector,
 } from "../../src/break-director"
-import { SOUND_CAPSULE, SOUND_COUNT } from "../../src/break-game"
+import { SOUND_COUNT } from "../../src/break-game"
 import { BreakSettings } from "../../src/break-menu"
-import { soundSamples } from "../../src/break-sound"
-
-/** The rate soundSamples writes at: src/break-sound.ts's SAMPLE_RATE. */
-const SAMPLE_RATE: i32 = 22050
-
-/** The sound turning sound on plays: src/break-sound.ts's SOUND_HELLO. */
-const SOUND_HELLO: i32 = SOUND_CAPSULE
+import { SAMPLE_RATE, SOUND_HELLO, voiceSamples } from "../../src/break-voices"
 
 /** A frame time to start from, until frames are timed: 60 Hz, in milliseconds. */
 const FIRST_FRAME_MS: f64 = 1000.0 / 60.0
@@ -125,7 +119,7 @@ export const sound = (id: i32): i32 => {
   if (id < 0 || id >= SOUND_COUNT) {
     return 0
   }
-  return gameWriteSamples(soundSamples(id), SAMPLE_RATE)
+  return gameWriteSamples(voiceSamples(id), SAMPLE_RATE)
 }
 
 /** One fixed step of 1/120 s on the page's input; `nowMs` is its step clock. */

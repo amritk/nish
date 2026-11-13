@@ -1,0 +1,33 @@
+{
+  "compiler": "nish 0.39.0",
+  "help": "861d7fcd1ff7b4efbf1841faf109634cd3751285493da871a990ecc270534498",
+  "memory": "32",
+  "inputs": {
+    "examples/break-web/break.mjs": "20304e422f30a2699b435559ae81974a812b8abbbd19137eac03a7bf246e412c",
+    "examples/break-web/build.mjs": "a03274403d236dca5f5e0829a2b77fd6d5457c9a1bcf0c63f6acf6306dd7dadb",
+    "examples/break-web/game.ts": "585b66a578dc4dda34586169686226639b613c8fd62d8f57b81aaea561238f1e",
+    "examples/break-web/shell.mjs": "4294f9edc87cae69d150485edb8e74ffb7486daa2cbd8926d92d269599f428b8",
+    "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
+    "runtime/page-game.mjs": "e04a2f9298c97b0876de51794d6d912331e07b5e3d1d3e075d457c1ff987c87b",
+    "runtime/page.mjs": "30a94f7965d6d44ad58053e4b3d42028c797c1afab5f914a20c63e433ff31d7c",
+    "runtime/runtime-wasm.c": "4d55783d03251a87be5684af792c2a6a7d7e28154480b2d33dac5abd4611f44a",
+    "scripts/build.sh": "bba45f8456959effd6949c513fe12ef4861854b85800ce179f8d2ab052d9b894",
+    "src/break-director.ts": "70c8582305a17b64229926bab457dc03db7c51596e630421d033748ed09bd88a",
+    "src/break-game.ts": "883a6049957bd88659e1496dfe692002d9979beba4c28d6bb4f8b1dfb0d551bc",
+    "src/break-gfx.ts": "1cdb5b27b061adddfe6e09fb1250c81cc9575f274776a9e75fb8cc18ab9e94e7",
+    "src/break-intro.ts": "a9c656c005184f227864a48e76c96427897181f559f5316921d9d383fad55226",
+    "src/break-levels.ts": "596d20e2762a2663e01bd18a519caaad99f918d88262f410aafb7426e07f496a",
+    "src/break-menu.ts": "c1c506a100ea2ed6659a62855018a75051b0aeaee895e10222537048e55a85a8",
+    "src/break-voices.ts": "f9224a3524cf7960cf68be61cd2be4c564fcad5c58f26991b6bb7f769ac65c76",
+    "std/base64.ts": "068f7c677f7bffb55a1179bfc4f7de179883b7c85253caf2c474f1ca9edb33fb",
+    "std/host/game.ts": "3004d84b9390960f9944ad3b6fe1364a6e930f3db5464984f445e979dcfdd2e4",
+    "std/host/ring.ts": "da5ea5f3cf216c2303a94c96f808f115be09a6890df67d392fd779e382c4606e",
+    "std/input.ts": "3f8c9ab34f172ad387160339f8f2ce35b22f944f02e617c2d26982396563cdc7",
+    "std/random.ts": "e7e360a36acfa0e02b8c644c5499e0bc8dc3fada41a36062adeb2dd590c51c13",
+    "std/raster.ts": "e6ef8eddbbb09c24384ab6f01ca1f7d826e50e87fc271b3822e4a238340243fa",
+    "std/synth.ts": "206f1ab1363011efea8f6b8349cfc35eb52985ad4b8613edf81acd90e4d08762",
+    "std/term-pixels.ts": "0818ca93e979c117b6731fff0fea8fb99a6018686c3a100772125cc5efcae663",
+    "std/term-rate.ts": "c39e79cca5dbb76d91b6bb255d5b460fbca1ed8f8178e5b9c1702f2112432e14",
+    "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
+  }
+}
