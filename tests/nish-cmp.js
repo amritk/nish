@@ -1220,7 +1220,7 @@ const quicRebind = byFinding(
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
 
 /** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
-const YAML_LOAD_CUTS = "Build own-key maps and known-size containers directly"
+const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
 
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
