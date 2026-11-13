@@ -2881,9 +2881,9 @@ test vectors. A byte string is a `u8[]`.
 
 | Module | Main exports |
 | --- | --- |
-| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
+| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
-| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
+| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes (`HmacSha256.digestInto(out, at)` writes the tag into your array and allocates nothing), and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, `bcryptHashN`/`bcryptVerifyN` for up to six at once at a width `bcryptCalibrate` picks, and `bcryptHash4`/`bcryptVerify4` for up to four: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
@@ -2998,11 +2998,23 @@ does and keeps no hold on `buf`, so the array is yours again once it returns.
 as a ring's `peek`, is handed over as it is. A chunked or compressed response, an `Http1TlsServer` slot, and a write still
 held back are copied as `write` copies them.
 
-Set `Http1Config.idleInput` and a slot lends its input and head buffers back
-too, whenever it has answered a request and holds no byte of the next: a server
-holding tens of thousands of keep-alive connections that each send a request
-now and then keeps those buffers only for the connections mid-request, for two
-pool operations a request. It is off by default. An `Http1Server` builds a
+A response with a `Content-Length` is finished once `write` or `sendBody` has
+taken its last byte, and one with no body (`Content-Length: 0`, a `HEAD`, a 204
+or a 304) once `respond` has queued its head: the next request on a keep-alive
+connection is answered whether or not you call `conn.end()`. A chunked body
+needs `end()`, which writes its last chunk, and so does a chunked response to
+an HTTP/1.0 client, which is sent unframed: without it the connection waits
+and the next request is never answered. Calling `end()` on any response stays
+correct; it answers 0 once the length is met and `H1_INVALID` while bytes are
+still owed.
+
+A slot lends its input and head buffers back too, whenever it has answered a
+request and holds no byte of the next: a server holding tens of thousands of
+keep-alive connections that each send a request now and then keeps those
+buffers only for the connections mid-request, for two pool operations a
+request, and an idle connection holds about 1.2 KB. That is
+`Http1Config.idleInput`, on by default; set it to `false` and each slot keeps
+its own buffers while it rests, about 1.9 KB more a connection. An `Http1Server` builds a
 slot's connection on the first accept into it and keeps it for the next, so a
 pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.

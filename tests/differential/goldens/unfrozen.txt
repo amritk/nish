@@ -573,6 +573,7 @@ cases/region_child_local_map added after R6: no rewriter to freeze it with
 cases/region_child_map added after R6: no rewriter to freeze it with
 cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with
+cases/res_let_reassign added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
@@ -591,6 +592,7 @@ cases/rng_entry_range_panic added after R6: no rewriter to freeze it with
 cases/rng_generic added after R6: no rewriter to freeze it with
 cases/rng_param added after R6: no rewriter to freeze it with
 cases/rng_widen added after R6: no rewriter to freeze it with
+cases/root_storage added after R6: no rewriter to freeze it with
 cases/sandbox_hello added after R6: no rewriter to freeze it with
 cases/script_basic added after R6: no rewriter to freeze it with
 cases/script_exit added after R6: no rewriter to freeze it with

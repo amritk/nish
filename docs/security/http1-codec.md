@@ -226,6 +226,18 @@ a pipelined pair and a refusal behind a good request pin it. Pipelined bytes
 wait in the parser's buffer, and once `inputLimit()` of them wait the slot
 stops asking to be read.
 
+**When an exchange ends** (`net_http1_server_implicit_end`): a response with
+a `Content-Length` ends once its last byte is written, through `write` or
+`sendBody`, and one with no body (`Content-Length: 0`, `HEAD`, 204, 304) once
+its head is, whether or not the program calls `end`; the connection checks at
+the boundary, when it would read the next request, so `end` called before then
+answers as it always has (0, and the same bytes on the wire). A chunked body,
+and an unframed one to HTTP/1.0, ends only at `end`, since the connection has
+no length to count: one byte short of the length, or chunked without `end`,
+and the next request is neither read nor answered, and no last chunk goes out.
+A program that forgot `end` on a length-framed response used to leave a
+kept-alive client waiting forever with nothing reported.
+
 **The head stays the request's until it is answered** (`std_http1_end_head`):
 at `HTTP1_END` of a kept-alive request with the next one already fed behind
 it, the parser still reports the first request's method, target, fields,
@@ -593,26 +605,34 @@ whose client stops reading holds one until it drains, then gives it back; fifty
 connections in a row leave the pool's buffers all free (`net_http1_server`).
 
 **Lent input, and what a lent buffer holds** (`net_http1_server`). With
-`Http1Config.idleInput` a slot gives its parser's input and head buffers to
-pools its server's slots share (`Http1Connection.park`, from `Http1Server.flush`
-and `Http1TlsServer.flush` and at `restart`) only while it rests: speaking
-HTTP, no request open, and `Http1Parser.resting()` (waiting for a request line,
-nothing fed and unread). A slot still reading a head, owing a response, holding
-pipelined bytes or upgraded keeps both, and `unpark` takes a buffer back in
-`feed` before any byte is copied in.
+`Http1Config.idleInput`, on by default since the idle trims, a slot gives its
+parser's input and head buffers to pools its server's slots share
+(`Http1Connection.park`, from `Http1Server.flush` and `Http1TlsServer.flush` and
+at `restart`) only while it rests: speaking HTTP, no request open, and
+`Http1Parser.resting()` (waiting for a request line, nothing fed and unread). A
+slot still reading a head, owing a response, holding pipelined bytes or upgraded
+keeps both, and `unpark` takes a buffer back in `feed` before any byte is copied
+in.
 
 A lent buffer is not cleared: it holds the bytes of the request it last
 carried, a password in a body included, until the next slot to take it
 overwrites them. Nothing reads them, since a parser reads only the window
 `[start, end)` it was fed and `park` resets that window to empty; the bytes
-stay in the process's memory as they did before the option, when each slot kept
-its own buffer with the same bytes in it.
+stay in the process's memory as they do with the option off, when each slot
+keeps its own buffer with the same bytes in it. Turning it on by default moves
+no byte a parser can read: it changes which slot's buffer the bytes sit in
+until they are overwritten, not whether they are. After `park`, `conn.data`
+and the parser's head, body and input views may point into a pooled buffer
+another client's slot is about to overwrite; the default is safe because those
+windows are valid only until the next `next()` (the doc comments in
+`http1-server.ts`), and a slot parks only once its exchange is done.
 
 Tests: `two slots served one after the other share one input and one head
-buffer`, `a connection with a request open keeps them`, `so do they while a
-byte of the next request is unread`, `and once nothing is open or unread both
-go back`, `a pipelined pair on a slot that lent its buffers is answered in
-order`, and `without idleInput a resting slot keeps its input buffer`.
+buffer`, `a connection with a request open keeps them`, `so do they while a byte
+of the next request is unread`, `and once nothing is open or unread both go
+back`, `a pipelined pair on a slot that lent its buffers is answered in order`,
+`on the default config the slots lent their input and head buffers to the
+pools`, and `without idleInput a resting slot keeps its input buffer`.
 
 **A lent buffer is taken back by identity, and the layout moves only where
 fields sit** (`net_http1_server`, `_f64`, 2026-11-06, written against `main`
@@ -666,9 +686,10 @@ checks, written against `main` at `9e49a177`): `respond` copies its previous
 final head only when every input of it is the same, and otherwise writes it
 fresh through `http1WriteResponseHead` and its checks, so a kept head cannot
 carry one response's fields, or a value the writer would refuse, into another.
-The kept head is the connection's own response buffer (`headBytes`, at most
-`H1_HEAD_KEEP`, 1,024 bytes, and `headLengths`, two i32 for each of at most
-`H1_HEAD_FIELDS`, 16, fields); the compare reads only the program's names and
+The kept head is the connection's own response buffer (`headBytes`, sized to
+the head it keeps rounded up to `H1_HEAD_ROUND`, 64 bytes, and never past
+`H1_HEAD_KEEP`, 1,024, and `headLengths`, two i32 for each of its fields, at
+most `H1_HEAD_FIELDS`, 16); the compare reads only the program's names and
 values and that buffer, never the parser's request head, so the request
 head's layout (each field line kept with its CRLF) does not reach it. The
 checks read every response byte for byte against `http1WriteResponseHead`
@@ -716,8 +737,10 @@ called directly, and `headCopies` says whether it was copied:
   kept head was the last connection's state).
 - Memory is bounded and lazy: the buffer is made at the first head that is
   kept, so a connection whose heads never repeat their shape holds none, and
-  one that keeps heads holds about 1.3 KiB (1,024 bytes of head, 128 of
-  lengths and the arrays' own headers).
+  one that keeps heads holds what its longest kept head needs: its bytes
+  rounded up to 64, two i32 a field and the arrays' own headers, at most
+  about 1.3 KiB (1,024 bytes of head and 128 of lengths). A longer head is
+  remade larger; a shorter one reuses the buffer.
 - Work on a miss is bounded. The compare reads a field with guarded word
   loads (`http1ServerKept`: 16-byte `nish:simd` loads with an overlapping
   tail from 16 bytes, two u64 loads from 8, two u32 loads from 4, bytes
