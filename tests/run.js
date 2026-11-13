@@ -29653,13 +29653,13 @@ if (!only || "sandbox dependency grants".includes(only)) {
         // tools: `env`, granted `exec:`, runs `true`, granted plainly, where
         // the plain `env` of sandbox_dep_exec_once could not (above).
         const optin = "sandbox_dep_exec_optin"
-        const xAllow = build(optin, ["--sandbox"])
         const rOptinOpen = rOther === null || rOther.stdout !== "0\n" ? null : run(build(optin, []), ["sync", "env", "true"])
         if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
           skip(
             `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOptinOpen)}); a manifest's exec: grant is not checked with the machine's tools`
           )
         } else {
+          const xAllow = build(optin, ["--sandbox"])
           const rOptin = run(xAllow, ["sync", "env", "true"])
           const rTrueHeld = run(xAllow, ["sync", "true"])
           check(

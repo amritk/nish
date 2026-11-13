@@ -2264,7 +2264,7 @@ export class Compilation {
       covered =
         relative ||
         texts.indexOf(`process.spawn=${literal.value}`) >= 0 ||
-        texts.indexOf(`${EXEC_SPAWN}${literal.value}`) >= 0 ||
+        texts.indexOf(`process.spawn=${EXEC_GRANT}${literal.value}`) >= 0 ||
         (found !== null && values.indexOf(found) >= 0)
     } else if (!covered) {
       covered = !literal.value.startsWith("/") || beneathAny(normalizePath(literal.value), values)
@@ -3945,7 +3945,7 @@ export class Compilation {
               if (this.grantArgOwners[j] === g && this.grantArgCaps[j] === c) {
                 named = true
                 addOnce(values, this.grantArgValues[j])
-                if (this.grantArgTexts[j].startsWith(EXEC_SPAWN)) {
+                if (this.grantArgTexts[j].startsWith(`process.spawn=${EXEC_GRANT}`)) {
                   addOnce(execs, this.grantArgValues[j])
                 }
               }
@@ -3982,11 +3982,13 @@ export class Compilation {
       }
       let v = 0
       while (v < values.length) {
-        let mark = v < granted ? "" : "/"
-        if (v < granted && execs.indexOf(values[v]) >= 0) {
-          mark = "//"
+        if (v >= granted) {
+          cli.push(`/${values[v]}`)
+        } else if (execs.indexOf(values[v]) >= 0) {
+          cli.push(`//${values[v]}`)
+        } else {
+          cli.push(values[v])
         }
-        cli.push(`${mark}${values[v]}`)
         v = v + 1
       }
     }
@@ -4159,9 +4161,6 @@ const normalizedGrant = (name: string, arg: string): string => `${name}=${normal
  * the loaders included, so it can run anything (docs/security/sandbox.md).
  */
 const EXEC_GRANT: string = "exec:"
-
-/** A `process.spawn` grant entry with the `EXEC_GRANT` prefix, as `grantArgTexts` holds it: written out, since a module constant is a literal. */
-const EXEC_SPAWN: string = "process.spawn=exec:"
 
 /** Push `value` onto `list` unless it is there already. */
 const addOnce = (list: string[], value: string): void => {

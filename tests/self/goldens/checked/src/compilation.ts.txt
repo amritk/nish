@@ -196,7 +196,6 @@ import NUMBER_MODE_F64 from "./context" -> const NUMBER_MODE_F64
 const SLASH: i32 = 47
 const PACKAGE_WALK_LIMIT: i32 = 256
 const EXEC_GRANT: string = "exec:"
-const EXEC_SPAWN: string = "process.spawn=exec:"
 struct ResolvedModule (interface) size=32 align=8 exported
   field path: string index=0 offset=0
   field name: string index=1 offset=8
@@ -2038,47 +2037,46 @@ function Compilation.sandboxWidened(this: Compilation, caps: i32): i32 -> @Compi
   local +8:11 deny: i32 (const)
 function Compilation.narrowSandbox(this: Compilation, facts: FactsTable): void -> @Compilation.narrowSandbox [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  sharedWrite: +0:11
   calls: Compilation.anyGrantScoped addOnce capabilityIndex dependencyMasks dependencyPackages functionIndex nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq programInterpreter rootReach
   pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 functionIndex#0 rootReach#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=functionIndex#1 rootReach#1
   stackSites=3 stackLocals=2
-  local -90:11 caps: i32 (const)
-  callee -89:23 capabilityIndex -> @capabilityIndex
-  callee -89:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
-  local -86:11 reach: DependencyReach (const)
-  callee -86:19 dependencyPackages -> @dependencyPackages
-  local -82:11 index: FunctionIndex (const)
-  callee -82:19 functionIndex -> @functionIndex
-  callee -81:5 dependencyMasks -> @dependencyMasks
-  local -80:11 root: i32 (const)
-  callee -80:18 rootReach -> @rootReach
-  local -79:16 c: i32 (const)
-  callee -78:7 capabilityIndex -> @capabilityIndex
-  callee -77:7 capabilityIndex -> @capabilityIndex
-  callee -76:7 capabilityIndex -> @capabilityIndex
-  local -74:13 bit: i32 (const)
-  local -73:11 cli: string[] (let)
-  callee -72:17 capabilityIndex -> @capabilityIndex
-  callee -70:24 capabilityIndex -> @capabilityIndex
-  local -64:13 values: string[] (const)
-  local -63:13 execs: string[] (const)
-  local -62:11 reached: boolean (let)
-  local -61:11 scoped: boolean (let)
-  local -60:11 p: i32 (let)
-  local -54:17 g: i32 (const)
-  local -53:15 named: boolean (let)
-  local -51:17 j: i32 (let)
-  callee -42:17 addOnce -> @addOnce
-  callee -40:19 addOnce -> @addOnce
-  local -17:13 granted: i32 (const)
-  callee -16:17 capabilityIndex -> @capabilityIndex
-  local -15:13 k: i32 (let)
-  local -13:17 interpreter: string | null (const)
-  callee -13:31 programInterpreter -> @programInterpreter
-  callee -11:13 addOnce -> @addOnce
-  local -6:11 v: i32 (let)
-  local -4:13 mark: string (let)
+  local -87:11 caps: i32 (const)
+  callee -86:23 capabilityIndex -> @capabilityIndex
+  callee -86:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
+  local -83:11 reach: DependencyReach (const)
+  callee -83:19 dependencyPackages -> @dependencyPackages
+  local -79:11 index: FunctionIndex (const)
+  callee -79:19 functionIndex -> @functionIndex
+  callee -78:5 dependencyMasks -> @dependencyMasks
+  local -77:11 root: i32 (const)
+  callee -77:18 rootReach -> @rootReach
+  local -76:16 c: i32 (const)
+  callee -75:7 capabilityIndex -> @capabilityIndex
+  callee -74:7 capabilityIndex -> @capabilityIndex
+  callee -73:7 capabilityIndex -> @capabilityIndex
+  local -71:13 bit: i32 (const)
+  local -70:11 cli: string[] (let)
+  callee -69:17 capabilityIndex -> @capabilityIndex
+  callee -67:24 capabilityIndex -> @capabilityIndex
+  local -61:13 values: string[] (const)
+  local -60:13 execs: string[] (const)
+  local -59:11 reached: boolean (let)
+  local -58:11 scoped: boolean (let)
+  local -57:11 p: i32 (let)
+  local -51:17 g: i32 (const)
+  local -50:15 named: boolean (let)
+  local -48:17 j: i32 (let)
+  callee -39:17 addOnce -> @addOnce
+  callee -37:19 addOnce -> @addOnce
+  local -14:13 granted: i32 (const)
+  callee -13:17 capabilityIndex -> @capabilityIndex
+  local -12:13 k: i32 (let)
+  local -10:17 interpreter: string | null (const)
+  callee -10:31 programInterpreter -> @programInterpreter
+  callee -8:13 addOnce -> @addOnce
+  local -3:11 v: i32 (let)
 function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.emit [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
