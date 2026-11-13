@@ -107,6 +107,31 @@ the session. Each limit has a default and is checked at start-up;
 [the standard library's `nish/net` section](standard-library.md#nishnet) has
 the details.
 
+## How many connections: the descriptor limit
+
+Every connection a server holds is a file descriptor, and the operating
+system caps how many one process may have open with two limits: a soft one,
+which the process may raise itself, and a hard one above it, which only the
+operator may. Shells and service managers often start a program with a soft
+limit of 1024 (256 on macOS), far below a hard limit of 65536 or more.
+
+A native program's first `nish:net` call that makes a descriptor
+(`tcpListen`, `tcpConnect`, `udpBind`, `unixListen`, `unixConnect`,
+`unixSocketPair` or `pollCreate`) raises the soft limit to the hard one, once
+for the whole process, as Node and Go do at start-up. On macOS it stops at
+`OPEN_MAX` (10240), the most the system takes there. A program that never
+calls `nish:net` keeps the limit it was given.
+
+Past the hard limit is the operator's to set: `ulimit -Hn` in the shell that
+starts the server, `LimitNOFILE=` in a systemd unit, or the container's
+`nofile` limit (`docker run --ulimit nofile=…`). At the limit, a call that
+wants a descriptor answers -24 (`EMFILE`), and `nish/net/handler` waits for
+one to close rather than spin.
+
+A child the program starts with `spawn` inherits the raised soft limit, as
+it would under Node. A child that relies on the lower one should lower it
+itself.
+
 ## Sharing a port and turning Nagle off: `tcpListenFlags`
 
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with one more
