@@ -13,8 +13,7 @@ const clean = (): void => {
   spawnSync(["rm", "-f", path, `${path}-journal`, `${path}-wal`, `${path}-shm`]);
 };
 
-export const main = (): i32 => {
-  clean();
+const run = (): i32 => {
   const a = openDatabase(path, OPEN_READWRITE | OPEN_CREATE);
   const b = openDatabase(path, OPEN_READWRITE);
   if (a.isErr() || b.isErr()) {
@@ -36,7 +35,6 @@ export const main = (): i32 => {
   const undone = a.value.exec("ROLLBACK");
   const closedA = a.value.close();
   const closedB = b.value.close();
-  clean();
   if (undone.isErr() || closedA.isErr() || closedB.isErr()) {
     console.log("cleanup failed");
     return 1;
@@ -55,4 +53,11 @@ export const main = (): i32 => {
   }
   console.log("busy after a millisecond-step wait");
   return 0;
+};
+
+export const main = (): i32 => {
+  clean();
+  const code = run();
+  clean();
+  return code;
 };
