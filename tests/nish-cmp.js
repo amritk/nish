@@ -5665,7 +5665,7 @@ const DECLARED = [
   ].map(([program, file]) => ({
     program,
     file,
-    changelog: "keep the panic kind a failed root keep recorded",
+    changelog: "the panic kind a failed root keep recorded",
     why: "the guarded loader's catch around the arena release keeps a panic kind already recorded instead of overwriting it with `trap`",
   })),
 ]
