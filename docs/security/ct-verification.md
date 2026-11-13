@@ -640,7 +640,12 @@ review.
   divsteps and its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the
   module's divstep loop unrolled thirty times, which `tests/run.js` holds to
   the module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
-  their limb loops unrolled.) `p256Verify` handles only public data.
+  their limb loops unrolled. Since ECC-8 the field multiply, square, add and
+  subtract are fiat's 64-bit ones, and their copies read the 64-bit helpers
+  as the module does: `p256FiatMulxU64Hi`, the add-with-carry and
+  subtract-with-borrow pairs, and `p256FiatCmovznzU64`, with `ct-check` lines
+  marking `p256FiatMulxU64Hi`'s operands and `p256FiatCmovznzU64`'s condition
+  and choices secret.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
