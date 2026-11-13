@@ -90,10 +90,10 @@
  *  masks and adds, whatever the scalar, so its loops count constants and no
  *  branch or address follows the nonce. Verification inverts its public s with
  *  the same function: a variable-time twin could stop once g is zero, but it
- *  would save at most the constant-time one's 33,620 Ir and add a second path
- *  to audit. Fermat's a^(n - 2), which both used before, is the reference the
- *  safegcd is held to bit for bit, in the test's seam
- *  (`tests/link/crypto_p256_inverse`). Every field inversion — of a Z that
+ *  would save at most the constant-time one's own cost, under 1% of a
+ *  verification, and add a second path to audit. Fermat's a^(n - 2), which
+ *  both used before, is the reference the safegcd is held to bit for bit, in
+ *  the test's seam (`tests/link/crypto_p256_inverse`). Every field inversion — of a Z that
  *  follows the key or the nonce in the public key, ECDH and signing — is the
  *  same safegcd modulo p, `p256FieldInvert`, on the same divstep and update
  *  functions.
