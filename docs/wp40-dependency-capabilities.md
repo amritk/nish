@@ -87,7 +87,15 @@ the confinement it had before. The ELF loader and `#!` interpreter the exec
 allowlist holds are refused as spawn targets unless granted too, and a
 program spawned under the allowlist is held to its own start: neither it nor
 anything it forks can execute a second program, granted or not (SBX-1,
-fixed; [wp37-os-sandbox.md](wp37-os-sandbox.md#one-exec-per-spawn)). Hosts are not enforced at run time: seccomp
+fixed; [wp37-os-sandbox.md](wp37-os-sandbox.md#one-exec-per-spawn)), unless
+the grant writes `exec:` before the program: `process.spawn=exec:make`
+lets `make` and its subtree exec anything the allowlist's EXECUTE reaches,
+the loader included, which is close to `process.spawn` whole for that
+program. The prefix is read before the program is resolved (an empty
+program is NL3046), the literal check above treats `exec:make` as it treats
+`make`, a program granted both ways is `exec:`, and the lock file records
+`process.spawn=exec:make` as its own text, so a move to it from
+`process.spawn=make` is a widening (NL2593). Hosts are not enforced at run time: seccomp
 cannot read the address a socket call is given (CAPS-19, open).
 
 ## 3. What a dependency reaches

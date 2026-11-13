@@ -206,9 +206,33 @@ kernel, or inside a container that forbids the calls it takes, every spawn
 under such a grant fails and says so on stderr, in `--sandbox=best-effort`
 too. Docker's default seccomp profile is one that forbids them: there the
 line ends `(EPERM)`. The same holds for a granted program that is itself a Nish program
-built with `--sandbox` and such a grant: its own spawns fail. To let a
-dependency's program start others, grant the dependency `process.spawn`
-whole, which lifts the list of programs with it.
+built with `--sandbox` and such a grant: its own spawns fail.
+
+To let one program start others, write `exec:` before it in the grant:
+
+```json
+{
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_build": ["process.spawn=exec:make", "process.spawn=cc"]
+      }
+    }
+  }
+}
+```
+
+Under `--sandbox`, `make` and everything it starts may run any program on
+the list, and also the loader and the `#!` interpreters the list lets the
+kernel run, which start any binary the program can read. So `exec:` is close
+to granting `process.spawn` whole for that program: grant it only to a
+dependency that may run anything. `cc` above is still held to its own
+start, and so is every program granted without `exec:`, which cannot borrow
+`make`'s reach by starting it. A program written both ways counts as
+`exec:`. `process.spawn=exec:` with no program after it stops the build,
+as a program that is not on your `PATH` does. The other way to let a
+dependency's programs start others is to grant it `process.spawn` whole,
+which lifts the list of programs with it.
 
 Addresses are checked at build time only. The kernel cannot see which
 address a socket call is given, so a `net=<host>` grant does not stop a
@@ -217,7 +241,8 @@ you have read.
 
 `nish-capabilities.lock.json` records the arguments too
 (`"pkg_conf": ["fs.read=data"]`). Widening a grant past them — a new
-directory, program or address, or the whole capability — stops the build
+directory, program or address, `exec:` before a program, or the whole
+capability — stops the build
 until you review it and run `--update-capability-lock` again.
 
 If the directory is gone when the program runs, `--sandbox` refuses to run,

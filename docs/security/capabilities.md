@@ -243,7 +243,12 @@ refuses it), "sandbox dependency grants: the wrapper passes the grant's real
 directory as the fs.read scope", "sandbox dependency grants: a dependency
 granted process.spawn=true runs true and cannot exec echo" (unsandboxed, the
 same program runs `echo`), and "sandbox dependency grants: the exec allowlist
-names the granted program by its absolute path".
+names the granted program by its absolute path". A grant
+`process.spawn=exec:<program>` is held to the same literals
+(`link/caps_dep_arg_spawn_exec_too_narrow`, `link/caps_dep_spawn_exec_granted`),
+and `exec:` with no program is NL3046
+(`link/caps_dep_manifest_spawn_exec_refused`); what it lifts at run time is in
+[sandbox.md](sandbox.md#limits).
 
 **The lockfile records the arguments** (CAPS-20):
 `link/caps_lock_args: rejected with "is granted `fs.read=more`, past the arguments `nish-capabilities.lock.json` records for its `fs.read`"`.
