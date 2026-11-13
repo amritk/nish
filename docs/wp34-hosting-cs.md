@@ -1101,6 +1101,10 @@ These are the items from the first version of this note that the later phases
 still owe. The cs note owns their order. Each keeps the justification it had:
 a named part of cs that cannot be written without it.
 
+Every item below is built, and the Notes column is the record of how each
+was answered; their state is kept on the
+[roadmap page](roadmap/wp34-hosting-cs.md).
+
 | Item | For | Notes |
 | --- | --- | --- |
 | **N7.** `atan2`, `tan`, `hypot`, `sign`, `clz32` and `imul`; JavaScript's `-0` and NaN from `Math.round`, `min` and `max`; `f32ToBits` | the simulation, the bots, the renderer | **Built (#847).** `clz32` was already there. Each zero or NaN change withdraws a documented deviation. The last bit of a transcendental stays platform noise ([wp33](wp33-round-trip.md) §3.1) |
