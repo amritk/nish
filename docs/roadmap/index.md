@@ -32,7 +32,6 @@ and where it is specified.
 
 - M4: when to declare 1.0.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
-- [WP27: Calling C](wp27-ffi.md): whether S5 (`errno`) happens at all.
 - [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions. [WP33: The round trip to TypeScript](wp33-round-trip.md)'s R6 is that mode, so it waits here too.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 
@@ -54,7 +53,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | --- | --- | --- |
 | [WP21: Packages](wp21-packages.md) | In progress | 5 of 7 |
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
-| [WP27: Calling C](wp27-ffi.md) | In progress | 4 of 5 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 15 of 19 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 4 of 8 |
@@ -91,6 +89,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP23: The language surface a corpus review asked for](wp23-language-surface.md) | Landed | 1 of 1 |
 | [WP25: Remove inheritance, widen `implements`](wp25-inheritance.md) | Landed | 1 of 1 |
 | [WP26: The standard library](wp26-stdlib.md) | Landed | 1 of 1 |
+| [WP27: Calling C](wp27-ffi.md) | Landed | 5 of 5 |
 | [WP29: The thread surface](wp29-thread-surface.md) | Landed | 5 of 8 |
 | [WP30: Bytes across the interop boundary](wp30-bytes-interop.md) | Landed | 1 of 3 |
 | [WP31: Ranged integers](wp31-ranged-integers.md) | Landed | 1 of 4 |

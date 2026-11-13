@@ -94,7 +94,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish:secret`](nish-secret.md) | Key material as an opaque value that the checker keeps from leaving the program by any road but one, and that is zeroed, with a store no optimiser may remove, before the function that made it lets go of it. |
 | [`nish:simd`](nish-simd.md) | Sixteen-byte vectors of one lane type, and the lane-wise operations on them, each lowered to target-independent LLVM vector IR. |
 | [`nish:term`](nish-term.md) | Terminal input for a full-screen program: read a key the moment it is pressed, wait for one with a timeout that doubles as a frame clock, and ask the terminal whether it is one, how big it is, and to stop echoing. |
-| [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves. |
+| [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, a C string or struct read through a pointer nothing proves, and the errno a C call left. |
 
 ## Standard library
 
