@@ -2,6 +2,17 @@
 name: NodeKind enum for the AST node kinds
 overview: Replace the 79 `N_*` i32 module constants in src/nodes.ts with one numeric `enum NodeKind`, type `Node.kind` and every kind-carrying signature with it, and grow Nish-0 to admit enums. The compiler's own IR does not change except for one dead check the enum proves dead.
 stages:
+  - id: enum-perf
+    title: perf(checker) — enum narrowing builds an enum's members once
+    goal: Checking src/ with node kinds as an enum costs no more than with i32 constants (within noise), with identical diagnostics and IR
+    verification: npm run check && npm run lint && node tests/run.js self && node tests/run.js performance && node tests/nish-cmp.js && node tests/self/goldens.js
+    todos:
+      - id: cache-members
+        content: Build each enum's member list once in enumMembersOf (src/expressions.ts) instead of re-interning every member per test — see Stage enum-perf
+      - id: set-joins
+        content: Make narrowHeld, joinHeld and memberListId linear and allocation-free when nothing narrows — see Stage enum-perf
+      - id: measure-parity
+        content: Measure a compiler built from this branch on main's src/ and on feature/nodekind-enum/enum's src/ — see Stage enum-perf
   - id: enum
     title: refactor(self) — the AST node kinds become enum NodeKind
     goal: Every node kind in src/ is a NodeKind member, no node kind is typed i32, Nish-0 admits enums, and the compiler's IR is unchanged but for the one explained dead check
@@ -20,6 +31,12 @@ stages:
       - id: verify-ir
         content: Diff the compiler's own IR before and after, regenerate tests/self/goldens/checked, measure self-compile time — see Verification
 ---
+
+## Stage `enum-perf` (added after review; merges before `enum`)
+
+**Owns:** `src/expressions.ts`, `src/program.ts`, `src/types.ts`, `src/symbols.ts`, `src/loop-flow.ts`, `tests/self/goldens/checked/**`, `tests/run.js` (a performance pin only, if one fits).
+
+Found at the merge gate of #1508: the seed compiles the enum'd `src/` 11% slower. Callgrind (+1.28 G instructions, +26%) puts it all in enum narrowing: `enumMembersOf` +332 M (re-interns all 79 members per test via a string key), `joinHeld` +216 M (pairwise 79×79 compares at every `||`/`&&` join), `TypeTable.internAll` and its key building ~+660 M, `narrowHeld` +32 M. A per-enum cache alone took the gap from +11% to +3% with byte-identical IR. Fix the checker so an enum costs what `i32` costs: cache members per enum, make join/narrow set-based (member types of one enum are interned by value, so ids compare), and do not allocate a new member list when a test leaves the set unchanged. No diagnostic, type or IR may change. The released seed keeps the old cost until the next release; measure with a compiler built from `src/`.
 
 ## Stage `enum`
 
