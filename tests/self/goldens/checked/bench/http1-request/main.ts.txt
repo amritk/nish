@@ -5366,7 +5366,7 @@ function Http1Parser.constructor(this: Http1Parser, maxTarget: i32, maxHeaderByt
   callee +1:27 http1Clamp -> @nish.http1Clamp
   callee +2:23 http1Clamp -> @nish.http1Clamp
   callee +3:20 http1Clamp -> @nish.http1Clamp
-  callee +19:5 Http1Parser.restart -> @nish.Http1Parser.restart
+  callee +21:5 Http1Parser.restart -> @nish.Http1Parser.restart
 function Http1Parser.feed(this: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.Http1Parser.feed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

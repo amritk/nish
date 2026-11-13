@@ -95,9 +95,7 @@ if (archive.status !== 0) {
   process.stderr.write(`git archive ${base}\n${archive.stderr}`)
   process.exit(1)
 }
-const untar = spawnSync("tar", ["-x", "-C", oldPackage], {
-  input: archive.stdout,
-})
+const untar = spawnSync("tar", ["-x", "-C", oldPackage], { input: archive.stdout })
 if (untar.status !== 0) {
   process.stderr.write(`tar -x\n${untar.stderr}`)
   process.exit(1)

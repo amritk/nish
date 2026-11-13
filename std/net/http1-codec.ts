@@ -431,8 +431,10 @@ export class Http1Parser {
     // caller that lends them out between requests puts empty ones here.
     // The spans likewise wait for the first field line (`http1SpanSet`). An
     // empty array cannot be written, only replaced, so one serves for both
-    // buffers and one for both lists, which `restart` replaces when
-    // `keepText` will fill them.
+    // buffers. The lists share one only until the `restart` below, which
+    // replaces both while `keepText` is on, as it is here even for a parser
+    // `Http1Connection` turns it off on: the sharing saves one empty array,
+    // not both.
     this.spans = []
     this.buf = []
     this.body = this.buf

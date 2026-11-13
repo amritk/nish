@@ -398,9 +398,9 @@ errors, 30,435 ns on-CPU per request (10,063 user).
 ## Measured: what an idle connection holds (2026-11-13)
 
 `Http1Connection`'s constructor no longer builds an `HttpDate` the server
-drops (it takes the server's), its spans and fields start as shared empty
-arrays rather than ones the first request replaces, and the response head a
-connection keeps to write again is sized to that head, rounded up to 64
+drops (it takes the server's), its spans wait for the first field line and
+its input and head buffers start as one shared empty array, and the response
+head a connection keeps to write again is sized to that head, rounded up to 64
 bytes, rather than `H1_HEAD_KEEP`'s fixed 1 KiB. `Http1Config.idleInput` is
 now on by default.
 
@@ -436,7 +436,9 @@ second copy of `new`, the noise floor:
 | json | 172,834 (157,495–220,407) | 171,621 (144,561–216,108) | 168,834 (141,726–225,154) | 172,632 (122,124–224,076) |
 | post-json | 116,150 (80,470–128,495) | 114,729 (78,332–119,979) | 101,582 (87,407–124,326) | 111,768 (71,823–117,227) |
 
-Two copies of one binary differ by up to 17% (plaintext) and 12% (post-json),
+The four builds run interleaved, `bench/http.mjs` alternating their order
+each round, so drift on the machine falls on all of them alike. Two copies
+of one binary differ by up to 17% (plaintext) and 12% (post-json),
 and every idleInput-on median sits between them or within 3% of the nearer,
 so the throughput change is inside the noise band. User CPU per request
 moved no more: 0.75 µs against 0.76 for plaintext, 0.80 against 0.85–0.94
