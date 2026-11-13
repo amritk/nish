@@ -272,8 +272,8 @@ const YAML_STRIP: i32 = 1
 const YAML_KEEP: i32 = 2
 
 /**
- * A flow scalar's `extras` when its span holds no line break and, quoted, no
- * escape or doubled quote: its body is its source span, byte for byte.
+ * A flow scalar's `extras` when its body is its source span, byte for byte.
+ * @internal Copied by std/yaml-json.ts with no search for a line break.
  */
 export const YAML_VERBATIM: i32 = 1
 
