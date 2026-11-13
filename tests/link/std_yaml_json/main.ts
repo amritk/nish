@@ -46,17 +46,24 @@ const yjSlice = (text: string, a: i32, b: i32): string =>
   a < 0 || b < a || b > toI32(text.length) ? `- ${a} ${b}` : text.substring(a, b);
 
 /**
- * Loads document 0 of `text` with `loadText`; the root, or the loader's code.
- * A fresh loader's `load(parseYaml(text))` must answer the same.
+ * Loads document 0 of `text` with `load(parseYaml(text))`; the root, or the
+ * loader's code. Beside it, a fresh loader's `loadText` into a document with
+ * the same limits must answer the same.
  */
 const yjLoad = (loader: YamlJsonLoader, doc: JsonDocument, text: string): JsonValue => {
-  const run = yjdRun(loader, doc, text, 0);
+  const twin = new JsonDocument(new JsonLimits());
+  twin.maxValues = doc.maxValues;
+  twin.duplicates = doc.duplicates;
+  twin.tok.maxTotalBytes = doc.tok.maxTotalBytes;
+  const direct = new YamlJsonLoader();
+  direct.maxDepth = loader.maxDepth;
+  const run = yjdRun(direct, twin, text, 0);
   YJ_DIRECT[0] += 1;
   if (run.differs !== "") {
     YJ_DIRECT[1] += 1;
     console.log(`DIFFERS ${text}\n${run.differs}`);
   }
-  return run.root;
+  return loader.load(parseYaml(text), 0, doc);
 };
 
 /** Loads document 0 of `text`, parsed with repeated keys let through to the loader. */

@@ -1,5 +1,5 @@
 // The two ways `nish/yaml-json` loads YAML text, side by side: `loadText`,
-// which loads it without a node tree, and `load(parseYaml(text))`. Their
+// which builds the values during the parse, and `load(parseYaml(text))`. Their
 // answers are compared as text: on a refusal the code and range, else the
 // JSON written out and every value's and key's source range.
 import { JsonLimits } from "nish/json-tokenizer";

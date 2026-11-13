@@ -1954,9 +1954,24 @@ export class JsonDocument {
           jsonValueGet(r.slotKeyStart, s),
           jsonValueGet(r.slotKeyEnd, s)
         )
+      } else if (object) {
+        this.clearKeyRange(this.memberSlot(c, i))
       }
     }
     return c
+  }
+
+  /**
+   * Marks slot `s` as having no key range when it lies below
+   * `slotRangeTop`, where an earlier key range of a deeper copy back-filled
+   * or a stale one stands.
+   */
+  private clearKeyRange(s: i32): void {
+    if (this.hasKeyRange(s)) {
+      const r: JsonValueRanges = this.rangeArrays()
+      jsonValuePut(r.slotKeyStart, s, -1)
+      jsonValuePut(r.slotKeyEnd, s, -1)
+    }
   }
 
   /** Appends `bytes[from, from + n)` to the end of `bytes`. */

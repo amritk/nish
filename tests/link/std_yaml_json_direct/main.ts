@@ -3,8 +3,10 @@
 // (tests/yaml-suite/cases.txt), and one past the last, loads both ways with
 // the same values, ranges and refusals. Then the refusals the direct path
 // must keep, each through `loadText` alone: an alias bomb, merge visits past
-// the budget, a document too deep and copies past the byte cap.
-import { JsonLimits } from "nish/json-tokenizer";
+// the budget, a document too deep and copies past the byte cap. Last, merge
+// and scalar cases that must load both ways alike and, where they load, by
+// the direct path rather than its fallback to `load`.
+import { JSON_TOK_ERR_TOTAL_LIMIT, JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
 import { Suite } from "nish/testing";
 import { parseYaml } from "nish/yaml";
@@ -118,9 +120,56 @@ const yjdRefusals = (t: Suite): void => {
   t.eqStr("reuse: an alias to a merge sequence is built afresh", merged < 0 ? `refused ${merged}` : doc.stringify(merged), '{"q":[{"p":1}],"p":1}');
 };
 
+/** Loads document `d` of `text` both ways; they must agree, and when `direct` the direct path must have answered. */
+const yjdSame = (t: Suite, loader: YamlJsonLoader, name: string, text: string, d: i32, direct: boolean): void => {
+  const doc = new JsonDocument(new JsonLimits());
+  const run = yjdRun(loader, doc, text, d);
+  if (run.differs !== "") {
+    console.log(`DIFFERS ${name}\n${run.differs}`);
+  }
+  t.ok(`same: ${name}`, run.differs === "");
+  if (direct) {
+    t.ok(`same: ${name}: built during the parse`, run.root >= 0 && loader.directLoaded);
+  }
+};
+
+const yjdMerges = (t: Suite): void => {
+  const loader = new YamlJsonLoader();
+  yjdSame(t, loader, "nested merges, own keys winning", "b: &b {a: 1, b: 2}\nm: &m {<<: *b, b: 3, c: 4}\nx: {<<: *m, c: 5, d: 6}\n", 0, true);
+  yjdSame(t, loader, "one map merged twice", "b: &b {a: 1, z: 0}\nc: &c {<<: *b, d: 2}\nx: {<<: [*b, *c], z: 3}\n", 0, true);
+  yjdSame(t, loader, "a merge into a map an alias copies", "b: &b {a: 1}\nm: &m {<<: *b, c: 2}\nn: *m\nk: [*m, *m]\n", 0, true);
+  yjdSame(t, loader, "a merged value that is an alias", "v: &v [1, {w: 2}]\nb: &b {a: *v}\nm: {<<: *b, e: *v}\n", 0, true);
+  let hops = "c0: &c0 {k0: 0}\n";
+  let hops99 = "";
+  for (let i: i32 = 1; i <= 100; i += 1) {
+    if (i === 100) {
+      hops99 = hops;
+    }
+    hops = `${hops}c${i}: &c${i} {<<: *c${i - 1}, k${i}: ${i}}\n`;
+  }
+  yjdSame(t, loader, "99 merge hops", hops99, 0, true);
+  yjdSame(t, loader, "100 merge hops", hops, 0, false);
+  const multi = "a: &a [1]\nb: *a\n---\nc: &c {x: 1}\nd: *c\ne: {<<: *c}\n";
+  yjdSame(t, loader, "a stream's first document, with an alias", multi, 0, true);
+  yjdSame(t, loader, "a stream's second document, with an alias", multi, 1, true);
+  yjdSame(t, loader, "plain scalars JSON spells otherwise, and a tagged one", "- +1\n- .5\n- 0x1F\n- !!str 1\n- -.5\n- 0o17\n", 0, true);
+
+  // A merged member's bytes are charged before it is copied.
+  const limits = new JsonLimits();
+  limits.maxTotalBytes = 64;
+  const capped = new JsonDocument(limits);
+  const long = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  const text = `a: &a {p: ${long}}\nb: {<<: *a}\nc: {<<: *a}\n`;
+  t.eqI32("byte cap: merged copies past maxTotalBytes are refused", loader.loadText(text, 0, capped), JSON_TOK_ERR_TOTAL_LIMIT);
+  t.ok("byte cap: the direct path refused the merge copy before making it", !loader.directLoaded);
+  t.eqI32("byte cap: nothing kept after a merge copy", capped.top, 0);
+  yjdSame(t, loader, "byte cap: merged copies past maxTotalBytes", text, 0, false);
+};
+
 export const main = (): number => {
   const t = new Suite("std/yaml-json loadText");
   yjdSuite(t);
   yjdRefusals(t);
+  yjdMerges(t);
   return t.done();
 };

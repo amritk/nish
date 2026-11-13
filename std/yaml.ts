@@ -49,6 +49,7 @@
 
 import { indexOfAny } from "nish/text"
 import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe"
+import { YamlJsonLoader } from "nish/yaml-json"
 
 // ---- Node kinds, styles and types -------------------------------------------
 
@@ -426,6 +427,12 @@ export class YamlStream {
    * @internal Used by `YamlParser`.
    */
   mergeItemsChecked: i32 = 0
+  /**
+   * Whether `keyName` keeps what it decodes; set only for a parse that loads
+   * as it goes (`parseYamlInto`), so `parseYaml` keeps nothing.
+   * @internal Set by `parseYamlInto`.
+   */
+  keepKeys: boolean = false
   /**
    * Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is.
    */
@@ -896,11 +903,15 @@ export class YamlStream {
   }
 
   /**
-   * `yamlKeyText` of `node`, decoded the first time it is asked for and kept,
-   * so the parser's duplicate-key check and a loader share one decode.
+   * `yamlKeyText` of `node`; under `keepKeys`, decoded the first time it is
+   * asked for and kept, so the parser's duplicate-key check and the loader
+   * share one decode.
    * @internal Called by `YamlParser` and `YamlJsonLoader` in yaml-json.ts.
    */
   keyName(node: i32): string {
+    if (!this.keepKeys) {
+      return yamlKeyText(this, node)
+    }
     if (node >= 0 && node < toI32(this.keySlots.length)) {
       const slot: i32 = this.keySlots[node]
       if (slot > 0) {
@@ -1852,6 +1863,9 @@ class YamlParser {
    * every item merges a map, `2` one does not, so a shared sequence is read once.
    */
   private mergeVerdicts: u8[]
+  /** The loader each collection of document `sinkDoc` is handed to as it ends, or null. */
+  private sink: YamlJsonLoader | null
+  private sinkDoc: i32 = -1
   private pos: i32 = 0
   private len: i32 = 0
   private depth: i32 = 0
@@ -1905,6 +1919,26 @@ class YamlParser {
     this.stream.merge = options.merge
     this.keepComments = options.keepComments
     this.firstOnly = options.firstDocumentOnly
+    this.sink = null
+  }
+
+  /**
+   * Hands every collection of document `d` to `loader` as the parse ends it,
+   * children before the collection that holds them.
+   * @internal Called by `parseYamlInto`.
+   */
+  loadInto(loader: YamlJsonLoader, d: i32): void {
+    this.sink = loader
+    this.sinkDoc = d
+    this.stream.keepKeys = true
+  }
+
+  /** Hands collection `node`, just ended, to the sink when its document is the one loaded. */
+  private ended(node: i32): void {
+    const sink: YamlJsonLoader | null = this.sink
+    if (sink !== null && toI32(this.stream.docRoots.length) === this.sinkDoc) {
+      sink.collection(this.stream, node)
+    }
   }
 
   // ---- Reporting and bytes -------------------------------------------------------
@@ -3494,6 +3528,7 @@ class YamlParser {
     const node: i32 = stream.newNode(YAML_MAP, YAML_FLOW, stream.start(pair), stream.end(pair))
     yamlPut(stream.firsts, node, stream.pushKid(pair))
     yamlPut(stream.counts, node, 1)
+    this.ended(node)
     return node
   }
 
@@ -3565,6 +3600,7 @@ class YamlParser {
     yamlPut(stream.firsts, node, first)
     yamlPut(stream.counts, node, this.scratchTop - base)
     this.scratchTop = base
+    this.ended(node)
   }
 
   /** A pair node joining `key` to `value`, which is `-1` when the key has none. */
@@ -5127,3 +5163,22 @@ export const parseYamlWith = (text: string, options: YamlOptions): YamlStream =>
  * @returns The documents, nodes and diagnostics the parse found.
  */
 export const parseYaml = (text: string): YamlStream => parseYamlWith(text, new YamlOptions())
+
+/**
+ * Parses a YAML stream with the default options, as `parseYaml` does, and
+ * hands each collection of document `d` to `loader` as the parse ends it, so
+ * the loader builds its values during the parse.
+ *
+ * @internal Called by `YamlJsonLoader.loadText` in yaml-json.ts.
+ * @param text The YAML source.
+ * @param loader The loader building document `d`.
+ * @param d The 0-based index of the document the loader builds.
+ * @returns The documents, nodes and diagnostics the parse found: those `parseYaml` finds.
+ */
+export const parseYamlInto = (text: string, loader: YamlJsonLoader, d: i32): YamlStream => {
+  const parser: YamlParser = new YamlParser(text, new YamlOptions())
+  parser.loadInto(loader, d)
+  parser.parseAll()
+  parser.stream.sortDiagnostics()
+  return parser.stream
+}
