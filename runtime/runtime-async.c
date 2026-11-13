@@ -49,8 +49,11 @@
  * number is reused for. The duplicate is closed when the wait fires.
  *
  * **Regions.** Each spawned task owns a region (runtime-region.c), entered
- * whenever the task runs and freed when it finishes, so whatever a task
- * allocates is given back when it ends. The driver enters and leaves around
+ * whenever the task runs and emptied when it finishes, so whatever a task
+ * allocates is given back when it ends. The emptied region stays on the
+ * task's node for the node's next task (`nish_region_recycle`): the slot and
+ * one small chunk are kept, so a task that fits in it costs no malloc or
+ * free. The driver enters and leaves around
  * each resume (`nish_async_enter`, `nish_async_leave`).
  *
  * **Cancellation.** `nish_async_cancel` marks a task cancelled
@@ -58,7 +61,7 @@
  * has pending, so every parked await answers false and the task is queued; a
  * wait the task makes afterwards is made already failed. Nothing is unwound:
  * the task runs on from each failed await to its end, its `using` bindings
- * dispose as they do on any return, and `nish_async_done` frees its region.
+ * dispose as they do on any return, and `nish_async_done` empties its region.
  * `nish_async_cancel_after` arms a deadline that cancels a task when it
  * passes, a timer in the heap that `done` takes out, and
  * `nish_async_wait_fd_within` a descriptor wait that fails when its own
@@ -106,7 +109,7 @@ typedef struct nish_task {
   struct nish_task *next; /* the ready queue's link, or the free list's */
   int32_t kind;           /* the spawned function's kind; -1 for `main` */
   uint32_t gen;           /* moves on each time the node is reused */
-  uint64_t region;        /* the task's region; 0 for `main` and a free node */
+  uint64_t region;        /* the task's region, kept on a free node for its next task; 0 for `main` */
   uint32_t index;         /* the node's place in the task table, for ever */
   uint32_t flags;         /* NISH_TASK_QUEUED, NISH_TASK_CANCELLED */
 } nish_task;
@@ -268,7 +271,7 @@ void *nish_async_spawn(int32_t kind, uint64_t bytes) {
   t->next = NULL;
   t->kind = kind;
   t->flags = 0;
-  t->region = nish_region_new();
+  if (!t->region) t->region = nish_region_new();
   nish_async_live++;
   return t;
 }
@@ -291,8 +294,8 @@ void nish_async_leave(void *node, void *prev) {
 
 static void nish_async_disarm(nish_task *t);
 
-/* A task finished: take out its deadline, free its region and put its node
-   back, a generation on. */
+/* A task finished: take out its deadline, empty its region for the node's
+   next task and put its node back, a generation on. */
 void nish_async_done(void *node) {
   nish_task *t = node;
   if (t->kind < 0) return;
@@ -313,8 +316,7 @@ void nish_async_done(void *node) {
     }
     t->flags &= ~NISH_TASK_QUEUED;
   }
-  nish_region_free(t->region);
-  t->region = 0;
+  t->region = nish_region_recycle(t->region);
   nish_async_live--;
   t->gen = t->gen == UINT32_MAX ? 1 : t->gen + 1;
   nish_slab *slab = &nish_async_slabs[t->kind];

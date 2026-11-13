@@ -1,6 +1,6 @@
 /* Each spawned task owns a region (runtime/runtime-async.c,
    runtime/runtime-region.c): the executor enters it whenever the task runs,
-   leaves it when the task suspends and frees it when the task finishes. Two
+   leaves it when the task suspends and empties it when the task finishes. Two
    tasks take turns allocating, as two tasks interleaved at their awaits do:
    neither allocation lands in `main`'s arena, each survives the other task's
    turn untouched, and each finished task gives its region back. */

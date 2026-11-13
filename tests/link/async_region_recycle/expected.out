@@ -1,0 +1,6 @@
+a first task starts with no chunk: yes
+the node is reused: yes
+its next task starts with one chunk, emptied: yes
+a thousand small tasks share one chunk: yes
+after a 1 MiB task, the next starts with no chunk: yes
+live: 0, nodes: 4

@@ -156,7 +156,10 @@ uint64_t nish_arena_used(void);
  * stale: an `awaitAll` lane's region, once the lane has answered; it panics
  * on a child region or a region with children. `nish_region_child_new` makes
  * a region whose parent is the one entered last on this thread, and panics
- * when none is; freeing a region frees its children, deepest first, and
+ * when none is. `nish_region_recycle` empties a region that is not entered
+ * for reuse, keeping its slot and at most one small chunk, makes its handle
+ * stale and answers the new one; a region with a parent or children, or on
+ * its last generation, is freed instead and the answer is 0. Freeing a region frees its children, deepest first, and
  * panics before freeing anything when any of them is entered. The wasm
  * profile has none of these (scripts/build.sh refuses IR that names them);
  * wasi has. */
@@ -166,6 +169,7 @@ void *nish_region_enter(uint64_t r);
 void nish_region_leave(uint64_t r, void *root);
 void nish_region_free(uint64_t r);
 void nish_region_adopt(uint64_t r);
+uint64_t nish_region_recycle(uint64_t r);
 
 /* ---- The async executor (runtime-async.c) --------------------------------
  * Linked only into a program whose IR names `@nish_async_`

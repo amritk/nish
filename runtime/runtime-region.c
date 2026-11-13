@@ -353,6 +353,44 @@ void nish_region_free(uint64_t r) {
   }
 }
 
+/* The most a recycled region keeps: a bigger chunk is given back, so a task
+   that once allocated a lot does not leave its node holding onto it
+   (docs/security/async.md, ASYNC-20). */
+#define NISH_REGION_KEEP ((uint64_t)16 << 10)
+
+/* A finished task's region, emptied for its node's next task: what
+   `nish_region_free` would do, except that the slot and the newest chunk
+   malloc made, up to NISH_REGION_KEEP, are kept, so a task that fits in it
+   costs no malloc, no free and no trip through the slot free list. The
+   generation moves on as at a free, so every copy of `r` is stale; the new
+   handle is the answer. The kept chunk's bytes are not cleared: compiled
+   code writes every byte it reads (`new` zero-fills, arrays fill to their
+   length, strings are written whole), as it does in the chunks malloc hands
+   back after a free. A region with a parent or children, or on its last
+   generation, is freed instead, and the answer is 0. Panics on an entered
+   region, as `free` does. Under ASAN nothing is kept. */
+uint64_t nish_region_recycle(uint64_t r) {
+  nish_region_slot *s = nish_region_slot_of(r);
+  uint64_t gen = s->gen + 1;
+  if (s->entered || s->parent || s->first_child || gen >= NISH_REGION_GEN_END) {
+    nish_region_free(r);
+    return 0;
+  }
+  nish_region_swap(s);
+  nish_reset_arena();
+  nish_chunk_link *keep = (nish_chunk_link *)nish_arena.chunks;
+  if (keep && keep->cap > NISH_REGION_KEEP) {
+    nish_free_arena();
+    keep = 0;
+  }
+  nish_region_swap(s);
+  /* The chunks go on doubling from the kept one, as if it had just grown. */
+  s->chunk = keep ? keep->cap * 2 : 8;
+  s->root = 0;
+  __atomic_store_n(&s->gen, gen, __ATOMIC_RELAXED);
+  return gen << NISH_REGION_SLOT_BITS | (r & (NISH_REGION_SLOTS - 1));
+}
+
 /* An `awaitAll` lane's region, once the lane has finished: its chunks go on
    top of the arena in `nish_arena`, newest first as there, so what the lane
    answered lives on in the arena that awaited it and is given back when that
