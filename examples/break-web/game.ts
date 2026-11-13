@@ -49,12 +49,12 @@ const LINK_LOADED: i32 = 9
  */
 export const BREAK_LINK = new Int32Array(10)
 
-/** How many words BREAK_HELP_IN holds: its length, then that many UTF-16 units. */
-const HELP_IN_WORDS: i32 = 1024
+/** How many words BREAK_HELP_IN holds: its length, then that many UTF-8 bytes. */
+const HELP_IN_WORDS: i32 = 8192
 
 /**
  * A help to break apart in place of BREAK_HELP, written before init: [0] its
- * length in UTF-16 units (0, the default, for BREAK_HELP), then the units.
+ * length in UTF-8 bytes (0, the default, for BREAK_HELP), then one byte a word.
  * The page writes none; a test hands in break_core_wasm's, to match its frames.
  */
 export const BREAK_HELP_IN = new Int32Array(HELP_IN_WORDS)
@@ -121,11 +121,11 @@ const startHelp = (): string => {
   if (n <= 0 || n >= HELP_IN_WORDS) {
     return BREAK_HELP
   }
-  let help = ""
+  const bytes: u8[] = []
   for (let i: i32 = 1; i <= n; i++) {
-    help = `${help}${String.fromCharCode(BREAK_HELP_IN[i])}`
+    bytes.push(toU8(BREAK_HELP_IN[i] & 255))
   }
-  return help
+  return String.fromBytes(bytes, 0, n)
 }
 
 /** Start a run, with the page's saved settings when it wrote some. */

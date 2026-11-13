@@ -25,6 +25,22 @@ const NEAR = new Set(["brick", "bricks", "breakout", "game", "play"])
 const LINE = 40
 
 /**
+ * The live terminal's look, kept out of theme.css so a page that never types
+ * loads none of it: for good once attached (--live) the hero's animation holds
+ * on its last frame, so what is typed stays put, and the caret blinks while
+ * the terminal has focus.
+ */
+const css = `
+.nish-hero__terminal--live *{animation:none}
+.nish-hero__terminal .nish-hero__line-in{padding-top:0}
+.nish-hero__said{display:block;max-height:16em;overflow:auto;color:var(--scalar-color-2)}
+.nish-hero__caret{display:inline-block;width:.6em;height:1.1em;vertical-align:text-bottom;
+background:var(--scalar-color-accent);opacity:.25}
+.nish-hero__terminal:focus-within .nish-hero__caret{opacity:1;animation:nish-caret 1s steps(1,end) infinite}
+@keyframes nish-caret{50%{opacity:0}}
+`
+
+/**
  * The terminal's answer to `line`: the text to print under it, "" for none,
  * or OPEN for `nish break`.
  */
@@ -73,7 +89,7 @@ export const attach = (
   input.removeEventListener("input", first)
   input.removeEventListener("keydown", first)
   input.maxLength = LINE
-  // Live for good: the hero's looping animation stops (theme.css).
+  // Live for good: the hero's looping animation stops (`css`).
   term.classList.add("nish-hero__terminal--live")
   const node = (tag, className, text = "") => {
     const made = document.createElement(tag)
@@ -81,6 +97,19 @@ export const attach = (
     made.textContent = text
     return made
   }
+  term.append(node("style", "", css))
+  // A form, so a keyboard's go key that sends no Enter keydown (an IME's 229)
+  // still enters the line, as a submit.
+  const form = node("form", "nish-hero__form")
+  form.setAttribute("autocomplete", "off")
+  term.append(form)
+  form.append(input)
+  // Whether the game was asked for from a tap: then closing it hands focus to
+  // nothing, so no soft keyboard springs up over the page.
+  let touched = document.defaultView?.matchMedia?.("(pointer: coarse)")?.matches ?? false
+  term.addEventListener("pointerdown", (event) => {
+    touched = event.pointerType === "touch"
+  })
   // A screen reader hears the input itself as it is typed, and each answer
   // through `said`; the drawn copy of the line is for the eye only.
   const said = node("span", "nish-hero__said")
@@ -105,7 +134,9 @@ export const attach = (
     say(`$ ${command}\nloading…\n`)
     opening ??= load()
     opening
-      .then((game) => game.open({ focus: input, say: (text) => say(`$ ${command}\n${text}\n`) }))
+      .then((game) =>
+        game.open({ focus: touched ? null : input, say: (text) => say(`$ ${command}\n${text}\n`) })
+      )
       .then(() => say(""))
       .catch((error) => {
         opening = null
@@ -121,13 +152,17 @@ export const attach = (
   }
   show()
   input.addEventListener("input", show)
+  const enter = (event) => {
+    event.preventDefault()
+    const entered = input.value
+    input.value = ""
+    show()
+    run(entered)
+  }
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.isComposing) {
-      event.preventDefault()
-      const entered = input.value
-      input.value = ""
-      show()
-      run(entered)
+      enter(event)
     }
   })
+  form.addEventListener("submit", enter)
 }

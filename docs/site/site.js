@@ -228,7 +228,7 @@
       )
     )
 
-  /** The hero's terminal: a hidden input takes its line; its first use imports the shell (examples/break-web). */
+  /** The hero's terminal: a hidden input whose first use imports the shell (examples/break-web). */
   const terminal = (...children) => {
     const input = el("input.nish-hero__input", {
       "aria-label": "Terminal",
@@ -238,22 +238,18 @@
       enterkeyhint: "go",
     })
     const term = el("div.nish-hero__window.nish-hero__terminal", {}, ...children, input)
-    term.addEventListener("click", () => input.focus())
-    // Lines entered while it loads are answered once it has; a failed load is retried.
-    const lines = []
+    term.addEventListener("click", () => getSelection().isCollapsed && input.focus())
+    const lines = [] // entered while the shell loads
     let shell = null
     const first = (event) => {
       if (event.key === "Enter" && !event.isComposing) {
         lines.push(input.value)
         input.value = ""
-      } else if (event.type !== "input") {
+      } else if (event.type !== "input" && event.keyCode !== 229) {
         return
       }
       const shellUrl = "/break/shell.mjs"
-      shell ??= import(shellUrl).then(
-        (m) => m.attach(term, input, lines, first),
-        () => (shell = null)
-      )
+      shell ??= import(shellUrl).then((m) => m.attach(term, input, lines, first)).catch(() => (shell = null))
     }
     input.addEventListener("input", first)
     input.addEventListener("keydown", first)

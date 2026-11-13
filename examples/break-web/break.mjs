@@ -114,7 +114,7 @@ export const writeSettings = (storage, words) => {
  * starts with `saved` settings when there are some, and after each step
  * reports a settings change to `onSave` and a quit to `onQuit`. A `help`
  * string replaces the compiler's --help the intro breaks apart (game.ts's
- * BREAK_HELP_IN); the page passes none.
+ * BREAK_HELP_IN); the page passes none, and an empty one keeps the compiler's.
  */
 export const linkLoader = (loader, saved, onSave, onQuit, help = null) => ({
   load: async (source, imports) => {
@@ -130,13 +130,16 @@ export const linkLoader = (loader, saved, onSave, onQuit, help = null) => ({
     }
     if (help !== null) {
       const words = game.views().storage.BREAK_HELP_IN
-      if (help.length >= words.length) {
-        throw new RangeError(`a help of ${help.length} units does not fit BREAK_HELP_IN`)
+      if (words === undefined) {
+        throw new TypeError("the game module has no BREAK_HELP_IN storage")
       }
-      words[0] = help.length
-      for (let i = 0; i < help.length; i++) {
-        words[i + 1] = help.charCodeAt(i)
+      // UTF-8, one byte a word: a Nish string is its bytes.
+      const bytes = new TextEncoder().encode(help)
+      if (bytes.length >= words.length) {
+        throw new RangeError(`a help of ${bytes.length} bytes does not fit BREAK_HELP_IN`)
       }
+      words[0] = bytes.length
+      words.set(bytes, 1)
     }
     let saves = 0
     let quit = false
@@ -222,16 +225,22 @@ export const open = ({
     focus?.focus?.()
   }
   close.addEventListener("click", shut)
-  // Modal: Tab moves between the canvas and the close control only, and a
-  // wheel or a drag over the overlay cannot scroll the page beneath it.
+  // Modal: Tab moves between the canvas and the close control only, Escape
+  // off the canvas closes, and a wheel or a drag over the overlay cannot scroll the page beneath it.
   const signal = controller.signal
   overlay.addEventListener(
     "keydown",
     (event) => {
+      // The canvas asked for now: a renderer may have put another in its place.
+      const screen = overlay.querySelector("canvas") ?? canvas
       if (event.key === "Tab") {
         event.preventDefault()
-        const next = event.target === close ? canvas : close
+        const next = event.target === close ? screen : close
         next.focus()
+      } else if (event.key === "Escape" && event.target !== screen) {
+        // The game reads Escape on its own screen; anywhere else it closes.
+        event.preventDefault()
+        shut()
       }
     },
     { signal }

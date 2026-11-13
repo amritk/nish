@@ -38,6 +38,7 @@
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -161,14 +162,40 @@ const ask = (option, colour = false) => {
   return r.stdout.replace(/\n$/, "")
 }
 
+/**
+ * The paths of the machine that builds: the repository, the working directory
+ * and the home directory, less any so short (a root, a home of "/") that any
+ * text would hold it.
+ */
+const LOCAL = [root, process.cwd(), os.homedir()].filter((p) => p.length > 1 && path.parse(p).root !== p)
+
+/** The first of LOCAL, or docs/AI.md, that `text` names; null when none. */
+const localPath = (text) => [...LOCAL, "docs/AI.md"].find((p) => text.includes(p)) ?? null
+
 /** The compiler's `--help`; a page must not show or hash a path on the machine that built it. */
 const askHelp = (colour) => {
   const text = ask("--help", colour)
-  if (text.includes(root) || text.includes("docs/AI.md")) {
-    fail(`${nish} --help names a path under NISH_AGENT=0; build.mjs must not publish it`)
+  if (localPath(text) !== null) {
+    fail(`${nish} --help names ${localPath(text)} under NISH_AGENT=0; build.mjs must not publish it`)
   }
   return text
 }
+
+/** The served module and loader that name a path of this machine, each with the path. */
+const leaks = () =>
+  ["game.wasm", "game.mjs"]
+    .map((name) => path.join(out, name))
+    .filter((file) => fs.existsSync(file))
+    .map((file) => [file, localPath(fs.readFileSync(file, "latin1"))])
+    .filter(([, found]) => found !== null)
+    .map(([file, found]) => `${path.relative(root, file)} (names ${found})`)
+
+/** Every file under --out, relative to it, with "/" between its parts. */
+const builtFiles = (dir = out, under = "") =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const name = `${under}${entry.name}`
+    return entry.isDirectory() ? builtFiles(path.join(dir, entry.name), `${name}/`) : [name]
+  })
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex")
 
@@ -235,6 +262,12 @@ if (checking) {
       changed.push(`${path.relative(root, served)} (not the file this build wrote)`)
     }
   }
+  for (const name of builtFiles()) {
+    if (name !== MANIFEST && !SERVED.includes(name)) {
+      changed.push(`${path.relative(root, path.join(out, name))} (not a file this build writes)`)
+    }
+  }
+  changed.push(...leaks())
   // The shell answers as the compiler does now, not only as it did when built.
   const shellFile = path.join(out, "shell.mjs")
   if (fs.existsSync(shellFile)) {
@@ -352,5 +385,10 @@ fs.writeFileSync(
   path.join(out, "shell.mjs"),
   shell.replace(SHELL_HELP, () => shellHelp(help)).replace(SHELL_VERSION, () => shellVersion(record.compiler))
 )
+if (leaks().length > 0) {
+  fail(
+    `the build names a path of this machine; nothing it holds may be published:\n  ${leaks().join("\n  ")}`
+  )
+}
 fs.writeFileSync(path.join(out, MANIFEST), `${JSON.stringify({ ...record, outputs: outputs() }, null, 2)}\n`)
 process.stdout.write(`break-web: ${out}\n`)
