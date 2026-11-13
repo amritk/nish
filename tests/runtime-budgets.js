@@ -1100,6 +1100,11 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * visibility, and an exported symbol survives `--gc-sections`, so the four stubs
  * are in every module that links runtime-wasm.c. Keeping them out of a program
  * that never calls them is a change to scripts/build.sh's link line.
+ *
+ * The game-page stage moved the same two digests again, for the same reason:
+ * runtime-wasm.c defines nish_arena_keep, the call-site reclaim's keep, as the
+ * identity, so string code reached from wasm (nish/term) links
+ * (docs/wp6-memory.md §2a), and `--export-all` keeps it in every module.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
@@ -1113,7 +1118,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
     loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "96d30c5e34923c2c601a84c2840b24900592957e2c5936d97b40502b574f9576",
+    wasm: "bb48e976a4bf87d39260add7b57da65f45387a1b822e144d902ae94417a4b004",
     host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
   },
   {
@@ -1129,7 +1134,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/label.ts",
     dts: "2908a99c7f6fbfdb2f974459751e1ef424fc31651f3d90905199af43572f7458",
     loader: "8c8c983e487e7fce8d39053ce902bf0ad83851e4263f5f177de7438bb25c755b",
-    wasm: "217f03032659ab60e8b67dfaaa0e14625a2f67cedbac18acb3b6178f9c149692",
+    wasm: "ea55629e5d04c0ce90835fc3879b71844a78cfc5a9ca2805b813292c602da76f",
     host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",
   },
 ]

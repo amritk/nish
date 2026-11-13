@@ -35918,6 +35918,199 @@ if (!only || "page-frame".includes(only)) {
   )
 }
 
+// ---- nish/page/game: a nish/host/game module run on a page ------------------------
+// examples/game-starter/build.mjs links the starter game; tests/game-page/check.mjs
+// runs it under runtime/page-game.mjs in Node, with the fake canvases, clock, audio
+// and listeners of tests/page-frame/fakes.mjs, and prints a line per check.
+// tests/game-page/smoke-manual.cjs is the manual Chromium smoke.
+if (!only || "game-page".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`game-page: ${why}`)
+  } else {
+    const out = path.join(buildDir, "game-starter")
+    // A build of this test's own, so an older one without the build's marker is no obstacle.
+    fs.rmSync(out, { recursive: true, force: true })
+    const built = spawnSync("node", ["examples/game-starter/build.mjs", "--nish", NISH, "--out", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    // The count is pinned, as page-frame's is: a check that goes missing is caught.
+    const GAME_PAGE_CHECKS = 73
+    /** Runs tests/game-page/check.mjs over the build in `dir`: its result lines, and whether all of them ran. */
+    const runChecks = (dir) => {
+      const res = spawnSync(process.execPath, [path.join(root, "tests", "game-page", "check.mjs"), dir], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lines = res.stdout.split("\n")
+      const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+      const counted = lines.find((line) => line.startsWith("checks: "))
+      const complete = res.status === 0 && counted === `checks: ${results.length}` && results.length === GAME_PAGE_CHECKS
+      return { res, results, complete }
+    }
+    if (check("game-page: examples/game-starter/build.mjs links the starter game", built.status === 0, shown(built))) {
+      const { res, results, complete } = runChecks(out)
+      check("game-page: the checks ran to the end", complete, shown(res))
+      for (const line of results) {
+        const ok = line.startsWith("ok ")
+        const rest = ok ? line.slice(3) : line.slice(7)
+        const tab = rest.indexOf("\t")
+        check(`game-page: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+      }
+    }
+
+    // The starter as a user has it: copied out of the repository beside an
+    // installed nish package (node_modules/nish, here a link to this checkout)
+    // and its node_modules/.bin/nish, built with a bare `node build.mjs`.
+    const away = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-starter-"))
+    // A copy with no package anywhere above it.
+    const alone = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-alone-"))
+    try {
+      const copy = path.join(away, "my-game")
+      fs.cpSync(path.join(root, "examples", "game-starter"), copy, {
+        recursive: true,
+        filter: (from) => path.basename(from) !== "dist",
+      })
+      fs.mkdirSync(path.join(away, "node_modules", ".bin"), { recursive: true })
+      fs.symlinkSync(root, path.join(away, "node_modules", "nish"), "dir")
+      // A shim, not a link: the compiler finds std/ and runtime/ from the path it was run by.
+      const bin = path.join(away, "node_modules", ".bin", "nish")
+      fs.writeFileSync(bin, `#!/bin/sh\nexec '${path.resolve(NISH)}' "$@"\n`, { mode: 0o755 })
+      const copied = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+      if (check("game-page: the starter copied out of the repository builds against the installed package", copied.status === 0,
+        shown(copied))) {
+        // What it built runs: every check the in-repo build passes, over dist/.
+        const { res, results, complete } = runChecks(path.join(copy, "dist"))
+        check(
+          "game-page: the copied starter's dist/ passes every check",
+          complete && results.every((line) => line.startsWith("ok ")),
+          [...results.filter((line) => !line.startsWith("ok ")), shown(res)].join("\n")
+        )
+        const again = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+        check("game-page: build.mjs rebuilds into the dist/ it wrote", again.status === 0, shown(again))
+      }
+
+      // --out is emptied, so build.mjs refuses one it does not own, saying why,
+      // and leaves it as it was; and a flag it does not know, or with no value.
+      const foreign = path.join(away, "foreign")
+      fs.mkdirSync(path.join(foreign, "nish"), { recursive: true })
+      fs.writeFileSync(path.join(foreign, "notes.txt"), "mine\n")
+      fs.writeFileSync(path.join(away, "a-file"), "mine\n")
+      const bare = path.join(alone, "my-game")
+      fs.cpSync(copy, bare, { recursive: true, filter: (from) => path.basename(from) !== "dist" })
+      for (const [what, args, cwd, says] of [
+        ["an --out holding the game", ["--out", away], copy, "holds the game, the package or the working directory"],
+        ["an --out at the root", ["--out", path.parse(away).root], copy, "holds the game, the package or the working directory"],
+        ["an --out at the working directory", ["--out", "."], copy, "holds the game, the package or the working directory"],
+        ["an --out holding files it did not write", ["--out", foreign], copy, "holds files this build did not write"],
+        ["an --out that is a file", ["--out", path.join(away, "a-file")], copy, "is a file; name a directory"],
+        ["a flag with no value", ["--out"], copy, "--out needs a value"],
+        ["a flag it does not know", ["--ouput", "elsewhere"], copy, "unknown argument --ouput"],
+        ["a directory without the nish package", [], bare, "the nish package is not installed here"],
+      ]) {
+        const refused = spawnSync(process.execPath, ["build.mjs", ...args], { cwd, encoding: "utf8" })
+        check(
+          `game-page: build.mjs refuses ${what}, saying so`,
+          refused.status === 1 && refused.stderr.includes(says),
+          shown(refused)
+        )
+      }
+      check(
+        "game-page: and the refusals left every directory as it was",
+        fs.existsSync(path.join(copy, "game.ts")) &&
+          fs.existsSync(path.join(foreign, "notes.txt")) &&
+          fs.existsSync(path.join(foreign, "nish")) &&
+          fs.readFileSync(path.join(away, "a-file"), "utf8") === "mine\n" &&
+          !fs.existsSync(path.join(copy, "elsewhere")) &&
+          !fs.existsSync(path.join(bare, "dist"))
+      )
+    } finally {
+      fs.rmSync(away, { recursive: true, force: true })
+      fs.rmSync(alone, { recursive: true, force: true })
+    }
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "game-page")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-game.d.ts"), path.join(dir, "page-game.d.ts"))
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "page-frame.d.ts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, DEFAULT_KEYS, DEFAULT_TOUCH, type Game, startGame } from "./page-game.js"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement): Promise<number> => {",
+      '  const game: Game = await startGame(canvas, new URL("./game.wasm", document.baseURI), {',
+      "    seed: 7,",
+      '    keys: [...DEFAULT_KEYS, "w"],',
+      '    touch: { zones: DEFAULT_TOUCH.zones, tap: " " },',
+      "    stepsPerSecond: 120,",
+      "    maxStepsPerFrame: 4,",
+      "    sound: { muted: true },",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string, fresh: HTMLCanvasElement) => console.warn(from, to, reason, fresh),",
+      "    loader: { load: async (source: WebAssembly.Module) => source },",
+      "    imports: {},",
+      "    onError: (error: unknown) => console.error(error),",
+      "    signal: new AbortController().signal,",
+      '    loaderUrl: new URL("./game.mjs", document.baseURI),',
+      "  })",
+      "  game.muted = false",
+      "  const running: boolean = game.running",
+      "  const now: HTMLCanvasElement = game.presenter.canvas",
+      "  game.stop()",
+      "  await startGame(canvas, \"game.wasm\", { touch: false, sound: false })",
+      "  return game.fps + game.refreshHz + now.width + (game.module === null || !running ? 0 : 1)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: false, noUnusedParameters: false },
+      include: [],
+      files: ["page-game.d.ts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("game-page: a page type-checks against runtime/page-game.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  // ... and what examples/game-starter/build.mjs reads from the installed package.
+  const shipped = [
+    "runtime/page-game.mjs",
+    "runtime/page-game.d.ts",
+    "runtime/page-frame.mjs",
+    "runtime/page.mjs",
+    "runtime/runtime-wasm.c",
+    "scripts/build.sh",
+  ]
+  check(
+    "game-page: npm pack ships nish/page/game, its imports and what build.mjs links with",
+    shipped.every((f) => packed.includes(f)),
+    `missing: ${shipped.filter((f) => !packed.includes(f)).join(", ")}\n${shown(pack)}`
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/game"]
+  check(
+    "game-page: package.json exports ./page/game",
+    exported !== undefined && exported.types === "./runtime/page-game.d.ts" && exported.default === "./runtime/page-game.mjs",
+    JSON.stringify(exported)
+  )
+}
+
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
 //
 // docs/wp50-wasm-host.md §10. examples/wasm-arena/build.mjs links client.ts for

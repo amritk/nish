@@ -158,6 +158,11 @@
                 "title": "Calling Nish from other languages",
                 "filepath": "docs/guide/using-nish/interop.md"
               },
+              "/browser-games": {
+                "type": "page",
+                "title": "Writing a browser game",
+                "filepath": "docs/guide/using-nish/browser-games.md"
+              },
               "/threads": {
                 "type": "page",
                 "title": "Threads",
