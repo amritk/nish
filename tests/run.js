@@ -61,7 +61,8 @@ import {
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
-import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
+import { linkCompiler } from "./self/compiler-cache.js"
+import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
@@ -581,9 +582,10 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs but
-// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts), about
-// 200 s from the job's start with its setup steps (measured in docs/wp10-ci.md,
-// "Shards and time limits"). Shard 1 then runs every section after them that
+// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts) and the
+// golden cases' work past their IR check, which `caseShard` deals by position:
+// every shard compiles every case, since later sections read that compile, and
+// does the rest for its own eighth. Shard 1 then runs every section after them that
 // is not dealt, and
 // the link programs a later section reads the output of (`LINK_READ_LATER`);
 // a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
@@ -631,11 +633,16 @@ if (seed.error !== undefined) {
   }
   summarise()
 }
+// A run before that linked the same inputs left its binary in
+// `build/cache/compiler-under-test/` (`tests/self/compiler-cache.js` says what
+// the key covers), and copying it saves the minute the link takes.
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true })
+const underTest = linkCompiler(seed, path.join("src", "compile.ts"), NISH)
 if (
   !check(
-    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test`,
-    linkWith(seed, path.join("src", "compile.ts"), NISH) !== null,
+    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test` +
+      (underTest?.reused ? ` (kept from a run with the same inputs, key ${underTest.key})` : ""),
+    underTest !== null,
     "(the seed's report is on stderr above)"
   )
 ) {
@@ -648,7 +655,9 @@ if (
 // run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
 // cases are independent of each other and the sections after this one are not
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
-// case has finished before the next section starts, and the checks are
+// case has finished before the next section starts; in a sharded run every
+// shard still compiles every case for that reason, and does the rest of the
+// work only for the cases `caseShard` deals it. The checks are
 // reported in corpus order, which keeps the output the same at any width.
 // The filter is the first argument that is neither a flag nor the value of
 // one (`--shard 2/4`, `--jobs 4`).
@@ -701,6 +710,48 @@ const caseEnv = (file) => {
 }
 
 const selectedCases = cases.filter((name) => !only || name.includes(only))
+
+/**
+ * The shard that does a golden case's dealt work: everything after its IR is
+ * held to the golden -- `llvm-as`, the `--warn-portability`,
+ * `--emit-capabilities`, `--emit-panics`, `--emit-arena` and
+ * `--explain-memory` compiles, and the native link and run. Every shard still
+ * compiles every case and checks its IR, because that compile is what later
+ * sections read: `build/test/<name>.ll` (the arrays, crypto, runtime and
+ * bench blocks, and shard 1's checks after the link programs, most of them
+ * behind an `existsSync` that would skip silently) and `caseResults`. None of
+ * them reads what the dealt work writes. Section A took 59 s of shard 2 in run
+ * 43369900293 and 30 s with the deal (`docs/wp10-ci.md`, "Where the wall
+ * clock goes"); what is left is mostly the compiles every shard keeps.
+ *
+ * The deal is by position, the linked cases and the compiled-only ones apart,
+ * so each shard gets an eighth of each kind whatever the corpus's order. The
+ * first linked case with and without `--threads` stays in shard 1: it is the
+ * specimen the `runtime objects:` checks replay there (`keepSpecimen`), and
+ * an unsharded run keeps the same one. A rejection or a `.stdout` case has no
+ * dealt work. A filtered run deals only the cases it selects, as it does the
+ * link programs.
+ */
+const caseShard = (() => {
+  if (SHARDS === 1) {
+    return () => SHARD
+  }
+  const exists = (name, ext) => fs.existsSync(path.join(casesDir, `${name}.${ext}`))
+  const dealt = selectedCases.filter((name) => !exists(name, "err") && !exists(name, "stdout"))
+  const linked = dealt.filter((name) => exists(name, "out"))
+  const specimens = [false, true]
+    .map((threads) => linked.find((name) => caseArgs(name).includes("--threads") === threads))
+    .filter((name) => name !== undefined)
+  const shardOf = new Map(specimens.map((name) => [name, 1]))
+  for (const group of [linked, dealt.filter((name) => !exists(name, "out"))]) {
+    let next = 0
+    for (const name of group.filter((name) => !shardOf.has(name))) {
+      shardOf.set(name, (next % SHARDS) + 1)
+      next++
+    }
+  }
+  return (name) => shardOf.get(name) ?? SHARD
+})()
 
 /**
  * Makes, in `dir`, the files the WP44 file cases open and cannot make
@@ -936,7 +987,9 @@ const runCase = async (name) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
-  const done = { compiled: r, steps, panicFunctions: 0 }
+  const done = { compiled: r, steps, panicFunctions: 0, dealtTo: 0 }
+  // Whether this shard does the case's work past its IR check (`caseShard`).
+  const mine = caseShard(name) === SHARD
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -963,7 +1016,7 @@ const runCase = async (name) => {
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
     expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
-  if (fs.existsSync(side("portability"))) {
+  if (mine && fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
@@ -992,7 +1045,7 @@ const runCase = async (name) => {
       "the two .ll files differ"
     )
   }
-  if (fs.existsSync(side("caps.json"))) {
+  if (mine && fs.existsSync(side("caps.json"))) {
     // WP35: the capability report, compiled a second time for the same reason
     // the portability warnings are -- the flag is not in `.args`, because the
     // tools that compile `tests/cases/` with the last release would refuse it.
@@ -1055,6 +1108,10 @@ const runCase = async (name) => {
     actual === expected,
     `--- expected\n${expected}\n--- actual\n${actual}`
   )
+  if (!mine) {
+    done.dealtTo = caseShard(name)
+    return done
+  }
 
   if (HAS_LLVM_AS) {
     const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
@@ -1249,6 +1306,21 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     reported++
   }
 })
+// What this shard left to the others, per `caseShard`: each named once, by count.
+{
+  const byShard = new Map()
+  for (const run of caseRuns) {
+    if (run.dealtTo > 0) {
+      byShard.set(run.dealtTo, (byShard.get(run.dealtTo) ?? 0) + 1)
+    }
+  }
+  for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
+    delegate(
+      `llvm-as, the side compiles and the native run of ${count} golden case(s) whose IR this shard checked`,
+      shardJob(i)
+    )
+  }
+}
 // The bound on native runs, held to what it promises with a bound of half a
 // second, because the real one takes two minutes to prove. `runNative` is the
 // helper both case loops run their programs through, so a change that drops
@@ -1335,12 +1407,15 @@ const caseResults = caseRuns.map((run) => run.compiled)
 // The oracle above passes vacuously on a function it never finds, so the run
 // says how many it read: every golden with a clean function contributes, and
 // a symbol spelling the oracle stopped recognising would take this to zero.
+// A shard reads only the cases dealt to it (`caseShard`), about an eighth of
+// the corpus's 2,861 functions, so the floor is shared out the same way.
 if (only === undefined) {
   const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
+  const floor = Math.floor(500 / SHARDS)
   check(
     `--emit-panics: the IR oracle read ${read} functions with nothing left that can panic`,
-    read >= 500,
-    "fewer than 500: the oracle is no longer finding the functions it is handed"
+    read >= floor,
+    `fewer than ${floor}: the oracle is no longer finding the functions it is handed`
   )
 }
 
@@ -11764,10 +11839,10 @@ if (dealtHere("p256Seams")) {
     })
   }
 
-  // #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
-  // and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
-  // `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
-  // 10,000 scalars. Neither inversion is exported, so the program reaches them
+  // #758: the scalar inverse by safegcd (`p256ScalarInverse`, which both
+  // signing paths and `p256Verify` use) against Fermat's a^(n-2), which the
+  // seam keeps as the reference, byte for byte, on the edges and a seeded
+  // corpus of 10,000 scalars. The inversion is not exported, so the program reaches it
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
   // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
@@ -11796,7 +11871,7 @@ if (dealtHere("p256Seams")) {
     const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
     check(
       "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
-      r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+      r.status === 0 && r.stdout === "gen-p256-table: 5632 limbs, as generated\n",
       shown(r)
     )
   }
@@ -14714,14 +14789,19 @@ if (dealtHere("arrayChecks")) {
         run ? String(run.stdout) + String(run.stderr) : String(cc.stderr)
       )
     }
-    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array")
-    if (fs.existsSync(scopeExe)) {
-      const run = spawnSync(scopeExe)
-      const lines = String(run.stdout).trim().split("\n")
+    // Linked here from section A's compile rather than taken from its binary:
+    // every shard compiles every case, but only the shard `caseShard` deals the
+    // case to links it, and this block runs wherever its group was dealt.
+    const scopeLl = path.join(buildDir, "mem_scope_dynamic_array.ll")
+    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array_flat")
+    if (fs.existsSync(scopeLl)) {
+      const cc = linkNative(scopeExe, scopeLl, { driver: null, libm: true })
+      const run = cc.status === 0 ? spawnSync(scopeExe) : null
+      const lines = run === null ? [] : String(run.stdout).trim().split("\n")
       check(
         "mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
-        run.status === 0 && lines.length === 4 && lines[1] === lines[3],
-        String(run.stdout) + String(run.stderr)
+        run !== null && run.status === 0 && lines.length === 4 && lines[1] === lines[3],
+        run === null ? String(cc.stderr) : String(run.stdout) + String(run.stderr)
       )
     }
   }
