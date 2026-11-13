@@ -1059,6 +1059,39 @@ at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
 [`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
 
+A C function that fails through `errno` is checked with `cErrno` from
+`nish:unsafe`. It answers the errno the most recent `declare function` call on
+this thread left, and naming it makes the compiler set errno to 0 just before
+every C call, so a function like `strtol`, which reports an out-of-range number
+only through errno, can be told apart from a success:
+
+```ts nish:ok
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+export const main = (): i32 => {
+  const big = strtol("99999999999999999999", null, 10);
+  console.log(`${cErrno()}`);
+  const small = strtol("42", null, 10);
+  console.log(`${small} ${cErrno()}`);
+  return big > 0 ? 0 : 1;
+};
+```
+
+```console
+34
+42 0
+```
+
+The compiler saves errno the moment C returns, before it copies a `string`
+result or allocates, so nothing Nish does afterwards moves the value you read.
+Each thread reads its own. A program that never names `cErrno` pays nothing;
+one that does pays a store and a load around every C call in the program. A
+wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
+there. The rules are in
+[`cErrno`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#cerrno-the-errno-a-c-call-left).
+
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and

@@ -433,7 +433,7 @@ const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name:
 }
 
 /**
- * A `nish:unsafe` function called by its global name. The six are declared
+ * A `nish:unsafe` function called by its global name. The eight are declared
  * as globals in `runtime/nish.d.ts`, as every `nish:` export is, but a
  * program reaches them only through the import: an unchecked index and a
  * defined wrap are each a decision about one site, and the import is what
@@ -925,6 +925,20 @@ const checkReadStruct = (ctx: CheckContext, call: Node, scope: Scope, args: Node
   return layout
 }
 
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5, `docs/wp27-ffi.md` §10): the errno
+ * the most recent `declare function` call on this thread left. Naming it is
+ * what makes every foreign call in the program zero errno before and save it
+ * after (`capturesErrno`); a freestanding wasm32 build has no libc and so no
+ * errno, and refuses it.
+ */
+const checkCErrno = (ctx: CheckContext, call: Node, args: Node): i32 => {
+  if (!refuseOnFreestandingWasm(ctx, call, "cErrno") && checkBuiltinArity(ctx, call, "cErrno", args, 0)) {
+    ctx.program.capturesErrno = true
+  }
+  return T_I32
+}
+
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
@@ -1000,6 +1014,9 @@ export const checkBuiltinFunctionNamed = (
     }
     if (name === "readStruct") {
       return checkReadStruct(ctx, call, scope, args, want)
+    }
+    if (name === "cErrno") {
+      return checkCErrno(ctx, call, args)
     }
     return name === "uncheckedGet" || name === "uncheckedSet"
       ? checkUncheckedAccess(ctx, call, scope, name, args)

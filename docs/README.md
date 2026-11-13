@@ -57,7 +57,7 @@ box per stage; the status line at a note's head may lag it.
 | [wp24-async.md](wp24-async.md) | Superseded by wp49: `async`/`await` was refused here, because there was nothing to wait for; `--emit-napi-async` built. |
 | [wp25-inheritance.md](wp25-inheritance.md) | Landed. Inheritance removed and `implements` widened to a field-prefix check, and why static dispatch made that the right trade. |
 | [wp26-stdlib.md](wp26-stdlib.md) | Landed. What a `std/` module is (source compiled into its importer, package `nish`), the module-or-builtin rule, and what the API had to absorb. |
-| [wp27-ffi.md](wp27-ffi.md) | In progress. Calling C through `declare function`: S1 (scalars), S2 (`CPtr`), S3 (strings, `readCString`) and S4 (`declare class` layouts, `readStruct`) built, S5 unbuilt. |
+| [wp27-ffi.md](wp27-ffi.md) | Landed. Calling C through `declare function`: S1 (scalars), S2 (`CPtr`), S3 (strings, `readCString`), S4 (`declare class` layouts, `readStruct`) and S5 (`cErrno`) built. |
 | [wp28-compatibility-mode.md](wp28-compatibility-mode.md) | Proposed. A compatibility dialect that accepts ordinary statically typed TypeScript behind a flag, and the line that decides what may enter it. |
 | [wp29-thread-surface.md](wp29-thread-surface.md) | Landed. The thread surface as legal TypeScript: P1 (`parallelMapInto`, `parallelReduce`), P2 (`using s = scope()`) and P3 (`Mutex<T>`, a lock that owns its data, and `Channel<T>` of scalars) built. |
 | [wp30-bytes-interop.md](wp30-bytes-interop.md) | Landed. `u8[]` and the other unsigned arrays across the wasm and N-API boundaries as typed arrays. |

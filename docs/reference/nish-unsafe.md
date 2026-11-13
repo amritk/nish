@@ -2,10 +2,11 @@
 
 # nish\:unsafe
 
-Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves.
+Element access with no bounds check, signed arithmetic that wraps, a C string or struct read through a pointer nothing proves, and the errno a C call left.
 
 ```ts
 import {
+  cErrno,
   readCString,
   readStruct,
   uncheckedGet,
@@ -29,6 +30,12 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="c​Errno" icon="phosphor/regular/function" href="#cerrno">
+
+The errno the most recent `declare function` call on this thread left: a program that names `cErrno` zeroes errno just before every foreign call and saves it just after, before any result marshalling.
+
+</scalar-card>
 
 <scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
@@ -84,12 +91,13 @@ for each name imported and an `unsafe call` line for each site.
 
 </scalar-callout>
 
-The global spelling is refused (NL2456): the seven are called only through an
+The global spelling is refused (NL2456): the eight are called only through an
 import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
 behaviour, which is the whole of the trade. There is no flag that turns the
 checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
-refuses each with exit 2. `readCString` and `readStruct` have no Node form, because their
-`CPtr` comes only from a `declare function`, which Node cannot call.
+refuses each with exit 2. `readCString`, `readStruct` and `cErrno` have no Node form,
+because their `CPtr` or errno comes only from a `declare function`, which Node
+cannot call.
 
 <scalar-detail title="Under Node">
 
@@ -115,6 +123,24 @@ every pair.
 Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
 
 ## Functions
+
+### cErrno
+
+The errno the most recent `declare function` call on this thread left:
+a program that names `cErrno` zeroes errno just before every foreign
+call and saves it just after, before any result marshalling. Native and
+`--profile wasi` only.
+
+```ts
+function cErrno(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+The saved errno; 0 before any foreign call, and 0 after one that
+  did not set it.
+
+</scalar-field>
 
 ### readCString
 

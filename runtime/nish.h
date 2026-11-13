@@ -138,6 +138,15 @@ void *nish_arena_keep(uint64_t mark, void *p);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t nish_arena_used(void);
 
+/* ---- cErrno (WP27 S5, docs/wp27-ffi.md §10) -----------------------------
+ * A program that names `cErrno` stores 0 through `nish_errno_ptr()` right
+ * before every `declare function` call and copies errno into
+ * `nish_errno_slot` right after it, before any result marshalling; `cErrno()`
+ * loads the slot. The slot is per thread under NISH_THREADS, so the runtime's
+ * own allocation and string copying cannot disturb it. */
+extern NISH_TLS int32_t nish_errno_slot;
+int *nish_errno_ptr(void);
+
 /* ---- Regions (runtime-region.c) -----------------------------------------
  * Arenas made, entered, left and freed one at a time
  * (docs/wp46-long-running-memory.md). A handle is a nonzero `uint64_t`: a

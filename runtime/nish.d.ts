@@ -707,7 +707,7 @@ declare function isExecutableSync(path: string): boolean;
 // ---- Unsafe (`nish:unsafe`) --------------------------------------------------
 //
 // Declared as globals so `tsc` reads a program that imports them, as every
-// `nish:` export is, but `nish` refuses a call to any of the seven that is not
+// `nish:` export is, but `nish` refuses a call to any of the eight that is not
 // imported from `nish:unsafe`: the import is the module's visible opt-in. The
 // refusal reads `` `uncheckedGet` is a `nish:unsafe` function and is called only
 // through an import of it `` (NL2456). An import may rename (`as`) and cannot be
@@ -853,6 +853,19 @@ declare function readCString(p: CPtr): string;
  * @returns a copy of the struct, in the `declare class` its context names.
  */
 declare function readStruct<T>(p: CPtr): T;
+
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent
+ * `declare function` call on this thread left, or 0 before any. Naming it
+ * anywhere in a program makes every foreign call zero errno just before it
+ * and save it just after, before the result is copied or anything allocated,
+ * so the runtime's own work after the call cannot change it. Meaningful only
+ * where the C function documents that it sets errno. Per thread; refused on a
+ * freestanding wasm32 build, which has no libc. Capability: unsafe.
+ *
+ * @returns the saved errno, an `i32`.
+ */
+declare function cErrno(): i32;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -3496,8 +3509,9 @@ declare module "nish:net" {
 }
 
 /**
- * Element access with no bounds check, signed arithmetic that wraps, and a C
- * string read through a pointer nothing proves.
+ * Element access with no bounds check, signed arithmetic that wraps, a C
+ * string or struct read through a pointer nothing proves, and the errno a C
+ * call left.
  *
  *     import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
  *
@@ -3511,12 +3525,13 @@ declare module "nish:net" {
  * is a call a reader can find. `--emit-checked` prints an `unsafe import` line
  * for each name imported and an `unsafe call` line for each site.
  *
- * The global spelling is refused (NL2456): the seven are called only through an
+ * The global spelling is refused (NL2456): the eight are called only through an
  * import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
  * behaviour, which is the whole of the trade. There is no flag that turns the
  * checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
- * refuses each with exit 2. `readCString` and `readStruct` have no Node form, because their
- * `CPtr` comes only from a `declare function`, which Node cannot call.
+ * refuses each with exit 2. `readCString`, `readStruct` and `cErrno` have no Node form,
+ * because their `CPtr` or errno comes only from a `declare function`, which Node
+ * cannot call.
  *
  * **Under Node.** `runtime/nish.mjs` answers the import: the get and set are
  * `xs[i]` and `xs[i] = v`, the wrapping three are `(a + b) | 0`,
@@ -3610,6 +3625,16 @@ declare module "nish:unsafe" {
    * @returns A copy of the struct; C keeps its own.
    */
   export function readStruct<T>(p: CPtr): T;
+  /**
+   * The errno the most recent `declare function` call on this thread left:
+   * a program that names `cErrno` zeroes errno just before every foreign
+   * call and saves it just after, before any result marshalling. Native and
+   * `--profile wasi` only.
+   *
+   * @returns The saved errno; 0 before any foreign call, and 0 after one that
+   *   did not set it.
+   */
+  export function cErrno(): i32;
 }
 
 /**
