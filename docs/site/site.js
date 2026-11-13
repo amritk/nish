@@ -165,20 +165,21 @@
         ),
         copyButton()
       ),
-      // The stage is a picture of what the text beside it already says, so it
-      // is hidden from assistive technology rather than read out line by line.
+      // The stage is a picture of what the text beside it already says, so its
+      // editor and beams are hidden from assistive technology rather than read
+      // out line by line. The terminal stays reachable: it takes a command.
       el(
         "div.nish-hero__stage",
-        { "aria-hidden": "true" },
+        {},
         el(
           "div.nish-hero__window.nish-hero__editor",
-          {},
+          { "aria-hidden": "true" },
           el("div.nish-hero__bar", {}, el("i"), el("i"), el("i"), el("span", {}, "squares.ts")),
           el("pre.nish-hero__code", {}, ...SOURCE.map(codeLine))
         ),
         el(
           "div.nish-hero__flow",
-          {},
+          { "aria-hidden": "true" },
           beams(),
           el(
             "div.nish-hero__core",
@@ -192,13 +193,11 @@
             ...TARGETS.map((name, index) => el("span.nish-hero__target", { style: `--i:${index}` }, name))
           )
         ),
-        el(
-          "div.nish-hero__window.nish-hero__terminal",
-          {},
-          el("div.nish-hero__bar", {}, el("i"), el("i"), el("i"), el("span", {}, "terminal")),
+        terminal(
+          el("div.nish-hero__bar", { "aria-hidden": "true" }, el("i"), el("i"), el("i"), el("span", {}, "terminal")),
           el(
             "pre.nish-hero__code",
-            {},
+            { "aria-hidden": "true" },
             el(
               "span.nish-hero__cmd",
               {},
@@ -210,6 +209,56 @@
         )
       )
     )
+
+  /**
+   * The hero's terminal, which takes a line once focused: Enter runs it, and
+   * every command but one is not found. That one loads its module from
+   * /break/ the first time it runs, and nothing before.
+   */
+  const terminal = (...children) => {
+    const typed = el("span")
+    const said = el("span.nish-hero__said", { "aria-live": "polite" })
+    const term = el(
+      "div.nish-hero__window.nish-hero__terminal",
+      { tabindex: "0", role: "textbox", "aria-label": "Terminal" },
+      ...children,
+      el("pre.nish-hero__code.nish-hero__line-in", {}, said, el("b", {}, "$ "), typed, el("i.nish-hero__caret"))
+    )
+    let opening = null
+    const say = (text) => (said.textContent = text)
+    term.addEventListener("keydown", (event) => {
+      const key = event.key
+      const line = typed.textContent
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return
+      }
+      if (key === "Enter") {
+        typed.textContent = ""
+        const command = line.trim()
+        if (command === "nish break") {
+          say(`$ ${command}\nloading…\n`)
+          opening ??= import("/break/break.mjs")
+          opening
+            .then((game) => game.open({ focus: term, say: (text) => say(`$ ${command}\n${text}\n`) }))
+            .then(() => say(""))
+            .catch((error) => {
+              opening = null
+              say(`$ ${command}\nnish break: ${error.message}\n`)
+            })
+        } else {
+          say(command === "" ? "" : `$ ${command}\n${command.split(" ")[0]}: command not found\n`)
+        }
+      } else if (key === "Backspace") {
+        typed.textContent = line.slice(0, -1)
+      } else if (key.length === 1 && line.length < 40) {
+        typed.textContent = line + key
+      } else {
+        return
+      }
+      event.preventDefault()
+    })
+    return term
+  }
 
   /**
    * The site is a single-page app: the landing page's Markdown is mounted,
