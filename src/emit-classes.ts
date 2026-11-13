@@ -20,6 +20,7 @@
 
 import { Emitter } from "./emit"
 import { emitFfiNullTest, emitRangedStore } from "./emit-builtins"
+import { rootClosureStructs } from "./emit-root"
 import { emitPackedResult, emitResultReturningCall, privateAbi, resultTypeDecl } from "./emit-result"
 import { fieldTbaa } from "./tbaa"
 import {
@@ -548,6 +549,10 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
   // only imported the class that embeds it, so it joins the list.
   const infos: StructInfo[] = []
   for (const info of emitter.program.structList) {
+    infos.push(info)
+  }
+  // WP55: a root's trace descriptors measure every struct it reaches.
+  for (const info of rootClosureStructs(emitter)) {
     infos.push(info)
   }
   let at = 0

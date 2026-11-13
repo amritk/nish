@@ -445,7 +445,12 @@ const returnsText = (bridged: ExternalFunction[]): boolean => {
   return false
 }
 
-export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored: StringSet): WasmBridge => {
+export const wasmBridged = (
+  table: TypeTable,
+  fns: ExternalFunction[],
+  vectored: StringSet,
+  keepsRoots: boolean
+): WasmBridge => {
   const bridged: ExternalFunction[] = []
   for (const fn of fns) {
     if (wasmSkipReason(table, fn.sig, vectored).length === 0) {
@@ -455,7 +460,9 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored:
   // Every function in the module, bridged or not, is linked into it, and one
   // whose prologue checks a range (every external one that takes a range)
   // calls the panic's two runtime symbols.
-  let needsRuntime = false
+  // WP55: root storage's keep is the runtime's (`nish_root_keep`), and it runs
+  // after every call.
+  let needsRuntime = keepsRoots
   for (const fn of fns) {
     if (takesRange(table, fn.sig)) {
       needsRuntime = true
@@ -955,11 +962,12 @@ const panicLoader = (hosts: boolean): string[] => {
  * `guarded`, inside `exportsOf`: every export runs in it. A dead module is
  * refused with a `NishPanic` and a busy one with a `NishReentry`, both before
  * the module is touched; with the runtime linked, everything the call
- * allocated in the arena is given back after the result has been read; and
+ * allocated in the arena is given back after the result has been read
+ * (`keepsRoots`: all but what root storage reaches, WP55 §4); and
  * anything but a refused argument that escapes the call (a panic, a trap, or
  * an exception out of a host function) leaves the module dead.
  */
-const guardLoader = (needsRuntime: boolean): string[] => {
+const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
   const lines: string[] = []
   lines.push(
     "  /** One call: refused on a dead or busy module; anything but a bad argument escaping it kills it. */"
@@ -994,7 +1002,8 @@ const guardLoader = (needsRuntime: boolean): string[] => {
   if (needsRuntime) {
     lines.push("      if (state.dead === null) {")
     lines.push("        try {")
-    lines.push("          raw.nish_arena_release(mark);")
+    // WP55 §4: with root storage, what the roots reach outlives the call.
+    lines.push(keepsRoots ? "          raw.nish_root_keep(mark);" : "          raw.nish_arena_release(mark);")
     lines.push("        } catch (e) {")
     lines.push(
       '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
@@ -1023,7 +1032,8 @@ export const generateWasmLoader = (
   dtsFile: string
 ): string => {
   const table = compilation.table
-  const bridge = wasmBridged(table, fns, structsHoldingVectors(compilation))
+  const keepsRoots = compilation.rootSymbols().length > 0
+  const bridge = wasmBridged(table, fns, structsHoldingVectors(compilation), keepsRoots)
   const layouts = storageLayouts(compilation)
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-dts", "// "))
@@ -1090,7 +1100,7 @@ export const generateWasmLoader = (
   lines.push("  const raw = instance.exports;")
   if (guard) {
     lines.push("  state.memory = raw.memory;")
-    pushAll(lines, guardLoader(bridge.needsRuntime))
+    pushAll(lines, guardLoader(bridge.needsRuntime, keepsRoots))
   }
   if (bridge.needsRuntime) {
     lines.push("  const memory = raw.memory;")
@@ -1575,7 +1585,9 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
     const program = unit.checker.program
     index = index + 1
     for (const info of program.constantList) {
-      if (!info.storage || info.origin !== program.source || info.storageElem < 0) {
+      // Root storage (WP55) has no layout a page could read: the runtime
+      // moves what its slots point to.
+      if (!info.storage || info.root || info.origin !== program.source || info.storageElem < 0) {
         continue
       }
       const key = keys.has(info.name) ? info.storageSymbol : info.name

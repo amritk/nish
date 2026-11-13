@@ -30,6 +30,7 @@
 //     parameters at `emitFunction`, the `!dbg` location around every statement
 //     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
+import { RootTraces } from "./emit-root"
 import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
 import { emitRegionBody } from "./emit-region"
@@ -506,9 +507,10 @@ export class Emitter {
       this.module.addTypeDecl(decl)
     }
     // WP50 S3: module storage is static, so it is defined here and not built.
+    const traces = new RootTraces()
     for (const info of this.program.constantList) {
       if (info.storage && info.origin === this.program.source) {
-        storageGlobals(this, info)
+        storageGlobals(this, info, traces)
       }
     }
     for (const sig of this.program.functions) {
