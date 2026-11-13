@@ -155,7 +155,9 @@ from `nish/term`:
   (`ACTION_MOVE` for a move) and `px`, `py`: the position in framebuffer
   pixels, already mapped through the scaling and the black bars around the
   frame. Moves are merged, so a step sees where the pointer is, not every
-  place it passed.
+  place it passed. A held button is released when it comes up, even off the
+  canvas, and when a context menu opens, the pointer is cancelled or the
+  window loses focus.
 - A touch holds a key down while it stays on a zone of the canvas: by default
   the left half holds `ArrowLeft` and the right half `ArrowRight`, and a short
   tap that does not move presses and releases `Enter`. A game written for the
@@ -201,12 +203,14 @@ $ npm install nish
 $ node build.mjs
 ```
 
-`build.mjs` writes `dist/`, one directory to serve: the `.wasm`, its loader,
-`index.html` and the three files of `nish/page/game` it imports. It finds the
+`build.mjs` writes `dist/`, one directory to serve: `game.wasm`, its loader
+`game.mjs` and the loader's typings `game.d.ts`, `index.html`, and, under
+`dist/nish/`, `nish/page/game` and the two files it imports. It finds the
 toolchain in the installed package (`node_modules/nish`) and the `nish`
 command in `node_modules/.bin`; `--nish <path>` names another compiler,
-`--out <dir>` another directory (one of its own: the build empties it first)
-and `--memory <MiB>` the memory size. It runs two commands, which a build of
+`--out <dir>` another directory and `--memory <MiB>` the memory size. The
+build empties its output directory first, so `--out` must name a new or empty
+directory, or one an earlier build wrote; any other flag is refused. It runs two commands, which a build of
 your own can run instead (`$NISH` is `node_modules/nish`):
 
 ```console

@@ -44,7 +44,7 @@ export interface GameLoader {
 
 /** What `startGame` takes beyond the canvas and the module's URL. */
 export interface GameOptions {
-  /** The seed passed to `init`; the clock's milliseconds by default. */
+  /** The seed passed to `init`, a whole number that fits in an i32; the clock's milliseconds by default. */
   readonly seed?: number;
   /**
    * The `KeyboardEvent.key` names the game reads; others, and any key held

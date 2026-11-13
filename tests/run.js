@@ -35087,25 +35087,29 @@ if (!only || "game-page".includes(only)) {
     skip(`game-page: ${why}`)
   } else {
     const out = path.join(buildDir, "game-starter")
+    // A build of this test's own, so an older one without the build's marker is no obstacle.
+    fs.rmSync(out, { recursive: true, force: true })
     const built = spawnSync("node", ["examples/game-starter/build.mjs", "--nish", NISH, "--out", out], {
       cwd: root,
       encoding: "utf8",
     })
-    if (check("game-page: examples/game-starter/build.mjs links the starter game", built.status === 0, shown(built))) {
-      const res = spawnSync(process.execPath, [path.join(root, "tests", "game-page", "check.mjs"), out], {
+    // The count is pinned, as page-frame's is: a check that goes missing is caught.
+    const GAME_PAGE_CHECKS = 73
+    /** Runs tests/game-page/check.mjs over the build in `dir`: its result lines, and whether all of them ran. */
+    const runChecks = (dir) => {
+      const res = spawnSync(process.execPath, [path.join(root, "tests", "game-page", "check.mjs"), dir], {
         cwd: root,
         encoding: "utf8",
       })
-      // The count is pinned, as page-frame's is: a check that goes missing is caught.
-      const GAME_PAGE_CHECKS = 69
       const lines = res.stdout.split("\n")
       const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
       const counted = lines.find((line) => line.startsWith("checks: "))
-      check(
-        "game-page: the checks ran to the end",
-        res.status === 0 && counted === `checks: ${results.length}` && results.length === GAME_PAGE_CHECKS,
-        shown(res)
-      )
+      const complete = res.status === 0 && counted === `checks: ${results.length}` && results.length === GAME_PAGE_CHECKS
+      return { res, results, complete }
+    }
+    if (check("game-page: examples/game-starter/build.mjs links the starter game", built.status === 0, shown(built))) {
+      const { res, results, complete } = runChecks(out)
+      check("game-page: the checks ran to the end", complete, shown(res))
       for (const line of results) {
         const ok = line.startsWith("ok ")
         const rest = ok ? line.slice(3) : line.slice(7)
@@ -35118,6 +35122,8 @@ if (!only || "game-page".includes(only)) {
     // installed nish package (node_modules/nish, here a link to this checkout)
     // and its node_modules/.bin/nish, built with a bare `node build.mjs`.
     const away = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-starter-"))
+    // A copy with no package anywhere above it.
+    const alone = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-alone-"))
     try {
       const copy = path.join(away, "my-game")
       fs.cpSync(path.join(root, "examples", "game-starter"), copy, {
@@ -35130,16 +35136,56 @@ if (!only || "game-page".includes(only)) {
       const bin = path.join(away, "node_modules", ".bin", "nish")
       fs.writeFileSync(bin, `#!/bin/sh\nexec '${path.resolve(NISH)}' "$@"\n`, { mode: 0o755 })
       const copied = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+      if (check("game-page: the starter copied out of the repository builds against the installed package", copied.status === 0,
+        shown(copied))) {
+        // What it built runs: every check the in-repo build passes, over dist/.
+        const { res, results, complete } = runChecks(path.join(copy, "dist"))
+        check(
+          "game-page: the copied starter's dist/ passes every check",
+          complete && results.every((line) => line.startsWith("ok ")),
+          [...results.filter((line) => !line.startsWith("ok ")), shown(res)].join("\n")
+        )
+        const again = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+        check("game-page: build.mjs rebuilds into the dist/ it wrote", again.status === 0, shown(again))
+      }
+
+      // --out is emptied, so build.mjs refuses one it does not own, saying why,
+      // and leaves it as it was; and a flag it does not know, or with no value.
+      const foreign = path.join(away, "foreign")
+      fs.mkdirSync(path.join(foreign, "nish"), { recursive: true })
+      fs.writeFileSync(path.join(foreign, "notes.txt"), "mine\n")
+      fs.writeFileSync(path.join(away, "a-file"), "mine\n")
+      const bare = path.join(alone, "my-game")
+      fs.cpSync(copy, bare, { recursive: true, filter: (from) => path.basename(from) !== "dist" })
+      for (const [what, args, cwd, says] of [
+        ["an --out holding the game", ["--out", away], copy, "holds the game, the package or the working directory"],
+        ["an --out at the root", ["--out", path.parse(away).root], copy, "holds the game, the package or the working directory"],
+        ["an --out at the working directory", ["--out", "."], copy, "holds the game, the package or the working directory"],
+        ["an --out holding files it did not write", ["--out", foreign], copy, "holds files this build did not write"],
+        ["an --out that is a file", ["--out", path.join(away, "a-file")], copy, "is a file; name a directory"],
+        ["a flag with no value", ["--out"], copy, "--out needs a value"],
+        ["a flag it does not know", ["--ouput", "elsewhere"], copy, "unknown argument --ouput"],
+        ["a directory without the nish package", [], bare, "the nish package is not installed here"],
+      ]) {
+        const refused = spawnSync(process.execPath, ["build.mjs", ...args], { cwd, encoding: "utf8" })
+        check(
+          `game-page: build.mjs refuses ${what}, saying so`,
+          refused.status === 1 && refused.stderr.includes(says),
+          shown(refused)
+        )
+      }
       check(
-        "game-page: the starter copied out of the repository builds against the installed package",
-        copied.status === 0 && fs.statSync(path.join(copy, "dist", "game.wasm"), { throwIfNoEntry: false })?.isFile() === true,
-        shown(copied)
+        "game-page: and the refusals left every directory as it was",
+        fs.existsSync(path.join(copy, "game.ts")) &&
+          fs.existsSync(path.join(foreign, "notes.txt")) &&
+          fs.existsSync(path.join(foreign, "nish")) &&
+          fs.readFileSync(path.join(away, "a-file"), "utf8") === "mine\n" &&
+          !fs.existsSync(path.join(copy, "elsewhere")) &&
+          !fs.existsSync(path.join(bare, "dist"))
       )
-      const refused = spawnSync(process.execPath, ["build.mjs", "--out", away], { cwd: copy, encoding: "utf8" })
-      check("game-page: build.mjs refuses an --out holding the game", refused.status !== 0 && fs.existsSync(path.join(copy, "game.ts")),
-        shown(refused))
     } finally {
       fs.rmSync(away, { recursive: true, force: true })
+      fs.rmSync(alone, { recursive: true, force: true })
     }
   }
 
@@ -35201,10 +35247,19 @@ if (!only || "game-page".includes(only)) {
   } catch {
     packed = []
   }
+  // ... and what examples/game-starter/build.mjs reads from the installed package.
+  const shipped = [
+    "runtime/page-game.mjs",
+    "runtime/page-game.d.ts",
+    "runtime/page-frame.mjs",
+    "runtime/page.mjs",
+    "runtime/runtime-wasm.c",
+    "scripts/build.sh",
+  ]
   check(
-    "game-page: npm pack ships runtime/page-game.mjs and runtime/page-game.d.ts",
-    packed.includes("runtime/page-game.mjs") && packed.includes("runtime/page-game.d.ts"),
-    shown(pack)
+    "game-page: npm pack ships nish/page/game, its imports and what build.mjs links with",
+    shipped.every((f) => packed.includes(f)),
+    `missing: ${shipped.filter((f) => !packed.includes(f)).join(", ")}\n${shown(pack)}`
   )
   const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/game"]
   check(

@@ -24,17 +24,22 @@ const fail = (message) => {
   process.stderr.write(`game-starter: ${message}\n`)
   process.exit(1)
 }
-const flag = (name, fallback) => {
-  const at = process.argv.indexOf(name)
-  if (at < 0) {
-    return fallback
+// The flags, each with one value; anything else is refused, so a misspelt
+// flag cannot quietly build into the default directory.
+const FLAGS = ["--out", "--nish", "--memory"]
+const given = new Map()
+for (let i = 2; i < process.argv.length; i += 2) {
+  const name = process.argv[i]
+  if (!FLAGS.includes(name)) {
+    fail(`unknown argument ${name}; the flags are ${FLAGS.join(", ")}`)
   }
-  const value = process.argv[at + 1]
+  const value = process.argv[i + 1]
   if (value === undefined || value === "" || value.startsWith("--")) {
     fail(`${name} needs a value`)
   }
-  return value
+  given.set(name, value)
 }
+const flag = (name, fallback) => given.get(name) ?? fallback
 
 /** The installed nish package's directory, found the way `import "nish"` would find it. */
 const packageDir = () => {
@@ -74,8 +79,10 @@ const memory = flag("--memory", "16")
 const ll = path.join(out, "ll")
 
 // --out is emptied first, so it may only name a directory this script owns:
-// not a root, not one holding this game, the package or the working directory,
-// and not one holding anything an earlier build did not write.
+// the game's own dist/, a directory that does not exist yet or is empty, or one
+// an earlier build marked as its own. Never a root, nor one holding this game,
+// the package or the working directory.
+const MARKER = ".game-starter-build"
 const inside = (dir, of) => {
   const rel = path.relative(dir, of)
   return rel === "" || !(rel.startsWith("..") || path.isAbsolute(rel))
@@ -83,17 +90,14 @@ const inside = (dir, of) => {
 if (path.dirname(out) === out || inside(out, here) || inside(out, process.cwd()) || inside(out, pkg)) {
   fail(`--out ${out} holds the game, the package or the working directory; name a directory of its own`)
 }
-const written = new Set([
-  "game.wasm",
-  "game.wasm.sites.json",
-  "game.mjs",
-  "game.d.ts",
-  "index.html",
-  "nish",
-  "ll",
-])
-if (fs.existsSync(out) && !fs.readdirSync(out).every((name) => written.has(name))) {
-  fail(`--out ${out} holds files this build did not write; name a new directory`)
+if (fs.existsSync(out)) {
+  if (!fs.statSync(out).isDirectory()) {
+    fail(`--out ${out} is a file; name a directory`)
+  }
+  const owned = out === path.join(here, "dist") || fs.existsSync(path.join(out, MARKER))
+  if (!owned && fs.readdirSync(out).length > 0) {
+    fail(`--out ${out} holds files this build did not write; name a new or empty directory`)
+  }
 }
 
 /** Runs `cmd` in this directory; exits with its output when it fails. */
@@ -109,6 +113,10 @@ const run = (cmd, args) => {
 fs.rmSync(out, { recursive: true, force: true })
 fs.mkdirSync(ll, { recursive: true })
 fs.mkdirSync(path.join(out, "nish"))
+fs.writeFileSync(
+  path.join(out, MARKER),
+  "written by examples/game-starter/build.mjs; --out may empty this directory\n"
+)
 
 // The two commands the guide's "Building" section shows: game.ts and each std
 // module it imports to one .ll each (the loader is written beside the .d.ts),

@@ -130,6 +130,22 @@ const validate = (url, options) => {
     expect(options[name] === undefined || typeof options[name] === "function", `${name} is a function`);
   }
   expect(
+    options.seed === undefined || (Number.isInteger(options.seed) && Math.abs(options.seed) <= 0x7fffffff),
+    `seed is a whole number that fits in an i32, not ${options.seed}`
+  );
+  expect(
+    options.sound === undefined ||
+      options.sound === false ||
+      (options.sound !== null &&
+        typeof options.sound === "object" &&
+        (options.sound.muted === undefined || typeof options.sound.muted === "boolean")),
+    "sound is false or { muted }"
+  );
+  expect(
+    options.prefer === undefined || ["webgpu", "webgl2", "canvas2d"].includes(options.prefer),
+    `prefer is "webgpu", "webgl2" or "canvas2d", not ${JSON.stringify(options.prefer)}`
+  );
+  expect(
     options.signal === undefined || typeof options.signal?.addEventListener === "function",
     "signal is an AbortSignal"
   );
@@ -318,13 +334,16 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
       push(EVENT_MOUSE, MOUSE_BUTTONS[index] ?? MOUSE_NONE, 0, mods, ACTION_RELEASE, x, y);
     }
   };
+  const releaseButtons = () => {
+    for (const [index, [x, y]] of [...buttons]) {
+      releaseButton(index, 0, x, y);
+    }
+  };
   const releaseAll = () => {
     for (const id of [...held.keys()]) {
       releaseKey(id, 0);
     }
-    for (const [index, [x, y]] of [...buttons]) {
-      releaseButton(index, 0, x, y);
-    }
+    releaseButtons();
     touches.clear();
   };
 
@@ -484,6 +503,20 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     const [x, y] = framePoint(e);
     releaseButton(e.button, modifiers(e), x, y);
   };
+  // A cancel's or a context menu's button is 0 or -1, not the one held, and no
+  // release follows either: every held button is let go where it was pressed.
+  const onPointerCancel = (e) => {
+    if (e.pointerType === "touch") {
+      onPointerUp(e);
+    } else if (running) {
+      releaseButtons();
+    }
+  };
+  const onContextMenu = () => {
+    if (running) {
+      releaseButtons();
+    }
+  };
   const onPointerMove = (e) => {
     if (running && e.pointerType !== "touch") {
       // Moves are coalesced: the step reads where the pointer is, not every place it passed.
@@ -502,8 +535,11 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     }
   };
   const onVisibility = () => {
+    // Hidden is a blur; shown again, the game hears its focus back if the canvas kept it.
     if (globalThis.document?.visibilityState === "hidden") {
       onBlur();
+    } else if (globalThis.document?.activeElement === presenter.canvas) {
+      onFocus();
     }
   };
   const onWindowResize = () => fit();
@@ -529,7 +565,8 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     ["keyup", onKeyUp],
     ["pointerdown", onPointerDown],
     ["pointerup", onPointerUp],
-    ["pointercancel", onPointerUp],
+    ["pointercancel", onPointerCancel],
+    ["contextmenu", onContextMenu],
     ["pointermove", onPointerMove],
     ["click", onGesture],
     ["touchend", onGesture],
