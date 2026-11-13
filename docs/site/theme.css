@@ -20,6 +20,11 @@
   Every animation here is decoration: the last block of the file turns all of
   it off under prefers-reduced-motion, and each animated element's resting
   style is its finished state, so nothing is lost when one does not run.
+
+  A hover changes colour, border, shadow and glow, never position or size:
+  no transform, margin or padding moves under the pointer. Something that
+  shifts as the pointer reaches it reads as a jump, and an edge that moves
+  away can leave the pointer, unhover it and bring it back, which flickers.
 */
 
 /* Rhythm: Scalar's defaults are 12px between blocks and 44px above a heading. */
@@ -225,20 +230,15 @@ body.scalar-app aside.t-doc__sidebar.sidebar-mobile-menu {
 }
 
 body img.logo.logo {
-  transition: transform 0.4s var(--nish-ease), filter 0.4s;
+  transition: filter 0.4s;
 }
 a:hover > img.logo.logo {
-  transform: scale(1.06) rotate(-3deg);
   filter: drop-shadow(0 0 10px color-mix(in srgb, var(--nish-violet), transparent 40%));
 }
 
-/* Sidebar rows slide a hair toward the page under the pointer. */
 aside.t-doc__sidebar [data-sidebar-id] a,
 aside.t-doc__sidebar [data-sidebar-id] button {
-  transition: background-color 0.2s, color 0.2s, transform 0.25s var(--nish-ease);
-}
-aside.t-doc__sidebar [data-sidebar-id] a:hover {
-  transform: translateX(2px);
+  transition: background-color 0.2s, color 0.2s;
 }
 
 /* The outline's marker carries the logo's gradient. */
@@ -314,14 +314,14 @@ aside.t-doc__toc .container {
   text-decoration-thickness: 2px;
 }
 
-/* Cards: a lift, a violet edge, and a glow under the pointer. site.js keeps
+/* Cards: a violet edge, a shadow and a glow under the pointer. site.js keeps
    --nish-x and --nish-y at the pointer; without it the glow sits top left. */
 body .t-editor__card {
   position: relative;
   overflow: hidden;
   border-radius: 14px;
   background: color-mix(in srgb, var(--scalar-background-card), transparent 25%);
-  transition: transform 0.35s var(--nish-ease), border-color 0.25s, box-shadow 0.35s;
+  transition: border-color 0.25s, box-shadow 0.35s;
 }
 body .t-editor__card::before {
   content: "";
@@ -337,7 +337,6 @@ body .t-editor__card::before {
   transition: opacity 0.3s;
 }
 body .t-editor__card.card--has-link:hover {
-  transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--nish-violet), transparent 35%);
   box-shadow: 0 14px 34px -18px color-mix(in srgb, var(--nish-violet), transparent 25%);
 }
@@ -346,10 +345,6 @@ body .t-editor__card.card--has-link:hover::before {
 }
 body .t-editor__card .card-content__title svg {
   color: var(--scalar-color-accent);
-  transition: transform 0.35s var(--nish-ease);
-}
-body .t-editor__card.card--has-link:hover .card-content__title svg {
-  transform: scale(1.15) rotate(-6deg);
 }
 
 /* Tables: one rounded panel with a tinted head and a row that answers the
@@ -404,6 +399,24 @@ table.t-editor__table tbody tr:hover {
   border-radius: 12px;
 }
 
+/* A heading's copy-link button: Scalar shows its icon by switching it from
+   display: none to flex on hover, so the button grows by the icon's width
+   and a centred heading shifts sideways under the pointer. The icon keeps its
+   box and only fades in. The "copied" tick still swaps for it, at the same
+   size. */
+.t-editor__heading .notify-container .icon:not(.notify) {
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.t-editor__heading:not(.show-copied):hover .notify-container .icon:not(.notify),
+.t-editor__heading .notify-container:focus-visible .icon:not(.notify) {
+  opacity: 1;
+}
+.t-editor__heading.show-copied .notify-container .icon:not(.notify) {
+  display: none;
+}
+
 /* ── The landing page's hero (docs/guide/index.md; built by site.js) ─────
    A source file is typed, flows through the compiler to its three targets,
    and runs. One 12s clock drives every part: each keyframe set below spans
@@ -430,6 +443,23 @@ table.t-editor__table tbody tr:hover {
 }
 .page-node:has(.nish-hero__inner) > .nish-hero {
   margin-top: 0;
+}
+/* The site loads site.js after it has painted the page, so the hero lands
+   on a page that is already on screen and pushes what is under it down: on a
+   phone, off the screen. Until site.js marks the host data-nish-ready, two
+   frames after filling it, the page under the hero is held hidden
+   (visibility, so it keeps its place in the layout): it moves while no one
+   can see it, then shows where it will stay. The hold is an animation that
+   ends by itself, so with site.js slow or missing the page shows after 1.2s,
+   as it did before. Once the host is ready the rule lets go, and each block
+   has its own animation back. */
+@keyframes nish-hold {
+  from {
+    visibility: hidden;
+  }
+}
+.page-node > [data-nish-hero]:not([data-nish-ready]) ~ * {
+  animation: nish-hold 1.2s step-end;
 }
 .nish-hero__inner {
   position: relative;
@@ -464,11 +494,14 @@ table.t-editor__table tbody tr:hover {
    "NISH", initials together, and once the headline has risen in each word
    opens out of its initial, one after the other. A word's trailing space is
    part of what opens, so folded there is no gap between the initials. At
-   rest, and with motion off, the whole name shows. */
+   rest, and with motion off, the whole name shows.
+
+   The unfolding changes the row's width, so on a screen too narrow for the
+   whole name on one line it would change the height too and push the page
+   down. Under the animated row, in the same grid cell, sits a hidden copy
+   that never animates: the cell is always the unfolded name's height. */
 .nish-hero__name {
-  display: flex;
-  flex-wrap: wrap;
-  row-gap: 4px;
+  display: grid;
   margin: 0 0 18px;
   font-family: var(--scalar-font-code);
   font-size: 13px;
@@ -476,6 +509,19 @@ table.t-editor__table tbody tr:hover {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--scalar-color-2);
+}
+.nish-hero__name-row {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.nish-hero__name-row--ghost {
+  visibility: hidden;
+}
+.nish-hero__name-row--ghost .nish-hero__rest,
+.nish-hero__name-row--ghost .nish-hero__rest > span {
+  animation: none;
 }
 .nish-hero__word {
   display: inline-flex;
@@ -561,7 +607,7 @@ table.t-editor__table tbody tr:hover {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.25s var(--nish-ease), box-shadow 0.25s, border-color 0.25s;
+  transition: box-shadow 0.25s, border-color 0.25s;
 }
 a.nish-hero__cta {
   color: var(--scalar-button-1-color);
@@ -570,14 +616,7 @@ a.nish-hero__cta {
   box-shadow: 0 8px 24px -10px var(--nish-violet);
 }
 a.nish-hero__cta:hover {
-  transform: translateY(-2px);
   box-shadow: 0 12px 28px -8px var(--nish-violet);
-}
-.nish-hero__cta span {
-  transition: transform 0.25s var(--nish-ease);
-}
-.nish-hero__cta:hover span {
-  transform: translateX(4px);
 }
 .nish-hero__install {
   min-width: 0;
@@ -588,7 +627,6 @@ a.nish-hero__cta:hover {
   background: color-mix(in srgb, var(--scalar-background-2), transparent 30%);
 }
 .nish-hero__install:hover {
-  transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--nish-violet), transparent 40%);
 }
 .nish-hero__install code {
@@ -924,8 +962,12 @@ a.nish-hero__cta:hover {
   .nish-hero__stage {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* Stacked, the beams would keep their 3:2 viewBox and grow with the
+     width, to 353px of mostly empty height at 720px, pushing the page
+     under the hero further below the fold. */
   .nish-hero__flow {
-    min-height: 130px;
+    min-height: 0;
+    height: 130px;
   }
   .nish-hero__code {
     font-size: 11px;
@@ -965,6 +1007,19 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   text-align: center;
   justify-content: center;
 }
+/* The copy-link button keeps its box at rest (see "A heading's copy-link
+   button"), which would pull the centred text left by half of it. A spacer
+   as wide as the button balances it on the other side. */
+.page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"]::before {
+  content: "";
+  flex: none;
+  width: 24px;
+}
+.page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"] .notify-container {
+  flex: none;
+  box-sizing: border-box;
+  width: 24px;
+}
 /* The paragraph under the hero is its lead. */
 .page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
   margin-top: 36px;
@@ -981,8 +1036,10 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   font-size: clamp(34px, 6.4vw, 64px);
   text-align: center;
 }
-.page-node:has(> [data-nish-hero]) .nish-hero__name {
+.page-node:has(> [data-nish-hero]) .nish-hero__name-row {
   justify-content: center;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__name {
   font-size: 14px;
   letter-spacing: 0.24em;
 }
@@ -1007,7 +1064,10 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   .page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
     font-size: 16px;
   }
-  .nish-hero__name {
+  /* The landing page's own size above outranks a bare class, so the phone
+     size names that selector too. */
+  .nish-hero__name,
+  .page-node:has(> [data-nish-hero]) .nish-hero__name {
     font-size: 11px;
     letter-spacing: 0.14em;
   }
@@ -1025,5 +1085,9 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+  /* Not motion: the hold under the landing page's hero (see nish-hold). */
+  .page-node > [data-nish-hero]:not([data-nish-ready]) ~ * {
+    animation: nish-hold 1.2s step-end !important;
   }
 }
