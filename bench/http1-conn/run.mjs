@@ -31,10 +31,12 @@
 // binaries fails the run.
 //
 // With `--rss N` (default 5 when the idle shape runs, 0 to skip) it also runs
-// the idle pool's `rss` mode N times per build, at `--connections` and at 0
-// connections, each printing its own peak RSS (VmHWM), and reports the
-// difference divided by the connections: the peak memory one idle keep-alive
-// connection costs.
+// the idle pool's `rss` and `rss-default` modes N times per build, at
+// `--connections` and at 0 connections, each printing its own peak RSS
+// (VmHWM), and reports the difference divided by the connections: the peak
+// memory one idle keep-alive connection costs, with `idleInput` and on the
+// default config, after one request a slot and after `--passes` (default 4),
+// when each slot has kept its response head.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -220,20 +222,30 @@ for (let r = 0; r < rounds; r++) {
   }
 }
 
-// The peak RSS of one `rss` run in KiB, which it prints where a time goes.
-const peak = (exe, count) =>
+// The peak RSS of one rss-shape run in KiB, which it prints where a time goes.
+const peak = (exe, shape, passes, count) =>
   Number(
-    bench(exe, ["rss", "0", String(count), "0"])
+    bench(exe, [shape, String(passes), String(count), "0"])
       .trim()
       .split(" ")[1]
   )
 const rssRuns = Number(flag("--rss", shapes.some(([, m]) => m === "idle" || m === "direct") ? "5" : "0"))
-// label -> bytes per idle connection, one per run
-const rss = new Map()
+const passes = Number(flag("--passes", "4"))
+// [table row, main.ts shape, passes]
+const rssRows = [
+  ["idleInput, 1 request", "rss", 1],
+  [`idleInput, ${passes} requests`, "rss", passes],
+  ["default, 1 request", "rss-default", 1],
+  [`default, ${passes} requests`, "rss-default", passes],
+]
+// row -> label -> bytes per idle connection, one per run
+const rss = new Map(rssRows.map(([row]) => [row, new Map()]))
 for (let r = 0; r < rssRuns; r++) {
-  for (const { label, exe } of binaries) {
-    const per = ((peak(exe, Number(connections)) - peak(exe, 0)) * 1024) / Number(connections)
-    rss.set(label, [...(rss.get(label) ?? []), per])
+  for (const [row, shape, n] of rssRows) {
+    for (const { label, exe } of binaries) {
+      const per = ((peak(exe, shape, n, Number(connections)) - peak(exe, shape, n, 0)) * 1024) / Number(connections)
+      rss.get(row).set(label, [...(rss.get(row).get(label) ?? []), per])
+    }
   }
 }
 
@@ -293,9 +305,11 @@ if (rssRuns > 0) {
   )
   console.log(`| | ${binaries.map((b) => b.label).join(" | ")} |`)
   console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
-  const cells = binaries.map((b) => {
-    const xs = sorted(rss.get(b.label))
-    return `${median(xs).toFixed(0)} (${xs[0].toFixed(0)}–${xs[xs.length - 1].toFixed(0)})`
-  })
-  console.log(`| rss | ${cells.join(" | ")} |`)
+  for (const [row] of rssRows) {
+    const cells = binaries.map((b) => {
+      const xs = sorted(rss.get(row).get(b.label))
+      return `${median(xs).toFixed(0)} (${xs[0].toFixed(0)}–${xs[xs.length - 1].toFixed(0)})`
+    })
+    console.log(`| ${row} | ${cells.join(" | ")} |`)
+  }
 }

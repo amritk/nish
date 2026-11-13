@@ -26,11 +26,16 @@
 //                                                buffer itself, no scratch copy:
 //                                                a variant `Http1Server` does
 //                                                not have, measured here only
-//   main rss 0 <connections> 0                   the idle pool's connections
-//                                                each served one request and
-//                                                parked, then nothing timed:
-//                                                prints the peak RSS in KiB
-//                                                (VmHWM) as `<ns>`
+//   main rss <passes> <connections> 0            the idle pool's connections
+//                                                each served <passes> requests
+//                                                (0 is one) and parked, then
+//                                                nothing timed: prints the
+//                                                peak RSS in KiB (VmHWM) as
+//                                                `<ns>`
+//   main rss-default <passes> <connections> 0    the rss shape on the default
+//                                                config: no `idleInput`, so a
+//                                                parked connection keeps its
+//                                                input and head buffers
 //
 // With `[evict]` MiB (default 0), the idle and direct shapes write one byte
 // of every cache line of an eviction ring that big between requests, a slice
@@ -215,9 +220,9 @@ class IdlePool {
   slice: i32 = 0
   ringAt: i32 = 0
 
-  constructor(count: i32, direct: boolean, evictMib: i32) {
+  constructor(count: i32, direct: boolean, evictMib: i32, idleInput: boolean) {
     const config: Http1Config = new Http1Config()
-    config.idleInput = true
+    config.idleInput = idleInput
     this.config = config
     this.connections = []
     this.fds = []
@@ -245,8 +250,10 @@ class IdlePool {
       const conn: Http1Connection = new Http1Connection(config)
       conn.pool = this.outputs
       conn.date = this.date
-      conn.inputs = this.inputs
-      conn.heads = this.heads
+      if (idleInput) {
+        conn.inputs = this.inputs
+        conn.heads = this.heads
+      }
       this.connections.push(conn)
       this.fds.push(i + 3)
     }
@@ -462,20 +469,25 @@ const IDLE_FIRST_HEAD: i32 = 256
  * `i` is even, the other way round when it is odd.
  */
 const idle = (shape: string, requests: i32, count: i32, batches: i32, evictMib: i32): i32 => {
-  const b: IdlePool = new IdlePool(count, shape === "direct", evictMib)
+  const measuring: boolean = shape === "rss" || shape === "rss-default"
+  const b: IdlePool = new IdlePool(count, shape === "direct", evictMib, shape !== "rss-default")
   const evicting: boolean = b.slice > 0
   // One untimed pass, as for the other shapes: every slot's connection has
   // served a request and parked, its buffers lent back to the pools, and the
-  // whole ring has been written once.
-  for (let i: i32 = 0; i < count; i += 1) {
-    if (evicting) {
-      b.sweep()
+  // whole ring has been written once. The rss shapes make `requests` passes,
+  // at least one: a slot keeps its response head from its second on.
+  const passes: i32 = measuring && requests > 1 ? requests : 1
+  for (let pass: i32 = 0; pass < passes; pass += 1) {
+    for (let i: i32 = 0; i < count; i += 1) {
+      if (evicting) {
+        b.sweep()
+      }
+      const pick: i32 = (i + pass) & 1
+      b.serve(i, b.requests[pick])
     }
-    const pick: i32 = i & 1
-    b.serve(i, b.requests[pick])
   }
-  if (shape === "rss") {
-    console.log(`${shape} ${peakKib()} 1 ${b.sum} ${b.inputs.made} ${b.heads.made} ${b.outputs.made}`)
+  if (measuring) {
+    console.log(`${shape} ${peakKib()} ${passes} ${b.sum} ${b.inputs.made} ${b.heads.made} ${b.outputs.made}`)
     return 0
   }
   b.sum = 0
@@ -730,7 +742,7 @@ export const main = (): i32 => {
   if (shape === "stages" || shape === "stages-loop") {
     return stages(requests, count, batches, shape === "stages")
   }
-  if (shape === "idle" || shape === "direct" || shape === "rss") {
+  if (shape === "idle" || shape === "direct" || shape === "rss" || shape === "rss-default") {
     return idle(shape, requests, count, batches, evictMib)
   }
   if (shape === "hot") {
