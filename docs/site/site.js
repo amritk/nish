@@ -251,7 +251,9 @@
         const command = line.trim()
         if (command === "nish break") {
           say(`$ ${command}\nloading…\n`)
-          opening ??= import("/break/break.mjs")
+          // The game is built into /break/ (examples/break-web/build.mjs), not beside this file.
+          const url = "/break/break.mjs"
+          opening ??= import(url)
           opening
             .then((game) => game.open({ focus: term, say: (text) => say(`$ ${command}\n${text}\n`) }))
             .then(() => say(""))

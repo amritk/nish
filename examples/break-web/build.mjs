@@ -188,6 +188,13 @@ const run = (cmd, args) => {
   return r.stdout
 }
 
+// The source imports nish/page/game from the runtime; the copy, from beside it.
+const PAGE_FROM = '"../../runtime/page-game.mjs"'
+const page = fs.readFileSync(path.join(here, "break.mjs"), "utf8")
+if (!page.includes(PAGE_FROM)) {
+  fail(`break.mjs no longer imports ${PAGE_FROM}; update build.mjs to match`)
+}
+
 const record = manifest()
 const ll = path.join(out, "ll")
 // Every output goes first, so a failed step cannot leave an older one to be served.
@@ -229,6 +236,6 @@ for (const name of ["ll", "game.d.ts", "game.wasm.sites.json"]) {
 for (const file of PAGE) {
   fs.copyFileSync(path.join(root, "runtime", file), path.join(out, "nish", file))
 }
-fs.copyFileSync(path.join(here, "break.mjs"), path.join(out, "break.mjs"))
+fs.writeFileSync(path.join(out, "break.mjs"), page.replace(PAGE_FROM, '"./nish/page-game.mjs"'))
 fs.writeFileSync(path.join(out, MANIFEST), `${JSON.stringify(record, null, 2)}\n`)
 process.stdout.write(`break-web: ${out}\n`)

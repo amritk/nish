@@ -5,7 +5,6 @@
 // compares the count, so a run cut short is caught.
 
 import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import zlib from "node:zlib"
@@ -121,7 +120,7 @@ const site = fs.readFileSync(siteFile, "utf8")
 const imports = [...site.matchAll(/\bimport\b\s*(\(|[^(\s])/g)]
 check(
   "site.js reaches the game only through one dynamic import of /break/break.mjs",
-  imports.length === 1 && imports[0][1] === "(" && /\bimport\("\/break\/break\.mjs"\)/.test(site),
+  imports.length === 1 && imports[0][1] === "(" && /\bconst url = "\/break\/break\.mjs"\s+opening \?\?= import\(url\)/.test(site),
   imports.map((m) => m[0]).join(", ")
 )
 
@@ -198,15 +197,7 @@ const runSite = (load) => {
 
 // --- break.mjs: the overlay ---------------------------------------------------
 
-// break.mjs imports nish/page/game from beside it, as the build lays it out.
-const laid = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-web-"))
-fs.mkdirSync(path.join(laid, "nish"))
-fs.copyFileSync(path.join(root, "examples", "break-web", "break.mjs"), path.join(laid, "break.mjs"))
-for (const file of ["page-game.mjs", "page-frame.mjs", "page.mjs"]) {
-  fs.copyFileSync(path.join(root, "runtime", file), path.join(laid, "nish", file))
-}
-const page = await import(pathToFileURL(path.join(laid, "break.mjs")).href)
-fs.rmSync(laid, { recursive: true, force: true })
+const page = await import(pathToFileURL(path.join(root, "examples", "break-web", "break.mjs")).href)
 
 {
   const store = new Map()

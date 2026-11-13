@@ -18,7 +18,8 @@
 //
 // The page writes the saved settings before `init` and reads the link after
 // each `step`, by handing startGame a loader that wraps the generated one.
-import { startGame } from "./nish/page-game.mjs"
+// build.mjs points this at nish/page-game.mjs beside the built copy.
+import { startGame } from "../../runtime/page-game.mjs"
 
 /** The localStorage key the settings live under. */
 export const STORE = "nish-break-settings"
