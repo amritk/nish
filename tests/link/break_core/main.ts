@@ -2,7 +2,7 @@
 // and a level, and each checkpoint prints a hash of the framebuffer. Nothing
 // here reads a clock, a file or a terminal: the suite builds it with
 // `--deterministic` (the `args` file), which refuses all three at compile
-// time, and the same program compiles with `--target wasm32-unknown-unknown`.
+// time. `break_core_wasm` is the wasm32 build of the director.
 import { Suite } from "../../../std/testing"
 import {
   ACTION_PRESS,
@@ -24,7 +24,7 @@ import {
   TermEvent,
 } from "nish/term"
 import { StepInput } from "../../../std/input"
-import { Framebuffer } from "nish/term-pixels"
+import { Framebuffer, GRAPHICS_HALFBLOCK, GRAPHICS_KITTY } from "nish/term-pixels"
 import { TermStats } from "nish/term-rate"
 import { BreakSettings } from "../../../src/break-menu"
 import {
@@ -250,6 +250,23 @@ const checkNoTerminal = (t: Suite): void => {
   tap(d, input, KEY_ENTER)
   t.ok("Enter on the first row shown cycles the resolution", d.settings.resolution !== resolution)
   t.eqI32("and leaves the frame rate", d.settings.fps, fps)
+
+  d.settings.stats = true
+  t.ok("the stats name no backend or frame rate with no terminal", statsHash(d, GRAPHICS_KITTY, 0) === statsHash(d, GRAPHICS_HALFBLOCK, 2))
+  const shell = new BreakDirector(7, new BreakSettings(), HELP, true)
+  shell.settings.stats = true
+  t.ok("a terminal's stats name the backend", statsHash(shell, GRAPHICS_KITTY, 0) !== statsHash(shell, GRAPHICS_HALFBLOCK, 0))
+}
+
+/** The hash of `d`'s frame drawn on graphics `backend` with frame-rate setting `fps`. */
+const statsHash = (d: BreakDirector, backend: i32, fps: i32): u32 => {
+  const fb = new Framebuffer(1, 1)
+  const stats = new TermStats()
+  stats.backend = backend
+  d.settings.fps = fps
+  sizeBreakFramebuffer(d, fb, 640, 360)
+  drawBreakDirector(d, fb, WHOLE, stats)
+  return hashPixels(fb)
 }
 
 /** `n` steps with no input; false if any asked to stop. */
