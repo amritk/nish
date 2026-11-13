@@ -4150,7 +4150,6 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
  */
 const normalizedGrant = (name: string, arg: string): string => `${name}=${normalizePath(arg)}`
 
-/** Push `value` onto `list` unless it is there already. */
 /**
  * WP40 §2a: the prefix of a `process.spawn` grant's program that lets the
  * program start others, `process.spawn=exec:<program>`. Under `--sandbox` a
@@ -4164,6 +4163,7 @@ const EXEC_GRANT: string = "exec:"
 /** A `process.spawn` grant entry with the `EXEC_GRANT` prefix, as `grantArgTexts` holds it: written out, since a module constant is a literal. */
 const EXEC_SPAWN: string = "process.spawn=exec:"
 
+/** Push `value` onto `list` unless it is there already. */
 const addOnce = (list: string[], value: string): void => {
   if (list.indexOf(value) < 0) {
     list.push(value)
