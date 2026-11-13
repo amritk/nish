@@ -12,9 +12,10 @@ builds the compiler under test from `src/` with the seed and links it at
 `build/nish-test`, then prints one `PASS` / `FAIL` line per check. The link is
 a minute of one core, so a binary linked once is kept in
 `build/cache/compiler-under-test/` under a hash of everything the link reads
-(the seed and its package, `src/`, `std/`, the toolchain:
-`tests/self/compiler-cache.js`), and a later run with the same inputs copies it
-in a fraction of a second; its first check says which it did. Almost every
+(the seed and its package, the source files the seed's front end names as the
+compiler's modules, the toolchain: `tests/self/compiler-cache.js`), and a later
+run with the same inputs copies it after a three-second front-end run instead
+of a minute's link; its first check says which it did. Almost every
 test is **data, not code**: a source file next to the output it must produce.
 
 - **Golden cases live in `tests/cases/`**, one `<name>.ts` per case, discovered

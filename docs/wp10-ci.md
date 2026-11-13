@@ -449,8 +449,9 @@ second longest at 10 min 45 s, linked stage1 seven times, once per
 `node tests/run.js` step. Since then `tests/self/compiler-cache.js` keeps the
 linked binary under a hash of everything the link reads, and the
 `.github/actions/compiler-cache` step restores it through the Actions cache:
-a run whose `src/`, `std/`, seed and toolchain match an earlier one copies
-stage1 instead of linking it, and a job that runs the suite more than once
+a run whose compiler sources (the modules the seed's front end names: `src/`
+and the nine `std/` modules it imports), seed and toolchain match an earlier
+one copies stage1 instead of linking it, and a job that runs the suite more than once
 links it at most once. The golden cases are dealt too: a shard compiles
 all of them and does the other work of its eighth only, which took section A
 from 59 s to 30 s of shard 2 in

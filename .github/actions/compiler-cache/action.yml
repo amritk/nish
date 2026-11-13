@@ -29,18 +29,21 @@ runs:
   steps:
     # The key is a hash of everything the link reads, so it can only be
     # computed once the seed, the toolchain and the checkout are all in place.
+    # No key -- a seed whose front end refuses src/ -- skips the cache, and the
+    # link below reports why, as the suite's first check would.
     - name: Compiler cache key
       id: key
       shell: bash
       env:
         SEED: ${{ inputs.seed }}
       run: |
-        key="$(node tests/self/compiler-cache.js --key --seed "$SEED")"
+        key="$(node tests/self/compiler-cache.js --key --seed "$SEED")" || key=""
         echo "key=$key" >> "$GITHUB_OUTPUT"
-        echo "compiler under test: key $key"
+        echo "compiler under test: key ${key:-none}"
 
     - name: Restore the compiler under test
       id: restore
+      if: steps.key.outputs.key != ''
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: build/cache/compiler-under-test/${{ steps.key.outputs.key }}
@@ -54,7 +57,7 @@ runs:
       run: node tests/self/compiler-cache.js --link "$OUT" --seed "$SEED"
 
     - name: Save the compiler under test
-      if: steps.restore.outputs.cache-hit != 'true' && inputs.save == 'true'
+      if: steps.key.outputs.key != '' && steps.restore.outputs.cache-hit != 'true' && inputs.save == 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: build/cache/compiler-under-test/${{ steps.key.outputs.key }}
