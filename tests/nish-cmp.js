@@ -1217,7 +1217,21 @@ const quicRebind = byFinding(
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
 
+const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
+
 const DECLARED = [
+  {
+    program: "tests/cases/res_let_reassign.ts",
+    file: "res_let_reassign.ll",
+    changelog: LET_REASSIGN,
+    why: "an `Ok`/`Err` assigned to a `let` of the frame follows the `let`, so the sites outside a loop are allocas and the functions keep their arena scope",
+  },
+  {
+    program: "tests/cases/res_proof_consumers.ts",
+    file: "res_proof_consumers.ll",
+    changelog: LET_REASSIGN,
+    why: "`s = parse(-5)`, a by-value `Result` assigned to a `let` and read only through `.ok`, follows the `let` onto the stack with its first value",
+  },
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
   ...vectorAccessTbaa(
