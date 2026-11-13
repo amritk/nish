@@ -92,8 +92,10 @@ home program. An instantiation of an *exported* template is exported itself
 `%struct.<name>` is a module-level LLVM type, and the type table identifies a
 struct by its name (`TypeTable.names`, `src/types.ts`). So two packages that
 declare `Node` would share one layout. `declaredStructs` and
-`rejectInstantiatedStructClashes` (`src/compilation.ts`) refuse that (NL3028,
-NL3030), and a class cannot be renamed on import because "the type name is part
+`rejectInstantiatedStructClashes` (`src/compilation.ts`) refuse that (NL3028
+for a declared class or interface, NL3013 for a generic class's instantiation),
+`rejectCollectionsClash` refuses a module's own `Map` or `Set` beside the global
+one for the same reason (NL3030), and a class cannot be renamed on import because "the type name is part
 of the ABI" (`src/checker.ts`, `tests/link/class_import_rename`).
 wp21-packages.md §9c left this deliberately.
 
@@ -184,8 +186,10 @@ A new step, `Compilation.qualifyClashingSymbols`, runs once every module has
 loaded (pass 1 and `qualifySymbols` included) and before `bindImports`. At
 that point each program's `functions` and `templateList` hold only what the
 module declares. Pass 1b appends imported signatures later. The step groups
-every defined, non-foreign function symbol and every template symbol by
-spelling. For each spelling held by more than one definition:
+every defined, non-foreign free function's symbol and every function
+template's symbol by spelling. A method or constructor (`sig.owner !== null`)
+is left out: its symbol is `Owner.method`, scoped by its class's name, which
+is S3's, and `--emit-header` gives it an asm label of that spelling. For each spelling held by more than one definition:
 
 - every **private** party is qualified, both of two private ones included, so
   which module keeps the bare name never depends on load order;
@@ -330,9 +334,9 @@ module too. What the inventory found:
 | The type table: `TypeTable.names` / `displays`, `typeName` (`src/types.ts`) | A struct's key becomes (module, name). `typeName` stays the source name for diagnostics |
 | The per-module struct registry: `CheckedProgram.struct`, `addStruct`, `addStructTemplate`, `addStructInstance` (`src/program.ts`), registered from `src/structs.ts` | Lookups that cross a module boundary take the owning module |
 | Cross-module layouts: `registerForeignLayouts` (`src/generics.ts`, four callers) | Registers under the qualified identity |
-| `%struct.<name>` emission: `src/emit-classes.ts` (definition, opaque), `emit-arrays.ts`, `emit-json.ts`, `emit-parallel.ts`, `emit-root.ts`, `emit-result.ts`, `program.ts` | Each spells the qualified struct name |
+| `%struct.<name>`: 21 files of `src/` spell it. The emitters are `emit.ts`, `emit-classes.ts` (definition, opaque), `emit-arrays.ts`, `emit-json.ts`, `emit-parallel.ts`, `emit-result.ts`, `emit-root.ts`, `emit-secret.ts`, `emit-shm-window.ts` and `emit-strings.ts`. The others are `attributes.ts`, `checker.ts`, `compilation.ts`, `debug.ts`, `generics.ts`, `interop-header.ts`, `program.ts`, `result.ts`, `runtime.ts`, `structs.ts` and `types.ts` | Each spells, or matches on, the qualified struct name |
 | `Owner.method` and constructor symbols (`src/structs.ts`, one site for declared classes and one for template members) | The owner's qualified name, so S1's rule follows for members |
-| The clash checks: `declaredStructs`, `rejectInstantiatedStructClashes`, `reportTemplateClash` (`src/compilation.ts`) and NL3028, NL3030, NL3022, NL3023, NL3015 | Rewritten over qualified names. Most of their refusals go |
+| The clash checks (`src/compilation.ts`): `declaredStructs` and `rejectInstantiatedStructClashes` (NL3028), `reportTemplateClash` (NL3013), `rejectCollectionsClash` (NL3030, a module's own `Map` or `Set` beside the global one), and the member clashes NL3022 and NL3023, which those preempt (`tests/wordings/unreachable.txt`) | Rewritten over qualified names. Most of their refusals go |
 | `--emit-header` (`src/interop-header.ts`, `cStructName(info.name)`) | C has one struct namespace, so an exported class that clashes needs S2's answer. A private one is not on the header |
 | `--emit-dts` and N-API (`src/interop-dts.ts`, `src/interop-napi.ts`) | The inventory found no struct naming there by `info.name`. S3 must confirm how a class reaches a `.d.ts` or an N-API wrapper before sizing it |
 | Typed JSON (`src/json-typed.ts`, `jsonRouteCallees`, `src/emit-json.ts`) | Messages name the type, and the decoder's reach set must key on the qualified identity |
@@ -340,7 +344,7 @@ module too. What the inventory found:
 
 **Size.** In `src/`, 37 files call `typeName(` and 26 look a struct up by name
 (`.struct(`, `structs.get(`). The sets overlap, so S3 reaches on the order of
-40 of `src/`'s 128 files, the seven emitters that spell `%struct.` among them.
+40 of `src/`'s 128 files, the 21 that spell `%struct.` among them.
 That is several times S1, with the interop surface on top, and its class half
 depends on S2's decision. It should be split into its own stages once S1 and S2
 have landed, and it is not one PR. Release note when it ships: `feat(checker):

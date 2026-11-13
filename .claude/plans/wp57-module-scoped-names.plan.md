@@ -32,7 +32,7 @@ Owns: `docs/wp57-module-scoped-names.md`, `docs/roadmap/wp57-module-scoped-names
 `docs/roadmap/index.md`, `docs/README.md`, `docs/MASTER_PLAN.md`,
 `scalar.config.json`, `docs/LANGUAGE.md`, `docs/wp5-modules.md`,
 `docs/guide/language/modules.md`, `docs/AI.md`, `docs/ARCHITECTURE.md`,
-`docs/wp15-performance.md`, `docs/wp26-stdlib.md`, `docs/wp21-packages.md`,
+`docs/wp15-performance.md`, `docs/wp26-stdlib.md`, `docs/reference/language/declarations.md`,
 `.claude/plans/wp57-module-scoped-names.plan.md`.
 
 One PR, docs only. No file under `src/`, `std/`, `runtime/` or `tests/`
