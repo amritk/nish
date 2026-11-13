@@ -1,4 +1,4 @@
-// `Http3Server` refuses a `idleTimeout` below one millisecond when it is
+// `Http3Server` refuses an `idleTimeout` below one millisecond when it is
 // made, before any slot's connection is built: with none, its clock would
 // close every client at once, and a negative one would never close one at
 // all. A server of one-millisecond timeouts is made, and one of
