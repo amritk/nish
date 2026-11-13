@@ -555,6 +555,44 @@ export const http1Checks = (): i32 => {
   refused(t, "a chunk size that is not hex", `${chunkedHead}g\r\n`, 400);
   refused(t, "a chunk size ending in a bare LF", `${chunkedHead}5\nhello\r\n0\r\n\r\n`, 400);
   refused(t, "a NUL in a chunk extension", `${chunkedHead}5;a\x00b\r\nhello\r\n0\r\n\r\n`, 400);
+  // A chunk extension is parsed whole (§7.1.1), since a front end that reads
+  // a quoted-string across the line's end frames the body differently.
+  refused(t, "a chunk extension with no name", `${chunkedHead}5;=\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk extension that is a second semicolon", `${chunkedHead}5;;\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk extension name with a space in it", `${chunkedHead}5;a b\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk extension with an empty value", `${chunkedHead}5;a=\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk extension followed by whitespace alone", `${chunkedHead}5;a \r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk extension value that is not a token", `${chunkedHead}5;a=b"c\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk extension with bytes after its quoted value", `${chunkedHead}5;a="b"c\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "an unclosed quoted chunk extension", `${chunkedHead}1;a="\r\nx\r\n0\r\n\r\n`, 400);
+  refused(t, "a quoted chunk extension whose closing quote is escaped", `${chunkedHead}5;a="b\\"\r\nhello\r\n0\r\n\r\n`, 400);
+  // A front end that reads the quoted-string to its closing quote sees one
+  // request whose first chunk is "yy"; a parser that skips to the CRLF sees a
+  // second request, GET /hidden, inside the first one's chunk extension.
+  const smuggler: Http1Parser = smallParser();
+  const smuggled: u8[] = bytesOf(
+    `${chunkedHead}2;a="\r\nxx\r\n0\r\n\r\nGET /hidden HTTP/1.1\r\nHost: a\r\n\r\n"\r\nyy\r\n0\r\n\r\n`
+  );
+  smuggler.feed(smuggled, zero, toI32(smuggled.length));
+  let smuggledHeads: i32 = 0;
+  let smuggledEvent: i32 = smuggler.next();
+  while (smuggledEvent === HTTP1_HEAD || smuggledEvent === HTTP1_BODY || smuggledEvent === HTTP1_END) {
+    if (smuggledEvent === HTTP1_HEAD) {
+      smuggledHeads += 1;
+    }
+    smuggledEvent = smuggler.next();
+  }
+  const oneHead: i32 = 1;
+  const badRequest: i32 = 400;
+  t.eqI32("a quoted chunk extension that runs across lines hides no second request", smuggledHeads, oneHead);
+  t.eqI32("and is refused with 400", smuggler.status, badRequest);
+  t.eqI32("a chunk extension name=value is read", statusOf(`${chunkedHead}5;a=b\r\nhello\r\n0\r\n\r\n`), zero);
+  t.eqI32(
+    "a quoted chunk extension with BWS, a semicolon and an escaped quote is read",
+    statusOf(`${chunkedHead}5 ; a = "x;y\\"z"\r\nhello\r\n0\r\n\r\n`),
+    zero
+  );
+  t.eqI32("two chunk extensions, the first with no value, are read", statusOf(`${chunkedHead}5;a;b=c\r\nhello\r\n0\r\n\r\n`), zero);
   refused(t, "chunk data followed by LF alone", `${chunkedHead}5\r\nhello\n0\r\n\r\n`, 400);
   refused(t, "a chunk-size line longer than the header limit", `${chunkedHead}5;${x256}\r\nhello\r\n0\r\n\r\n`, 400);
   refused(t, "a malformed trailer", `${chunkedHead}0\r\nbad trailer\r\n\r\n`, 400);

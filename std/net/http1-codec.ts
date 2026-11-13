@@ -1600,9 +1600,105 @@ export const http1HexValue = (c: i32): i32 => {
 }
 
 /**
- * Reads a chunk-size line (§7.1): 1*HEXDIG, then optional whitespace and a
- * `;` extension that is read past but not interpreted. Sets `left` and answers
- * `HTTP1_NEED_MORE`, or the refusal.
+ * Where the quoted-string that opens at `bytes[from]` ends (RFC 9110 §5.6.4):
+ * the index just past its closing DQUOTE, or -1 when the line ends first or
+ * a byte inside is neither qdtext nor a quoted-pair. A backslash takes the
+ * byte after it whatever it is, a DQUOTE included, as long as that byte is
+ * HTAB, SP, VCHAR or obs-text.
+ */
+const http1QuotedStringEnd = (bytes: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from + 1
+  while (i >= 0 && i < to && i < toI32(bytes.length)) {
+    const c: i32 = toI32(bytes[i])
+    if (c === 34) {
+      return i + 1
+    }
+    if (c === 92) {
+      i += 1
+      if (i < 0 || i >= to || i >= toI32(bytes.length) || !http1IsValueByte(toI32(bytes[i]))) {
+        return -1
+      }
+    } else if (!http1IsValueByte(c)) {
+      return -1
+    }
+    i += 1
+  }
+  return -1
+}
+
+/** The first index from `from` on, before `to`, that is not OWS. */
+const http1SkipOws = (bytes: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(bytes.length) && http1IsOws(toI32(bytes[i]))) {
+    i += 1
+  }
+  return i
+}
+
+/**
+ * Whether `bytes[from .. to)`, what follows a chunk size on its line, is the
+ * chunk-ext of RFC 9112 §7.1.1 and nothing else:
+ * `*( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )`, the name
+ * a token and the value a token or a quoted-string. An empty window holds no
+ * extensions and is valid. The extensions are not interpreted, but they are
+ * parsed whole: a parser that skips to the line's end and one that reads a
+ * quoted-string across it disagree about where the chunk's data starts (the
+ * chunk-extension smuggling of Jetty's CVE-2026-2332 and Netty's
+ * CVE-2026-33870), so an unclosed quote, an empty name or value, a stray `;`
+ * or `=`, and whitespace that leads nowhere are each refused. The server's
+ * parser and the client's both read their chunk-size lines through this.
+ * @param bytes the buffer holding the chunk-size line
+ * @param from the index just past the chunk size's last hex digit
+ * @param to the index of the line's CR, exclusive
+ * @returns true when the window is zero or more well-formed chunk extensions
+ */
+export const http1ChunkExtValid = (bytes: u8[], from: i32, to: i32): boolean => {
+  const end: i32 = to < toI32(bytes.length) ? to : toI32(bytes.length)
+  let i: i32 = from
+  while (i >= 0 && i < end) {
+    i = http1SkipOws(bytes, i, end)
+    if (i < 0 || i >= end || toI32(bytes[i]) !== 59) {
+      return false
+    }
+    i = http1SkipOws(bytes, i + 1, end)
+    const nameStart: i32 = i
+    while (i >= 0 && i < end && http1IsTokenByte(toI32(bytes[i]))) {
+      i += 1
+    }
+    if (i === nameStart) {
+      return false
+    }
+    const nameEnd: i32 = i
+    i = http1SkipOws(bytes, i, end)
+    if (i >= 0 && i < end && toI32(bytes[i]) === 61) {
+      i = http1SkipOws(bytes, i + 1, end)
+      if (i >= 0 && i < end && toI32(bytes[i]) === 34) {
+        i = http1QuotedStringEnd(bytes, i, end)
+        if (i < 0) {
+          return false
+        }
+      } else {
+        const valueStart: i32 = i
+        while (i >= 0 && i < end && http1IsTokenByte(toI32(bytes[i]))) {
+          i += 1
+        }
+        if (i === valueStart) {
+          return false
+        }
+      }
+    } else {
+      // Whitespace after a name is BWS only before the next `;`, which the
+      // loop's next turn reads from the name's end.
+      i = nameEnd
+    }
+  }
+  return true
+}
+
+/**
+ * Reads a chunk-size line (§7.1): 1*HEXDIG, then the chunk extensions
+ * `http1ChunkExtValid` reads, parsed but not interpreted. Sets `left` and
+ * answers `HTTP1_NEED_MORE`, or the refusal.
  */
 const http1ChunkSize = (p: Http1Parser): i32 => {
   const buf: u8[] = p.buf
@@ -1647,6 +1743,9 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
       if (!http1IsValueByte(toI32(buf[k]))) {
         return http1Fail(p, 400, "a control character in a chunk extension")
       }
+    }
+    if (!http1ChunkExtValid(buf, digitsEnd, b)) {
+      return http1Fail(p, 400, "a malformed chunk extension")
     }
   }
   if (over) {

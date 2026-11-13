@@ -80,6 +80,20 @@ PASS  refused with 400: an empty chunk size
 PASS  refused with 400: a chunk size that is not hex
 PASS  refused with 400: a chunk size ending in a bare LF
 PASS  refused with 400: a NUL in a chunk extension
+PASS  refused with 400: a chunk extension with no name
+PASS  refused with 400: a chunk extension that is a second semicolon
+PASS  refused with 400: a chunk extension name with a space in it
+PASS  refused with 400: a chunk extension with an empty value
+PASS  refused with 400: a chunk extension followed by whitespace alone
+PASS  refused with 400: a chunk extension value that is not a token
+PASS  refused with 400: a chunk extension with bytes after its quoted value
+PASS  refused with 400: an unclosed quoted chunk extension
+PASS  refused with 400: a quoted chunk extension whose closing quote is escaped
+PASS  a quoted chunk extension that runs across lines hides no second request
+PASS  and is refused with 400
+PASS  a chunk extension name=value is read
+PASS  a quoted chunk extension with BWS, a semicolon and an escaped quote is read
+PASS  two chunk extensions, the first with no value, are read
 PASS  refused with 400: chunk data followed by LF alone
 PASS  refused with 400: a chunk-size line longer than the header limit
 PASS  refused with 400: a malformed trailer
@@ -512,4 +526,4 @@ PASS  and writes only the bytes from the start on
 PASS  http1WriteLastChunk writes the last chunk at its offset
 PASS  and is HTTP1_NO_ROOM four bytes from the end
 PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
-http1: 514 passed, 0 failed, 0 skipped
+http1: 528 passed, 0 failed, 0 skipped
