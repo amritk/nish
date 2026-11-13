@@ -14790,14 +14790,19 @@ if (dealtHere("arrayChecks")) {
         run ? String(run.stdout) + String(run.stderr) : String(cc.stderr)
       )
     }
-    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array")
-    if (fs.existsSync(scopeExe)) {
-      const run = spawnSync(scopeExe)
-      const lines = String(run.stdout).trim().split("\n")
+    // Linked here from section A's compile rather than taken from its binary:
+    // every shard compiles every case, but only the shard `caseShard` deals the
+    // case to links it, and this block runs wherever its group was dealt.
+    const scopeLl = path.join(buildDir, "mem_scope_dynamic_array.ll")
+    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array_flat")
+    if (fs.existsSync(scopeLl)) {
+      const cc = linkNative(scopeExe, scopeLl, { driver: null, libm: true })
+      const run = cc.status === 0 ? spawnSync(scopeExe) : null
+      const lines = run === null ? [] : String(run.stdout).trim().split("\n")
       check(
         "mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
-        run.status === 0 && lines.length === 4 && lines[1] === lines[3],
-        String(run.stdout) + String(run.stderr)
+        run !== null && run.status === 0 && lines.length === 4 && lines[1] === lines[3],
+        run === null ? String(cc.stderr) : String(run.stdout) + String(run.stderr)
       )
     }
   }
