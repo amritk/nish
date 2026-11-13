@@ -2597,14 +2597,11 @@ const keptOne = (ctx: CheckContext, current: i32[], member: i32, keep: boolean):
     return current[1 - at]
   }
   const kept = new Array<i32>(current.length - 1)
-  let i = 0
-  while (i < at) {
-    kept[i] = current[i]
-    i = i + 1
-  }
-  while (i + 1 < current.length) {
-    kept[i] = current[i + 1]
-    i = i + 1
+  for (let i = 0; i < kept.length; i++) {
+    const from = i < at ? i : i + 1
+    if (from < current.length) {
+      kept[i] = current[from]
+    }
   }
   return keptId(ctx, kept)
 }
