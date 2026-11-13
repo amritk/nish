@@ -895,6 +895,15 @@ case "$profile" in
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
     wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory -ffp-contract=off)
+    # Root storage (WP55): IR that calls nish_runtime_root_keep compiles
+    # runtime-wasm.c with NISH_WASM_ROOTS, which takes in the root keep and
+    # leaves the arena resets to the IR. Without it the module links the bytes
+    # it always did: the wasm profile exports every function it compiles.
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        *.ll) if grep -q '@nish_runtime_root_keep' "$i"; then wasm_compile+=(-DNISH_WASM_ROOTS); break; fi ;;
+      esac
+    done
     if [ "$profile" = wasm ]; then
       "$CC" "${wasm_compile[@]}" \
         ${tls[@]+"${tls[@]}"} \

@@ -250,6 +250,14 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP55: empties every root, then the arena; root storage's nish_reset_arena and nish_free_arena.
+    this.add(
+      plain(
+        "nish_runtime_root_reset",
+        "declare void @nish_runtime_root_reset(i8* noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
     // WP46: `nish:region`'s calls (runtime/runtime-region.c), each written
     // by the body of one of `std/region.ts`'s intrinsics (`src/emit-region.ts`).
     // `enter` and `leave` swap the thread's arena, so every one is a write.

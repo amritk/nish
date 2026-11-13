@@ -265,4 +265,16 @@ export const rootTable = (emitter: Emitter, traces: RootTraces, info: ConstInfo,
   call void ${keep}(i64 %mark, i8* bitcast ([${n} x %nish.root*]* @nish.roots to i8*), i32 ${n})
   ret void
 }`)
+  // Emptying the arena empties every root first (WP55 §4.2): a root left
+  // pointing at a released block would be traced into whatever lands there.
+  // These replace the runtime's weak definitions, so a module without root
+  // storage links none of the keep.
+  const reset = emitter.useRuntime("nish_runtime_root_reset")
+  for (const name of ["nish_reset_arena", "nish_free_arena"]) {
+    emitter.definesRuntime.add(name)
+    emitter.module.addRawDefinition(`define void @${name}() {
+  call void ${reset}(i8* bitcast ([${n} x %nish.root*]* @nish.roots to i8*), i32 ${n})
+  ret void
+}`)
+  }
 }

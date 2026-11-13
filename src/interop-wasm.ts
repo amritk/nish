@@ -1010,13 +1010,20 @@ const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
     // WP55 §4: with root storage, what the roots reach outlives the call.
     lines.push(keepsRoots ? "          raw.nish_root_keep(mark);" : "          raw.nish_arena_release(mark);")
     lines.push("        } catch (e) {")
-    // A panic inside the keep (its scratch outgrowing memory is "memory") has
-    // recorded its own kind through the panic import; only a bare trap has not.
-    lines.push("          if (state.dead === null) {")
-    lines.push(
-      '            state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
-    )
-    lines.push("          }")
+    if (keepsRoots) {
+      // A panic inside the keep (its scratch outgrowing memory is "memory")
+      // has recorded its own kind through the panic import; only a bare trap
+      // has not. A release cannot panic, so its loader keeps the plain form.
+      lines.push("          if (state.dead === null) {")
+      lines.push(
+        '            state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      )
+      lines.push("          }")
+    } else {
+      lines.push(
+        '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      )
+    }
     // Thrown from `finally`, this replaces the call's result: the module is
     // dead, and the caller hears it from this call rather than the next.
     lines.push("          throw e;")

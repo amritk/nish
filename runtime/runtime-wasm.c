@@ -111,11 +111,15 @@ void *nish_alloc_struct(uint64_t size) {
   return nish_arena_grow(size);
 }
 
-static void nish_roots_clear(void);
-/* Emptying the arena empties every root first (WP55 §4.2): a root left
-   pointing at a released block would be traced into whatever lands there. */
-void nish_reset_arena(void) { nish_roots_clear(); nish_arena.off = 0; }
-void nish_free_arena(void) { nish_roots_clear(); nish_arena.off = 0; } /* memory cannot be returned */
+/* A module with root storage defines both itself (src/emit-root.ts), emptying
+   every root first through nish_runtime_root_reset; scripts/build.sh compiles
+   it with NISH_WASM_ROOTS, which leaves these two out and takes the root keep
+   below in. The wasm profile exports every function, so the root keep is
+   compiled into no other module. */
+#ifndef NISH_WASM_ROOTS
+void nish_reset_arena(void) { nish_arena.off = 0; }
+void nish_free_arena(void) { nish_arena.off = 0; } /* memory cannot be returned */
+#endif
 uint64_t nish_arena_used(void) { return nish_arena.off; }
 uint64_t nish_arena_mark(void) { return nish_arena.buf ? (uint64_t)(uintptr_t)(nish_arena.buf + nish_arena.off) : 0; }
 void nish_arena_release(uint64_t mark) { nish_arena.off = mark ? mark - (uintptr_t)nish_arena.buf : 0; }
@@ -156,6 +160,7 @@ void nish_array_grow(nish_array *a, uint64_t elem_size) {
   a->cap = cap;
 }
 
+#ifdef NISH_WASM_ROOTS
 /* ---- Root storage (docs/wp55-persistent-root.md §4): keep what the roots
  * reach between export calls, release the rest.
  *
@@ -497,6 +502,16 @@ static void nish_root_compact(void) {
   nish_arena.off = (uint64_t)((uintptr_t)to - (uintptr_t)nish_arena.buf);
 }
 
+/* Root storage's nish_reset_arena and nish_free_arena (WP55 §4.2): a root
+   left pointing at a released block would be traced into whatever lands
+   there, so every root is emptied before the arena. */
+void nish_runtime_root_reset(const nish_root *const *roots, int32_t count) {
+  nish_roots = roots;
+  nish_root_count = count;
+  nish_roots_clear();
+  nish_arena.off = 0;
+}
+
 /* After an export call that began at `mark`: keep what `roots` reach. */
 void nish_runtime_root_keep(uint64_t mark, const nish_root *const *roots, int32_t count) {
   nish_roots = roots;
@@ -507,6 +522,7 @@ void nish_runtime_root_keep(uint64_t mark, const nish_root *const *roots, int32_
   if (nish_arena.off - nish_root_floor <= 2 * nish_root_live + NISH_PAGE) return;
   nish_root_compact();
 }
+#endif /* NISH_WASM_ROOTS */
 
 /* ---- Panics: `unreachable`, which the host sees as a RuntimeError; under
  * wasm-host the page hears of each first (NISH_DIE above). */

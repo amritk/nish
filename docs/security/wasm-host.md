@@ -69,7 +69,7 @@ WH-8 and WH-10 are recorded open:
 | `src/emit-strings.ts` | `emitHostString`: a string argument as its data pointer and byte count |
 | `src/module-storage.ts` | lending a `u8[]` storage array to a function's `u8[]` parameter |
 | `std/host/text.ts` | `textRead`, `textWrite`, `textWriteInt`, `textWriteF64` |
-| `runtime/runtime-wasm.c` | root storage's keep under `NISH_WASM_HOST` (WP55): `nish_runtime_root_keep`, `nish_root_compact` and the trace it runs (`nish_slot`, `nish_visit`, `nish_block`, `nish_moved`), its scratch (`nish_scratch`, `nish_words_push`, `nish_seen_add`), and `nish_roots_clear` in `nish_reset_arena` and `nish_free_arena` |
+| `runtime/runtime-wasm.c` | root storage's keep, compiled only under `NISH_WASM_ROOTS` (WP55; `scripts/build.sh` sets it for IR that calls the keep): `nish_runtime_root_keep`, `nish_root_compact` and the trace it runs (`nish_slot`, `nish_visit`, `nish_block`, `nish_moved`), its scratch (`nish_scratch`, `nish_words_push`, `nish_seen_add`), and `nish_runtime_root_reset`, whose `nish_roots_clear` empties every root before the module's own `nish_reset_arena` and `nish_free_arena` release the arena |
 | `src/emit-root.ts` | the trace descriptors, the root table and `nish_root_keep` the compiler writes |
 | `src/interop-wasm.ts` | `guardLoader`'s keep: `raw.nish_root_keep(mark)` in place of `raw.nish_arena_release(mark)` in a program with root storage, and `layoutLoader`'s leaving root storage out of `layout` |
 

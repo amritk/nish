@@ -13926,10 +13926,21 @@ target triple = "wasm32-unknown-unknown"
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #0
+declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define void @nish_root_keep(i64 %mark) {
   call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define void @nish_reset_arena() {
+  call void @nish_runtime_root_reset(i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define void @nish_free_arena() {
+  call void @nish_runtime_root_reset(i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
   ret void
 }
 
@@ -31867,6 +31878,7 @@ declare void @nish_sandbox_check() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #2
+declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #2
 declare noundef i64 @nish_region_new() #2
 declare noundef i64 @nish_region_child_new() #2
 declare i8* @nish_region_enter(i64 noundef) #2

@@ -142,6 +142,9 @@ void *nish_arena_keep(uint64_t mark, void *p);
  * calls that in place of `nish_arena_release(mark)`. */
 struct nish_root;
 void nish_runtime_root_keep(uint64_t mark, const struct nish_root *const *roots, int32_t count);
+/* Root storage's nish_reset_arena and nish_free_arena (wasm only): empty every
+ * root in `roots`, then the arena. */
+void nish_runtime_root_reset(const struct nish_root *const *roots, int32_t count);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t nish_arena_used(void);
 
