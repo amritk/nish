@@ -17271,13 +17271,23 @@ if (dealtHere("simd")) {
         return null
       }
       const epilogue = /^(popq\s|vzeroupper$|add\s+sp, sp, #|addq\s+\$\d+, %rsp$|ldp\s+x(19|2\d|30), x(2\d|30), \[sp|ldr\s+x(19|2\d|30), \[sp)/
-      /** The stack offsets a vector store writes, or null for any other instruction. */
-      const vectorStore = (line) => {
+      /** The registers `body` points into its own frame: `mov x12, sp`, `add x9, sp, #16`, `leaq 8(%rsp), %rdi`. */
+      const frameBases = (body) =>
+        new Set(body.flatMap((line) => /^(?:mov|add|sub)\s+(x\d+), (?:sp|x29)\b/.exec(line)?.[1] ?? /^leaq\s+.*\(%r[sb]p(?:,[^)]*)?\), %(\w+)$/.exec(line)?.[1] ?? []))
+      /**
+       * The stack offsets a vector store writes, or null for any other instruction. A vector store
+       * through any other base writes memory the caller passed (the output, the GHASH state), which is
+       * the kernel's result, not a spill.
+       */
+      const vectorStore = (line, bases) => {
         let m = /^v?mov\w*\s+%([xy])mm\d+, (-?\d*)\(%rsp\)$/.exec(line)
         if (m !== null) return Array.from({ length: m[1] === "y" ? 4 : 2 }, (_, i) => Number(m[2] || 0) + 8 * i)
         if ((m = /^str\s+q\d+, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
-        // Any other vector store to the stack or the frame (a pair, an unscaled offset) is read as a spill.
-        return /^(v?mov\w*\s+%[xy]mm\d+, .*\(%r[sb]p\)|st(r|p|ur)\s+[qd]\d+, .*\[(sp|x29)\b)/.test(line) ? [Number.NaN] : null
+        // Any other vector store to the stack or the frame (a pair, an unscaled or indexed offset, a
+        // register that points into the frame) is read as a spill no wipe reaches.
+        if (/^(v?mov\w*\s+%[xy]mm\d+, .*\(%r[sb]p(,[^)]*)?\)|st(r|p|ur)\s+[qd]\d+, .*\[(sp|x29)\b)/.test(line)) return [Number.NaN]
+        m = /^v?mov\w*\s+%[xy]mm\d+, .*\(%(\w+)(?:,[^)]*)?\)$/.exec(line) ?? /^st(?:r|p|ur)\s+[qd]\d+, .*\[(x\d+)\b/.exec(line)
+        return m !== null && bases.has(m[1]) ? [Number.NaN] : null
       }
       /** The stack offsets a zero store of 8 bytes clears, or null for any other instruction. */
       const zeroStore = (line) => {
@@ -17309,9 +17319,10 @@ if (dealtHere("simd")) {
           const faults = []
           const clears = []
           const inClear = new Set()
+          const bases = frameBases(body)
           body.forEach((line, at) => {
             const wiped = new Set(body.slice(at + 1).flatMap((later) => zeroStore(later) ?? []))
-            if ((vectorStore(line) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
+            if ((vectorStore(line, bases) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
             const tail = /^(jmp|b)\s+nish_aes_clear$/.test(line)
             if (!tail && !/^retq?$/.test(line)) return
             let i = at - 1
