@@ -5656,6 +5656,18 @@ const DECLARED = [
       why: "the program declares module storage of a class or null, which the seed refuses with NL2686 and the candidate keeps as root storage, so only the candidate compiles it",
     })
   ),
+  // A guarded loader marks a failed release or keep a `trap` only when no
+  // panic recorded its own kind first (guardLoader, src/interop-wasm.ts).
+  ...[
+    ["tests/cases/host_import_string.ts", "host_import_string.mjs"],
+    ["tests/link/net_fetch_async_dns_slow/main.ts", "main.mjs"],
+    ["tests/link/storage_lend_import/main.ts", "main.mjs"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: "keep the panic kind a failed root keep recorded",
+    why: "the guarded loader's catch around the arena release keeps a panic kind already recorded instead of overwriting it with `trap`",
+  })),
 ]
 
 /**
