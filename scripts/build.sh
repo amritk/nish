@@ -889,21 +889,27 @@ case "$profile" in
         esac
       done
     fi
+    # Root storage (WP55): a module with root storage defines its own
+    # `nish_reset_arena`, which empties every root through the runtime's
+    # nish_runtime_root_reset. Its IR links runtime-wasm.c, compiled with
+    # NISH_WASM_ROOTS, which takes in the root keep and leaves the arena resets
+    # to the IR. The definition is the trigger: a bare `declare` of the keep
+    # (every `--runtime-decls` module has one) or a string spelling a name is
+    # not. Without it the module links the bytes it always did: the wasm
+    # profile exports every function it compiles.
+    roots_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        *.ll) if grep -qE '^define void @nish_reset_arena\(' "$i"; then roots_wanted=1; round_wanted=1; fi ;;
+      esac
+    done
     if [ "$round_wanted" = 1 ] && [ "$wasm_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-wasm.c")
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
     wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory -ffp-contract=off)
-    # Root storage (WP55): IR that calls nish_runtime_root_keep compiles
-    # runtime-wasm.c with NISH_WASM_ROOTS, which takes in the root keep and
-    # leaves the arena resets to the IR. Without it the module links the bytes
-    # it always did: the wasm profile exports every function it compiles.
-    for i in ${inputs[@]+"${inputs[@]}"}; do
-      case "$i" in
-        *.ll) if grep -q '@nish_runtime_root_keep' "$i"; then wasm_compile+=(-DNISH_WASM_ROOTS); break; fi ;;
-      esac
-    done
+    if [ "$roots_wanted" = 1 ]; then wasm_compile+=(-DNISH_WASM_ROOTS); fi
     if [ "$profile" = wasm ]; then
       "$CC" "${wasm_compile[@]}" \
         ${tls[@]+"${tls[@]}"} \

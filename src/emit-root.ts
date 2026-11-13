@@ -267,7 +267,8 @@ export const rootTable = (emitter: Emitter, traces: RootTraces, info: ConstInfo,
 }`)
   // Emptying the arena empties every root first (WP55 §4.2): a root left
   // pointing at a released block would be traced into whatever lands there.
-  // These replace the runtime's weak definitions, so a module without root
+  // The runtime compiles its own pair only without NISH_WASM_ROOTS, which
+  // scripts/build.sh sets for IR that defines these, so a module without root
   // storage links none of the keep.
   const reset = emitter.useRuntime("nish_runtime_root_reset")
   for (const name of ["nish_reset_arena", "nish_free_arena"]) {

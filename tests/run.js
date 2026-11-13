@@ -35164,6 +35164,32 @@ if (!only || "host-import".includes(only)) {
         `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
       )
     }
+    // IR that only declares the root keep, as every --runtime-decls module
+    // does, has no root storage: it links main's bytes, with the runtime's own
+    // nish_reset_arena and nish_free_arena (scripts/build.sh keys
+    // NISH_WASM_ROOTS on the IR defining nish_reset_arena).
+    if (wasmBytes) {
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === "examples/arrays.ts")
+      const ll = wasmHostCompile(path.join(dir, "declares-keep"), "arrays")
+      const got = {}
+      if (ll !== null) {
+        fs.appendFileSync(ll, "\ndeclare void @nish_runtime_root_keep(i64, i8*, i32)\n")
+      }
+      for (const [part, profile] of [
+        ["wasm", "wasm"],
+        ["host", "wasm-host"],
+      ]) {
+        const out = path.join(dir, "declares-keep", `arrays.${profile}.wasm`)
+        const linked = ll === null ? { status: 1, stdout: "", stderr: "compile failed" } : wasmHostLink([ll, "runtime/runtime-wasm.c"], ["-o", out, "--profile", profile])
+        got[part] = linked.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(linked)
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        "host-import: examples/arrays.ts whose IR declares nish_runtime_root_keep links main's --profile wasm and wasm-host .wasm",
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+    }
   }
 }
 
@@ -35872,6 +35898,55 @@ if (!only || "persist".includes(only)) {
       lateIr.includes("define void @nish_root_keep(i64 %mark)"),
     shown(late)
   )
+  // Root storage with no string, no round_init and no tagged panic still links
+  // runtime-wasm.c (its keep, resets and arena): the IR's own nish_reset_arena
+  // is what asks for it. The panic tags are stripped to leave nothing else.
+  const bumpWhy = wasmHostTools()
+  if (bumpWhy !== null) {
+    skip(`persist: ${bumpWhy}`)
+  } else {
+    const bump = spawnSync(
+      NISH,
+      ["tests/module-storage/persist/bump.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "bump.d.ts"), "-o", `${unionDir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    const bareLl = path.join(unionDir, "bump-bare.ll")
+    if (bump.status === 0) {
+      const ir = fs.readFileSync(path.join(unionDir, "bump.ll"), "utf8")
+      fs.writeFileSync(
+        bareLl,
+        ir
+          .replace(/, !nish\.site !\{i32 \d+\}/g, "")
+          .split("\n")
+          .filter((line) => !/^; nish\.sites? /.test(line))
+          .join("\n")
+      )
+    }
+    for (const profile of ["wasm", "wasm-host"]) {
+      const out = path.join(unionDir, `bump.${profile}.wasm`)
+      const linked = bump.status === 0 ? wasmHostLink([bareLl], ["-o", out, "--profile", profile]) : bump
+      let got = shown(linked)
+      if (linked.status === 0) {
+        try {
+          const { exports: e } = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(out)), {})
+          e.init()
+          const mark = e.nish_arena_mark()
+          e.step()
+          e.nish_root_keep(mark)
+          e.step()
+          e.nish_root_keep(mark)
+          got = e.step()
+        } catch (err) {
+          got = String(err)
+        }
+      }
+      check(
+        `persist: root storage with no string, round_init or panic site links runtime-wasm.c under --profile ${profile} and keeps its root`,
+        got === 3,
+        String(got)
+      )
+    }
+  }
   const why = wasmHostTools()
   if (why !== null) {
     skip(`persist: ${why}`)

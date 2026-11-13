@@ -198,8 +198,8 @@ function rootTable(emitter: Emitter, traces: RootTraces, info: ConstInfo, data: 
   local +26:9 keep: string (const)
   callee +26:16 Emitter.useRuntime -> @Emitter.useRuntime
   callee +27:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
-  local +35:9 reset: string (const)
-  callee +35:17 Emitter.useRuntime -> @Emitter.useRuntime
-  local +36:14 name: string (const)
-  callee +37:5 StringSet.add -> @StringSet.add
-  callee +38:5 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  local +36:9 reset: string (const)
+  callee +36:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local +37:14 name: string (const)
+  callee +38:5 StringSet.add -> @StringSet.add
+  callee +39:5 IRModule.addRawDefinition -> @IRModule.addRawDefinition
