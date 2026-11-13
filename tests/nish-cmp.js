@@ -1964,6 +1964,16 @@ const DECLARED = [
     changelog: "reaches its spawner's state and awaits the async Postgres pool",
     why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 8)",
   },
+  ...[
+    "tests/link/std_yaml_json/main.ts",
+    "tests/link/std_yaml_json_direct/main.ts",
+    "bench/yaml-json/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "straight into a JsonDocument",
+    why: "the program calls YamlJsonLoader.loadText, which the 0.39.0 seed's std does not have, so only the candidate compiles it",
+  })),
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
   // program that reaches them. These come first: dns.ll also carries this
