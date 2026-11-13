@@ -340,6 +340,16 @@ jobs:
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version
 
+      # The seed's link of src/compile.ts is a minute on one core, the same in
+      # every shard, and the same binary as the last run whose src/, std/, seed
+      # and toolchain were these: tests/self/compiler-cache.js keys it on all
+      # of them, and the Test step below copies it rather than linking again.
+      # Shard 1 alone saves a miss, since the eight build the same bytes.
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+        with:
+          save: ${{ matrix.shard == 1 }}
+
       # A server `nish run --watch` swaps closes its SO_REUSEPORT listener
       # while the new one is up, and Linux resets the connections still queued
       # on a closing listener unless this setting moves them to another
@@ -1170,13 +1180,16 @@ jobs:
         run: npm ci
 
       # The same seed, and the same compiler `npm test` builds in the `test`
-      # job; see there. This job has no suite to borrow it from, so it links
-      # its own.
+      # job; see there. It comes through the same cache, so on a hit this job
+      # reuses the binary the `test` job's shard 1 saved.
       - name: Fetch the seed
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler with the seed
-        run: build/seed/bin/nish src/compile.ts --link build/nish
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: ${{ matrix.shard == 1 }}
 
       # The runner answers 1 when any check failed, so the step's own exit status
       # is the gate. Its last line is the summary, which is what a reader wants
@@ -1262,6 +1275,13 @@ jobs:
       # and the section's GC check compiles examples/hello.ts with it.
       - name: Fetch the seed
         run: bash scripts/fetch-seed.sh
+
+      # Each `node tests/run.js` below needs that stage1; this step links it, or
+      # restores the one an earlier run linked from the same inputs, and the
+      # seven runs copy it from build/cache rather than each spending 40 s on
+      # the link (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
 
       # `set -o pipefail` so that a failed check in the section fails the step
       # before the grep is asked anything; the grep is then the guard against a
@@ -1449,6 +1469,13 @@ jobs:
         timeout-minutes: 5
         run: bash scripts/fetch-seed.sh
 
+      # Both `node tests/run.js` runs below copy this stage1 from build/cache
+      # rather than linking it each (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+        with:
+          save: ${{ matrix.shard == 1 }}
+
       # Linux routes all of 127.0.0.0/8 to lo; Darwin's lo0 carries 127.0.0.1
       # alone, and net_relay's loopback.ts opens sessions from 127.0.0.2 and
       # 127.0.0.3 to test the relay's per-address cap. Without the aliases those
@@ -1555,6 +1582,11 @@ jobs:
       - name: Fetch the seed
         timeout-minutes: 5
         run: bash scripts/fetch-seed.sh
+
+      # One stage1 for the run under each pin below, copied from build/cache
+      # rather than linked once per pin (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
 
       # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
       # than getauxval: the agreement driver must name the ARMv8 path, and the

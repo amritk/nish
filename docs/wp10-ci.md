@@ -433,6 +433,22 @@ link programs, which every shard repeated, and 13.2 after them, which shard 1
 alone ran. [Shards](#shards-and-time-limits) says what moved where. The
 `runner` job was the next longest at 13 min 6 s, on one core of four.
 
+On eight shards, in
+[run 43369900293](https://github.com/amritk/nish/actions/runs/43369900293)
+(`ac813b5`), the run took 11 min 31 s and the longest `test` job was shard 2's
+at 11 min 29 s. Each shard's Test step spent 43-75 s linking stage1, 109-249 s
+on the sections before the link programs (113 s of it the golden cases, which
+every shard runs in full) and 185-395 s after them. The stage1 link is the
+seed's front end (2 s) and then the speed profile's full LTO on one core (about
+69 s): a target with landing pads links in one partition. The NEON job, the
+second longest at 10 min 45 s, linked stage1 seven times, once per
+`node tests/run.js` step. Since then `tests/self/compiler-cache.js` keeps the
+linked binary under a hash of everything the link reads, and the
+`.github/actions/compiler-cache` step restores it through the Actions cache:
+a run whose `src/`, `std/`, seed and toolchain match an earlier one copies
+stage1 instead of linking it, and a job that runs the suite more than once
+links it at most once.
+
 ## Running the same steps locally
 
 ```bash

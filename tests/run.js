@@ -61,7 +61,8 @@ import {
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
-import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
+import { linkCompiler } from "./self/compiler-cache.js"
+import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
@@ -631,11 +632,16 @@ if (seed.error !== undefined) {
   }
   summarise()
 }
+// A run before that linked the same inputs left its binary in
+// `build/cache/compiler-under-test/` (`tests/self/compiler-cache.js` says what
+// the key covers), and copying it saves the minute the link takes.
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true })
+const underTest = linkCompiler(seed, path.join("src", "compile.ts"), NISH)
 if (
   !check(
-    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test`,
-    linkWith(seed, path.join("src", "compile.ts"), NISH) !== null,
+    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test` +
+      (underTest?.reused ? ` (kept from a run with the same inputs, key ${underTest.key})` : ""),
+    underTest !== null,
     "(the seed's report is on stderr above)"
   )
 ) {
