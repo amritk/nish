@@ -2523,6 +2523,10 @@ const markMember = (marks: i32[], member: i32, stamp: i32): void => {
   marks[member] = stamp
 }
 
+/** Whether `stampMembers` marked `member` with `stamp`. */
+const isMarked = (marks: i32[], member: i32, stamp: i32): boolean =>
+  member >= 0 && member < marks.length && marks[member] === stamp
+
 /** Whether `first` or `second` names the value `member` holds, compared value by value. */
 const namedBy = (ctx: CheckContext, member: i32, first: i32[], second: i32[]): boolean => {
   const value = ctx.table.memberValue(member)
@@ -2558,7 +2562,7 @@ const holdNamed = (
   const marks = ctx.program.memberMarks
   let count = 0
   for (const member of current) {
-    if ((stamp > 0 ? marks[member] === stamp : namedBy(ctx, member, first, second)) === keep) {
+    if ((stamp > 0 ? isMarked(marks, member, stamp) : namedBy(ctx, member, first, second)) === keep) {
       count = count + 1
     }
   }
@@ -2567,7 +2571,7 @@ const holdNamed = (
   }
   const kept: i32[] = []
   for (const member of current) {
-    if ((stamp > 0 ? marks[member] === stamp : namedBy(ctx, member, first, second)) === keep) {
+    if ((stamp > 0 ? isMarked(marks, member, stamp) : namedBy(ctx, member, first, second)) === keep) {
       kept.push(member)
     }
   }
@@ -3830,7 +3834,7 @@ export const heldAcross = (ctx: CheckContext, node: Node, scope: Scope): Scope =
       const stamp = stampMembers(ctx, local.type, every, before, written)
       const marks = ctx.program.memberMarks
       for (const member of every) {
-        if (stamp > 0 ? marks[member] === stamp : namedBy(ctx, member, before, written)) {
+        if (stamp > 0 ? isMarked(marks, member, stamp) : namedBy(ctx, member, before, written)) {
           kept.push(member)
         }
       }
