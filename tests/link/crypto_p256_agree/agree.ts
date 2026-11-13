@@ -1,16 +1,15 @@
 // P-256's fixed-base comb against its variable-base window, end to end (#628).
 //
-// `p256PublicKey` and `p256Sign` compute k G with `p256BaseMult`, a 4-tooth comb
-// over a precomputed table of G's multiples; `p256Verify` and ECDH still compute
+// `p256PublicKey` and `p256Sign` compute k G with `p256BaseMult`, a signed comb
+// over a precomputed table of G's multiples (ECC-7); `p256Verify` and ECDH still compute
 // it with `p256ScalarMult`, the 4-bit window over a table built from the point.
 // This program requires the two to give the same encoded point, byte for byte,
 // for every scalar below, and prints how many did.
 //
 // **The seam.** Neither multiply is exported, and this test adds no public API
 // to reach them. `tests/run.js` ("p256 agree: ...") copies std/crypto/p256.ts,
-// appends `seam.ts.in` to it — three exports, `p256SeamBase`,
-// `p256SeamReference` and `p256SeamShared`, over the module's own private
-// functions — and compiles this file as the `main.ts` of a directory holding
+// appends `seam.ts.in` to it — the `p256Seam*` exports, over the module's own
+// private functions — and compiles this file as the `main.ts` of a directory holding
 // that copy as `./p256`. The directory has no `main.ts`, so the link harness
 // and the corpus walkers never compile this file on its own, where `./p256`
 // does not exist. Only the copy is imported: `nish/crypto/p256` beside it would
@@ -20,10 +19,15 @@
 //
 // - RFC 6979 A.2.5's private key and its two SHA-256 nonces, against the
 //   published public key and `r`s;
-// - edges: 0, 1, 2, 15, 16, n - 2, n - 1, n, n + 1, p and 2^256 - 1, and the 16
-//   scalars whose comb digits are all one value (all 0 is 0, all 15 is
-//   2^256 - 1), then one scalar per digit position and value, every other digit
-//   0, so each of the table's 240 entries is the only one read at least once;
+// - edges: 0, 1, 2, 15, 16, n - 3, n - 2, n - 1, n, n + 1 and p; then, for each comb
+//   and for all combs at once, the scalar whose recoded m (k = 2m - (2^B - 1)
+//   mod n, `p256SeamUnrecode`) has one digit value at every column of that comb
+//   and every other bit clear, for each of the 64 values. It counts the table
+//   choices, (comb, entry, sign), those scalars read: all 656 the comb can
+//   make. The other 48 of the 704 are comb 10's entries that need tooth 4 or 5,
+//   bits 256 and up, which m below n never sets;
+// - the table itself: every entry rebuilt from G by the module's own complete
+//   doubling and addition (`p256SeamTableRebuilt`) and compared, encoded;
 // - Wycheproof: the `r` and the `s` of every 64-byte signature of
 //   ecdsa_secp256r1_sha256_p1363 and _sha512_p1363 as scalars — the ECDSA files
 //   carry public keys and no private keys, and these are 256-bit numbers chosen
@@ -52,8 +56,13 @@ import {
   P256_SIGNATURE_SIZE,
   p256PublicKey,
   p256SeamBase,
+  p256SeamRecode,
   p256SeamReference,
+  p256SeamShape,
   p256SeamShared,
+  p256SeamTableEntries,
+  p256SeamTableRebuilt,
+  p256SeamUnrecode,
   p256SignSha256,
   p256SignSha256Into,
   p256VerifySha256,
@@ -203,39 +212,73 @@ const agree = (hash: u64[], tally: Tally, n: u8[], name: string, k: u8[]): u8[] 
 /** The x coordinate of an encoded point, as hex. */
 const xOf = (point: u8[]): string => toHex(point).substring(2, 66)
 
-/** The scalar whose comb digit at every position `i` (bits i, i + 64, i + 128, i + 192) is `digit`. */
-const everyDigit = (digit: i32): u8[] => {
-  const out: u8[] = new Array<u8>(32)
-  for (let byte: i32 = 0; byte < 32; byte++) {
-    // Byte `byte` holds bits 8 (31 - byte) and up, all in one 64-bit tooth.
-    const tooth: i32 = (31 - byte) >> 3
-    out[byte] = ((digit >> tooth) & 1) === 1 ? 255 : 0
+/** Bit `bit` of the 32 big-endian bytes `m`; every bit from 256 up reads 0. */
+const bitOf = (m: u8[], bit: i32): i32 => {
+  if (bit >= 256) {
+    return 0
   }
-  return out
+  const at: i32 = 31 - (bit >> 3)
+  return (toI32(m[at]) >> (bit & 7)) & 1
 }
 
-/** The scalar whose comb digit at position `i` is `digit` and every other digit 0. */
-const oneDigit = (i: i32, digit: i32): u8[] => {
+/**
+ * The recoded scalar m whose digit is `digit` at every column of comb `comb`,
+ * or of every comb when `comb` is -1, and whose every other bit is clear.
+ * Bits from 256 up are dropped: m is below n, so the comb reads them as 0.
+ */
+const combDigits = (shape: i32[], comb: i32, digit: i32): u8[] => {
+  const teeth: i32 = shape[0]
+  const spacing: i32 = shape[1]
   const out: u8[] = new Array<u8>(32)
-  for (let b: i32 = 0; b < 4; b++) {
-    if (((digit >> b) & 1) === 1) {
-      const bit: i32 = i + 64 * b
-      const shift: i32 = bit & 7
-      const at: i32 = 31 - (bit >> 3)
-      out[at] = toU8(toI32(out[at]) | (1 << shift))
+  for (let c: i32 = 0; c < shape[2]; c++) {
+    if (comb < 0 || c === comb) {
+      for (let i: i32 = 0; i < spacing; i++) {
+        for (let j: i32 = 0; j < teeth; j++) {
+          const bit: i32 = (c * teeth + j) * spacing + i
+          if (((digit >> j) & 1) === 1 && bit < 256) {
+            const at: i32 = 31 - (bit >> 3)
+            out[at] = toU8(toI32(out[at]) | (1 << (bit & 7)))
+          }
+        }
+      }
     }
   }
   return out
 }
 
-/** The edges and the digit sweep; answers how many scalars were run. */
-const edges = (hash: u64[], tally: Tally, n: u8[]): void => {
+/**
+ * Marks in `read` the table choice, (comb, entry, sign), that each of the
+ * comb's additions makes for the recoded scalar `m`: the top tooth is the sign
+ * and the others, inverted when it is clear, the entry.
+ */
+const cover = (shape: i32[], read: i32[], m: u8[]): void => {
+  const teeth: i32 = shape[0]
+  const spacing: i32 = shape[1]
+  const entries: i32 = shape[3]
+  for (let c: i32 = 0; c < shape[2]; c++) {
+    for (let i: i32 = 0; i < spacing; i++) {
+      let digit: i32 = 0
+      for (let j: i32 = 0; j < teeth; j++) {
+        digit = digit | (bitOf(m, (c * teeth + j) * spacing + i) << j)
+      }
+      const top: i32 = digit >> (teeth - 1)
+      const u: i32 = (top === 1 ? digit : ~digit) & (entries - 1)
+      read[(c * entries + u) * 2 + top] = 1
+    }
+  }
+}
+
+/** The edges and the digit sweep; answers how many table choices the sweep read. */
+const edges = (hash: u64[], tally: Tally, n: u8[]): i32 => {
   const small: i32[] = [0, 1, 2, 15, 16]
   for (let i: i32 = 0; i < toI32(small.length); i++) {
     const k: u8[] = new Array<u8>(32)
     k[31] = toU8(small[i])
     agree(hash, tally, n, `${small[i]}`, k)
   }
+  const nMinus3: u8[] = fromHex(N)
+  nMinus3[31] = toU8(toI32(nMinus3[31]) - 3)
+  agree(hash, tally, n, "n - 3", nMinus3)
   const nMinus2: u8[] = fromHex(N)
   nMinus2[31] = toU8(toI32(nMinus2[31]) - 2)
   agree(hash, tally, n, "n - 2", nMinus2)
@@ -247,14 +290,21 @@ const edges = (hash: u64[], tally: Tally, n: u8[]): void => {
   nPlus1[31] = toU8(toI32(nPlus1[31]) + 1)
   agree(hash, tally, n, "n + 1", nPlus1)
   agree(hash, tally, n, "p", fromHex(P))
-  for (let digit: i32 = 0; digit < 16; digit++) {
-    agree(hash, tally, n, `every digit ${digit}`, everyDigit(digit))
-  }
-  for (let i: i32 = 0; i < 64; i++) {
-    for (let digit: i32 = 1; digit < 16; digit++) {
-      agree(hash, tally, n, `digit ${i} = ${digit}`, oneDigit(i, digit))
+  const shape: i32[] = p256SeamShape()
+  const digits: i32 = 1 << shape[0]
+  const read: i32[] = new Array<i32>(shape[2] * shape[3] * 2)
+  for (let c: i32 = -1; c < shape[2]; c++) {
+    for (let digit: i32 = 0; digit < digits; digit++) {
+      const k: u8[] = p256SeamUnrecode(combDigits(shape, c, digit))
+      cover(shape, read, p256SeamRecode(k))
+      agree(hash, tally, n, c < 0 ? `every digit ${digit}` : `comb ${c} digit ${digit}`, k)
     }
   }
+  let choices: i32 = 0
+  for (let i: i32 = 0; i < toI32(read.length); i++) {
+    choices = choices + read[i]
+  }
+  return choices
 }
 
 /** The `r` and the `s` of every 64-byte signature in `cases`. */
@@ -327,10 +377,15 @@ export const main = (): i32 => {
   )
 
   const edge = new Tally()
-  edges(hash, edge, n)
+  const choices: i32 = edges(hash, edge, n)
   console.log(
-    `edges and digits: ${edge.agreed} of ${edge.scalars} scalars agree, ${edge.keys} of them public keys`
+    `edges and digits: ${edge.agreed} of ${edge.scalars} scalars agree, ${edge.keys} of them public keys, ` +
+      `${choices} table choices read`
   )
+
+  const entries: i32 = p256SeamTableEntries()
+  const rebuilt: i32 = p256SeamTableRebuilt()
+  console.log(`table: ${rebuilt} of ${entries} entries rebuilt from G`)
 
   const ecdsa = new Tally()
   signatureScalars(hash, ecdsa, n, "ecdsa_secp256r1_sha256_p1363", wycheproofEcdsaP256Sha256P1363Cases())
@@ -367,5 +422,5 @@ export const main = (): i32 => {
     (ecdsa.scalars - ecdsa.agreed) +
     (keys.scalars - keys.agreed) +
     (corpus.scalars - corpus.agreed)
-  return failed === 0 && published ? 0 : 1
+  return failed === 0 && published && rebuilt === entries ? 0 : 1
 }

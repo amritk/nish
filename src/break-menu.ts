@@ -5,9 +5,9 @@
 //
 // It is pure: `stepBreakMenu` reads one step of input and answers what the
 // director should do next, `drawBreakMenu` paints a framebuffer, and neither
-// touches the terminal. The director owns the terminal, applies settings and
-// switches to the game. The one file this module touches is the settings file
-// (`loadBreakSettings`, `saveBreakSettings`), which the director names.
+// touches the terminal. The director applies settings and switches to the
+// game; where the settings are kept between runs is the host's
+// (`break-settings-file.ts` for the terminal).
 //
 // Like the game it follows two rules. Every array is made in `newBreakMenu`
 // and reused, so a step or a frame allocates nothing. And anything that moves
@@ -17,17 +17,13 @@
 import { Framebuffer } from "nish/term-pixels"
 import {
   NO_SHADOW,
-  Particles,
   STEPS_PER_SECOND,
-  GfxTrail,
   View,
   WORLD_H,
   WORLD_W,
-  add,
   bevelBrick,
   blendRect,
   clamp,
-  dim,
   disc,
   drawParticles,
   drawTextCentred,
@@ -39,16 +35,22 @@ import {
   fontScaleFor,
   glow,
   gradient,
-  hue,
   lerp,
-  gfxMix,
   outBounce,
   outCubic,
-  pushTrail,
-  spawnParticle,
   stepParticles,
   viewFor,
 } from "./break-gfx"
+import {
+  RasterParticles,
+  RasterTrail,
+  rasterAdd,
+  rasterDim,
+  rasterHue,
+  rasterMix,
+  rasterPushTrail,
+  rasterSpawnParticle,
+} from "../std/raster"
 import {
   ACTION_PRESS,
   ACTION_REPEAT,
@@ -63,9 +65,7 @@ import {
   KEY_UP,
   TermEvent,
 } from "nish/term"
-import { TermInput } from "nish/term-io"
-import { CLI } from "./branding"
-import { dirname } from "./paths"
+import { StepInput } from "../std/input"
 
 // ---- The interface the director reads ---------------------------------------
 
@@ -131,11 +131,11 @@ export const resolutionChoice = (index: i32): i32 => {
 
 /** What the Settings screen edits; the director reads it and applies it. */
 export class BreakSettings {
-  /** An index for `fpsChoice`: 0 is adaptive. */
+  /** An index for `fpsChoice`: 0 is adaptive. Only a terminal host applies it, when it opens the terminal. */
   fps: i32
   /** An index for `resolutionChoice`: 0 is auto. */
   resolution: i32
-  /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. */
+  /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. Only a terminal host reads it. */
   graphics: i32
   /** 0 low (no glow, no trails, a third of the sparks), 1 high. */
   effects: i32
@@ -224,49 +224,6 @@ export const parseBreakSettings = (text: string): BreakSettings => {
   }
   applySettingLine(s, text.slice(start))
   return s
-}
-
-/**
- * Where `nish break` keeps its settings: `${xdg}/nish/break` when `xdg` is
- * absolute, else `${home}/.config/nish/break` when `home` is, else "" for
- * nowhere — `runCacheRoot`'s rules, given the two variables' values.
- */
-export const breakSettingsPath = (xdg: string, home: string): string => {
-  if (xdg.startsWith("/")) {
-    return `${xdg}/${CLI}/break`
-  }
-  return home.startsWith("/") ? `${home}/.config/${CLI}/break` : ""
-}
-
-/** The settings kept at `path`; the defaults when `path` is "" or cannot be read as a file. */
-export const loadBreakSettings = (path: string): BreakSettings => {
-  const text: string | null = path === "" ? null : readFileSyncOrNull(path)
-  if (text === null) {
-    return new BreakSettings()
-  }
-  return parseBreakSettings(text)
-}
-
-/**
- * Keep `s` at `path`, making its directory and that directory's parent when
- * they are missing. It is written beside `path` and renamed over it, so a
- * failed write leaves the old file. Answers whether it was kept; a failure
- * anywhere answers false and says nothing.
- */
-export const saveBreakSettings = (path: string, s: BreakSettings): boolean => {
-  if (path === "") {
-    return false
-  }
-  const dir: string = dirname(path)
-  if (!mkdirSync(dirname(dir)) || !mkdirSync(dir)) {
-    return false
-  }
-  const temp: string = `${path}.tmp`
-  if (writeFileSyncMode(temp, formatBreakSettings(s), 0o644) < 0 || renameSync(temp, path) < 0) {
-    unlinkSync(temp)
-    return false
-  }
-  return true
 }
 
 // ---- Screens and layout -----------------------------------------------------
@@ -445,8 +402,8 @@ export class BreakMenu {
   prevBallY: f64
   ballVX: f64
   ballVY: f64
-  trail: GfxTrail
-  sparks: Particles
+  trail: RasterTrail
+  sparks: RasterParticles
   /** The view `drawBreakMenu` reuses, so a frame allocates none. */
   view: View
 
@@ -459,7 +416,7 @@ export class BreakMenu {
   selected: i32
   /** The level Play and Start level begin at, 1 to 6. */
   level: i32
-  /** The Settings row selected, 0 to 6. */
+  /** The Settings row selected, `ROW_FPS` to `ROW_BACK`. */
   row: i32
   /** The frame rate and graphics when Settings opened, to tell whether leaving needs `MENU_APPLY`. */
   entryFps: i32
@@ -470,6 +427,11 @@ export class BreakMenu {
   rngState: i32
   /** Whether the outro has answered the level, so later steps do not answer it again. */
   outroAnswered: boolean
+  /**
+   * Whether the host opens a terminal, which the frame rate and graphics rows
+   * are settings of; without one Settings leaves them out. True until a host says otherwise.
+   */
+  terminal: boolean
 
   /** A menu on the title screen; `newBreakMenu` is the way to make one. */
   constructor(level: i32, seed: i32, settings: BreakSettings) {
@@ -485,6 +447,7 @@ export class BreakMenu {
     this.entryGraphics = settings.graphics
     this.outroTick = 0
     this.outroAnswered = false
+    this.terminal = true
     const bricks: i32 = logoBrickCount()
     this.homeXs = new Array<f64>(bricks)
     this.homeXs.fill(0.0)
@@ -517,8 +480,8 @@ export class BreakMenu {
     this.prevBallY = this.ballY
     this.ballVX = 0.0
     this.ballVY = 0.0
-    this.trail = new GfxTrail(MENU_TRAIL_POINTS)
-    this.sparks = new Particles(SPARK_CAPACITY)
+    this.trail = new RasterTrail(MENU_TRAIL_POINTS)
+    this.sparks = new RasterParticles(SPARK_CAPACITY)
     this.view = new View()
   }
 }
@@ -619,7 +582,7 @@ const serveBall = (menu: BreakMenu): void => {
  * step's key presses act. It answers `MENU_STAY`, `MENU_QUIT`, `MENU_APPLY`,
  * or the level to play on the step the outro ends.
  */
-export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 => {
+export const stepBreakMenu = (menu: BreakMenu, input: StepInput): i32 => {
   // Wrapped long before i32 runs out, so a menu left open for months does not
   // panic on the checked add; the animations jump once a billion steps.
   menu.tick = menu.tick >= TICK_WRAP ? 0 : menu.tick + 1
@@ -730,7 +693,7 @@ const pickTitle = (menu: BreakMenu): i32 => {
     menu.screen = SCREEN_HOWTO
   } else if (menu.selected === ITEM_SETTINGS) {
     menu.screen = SCREEN_SETTINGS
-    menu.row = ROW_FPS
+    menu.row = menu.terminal ? ROW_FPS : ROW_RESOLUTION
     menu.entryFps = menu.settings.fps
     menu.entryGraphics = menu.settings.graphics
     snapHighlight(menu)
@@ -757,7 +720,7 @@ const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
     return MENU_QUIT
   }
   if (act === ACT_UP || act === ACT_DOWN) {
-    menu.row = wrap(menu.row, act === ACT_UP ? -1 : 1, ROW_COUNT)
+    menu.row = nextRow(menu, act === ACT_UP ? -1 : 1)
   } else if (act === ACT_LEFT || act === ACT_RIGHT) {
     cycleSetting(menu.settings, menu.row, act === ACT_LEFT ? -1 : 1)
   } else if (act === ACT_BACK || (act === ACT_PICK && menu.row === ROW_BACK)) {
@@ -766,6 +729,30 @@ const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
     cycleSetting(menu.settings, menu.row, 1)
   }
   return MENU_STAY
+}
+
+/** Whether Settings shows `row`: the frame rate and graphics only when the host opens a terminal. */
+const rowShown = (menu: BreakMenu, row: i32): boolean =>
+  menu.terminal || (row !== ROW_FPS && row !== ROW_GRAPHICS)
+
+/** The next row Settings shows from the selected one, a step of `by` (1 or -1) at a time, wrapping. */
+const nextRow = (menu: BreakMenu, by: i32): i32 => {
+  let row: i32 = wrap(menu.row, by, ROW_COUNT)
+  while (!rowShown(menu, row)) {
+    row = wrap(row, by, ROW_COUNT)
+  }
+  return row
+}
+
+/** How many shown rows are above `row`: its line on the Settings screen. */
+const rowLine = (menu: BreakMenu, row: i32): i32 => {
+  let line: i32 = 0
+  for (let r: i32 = 0; r < row; r++) {
+    if (rowShown(menu, r)) {
+      line++
+    }
+  }
+  return line
 }
 
 /** Back to the title, answering `MENU_APPLY` when the frame rate or graphics changed while Settings was open. */
@@ -809,7 +796,7 @@ const graphicsAt = (slot: i32): i32 => (slot <= 0 || slot > 4 ? -1 : 4 - slot)
 /** The world y the highlight bar belongs at for the screen's selection. */
 const highlightTarget = (menu: BreakMenu): f64 =>
   menu.screen === SCREEN_SETTINGS
-    ? ROW_TOP + toF64(menu.row) * ROW_GAP
+    ? ROW_TOP + toF64(rowLine(menu, menu.row)) * ROW_GAP
     : ITEM_TOP + toF64(menu.selected) * ITEM_GAP
 
 /** Move the highlight part of the way to its target, so it slides and settles. */
@@ -875,13 +862,13 @@ const knock = (menu: BreakMenu, cell: i32): void => {
   menu.wallAway[cell] = REGROW_STEPS + menuRandom(menu, 0, REGROW_SPREAD)
   const cx: f64 = (toF64(cell % WALL_COLS) + 0.5) * WALL_BRICK_W
   const cy: f64 = WALL_TOP + (toF64(cell / WALL_COLS) + 0.5) * WALL_BRICK_H
-  const colour: i32 = add(wallColour(cell / WALL_COLS), 0x303030)
+  const colour: i32 = rasterAdd(wallColour(cell / WALL_COLS), 0x303030)
   const count: i32 = menu.settings.effects === 0 ? 2 : 8
   for (let i: i32 = 0; i < count; i++) {
     const vx: f64 = toF64(menuRandom(menu, -60, 60))
     const vy: f64 = toF64(menuRandom(menu, -70, 20))
     const life: f64 = toF64(menuRandom(menu, 40, 80)) / 100.0
-    spawnParticle(menu.sparks, cx, cy, vx, vy, life, 1.5, colour)
+    rasterSpawnParticle(menu.sparks, cx, cy, vx, vy, life, 1.5, colour)
   }
 }
 
@@ -920,7 +907,7 @@ const menuStepBall = (menu: BreakMenu): void => {
   }
   // The trail gets where the ball was before this step, the start of the
   // segment the frame interpolates along, so it never runs ahead of the drawn ball.
-  pushTrail(menu.trail, menu.prevBallX, menu.prevBallY)
+  rasterPushTrail(menu.trail, menu.prevBallX, menu.prevBallY)
 }
 
 // ---- The outro --------------------------------------------------------------
@@ -961,7 +948,7 @@ const logoSlots = (menu: BreakMenu): i32 => {
  * wait. Any key press skips to the end; the last step answers the level,
  * once: the director may step the menu again before it takes the answer.
  */
-const stepOutro = (menu: BreakMenu, input: TermInput): i32 => {
+const stepOutro = (menu: BreakMenu, input: StepInput): i32 => {
   if (menu.outroAnswered) {
     return MENU_STAY
   }
@@ -997,12 +984,21 @@ const stepOutro = (menu: BreakMenu, input: TermInput): i32 => {
 const loosen = (menu: BreakMenu, i: i32): void => {
   menu.vxs[i] = (menu.xs[i] + CELL_W / 2.0 - WORLD_W / 2.0) * 0.8 + toF64(menuRandom(menu, -30, 30))
   menu.vys[i] = -toF64(menuRandom(menu, 40, 120))
-  const colour: i32 = add(logoColour(menu.columns[i], 0.0), 0x404040)
+  const colour: i32 = rasterAdd(logoColour(menu.columns[i], 0.0), 0x404040)
   const count: i32 = menu.settings.effects === 0 ? 1 : 3
   for (let k: i32 = 0; k < count; k++) {
     const vx: f64 = toF64(menuRandom(menu, -50, 50))
     const vy: f64 = toF64(menuRandom(menu, -80, 0))
-    spawnParticle(menu.sparks, menu.xs[i] + CELL_W / 2.0, menu.ys[i] + CELL_H / 2.0, vx, vy, 0.6, 1.5, colour)
+    rasterSpawnParticle(
+      menu.sparks,
+      menu.xs[i] + CELL_W / 2.0,
+      menu.ys[i] + CELL_H / 2.0,
+      vx,
+      vy,
+      0.6,
+      1.5,
+      colour
+    )
   }
 }
 
@@ -1048,7 +1044,8 @@ const itemsFade = (menu: BreakMenu, time: f64, alpha: f64): f64 => {
 }
 
 /** A wall row's face: the rainbow, dimmed well back so the menu reads over it; `break-intro.ts` lays the same wall. */
-export const wallColour = (row: i32): i32 => dim(hue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
+export const wallColour = (row: i32): i32 =>
+  rasterDim(rasterHue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
 
 /** The attract wall: every brick there, and returning ones growing from their centre. */
 const menuDrawWall = (menu: BreakMenu, view: View, alpha: f64): void => {
@@ -1089,12 +1086,12 @@ const drawBall = (menu: BreakMenu, view: View, alpha: f64): void => {
  * `time`, under a white band that sweeps across every few seconds.
  */
 const logoColour = (column: i32, time: f64): i32 => {
-  const base: i32 = hue(toF64(column) / 30.0 + time / 300.0)
+  const base: i32 = rasterHue(toF64(column) / 30.0 + time / 300.0)
   const x: f64 = toF64(column) * CELL_W
   const sweep: f64 = time * 1.8
   const band: f64 = sweep - Math.floor(sweep / 480.0) * 480.0 - 60.0
   const near: f64 = clamp(toF64(1) - Math.abs(x - band) / 28.0, 0.0, 1.0)
-  return gfxMix(base, WHITE, near * 0.75)
+  return rasterMix(base, WHITE, near * 0.75)
 }
 
 /** A logo brick's y on the title at `time`: dropping in with a bounce, then bobbing on a slow wave. */
@@ -1144,20 +1141,20 @@ const lineScale = (view: View): i32 => fontScaleFor(view, 7.0)
 /** The title items, the sliding highlight and the footer, faded by `fade`. */
 const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64): void => {
   const scale: i32 = lineScale(view)
-  const accent: i32 = hue(time / 400.0)
+  const accent: i32 = rasterHue(time / 400.0)
   if (scale < 1) {
     // Compact: the selected item alone, between arrows, where the list would be.
-    drawTextCentred(view, WORLD_W / 2.0, 104.0, 1, "<", gfxMix(BG_MID, MUTED, fade), NO_SHADOW)
+    drawTextCentred(view, WORLD_W / 2.0, 104.0, 1, "<", rasterMix(BG_MID, MUTED, fade), NO_SHADOW)
     drawTextCentred(
       view,
       WORLD_W / 2.0,
       116.0,
       1,
       itemLabel(menu, menu.selected),
-      gfxMix(BG_MID, WHITE, fade),
+      rasterMix(BG_MID, WHITE, fade),
       NO_SHADOW
     )
-    drawTextCentred(view, WORLD_W / 2.0, 128.0, 1, ">", gfxMix(BG_MID, MUTED, fade), NO_SHADOW)
+    drawTextCentred(view, WORLD_W / 2.0, 128.0, 1, ">", rasterMix(BG_MID, MUTED, fade), NO_SHADOW)
     return
   }
   const y: f64 = lerp(menu.prevHighlightY, menu.highlightY, alpha)
@@ -1170,8 +1167,8 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
       ITEM_TOP + toF64(i) * ITEM_GAP,
       scale,
       itemLabel(menu, i),
-      gfxMix(BG_MID, colour, fade),
-      gfxMix(BG_MID, SHADOW, fade)
+      rasterMix(BG_MID, colour, fade),
+      rasterMix(BG_MID, SHADOW, fade)
     )
   }
   drawTextCentred(
@@ -1180,7 +1177,7 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
     166.0,
     scale,
     "you found the wall.",
-    gfxMix(BG_MID, MUTED, fade),
+    rasterMix(BG_MID, MUTED, fade),
     NO_SHADOW
   )
 }
@@ -1192,8 +1189,8 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
 const drawBar = (view: View, y: f64, width: f64, accent: i32, fade: f64): void => {
   const left: f64 = (WORLD_W - width) / 2.0
   blendRect(view, left, y - 2.0, width, 11.0, accent, 0.22 * fade)
-  fillRect(view, left - 3.0, y - 2.0, 2.0, 11.0, gfxMix(BG_MID, accent, fade))
-  fillRect(view, left + width + 1.0, y - 2.0, 2.0, 11.0, gfxMix(BG_MID, accent, fade))
+  fillRect(view, left - 3.0, y - 2.0, 2.0, 11.0, rasterMix(BG_MID, accent, fade))
+  fillRect(view, left + width + 1.0, y - 2.0, 2.0, 11.0, rasterMix(BG_MID, accent, fade))
 }
 
 /** Title item `i`'s label; Start level carries the level between arrows. */
@@ -1230,7 +1227,7 @@ const menuLevelLabel = (level: i32): string => {
 /** The dark panel Settings and How to play sit on, with a rainbow rule along its top. */
 const drawPanel = (view: View, time: f64): void => {
   blendRect(view, PANEL_X, PANEL_Y, PANEL_W, PANEL_H, PANEL, 0.86)
-  fillRect(view, PANEL_X, PANEL_Y, PANEL_W, 1.0, hue(time / 400.0))
+  fillRect(view, PANEL_X, PANEL_Y, PANEL_W, 1.0, rasterHue(time / 400.0))
 }
 
 /** The Settings rows, each `name < value >`, the highlight, and the selected row's hint at the foot. */
@@ -1243,10 +1240,15 @@ const drawSettings = (menu: BreakMenu, view: View, alpha: f64, time: f64): void 
     drawTextCentred(view, WORLD_W / 2.0, 112.0, 1, rowValue(menu.settings, menu.row), WHITE, NO_SHADOW)
     return
   }
-  const accent: i32 = hue(time / 400.0)
+  const accent: i32 = rasterHue(time / 400.0)
   drawBar(view, lerp(menu.prevHighlightY, menu.highlightY, alpha), 240.0, accent, 1.0)
+  let line: i32 = 0
   for (let r: i32 = 0; r < ROW_COUNT; r++) {
-    const y: f64 = ROW_TOP + toF64(r) * ROW_GAP
+    if (!rowShown(menu, r)) {
+      continue
+    }
+    const y: f64 = ROW_TOP + toF64(line) * ROW_GAP
+    line++
     const on: boolean = r === menu.row
     drawTextShadow(view, 48.0, y, scale, rowName(r), on ? WHITE : TEXT, SHADOW)
     if (r !== ROW_BACK) {
@@ -1414,7 +1416,7 @@ const drawHowTo = (view: View, time: f64): void => {
  * its name under it.
  */
 const drawCapsule = (view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64): void => {
-  const colour: i32 = hue(toF64(k) / 6.0)
+  const colour: i32 = rasterHue(toF64(k) / 6.0)
   const bob: f64 = Math.sin(time * 0.06 + toF64(k)) * 1.0
   const top: f64 = y + bob
   disc(view, cx - 7.0, top + 4.0, 4.0, colour)
@@ -1471,6 +1473,6 @@ const drawWipe = (view: View, t: f64, time: f64): void => {
   const edge: f64 = outCubic(f) * (WORLD_H + 2.0)
   fillRect(view, -1.0, -1.0, WORLD_W + 2.0, edge + 1.0, WIPE)
   if (f < 1.0) {
-    fillRect(view, -1.0, edge - 1.0, WORLD_W + 2.0, 1.5, hue(time / 400.0))
+    fillRect(view, -1.0, edge - 1.0, WORLD_W + 2.0, 1.5, rasterHue(time / 400.0))
   }
 }
