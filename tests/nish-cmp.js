@@ -1420,6 +1420,7 @@ const DECLARED = [
     ["tests/link/net_http1_server_feed_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http1_server_frame_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http1_server_head_reuse/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_implicit_end/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http1_server_send_body/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http1_server_send_body_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_http1_server_write_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
