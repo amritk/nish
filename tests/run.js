@@ -17220,6 +17220,142 @@ if (dealtHere("simd")) {
     }
   }
 
+  // runtime/runtime-aes.c's four kernels end with `nish_aes_clear`, which zeroes every vector
+  // register the caller does not keep and every caller-saved general one, so no round key, H
+  // power or keystream block outlives the call in a register (docs/security/crypto-aead.md,
+  // AEAD-4). Here each kernel's `clang -O2` assembly, on x86-64, x86-64 at x86-64-v3 and
+  // aarch64, must reach every `ret` through a run of zeroing idioms and then only the
+  // epilogue (pops, the stack pointer, `vzeroupper`); that run must zero every vector
+  // register and caller-saved general register the rest of the body names; and a vector
+  // register stored to the stack must land in a buffer the kernel wipes after the store (both
+  // 8-byte halves stored zero: ctr's keystream, ghash's padded block), never a spill no clear
+  // reaches. A twin of the file with no call of `nish_aes_clear` must have every kernel
+  // refused, and a twin whose clear skips xmm0 and v0 must have nish_aes_block refused at the
+  // baseline: the reading is register-exact.
+  if (!only || "simd runtime-aes the AES kernels clear their registers".includes(only)) {
+    if (!HAS_CLANG) {
+      skip("runtime-aes.c: no clang to show its kernels clear their registers")
+    } else {
+      const clearDir = path.join(buildDir, "aes-clear")
+      fs.rmSync(clearDir, { recursive: true, force: true })
+      fs.mkdirSync(clearDir, { recursive: true })
+      const source = fs.readFileSync(path.join(root, "runtime", "runtime-aes.c"), "utf8")
+      const call = "  nish_aes_clear();\n"
+      const noClear = path.join(clearDir, "runtime-aes-no-clear.c")
+      fs.writeFileSync(noClear, source.replaceAll(call, ""))
+      const firstZeros = ['"pxor %%xmm0, %%xmm0\\n\\t', '"movi v0.16b, #0\\n\\t']
+      const partClear = path.join(clearDir, "runtime-aes-part-clear.c")
+      fs.writeFileSync(partClear, firstZeros.reduce((text, line) => text.replace(line, '"'), source))
+      const kernels = ["nish_aes_schedule", "nish_aes_block", "nish_aes_ctr", "nish_aes_ghash"]
+      const x86Names = { a: "rax", b: "rbx", c: "rcx", d: "rdx", si: "rsi", di: "rdi", bp: "rbp", sp: "rsp" }
+      /** A register operand by its whole register: `v3` for xmm3, ymm3, q3 or d3; `rax` for eax; `x5` for w5. */
+      const whole = (operand) => {
+        let m = /^%[xyz]mm(\d+)$/.exec(operand) ?? /^[vqdsh](\d+)(\.\w+)?$/.exec(operand)
+        if (m !== null) return `v${m[1]}`
+        if ((m = /^%r(\d+)[dwb]?$/.exec(operand)) !== null) return `r${m[1]}`
+        if ((m = /^%[re]?(a|b|c|d|si|di|bp|sp)[xlh]?$/.exec(operand)) !== null) return x86Names[m[1]]
+        if ((m = /^[xw](\d+)$/.exec(operand)) !== null) return `x${m[1]}`
+        return null
+      }
+      const callerSaved = new Set(["rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"])
+      for (let i = 0; i <= 17; i++) callerSaved.add(`x${i}`)
+      /** The registers one zeroing idiom clears, or null for any other instruction. */
+      const zeroes = (line) => {
+        if (line === "vzeroall") return Array.from({ length: 16 }, (_, i) => `v${i}`)
+        let m = /^pxor\s+(%xmm\d+), (%xmm\d+)$/.exec(line) ?? /^xorl\s+(%\w+), (%\w+)$/.exec(line)
+        if (m !== null && m[1] === m[2]) return [whole(m[1])]
+        if ((m = /^movi\s+(v\d+)\.16b, #0$/.exec(line)) !== null) return [m[1]]
+        if ((m = /^mov\s+(x\d+), xzr$/.exec(line)) !== null) return [m[1]]
+        return null
+      }
+      const epilogue = /^(popq\s|vzeroupper$|add\s+sp, sp, #|addq\s+\$\d+, %rsp$|ldp\s+x(19|2\d|30), x(2\d|30), \[sp|ldr\s+x(19|2\d|30), \[sp)/
+      /** The stack offsets a vector store writes, or null for any other instruction. */
+      const vectorStore = (line) => {
+        let m = /^v?mov\w*\s+%([xy])mm\d+, (-?\d*)\(%rsp\)$/.exec(line)
+        if (m !== null) return Array.from({ length: m[1] === "y" ? 4 : 2 }, (_, i) => Number(m[2] || 0) + 8 * i)
+        if ((m = /^str\s+q\d+, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        // Any other vector store to the stack or the frame (a pair, an unscaled offset) is read as a spill.
+        return /^(v?mov\w*\s+%[xy]mm\d+, .*\(%r[sb]p\)|st(r|p|ur)\s+[qd]\d+, .*\[(sp|x29)\b)/.test(line) ? [Number.NaN] : null
+      }
+      /** The stack offsets a zero store of 8 bytes clears, or null for any other instruction. */
+      const zeroStore = (line) => {
+        let m = /^movq\s+\$0, (-?\d*)\(%rsp\)$/.exec(line) ?? /^str\s+xzr, \[sp(?:, #(\d+))?\]$/.exec(line)
+        if (m !== null) return [Number(m[1] || 0)]
+        if ((m = /^stp\s+xzr, xzr, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        return null
+      }
+      /** What is wrong with each kernel of `file` on `target`, by name: an empty list when it clears. */
+      const read = (file, target) => {
+        const o = spawnSync(
+          "clang",
+          ["-O2", "-S", "-ffreestanding", `--target=${target.triple}`, ...(target.flags ?? []), "-I", path.join(root, "runtime"), file, "-o", "-"],
+          { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+        )
+        const lines = String(o.stdout).split("\n")
+        const out = new Map()
+        for (const kernel of kernels) {
+          const body = o.status === 0 ? functionBody(lines, kernel, target) : null
+          if (body === null) {
+            out.set(kernel, [`no ${kernel} in the assembly${o.stderr ? `: ${o.stderr}` : ""}`])
+            continue
+          }
+          const faults = []
+          const clears = []
+          const inClear = new Set()
+          body.forEach((line, at) => {
+            const wiped = new Set(body.slice(at + 1).flatMap((later) => zeroStore(later) ?? []))
+            if ((vectorStore(line) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
+            if (!/^retq?$/.test(line)) return
+            let i = at - 1
+            while (i >= 0 && epilogue.test(body[i])) i--
+            const zeroed = new Set()
+            for (; i >= 0 && zeroes(body[i]) !== null; i--) {
+              for (const reg of zeroes(body[i])) zeroed.add(reg)
+              inClear.add(i)
+            }
+            clears.push({ at, zeroed })
+          })
+          if (clears.length === 0) faults.push("no ret")
+          const used = new Set()
+          body.forEach((line, at) => {
+            if (inClear.has(at)) return
+            for (const operand of line.split(/[\s,()[\]{}]+/).slice(1)) {
+              const reg = whole(operand)
+              if (reg !== null && (reg.startsWith("v") || callerSaved.has(reg))) used.add(reg)
+            }
+          })
+          for (const { at, zeroed } of clears) {
+            const left = [...used].filter((reg) => !zeroed.has(reg))
+            if (left.length > 0) faults.push(`the ret at instruction ${at} leaves ${left.join(" ")} uncleared`)
+          }
+          out.set(kernel, faults)
+        }
+        return out
+      }
+      const show = (verdicts) => [...verdicts].map(([kernel, faults]) => `${kernel}: ${faults.length === 0 ? "clears" : faults.join("; ")}`).join("\n")
+      for (const target of [...CT_TARGETS, ctAtLevel("x86-64-v3")]) {
+        const name = ctTargetName(target)
+        const real = read("runtime/runtime-aes.c", target)
+        const bare = read(noClear, target)
+        check(
+          `runtime-aes.c on ${name}: the AES kernels clear their registers at clang -O2 (each ret follows a run of zeroing idioms that covers every vector and caller-saved register the kernel names, and every vector stored to the stack lands in a wiped buffer), where a twin with no nish_aes_clear call has all four refused`,
+          source.split(call).length - 1 === kernels.length &&
+            [...real.values()].every((faults) => faults.length === 0) &&
+            [...bare.values()].every((faults) => faults.length > 0),
+          `--- runtime-aes.c:\n${show(real)}\n--- the twin with no clear:\n${show(bare)}`
+        )
+        if (target.level === undefined) {
+          const part = read(partClear, target)
+          check(
+            `runtime-aes.c on ${name}: a twin whose clear skips the first vector register has nish_aes_block refused`,
+            firstZeros.every((line) => source.includes(line)) && (part.get("nish_aes_block") ?? []).some((fault) => / v0( |$)/.test(fault)),
+            show(part)
+          )
+        }
+      }
+    }
+  }
+
   // runtime/runtime-chacha20.c wipes the stack buffers its kernel owns -- each vector
   // loop's working words, input block and keystream, NEON's row buffer, the tail's block
   // and keystream -- with volatile 8-byte stores, as runtime-aes.c does (above). Every

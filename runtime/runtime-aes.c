@@ -56,9 +56,12 @@
  * state on the stack on purpose. The two stack buffers they do have, the
  * keystream of a partial last block and a zero-padded last block for GHASH, are
  * zeroed before return by volatile stores, the mechanism `nish:secret`'s wipe
- * uses, which tests/run.js holds against `clang -O2`. What sits in vector
- * registers, and what the register allocator spills, no store from C can
- * reach (docs/security/crypto-aead.md).
+ * uses, which tests/run.js holds against `clang -O2`. Every kernel ends with
+ * `nish_aes_clear`, which zeroes the vector registers and the caller-saved
+ * general ones, and no kernel spills a vector register: tests/run.js reads both
+ * in the `-O2` assembly. What that cannot reach -- the `debug` profile's `-O0`
+ * stack, and a signal frame taken mid-kernel -- is in
+ * docs/security/crypto-aead.md, AEAD-4.
  *
  * The algorithms are FIPS 197 (the key expansion, with SubWord taken from the
  * AES instructions) and SP 800-38D (GCTR and GHASH); the GHASH multiply is the
