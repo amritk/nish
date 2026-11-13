@@ -1623,12 +1623,16 @@ export class Http1Connection {
   /**
    * Records the final head just written at `output[start .. end)`, with what
    * it was written from, for `sameHead`. Its bytes are kept only when the
-   * head before it had the same status, framing, `Connection` and number of
-   * fields, so that a program whose every head differs pays a few stores per
-   * response and no copy; a head longer than `H1_HEAD_KEEP`, or with more
-   * than `H1_HEAD_FIELDS` fields, is never kept. The buffer is made at the
-   * first head that is kept, so a connection whose heads never repeat their
-   * shape holds none. `respond` stops calling it, and `sameHead`, for the
+   * head before it had the same status, `Connection` and number of fields,
+   * so that a program whose every head differs in those pays a few stores
+   * per response and no copy; a head longer than `H1_HEAD_KEEP`, or with
+   * more than `H1_HEAD_FIELDS` fields, is never kept. The framing is left
+   * out of that test (`sameHead` still compares it): a body length that
+   * varies would otherwise make the buffer's allocation wait for two equal
+   * lengths in a row among the few heads kept each second, a moment set by
+   * the clock rather than the program. The buffer is made at the first head
+   * that is kept, so a connection whose heads never repeat their shape holds
+   * none. `respond` stops calling it, and `sameHead`, for the
    * rest of the second once `H1_HEAD_MISSES` heads in a row are written.
    */
   private keepHead(
@@ -1644,10 +1648,7 @@ export class Http1Connection {
     const n: i32 = end - start
     const fields: i32 = toI32(names.length)
     const again: boolean =
-      status === this.headStatus &&
-      framing === this.headFraming &&
-      connection === this.headConnection &&
-      fields === this.headFields
+      status === this.headStatus && connection === this.headConnection && fields === this.headFields
     this.headStatus = status
     this.headFraming = framing
     this.headConnection = connection

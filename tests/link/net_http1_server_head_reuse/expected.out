@@ -65,6 +65,12 @@ PASS  fresh arrays with the kept head's bytes: the base head, copied
 PASS  fresh arrays with the kept head's bytes: the base head, copied: copied
 PASS  fresh arrays with the kept head's bytes
 PASS  fresh arrays with the kept head's bytes: copied
+PASS  one body length
+PASS  one body length: written
+PASS  another body length, kept
+PASS  another body length, kept: written
+PASS  that length again, copied
+PASS  that length again, copied: copied
 PASS  arrays answered in place
 PASS  arrays answered in place: written
 PASS  arrays answered in place, kept
@@ -923,4 +929,4 @@ PASS  now copied
 PASS  its bytes
 PASS  two hundred answers, each byte for byte
 PASS  two heads written, 198 copied
-http1 head reuse: 925 passed, 0 failed, 0 skipped
+http1 head reuse: 931 passed, 0 failed, 0 skipped

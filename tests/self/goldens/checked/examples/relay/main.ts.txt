@@ -29146,9 +29146,9 @@ function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, s
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -7:11 n: i32 (const)
-  local -6:11 fields: i32 (const)
-  local -5:11 again: boolean (const)
+  local -4:11 n: i32 (const)
+  local -3:11 fields: i32 (const)
+  local -2:11 again: boolean (const)
   local +15:14 i: i32 (let)
   callee +19:5 copyBytes -> @nish.copyBytes
   callee +24:24 HttpDate.formats -> @nish.HttpDate.formats

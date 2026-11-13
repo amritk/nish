@@ -1,5 +1,5 @@
 // `Http1Connection.respond` keeps a final head it has written twice running
-// (the same status, framing, `Connection` and number of fields) and copies it
+// (the same status, `Connection` and number of fields) and copies it
 // when the next is the same: the same fields too, in the same second. These
 // checks drive connections with no socket and read every response byte for byte against
 // `http1WriteResponseHead` called directly, so a copied head is shown to be
@@ -159,6 +159,12 @@ export const main = (): i32 => {
   against(t, "a field fewer, its value never carried over", three, threeValues, 200, names, values, body, "OK", false);
   against(t, "the fields in another order", names, values, 200, fields(["Content-Type", "Server"]), fields(["text/plain", "Nish"]), body, "OK", false);
   against(t, "fresh arrays with the kept head's bytes", names, values, 200, fields(["Server", "Content-Type"]), fields(["Nish", "text/plain"]), body, "OK", true);
+  // A body length that changes still keeps the head after it: the kept buffer
+  // is made at the second head, never at a moment the clock picks.
+  const varying = fed(times(GET, 3));
+  check(t, varying, "one body length", 200, names, values, body, "OK", false);
+  check(t, varying, "another body length, kept", 200, names, values, "Hello, World!!", "OK", false);
+  check(t, varying, "that length again, copied", 200, names, values, "Hello, World!!", "OK", true);
   // The same arrays, their bytes changed in place: compared by content, not identity.
   const live: u8[][] = fields(["Server", "Content-Type"]);
   const liveValues: u8[][] = fields(["Nish", "text/plain"]);
