@@ -17,7 +17,7 @@ const NS_PER_MS: i64 = 1000000
 const CHANNEL_CURL: i32 = 0
 const CHANNEL_NPM: i32 = 1
 const CHANNEL_SOURCE: i32 = 2
-const NOTICE_PROBE: string = "[ -t 2 ] || exit 1\nexec 2>/dev/null\nset -f\np=$1 d=$2\n[ -e \"$p\" ] || [ -h \"$p\" ] || exit 3\nfor f in \"$d\" \"$p\"; do\n  line=$(/bin/ls -ldn -- \"$f\") || exit 4\n  set -- $line\n  case $f in \"$d\") t=d ;; *) t=- ;; esac\n  case $1 in \"$t\"[-r][-w][-xsS][-r][-w][-xsS][-r][-w][-xtT]*) ;; *) exit 4 ;; esac\n  case $1 in ?????w* | ????????w*) exit 4 ;; esac\n  case $3 in \"\" | *[!0-9]*) exit 4 ;; esac\n  [ -O \"$f\" ] || exit 4\ndone\nexit 0\n"
+const NOTICE_PROBE: string = "[ -t 2 ] || exit 1\nexec 2>/dev/null\nset -f\np=$1 d=$2\n[ -e \"$p\" ] || [ -h \"$p\" ] || exit 3\nfor f in \"$d\" \"$p\"; do\n  line=$(/bin/ls -ldn -- \"$f\") || exit 4\n  set -- $line\n  case $f in \"$d\") t=d ;; *) t=- ;; esac\n  case $1 in \"$t\"[-r][-w][-xsS][-r][-w][-xsS][-r][-w][-xtT]*) ;; *) exit 4 ;; esac\n  case $1 in ?????w* | ????????w*) exit 4 ;; esac\n  [ -O \"$f\" ] || exit 4\ndone\nexit 0\n"
 const PROBE_NOT_TERMINAL: i32 = 1
 const PROBE_TRUSTED: i32 = 0
 const RELEASE_HELPER_SOURCE: string = "// The release helper `nish upgrade` and the update notice run.\nimport { releaseFetchInstaller, releaseIsNewer, releaseLatest } from \"nish/release\"\n\nconst LOOKUP_MS: i32 = 2000\nconst INSTALLER_MS: i32 = 30000\n\nexport const main = (): number => {\n  const argv: string[] = process.argv\n  if (argv.length === 4 && argv[1] === \"latest\") {\n    const latest = releaseLatest(argv[2], LOOKUP_MS)\n    if (latest === null) {\n      return 3\n    }\n    console.log(latest)\n    console.log(releaseIsNewer(latest, argv[3]) ? \"newer\" : \"not newer\")\n    return 0\n  }\n  if (argv.length === 4 && argv[1] === \"newer\") {\n    return releaseIsNewer(argv[2], argv[3]) ? 0 : 1\n  }\n  if (argv.length === 5 && argv[1] === \"installer\") {\n    return releaseFetchInstaller(argv[2], argv[3], argv[4], INSTALLER_MS) ? 0 : 3\n  }\n  return 2\n}\n" [exported]
@@ -63,7 +63,7 @@ function numberEnd(v: string, i: i32): i32 -> @numberEnd
 function identifiersEnd(v: string, i: i32, pre: boolean): i32 -> @identifiersEnd
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:7 start: i32 (let)
   local +1:7 j: i32 (let)
@@ -224,7 +224,7 @@ function planUpgrade(args: string[], from: i32, real: string): UpgradePlan -> @p
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via nish_print
   escaping: from real
-  calls: envName installChannel jsonQuote nish_alloc_struct nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write rawBase releaseBase upgradeUsage validVersion wrapperBeside
+  calls: envName installChannel jsonQuote nish_alloc_struct nish_print nish_str_at nish_str_concat nish_str_eq nish_write rawBase releaseBase upgradeUsage validVersion wrapperBeside
   pointer args: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 plan: UpgradePlan (const)
@@ -238,13 +238,14 @@ function planUpgrade(args: string[], from: i32, real: string): UpgradePlan -> @p
   callee +23:12 upgradeUsage -> @upgradeUsage
   callee +25:15 releaseBase -> @releaseBase
   callee +26:14 rawBase -> @rawBase
-  callee +28:12 upgradeUsage -> @upgradeUsage
-  callee +30:10 envName -> @envName
-  callee +30:40 envName -> @envName
-  local +36:9 channel: InstallChannel (const)
-  callee +36:19 installChannel -> @installChannel
-  callee +36:40 wrapperBeside -> @wrapperBeside
-  local +38:11 wanted: string (const)
+  local +28:11 bad: string (const)
+  callee +28:42 envName -> @envName
+  callee +28:67 envName -> @envName
+  callee +29:12 upgradeUsage -> @upgradeUsage
+  local +34:9 channel: InstallChannel (const)
+  callee +34:19 installChannel -> @installChannel
+  callee +34:40 wrapperBeside -> @wrapperBeside
+  local +36:11 wanted: string (const)
 function askLatest(helper: string, base: string, out: string): Latest | null -> @askLatest
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn_to

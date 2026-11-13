@@ -53,7 +53,7 @@ Whether a cache checked at `checkedMs` still answers at `nowMs`: younger than `m
 
 <scalar-card title="release​Cache​Parse" icon="phosphor/regular/function" href="#releasecacheparse">
 
-The cache's text as a `ReleaseCache`, or null when it is not exactly the two lines `checked <ms>` and `latest <version>` (the version empty or valid).
+The cache's text as a `ReleaseCache`, or null when it is not exactly the two lines `checked <ms>` and `latest <version>` (the version empty or valid), with at most a final newline after them.
 
 </scalar-card>
 
@@ -233,7 +233,8 @@ True when the cache need not be refreshed.
 ### releaseCacheParse
 
 The cache's text as a `ReleaseCache`, or null when it is not exactly the two
-lines `checked <ms>` and `latest <version>` (the version empty or valid).
+lines `checked <ms>` and `latest <version>` (the version empty or valid),
+with at most a final newline after them.
 
 ```ts
 function releaseCacheParse(

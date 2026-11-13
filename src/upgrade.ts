@@ -65,7 +65,7 @@ const noticeOffByEnvironment = (): boolean => {
  */
 const numberEnd = (v: string, i: i32): i32 => {
   let j = i
-  while (j < v.length && v.charCodeAt(j) >= 48 && v.charCodeAt(j) <= 57) {
+  while (j >= 0 && j < v.length && v.charCodeAt(j) >= 48 && v.charCodeAt(j) <= 57) {
     j++
   }
   if (j === i || j - i > 15 || (j - i > 1 && v.charCodeAt(i) === 48)) {
@@ -84,7 +84,7 @@ const identifiersEnd = (v: string, i: i32, pre: boolean): i32 => {
   let j = i
   while (true) {
     let digits = true
-    while (j < v.length) {
+    while (j >= 0 && j < v.length) {
       const c = v.charCodeAt(j)
       const digit = c >= 48 && c <= 57
       if (!digit && !((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 45)) {
@@ -93,10 +93,13 @@ const identifiersEnd = (v: string, i: i32, pre: boolean): i32 => {
       digits = digits && digit
       j++
     }
-    if (j === start || (pre && digits && j - start > 1 && v.charCodeAt(start) === 48)) {
+    if (
+      j === start ||
+      (pre && digits && j - start > 1 && start >= 0 && start < v.length && v.charCodeAt(start) === 48)
+    ) {
       return -1
     }
-    if (j >= v.length || v.charCodeAt(j) !== 46) {
+    if (j < 0 || j >= v.length || v.charCodeAt(j) !== 46) {
       return j
     }
     j++
@@ -119,7 +122,7 @@ const validVersion = (v: string): boolean => {
   let i = 0
   for (let part = 0; part < 3; part++) {
     if (part > 0) {
-      if (i >= v.length || v.charCodeAt(i) !== 46) {
+      if (i < 0 || i >= v.length || v.charCodeAt(i) !== 46) {
         return false
       }
       i++
@@ -359,7 +362,6 @@ const NOTICE_PROBE: string =
   '  case $f in "$d") t=d ;; *) t=- ;; esac\n' +
   '  case $1 in "$t"[-r][-w][-xsS][-r][-w][-xsS][-r][-w][-xtT]*) ;; *) exit 4 ;; esac\n' +
   "  case $1 in ?????w* | ????????w*) exit 4 ;; esac\n" +
-  '  case $3 in "" | *[!0-9]*) exit 4 ;; esac\n' +
   '  [ -O "$f" ] || exit 4\n' +
   "done\n" +
   "exit 0\n"
@@ -510,7 +512,7 @@ const upgradeUsage = (plan: UpgradePlan, message: string): UpgradePlan => {
  */
 export const planUpgrade = (args: string[], from: i32, real: string): UpgradePlan => {
   const plan = new UpgradePlan()
-  for (let i = from; i < args.length; i++) {
+  for (let i = from; i >= 0 && i < args.length; i++) {
     const arg = args[i]
     if (arg === "--check") {
       plan.check = true
@@ -537,10 +539,8 @@ export const planUpgrade = (args: string[], from: i32, real: string): UpgradePla
   plan.base = releaseBase()
   plan.raw = rawBase()
   if (plan.base.length === 0 || plan.raw.length === 0) {
-    return upgradeUsage(
-      plan,
-      `${envName("RELEASE_URL")} and ${envName("RELEASE_RAW_URL")} must be https://, or http:// to the loopback address`
-    )
+    const bad = plan.base.length === 0 ? envName("RELEASE_URL") : envName("RELEASE_RAW_URL")
+    return upgradeUsage(plan, `${bad} must be https://, or http:// to the loopback address`)
   }
   if (plan.check) {
     return plan

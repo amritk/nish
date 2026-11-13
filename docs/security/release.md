@@ -110,8 +110,10 @@ Tests: `nish upgrade ${bad}: exit 2, before any network access` (for
 server's log shows no request), `nish/release: versions, ordering, redirects
 and bases` (the same characters against `releaseValidVersion`, and a tag with
 `?x` or `#x` after it),
-`nish upgrade: a release URL that is plain http to another host is refused (exit 2)`,
-`nish upgrade: a loopback release URL that names another host after the colon is refused (exit 2)`.
+`nish upgrade: ${what} is refused (exit 2), named, before any request` (a
+release URL that is plain http to another host, a loopback one that names
+another host after the colon, and a bad raw URL beside a good release URL;
+each asserts the override named on stderr and no request in the server's log).
 
 ### A planted cache
 
@@ -128,27 +130,48 @@ and no check starts, REL-5), so a link planted at the path is replaced, never
 followed. `releaseCacheRead` holds the library's cache to the same rule, its
 directory included (REL-4). A check that learns nothing leaves the cache as it
 was, so a newer release it already names is still announced. A version in the cache is printed only when it
-passes `validVersion` (pinned by review: no test plants one).
+passes `validVersion`: `update notice: a private cache whose newer is ${what} is not believed`
+plants an escape sequence and a path, and asserts no line and no ESC byte on
+the terminal.
 
 A cache dated in the future, which a clock set back or a planted file gives,
 counts as stale, so it cannot silence the check for longer than a day.
 
+The file-kind half of the rule (a regular file, a directory for the
+directory) is defence in depth that no test can tell from its absence: the
+runtime's `readFileSyncOrNull` answers null for anything it cannot `lseek`
+(a FIFO, a socket) and nothing readable for a device, so a cache of another
+kind is never believed even without the check. The FIFO tests below pin that
+outcome, whichever of the two refuses it.
+
 Tests: `update notice: a cache that is a symlink is not believed`,
 `update notice: a group-writable cache is not believed`,
 `update notice: a cache in a world-writable directory is not believed`,
-`update notice: a world-writable cache directory is made 0700, so the next run believes it`,
+`update notice: a world-writable cache directory is made 0700, so the next run believes it`
+(the next run shows the line),
+`update notice: the cache written over a planted link replaces the link and leaves its target alone`,
+`update notice: a private cache whose newer is ${what} is not believed`,
+`update notice: a private cache with ${what} is not believed` (a third line,
+and a checked time that is not a number),
+`update notice: a private FIFO at the cache path is not believed`,
+`update notice: a world-readable cache owned by another user is not believed`
+(the `-O` check alone refuses it; a skip that says so where the test cannot
+make another user's file),
 `nish upgrade --check: a failed check keeps the newer release the cache names`,
 `nish/release: versions, ordering, redirects and bases` (its cache line),
 `nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it`,
 `nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead`,
-`nish/release: a cache parses only as its two lines, with a valid or empty version`,
+`nish/release: a cache parses only as its two lines, with a valid or empty version and nothing after them`,
 `nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed`,
 `nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none`,
-`nish/release: a cache file, or its directory, owned by another user is not believed`
-(run where the test can make another user's file: as root or with
+`nish/release: a private FIFO at the cache path is not believed`,
+`nish/release: a world-readable cache file owned by another user is not believed`,
+`nish/release: a cache in a directory owned by another user is not believed`
+(each readable by the test and otherwise private, so only the owner check
+refuses it; run where the test can make another user's file: as root or with
 passwordless `sudo`, as on CI's runners; elsewhere it is a skip that says so),
 `update notice: a cache ${what} is refreshed by exactly one check` (stale and
-future), `update notice: two runs on a fresh cache make no network check`.
+future, and the refreshed file is 0600), `update notice: two runs on a fresh cache make no network check`.
 
 ### What runs
 
@@ -186,4 +209,4 @@ Tests: `update notice: nish --version on a terminal prints the line once, exit u
 | REL-3 | Low | `src/upgrade.ts` (`NOTICE_PROBE`, `updateNotice`) | The probe checks the cache's owner and mode, then the compiler reads it: a file swapped between the two is read unchecked. | **Open, accepted.** Swapping it needs write access to its directory, which the probe has already required to be this user's alone. |
 | REL-4 | Low | `std/release.ts` (`releaseCacheRead`) | The file's owner and mode were checked but not its directory's, so in a directory another user can write the file could be swapped between the check and the read, and the swapped one believed. | **Fixed** before the module shipped: the directory must be a directory (not a link) this user owns that no one else can write. Before, `nish/release: versions, ordering, redirects and bases` read a cache in a 0775 directory (its last line printed `false true`); after, it is refused (`true true`). |
 | REL-5 | Low | `src/upgrade.ts` (`writeNoticeCache`) | A cache directory already there and writable by its group (a umask of 002) was never made private, so the probe refused the cache on every run and every run on a terminal started a network check. | **Fixed** before the module shipped: an existing directory is made 0700 with `chmod`, and when that fails nothing is kept and no check starts. Before, `update notice: a world-writable cache directory is made 0700, so the next run believes it` failed (mode 777); after, it passes. |
-| REL-6 | Low | `src/upgrade.ts` (`baseAllowed`), `std/release.ts` (`releaseBaseAllowed`) | A release URL override was accepted when it began `http://localhost:`, so `http://localhost:@host/` — whose host is `host` — passed the loopback rule, and a release could be asked of another host over plain http. | **Fixed** before the module shipped: after the host only `:<digits>` then `/` or the end may follow. Before, `nish upgrade: a loopback release URL that names another host after the colon is refused (exit 2)` ran the check; after, it exits 2. |
+| REL-6 | Low | `src/upgrade.ts` (`baseAllowed`), `std/release.ts` (`releaseBaseAllowed`) | A release URL override was accepted when it began `http://localhost:`, so `http://localhost:@host/` — whose host is `host` — passed the loopback rule, and a release could be asked of another host over plain http. | **Fixed** before the module shipped: after the host only `:<digits>` then `/` or the end may follow. Before, `nish upgrade: ${what} is refused (exit 2), named, before any request` (its loopback case, `http://localhost:@example.com/x`) ran the check; after, it exits 2 naming `NISH_RELEASE_URL`, with no request made. |

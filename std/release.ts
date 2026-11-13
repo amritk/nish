@@ -193,17 +193,37 @@ const releaseSign = (a: i64, b: i64): i32 => {
   return a > b ? 1 : 0
 }
 
-/** Two prerelease identifiers in semver's order: numbers below words, numbers by value, words by ASCII. */
-const releaseCompareIdent = (a: string, b: string): i32 => {
-  const na: i64 = releaseNumber(a)
-  const nb: i64 = releaseNumber(b)
-  if (na >= 0 && nb >= 0) {
-    return releaseSign(na, nb)
+/** Whether `s` is a non-empty run of ASCII digits, however long. */
+const releaseAllDigits = (s: string): boolean => {
+  const n: i32 = toI32(s.length)
+  if (n === 0) {
+    return false
   }
-  if (na >= 0) {
+  for (let i: i32 = 0; i < n; i++) {
+    const c: i32 = toI32(s.charCodeAt(i))
+    if (c < 48 || c > 57) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Two prerelease identifiers in semver's order: numbers below words, words by
+ * ASCII, numbers by value. A number has no leading zero (`releasePreWellFormed`
+ * refuses one), so the longer is the larger and two of a length compare as
+ * text: past what an `i64` holds too.
+ */
+const releaseCompareIdent = (a: string, b: string): i32 => {
+  const da: boolean = releaseAllDigits(a)
+  const db: boolean = releaseAllDigits(b)
+  if (da && db && a.length !== b.length) {
+    return releaseSign(toI64(a.length), toI64(b.length))
+  }
+  if (da && !db) {
     return -1
   }
-  if (nb >= 0) {
+  if (db && !da) {
     return 1
   }
   for (let i: i32 = 0; i < toI32(a.length) && i < toI32(b.length); i++) {
@@ -470,14 +490,18 @@ export const releaseCacheRead = (path: string): ReleaseCache | null => {
 
 /**
  * The cache's text as a `ReleaseCache`, or null when it is not exactly the two
- * lines `checked <ms>` and `latest <version>` (the version empty or valid).
+ * lines `checked <ms>` and `latest <version>` (the version empty or valid),
+ * with at most a final newline after them.
  *
  * @param text The file's contents.
  * @returns The parsed cache, or null.
  */
 export const releaseCacheParse = (text: string): ReleaseCache | null => {
   const lines: string[] = split(text, "\n")
-  if (lines.length < 2 || !lines[0].startsWith("checked ") || !lines[1].startsWith("latest ")) {
+  if (lines.length < 2 || lines.length > 3 || (lines.length === 3 && lines[2].length > 0)) {
+    return null
+  }
+  if (!lines[0].startsWith("checked ") || !lines[1].startsWith("latest ")) {
     return null
   }
   const checked: i64 = releaseNumber(lines[0].slice(8))
