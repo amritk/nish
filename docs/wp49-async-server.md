@@ -273,11 +273,15 @@ of what they move:
    connection to the worker on the core whose queue received it
    (`SO_INCOMING_CPU`, or a `SO_ATTACH_REUSEPORT_CBPF` program), so a packet
    and its handler stay on one core's cache.
-3. **The `plaintext` gap to uWS** (about 21% at 256 connections) is in user
-   space. System calls are already about 2 per request, and io_uring was
-   measured not to pay ([bench/README.md](../bench/README.md), "Syscall
-   cost"). Profile it per request: the parser, the route lookup, the
-   response head.
+3. **The `plaintext` gap to uWS** is closed for the explicit entry. After
+   the codec, head and codegen stages of #1416 it serves 1.63M to 1.76M
+   `/plaintext` req/s at 256 connections, 2.2× to 2.4× `uws` and 2.0× to
+   2.2× `go-fasthttp`, each one process on one core with wrk on the other
+   three ([BENCHMARKS.md](BENCHMARKS.md#http1-codec-re-measured-after-the-codec-head-and-codegen-stages)).
+   A request costs 3,883 instructions, down from 5,422 but over the 3,251
+   target; `http1Next` holds 60% of them. The async entry is still 22% to
+   37% behind the explicit one at 256 and 1024. A browser-shaped `/json` at
+   256 was 6% to 12% slower than before the stages, outside its band.
 4. **`fortune`:** an HTML escape, a byte sort and one buffer reused per
    response (WP39 E8).
 5. **A rig like TFB's.** Our numbers come from wrk sharing the machine with
