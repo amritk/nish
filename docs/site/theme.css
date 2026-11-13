@@ -653,6 +653,8 @@ a.nish-hero__cta:hover {
 }
 .nish-hero__terminal {
   position: relative;
+  /* site.js pins a held terminal's height from its border box. */
+  box-sizing: border-box;
   grid-column: 1 / -1;
   cursor: text;
 }

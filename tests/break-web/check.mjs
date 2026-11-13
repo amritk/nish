@@ -42,6 +42,7 @@ class Node {
     const node = this
     this.classList = { add: (c) => (node.className = `${node.className} ${c}`.trim()) }
     this.style = { setProperty: () => {} }
+    this.getBoundingClientRect = () => ({ height: 0 })
   }
   get textContent() {
     return this.text + this.children.map((c) => (typeof c === "string" ? c : c.textContent)).join("")
@@ -195,11 +196,11 @@ check(
 )
 
 // The hero's script ships on every docs page, so all the terminal does lives in
-// the lazy shell: site.js may grow by under 950 B gzipped for it (400 B took
+// the lazy shell: site.js may grow by under 1050 B gzipped for it (400 B took
 // keys, the rest holds the terminal still under a mouse or focus). The
 // baseline is site.js on main before the terminal took keys (71c41439).
 const SITE_GZIP_BEFORE = 3480
-const SITE_GZIP_GROWTH = 950
+const SITE_GZIP_GROWTH = 1050
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(
   `site.js grows by under ${SITE_GZIP_GROWTH} B gzipped`,
@@ -358,25 +359,29 @@ const runSite = (load) => {
   const held = () => term.attributes["data-held"]
   check("the terminal's prompt is drawn before the shell loads", term.find("nish-hero__ready")?.parent === term.querySelector("pre"))
   loopAt(0.1)
-  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
   check("a mouse over the terminal, before the command is typed, holds it blank and focuses its input",
     held() === "blank" && hero.document.activeElement === input && asked.length === 0, `${held()} ${hero.document.activeElement?.tag}`)
   term.dispatch("pointerleave", event("pointerleave"))
   check("leaving before a key blurs the input and lets the loop go on",
     held() === undefined && hero.document.activeElement === hero.document.body, `${held()} ${hero.document.activeElement?.tag}`)
   loopAt(0.7)
-  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
   check("a mouse over the terminal while its output shows holds it with the prompt under the output", held() === "")
   term.dispatch("pointerleave", event("pointerleave"))
   loopAt(0.9)
-  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
   check("once the output has faded the hold is blank again", held() === "blank", held())
+  term.dispatch("pointerleave", event("pointerleave"))
+
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 1 }))
+  check("a mouse dragging over the terminal takes no focus", hero.document.activeElement === hero.document.body)
   term.dispatch("pointerleave", event("pointerleave"))
 
   const search = hero.document.createElement("input")
   hero.document.body.append(search)
   search.focus()
-  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
   check("a mouse over the terminal takes no focus from a field that has it", hero.document.activeElement === search)
   term.dispatch("pointerleave", event("pointerleave"))
   check("and leaving lets the terminal go", held() === undefined, held())
@@ -386,7 +391,7 @@ const runSite = (load) => {
   check("a touch passing over focuses nothing", hero.document.activeElement === hero.document.body && held() === undefined)
   term.dispatch("pointerleave", event("pointerleave"))
 
-  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
   term.dispatch("click", event("click"))
   term.dispatch("pointerleave", event("pointerleave"))
   check("a clicked terminal keeps focus, and its hold, as the mouse leaves", hero.document.activeElement === input && held() !== undefined)
@@ -401,11 +406,28 @@ const runSite = (load) => {
   const term = hero.terminal
   const input = term.find("nish-hero__input")
   const held = () => term.attributes["data-held"]
-  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
   typeIn(input, "l")
   term.dispatch("pointerleave", event("pointerleave"))
   check("once a key asks for the shell, leaving keeps the input focused and the terminal held",
     hero.document.activeElement === input && held() !== undefined && asked.length === 1, `${held()} ${asked.length}`)
+}
+
+{
+  // A shell that fails to load after the mouse has left lets the terminal go.
+  let reject = null
+  const hero = runSite(() => new Promise((_, no) => (reject = no)))
+  const term = hero.terminal
+  const input = term.find("nish-hero__input")
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  typeIn(input, "l")
+  term.dispatch("pointerleave", event("pointerleave"))
+  input.blur()
+  const heldWhileLoading = term.attributes["data-held"] !== undefined
+  reject(new Error("offline"))
+  await settle()
+  check("a shell that fails to load, once the terminal is left, lets the loop go on",
+    heldWhileLoading && term.attributes["data-held"] === undefined, term.attributes["data-held"])
 }
 
 // --- shell.mjs: what the terminal answers ------------------------------------

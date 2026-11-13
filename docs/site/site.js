@@ -257,7 +257,7 @@
       }
       // nish-hero-cmd types from 43%; nish-hero-show fades by 86%.
       const at = code.getAnimations?.()[0]?.effect.getComputedTiming().progress
-      term.style.minHeight = `${term.clientHeight}px`
+      term.style.minHeight = `${term.getBoundingClientRect().height}px`
       term.setAttribute("data-held", at < 0.43 || at >= 0.85 ? "blank" : "")
     }
     const release = () => {
@@ -275,7 +275,8 @@
     })
     // A mouse focuses the input only when no other field has focus.
     term.addEventListener("pointerenter", (event) => {
-      if (event.pointerType === "mouse") {
+      // Not mid-drag, where focus would end the page's selection.
+      if (event.pointerType === "mouse" && event.buttons === 0) {
         hovered = true
         hold()
         if (document.activeElement === document.body) {
@@ -309,6 +310,7 @@
         .catch(() => {
           lines.length = 0
           shell = null
+          release()
         })
     }
     input.addEventListener("input", first)
