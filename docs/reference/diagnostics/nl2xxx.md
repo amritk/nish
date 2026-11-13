@@ -14438,6 +14438,97 @@ The message of an error contains:
 …: the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
 ```
 
+[`nl2766_root_storage_handle.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_handle.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a handle class owns a
+// C resource the runtime cannot move.
+declare function fopen(path: string, mode: string): CPtr | null
+
+class File {
+  readonly file: CPtr | null
+  constructor(path: string) {
+    this.file = fopen(path, "r")
+  }
+}
+
+class Log {
+  out: File
+
+  constructor() {
+    this.out = new File("/dev/null")
+  }
+}
+
+const log = new Array<Log | null>(1)
+
+export const open = (): boolean => log[0] !== null
+```
+
+```text
+Root storage `log` cannot keep Log.out (File): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_interface.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_interface.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: an interface a class
+// implements is a pointer to an object of any of its classes, with no tag.
+interface Shape {
+  side: i32
+}
+
+class Square implements Shape {
+  side: i32 = 2
+}
+
+class Scene {
+  shapes: Shape[]
+
+  constructor() {
+    this.shapes = [new Square()]
+  }
+}
+
+const scene = new Array<Scene | null>(1)
+
+export const total = (): i32 => {
+  const s = scene[0]
+  return s === null ? 0 : s.shapes.length
+}
+```
+
+```text
+Root storage `scene` cannot keep Scene.shapes[] (Shape): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_layout.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_layout.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a C struct layout is
+// C's to own.
+declare class Point {
+  x: i32
+  y: i32
+}
+
+class Path {
+  end: Point
+
+  constructor() {
+    this.end = new Point()
+  }
+}
+
+const path = new Array<Path | null>(1)
+
+export const has = (): boolean => path[0] !== null
+```
+
+```text
+Root storage `path` cannot keep Path.end (Point): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
 [`nl2766_root_storage_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_map.ts):
 
 ```ts
@@ -14459,7 +14550,31 @@ export const size = (): i32 => {
 ```
 
 ```text
-Root storage `cache` cannot keep
+Root storage `cache` cannot keep Cache.names (Map<string, i32>): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_set.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a `Set` it cannot.
+class Seen {
+  ids: Set<i32>
+
+  constructor() {
+    this.ids = new Set<i32>()
+  }
+}
+
+const seen = new Array<Seen | null>(1)
+
+export const count = (): i32 => {
+  const s = seen[0]
+  return s === null ? 0 : s.ids.size
+}
+```
+
+```text
+Root storage `seen` cannot keep Seen.ids (Set<i32>): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
 ```
 
 ## NL2767
@@ -14467,7 +14582,7 @@ Root storage `cache` cannot keep
 The message of an error contains:
 
 ```text
-` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
+…` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
 ```
 
 [`nl2767_root_storage_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2767_root_storage_export.ts):
@@ -14487,7 +14602,7 @@ export const tick = (): i32 => {
 ```
 
 ```text
-Root storage `world` cannot be exported
+Root storage `world` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
 ```
 
 ## NL2768
@@ -14495,7 +14610,7 @@ Root storage `world` cannot be exported
 The message of an error contains:
 
 ```text
-` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+…` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
 ```
 
 [`nl2768_root_storage_threads.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_threads.ts):
@@ -14519,5 +14634,5 @@ export const tick = (): i32 => {
 ```
 
 ```text
-` cannot be kept in a program that loads `nish/threads` or `nish:region`
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
 ```

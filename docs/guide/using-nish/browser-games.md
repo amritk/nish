@@ -260,7 +260,11 @@ $ $NISH/scripts/build.sh ll/*.ll $NISH/runtime/runtime-wasm.c -o out/game.wasm \
 imports it from beside the `.wasm`. `--memory 16` fixes the module's memory at
 16 MiB, which the framebuffer, the sound samples and a game's own state fit in
 with room to spare: a fixed memory never moves, so the page reads the
-framebuffer in place every frame without copying it.
+framebuffer in place every frame without copying it. A game that keeps its
+world in root storage needs about three times the world's size plus 40 bytes
+an object on top
+([sizing](interop.md#keeping-objects-between-calls-root-storage)); the break
+director keeps 3.3 MB.
 
 ## The page
 

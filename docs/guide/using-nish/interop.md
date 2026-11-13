@@ -501,7 +501,11 @@ After each export call, the loader keeps what the roots reach and frees the
 rest of what the call allocated. Once the kept objects take more than twice
 the room they need (and 64 KiB), the runtime moves them together and rewrites
 every pointer to them, so memory stays bounded however long the page runs:
-200,000 calls to `push` above leave a 1.6 MB list in about 20 MB of memory.
+200,000 calls to `push` above leave a 2.2 MB list in about 14 MB of memory.
+The moving needs room of its own, some 40 bytes for each object the roots
+reach, so give `--memory` about three times the live graph plus 40 bytes an
+object: a graph of many small objects, like that list, wants some 7 times its
+size.
 
 - What a root reaches must be numbers, booleans, enums, strings, arrays,
   classes and unions of classes. A `Map`, a `Set`, an interface or a C type

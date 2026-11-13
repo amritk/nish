@@ -144,22 +144,39 @@ called `nish_arena_release(mark)`, after the result is decoded, as before.
 2. If the kept region is at most `2 × live + 64 KiB`, where `live` is the size
    the last compaction kept, nothing is released: the call's allocations stay.
    This is the cheap path, taken by most calls.
-3. Otherwise it **compacts**: it traces from every root slot, recording each
-   reachable block in the kept region (start, size) and each pointer slot that
-   holds a pointer into it. A pointer outside the kept region — a string
-   literal, module storage — is left as it is and not followed. Blocks are
-   sorted and overlapping blocks merged into extents, so aliasing, cycles and a
-   pointer into the middle of a block are all one extent. Extents are copied,
-   in address order, into scratch above `off`, each keeping its address modulo
-   8; every recorded slot is rewritten by a binary search over the extents;
-   the scratch is moved down to `floor`; `off` is set past it; `live` becomes
-   its size.
+3. Otherwise it **compacts**: it traces from every root slot with a work list
+   (no recursion, so a list as long as the run does not run out of stack),
+   recording each reachable block in the kept region (start, size) and each
+   pointer slot that holds a pointer into it. A pointer outside the kept
+   region — a string constant, memory below `floor` — is followed, so what it
+   reaches is traced too, but it is never moved. Blocks are sorted and
+   overlapping blocks merged into extents, so aliasing, cycles and a pointer
+   into the middle of a block are all one extent. Every recorded slot is
+   rewritten, once, by a binary search over the extents; then the extents
+   slide down in place, in address order, with `memmove` — each one's new
+   place is at or below its old one and above every earlier extent's, so a
+   forward move never overwrites what is still to move. `off` is set past the
+   last; `live` becomes the kept size.
+
+The trace's bookkeeping lives in **scratch** above `off`: the block list, the
+slot list, the work list and a seen set (an open-addressing hash of block
+starts), each a vector that doubles as it grows, and then the extent list. A
+vector that grows gives its old copy back to a short free list, and the work
+list and the seen set go back to it once the trace ends, so the extent list
+and later growth reuse them; scratch is never copied into the heap and is
+forgotten when the keep returns.
 
 Memory is then bounded by `2 × live + 64 KiB` of kept region, plus one call's
-temporaries, plus the compaction's scratch (one copy of the live graph and its
-slot list). `memory.buffer` grows to that high-water mark and stays there; the
-amortised cost of a call is at most what it allocated, since a compaction that
-copies `live` bytes comes only after at least `live + 64 KiB` were allocated.
+temporaries, plus the scratch, which grows with the number of blocks the roots
+reach, not their bytes: some 40 bytes a block. `memory.buffer` grows to that
+high-water mark and stays there. Measured (`tests/persist/drive.mjs`): a list
+of 200,000 small nodes, 2,213,360 live bytes, peaks at 14,090,240 bytes of
+linear memory, about 6.4× live (9× before the free list); the break director,
+with fewer, larger blocks, keeps 3.26 MB in 3.34 MB. So a module of small
+objects needs `--memory` of about 3× its live graph plus 40 bytes an object.
+The amortised cost of a call is at most what it allocated, since a compaction
+that moves `live` bytes comes only after at least `live + 64 KiB` were
+allocated.
 
 ### 4.1 Why nothing else points into the kept region
 
