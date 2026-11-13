@@ -160,6 +160,9 @@ HTTP/2 type HTTP/3 reserves (H3_FRAME_UNEXPECTED, §7.2.8);
 - a GOAWAY whose push ID rose, a MAX_PUSH_ID that fell, a CANCEL_PUSH past
 the push IDs allowed (H3_ID_ERROR, §5.2, §7.2.7, §7.2.3);
 - a control frame past `H3_CONTROL_FRAME_MAX` (H3_EXCESSIVE_LOAD);
+- a request reset past what `resetBudget` allows — by the client, or by
+this side for a stream error or a 431 the client caused, net of the
+requests this side answered (H3_EXCESSIVE_LOAD, §10.5);
 - and QPACK's three.
 
 A stream error resets one request, both ways, and the connection lives: a
@@ -259,6 +262,7 @@ class Http3Config
 | `bodyChunk: i32` | The body buffer: the largest `H3_DATA` window. |
 | `extendedConnect: boolean` | Whether `:protocol` is accepted (RFC 9220's extended CONNECT), and SETTINGS_ENABLE_CONNECT_PROTOCOL sent. WebTransport turns it on. |
 | `maxFieldSectionSize: i32` | SETTINGS_MAX_FIELD_SECTION_SIZE (§4.2.2): past it a request is answered with a 431. |
+| `resetBudget: i32` | How many requests may be reset before the connection is closed with H3_EXCESSIVE_LOAD, net of those this side answered: each request the client resets or stops, and each this side resets for a stream error or answers with a 431, costs one; each response this side ends with a FIN earns one back, up to this. Rapid reset (CVE-2023-44487) and MadeYouReset (CVE-2025-8671) over HTTP/3. |
 | `webtransportSessions: i32` | The WebTransport sessions this side takes at once (`nish/net/webtransport`), 0 for none. Above 0 it turns on extended CONNECT and sends SETTINGS_H3_DATAGRAM, SETTINGS_ENABLE_WEBTRANSPORT and SETTINGS_WEBTRANSPORT_MAX_SESSIONS, and the QUIC connection must take DATAGRAM frames; at 0 it must not (RFC 9297 §2.1.1). |
 | `writeChunk: i32` | The largest DATA frame `writeData` starts. |
 
