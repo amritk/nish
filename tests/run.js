@@ -51,6 +51,7 @@ import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/p
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import {
   budgetLabel,
+  HTTP1_SERVER_IDLE_BYTES,
   HTTP1_SERVER_START_BYTES,
   HTTP1_TLS_SERVER_START_BYTES,
   HTTP2_TLS_SERVER_START_BYTES,
@@ -11904,8 +11905,10 @@ if (dealtHere("netStartup")) {
   // pool sized for a busy day costs little before its first connection.
   // `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
   // socket and prints the arena bytes it took, which the ceiling
-  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
-  // they fit in one chunk, without which `Arena.used()` measures nothing.
+  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, then what
+  // one idle keep-alive connection holds after four requests, which
+  // `HTTP1_SERVER_IDLE_BYTES` holds, and whether both fit in one chunk, without
+  // which `Arena.used()` measures nothing.
   if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
     const dir = path.join(buildDir, "link", "net_http1_server.startup")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -11926,11 +11929,16 @@ if (dealtHere("netStartup")) {
     )
     if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
       const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
-      const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+      const [bytes, , chunk, idle] = String(run.stdout).trim().split(" ")
       check(
         "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
         run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
         `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+      )
+      check(
+        "net_http1_server: an idle keep-alive Http1Server connection holds at most HTTP1_SERVER_IDLE_BYTES",
+        run.status === 0 && chunk === "yes" && Number(idle) > 0 && Number(idle) <= HTTP1_SERVER_IDLE_BYTES,
+        `ceiling ${HTTP1_SERVER_IDLE_BYTES}\n${shown(run)}`
       )
     }
   }

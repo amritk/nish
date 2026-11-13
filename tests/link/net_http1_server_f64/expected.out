@@ -152,7 +152,7 @@ PASS  then the end of the stream, not a reset
 PASS  and closed once the client hangs up
 PASS  a free TLS slot answers H1_ERROR to next and done to flush
 PASS  with nothing gone wrong in the loop
-PASS  without idleInput a resting slot keeps its input buffer
+PASS  on the default config the slots lent their input and head buffers to the pools
 PASS  two slots served one after the other share one input and one head buffer
 PASS  and both rest with none of their own
 PASS  a pipelined pair on a slot that lent its buffers is answered in order
@@ -167,6 +167,8 @@ PASS  a peer on a freed slot is served from the pools
 PASS  a WebSocket handshake on a slot that lent its buffers switches
 PASS  and closes on a close
 PASS  with nothing gone wrong in that loop
+PASS  without idleInput a resting slot keeps its input buffer
+PASS  with nothing gone wrong in the loop that keeps them
 PASS  respond with no request is H1_CLOSED
 PASS  so are write and end
 PASS  so is acceptWebSocket
@@ -251,4 +253,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 253 passed, 0 failed, 0 skipped
+http1 server: 255 passed, 0 failed, 0 skipped

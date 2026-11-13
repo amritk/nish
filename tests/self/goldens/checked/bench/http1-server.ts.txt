@@ -6510,6 +6510,7 @@ const HTTP1_S_CLOSED: i32 = 9
 const HTTP1_S_ERROR: i32 = 10
 const HTTP1_FIRST_INPUT: i32 = 1024 [exported]
 const HTTP1_FIRST_HEAD: i32 = 256 [exported]
+const HTTP1_FIRST_SPANS: i32 = 64
 const HTTP1_LINE: i32 = -1
 const HTTP1_TCHAR_32: i32 = 67071226
 const HTTP1_TCHAR_64: i32 = -939524098
@@ -6608,7 +6609,7 @@ function Http1Parser.constructor(this: Http1Parser, maxTarget: i32, maxHeaderByt
   callee +1:27 http1Clamp -> @nish.http1Clamp
   callee +2:23 http1Clamp -> @nish.http1Clamp
   callee +3:20 http1Clamp -> @nish.http1Clamp
-  callee +18:5 Http1Parser.restart -> @nish.Http1Parser.restart
+  callee +21:5 Http1Parser.restart -> @nish.Http1Parser.restart
 function Http1Parser.feed(this: Http1Parser, data: u8[], off: i32, len: i32): void -> @nish.Http1Parser.feed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -8026,6 +8027,7 @@ const H1_R_NONE: i32 = 0
 const H1_R_BODY: i32 = 1
 const H1_R_DONE: i32 = 2
 const H1_HEAD_KEEP: i32 = 1024
+const H1_HEAD_ROUND: i32 = 64
 const H1_HEAD_FIELDS: i32 = 16
 const H1_HEAD_MISSES: i32 = 4
 const H1_CONN_NONE: i32 = 0
@@ -8062,10 +8064,11 @@ struct Http1Config (class) size=48 align=4 exported
   field lingerTimeout: i32 index=9 offset=36 initialized
   field lingerBytes: i32 index=10 offset=40 initialized
   field idleInput: boolean index=11 offset=44 initialized
-struct Http1OutputPool (class) size=16 align=8 exported
+struct Http1OutputPool (class) size=24 align=8 exported
   field free: u8[][] index=0 offset=0
   field size: i32 index=1 offset=8 initialized
   field made: i32 index=2 offset=12 initialized
+  field room: i32 index=3 offset=16 initialized
   constructor -> @nish.Http1OutputPool.constructor
   method take -> @nish.Http1OutputPool.take
   method give -> @nish.Http1OutputPool.give
@@ -8373,30 +8376,34 @@ function http1ServerReserved(name: u8[]): boolean -> @nish.http1ServerReserved
 function Http1OutputPool.constructor(this: Http1OutputPool, size: i32): void -> @nish.Http1OutputPool.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: size
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1OutputPool.take(this: Http1OutputPool): u8[] -> @nish.Http1OutputPool.take [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=16 writesThrough=true captured=false
+  calls: nish_array_grow nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:13 buf: u8[] (const)
+  local +4:11 buf: u8[] (const)
+  local +9:13 want: i32 (const)
+  local +10:16 i: i32 (let)
 function Http1OutputPool.give(this: Http1OutputPool, buf: u8[]): void -> @nish.Http1OutputPool.give [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: buf
   calls: nish_array_grow
-  pointer this: size=16 writesThrough=false captured=false
+  pointer this: size=24 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function Http1Connection.constructor(this: Http1Connection, config: Http1Config): void -> @nish.Http1Connection.constructor [exported constructor]
+function Http1Connection.constructor(this: Http1Connection, config: Http1Config, date: HttpDate | null): void -> @nish.Http1Connection.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: +0:5
-  escaping: config
+  escaping: config date
   calls: nish.Http1Connection.restart nish.Http1Parser.constructor nish.HttpDate.constructor nish.http1ServerCheckCap nish_alloc_struct nish_panic_overflow
   pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http1Connection.restart#0
   pointer config: size=48 writesThrough=true captured=true
+  pointer date: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -31:11 big: i32 (const)
   local -30:11 one: i32 (const)
@@ -8415,7 +8422,7 @@ function Http1Connection.constructor(this: Http1Connection, config: Http1Config)
   callee -17:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -11:5 http1ServerCheckCap -> @nish.http1ServerCheckCap
   callee -2:19 new Http1Parser -> @nish.Http1Parser.constructor
-  callee -1:17 new HttpDate -> @nish.HttpDate.constructor
+  callee -1:33 new HttpDate -> @nish.HttpDate.constructor
   local +16:9 limit: i32 (let)
   callee +24:5 Http1Connection.restart -> @nish.Http1Connection.restart
 function Http1Connection.restart(this: Http1Connection): void -> @nish.Http1Connection.restart [exported method]
@@ -8717,9 +8724,9 @@ function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, s
   local -4:11 n: i32 (const)
   local -3:11 fields: i32 (const)
   local -2:11 again: boolean (const)
-  local +15:14 i: i32 (let)
-  callee +19:5 copyBytes -> @nish.copyBytes
-  callee +24:24 HttpDate.formats -> @nish.HttpDate.formats
+  local +17:14 i: i32 (let)
+  callee +21:5 copyBytes -> @nish.copyBytes
+  callee +26:24 HttpDate.formats -> @nish.HttpDate.formats
 function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -8978,8 +8985,8 @@ function Http1Server.build(this: Http1Server): Http1Connection -> @nish.Http1Ser
   calls: nish.Http1Connection.constructor nish_alloc_struct nish_array_grow
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -7:11 conn: Http1Connection (const)
-  callee -7:35 new Http1Connection -> @nish.Http1Connection.constructor
+  local -6:11 conn: Http1Connection (const)
+  callee -6:35 new Http1Connection -> @nish.Http1Connection.constructor
 function Http1Server.size(this: Http1Server): i32 -> @nish.Http1Server.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=112 writesThrough=false captured=false

@@ -3008,11 +3008,13 @@ and the next request is never answered. Calling `end()` on any response stays
 correct; it answers 0 once the length is met and `H1_INVALID` while bytes are
 still owed.
 
-Set `Http1Config.idleInput` and a slot lends its input and head buffers back
-too, whenever it has answered a request and holds no byte of the next: a server
-holding tens of thousands of keep-alive connections that each send a request
-now and then keeps those buffers only for the connections mid-request, for two
-pool operations a request. It is off by default. An `Http1Server` builds a
+A slot lends its input and head buffers back too, whenever it has answered a
+request and holds no byte of the next: a server holding tens of thousands of
+keep-alive connections that each send a request now and then keeps those
+buffers only for the connections mid-request, for two pool operations a
+request, and an idle connection holds about 1.2 KB. That is
+`Http1Config.idleInput`, on by default; set it to `false` and each slot keeps
+its own buffers while it rests, about 1.9 KB more a connection. An `Http1Server` builds a
 slot's connection on the first accept into it and keeps it for the next, so a
 pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.
