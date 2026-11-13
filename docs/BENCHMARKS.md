@@ -2012,6 +2012,12 @@ node bench/http1-parse/run.mjs
 
 <!-- http-codec-baseline:end -->
 
+<!-- http-codec-regate:begin -->
+## HTTP/1 codec re-measured after the codec, head and codegen stages
+
+In progress: the figures land in this section before the pull request opens.
+<!-- http-codec-regate:end -->
+
 <!-- syscall-cost:begin -->
 ## Syscall cost
 
