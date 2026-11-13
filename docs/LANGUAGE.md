@@ -6518,6 +6518,73 @@ if.end:
   the link; whether the program links there is the `declare function`'s
   question, answered by the libc the target has.
 
+#### `cErrno`: the errno a C call left
+
+**`cErrno(): i32`, from
+[`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), answers the
+errno the most recent `declare function` call on this thread left, and 0
+before any.** In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+per-thread runtime slot immediately after it returns, before any result is
+marshalled; `cErrno()` reads the slot (`tests/cases/ffi_errno`,
+[cookbook](IR_COOKBOOK.md#cerrno-errno-after-a-foreign-call),
+[design](wp27-ffi.md#10-s5-as-built-cerrno)):
+
+```ts
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10);
+  return cErrno() === 0 ? n : -1;
+};
+```
+
+```llvm
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+```
+
+- **Saved before anything else runs.** The copy of a `string` result, an arena
+  allocation or a `console.log` may call into libc and move errno, so the save
+  is the first instruction after the call, ahead of the `NULL` check of a
+  `string` result. A C function that sets errno and answers a string is read
+  correctly after the copy.
+- **Zeroed before, so a success reads 0.** `strtol` reports an out-of-range
+  number only through errno; with the zeroing, `cErrno()` after an in-range
+  call is 0 unless the callee set it. No setter is exposed.
+- **Per thread.** errno is per thread in every libc, and the slot is
+  `_Thread_local` under `--threads` (`thread_local(initialexec)` in the IR), so
+  a thread reads what its own last call left (`ffi_errno_threads`).
+- **Program-wide, and free when unnamed.** One `cErrno` anywhere makes every
+  `declare function` call in every module of the program pay the zero and the
+  save, and none of them is then a tail call. A program that never names it
+  emits none of it.
+- **Not covered:** a host-module import (`--host`) is not a C call; the close a
+  `using` handle runs at scope exit is the compiler's call, not the program's,
+  and is not captured.
+- **Not a global.** errno is a macro over a thread-local accessor in every
+  libc, so there is no `errno` symbol to declare, and `declare let errno: i32`
+  is the parser's
+  `` a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT` ``
+  (`reject_ffi_errno_global`).
+- **Refused:** an argument (`` `cErrno` expects exactly 0 arguments, got 1 ``,
+  `reject_ffi_errno_arg`), a call without the import (NL2456,
+  `reject_ffi_errno_import`), and a freestanding wasm32 build, which has no
+  operating system:
+  `` `cErrno` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_ffi_errno_wasm`). `--profile wasi` links wasi-libc and keeps it.
+- **It is `nish:unsafe` and an `unsafe` call** to `--deny unsafe`, like every
+  export of the module; it reads a defined value and is no panic site.
+
 #### A `u8[]` parameter: a buffer and its count
 
 **A `u8[]` or `readonly u8[]` parameter is a buffer C reads or writes, and a
@@ -8516,7 +8583,7 @@ global too ([`nish:term`](#nishterm-terminal-input)).
 
 **[`nish:unsafe`](reference/nish-unsafe.md)** exports `uncheckedGet`,
 `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`,
-`readCString`, `readStruct`. They are **reached only through the import**
+`readCString`, `readStruct`, `cErrno`. They are **reached only through the import**
 ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 
 **[`nish:async`](reference/nish-async.md)** exports `spawn`, `awaitAll`,
@@ -8934,8 +9001,9 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 Two things the language otherwise never does are each a decision about one
 site: reading or writing an element without the bounds check, and letting a
 signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
-and two, `readCString` and `readStruct`, that read a C string or a C struct
-through a pointer nothing proves. A program reaches them only through an import, so every module that
+two, `readCString` and `readStruct`, that read a C string or a C struct
+through a pointer nothing proves, and an eighth, `cErrno`, that reads the
+errno a C call left. A program reaches them only through an import, so every module that
 gives up a check or defines a wrap says so at its top and every site that does
 is a call a reader can find.
 
@@ -8950,6 +9018,7 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
 | `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
@@ -13377,7 +13446,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
-| `unsafe` | the seven `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call") |
+| `unsafe` | the eight `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct`, `cErrno` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,

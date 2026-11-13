@@ -76,7 +76,7 @@ global too ([`nish:term`](#nishterm-terminal-input)).
 
 **[`nish:unsafe`](../nish-unsafe.md)** exports `uncheckedGet`,
 `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`,
-`readCString`, `readStruct`. They are **reached only through the import**
+`readCString`, `readStruct`, `cErrno`. They are **reached only through the import**
 ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 
 **[`nish:async`](../nish-async.md)** exports `spawn`, `awaitAll`,
@@ -494,8 +494,9 @@ never `readonly` ([wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs
 Two things the language otherwise never does are each a decision about one
 site: reading or writing an element without the bounds check, and letting a
 signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
-and two, `readCString` and `readStruct`, that read a C string or a C struct
-through a pointer nothing proves. A program reaches them only through an import, so every module that
+two, `readCString` and `readStruct`, that read a C string or a C struct
+through a pointer nothing proves, and an eighth, `cErrno`, that reads the
+errno a C call left. A program reaches them only through an import, so every module that
 gives up a check or defines a wrap says so at its top and every site that does
 is a call a reader can find.
 
@@ -510,6 +511,7 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](declarations.md#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
 | `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](declarations.md#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
@@ -4939,7 +4941,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
-| `unsafe` | the seven `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call") |
+| `unsafe` | the eight `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct`, `cErrno` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,

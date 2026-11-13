@@ -3325,6 +3325,10 @@ class FactCollector {
       }
       i = i + 1
     }
+    // WP27 S5: errno is zeroed through `nish_errno_ptr` around the call.
+    if (!host && this.unit.program.capturesErrno) {
+      this.addCallees(["nish_errno_ptr"])
+    }
     // WP53 B1.2: C writes into a `u8[]` it is handed, which is a store into
     // the array's own slots here, and a count that may be larger than a
     // buffer's length is held against it before the call
@@ -3981,7 +3985,14 @@ class FactCollector {
     const name = builtinNameOf(this.unit.program, node)
     // `nish:simd`'s load reads elements and its store writes them, as an
     // element access does, through a bounds check (`isSimdAccess`).
-    if (name === "uncheckedGet" || name === "readCString" || name === "readStruct" || isSimdLoad(name)) {
+    // `cErrno` reads the slot the foreign calls write (WP27 S5).
+    if (
+      name === "uncheckedGet" ||
+      name === "readCString" ||
+      name === "readStruct" ||
+      name === "cErrno" ||
+      isSimdLoad(name)
+    ) {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE

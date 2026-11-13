@@ -3753,6 +3753,18 @@ export class Compilation {
         this.entry().checker.program.usesArgv = true
       }
     }
+    // WP27 S5: one module naming `cErrno` makes every foreign call capture.
+    let capturesErrno = false
+    for (const unit of this.modules) {
+      if (unit.checker.program.capturesErrno) {
+        capturesErrno = true
+      }
+    }
+    if (capturesErrno) {
+      for (const unit of this.modules) {
+        unit.checker.program.capturesErrno = true
+      }
+    }
     const facts = analyzeFunctions(units, this.table, this.opts, this.runtime)
     this.analysisUnits = units
     this.facts = facts
