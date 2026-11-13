@@ -446,7 +446,7 @@ function setsDisjoint(ctx: CheckContext, left: Node, right: Node): boolean -> @s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via memberConstantType
   calls: CheckedProgram.isEnumMember TypeTable.isMemberOf intAt listIndex memberConstantType memberSetOf membersDisjoint namesMembers nish_panic_index setHas unwrapParens
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=memberConstantType#0 setHas#0 membersDisjoint#0 memberSetOf#0 memberSetOf#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=memberConstantType#0 memberConstantType#0 setHas#0 membersDisjoint#0 memberSetOf#0 memberSetOf#0
   pointer left: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer right: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -454,25 +454,28 @@ function setsDisjoint(ctx: CheckContext, left: Node, right: Node): boolean -> @s
   callee +0:13 unwrapParens -> @unwrapParens
   local +1:9 b: Node (const)
   callee +1:13 unwrapParens -> @unwrapParens
-  local +4:9 aSet: i32 (const)
   local +5:9 aConstant: boolean (const)
   callee +5:44 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
-  callee +6:22 namesMembers -> @namesMembers
-  local +9:9 bSet: i32 (const)
-  local +10:9 bConstant: boolean (const)
-  callee +10:44 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
-  callee +11:22 namesMembers -> @namesMembers
-  local +15:11 set: i32 (const)
-  local +16:11 member: i32 (const)
-  callee +16:20 memberConstantType -> @memberConstantType
-  local +17:11 enumType: i32 (const)
-  callee +17:22 intAt -> @intAt
-  callee +17:57 listIndex -> @listIndex
-  callee +18:48 TypeTable.isMemberOf -> @TypeTable.isMemberOf
-  callee +19:15 setHas -> @setHas
-  callee +22:10 membersDisjoint -> @membersDisjoint
-  callee +22:31 memberSetOf -> @memberSetOf
-  callee +22:52 memberSetOf -> @memberSetOf
+  local +6:9 bConstant: boolean (const)
+  callee +6:44 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
+  local +7:9 aMember: i32 (const)
+  callee +7:31 memberConstantType -> @memberConstantType
+  local +8:9 bMember: i32 (const)
+  callee +8:31 memberConstantType -> @memberConstantType
+  local +11:9 aSet: i32 (const)
+  callee +12:22 namesMembers -> @namesMembers
+  local +15:9 bSet: i32 (const)
+  callee +16:22 namesMembers -> @namesMembers
+  local +20:11 set: i32 (const)
+  local +21:11 member: i32 (const)
+  local +22:11 enumType: i32 (const)
+  callee +22:22 intAt -> @intAt
+  callee +22:57 listIndex -> @listIndex
+  callee +23:48 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  callee +24:15 setHas -> @setHas
+  callee +27:10 membersDisjoint -> @membersDisjoint
+  callee +27:31 memberSetOf -> @memberSetOf
+  callee +27:52 memberSetOf -> @memberSetOf
 function membersOfSet(ctx: CheckContext, set: i32): i32[] -> @membersOfSet [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via buildExclusion
@@ -2040,6 +2043,14 @@ function holdSet(scope: Scope, local: Local, set: i32): void -> @holdSet
   callee +1:5 Scope.narrow -> @Scope.narrow
   callee +5:3 Scope.narrow -> @Scope.narrow
   callee +6:3 Scope.hold -> @Scope.hold
+function nameMembers(ctx: CheckContext, enumType: i32, current: i32, first: i32, second: i32): void -> @nameMembers
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via enumMembersOf
+  escaping: enumType
+  calls: enumMembersOf
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=enumMembersOf#0
+  stackSites=0 stackLocals=0
+  callee +0:5 enumMembersOf -> @enumMembersOf
 function heldMembers(ctx: CheckContext, scope: Scope, local: Local): i32[] -> @heldMembers [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via heldList
@@ -2052,22 +2063,24 @@ function heldMembers(ctx: CheckContext, scope: Scope, local: Local): i32[] -> @h
   callee +0:29 Scope.heldBy -> @Scope.heldBy
 function narrowHeld(ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void -> @narrowHeld [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via holdNamed
+  sharedWrite: via nameMembers
   escaping: keep
-  calls: Scope.heldBy TypeTable.isEnumMemberType heldMembers holdNamed holdSet keptSet
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdNamed#0 keptSet#0 heldMembers#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=holdNamed#1 Scope.heldBy#0 heldMembers#1 holdSet#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=holdNamed#2 Scope.heldBy#1 keptSet#1 heldMembers#2 holdSet#1
+  calls: Scope.heldBy TypeTable.isEnumMemberType heldMembers holdNamed holdSet keptSet nameMembers
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=nameMembers#0 holdNamed#0 keptSet#0 heldMembers#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0 holdNamed#1 Scope.heldBy#0 heldMembers#1 holdSet#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=Scope.heldBy#1 holdNamed#2 Scope.heldBy#1 keptSet#1 heldMembers#2 holdSet#1
   pointer members: size=0 writesThrough=true captured=false passedTo=keptSet#3
   stackSites=1 stackLocals=0
-  callee +0:56 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  local +1:11 named: i32 (const)
-  callee +2:5 holdNamed -> @holdNamed
-  callee +2:34 Scope.heldBy -> @Scope.heldBy
-  local +5:9 set: i32 (const)
-  callee +5:15 keptSet -> @keptSet
-  callee +5:35 heldMembers -> @heldMembers
-  callee +7:5 holdSet -> @holdSet
+  callee +0:3 nameMembers -> @nameMembers
+  callee +0:32 Scope.heldBy -> @Scope.heldBy
+  callee +1:56 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  local +2:11 named: i32 (const)
+  callee +3:5 holdNamed -> @holdNamed
+  callee +3:34 Scope.heldBy -> @Scope.heldBy
+  local +6:9 set: i32 (const)
+  callee +6:15 keptSet -> @keptSet
+  callee +6:35 heldMembers -> @heldMembers
+  callee +8:5 holdSet -> @holdSet
 function holdKept(ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void -> @holdKept [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdSet
@@ -2195,19 +2208,23 @@ function addLocals(into: Local[], locals: Local[]): void -> @addLocals [exported
   local -7:9 seen: boolean (let)
   local -6:16 had: Local (const)
 function joinHeld(ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void -> @joinHeld
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via holdNamed
-  calls: Scope.heldBy holdNamed
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdNamed#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=holdNamed#1 Scope.heldBy#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=holdNamed#2 Scope.heldBy#1 Scope.heldBy#1 Scope.heldBy#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nameMembers
+  calls: Scope.heldBy holdNamed nameMembers
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=nameMembers#0 holdNamed#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0 holdNamed#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=Scope.heldBy#1 Scope.heldBy#1 Scope.heldBy#1 holdNamed#2
   pointer first: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0
   pointer second: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0
   stackSites=0 stackLocals=0
-  callee +0:3 holdNamed -> @holdNamed
-  callee +0:32 Scope.heldBy -> @Scope.heldBy
-  callee +0:53 Scope.heldBy -> @Scope.heldBy
-  callee +0:74 Scope.heldBy -> @Scope.heldBy
+  local +0:9 current: i32 (const)
+  callee +0:19 Scope.heldBy -> @Scope.heldBy
+  local +1:9 fromFirst: i32 (const)
+  callee +1:21 Scope.heldBy -> @Scope.heldBy
+  local +2:9 fromSecond: i32 (const)
+  callee +2:22 Scope.heldBy -> @Scope.heldBy
+  callee +3:3 nameMembers -> @nameMembers
+  callee +4:3 holdNamed -> @holdNamed
 function variantsIn(ctx: CheckContext, union: i32, type: i32): i32[] -> @variantsIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type union

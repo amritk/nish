@@ -630,21 +630,26 @@ const memberConstantType = (ctx: CheckContext, bare: Node): i32 => {
 const setsDisjoint = (ctx: CheckContext, left: Node, right: Node): boolean => {
   const a = unwrapParens(left)
   const b = unwrapParens(right)
+  // Each member constant's type is made here, left first, even when the
+  // answer is known without it: the first request for a value names its
+  // type, which an enum with two members of one value shows.
+  const aConstant = a.kind === N_MEMBER && ctx.program.isEnumMember(ctx.table, a)
+  const bConstant = b.kind === N_MEMBER && ctx.program.isEnumMember(ctx.table, b)
+  const aMember = aConstant ? memberConstantType(ctx, a) : -1
+  const bMember = bConstant ? memberConstantType(ctx, b) : -1
   // A side that is no member constant and whose read recorded no set names no
   // members, which no comparison is refused for: most reads, enum or not.
   const aSet = ctx.program.memberSets[a.id]
-  const aConstant = a.kind === N_MEMBER && ctx.program.isEnumMember(ctx.table, a)
   if (!aConstant && !namesMembers(aSet)) {
     return false
   }
   const bSet = ctx.program.memberSets[b.id]
-  const bConstant = b.kind === N_MEMBER && ctx.program.isEnumMember(ctx.table, b)
   if (!bConstant && !namesMembers(bSet)) {
     return false
   }
   if (aConstant !== bConstant) {
     const set = aConstant ? bSet : aSet
-    const member = memberConstantType(ctx, aConstant ? a : b)
+    const member = aConstant ? aMember : bMember
     const enumType = intAt(ctx.program.memberListEnums, listIndex(set))
     if (set < MEMBERS_NONE && enumType >= 0 && ctx.table.isMemberOf(member, enumType)) {
       return !setHas(ctx, set, member)
@@ -3125,6 +3130,18 @@ const holdSet = (scope: Scope, local: Local, set: i32): void => {
   scope.hold(local, set)
 }
 
+/**
+ * Make every member type of `enumType` when one of the held sets is the whole
+ * enum (-1), where listing what it holds would. The first request for a value
+ * names its type, so an enum with two members of one value is spelled by the
+ * same member whichever shortcut answers the narrowing.
+ */
+const nameMembers = (ctx: CheckContext, enumType: i32, current: i32, first: i32, second: i32): void => {
+  if (current === -1 || first === -1 || second === -1) {
+    enumMembersOf(ctx, enumType)
+  }
+}
+
 /** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
 export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] =>
   heldList(ctx, local.type, scope.heldBy(local))
@@ -3142,6 +3159,7 @@ export const narrowHeld = (
   members: i32[],
   keep: boolean
 ): void => {
+  nameMembers(ctx, local.type, scope.heldBy(local), MEMBERS_NONE, MEMBERS_NONE)
   if (members.length === 0 || (members.length === 1 && ctx.table.isEnumMemberType(members[0]))) {
     const named = members.length === 1 ? members[0] : MEMBERS_NONE
     holdNamed(ctx, scope, local, scope.heldBy(local), named, MEMBERS_NONE, keep)
@@ -3312,7 +3330,11 @@ export const addLocals = (into: Local[], locals: Local[]): void => {
 
 /** Narrow the enum variable `local` to the members `first` or `second` leaves it, when fewer than it holds. */
 const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
-  holdNamed(ctx, scope, local, scope.heldBy(local), first.heldBy(local), second.heldBy(local), true)
+  const current = scope.heldBy(local)
+  const fromFirst = first.heldBy(local)
+  const fromSecond = second.heldBy(local)
+  nameMembers(ctx, local.type, current, fromFirst, fromSecond)
+  holdNamed(ctx, scope, local, current, fromFirst, fromSecond, true)
 }
 
 /**
