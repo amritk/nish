@@ -2222,6 +2222,7 @@ export class QuicConnection {
     // Loss recovery's timer runs after the datagram, so an acknowledgement
     // it carries settles what it acknowledges before a probe is owed.
     this.runRecoveryTimer()
+    this.runEarlyProbe()
     return this.closed() ? this.error : QUIC_ERROR_NO_ERROR
   }
 
@@ -4247,8 +4248,13 @@ export class QuicConnection {
    * largest acknowledged packet moved since the last such probe, one
    * datagram goes regardless of the window (a PING when nothing else is
    * queued), so the client always has one to answer, from wherever it now
-   * is (RFC 9000 §9.3). One per acknowledgment that advances the space, at
-   * most one a round trip; the probe timeout still runs as before.
+   * is (RFC 9000 §9.3). One per acknowledgment that advances the space, so
+   * at most about two a round trip, a buffer-limited transfer that lost
+   * nothing included; none while the sent ring is full, where a probe would
+   * resend the oldest packet in flight instead. The probe timeout still runs
+   * as before. With the NAT beside the client, a rebind after the probe
+   * arrives and before the next burst does is still missed: only the client
+   * sending can close that half round trip.
    */
   private earlyProbeAt(): i64 {
     if (this.state !== QUIC_STATE_CONNECTED || this.application.probes > 0) {
@@ -4260,6 +4266,7 @@ export class QuicConnection {
       sent.inFlight === 0 ||
       sent.lastAckEliciting < 0 ||
       sent.largestAcked <= this.earlyProbeAcked ||
+      sent.full() ||
       !this.streams.bufferBlocked()
     ) {
       return -1
