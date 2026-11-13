@@ -419,9 +419,10 @@ table.t-editor__table tbody tr:hover {
 
 /* ── The landing page's hero (docs/guide/index.md; built by site.js) ─────
    A source file is typed, flows through the compiler to its three targets,
-   and runs. One 12s clock drives every part: each keyframe set below spans
-   the whole cycle and places its part by percentage (1s is 8.33%), so the
-   parts cannot drift apart. */
+   and runs, once; then the terminal's prompt waits for a line. One 12s
+   clock drives every part: each keyframe set below spans the whole run and
+   places its part by percentage (1s is 8.33%), so the parts cannot drift
+   apart, and each ends on its resting style. */
 .nish-hero {
   --nish-cycle: 12s;
   position: relative;
@@ -653,8 +654,6 @@ a.nish-hero__cta:hover {
 }
 .nish-hero__terminal {
   position: relative;
-  /* site.js pins a held terminal's height from its border box. */
-  box-sizing: border-box;
   grid-column: 1 / -1;
   cursor: text;
 }
@@ -696,7 +695,6 @@ a.nish-hero__cta:hover {
   font-size: 12px;
   line-height: 1.7;
   white-space: pre;
-  animation: nish-hero-show var(--nish-cycle) linear infinite;
 }
 .nish-hero__code > span {
   display: block;
@@ -718,35 +716,18 @@ a.nish-hero__cta:hover {
   color: var(--scalar-color-green);
 }
 
-/* What is typed is wiped together at the end of the cycle. A line's own
-   animation starts late (its delay), so it also hides itself before the
-   cycle ends: otherwise it would still be showing its last frame when the
-   block fades back in. */
-@keyframes nish-hero-show {
-  0%,
-  83% {
-    opacity: 1;
-  }
-  86%,
-  100% {
-    opacity: 0;
-  }
-}
+/* Each part holds its first frame through its delay (`both`). */
 @keyframes nish-hero-type {
   0% {
     clip-path: inset(0 100% 0 0);
   }
   4%,
-  86% {
-    clip-path: inset(0);
-  }
-  86.01%,
   100% {
-    clip-path: inset(0 100% 0 0);
+    clip-path: inset(0);
   }
 }
 .nish-hero__line {
-  animation: nish-hero-type var(--nish-cycle) steps(24, end) infinite;
+  animation: nish-hero-type var(--nish-cycle) steps(24, end) both;
   animation-delay: calc(var(--i) * 0.28s);
 }
 @keyframes nish-hero-cmd {
@@ -762,7 +743,7 @@ a.nish-hero__cta:hover {
 .nish-hero__typed {
   display: inline-block;
   vertical-align: bottom;
-  animation: nish-hero-cmd var(--nish-cycle) steps(19, end) infinite;
+  animation: nish-hero-cmd var(--nish-cycle) steps(19, end) both;
 }
 @keyframes nish-hero-out {
   0%,
@@ -777,7 +758,7 @@ a.nish-hero__cta:hover {
   }
 }
 .nish-hero__out {
-  animation: nish-hero-out var(--nish-cycle) var(--nish-ease) infinite;
+  animation: nish-hero-out var(--nish-cycle) var(--nish-ease) both;
 }
 
 /* The terminal takes a line, through a hidden input: off-screen text would
@@ -799,27 +780,14 @@ a.nish-hero__cta:hover {
   outline: 2px solid var(--scalar-color-accent);
   outline-offset: 2px;
 }
-/* Held (hovered or focused; site.js sets data-held), the terminal shows the
-   loop's last frame, or with "blank" none of it, and a prompt under it. An
-   !important declaration outranks an animation, so the loop runs on beneath
-   and, let go, picks up in step with the rest of the hero. The prompt's line
-   is kept while hidden, so a hold does not grow the terminal. */
-.nish-hero__terminal[data-held] :is(.nish-hero__code, .nish-hero__typed, .nish-hero__out) {
-  opacity: 1 !important;
-  clip-path: none !important;
-  transform: none !important;
-}
-.nish-hero__terminal[data-held] > pre:first-of-type {
+/* The prompt under the output, until the shell's own line (padded the same
+   way) takes its place on the first key. */
+.nish-hero__terminal > pre:first-of-type {
   padding-bottom: 0;
 }
-.nish-hero__terminal[data-held="blank"] :is(.nish-hero__cmd, .nish-hero__out) {
-  display: none;
-}
 .nish-hero__ready {
-  visibility: hidden;
-}
-[data-held] .nish-hero__ready {
-  visibility: visible;
+  padding-bottom: 12px;
+  animation: nish-hero-out var(--nish-cycle) var(--nish-ease) 0.3s both;
 }
 .nish-hero__ready i {
   display: inline-block;
@@ -905,10 +873,10 @@ a.nish-hero__cta:hover {
   }
 }
 .nish-hero__pulse--in {
-  animation: nish-hero-pulse-in var(--nish-cycle) linear infinite;
+  animation: nish-hero-pulse-in var(--nish-cycle) linear both;
 }
 .nish-hero__pulse--out {
-  animation: nish-hero-pulse-out var(--nish-cycle) linear infinite;
+  animation: nish-hero-pulse-out var(--nish-cycle) linear both;
   animation-delay: calc(var(--i) * 0.15s);
 }
 
@@ -936,7 +904,7 @@ a.nish-hero__cta:hover {
   border-radius: 14px;
   background: var(--scalar-background-1);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--nish-violet), transparent 50%);
-  animation: nish-hero-core var(--nish-cycle) var(--nish-ease) infinite;
+  animation: nish-hero-core var(--nish-cycle) var(--nish-ease) both;
 }
 /* A comet circling the compiler: a conic sweep, masked down to a 2px ring. */
 .nish-hero__ring {
@@ -984,17 +952,13 @@ a.nish-hero__cta:hover {
   min-width: 108px;
   font-size: 11.5px;
   text-align: center;
-  animation: nish-hero-target var(--nish-cycle) var(--nish-ease) infinite;
+  animation: nish-hero-target var(--nish-cycle) var(--nish-ease) both;
   animation-delay: calc(var(--i) * 0.15s);
 }
-/* Lit is the resting style, so the keyframes name it by hand at both ends of
-   the stretch it holds: a keyframe that left it out would be interpolated
-   straight from unlit to unlit. */
+/* Lit is the resting style, where the run leaves a target. */
 @keyframes nish-hero-target {
   0%,
-  37%,
-  86%,
-  100% {
+  37% {
     color: var(--scalar-color-3);
     border-color: var(--scalar-border-color);
     background: transparent;
@@ -1005,7 +969,7 @@ a.nish-hero__cta:hover {
     transform: scale(1.08);
   }
   41%,
-  83% {
+  100% {
     color: var(--scalar-color-1);
     border-color: color-mix(in srgb, var(--nish-violet), transparent 35%);
     background: color-mix(in srgb, var(--nish-violet), transparent 82%);
