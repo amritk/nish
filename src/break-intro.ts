@@ -14,7 +14,7 @@
 
 import { Framebuffer } from "nish/term-pixels"
 import { ACTION_PRESS, EVENT_KEY, KEY_CHAR, KEY_ESCAPE } from "nish/term"
-import { TermInput } from "nish/term-io"
+import { StepInput } from "../std/input"
 import {
   GLYPH_ADVANCE,
   GLYPH_H,
@@ -459,7 +459,7 @@ const introScheduleWall = (intro: BreakIntro): void => {
  * the missing brick drops, the help falls, the wall is laid and its lower
  * courses fall out. Answers `INTRO_DONE` once nothing is left in the air.
  */
-export const stepBreakIntro = (intro: BreakIntro, input: TermInput): i32 => {
+export const stepBreakIntro = (intro: BreakIntro, input: StepInput): i32 => {
   intro.sounds = []
   for (const e of input.events) {
     if (e.type !== EVENT_KEY || e.action !== ACTION_PRESS) {
