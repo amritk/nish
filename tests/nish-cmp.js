@@ -1203,6 +1203,15 @@ const quicRebind = byFinding(
   "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves"
 )
 
+/**
+ * The release-note words of the security pass that closes HTTP/1 chunk
+ * extensions and Host, the HTTP/2 SETTINGS walk, the HTTP/3 reset budget,
+ * WebSocket Origin, YAML merge reuse and the PKI mapped-IPv4 and distrust
+ * paths. They land as one squashed pull request, so every declaration of it
+ * names its title; each entry's `why` says which fix moved the file.
+ */
+const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+
 const DECLARED = [
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
@@ -5638,70 +5647,70 @@ const DECLARED = [
   // every program that lays out or calls what they changed.
   {
     file: "url.ll",
-    changelog: "refuse an HTTP/1 Host that is not a host and port",
+    changelog: SECURITY_PATHS,
     why: "url.ts gains the authority checks the HTTP/1 Host test calls (`urlFind` and its neighbours), and nish/net/http1-codec now imports it, so every program reaching the codec writes url.ll and its IR moves",
   },
   {
     file: "http1-codec.ll",
-    changelog: "parse a chunk extension's grammar whole",
+    changelog: SECURITY_PATHS,
     why: "http1-codec.ts parses a chunk extension's grammar whole (`http1ChunkExtValid`) and checks a request's Host against url.ts (`hostField`), so the module and its string table move",
   },
   {
     file: "http1-client-codec.ll",
-    changelog: "parse a chunk extension's grammar whole",
+    changelog: SECURITY_PATHS,
     why: "the client codec refuses a malformed chunk extension with a new message, which renumbers its string table and every use of it",
   },
   {
     file: "http1-server.ll",
-    changelog: "refuse an HTTP/1 Host that is not a host and port",
+    changelog: SECURITY_PATHS,
     why: "Http1Parser gains `hostField`, so the server's GEPs into the parser move by one",
   },
   {
     file: "x509.ll",
-    changelog: "refuse certificates whose key a caller distrusts",
+    changelog: SECURITY_PATHS,
     why: "X509Certificate gains `spki`, kept from the parse, so the certificate grows 8 bytes and the module moves",
   },
   {
     file: "pki.ll",
-    changelog: "refuse certificates whose key a caller distrusts",
+    changelog: SECURITY_PATHS,
     why: 'PkiTrustStore gains a `distrusted` set checked on every path, and the name constraints exclude the IPv4-mapped form of an excluded IPv4 subtree ("exclude the IPv4-mapped form"), so the module moves',
   },
   {
     file: "pki-roots.ll",
-    changelog: "refuse certificates whose key a caller distrusts",
+    changelog: SECURITY_PATHS,
     why: "X509Certificate gains `spki`, so the roots module's struct and the constructor's dereferenceable size move",
   },
   {
     file: "verify.ll",
-    changelog: "refuse certificates whose key a caller distrusts",
+    changelog: SECURITY_PATHS,
     why: "the TLS verifier passes a caller's distrusted keys to the trust store, and X509Certificate and PkiTrustStore grow, so the module moves",
   },
   {
     file: "tls-tcp.ll",
-    changelog: "refuse certificates whose key a caller distrusts",
+    changelog: SECURITY_PATHS,
     why: "X509Certificate and PkiTrustStore grow, so the TLS transport that lays them out moves",
   },
   {
     file: "postgres-carrier.ll",
-    changelog: "refuse certificates whose key a caller distrusts",
+    changelog: SECURITY_PATHS,
     why: "X509Certificate and PkiTrustStore grow, so the Postgres carrier that lays them out moves",
   },
   {
     file: "http2.ll",
-    changelog: "walk an HTTP/2 connection's streams at most twice",
+    changelog: SECURITY_PATHS,
     why: "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice per frame, so the module moves",
   },
   {
     file: "http2-cleartext.ll",
-    changelog: "walk an HTTP/2 connection's streams at most twice",
+    changelog: SECURITY_PATHS,
     why: "http2-cleartext declares Http2Connection's methods, which gain `windowPassesMax`, so its declarations renumber",
   },
   {
     file: "yaml.ll",
-    changelog: "read a shared YAML merge sequence once",
+    changelog: SECURITY_PATHS,
     why: "parseYaml checks a shared merge sequence once (`mergeItemsChecked`), so the module moves",
   },
-  ...byFinding("refuse an HTTP/1 Host that is not a host and port")(
+  ...byFinding(SECURITY_PATHS)(
     "http1-codec now imports nish/net/url to check a request's Host (`hostField` on Http1Parser, `urlFind` and the authority checks in url.ts), so the parser grows a field, the header's url structs come first, and every module laying the parser out or calling the url helpers moves; a refused-by-the-reference row is a program naming the new export",
     {
       "examples/file-server.ts": ["file-server.ll"],
@@ -5727,7 +5736,7 @@ const DECLARED = [
       "tests/link/std_postgres_tls_unix_panic/main.ts": ["handler.ll", "main.h"],
     }
   ),
-  ...byFinding("read a shared YAML merge sequence once")(
+  ...byFinding(SECURITY_PATHS)(
     "the YAML loader gains `mergeItemsChecked` and checks a shared merge sequence once, so the loader's struct and the modules laying it out move",
     {
       "bench/yaml-compare/main.ts": ["main.h", "main.ll"],
@@ -5737,7 +5746,7 @@ const DECLARED = [
       "tests/link/std_yaml_json/main.ts": ["main.h"],
     }
   ),
-  ...byFinding("refuse certificates whose key a caller distrusts")(
+  ...byFinding(SECURITY_PATHS)(
     "X509Certificate gains `spki`, PkiTrustStore gains a `distrusted` set and HttpOptions gains `distrustSpkiSha256`, so every module laying them out moves and a program naming `PKI_ERR_DISTRUSTED` or `spki` compiles only under the candidate",
     {
       "tests/link/crypto_pki/main.ts": ["exit"],
@@ -5754,11 +5763,11 @@ const DECLARED = [
       "tests/link/std_postgres_tls_unix_panic/main.ts": ["main.ll"],
     }
   ),
-  ...byFinding("parse a chunk extension's grammar whole")(
+  ...byFinding(SECURITY_PATHS)(
     "the program calls `http1ChunkExtValid`, which only the candidate's nish/net/http1-codec exports",
     { "tests/link/net_http1_parse_diff/main.ts": ["exit"] }
   ),
-  ...byFinding("walk an HTTP/2 connection's streams at most twice")(
+  ...byFinding(SECURITY_PATHS)(
     "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice, so the modules that declare or call its methods move",
     {
       "tests/link/net_http2/main.ts": ["checks.ll", "peer.ll"],
@@ -5776,11 +5785,11 @@ const DECLARED = [
       "tests/link/net_loopback_f64/main.ts": ["net_http2_peer.ll"],
     }
   ),
-  ...byFinding("close an HTTP/3 connection that resets past its budget")(
+  ...byFinding(SECURITY_PATHS)(
     "the program sets `Http3Config.resetBudget`, which only the candidate's nish/net/http3 has",
     { "tests/link/net_http3_bad_reset_budget/main.ts": ["exit"] }
   ),
-  ...byFinding("let a WebSocket server refuse a cross-origin handshake")(
+  ...byFinding(SECURITY_PATHS)(
     "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
     { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
   ),
