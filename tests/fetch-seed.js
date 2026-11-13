@@ -924,7 +924,9 @@ const runScripts = (text) => {
 }
 
 // SC-30: no workflow lets a dependency run code at install time, and every
-// job runs the one Node release CI pins, named exactly.
+// job runs the one Node release CI pins, named exactly. The one exception is
+// rebuild.yml's `ddc` job, which installs old tags' lockfiles that npm 11
+// refuses; it pins its own older release, as exactly.
 {
   const scripted = workflows.flatMap(({ file, text }) =>
     [...text.matchAll(/^\s*(?:- )?run:\s*(npm ci\b[^\n]*)/gm)]
@@ -935,11 +937,18 @@ const runScripts = (text) => {
   const versions = workflows.flatMap(({ file, text }) =>
     [...text.matchAll(/node-version:\s*(\S+)/g)].map((m) => ({ file, v: m[1].replace(/^["']|["']$/g, "") }))
   )
-  const distinct = [...new Set(versions.map(({ v }) => v))]
+  const historical = versions.filter(({ file, v }) => file === "rebuild.yml" && v.startsWith("22."))
   check(
-    `every workflow pins one exact Node release (${distinct.join(", ")})`,
-    versions.length > 0 && distinct.length === 1 && /^\d+\.\d+\.\d+$/.test(distinct[0]),
-    versions.map(({ file, v }) => `${file}: ${v}`).join("\n")
+    `rebuild.yml's ddc job alone pins an older Node, exactly (${historical.map(({ v }) => v).join(", ")})`,
+    historical.length === 1 && /^\d+\.\d+\.\d+$/.test(historical[0].v),
+    historical.map(({ file, v }) => `${file}: ${v}`).join("\n")
+  )
+  const current = versions.filter((entry) => !historical.includes(entry))
+  const distinct = [...new Set(current.map(({ v }) => v))]
+  check(
+    `every other workflow pins one exact Node release (${distinct.join(", ")})`,
+    current.length > 0 && distinct.length === 1 && /^\d+\.\d+\.\d+$/.test(distinct[0]),
+    current.map(({ file, v }) => `${file}: ${v}`).join("\n")
   )
 }
 
