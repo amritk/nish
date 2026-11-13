@@ -11764,10 +11764,10 @@ if (dealtHere("p256Seams")) {
     })
   }
 
-  // #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
-  // and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
-  // `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
-  // 10,000 scalars. Neither inversion is exported, so the program reaches them
+  // #758: the scalar inverse by safegcd (`p256ScalarInverse`, which both
+  // signing paths and `p256Verify` use) against Fermat's a^(n-2), which the
+  // seam keeps as the reference, byte for byte, on the edges and a seeded
+  // corpus of 10,000 scalars. The inversion is not exported, so the program reaches it
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
   // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
@@ -11796,7 +11796,7 @@ if (dealtHere("p256Seams")) {
     const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
     check(
       "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
-      r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+      r.status === 0 && r.stdout === "gen-p256-table: 5632 limbs, as generated\n",
       shown(r)
     )
   }
