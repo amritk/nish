@@ -280,8 +280,9 @@ of what they move:
    three ([BENCHMARKS.md](BENCHMARKS.md#http1-codec-re-measured-after-the-codec-head-and-codegen-stages)).
    A request costs 3,883 instructions, down from 5,422 but over the 3,251
    target; `http1Next` holds 60% of them. The async entry is still 22% to
-   37% behind the explicit one at 256 and 1024. A browser-shaped `/json` at
-   256 was 6% to 12% slower than before the stages, outside its band.
+   37% behind the explicit one at 256 and 1024. `/json` got worse: 3% to
+   19% slower in four cells from 128 to 512 connections, and 6% to 12%
+   slower with a browser-shaped head at 256, each outside its band.
 4. **`fortune`:** an HTML escape, a byte sort and one buffer reused per
    response (WP39 E8).
 5. **A rig like TFB's.** Our numbers come from wrk sharing the machine with
