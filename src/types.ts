@@ -556,6 +556,14 @@ export class TypeTable {
     return ids[value] - 1
   }
 
+  /**
+   * Whether `enumMemberOf` gives one id per enum and `value` whatever the
+   * name: values below `MEMBER_TABLE_LIMIT` are looked up by value alone.
+   */
+  internsByValue(value: i32): boolean {
+    return value >= 0 && value < MEMBER_TABLE_LIMIT
+  }
+
   /** Whether `type` is an enum member type; -1, a node with no recorded type, is not. */
   isEnumMemberType(type: i32): boolean {
     return type >= 0 && this.kinds[type] === K_ENUM_MEMBER

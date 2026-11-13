@@ -1796,9 +1796,19 @@ export class CheckedProgram {
   /**
    * The member sets no one type spells: what an enum variable holds once a
    * test excluded some of its members, `Kind.B | Kind.C`. `memberSets` and
-   * `Scope.hold` name one by its index, encoded below -2.
+   * `Scope.hold` name one by its index, encoded below -2. A list a test made
+   * by excluding one member is kept as that exclusion until something reads
+   * its members: `memberListDrops[i]` is the member excluded (-1 for a list
+   * built whole), `memberListBases[i]` the set it was excluded from (-1 being
+   * every member of the enum `memberListEnums[i]`), `memberListSizes[i]` how
+   * many members are left, and `memberLists[i]` stays empty until
+   * `membersOfSet` builds it, in the order of the set it came from.
    */
   memberLists: i32[][]
+  memberListDrops: i32[]
+  memberListBases: i32[]
+  memberListEnums: i32[]
+  memberListSizes: i32[]
   /**
    * Every member of an enum as member types (`enumMembersOf`), built the
    * first time a test reads it: `enumMemberTypes[i]` is the enum and
@@ -2117,6 +2127,10 @@ export class CheckedProgram {
     this.spreadCopies = []
     this.memberSets = new Array<i32>(nodeCount)
     this.memberLists = []
+    this.memberListDrops = []
+    this.memberListBases = []
+    this.memberListEnums = []
+    this.memberListSizes = []
     this.enumMemberTypes = []
     this.enumMemberLists = []
     this.memberMarks = []
