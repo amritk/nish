@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 760 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 761 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14613,6 +14613,34 @@ The message of an error contains:
 …` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
 ```
 
+[`nl2768_root_storage_region.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_region.ts):
+
+```ts
+// A region allocates from an arena of its own, which a root could outlive.
+import { enter, free, region } from "nish:region"
+
+class World {
+  tick: i32 = 0
+}
+
+const world = new Array<World | null>(1)
+
+const build = (): i32[] => [1, 2, 3]
+const count = (xs: i32[]): i32 => xs.length
+
+export const tick = (): i32 => {
+  const r = region(build)
+  const n = enter(r, count)
+  free(r)
+  const w = world[0]
+  return w === null ? n : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
 [`nl2768_root_storage_threads.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_threads.ts):
 
 ```ts
@@ -14635,4 +14663,96 @@ export const tick = (): i32 => {
 
 ```text
 Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+## NL2769
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_header.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_header.ts) (compiled with `--emit-header build/test/wordings/nl2769_root_storage_header.h`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_napi.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_napi.ts) (compiled with `--emit-napi build/test/wordings/nl2769_root_storage_napi.c`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_napi_async.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_napi_async.ts) (compiled with `--threads --emit-napi-async build/test/wordings/nl2769_root_storage_napi_async.c`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
 ```

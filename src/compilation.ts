@@ -1407,6 +1407,7 @@ export class Compilation {
       unit.checker.recheckStorage()
     }
     this.rejectRootWithArenas()
+    this.rejectRootInShim()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -3139,6 +3140,32 @@ export class Compilation {
             info.decl.start,
             info.decl.end,
             `Root storage \`${info.name}\` cannot be kept in a program that loads \`nish/threads\` or \`nish:region\`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a build that writes a native shim
+   * (`--emit-napi`, `--emit-napi-async`, `--emit-header`). The shim releases
+   * the arena after every call that passes a string or an array
+   * (`src/interop-napi.ts`), which frees what a root reaches, and only a page
+   * module's loader keeps it instead.
+   */
+  rejectRootInShim(): void {
+    const opts = this.opts
+    if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0 && opts.emitHeader.length === 0) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a build that writes a native shim (\`--emit-napi\`, \`--emit-napi-async\` or \`--emit-header\`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module`
           )
         }
       }

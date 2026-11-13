@@ -2140,6 +2140,13 @@ define void @nish_root_keep(i64 %mark) {
   loads `nish/threads` or `nish:region` is
   `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
   (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
 - **Every function may store through a root**, so a program with root
   storage does not prove a parameter-only allocation stays in its caller's
   scope from the signature alone; the compiler's other proofs are unchanged.
