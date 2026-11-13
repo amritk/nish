@@ -471,6 +471,12 @@ fifteen sections are now dealt as well (`osHost` to `fix` in
 `DEALT_SECTIONS`), so a shard runs only its share of them. Their costs in
 `tests/shard-costs.json` are per-section maxima from that run: for each, the
 largest span from its first check to its last that one of shards 1 to 4 paid.
+In [run 43402907927](https://github.com/amritk/nish/actions/runs/43402907927),
+the first with that deal, the span from the native run limit to the first link
+program fell from 65–219 s a shard (825 s summed) to 7–121 s (272 s summed).
+What remains on shards 6 and 8 is `emitTs` and `termIo` with the `nish break`
+check, dealt before. The longest `test` job went from 10 min 49 s to
+8 min 32 s.
 
 ## Running the same steps locally
 
