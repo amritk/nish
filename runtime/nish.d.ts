@@ -707,7 +707,7 @@ declare function isExecutableSync(path: string): boolean;
 // ---- Unsafe (`nish:unsafe`) --------------------------------------------------
 //
 // Declared as globals so `tsc` reads a program that imports them, as every
-// `nish:` export is, but `nish` refuses a call to any of the six that is not
+// `nish:` export is, but `nish` refuses a call to any of the seven that is not
 // imported from `nish:unsafe`: the import is the module's visible opt-in. The
 // refusal reads `` `uncheckedGet` is a `nish:unsafe` function and is called only
 // through an import of it `` (NL2456). An import may rename (`as`) and cannot be
@@ -822,6 +822,37 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  * @returns a copy of the bytes before the first `NUL`.
  */
 declare function readCString(p: CPtr): string;
+/**
+ * A copy of the C struct at `p`, in a new instance of the `declare class` the
+ * call's context names: `const lc: Lconv = readStruct(localeconv())`. A type
+ * argument is not written at a call site (`readStruct<Lconv>(p)` is refused,
+ * as `identity<i32>(7)` is), so the layout comes from an annotation, a
+ * parameter or a return type, as `Ok(v)`'s type does; a call with none, or one
+ * whose context is not a `declare class`, is refused. It copies the layout's
+ * size in bytes, so the class must describe the struct's first fields (a
+ * prefix is enough) and `p` must point at that many readable bytes: undefined
+ * behaviour otherwise, as with `readCString`.
+ *
+ * The copy is the program's own: C may free or overwrite its struct straight
+ * after the call, and a `CPtr` field of the copy is still C's pointer, read
+ * with `readCString` while C keeps it live. The parameter is `CPtr`, so an
+ * unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
+ *
+ * A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
+ * naming the layout, since a `declare function` declared to answer `CPtr` may
+ * still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+ * the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
+ * `oom` beside it.
+ *
+ * The copy is new on every call and is the calling function's allocation, held
+ * by the arena like `new`. It lowers the same on wasm32, where a pointer is 4
+ * bytes and the layout is sized to match. It has no Node form.
+ * Capability: unsafe.
+ *
+ * @param p the address of a C struct a `declare function` handed back.
+ * @returns a copy of the struct, in the `declare class` its context names.
+ */
+declare function readStruct<T>(p: CPtr): T;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -1712,8 +1743,11 @@ declare function connectResult(fd: i32): i32;
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
  * @param flags flag 1 `SO_REUSEPORT`, so several sockets that all ask for it share a port and
- *   the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); any other
- *   bit is -22.
+ *   the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); flag 4, with
+ *   flag 1 and a group size N from 1 to 255 in bits 8 to 15, steers QUIC: the port's group hands
+ *   each datagram to its socket number (byte 0 of the Destination Connection ID) mod N, in the
+ *   order the sockets were bound, and a refused attach closes the socket and answers the errno
+ *   (-95 on Darwin). Flag 4 without 1, with 2 or with N 0, N without 4, or any other bit is -22.
  * @returns the socket's descriptor, or a negative errno.
  */
 declare function udpBind(host: string, port: i32, flags: i32): i32;
@@ -3477,11 +3511,11 @@ declare module "nish:net" {
  * is a call a reader can find. `--emit-checked` prints an `unsafe import` line
  * for each name imported and an `unsafe call` line for each site.
  *
- * The global spelling is refused (NL2456): the six are called only through an
+ * The global spelling is refused (NL2456): the seven are called only through an
  * import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
  * behaviour, which is the whole of the trade. There is no flag that turns the
  * checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
- * refuses each with exit 2. `readCString` has no Node form, because its
+ * refuses each with exit 2. `readCString` and `readStruct` have no Node form, because their
  * `CPtr` comes only from a `declare function`, which Node cannot call.
  *
  * **Under Node.** `runtime/nish.mjs` answers the import: the get and set are
@@ -3492,8 +3526,10 @@ declare module "nish:net" {
  * **The no-panic scope.** Under `--deny-panics` or `"nish".noPanic`,
  * `uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
  * sites, because the import has already said that an index out of range is
- * the author's to rule out. The wrapping three are not sites at all: they
- * are defined for every pair.
+ * the author's to rule out. `readStruct` is not: it tests its pointer and
+ * panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
+ * refuses it. The wrapping three are not sites at all: they are defined for
+ * every pair.
  *
  * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
  */
@@ -3563,6 +3599,17 @@ declare module "nish:unsafe" {
    * @returns A copy of the bytes before the `NUL`; C keeps its buffer.
    */
   export function readCString(p: CPtr): string;
+  /**
+   * A copy of the C struct at `p` in a new instance of the `declare class` the
+   * call's context names (`const lc: Lconv = readStruct(localeconv())`), so C
+   * may free or overwrite its struct straight after. It reads and allocates,
+   * and is native only.
+   *
+   * @param p A pointer from a `declare function`. Undefined behaviour unless
+   *   it points at the layout's size of readable bytes.
+   * @returns A copy of the struct; C keeps its own.
+   */
+  export function readStruct<T>(p: CPtr): T;
 }
 
 /**

@@ -22,7 +22,7 @@ Forbidden syntax: 63 codes.
 
 <scalar-card title="NL2xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl2xxx.md">
 
-The type checker: 754 codes.
+The type checker: 757 codes.
 
 </scalar-card>
 

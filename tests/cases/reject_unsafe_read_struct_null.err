@@ -1,0 +1,2 @@
+`readStruct` expects an argument of type CPtr, got CPtr | null
+`readStruct` expects exactly 1 argument, got 0

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 923
+export const RULE_COUNT: i32 = 926
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -517,6 +517,8 @@ const diagnosticRules = (): string[] => [
   "NL2669",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
+  "`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)",
+  "NL2764",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
   "NL3043",
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
@@ -601,6 +603,8 @@ const diagnosticRules = (): string[] => [
   "NL2655",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
   "NL2288",
+  ": `readStruct` copies into the `declare class` its context names, so write `const s: Stat = readStruct(p)`",
+  "NL2763",
   ".capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names",
   "NL3032",
   "` returns a `Promise`, which wasm cannot wait for: await it in the page and call an export with the result",
@@ -1079,6 +1083,8 @@ const diagnosticRules = (): string[] => [
   "NL2633",
   "`integer` needs exactly two bounds, e.g. `integer<0, 255>`",
   "NL2378",
+  "`readStruct(p)` copies into a `declare class` layout, and ",
+  "NL2765",
   ", and a declared C function takes scalars and `CPtr` only",
   "NL2322",
   "; compare a signed value, or against a bound other than 0",
