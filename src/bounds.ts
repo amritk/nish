@@ -186,6 +186,7 @@ import { StringMap } from "./map"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
 import { Options } from "./options"
 import { isAsciiText } from "./strings"
+import { isSimdExport, simdSuffix, simdTypeLane } from "./nish-modules"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import {
   DeclaredRange,
@@ -1230,6 +1231,31 @@ export const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
   return null
 }
 
+/** The two sides of `e - c`, with `c` a literal of 1 or more. */
+class MinusLiteral {
+  base: Node
+  c: i32
+
+  constructor(base: Node, c: i32) {
+    this.base = base
+    this.c = c
+  }
+}
+
+/**
+ * `e - c` with `c` a literal of 1 or more, where the difference is exact: a
+ * signed subtraction is checked or proven, as `offsetIndex`'s sum is, so a
+ * bound below it is one `c` below `e`.
+ */
+const minusLiteral = (ctx: CheckContext, expr: Node): MinusLiteral | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== N_BINARY || e.text !== "-" || !checksOverflow(ctx.program, ctx.table, e)) {
+    return null
+  }
+  const c = literalValue(e.children[1])
+  return c >= 1 ? new MinusLiteral(e.children[0], c) : null
+}
+
 /**
  * Whether `call` is the builtin `toI32` itself, resolved the way the checker
  * resolved it: a plain identifier with no user function behind it
@@ -1614,6 +1640,24 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
       const bound = (strict ? hiConst : hiConst + 1) - loOffset.c
       if (bound >= 1) {
         out.push(new Fact(FACT_MAX_INDEX, loOffset.v, null, bound))
+      }
+    }
+  }
+  // `i < w.length - c` and `i <= n - c`, with `n` a hoisted length: the guard
+  // of a loop that reads `c` elements at once from `i`, as a vector access
+  // does. The difference is exact (`checksOverflow`), so `i + c` is at most
+  // the length, and `i` reaches `c - 1` past itself (`c` for a strict compare).
+  const hiMinus = minusLiteral(ctx, hi)
+  if (loVar !== null && hiMinus !== null) {
+    const reach = strict ? hiMinus.c : hiMinus.c - 1
+    const length = lengthOf(walk, hiMinus.base)
+    if (length !== null) {
+      out.push(new Fact(FACT_BELOW, loVar, length, reach))
+    }
+    const n = indexLocal(ctx, hiMinus.base)
+    if (n !== null) {
+      for (const above of holdersAbove(state, n)) {
+        out.push(new Fact(FACT_BELOW, loVar, above, knownBelow(state, n, above) ? reach + 1 : reach))
       }
     }
   }
@@ -2720,7 +2764,94 @@ const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
  * The walk and the loop-effect scan both ask this, so they cannot disagree.
  */
 export const callsNothing = (ctx: CheckContext, call: Node): boolean =>
-  isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call) || isUncheckedElementCall(ctx.program, call)
+  isCharCodeAt(ctx, call) ||
+  isBuiltinToI32(ctx.program, call) ||
+  isUncheckedElementCall(ctx.program, call) ||
+  isSimdCall(ctx.program, call)
+
+/**
+ * A `nish:simd` call: a constructor, a splat, a lane operation, a load or a
+ * store. Every one lowers inline and calls nothing but the `noreturn` index
+ * panic (`identifierBuiltinCalleesNamed`), and none can reach a length or a
+ * local. A load reads elements and a store writes them, and no fact here
+ * describes an element's value. Without this, the `extract` or `bitmask` that
+ * reads a vector just loaded would drop the facts that proved the load.
+ */
+const isSimdCall = (program: CheckedProgram, call: Node): boolean =>
+  call.kind === N_CALL && program.nodeCallees[call.id] === null && isSimdExport(program.nodeBuiltins[call.id])
+
+/**
+ * The lane count of `nish:simd`'s `load…(xs, i)` or `store(v, xs, i)`, the
+ * calls `emitVectorAccess` lowers to one checked vector load or store, or 0
+ * for any other call. They are reachable only by import, so the checker's
+ * record of the imported name is the whole test (`isVectorAccess` in
+ * `src/emit-arrays.ts`).
+ */
+const vectorAccessLanes = (ctx: CheckContext, call: Node): i32 => {
+  const args = call.children[1].children
+  if (call.kind !== N_CALL || args.length < 2) {
+    return 0
+  }
+  const name = ctx.program.nodeBuiltins[call.id]
+  if (name === "store" && args.length === 3) {
+    return ctx.table.laneCount(ctx.program.nodeTypes[args[0].id])
+  }
+  if (simdTypeLane(simdSuffix(name, "load")).length > 0) {
+    return ctx.table.laneCount(ctx.program.nodeTypes[call.id])
+  }
+  return 0
+}
+
+/**
+ * A vector access of `lanes` elements from `i` checks `0 <= i` and
+ * `i + lanes <= xs.length` at once, so it is proven by `i`'s floor and a
+ * `below` fact that reaches `lanes - 1` past `i`, and it leaves both behind
+ * when its check passes. The index is a local, `i + c` or a literal, the
+ * shapes `judge` reads for one element.
+ */
+const judgeVectorAccess = (walk: BoundsWalk, state: State, call: Node, lanes: i32): void => {
+  const args = call.children[1].children
+  const holder = holderOf(walk, args[args.length - 2])
+  if (holder === null) {
+    return
+  }
+  const index = args[args.length - 1]
+  const last = lanes - 1
+  const constant = literalValue(index)
+  if (constant >= 0) {
+    // Past `INT_MAX` the access cannot pass its check, and the sum is no
+    // length: it keeps its check and leaves nothing behind.
+    if (toI64(constant) + toI64(lanes) > I32_MAX) {
+      return
+    }
+    if (knownMinLength(state, holder, constant + lanes)) {
+      noteProof(walk, call)
+    }
+    addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, constant + lanes))
+    return
+  }
+  // A passed `w[i + c]` says nothing about `i >= 0`, as in `recordPassedCheck`.
+  const offset = offsetIndex(walk.ctx, index)
+  if (offset !== null) {
+    if (toI64(offset.c) + toI64(last) > I32_MAX) {
+      return
+    }
+    if (knownNonNegative(state, offset.v) && belowReach(state, offset.v, holder) >= offset.c + last) {
+      noteProof(walk, call)
+    }
+    addFact(state, new Fact(FACT_BELOW, offset.v, holder, offset.c + last))
+    return
+  }
+  const i = indexLocal(walk.ctx, index)
+  if (i === null) {
+    return
+  }
+  if (knownNonNegative(state, i) && belowReach(state, i, holder) >= last) {
+    noteProof(walk, call)
+  }
+  addFact(state, new Fact(FACT_NON_NEGATIVE, i, null, 0))
+  addFact(state, new Fact(FACT_BELOW, i, holder, last))
+}
 
 /**
  * `uncheckedGet(xs, i)` or `uncheckedSet(xs, i, v)` from `nish:unsafe`, by the
@@ -3324,6 +3455,10 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     }
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
+    }
+    const lanes = vectorAccessLanes(ctx, e)
+    if (lanes > 0) {
+      judgeVectorAccess(walk, state, e, lanes)
     }
     if (isArrayPop(ctx, e)) {
       judgePop(walk, state, e)

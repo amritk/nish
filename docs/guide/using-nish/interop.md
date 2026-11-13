@@ -194,6 +194,94 @@ naming it:
 Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (WP50 stage 1), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.
 ```
 
+#### Putting a framebuffer on a canvas: `nish/page/frame`
+
+A program that draws into an `Int32Array` of 0xRRGGBB pixels, row by row,
+can show it on a `<canvas>` with `nish/page/frame`. Like `nish/page`, it is
+plain JavaScript with no imports and no build step. It has two exports:
+
+- **`createPresenter(canvas, options?)`** tries WebGPU, then WebGL 2, then
+  Canvas 2D, and keeps the first that works. Its `present(pixels, width,
+  height)` uploads the pixels and draws them scaled with nearest-neighbour
+  sampling, letterboxed in black to keep their aspect. Pass the module's own
+  view: the presenter reads it in place and copies nothing first. It keeps
+  its textures, buffers and descriptors from frame to frame, making them
+  again only when the framebuffer's size changes.
+- **`runFixedStep({ stepsPerSecond, step, render })`** calls `step` at a
+  fixed rate and `render(alpha, frameMs)` on every animation frame, so a
+  120 Hz or 240 Hz display gets that many renders even when the program
+  steps 60 times a second. `alpha` is how far the frame is between two
+  steps. A frame over a quarter second (a hidden tab, a debugger pause)
+  counts as a quarter second, and at most `maxStepsPerFrame` steps (8 by
+  default) run in one frame; the backlog past that is dropped. The loop's
+  `refreshHz` reads the display's rate from the fastest recent frames, its
+  `fps` counts renders a second, and `stop()` ends it.
+
+The program keeps the pixels in [module storage](#sharing-memory-with-the-page):
+
+```ts
+// screen.ts
+export const frame = new Int32Array(320 * 180);
+
+export const step = (): void => {
+  for (let i = 0; i < frame.length; i++) {
+    frame[i] = (frame[i] + 0x010203) & 0xffffff;
+  }
+};
+```
+
+```js
+import { createPresenter, runFixedStep } from "nish/page/frame";
+import { loadSync } from "./screen.mjs";
+import { bytes } from "./screen.bytes.mjs";
+
+const screen = loadSync(bytes);
+const canvas = document.querySelector("canvas");
+const presenter = await createPresenter(canvas, {
+  onFallback: (from, to, reason) => console.warn(`${from} -> ${to}: ${reason}`),
+});
+const fit = () => {
+  const box = presenter.canvas.getBoundingClientRect();
+  presenter.resize(box.width, box.height, devicePixelRatio);
+};
+addEventListener("resize", fit);
+fit();
+
+runFixedStep({
+  stepsPerSecond: 60,
+  step: () => screen.step(),
+  // views() after the step: a memory that grew has a new buffer.
+  render: () => presenter.present(screen.views().storage.frame, 320, 180),
+});
+```
+
+Each tier that does not work is recorded in `presenter.attempts` with the
+browser's reason (`navigator.gpu is missing`, `requestAdapter answered
+null`, `getContext("webgl2") answered null`, ...) and passed to
+`onFallback`, so a fallback is never silent. When none works,
+`createPresenter` rejects with every tier's reason. `prefer: "webgl2"` or
+`prefer: "canvas2d"` starts lower down the list, as a page's own
+`?renderer=` switch might ask; the tiers above it are not tried.
+
+A tier can also be lost while the page runs: a WebGPU device lost or an
+error nothing captured, or a `webglcontextlost` event. The presenter then
+moves to the next tier down before the next frame and calls `onFallback`.
+A canvas keeps the first kind of context it hands out, so the next tier
+gets a fresh `<canvas>`: a copy of the element made by `cloneNode`, put in
+the old one's place. It has the same id, classes, style and size, but not
+the event listeners added to the old one. `onFallback` gets that canvas as
+its fourth argument, `(from, to, reason, canvas)`: add those listeners again
+there. It is the only way to reach it while `createPresenter` is still
+running; after, `presenter.canvas` is the element on screen, as `fit` reads
+it above. A canvas not in the document has no place for the copy to take,
+so the copy is not in the document either: put `presenter.canvas` where you
+want it. The tier given up releases its device or context as it goes.
+`presenter.resize` throws a `RangeError` on a size that is not a finite
+number of at least 0, or a pixel ratio that is not above 0.
+
+The pixels are read as little-endian words, the byte order of wasm memory.
+The top byte of each word is ignored and every pixel is drawn opaque.
+
 ### Functions the page supplies: host modules
 
 A module that calls back into the page imports those functions from an

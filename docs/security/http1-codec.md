@@ -35,7 +35,7 @@ with its own `WS_HS_*` code; it adds no finding.
 | File | Functions |
 | --- | --- |
 | `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`, `http1HeadGrow`, `http1FramingField`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; the kept response head (`sameHead`, `keepHead`, `http1ServerKept`, `http1ServerSame8`, `http1ServerSame4`, `http1ServerSameByByte`); `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`; the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
 
@@ -82,6 +82,7 @@ nonce and every mask key from the caller.
 | H1-4 | Low | `std/net/http1-server.ts` (`Http1Connection.expiresNoSooner`, read by `Http1Server.expire` and `Http1TlsServer.expire`) | `expire` walks every slot only when the soonest one can be due, but that bound counted a head clock not yet started from the slot's last move, so a kept-alive slot quiet for longer than `headTimeout` (30 s by default) put it in the past and every `expire` walked every slot. Clients that hold quiet keep-alives, a few hundred of 30,000 in a benchmark with 7 s think times, made the work of each turn of the loop grow with the number of connections: about a third of a server's CPU there. Nothing is closed that should not be. | **Fixed.** `expiresNoSooner(now)` counts a head clock not yet started from `now`, since one started later starts no sooner, and keeps `lastActive + idleTimeout` and a started clock's `headSince + headTimeout`. While an exchange is open it counts from `lastActive`, since `nextRequest` starts a pipelined head's clock there when the exchange ends, which can be before `now`; a slot quiet past `headTimeout` with its exchange still open (a slow handler) still makes `expire` walk every slot, which is rare and no worse than the base. Tests: `a kept-alive slot quiet past headTimeout is due no sooner than later` and `a head pipelined behind an open exchange is due no later than its bound says` in `tests/link/net_http1_server` and `_f64`; the base cannot build the first (`expiresNoSooner` took no `now`) and its bound there is past, and the second fails on a clock not yet started counted from `now` alone. |
 | H1-5 | Medium | `std/net/http1-codec.ts` (`Http1Parser.next`, `resting`, `http1StartRequest`, the field `headHeld`), read through `std/net/http1-server.ts` (`Http1Connection.respond`, `acceptEncoding`, `respondEncoded`) | On a kept-alive request the parser reset its head (method, target, version, fields, keep-alive) as it reported `HTTP1_END`, before the program had answered. A response written at `H1_END` was framed from the reset head: a `HEAD` request was answered with a body, which a client or a proxy sharing the connection reads as the start of the next response, and an HTTP/1.0 keep-alive client was answered with chunked framing it cannot read, since the reset version was 1.1. `acceptEncoding()` and `targetIs` read nothing there either. | **Fixed** (option 1: keep the head, copy nothing). At the keep-alive `HTTP1_END` the parser moves to the request line but holds the head (`headHeld`); the next `next()` resets it before it reads any byte of the next request. The server calls `next()` again only once the response is done (`nextRequest`), so the head stays this request's for its whole response whatever pipelined bytes are fed behind it, and nothing is copied or allocated. `resting()` is false while a head is held, so a slot is not taken for idle with a request still unanswered. Tests: every line of `tests/link/std_http1_end_head` (run as `link/std_http1_end_head: exits with 0 and stdout matches expected.out`); against the base std, 14 of its 49 checks fail, among them `HEAD: no body is owed`, `HEAD: the output is the head alone`, `HTTP/1.0: not chunked`, `pipelined: acceptEncoding at H1_END is the first's gzip`, `fed after: the held head is still the first's` (the next request's bytes fed after `H1_END`, enough to grow the input buffer) and `router: at H1_END the first's route, not a 404`. |
 | H1-6 | Low | `std/net/websocket.ts` (`websocketFrameEvent`, `websocketUnmaskInto`, the field `WsDecoder.frameChecked`) | A text frame's payload was checked as UTF-8 only once the whole frame had arrived, so a peer could send a byte that can never be valid UTF-8 and then keep the connection, and up to `maxMessage` bytes of buffer, for as long as it took to send the rest. RFC 6455 §8.1 asks for the connection to be failed as soon as the bytes so far cannot be a valid prefix. Autobahn's 6.4.3 and 6.4.4 grade the late 1007 NON-STRICT. Nothing invalid was ever handed out; the 1007 was only late. | **Fixed.** A text frame, or a continuation of a text message, is unmasked and checked as its bytes arrive. `frameChecked` records how far the current frame has been checked, so each byte is unmasked and checked once, and the key is rotated to that offset (`websocketUnmaskInto`'s `phase`). A bad byte answers `WS_ERROR` with 1007 while the rest of its frame is still owed. Binary frames are unchanged. Tests: `refused with 1007 inside a frame still arriving`, `refused with 1007 inside a masked frame still arriving` and `refused with 1007 inside a continuation still arriving` in `tests/link/net_websocket` and `_f64` (run as `link/net_websocket: exits with 0 and stdout matches expected.out` and its `_f64` twin) fail on the base, which answered `WS_NEED_MORE`; `a valid prefix of a frame still arriving is not refused`, `masked text fed a byte at a time`, `masked text fragments fed a byte at a time`, `a four-byte character fed a byte at a time` and `a four-byte character across the buffer's growth, fed a byte at a time` pass on both. The message buffer grows with the bytes that have arrived, never to the length a header declares: `a 65536-byte text frame with one byte arrived holds a small buffer` pins it. The interop job's `autobahn` run checks it against an independent client. |
+| H1-7 | Low | `std/net/http1-server.ts` (`Http1Connection.sameHead`, `http1ServerKept`) | The kept-head compare stops at the first byte that differs, so how long `respond` takes can tell whether a response's head equals the one before it on the same connection. Both heads are the same program's answers to the same peer, and nothing is kept across connections or slots (`restart` empties the kept head's record). | **Open, accepted.** Not attacker-relevant: the peer learns at most whether its own two responses share a head, which their bytes already show it. A program that puts a secret in a header and wants no timing signal at all writes it in the body. |
 
 ## Fuzzing
 
@@ -649,6 +650,77 @@ finishes in time (H1-1).
 A kept-alive slot quiet past `headTimeout` is not yet
 due, so it does not make every `expire` walk every slot (H1-4). The pool sheds
 a connection past its size.
+
+**Kept response heads** (`tests/link/net_http1_server_head_reuse`, 925
+checks, written against `main` at `9e49a177`): `respond` copies its previous
+final head only when every input of it is the same, and otherwise writes it
+fresh through `http1WriteResponseHead` and its checks, so a kept head cannot
+carry one response's fields, or a value the writer would refuse, into another.
+The kept head is the connection's own response buffer (`headBytes`, at most
+`H1_HEAD_KEEP`, 1,024 bytes, and `headLengths`, two i32 for each of at most
+`H1_HEAD_FIELDS`, 16, fields); the compare reads only the program's names and
+values and that buffer, never the parser's request head, so the request
+head's layout (each field line kept with its CRLF) does not reach it. The
+checks read every response byte for byte against `http1WriteResponseHead`
+called directly, and `headCopies` says whether it was copied:
+
+- A head is copied only when the status, the framing, the `Connection` the
+  request asked for, the `HttpDate` object and its tick (`formats()`), the
+  number of fields, each name's and each value's length, and every name and
+  value byte match the kept head; the compare runs on every response. Each
+  input changed alone is written fresh (`another status`, `a value of the
+  same length, changed`, `a name of the same length in another case`, `a
+  field fewer, its value never carried over`, `the fields in another order`,
+  the Date tick), and one byte changed at the start, middle and end of a name
+  and of a value of every length from 1 to 33 bytes (each of the compare's
+  byte, four-, eight- and sixteen-byte paths), each against a freshly kept
+  head, is written fresh too. Sixteen fields, the most a kept head holds, are
+  kept and copied; heads of up to three-byte names and values (`short
+  fields`) take the byte-at-a-time compare. The four- and eight-byte
+  compares' own fallback to bytes is not reachable through `respond`, since
+  `http1ServerKept` checks the field fits the kept buffer before it calls
+  them; their guards stay so that no load can pass either array.
+- A value cannot smuggle text past the writer's check. The first version of
+  the compare matched names' lengths but not values', and a last value whose
+  bytes ran on through the kept `\r\nDate: …\r\nContent-Length: n` matched
+  the kept head byte for byte and was answered with it instead of
+  `H1_INVALID`; it was fixed before it reached `main`, by comparing every
+  length first. `a last value spanning the kept Date and Content-Length is
+  refused` (0 before the fix, `H1_INVALID` after) and `a name spanning two
+  kept lines is refused` pin it. The reserved-name check is skipped only on a
+  copy, whose names are those of a head that passed it.
+- A refusal after a copied head is its own: `an error after a copied head is
+  that same 505` (the copied head carried `X-Secret`) and `a target past
+  maxTarget is answered 414 and closed` read the whole output. A `100
+  Continue` is never kept and does not end the kept head (`a 100 after two
+  answers and before a third`).
+- The copy is bounded: it runs only when the head fits `bodyRoom()`, which
+  stops `H1_CONTROL_RESERVE` short of the output's end. A head one byte too
+  big for the room is held (`H1_AGAIN`) with nothing copied or queued (`the
+  same head with one byte too little room is held`, `held: nothing queued`),
+  and copied once the output drains. A head over 1 KiB is never kept.
+- A slot's next connection starts with no kept head: `restart` empties it,
+  so a head the last connection kept is neither copied nor taken for a repeat
+  (`after the restart: written` and `after the restart, kept: written` fail
+  without it; a copy would have had the same bytes as a fresh write, but the
+  kept head was the last connection's state).
+- Memory is bounded and lazy: the buffer is made at the first head that is
+  kept, so a connection whose heads never repeat their shape holds none, and
+  one that keeps heads holds about 1.3 KiB (1,024 bytes of head, 128 of
+  lengths and the arrays' own headers).
+- Work on a miss is bounded. The compare reads a field with guarded word
+  loads (`http1ServerKept`: 16-byte `nish:simd` loads with an overlapping
+  tail from 16 bytes, two u64 loads from 8, two u32 loads from 4, bytes
+  below), each guard checking both arrays, and stops at the first length or
+  byte that differs. A miss after a head of the same shape copies the
+  written head into `headBytes` (`keepHead`, at most `H1_HEAD_KEEP` bytes).
+  After `H1_HEAD_MISSES` (4) heads in a row are written, `respond` neither
+  compares nor keeps until the `Date` turns, so a peer that varies every
+  response pays at most four compares and copies a second per connection,
+  then none (`the fourth miss repeated: off, so written`, `the streak
+  copied nothing past its base`, `the next second: kept, then copied`, a
+  copy ending a streak (`round 2, the third miss's head again`), and `restarted while off:
+  copied`).
 
 **The program's mistakes panic** (one program each): a window outside its
 buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`

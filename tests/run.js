@@ -14355,6 +14355,23 @@ if (dealtHere("arrayChecks")) {
       )
     }
 
+    // A vector store cannot write a class field either: `emitVectorAccess` tags it as
+    // the element data a scalar access of its lane type is (src/emit-arrays.ts).
+    // Untagged, `opt -O3` reloads `this.count` after every `store(v, this.out, i)` in
+    // `@Sink.fill`; tagged, it promotes the field to a register for the whole loop.
+    const vectorReloadLl = path.join(buildDir, "simd_store_field_reload.ll")
+    if (has("opt") && fs.existsSync(vectorReloadLl)) {
+      const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", vectorReloadLl])
+      const body = String(o.stdout).match(/define[^\n]*@Sink\.fill\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loop = body.slice(body.indexOf("\nwhile.body:"), body.indexOf("\nwhile.end:"))
+      const reloads = loop.match(/= load i32, ptr %this\b/g) ?? []
+      check(
+        "simd_store_field_reload: opt -O3 keeps the field in a register across the vector store",
+        o.status === 0 && body !== "" && loop.includes("store <16 x i8>") && reloads.length === 0,
+        o.status === 0 ? `field loads in the loop: ${reloads.length}\n${body}` : String(o.stderr)
+      )
+    }
+
     // A class-field store cannot write an array header, and the header's own `!tbaa`
     // subtree is what tells LLVM so (`headerTbaa`, src/tbaa.ts). Without it `opt -O3`
     // reloads `this.piles`'s `data` after `top.next = null` and again after
@@ -17216,6 +17233,165 @@ if (dealtHere("simd")) {
             !/store i64 0,|@llvm\.memset/.test(plainCtr),
           `${real.why}${plain.why}nish_aes_ctr: ${zeros("nish_aes_ctr")}, nish_aes_ghash: ${zeros("nish_aes_ghash")} volatile zeros\n--- the twin's nish_aes_ctr:\n${plainCtr}`
         )
+      }
+    }
+  }
+
+  // runtime/runtime-aes.c's four kernels end with `nish_aes_clear`, which zeroes every vector
+  // register the caller does not keep and every caller-saved general one, so no round key, H
+  // power or keystream block outlives the call in a register (docs/security/crypto-aead.md,
+  // AEAD-4). Here each kernel's `clang -O2` assembly, on x86-64, x86-64 at x86-64-v3 and
+  // aarch64, must leave through the clear: every `ret`, and every tail jump, follows only the
+  // epilogue (pops, the stack pointer, `vzeroupper`) back to a run of zeroing idioms or to a
+  // call of `nish_aes_clear`, or is a jump to it, whose body must be nothing but zeroing
+  // idioms and its `ret`. What the exit runs must zero every vector
+  // register and caller-saved general register the rest of the body names; and a vector
+  // register stored to the stack must land in a buffer the kernel wipes after the store (both
+  // 8-byte halves stored zero: ctr's keystream, ghash's padded block), never a spill no clear
+  // reaches. A twin of the file with no call of `nish_aes_clear` must have every kernel
+  // refused, and a twin whose clear skips xmm0 and v0 must have nish_aes_block refused at the
+  // baseline: the reading is register-exact.
+  if (!only || "simd runtime-aes the AES kernels clear their registers".includes(only)) {
+    if (!HAS_CLANG) {
+      skip("runtime-aes.c: no clang to show its kernels clear their registers")
+    } else {
+      const clearDir = path.join(buildDir, "aes-clear")
+      fs.rmSync(clearDir, { recursive: true, force: true })
+      fs.mkdirSync(clearDir, { recursive: true })
+      const source = fs.readFileSync(path.join(root, "runtime", "runtime-aes.c"), "utf8")
+      const call = "  nish_aes_clear();\n"
+      const noClear = path.join(clearDir, "runtime-aes-no-clear.c")
+      fs.writeFileSync(noClear, source.replaceAll(call, ""))
+      const firstZeros = ['"pxor %%xmm0, %%xmm0\\n\\t', '"movi v0.16b, #0\\n\\t']
+      const partClear = path.join(clearDir, "runtime-aes-part-clear.c")
+      fs.writeFileSync(partClear, firstZeros.reduce((text, line) => text.replace(line, '"'), source))
+      const kernels = ["nish_aes_schedule", "nish_aes_block", "nish_aes_ctr", "nish_aes_ghash"]
+      const x86Names = { a: "rax", b: "rbx", c: "rcx", d: "rdx", si: "rsi", di: "rdi", bp: "rbp", sp: "rsp" }
+      /** A register operand by its whole register: `v3` for xmm3, ymm3, q3 or d3; `rax` for eax; `x5` for w5. */
+      const whole = (operand) => {
+        let m = /^%[xyz]mm(\d+)$/.exec(operand) ?? /^[vqdsh](\d+)(\.\w+)?$/.exec(operand)
+        if (m !== null) return `v${m[1]}`
+        if ((m = /^%r(\d+)[dwb]?$/.exec(operand)) !== null) return `r${m[1]}`
+        if ((m = /^%[re]?(a|b|c|d|si|di|bp|sp)[xlh]?$/.exec(operand)) !== null) return x86Names[m[1]]
+        if ((m = /^[xw](\d+)$/.exec(operand)) !== null) return `x${m[1]}`
+        return null
+      }
+      const callerSaved = new Set(["rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"])
+      for (let i = 0; i <= 17; i++) callerSaved.add(`x${i}`)
+      /** The registers one zeroing idiom clears, or null for any other instruction. */
+      const zeroes = (line) => {
+        if (line === "vzeroall") return Array.from({ length: 16 }, (_, i) => `v${i}`)
+        let m = /^pxor\s+(%xmm\d+), (%xmm\d+)$/.exec(line) ?? /^xorl\s+(%\w+), (%\w+)$/.exec(line)
+        if (m !== null && m[1] === m[2]) return [whole(m[1])]
+        if ((m = /^movi\s+(v\d+)\.16b, #0$/.exec(line)) !== null) return [m[1]]
+        if ((m = /^mov\s+(x\d+), xzr$/.exec(line)) !== null) return [m[1]]
+        return null
+      }
+      const epilogue = /^(popq\s|vzeroupper$|add\s+sp, sp, #|addq\s+\$\d+, %rsp$|ldp\s+x(19|2\d|30), x(2\d|30), \[sp|ldr\s+x(19|2\d|30), \[sp)/
+      /** The registers `body` points into its own frame: `mov x12, sp`, `add x9, sp, #16`, `leaq 8(%rsp), %rdi`. */
+      const frameBases = (body) =>
+        new Set(body.flatMap((line) => /^(?:mov|add|sub)\s+(x\d+), (?:sp|x29)\b/.exec(line)?.[1] ?? /^leaq\s+.*\(%r[sb]p(?:,[^)]*)?\), %(\w+)$/.exec(line)?.[1] ?? []))
+      /**
+       * The stack offsets a vector store writes, or null for any other instruction. A vector store
+       * through any other base writes memory the caller passed (the output, the GHASH state), which is
+       * the kernel's result, not a spill.
+       */
+      const vectorStore = (line, bases) => {
+        let m = /^v?mov\w*\s+%([xy])mm\d+, (-?\d*)\(%rsp\)$/.exec(line)
+        if (m !== null) return Array.from({ length: m[1] === "y" ? 4 : 2 }, (_, i) => Number(m[2] || 0) + 8 * i)
+        if ((m = /^str\s+q\d+, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        // Any other vector store to the stack or the frame (a pair, an unscaled or indexed offset, a
+        // register that points into the frame) is read as a spill no wipe reaches.
+        if (/^(v?mov\w*\s+%[xy]mm\d+, .*\(%r[sb]p(,[^)]*)?\)|st(r|p|ur)\s+[qd]\d+, .*\[(sp|x29)\b)/.test(line)) return [Number.NaN]
+        m = /^v?mov\w*\s+%[xy]mm\d+, .*\(%(\w+)(?:,[^)]*)?\)$/.exec(line) ?? /^st(?:r|p|ur)\s+[qd]\d+, .*\[(x\d+)\b/.exec(line)
+        return m !== null && bases.has(m[1]) ? [Number.NaN] : null
+      }
+      /** The stack offsets a zero store of 8 bytes clears, or null for any other instruction. */
+      const zeroStore = (line) => {
+        let m = /^movq\s+\$0, (-?\d*)\(%rsp\)$/.exec(line) ?? /^str\s+xzr, \[sp(?:, #(\d+))?\]$/.exec(line)
+        if (m !== null) return [Number(m[1] || 0)]
+        if ((m = /^stp\s+xzr, xzr, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        return null
+      }
+      /** What is wrong with each kernel of `file` on `target`, by name: an empty list when it clears. */
+      const read = (file, target) => {
+        const o = spawnSync(
+          "clang",
+          ["-O2", "-S", "-ffreestanding", `--target=${target.triple}`, ...(target.flags ?? []), "-I", path.join(root, "runtime"), file, "-o", "-"],
+          { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+        )
+        const lines = String(o.stdout).split("\n")
+        const out = new Map()
+        // The registers `nish_aes_clear` zeroes, when its body is zeroing idioms and a `ret`.
+        const clearBody = o.status === 0 ? functionBody(lines, "nish_aes_clear", target) : null
+        const clearZeroes = clearBody?.slice(0, -1).map(zeroes) ?? [null]
+        const cleared = /^retq?$/.test(clearBody?.at(-1) ?? "") && clearZeroes.every((regs) => regs !== null) ? new Set(clearZeroes.flat()) : new Set()
+        const toClear = /^(jmp|b|callq?|bl)\s+nish_aes_clear$/
+        for (const kernel of kernels) {
+          const body = o.status === 0 ? functionBody(lines, kernel, target) : null
+          if (body === null) {
+            out.set(kernel, [`no ${kernel} in the assembly${o.stderr ? `: ${o.stderr}` : ""}`])
+            continue
+          }
+          const faults = []
+          const clears = []
+          const inClear = new Set()
+          const bases = frameBases(body)
+          body.forEach((line, at) => {
+            const wiped = new Set(body.slice(at + 1).flatMap((later) => zeroStore(later) ?? []))
+            if ((vectorStore(line, bases) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
+            const tail = /^(jmp|b)\s+nish_aes_clear$/.test(line)
+            if (!tail && !/^retq?$/.test(line)) return
+            let i = at - 1
+            while (i >= 0 && epilogue.test(body[i])) i--
+            const zeroed = new Set()
+            if (tail || (i >= 0 && toClear.test(body[i]))) {
+              for (const reg of cleared) zeroed.add(reg)
+              if (!tail) i--
+            }
+            for (; i >= 0 && zeroes(body[i]) !== null; i--) {
+              for (const reg of zeroes(body[i])) zeroed.add(reg)
+              inClear.add(i)
+            }
+            clears.push({ at, zeroed })
+          })
+          if (clears.length === 0) faults.push("no ret and no jump to nish_aes_clear")
+          const used = new Set()
+          body.forEach((line, at) => {
+            if (inClear.has(at)) return
+            for (const operand of line.split(/[\s,()[\]{}]+/).slice(1)) {
+              const reg = whole(operand)
+              if (reg !== null && (reg.startsWith("v") || callerSaved.has(reg))) used.add(reg)
+            }
+          })
+          for (const { at, zeroed } of clears) {
+            const left = [...used].filter((reg) => !zeroed.has(reg))
+            if (left.length > 0) faults.push(`the ret at instruction ${at} leaves ${left.join(" ")} uncleared`)
+          }
+          out.set(kernel, faults)
+        }
+        return out
+      }
+      const show = (verdicts) => [...verdicts].map(([kernel, faults]) => `${kernel}: ${faults.length === 0 ? "clears" : faults.join("; ")}`).join("\n")
+      for (const target of [...CT_TARGETS, ctAtLevel("x86-64-v3")]) {
+        const name = ctTargetName(target)
+        const real = read("runtime/runtime-aes.c", target)
+        const bare = read(noClear, target)
+        check(
+          `runtime-aes.c on ${name}: the AES kernels clear their registers at clang -O2 (each ret or tail jump reaches, past the epilogue, a run of zeroing idioms or nish_aes_clear that covers every vector and caller-saved register the kernel names, and every vector stored to the stack lands in a wiped buffer), where a twin with no nish_aes_clear call has all four refused`,
+          source.split(call).length - 1 === kernels.length &&
+            [...real.values()].every((faults) => faults.length === 0) &&
+            [...bare.values()].every((faults) => faults.length > 0),
+          `--- runtime-aes.c:\n${show(real)}\n--- the twin with no clear:\n${show(bare)}`
+        )
+        if (target.level === undefined) {
+          const part = read(partClear, target)
+          check(
+            `runtime-aes.c on ${name}: a twin whose clear skips the first vector register has nish_aes_block refused`,
+            firstZeros.every((line) => source.includes(line)) && (part.get("nish_aes_block") ?? []).some((fault) => / v0( |$)/.test(fault)),
+            show(part)
+          )
+        }
       }
     }
   }
@@ -29837,6 +30013,16 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
     ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
     ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_guard", "a load a too-short loop guard does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_resized", "a load after a call that shrinks the array its guard proved", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_unfloored", "a load under `i <= n - 16` with `i` not known non-negative", "3\n", "index out of range: 18446744073709551615 >= 20"],
+    ["simd_access_oob_loop_pop", "a load after a `pop` in the loop its hoisted guard proved", "1\n", "index out of range: 4 >= 4"],
+    ["simd_access_oob_alias_pop", "a load after its array shrinks through a second handle", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_field_swap", "a load of a field array a method replaced after the guard", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_strict", "a load a strict guard one lane short does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_below", "a load `i <= n - 2` with `n < xs.length` does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_huge_offset", "a load at `i + c` whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
+    ["simd_access_oob_huge_literal", "a load at a literal whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
   ]
   for (const [name, what, stdout, words] of oobCases) {
     const exe = buildCaseIn(simdDir, name)
@@ -34907,6 +35093,104 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
     }
   }
+}
+
+// ---- nish/page/frame: the framebuffer presenter and the fixed-step loop ------------
+// tests/page-frame/check.mjs runs runtime/page-frame.mjs under Node against fake
+// WebGPU, WebGL 2 and Canvas 2D objects and prints a line per check. A real
+// browser is not run here: tests/page-frame/smoke-manual.cjs is the manual
+// Chromium smoke a change to the presenter is tried with.
+if (!only || "page-frame".includes(only)) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "page-frame", "check.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // Each line is `ok <name>` or `not ok <name>\t<detail>`, and the last
+  // `checks: <n>`: a run that stopped early prints fewer lines than it counts,
+  // or no count at all. The count is pinned, so a check that goes missing
+  // (a block skipped, a loop that ran short) is caught too; a check added or
+  // removed moves it.
+  const PAGE_FRAME_CHECKS = 114
+  const out = res.stdout.split("\n")
+  const lines = out.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = out.find((line) => line.startsWith("checks: "))
+  check(
+    "page-frame: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${lines.length}` && lines.length === PAGE_FRAME_CHECKS,
+    shown(res)
+  )
+  for (const line of lines) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`page-frame: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "page-frame")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "nish-page-frame.d.mts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, createPresenter, runFixedStep } from "./nish-page-frame.mjs"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement, pixels: Int32Array): Promise<number> => {",
+      "  const presenter = await createPresenter(canvas, {",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string) => console.warn(from, to, reason),",
+      "  })",
+      "  presenter.resize(canvas.clientWidth, canvas.clientHeight, devicePixelRatio)",
+      "  const loop = runFixedStep({",
+      "    stepsPerSecond: 60,",
+      "    maxStepsPerFrame: 4,",
+      "    step: () => undefined,",
+      "    render: (alpha: number, frameMs: number) => presenter.present(pixels, 4, 2),",
+      "  })",
+      "  const reasons: string[] = presenter.attempts.map((a) => `${a.backend}: ${a.reason}`)",
+      "  const now: HTMLCanvasElement = presenter.canvas",
+      "  loop.stop()",
+      "  presenter.destroy()",
+      "  return loop.refreshHz + loop.fps + reasons.length + now.width",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, noUnusedParameters: false },
+      include: [],
+      files: ["nish-page-frame.d.mts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("page-frame: a page type-checks against runtime/page-frame.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  check(
+    "page-frame: npm pack ships runtime/page-frame.mjs and runtime/page-frame.d.ts",
+    packed.includes("runtime/page-frame.mjs") && packed.includes("runtime/page-frame.d.ts"),
+    shown(pack)
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/frame"]
+  check(
+    "page-frame: package.json exports ./page/frame",
+    exported !== undefined &&
+      exported.types === "./runtime/page-frame.d.ts" &&
+      exported.default === "./runtime/page-frame.mjs",
+    JSON.stringify(exported)
+  )
 }
 
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
