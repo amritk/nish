@@ -614,10 +614,14 @@ export class Sha256 {
     for (let i: i32 = 0; i < words; i += 1) {
       const word: u32 = state[i]
       const p: i32 = at + 4 * i
-      out[p] = toU8(word >>> 24)
-      out[p + 1] = toU8(word >>> 16)
-      out[p + 2] = toU8(word >>> 8)
-      out[p + 3] = toU8(word)
+      // Always true once the window check above passed; written out so the
+      // prover sees each byte's index is inside `out`.
+      if (p >= 0 && p + 3 < toI32(out.length)) {
+        out[p] = toU8(word >>> 24)
+        out[p + 1] = toU8(word >>> 16)
+        out[p + 2] = toU8(word >>> 8)
+        out[p + 3] = toU8(word)
+      }
     }
   }
 }
