@@ -6484,28 +6484,39 @@ function owned(s: string): string {
 ```llvm
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %copy.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %copy.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
 ```
 
 - **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
   for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
   pointer that is dangling, already freed, or to a buffer with no NUL is
   undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
-  So the call is an `unchecked` [panic site](#panic-sites) that is allowed
-  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
-  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
-  which is `ffi`.
-- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  It is an `unsafe` call to `--deny unsafe`, and the `CPtr` it reads came from
+  a `declare function`, which is `ffi`.
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](#panic-sites) kind, as
+  [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)'s does:
+  `` `readCString` read a NULL pointer ``, exit 1
+  (`tests/cases/panics_ffi_read_cstring_null`). The parameter is `CPtr`, so
   an unnarrowed pointer is
   `` `readCString` expects an argument of type CPtr, got CPtr | null ``
-  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
-  compiler trusts is the declaration: a `declare function` whose result is
-  declared `CPtr` gets no check after the call, so a C function that may
-  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
-  through. Declare such a result `CPtr | null`.
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
+  `declare function` declared to answer `CPtr` may still answer `NULL`, so
+  the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
+  above. No proof removes the test, so `--deny-panics` refuses a call in its
+  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
   constructor and released with its owner, and refused inside a `using a =
@@ -9016,8 +9027,8 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
-| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
-| `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `readCString(p: CPtr): string` | a NULL test that panics `ffi-null`, then a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates; may panic | `ffi_owned_string`, `panics_ffi_read_cstring_null`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
+| `readStruct(p: CPtr): T` | a NULL test that panics `ffi-null`, then `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates; may panic | `ffi_struct_read`, `panics_ffi_read_struct_null`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
 | `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
@@ -9071,10 +9082,11 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
-  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
-  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
-  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
+  its pointer for `NULL`, an `ffi-null` site no proof removes
+  (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
+  refuses a call to either in its scope. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -15107,12 +15119,16 @@ holds a NUL byte, which C would read as the end of the string:
 is `NULL`:
 `` `name` returned NULL for a `string` result; declare it `string | null` ``;
 or the pointer of a [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)
-call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``
+call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``;
+or the pointer of a
+[`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) call that is
+`NULL`: `` `readCString` read a NULL pointer ``
 
 - *What proves it away:* nothing: a result declared `string | null` reads
   `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`); the
-  `readStruct` test stays at every call
-  (`tests/cases/panics_ffi_read_struct_null`)
+  `readStruct` and `readCString` tests stay at every call
+  (`tests/cases/panics_ffi_read_struct_null`,
+  `tests/cases/panics_ffi_read_cstring_null`)
 
 **`ffi-length`**: a call to a
 [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is
@@ -15142,12 +15158,11 @@ through further calls
 
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
-behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated (`readStruct` tests its pointer for `NULL`, so it is an
-`ffi-null` site below)
+behaviour (`readCString` and `readStruct` test their pointer for `NULL`, so
+each is an `ffi-null` site above)
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
-  author's word that the index is in range, or that the pointer is, not a
+  author's word that the index is in range, not a
   proof, and the `nish:unsafe` import its module must write is the opt-in to
   that word, so it is listed with `"allowed": true` and, like `oom`, never
   makes a function one that may panic (`tests/cases/deny_panics_unsafe`)

@@ -64,8 +64,8 @@ export const isNishSpecifier = (specifier: string): boolean => specifier.startsW
  * undefined behaviour out of range, a wrapping operation is defined where
  * the operator it replaces is not, `readCString` (WP27 S3.3) reads a C
  * address until a `NUL` nothing proves is there, and `readStruct` (S4.2)
- * copies a struct's worth of bytes from one (after a `NULL` test that panics
- * with `ffi-null`; nothing checks the size), so a call to any of them has
+ * copies a struct's worth of bytes from one (each after a `NULL` test that
+ * panics with `ffi-null`; nothing checks the `NUL` or the size), so a call to any of them has
  * to be visible where it is written. `cErrno` (WP27 S5) checks nothing either:
  * it answers whatever the last foreign call left, which is only meaningful
  * where C documents that it sets errno. The eight are reached only through an import of this module

@@ -2326,15 +2326,17 @@ so `free(p)` straight after it is safe.
 
 The parameter is `CPtr`, so an unnarrowed `CPtr | null` is refused (``
 `readCString` expects an argument of type CPtr, got CPtr | null ``) and `if
-(p !== null)` comes first; a `declare function` whose result is declared
-`CPtr` gets no check, so declare a result that may be `NULL` as `CPtr |
-null`.
+(p !== null)` comes first. A `declare function` declared to answer `CPtr`
+may still answer `NULL`, so the call tests `p` first and panics with
+`ffi-null` on `NULL` (`` `readCString` read a NULL pointer ``, exit 1), as
+`readStruct` does; declare a result that may be `NULL` as `CPtr | null`.
 
 The copy is new on every call and is the calling function's allocation, and
 it is refused inside a `using a = arena()` block that would release one held
 outside it (`` `readCString(p)` may be allocated inside the `using arena()`
-block ``). Under `--deny-panics` it is an allowed `unchecked` site, with the
-copy's `oom` beside it, and the pointer it reads is `ffi`. It lowers the same
+block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+proof removes, so the scope refuses the call (the copy's `oom` beside it is
+allowed), and the pointer it reads is `ffi`. It lowers the same
 on wasm32, where whether the program links is the `declare function`'s
 question. It has no Node form, as a `CPtr` comes only from a `declare
 function`, which Node cannot call. Capability: unsafe.
@@ -2345,7 +2347,7 @@ function readCString(p: CPtr): string
 
 <scalar-field name="p" type="CPtr" required>
 
-the address a `declare function` handed back.
+the address a `declare function` handed back; `NULL` panics.
 
 </scalar-field>
 
