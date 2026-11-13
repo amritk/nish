@@ -1146,6 +1146,12 @@ const pathMtu = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
+/** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
+const VECTOR_ACCESS_TBAA = "vector loads and stores in range"
+const vectorAccessTbaa = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: VECTOR_ACCESS_TBAA, why }))
+  )
 
 /**
  * The words WP39 G6's changelog line starts with: the branch's runtime commit
@@ -1190,6 +1196,56 @@ const pgTls = (why, filesByProgram) =>
   )
 
 const DECLARED = [
+  // A vector load or store carries the scope and TBAA tag a scalar element
+  // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
+  ...vectorAccessTbaa(
+    "a nish:simd vector load or store gains the !alias.scope, !noalias and !tbaa a scalar element access of its lane type carries, and src/bounds.ts drops its check where a guard proves every lane in range (`i <= n - 16`, a literal index into a known length); a scalar index under an `i < w.length - c` guard is proven too, so the modules with such an access move",
+    {
+      "tests/cases/simd_access.ts": ["simd_access.ll"],
+      "tests/cases/simd_access_alias.ts": ["simd_access_alias.ll"],
+      "tests/cases/simd_access_oob_guard.ts": ["simd_access_oob_guard.ll"],
+      "tests/cases/simd_access_oob_resized.ts": ["simd_access_oob_resized.ll"],
+      "tests/cases/simd_access_oob_unfloored.ts": ["simd_access_oob_unfloored.ll"],
+      "tests/cases/simd_access_oob_loop_pop.ts": ["simd_access_oob_loop_pop.ll"],
+      "tests/cases/simd_access_oob_alias_pop.ts": ["simd_access_oob_alias_pop.ll"],
+      "tests/cases/simd_access_oob_field_swap.ts": ["simd_access_oob_field_swap.ll"],
+      "tests/cases/simd_access_oob_strict.ts": ["simd_access_oob_strict.ll"],
+      "tests/cases/simd_access_oob_below.ts": ["simd_access_oob_below.ll"],
+      "tests/cases/simd_access_oob_huge_offset.ts": ["simd_access_oob_huge_offset.ll"],
+      "tests/cases/simd_access_oob_huge_literal.ts": ["simd_access_oob_huge_literal.ll"],
+      "tests/cases/simd_access_order.ts": ["simd_access_order.ll"],
+      "tests/cases/simd_access_proven.ts": ["simd_access_proven.ll"],
+      "tests/cases/simd_values.ts": ["simd_values.ll"],
+      "tests/cases/simd_zero_fill.ts": ["simd_zero_fill.ll"],
+      "tests/cases/simd_access_oob.ts": ["simd_access_oob.ll"],
+      "tests/cases/simd_access_oob_first.ts": ["simd_access_oob_first.ll"],
+      "tests/cases/simd_access_oob_negative.ts": ["simd_access_oob_negative.ll"],
+      "tests/cases/simd_chacha_quarter.ts": ["simd_chacha_quarter.ll"],
+      "tests/cases/simd_load_field_loop.ts": ["simd_load_field_loop.ll"],
+      "tests/cases/simd_store_field_reload.ts": ["simd_store_field_reload.ll"],
+      "tests/cases/simd_store_oob.ts": ["simd_store_oob.ll"],
+      "docs/cookbook/simd-load-store.ts": ["simd-load-store.ll"],
+      "bench/http1-parse/main.ts": ["old-copy.ll", "old.ll"],
+      "tests/link/net_http1_parse_diff/main.ts": ["old.ll"],
+      "tests/link/simd_parallel_capture/main.ts": ["main.ll"],
+      "examples/http-get-json.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["outbound.ll"],
+      "tests/link/net_outbound/main.ts": ["outbound.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream_release/main.ts": ["outbound.ll"],
+    }
+  ),
   // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
   // by one interleaved wNAF pass, so the module every importer writes moves.
   ...["p256.ll", "std_crypto_p256.ll"].map((file) => ({

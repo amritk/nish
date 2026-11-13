@@ -14355,6 +14355,23 @@ if (dealtHere("arrayChecks")) {
       )
     }
 
+    // A vector store cannot write a class field either: `emitVectorAccess` tags it as
+    // the element data a scalar access of its lane type is (src/emit-arrays.ts).
+    // Untagged, `opt -O3` reloads `this.count` after every `store(v, this.out, i)` in
+    // `@Sink.fill`; tagged, it promotes the field to a register for the whole loop.
+    const vectorReloadLl = path.join(buildDir, "simd_store_field_reload.ll")
+    if (has("opt") && fs.existsSync(vectorReloadLl)) {
+      const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", vectorReloadLl])
+      const body = String(o.stdout).match(/define[^\n]*@Sink\.fill\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loop = body.slice(body.indexOf("\nwhile.body:"), body.indexOf("\nwhile.end:"))
+      const reloads = loop.match(/= load i32, ptr %this\b/g) ?? []
+      check(
+        "simd_store_field_reload: opt -O3 keeps the field in a register across the vector store",
+        o.status === 0 && body !== "" && loop.includes("store <16 x i8>") && reloads.length === 0,
+        o.status === 0 ? `field loads in the loop: ${reloads.length}\n${body}` : String(o.stderr)
+      )
+    }
+
     // A class-field store cannot write an array header, and the header's own `!tbaa`
     // subtree is what tells LLVM so (`headerTbaa`, src/tbaa.ts). Without it `opt -O3`
     // reloads `this.piles`'s `data` after `top.next = null` and again after
@@ -29720,6 +29737,16 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
     ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
     ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_guard", "a load a too-short loop guard does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_resized", "a load after a call that shrinks the array its guard proved", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_unfloored", "a load under `i <= n - 16` with `i` not known non-negative", "3\n", "index out of range: 18446744073709551615 >= 20"],
+    ["simd_access_oob_loop_pop", "a load after a `pop` in the loop its hoisted guard proved", "1\n", "index out of range: 4 >= 4"],
+    ["simd_access_oob_alias_pop", "a load after its array shrinks through a second handle", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_field_swap", "a load of a field array a method replaced after the guard", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_strict", "a load a strict guard one lane short does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_below", "a load `i <= n - 2` with `n < xs.length` does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_huge_offset", "a load at `i + c` whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
+    ["simd_access_oob_huge_literal", "a load at a literal whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
   ]
   for (const [name, what, stdout, words] of oobCases) {
     const exe = buildCaseIn(simdDir, name)
