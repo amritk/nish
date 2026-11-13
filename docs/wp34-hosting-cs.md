@@ -312,7 +312,7 @@ itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 | **R2** | Extended CONNECT (RFC 9220), HTTP datagrams (RFC 9297) and **WebTransport over HTTP/3**: sessions, datagrams, unidirectional and bidirectional streams, and close. It is pinned to the draft Chrome negotiates today; that draft's SETTINGS and headers are recorded once from a `wtransport` 0.7 exchange and held as a golden | Chrome through Playwright; a `wtransport` (Rust) client against the Nish server, which is the cross-implementation test | R1, Q4 | built against a Nish client, with a `wtransport` 0.7 exchange recorded and replayed byte for byte; Chromium through Playwright opens a WebTransport session and echoes a datagram and a stream in S2's interop job (#487) |
 | **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 | built in nish as `examples/relay/`, with the `cargo test` cases and fixtures ported and every refusal across loopback; N9's soak flat (0 bytes a session over 100,000, with #492, #512 and #515); `boot-check`, `bench:offload` and the cs port open, 0.17.0 carrying R2; DATA down above 1,164 bytes landed with DPLPMTUD (#1458) |
 
-**What is left, in order.** *2026-11-12:* K2 to K4's disassembly (#1464), K5's safegcd field inversion and windowed verify (#1469), K5's cached table for G and verify's scalar safegcd (#1516) and 64-bit limbs (#1518), T1's secp256r1 key shares and TLS-4 (#1449, #1479), WP39 G1 (#1437) and G2 (#1454), Q3's congestion cases (#1477) and A1's DPLPMTUD (#1458) are done. *2026-11-13:* H3-5's HTTP/3 clock with WT-2's decision (#1513), AEAD-4's narrowing with the `--cpu` finding (#1510) and #1485's rebind fix (#1511, QUIC-12) are done too. What remains here is the cs side.
+**What is left, in order.** *2026-11-12:* K2 to K4's disassembly (#1464), K5's safegcd field inversion and windowed verify (#1469), T1's secp256r1 key shares and TLS-4 (#1449, #1479), WP39 G1 (#1437) and G2 (#1454), Q3's congestion cases (#1477) and A1's DPLPMTUD (#1458) are done. *2026-11-13:* K5's cached table for G and verify's scalar safegcd (#1516) and 64-bit limbs (#1518), H3-5's HTTP/3 clock with WT-2's decision (#1513), AEAD-4's narrowing with the `--cpu` finding (#1510) and #1485's rebind fix (#1511, QUIC-12) are done too. What remains here is the cs side.
 
 *2026-11-08:* the chain Q3 → Q4 → R1 → R2 that
 was the critical path is built, and A1 with it. So are the HTTP/1.1 and
@@ -1068,6 +1068,53 @@ noise.
 now the largest piece of the signature after `k·G`: 552,948 Ir, 22.4% of it,
 still by Fermat. The other two are 64-bit limbs and the verify path, which
 keeps the variable-base window and did not move. X25519 is now the handshake's largest module, at 3,147,968 Ir.
+
+#### K5: P-256, the cached table for G and verify's inversion — the result
+
+Two changes landed together. The first is the signed all-bits-set comb for
+`k·G` (11 combs of 6 teeth, 352 points, 22 KiB, built on the first signature
+into `P256SignScratch`; ECC-7). The second has `p256Verify` invert its public
+`s` with the constant-time safegcd `p256ScalarInverse` in place of Fermat's
+`a^(n - 2)` ladder, which leaves `std/crypto/p256.ts` and survives only as the
+reference in the inverse test's seam (ECC-4). The bar was: sign faster, and
+verify not slower.
+
+**How it was measured.** On this branch's head and on `bf63d260` (`main`
+before the stage). Each was built by the same `build/nish` from a copy of
+`bench/p256.ts` importing its tree's own `p256.ts`, with a byte-identical copy
+of the `bf63d260` binary as the twin. Instructions are from callgrind,
+measured per call as the difference between two scales of one run. Every
+binary printed the pinned checksum, 1238268086. The machine is an
+`Intel(R) Xeon(R) Processor @ 2.30GHz`.
+
+| Workload | `bf63d260` Ir | Twin Ir | Comb only Ir | Head Ir | Change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Public key (`k·G`) | 1,778,164 | 1,778,164 | 1,277,626 | 1,277,626 | **−28.1%** |
+| Sign (`p256SignSha256`) | 1,917,782 | 1,917,782 | 1,417,255 | 1,417,268 | **−26.1%** |
+| Verify | 9,179,460 | 9,179,460 | 9,179,463 | 8,437,142 | **−8.1%** |
+
+The twin matches to the instruction, so the band is 0 Ir. The comb moves
+key generation and signing. The inversion moves verification by 742,318 Ir,
+about Fermat's 776,501 less safegcd's 33,661, as ECC-4 measures each through
+the inverse test's seam.
+
+**Wall clock** (`node bench/p256.mjs --self --binary <bf63d260>`, 9 rounds of
+3): at the minimum, head is 63.6 µs against 84.4 µs for the public key, 72.1
+against 91.6 for sign and 425.4 against 448.2 for verify. Head's own copy
+is within 0.9%, 0.5% and 3.1% at the minimum (+11.4% on sign's median, so
+the medians are noisy).
+
+**The handshake** (`node bench/tls-handshake.mjs --baseline bf63d260`, 16
+rounds of 600). Server CPU, min / median µs: head 983 / 1108, head's copy
+1000 / 1092, `bf63d260` 1000 / 1133, its copy 1017 / 1150. Head is 1.7% /
+2.3% below `bf63d260`, and the copies differ by 1.7% / 1.5%. The fall is
+within the band, so this page claims the handshake is not slower and nothing
+more. The handshake signs once and does not verify.
+
+**What is left.** The handshake's P-256 cost is now the signature's field
+inversion and the comb's additions. X25519 is still the largest module.
+Verification still computes `u1·G + u2·Q` in one public double
+multiplication (`p256DoubleMultPublic`), which does not use the comb.
 
 ## 6. Decisions for the owner
 

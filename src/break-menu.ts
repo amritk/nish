@@ -5,9 +5,9 @@
 //
 // It is pure: `stepBreakMenu` reads one step of input and answers what the
 // director should do next, `drawBreakMenu` paints a framebuffer, and neither
-// touches the terminal. The director owns the terminal, applies settings and
-// switches to the game. The one file this module touches is the settings file
-// (`loadBreakSettings`, `saveBreakSettings`), which the director names.
+// touches the terminal. The director applies settings and switches to the
+// game; where the settings are kept between runs is the host's
+// (`break-settings-file.ts` for the terminal).
 //
 // Like the game it follows two rules. Every array is made in `newBreakMenu`
 // and reused, so a step or a frame allocates nothing. And anything that moves
@@ -63,9 +63,7 @@ import {
   KEY_UP,
   TermEvent,
 } from "nish/term"
-import { TermInput } from "nish/term-io"
-import { CLI } from "./branding"
-import { dirname } from "./paths"
+import { StepInput } from "../std/input"
 
 // ---- The interface the director reads ---------------------------------------
 
@@ -131,11 +129,11 @@ export const resolutionChoice = (index: i32): i32 => {
 
 /** What the Settings screen edits; the director reads it and applies it. */
 export class BreakSettings {
-  /** An index for `fpsChoice`: 0 is adaptive. */
+  /** An index for `fpsChoice`: 0 is adaptive. Only a terminal host applies it, when it opens the terminal. */
   fps: i32
   /** An index for `resolutionChoice`: 0 is auto. */
   resolution: i32
-  /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. */
+  /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. Only a terminal host reads it. */
   graphics: i32
   /** 0 low (no glow, no trails, a third of the sparks), 1 high. */
   effects: i32
@@ -224,49 +222,6 @@ export const parseBreakSettings = (text: string): BreakSettings => {
   }
   applySettingLine(s, text.slice(start))
   return s
-}
-
-/**
- * Where `nish break` keeps its settings: `${xdg}/nish/break` when `xdg` is
- * absolute, else `${home}/.config/nish/break` when `home` is, else "" for
- * nowhere — `runCacheRoot`'s rules, given the two variables' values.
- */
-export const breakSettingsPath = (xdg: string, home: string): string => {
-  if (xdg.startsWith("/")) {
-    return `${xdg}/${CLI}/break`
-  }
-  return home.startsWith("/") ? `${home}/.config/${CLI}/break` : ""
-}
-
-/** The settings kept at `path`; the defaults when `path` is "" or cannot be read as a file. */
-export const loadBreakSettings = (path: string): BreakSettings => {
-  const text: string | null = path === "" ? null : readFileSyncOrNull(path)
-  if (text === null) {
-    return new BreakSettings()
-  }
-  return parseBreakSettings(text)
-}
-
-/**
- * Keep `s` at `path`, making its directory and that directory's parent when
- * they are missing. It is written beside `path` and renamed over it, so a
- * failed write leaves the old file. Answers whether it was kept; a failure
- * anywhere answers false and says nothing.
- */
-export const saveBreakSettings = (path: string, s: BreakSettings): boolean => {
-  if (path === "") {
-    return false
-  }
-  const dir: string = dirname(path)
-  if (!mkdirSync(dirname(dir)) || !mkdirSync(dir)) {
-    return false
-  }
-  const temp: string = `${path}.tmp`
-  if (writeFileSyncMode(temp, formatBreakSettings(s), 0o644) < 0 || renameSync(temp, path) < 0) {
-    unlinkSync(temp)
-    return false
-  }
-  return true
 }
 
 // ---- Screens and layout -----------------------------------------------------
@@ -459,7 +414,7 @@ export class BreakMenu {
   selected: i32
   /** The level Play and Start level begin at, 1 to 6. */
   level: i32
-  /** The Settings row selected, 0 to 6. */
+  /** The Settings row selected, `ROW_FPS` to `ROW_BACK`. */
   row: i32
   /** The frame rate and graphics when Settings opened, to tell whether leaving needs `MENU_APPLY`. */
   entryFps: i32
@@ -470,6 +425,11 @@ export class BreakMenu {
   rngState: i32
   /** Whether the outro has answered the level, so later steps do not answer it again. */
   outroAnswered: boolean
+  /**
+   * Whether the host opens a terminal, which the frame rate and graphics rows
+   * are settings of; without one Settings leaves them out. True until a host says otherwise.
+   */
+  terminal: boolean
 
   /** A menu on the title screen; `newBreakMenu` is the way to make one. */
   constructor(level: i32, seed: i32, settings: BreakSettings) {
@@ -485,6 +445,7 @@ export class BreakMenu {
     this.entryGraphics = settings.graphics
     this.outroTick = 0
     this.outroAnswered = false
+    this.terminal = true
     const bricks: i32 = logoBrickCount()
     this.homeXs = new Array<f64>(bricks)
     this.homeXs.fill(0.0)
@@ -619,7 +580,7 @@ const serveBall = (menu: BreakMenu): void => {
  * step's key presses act. It answers `MENU_STAY`, `MENU_QUIT`, `MENU_APPLY`,
  * or the level to play on the step the outro ends.
  */
-export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 => {
+export const stepBreakMenu = (menu: BreakMenu, input: StepInput): i32 => {
   // Wrapped long before i32 runs out, so a menu left open for months does not
   // panic on the checked add; the animations jump once a billion steps.
   menu.tick = menu.tick >= TICK_WRAP ? 0 : menu.tick + 1
@@ -730,7 +691,7 @@ const pickTitle = (menu: BreakMenu): i32 => {
     menu.screen = SCREEN_HOWTO
   } else if (menu.selected === ITEM_SETTINGS) {
     menu.screen = SCREEN_SETTINGS
-    menu.row = ROW_FPS
+    menu.row = menu.terminal ? ROW_FPS : ROW_RESOLUTION
     menu.entryFps = menu.settings.fps
     menu.entryGraphics = menu.settings.graphics
     snapHighlight(menu)
@@ -757,7 +718,7 @@ const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
     return MENU_QUIT
   }
   if (act === ACT_UP || act === ACT_DOWN) {
-    menu.row = wrap(menu.row, act === ACT_UP ? -1 : 1, ROW_COUNT)
+    menu.row = nextRow(menu, act === ACT_UP ? -1 : 1)
   } else if (act === ACT_LEFT || act === ACT_RIGHT) {
     cycleSetting(menu.settings, menu.row, act === ACT_LEFT ? -1 : 1)
   } else if (act === ACT_BACK || (act === ACT_PICK && menu.row === ROW_BACK)) {
@@ -766,6 +727,30 @@ const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
     cycleSetting(menu.settings, menu.row, 1)
   }
   return MENU_STAY
+}
+
+/** Whether Settings shows `row`: the frame rate and graphics only when the host opens a terminal. */
+const rowShown = (menu: BreakMenu, row: i32): boolean =>
+  menu.terminal || (row !== ROW_FPS && row !== ROW_GRAPHICS)
+
+/** The next row Settings shows from the selected one, a step of `by` (1 or -1) at a time, wrapping. */
+const nextRow = (menu: BreakMenu, by: i32): i32 => {
+  let row: i32 = wrap(menu.row, by, ROW_COUNT)
+  while (!rowShown(menu, row)) {
+    row = wrap(row, by, ROW_COUNT)
+  }
+  return row
+}
+
+/** How many shown rows are above `row`: its line on the Settings screen. */
+const rowLine = (menu: BreakMenu, row: i32): i32 => {
+  let line: i32 = 0
+  for (let r: i32 = 0; r < row; r++) {
+    if (rowShown(menu, r)) {
+      line++
+    }
+  }
+  return line
 }
 
 /** Back to the title, answering `MENU_APPLY` when the frame rate or graphics changed while Settings was open. */
@@ -809,7 +794,7 @@ const graphicsAt = (slot: i32): i32 => (slot <= 0 || slot > 4 ? -1 : 4 - slot)
 /** The world y the highlight bar belongs at for the screen's selection. */
 const highlightTarget = (menu: BreakMenu): f64 =>
   menu.screen === SCREEN_SETTINGS
-    ? ROW_TOP + toF64(menu.row) * ROW_GAP
+    ? ROW_TOP + toF64(rowLine(menu, menu.row)) * ROW_GAP
     : ITEM_TOP + toF64(menu.selected) * ITEM_GAP
 
 /** Move the highlight part of the way to its target, so it slides and settles. */
@@ -961,7 +946,7 @@ const logoSlots = (menu: BreakMenu): i32 => {
  * wait. Any key press skips to the end; the last step answers the level,
  * once: the director may step the menu again before it takes the answer.
  */
-const stepOutro = (menu: BreakMenu, input: TermInput): i32 => {
+const stepOutro = (menu: BreakMenu, input: StepInput): i32 => {
   if (menu.outroAnswered) {
     return MENU_STAY
   }
@@ -1245,8 +1230,13 @@ const drawSettings = (menu: BreakMenu, view: View, alpha: f64, time: f64): void 
   }
   const accent: i32 = hue(time / 400.0)
   drawBar(view, lerp(menu.prevHighlightY, menu.highlightY, alpha), 240.0, accent, 1.0)
+  let line: i32 = 0
   for (let r: i32 = 0; r < ROW_COUNT; r++) {
-    const y: f64 = ROW_TOP + toF64(r) * ROW_GAP
+    if (!rowShown(menu, r)) {
+      continue
+    }
+    const y: f64 = ROW_TOP + toF64(line) * ROW_GAP
+    line++
     const on: boolean = r === menu.row
     drawTextShadow(view, 48.0, y, scale, rowName(r), on ? WHITE : TEXT, SHADOW)
     if (r !== ROW_BACK) {

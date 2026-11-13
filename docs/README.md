@@ -179,7 +179,10 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   colour change re-measures the contrast figures in the file's head.
 - [`site.js`](site/site.js) builds the hero into the empty
   `<div data-nish-hero></div>` at the top of [the landing
-  page](guide/index.md) and tracks the pointer for the cards.
+  page](guide/index.md) and tracks the pointer for the cards. Until it
+  marks the hero's host `data-nish-ready`, `theme.css` holds the page under
+  the hero hidden, so the hero's late arrival pushes nothing a reader is
+  looking at; the hold ends by itself after 1.2s if `site.js` never runs.
 - The landing page is the site's home, not a page of the guide: its route,
   first under `/` in `scalar.config.json` and out of the sidebar, sets a
   `layout` that drops the outline, the page actions and the previous/next
