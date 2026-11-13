@@ -5843,6 +5843,28 @@ const DECLARED = [
     ],
     "tests/link/net_webtransport_f64/main.ts": ["clock.ll"],
   }),
+  // WP55: module storage of `C | null` is root storage, which the seed
+  // refuses as NL2686.
+  ...["tests/cases/root_storage.ts", "tests/cases/root_storage_page.ts", "docs/cookbook/storage-root.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "root storage's object graph",
+      why: "the program declares module storage of a class or null, which the seed refuses with NL2686 and the candidate keeps as root storage, so only the candidate compiles it",
+    })
+  ),
+  // A guarded loader marks a failed release or keep a `trap` only when no
+  // panic recorded its own kind first (guardLoader, src/interop-wasm.ts).
+  ...[
+    ["tests/cases/host_import_string.ts", "host_import_string.mjs"],
+    ["tests/link/net_fetch_async_dns_slow/main.ts", "main.mjs"],
+    ["tests/link/storage_lend_import/main.ts", "main.mjs"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: "the panic kind a failed root keep recorded",
+    why: "the guarded loader's catch around the arena release keeps a panic kind already recorded instead of overwriting it with `trap`",
+  })),
   // The security fixes of this release move the std modules they touch and
   // every program that lays out or calls what they changed.
   {

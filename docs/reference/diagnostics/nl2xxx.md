@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 757 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 762 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14428,4 +14428,362 @@ The message of an error contains:
 
 ```text
 `readStruct(p)` copies into a `declare class` layout, and …
+```
+
+## NL2766
+
+The message of an error contains:
+
+```text
+…: the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_handle.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_handle.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a handle class owns a
+// C resource the runtime cannot move.
+declare function fopen(path: string, mode: string): CPtr | null
+
+class File {
+  readonly file: CPtr | null
+  constructor(path: string) {
+    this.file = fopen(path, "r")
+  }
+}
+
+class Log {
+  out: File
+
+  constructor() {
+    this.out = new File("/dev/null")
+  }
+}
+
+const log = new Array<Log | null>(1)
+
+export const open = (): boolean => log[0] !== null
+```
+
+```text
+Root storage `log` cannot keep Log.out (File): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_interface.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_interface.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: an interface a class
+// implements is a pointer to an object of any of its classes, with no tag.
+interface Shape {
+  side: i32
+}
+
+class Square implements Shape {
+  side: i32 = 2
+}
+
+class Scene {
+  shapes: Shape[]
+
+  constructor() {
+    this.shapes = [new Square()]
+  }
+}
+
+const scene = new Array<Scene | null>(1)
+
+export const total = (): i32 => {
+  const s = scene[0]
+  return s === null ? 0 : s.shapes.length
+}
+```
+
+```text
+Root storage `scene` cannot keep Scene.shapes[] (Shape): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_layout.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_layout.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a C struct layout is
+// C's to own.
+declare class Point {
+  x: i32
+  y: i32
+}
+
+class Path {
+  end: Point
+
+  constructor() {
+    this.end = new Point()
+  }
+}
+
+const path = new Array<Path | null>(1)
+
+export const has = (): boolean => path[0] !== null
+```
+
+```text
+Root storage `path` cannot keep Path.end (Point): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_map.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a `Map` it cannot.
+class Cache {
+  names: Map<string, i32>
+
+  constructor() {
+    this.names = new Map<string, i32>()
+  }
+}
+
+const cache = new Array<Cache | null>(1)
+
+export const size = (): i32 => {
+  const c = cache[0]
+  return c === null ? 0 : c.names.size
+}
+```
+
+```text
+Root storage `cache` cannot keep Cache.names (Map<string, i32>): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_set.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a `Set` it cannot.
+class Seen {
+  ids: Set<i32>
+
+  constructor() {
+    this.ids = new Set<i32>()
+  }
+}
+
+const seen = new Array<Seen | null>(1)
+
+export const count = (): i32 => {
+  const s = seen[0]
+  return s === null ? 0 : s.ids.size
+}
+```
+
+```text
+Root storage `seen` cannot keep Seen.ids (Set<i32>): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+## NL2767
+
+The message of an error contains:
+
+```text
+…` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
+```
+
+[`nl2767_root_storage_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2767_root_storage_export.ts):
+
+```ts
+// Root storage moves its objects between calls, so a page cannot read it.
+class World {
+  tick: i32 = 0
+}
+
+export const world = new Array<World | null>(1)
+
+export const tick = (): i32 => {
+  const w = world[0]
+  return w === null ? -1 : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
+```
+
+## NL2768
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+[`nl2768_root_storage_region.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_region.ts):
+
+```ts
+// A region allocates from an arena of its own, which a root could outlive.
+import { enter, free, region } from "nish:region"
+
+class World {
+  tick: i32 = 0
+}
+
+const world = new Array<World | null>(1)
+
+const build = (): i32[] => [1, 2, 3]
+const count = (xs: i32[]): i32 => xs.length
+
+export const tick = (): i32 => {
+  const r = region(build)
+  const n = enter(r, count)
+  free(r)
+  const w = world[0]
+  return w === null ? n : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+[`nl2768_root_storage_threads.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_threads.ts):
+
+```ts
+// A thread allocates from an arena of its own, which a root could outlive.
+import { AtomicI32 } from "nish/threads"
+
+class World {
+  tick: i32 = 0
+}
+
+const world = new Array<World | null>(1)
+
+export const tick = (): i32 => {
+  const count = new AtomicI32(0)
+  count.add(1)
+  const w = world[0]
+  return w === null ? count.load() : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+## NL2769
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_header.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_header.ts) (compiled with `--emit-header build/test/wordings/nl2769_root_storage_header.h`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_napi.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_napi.ts) (compiled with `--emit-napi build/test/wordings/nl2769_root_storage_napi.c`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_napi_async.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_napi_async.ts) (compiled with `--threads --emit-napi-async build/test/wordings/nl2769_root_storage_napi_async.c`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+## NL2770
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
+```
+
+[`nl2770_root_storage_wasi_dts.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2770_root_storage_wasi_dts.ts) (compiled with `--profile wasi --emit-dts build/test/wordings/nl2770_root_storage_wasi_dts.d.ts`):
+
+```ts
+// A WASI build's loader releases the arena after every call, and only a page
+// module emits the keep a loader would call instead.
+class Player {
+  score: i32 = 0
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (score: i32): i32 => {
+  const p = new Player()
+  p.score = score
+  player[0] = p
+  return score
+}
+```
+
+```text
+Root storage `player` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
 ```

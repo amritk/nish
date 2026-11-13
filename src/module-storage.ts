@@ -32,16 +32,19 @@ import { parameterSpelling } from "./checker"
 import { CheckContext } from "./context"
 import { dottedName, isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
 import { Node, NodeKind } from "./nodes"
+import { isCollectionStruct } from "./generics"
 import {
   CheckedProgram,
   ConstInfo,
   FunctionSig,
+  STRUCT_CLASS,
+  STRUCT_INTERFACE,
   StructInfo,
   elementStride,
   inlineElementStruct,
 } from "./program"
 import { rewrittenArrayMethod } from "./std-modules"
-import { T_BOOL, T_U8, TypeTable, isHostWindow, isNumeric } from "./types"
+import { T_BOOL, T_STRING, T_U8, TypeTable, isHostWindow, isNumeric } from "./types"
 
 /** The most elements one storage may hold. */
 const STORAGE_MAX_LENGTH: i32 = 16777216
@@ -81,7 +84,18 @@ export const checkStorage = (ctx: CheckContext, info: ConstInfo): Node | null =>
   const name = info.name
   const elem = info.storageElem
   const spelled = ctx.table.typeName(elem)
-  if (!checkStorageElement(ctx, info, elemNode, elem, spelled)) {
+  if (rootClass(info.scope, ctx.table, elem) !== null) {
+    info.root = true
+    if (info.exported) {
+      storageReport(
+        ctx,
+        info,
+        info.decl,
+        `Root storage \`${name}\` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead`
+      )
+      return null
+    }
+  } else if (!checkStorageElement(ctx, info, elemNode, elem, spelled)) {
     return null
   }
   const args = expr.children[2]
@@ -249,6 +263,10 @@ const storageRecord = (program: CheckedProgram, table: TypeTable, elem: i32): St
 export const recheckStorage = (ctx: CheckContext, info: ConstInfo): void => {
   const scope = info.scope
   const elem = info.storageElem
+  if (info.root) {
+    checkRootClosure(ctx, info)
+    return
+  }
   if (scope === null || storageElementFault(ctx, info, elem) !== FAULT_HOLD) {
     return
   }
@@ -258,6 +276,130 @@ export const recheckStorage = (ctx: CheckContext, info: ConstInfo): void => {
   const expr = storageNewNode(info.decl.children[2])
   const at = expr.children[1].children.length > 0 ? expr.children[1].children[0] : expr
   storageFaultReport(ctx, info, at, FAULT_HOLD, ctx.table.typeName(elem))
+}
+
+// ---- Root storage (WP55) -------------------------------------------------------
+
+/**
+ * The class `C` when `elem` is `C | null` and the storage is root storage
+ * (`docs/wp55-persistent-root.md` §3), or null. `C` alone, an interface and a
+ * record stay module storage, refused by NL2686 as before.
+ */
+const rootClass = (program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null => {
+  if (program === null || elem < 0 || !table.isNullable(elem)) {
+    return null
+  }
+  const inner = table.stripNull(elem)
+  if (!table.isStruct(inner)) {
+    return null
+  }
+  const info = program.struct(table.nameOf(inner))
+  return info !== null && info.kind === STRUCT_CLASS ? info : null
+}
+
+/**
+ * Walk everything `info`'s class can reach — every field, array element,
+ * nullable and union variant, transitively — and refuse the first type the
+ * runtime cannot trace, naming the path to it (§3.1). Runs once every body
+ * and instantiation is checked, so whether an interface is implemented is
+ * final.
+ */
+const checkRootClosure = (ctx: CheckContext, info: ConstInfo): void => {
+  const scope = info.scope
+  if (scope === null) {
+    return
+  }
+  const seen: boolean[] = []
+  const elem = ctx.table.stripNull(info.storageElem)
+  const fault = rootFault(ctx, scope, seen, elem, ctx.table.nameOf(elem))
+  if (fault === "" || fault === "!") {
+    return
+  }
+  storageReport(
+    ctx,
+    info,
+    info.decl,
+    `Root storage \`${info.name}\` cannot keep ${fault}: the runtime moves what a root reaches between calls, so everything it reaches is a number, a \`boolean\`, an enum, a string, an array, a class or a discriminated union of classes — never a \`Map\`, a \`Set\`, an interface a class implements, a \`Region\`, a \`Secret\`, a \`CPtr\`, a handle class or a C struct layout`
+  )
+}
+
+/**
+ * The first untraceable type under `type`, reached by `path`, as
+ * `path (type)`; `""` when everything is traceable, `"!"` when a type that
+ * was already reported (a poisoned class) stops the walk silently.
+ */
+const rootFault = (
+  ctx: CheckContext,
+  scope: CheckedProgram,
+  seen: boolean[],
+  type: i32,
+  path: string
+): string => {
+  const table = ctx.table
+  if (type < 0) {
+    return "!"
+  }
+  while (seen.length <= type) {
+    seen.push(false)
+  }
+  if (seen[type]) {
+    return ""
+  }
+  seen[type] = true
+  if (
+    isNumeric(type) ||
+    type === T_BOOL ||
+    type === T_STRING ||
+    table.isEnum(type) ||
+    table.isEnumMemberType(type) ||
+    table.isRanged(type) ||
+    table.isHostHandle(type) ||
+    table.isFnRef(type) ||
+    table.isVector(type)
+  ) {
+    return ""
+  }
+  if (table.isNullable(type)) {
+    return rootFault(ctx, scope, seen, table.stripNull(type), path)
+  }
+  if (table.isArray(type)) {
+    return rootFault(ctx, scope, seen, table.refOf(type), `${path}[]`)
+  }
+  if (table.isUnion(type)) {
+    for (const variant of table.variantsOf(type)) {
+      const fault = rootFault(ctx, scope, seen, variant, path)
+      if (fault !== "") {
+        return fault
+      }
+    }
+    return ""
+  }
+  const spelled = `${path} (${table.typeName(type)})`
+  if (!table.isStruct(type) || table.isSecret(type)) {
+    return spelled
+  }
+  const struct = scope.struct(table.nameOf(type))
+  if (struct === null) {
+    return spelled
+  }
+  if (struct.poisoned) {
+    return "!"
+  }
+  if (
+    isCollectionStruct(struct) ||
+    struct.handle ||
+    struct.layout ||
+    (struct.kind === STRUCT_INTERFACE && struct.implemented)
+  ) {
+    return spelled
+  }
+  for (const field of struct.fields) {
+    const fault = rootFault(ctx, scope, seen, field.type, `${path}.${field.name}`)
+    if (fault !== "") {
+      return fault
+    }
+  }
+  return ""
 }
 
 /** What is wrong with `elem` as a storage element or a record field, never looking inside a record. */
