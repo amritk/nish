@@ -6,6 +6,8 @@ PASS  Content-Length 0, no write, no end: the second request is answered
 PASS  and the first response has an empty body
 PASS  a HEAD with its body swallowed, no end: the second request is answered
 PASS  and no body went out for it
+PASS  a 204, no end: the second request is answered
+PASS  and the 204 went out with no body framing
 PASS  a pipelined second request is answered after a first with no end
 PASS  in order
 PASS  with the bytes the unpipelined exchange sent
@@ -18,6 +20,8 @@ PASS  and end() still answers H1_INVALID
 PASS  a chunked body, no end: the second request is not read
 PASS  nor answered, and no last chunk went out
 PASS  end() still writes the last chunk and answers 0
+PASS  a chunked body to HTTP/1.0, no end: sent unframed, the connection stays open
+PASS  and end() answers 0 and closes it
 PASS  the next request starts without end
 PASS  and an end() for the first response then has none under way
-http1 implicit end: 22 passed, 0 failed, 0 skipped
+http1 implicit end: 26 passed, 0 failed, 0 skipped

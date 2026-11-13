@@ -119,10 +119,10 @@ response with a length is over once its last byte is written, and one with
 no body (`Content-Length: 0`, HEAD, 204, 304) once its head is, so `end` is
 optional for both; a chunked body, and an unframed one to HTTP/1.0, has no
 length to count and is over only at `end`, without which the connection
-waits and the next request is never answered. The
-program may answer at once (before the body has arrived) or after
-`H1_END`; either way the request's body is read to its end before the next
-request starts, which is what keeps pipelined requests in order (§9.3.2).
+waits and the next request is never answered. The program may answer at
+once (before the body has arrived) or after `H1_END`; either way the
+request's body is read to its end before the next request starts, which is
+what keeps pipelined requests in order (§9.3.2).
 Pipelined bytes wait in the parser's buffer, and once it holds
 `inputLimit()` bytes the connection stops asking for input, so the client's
 TCP window closes: back-pressure on the way in.

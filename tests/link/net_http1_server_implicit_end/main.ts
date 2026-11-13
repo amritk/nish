@@ -2,12 +2,12 @@
 // slot and a plain `nish:net` client sending two requests on one keep-alive
 // connection. A response whose length `write` or `sendBody` has met, or that
 // has no body at all, is over when the connection looks for the next
-// request, so the second request is answered; a body one byte short, and a
-// chunked body, still wait for `end()`. Every wait is bounded: two seconds
+// request, so the second request is answered; a body one byte short, a
+// chunked body, and an unframed one to HTTP/1.0 still wait for `end()`. Every wait is bounded: two seconds
 // without a wake is a failure, and the `Date` is pinned so that wire bytes
 // can be compared.
 import { netAddress, netClose, netLocalPort, netRead, netWrite, tcpConnect, tcpListen } from "nish:net";
-import { HTTP1_CHUNKED } from "nish/net/http1-codec";
+import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import {
   H1_CLOSED,
   H1_DONE,
@@ -107,6 +107,11 @@ class Pair {
     this.scratch = new Array<u8>(65536);
   }
 
+  /** Whether the server accepted the client; a case whose pair is not up fails without touching the slot. */
+  up(): boolean {
+    return this.slot >= 0;
+  }
+
   conn(): Http1Connection {
     return this.server.connection(this.slot);
   }
@@ -115,7 +120,7 @@ class Pair {
   ask(text: string): void {
     const bytes: u8[] = ascii(text);
     netWrite(this.client, bytes, ZERO, toI32(bytes.length));
-    if (this.slot >= 0 && ready(this.server.fd(this.slot), 1)) {
+    if (this.up() && ready(this.server.fd(this.slot), 1)) {
       this.server.readable(this.slot);
     }
   }
@@ -178,7 +183,7 @@ class Pair {
 
   /** Closes the slot, the client and the listener. */
   close(): void {
-    if (this.server.holds(this.slot)) {
+    if (this.up() && this.server.holds(this.slot)) {
       this.server.close(this.slot);
     }
     netClose(this.client);
@@ -196,8 +201,8 @@ const secondBody = (): u8[] => pattern(700, 9);
  * Two requests on one keep-alive connection, the second `Connection: close`
  * and sent only once the first response is read (or with the first, when
  * `pipelined`). The first is answered with `length` bytes of `first` handed
- * over by `mode`, `end()` only when `callEnd`; the second with `second` by
- * `write` and no `end()`.
+ * over by `mode` with `status`, `end()` only when `callEnd`; the second
+ * with `second` by `write` and no `end()`.
  */
 class TwoRequests {
   /** Whether the second request reached the program, and the exchange closed cleanly after it. */
@@ -207,15 +212,25 @@ class TwoRequests {
   ended: i32 = 0;
   heard: u8[];
 
-  constructor(method: string, length: i32, mode: i32, callEnd: boolean, pipelined: boolean) {
+  constructor(method: string, status: i32, length: i32, mode: i32, callEnd: boolean, pipelined: boolean) {
+    this.heard = [];
+    const p = new Pair(new Http1Config());
+    if (p.up()) {
+      this.run(p, method, status, length, mode, callEnd, pipelined);
+    } else {
+      p.close();
+    }
+    this.heard = p.heard;
+  }
+
+  private run(p: Pair, method: string, status: i32, length: i32, mode: i32, callEnd: boolean, pipelined: boolean): void {
     const none: u8[][] = [];
     const first: u8[] = firstBody();
     const second: u8[] = secondBody();
-    const p = new Pair(new Http1Config());
     const head: string = `${method} /a HTTP/1.1\r\nHost: a\r\n\r\n`;
     p.ask(pipelined ? head + LAST : head);
     const conn = p.conn();
-    let ok: boolean = p.until(H1_REQUEST) === H1_REQUEST && conn.respond(200, none, none, length) === 0;
+    let ok: boolean = p.until(H1_REQUEST) === H1_REQUEST && conn.respond(status, none, none, length) === 0;
     if (mode === SEND_BODY) {
       ok = ok && conn.sendBody(first, ZERO, length) === length;
     } else if (mode === WRITE_TWICE) {
@@ -237,7 +252,6 @@ class TwoRequests {
     } else {
       p.close();
     }
-    this.heard = p.heard;
   }
 }
 
@@ -252,9 +266,18 @@ class Stalled {
   heard: u8[];
 
   constructor(length: i32, sent: i32) {
+    this.heard = [];
+    const p = new Pair(new Http1Config());
+    if (p.up()) {
+      this.run(p, length, sent);
+    }
+    this.heard = p.heard;
+    p.close();
+  }
+
+  private run(p: Pair, length: i32, sent: i32): void {
     const none: u8[][] = [];
     const first: u8[] = firstBody();
-    const p = new Pair(new Http1Config());
     p.ask(KEEP);
     const conn = p.conn();
     p.until(H1_REQUEST);
@@ -266,8 +289,51 @@ class Stalled {
     this.event = p.until(H1_REQUEST);
     this.secondHeard = p.hear(2);
     this.ended = conn.end();
+  }
+}
+
+/**
+ * A chunked response to an HTTP/1.0 keep-alive request, sent unframed: with
+ * no length and no last chunk, nothing but `end()` says it is over, so the
+ * connection stays open until then.
+ */
+class Unframed {
+  /** Whether the connection stayed open, unfinished, while `end()` was owed. */
+  held: boolean = false;
+  /** What `end()` answered, and whether the connection then closed cleanly. */
+  ended: i32 = 0;
+  completed: boolean = false;
+  heard: u8[];
+
+  constructor() {
+    this.heard = [];
+    const p = new Pair(new Http1Config());
+    if (p.up()) {
+      this.run(p);
+    } else {
+      p.close();
+    }
     this.heard = p.heard;
-    p.close();
+  }
+
+  private run(p: Pair): void {
+    const none: u8[][] = [];
+    const first: u8[] = firstBody();
+    p.ask("GET /a HTTP/1.0\r\nConnection: keep-alive\r\n\r\n");
+    const conn = p.conn();
+    let ok: boolean = p.until(H1_REQUEST) === H1_REQUEST && conn.respond(200, none, none, HTTP1_CHUNKED) === 0;
+    ok = ok && conn.sendBody(first, ZERO, 3000) === 3000 && p.until(H1_END) === H1_END;
+    // The body goes out; the connection neither finishes nor closes.
+    const done: boolean = (p.server.flush(p.slot) & H1_DONE) !== 0;
+    let eof: boolean = p.drain();
+    while (!eof && ready(p.client, 1)) {
+      p.server.next(p.slot);
+      p.server.flush(p.slot);
+      eof = p.drain();
+    }
+    this.held = ok && !done && !eof && find(p.heard, first, ZERO) >= 0;
+    this.ended = conn.end();
+    this.completed = p.finish();
   }
 }
 
@@ -277,32 +343,36 @@ export const main = (): i32 => {
   const first: u8[] = firstBody();
   const second: u8[] = secondBody();
 
-  const viaSend = new TwoRequests("GET", 3000, SEND_BODY, false, false);
+  const viaSend = new TwoRequests("GET", 200, 3000, SEND_BODY, false, false);
   t.ok("a full body through sendBody, no end: the second request is answered", viaSend.answered);
   t.ok("and both responses reach the client", viaSend.completed && count(viaSend.heard, ascii("HTTP/1.1 200")) === 2);
 
-  const viaWrite = new TwoRequests("GET", 3000, WRITE_TWICE, false, false);
+  const viaWrite = new TwoRequests("GET", 200, 3000, WRITE_TWICE, false, false);
   t.ok("a full body in two writes, no end: the second request is answered", viaWrite.answered && viaWrite.completed);
   t.ok("with the bytes sendBody sent", same(viaWrite.heard, viaSend.heard));
 
-  const empty = new TwoRequests("GET", 0, NOTHING, false, false);
+  const empty = new TwoRequests("GET", 200, 0, NOTHING, false, false);
   t.ok("Content-Length 0, no write, no end: the second request is answered", empty.answered && empty.completed);
   t.ok("and the first response has an empty body", find(empty.heard, ascii("Content-Length: 0\r\n"), ZERO) >= 0);
 
-  const head = new TwoRequests("HEAD", 3000, SEND_BODY, false, false);
+  const head = new TwoRequests("HEAD", 200, 3000, SEND_BODY, false, false);
   t.ok("a HEAD with its body swallowed, no end: the second request is answered", head.answered && head.completed);
   t.ok("and no body went out for it", find(head.heard, first, ZERO) < 0 && find(head.heard, second, ZERO) >= 0);
 
-  const pipelined = new TwoRequests("GET", 3000, SEND_BODY, false, true);
+  const noContent = new TwoRequests("GET", 204, HTTP1_NO_BODY, NOTHING, false, false);
+  t.ok("a 204, no end: the second request is answered", noContent.answered && noContent.completed);
+  t.ok("and the 204 went out with no body framing", find(noContent.heard, ascii("HTTP/1.1 204"), ZERO) >= 0 && find(noContent.heard, ascii("Transfer-Encoding"), ZERO) < 0);
+
+  const pipelined = new TwoRequests("GET", 200, 3000, SEND_BODY, false, true);
   t.ok("a pipelined second request is answered after a first with no end", pipelined.answered && pipelined.completed);
   const at: i32 = find(pipelined.heard, first, ZERO);
   t.ok("in order", at >= 0 && find(pipelined.heard, second, at) > at);
   t.ok("with the bytes the unpipelined exchange sent", same(pipelined.heard, viaSend.heard));
 
-  const withEnd = new TwoRequests("GET", 3000, WRITE_TWICE, true, false);
+  const withEnd = new TwoRequests("GET", 200, 3000, WRITE_TWICE, true, false);
   t.eqI32("end() after the full body still answers 0", withEnd.ended, 0);
   t.ok("and the wire bytes are those without it", withEnd.completed && same(withEnd.heard, viaWrite.heard));
-  const emptyEnd = new TwoRequests("GET", 0, NOTHING, true, false);
+  const emptyEnd = new TwoRequests("GET", 200, 0, NOTHING, true, false);
   t.ok("end() on Content-Length 0 answers 0, same bytes", emptyEnd.ended === 0 && emptyEnd.completed && same(emptyEnd.heard, empty.heard));
 
   const short = new Stalled(3000, 2999);
@@ -315,15 +385,25 @@ export const main = (): i32 => {
   t.ok("nor answered, and no last chunk went out", !chunked.secondHeard && find(chunked.heard, ascii("\r\n0\r\n\r\n"), ZERO) < 0);
   t.eqI32("end() still writes the last chunk and answers 0", chunked.ended, 0);
 
+  const unframed = new Unframed();
+  t.ok("a chunked body to HTTP/1.0, no end: sent unframed, the connection stays open", unframed.held);
+  t.ok("and end() answers 0 and closes it", unframed.ended === 0 && unframed.completed);
+
   // `end()` called once the connection has moved on answers as a second `end()` does.
   const late = new Pair(new Http1Config());
-  late.ask(KEEP + LAST);
-  const conn = late.conn();
-  late.until(H1_REQUEST);
-  conn.respond(200, none, none, 10);
-  conn.write(first, ZERO, 10);
-  t.ok("the next request starts without end", late.until(H1_REQUEST) === H1_REQUEST && conn.parser.targetIs("/b"));
-  t.eqI32("and an end() for the first response then has none under way", conn.end(), H1_CLOSED);
+  let moved: boolean = false;
+  let lateEnd: i32 = 0;
+  if (late.up()) {
+    late.ask(KEEP + LAST);
+    const conn = late.conn();
+    late.until(H1_REQUEST);
+    conn.respond(200, none, none, 10);
+    conn.write(first, ZERO, 10);
+    moved = late.until(H1_REQUEST) === H1_REQUEST && conn.parser.targetIs("/b");
+    lateEnd = conn.end();
+  }
+  t.ok("the next request starts without end", moved);
+  t.eqI32("and an end() for the first response then has none under way", lateEnd, H1_CLOSED);
   late.close();
   return t.done();
 };
