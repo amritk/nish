@@ -881,8 +881,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **110,976 bytes** (+64) by path MTU discovery (RFC 9000 §14.3): the
  * connection's path MTU, its limit, the search's bounds, the probe in flight and
  * its counters, and recovery's datagram size.
+ *
+ * Moved to **111,000 bytes** (+24) by the HTTP/3 clock (H3-5,
+ * `docs/security/http3.md`): the two times an `Http3Connection` measures its
+ * idle and head timeouts from, and the counts and mode that say whether a
+ * client made progress, filling padding the object already had.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110976
+export const HTTP3_SERVER_SLOT_BYTES = 111000
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

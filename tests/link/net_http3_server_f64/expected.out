@@ -91,4 +91,11 @@ PASS  the slot's address follows the client to it
 PASS  and the server validates the new port with a PATH_CHALLENGE sent there (§8.2)
 PASS  answered, the new port carries the next request and its response
 PASS  and nothing after the rebinding went to the first port
-http3 server: 93 passed, 0 failed, 0 skipped
+PASS  three clients, each in a slot of its own
+PASS  the steps took the clock past the idle timeout
+PASS  under 250 ms in, inside both timeouts, all three hold their slots
+PASS  between 400 and 900 ms in, the trickler is closed with H3_EXCESSIVE_LOAD and the idle client is not yet
+PASS  the trickler's close is the application's
+PASS  past 1,000 ms, the idle client is closed with H3_NO_ERROR
+PASS  and the active client keeps its slot, every GET answered
+http3 server: 100 passed, 0 failed, 0 skipped
