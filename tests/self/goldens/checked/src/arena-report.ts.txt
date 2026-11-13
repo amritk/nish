@@ -197,23 +197,12 @@ function growingAround(walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
   callee +2:10 new Around -> @Around.constructor
 function boundedPasses(walk: ArenaWalk, table: TypeTable, loop: Node): boolean -> @boundedPasses
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: comparesOrder isCountedLoop nish_panic_index
+  calls: isCountedLoop
   pointer walk: size=112 writesThrough=false captured=false
   pointer table: size=136 writesThrough=false captured=false passedTo=isCountedLoop#1
   pointer loop: size=40 writesThrough=false captured=false passedTo=isCountedLoop#2
   stackSites=0 stackLocals=0
-  callee +0:39 isCountedLoop -> @isCountedLoop
-  callee +4:12 comparesOrder -> @comparesOrder
-  callee +6:71 comparesOrder -> @comparesOrder
-function comparesOrder(condition: Node): boolean -> @comparesOrder
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: comparesOrder nish_panic_index nish_str_eq
-  pointer condition: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  callee +0:12 comparesOrder -> @comparesOrder
-  local +5:9 op: string (const)
-  callee +7:12 comparesOrder -> @comparesOrder
-  callee +7:52 comparesOrder -> @comparesOrder
+  callee +0:3 isCountedLoop -> @isCountedLoop
 function outsideLoops(): Around -> @outsideLoops
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: Around.constructor nish_alloc_struct
