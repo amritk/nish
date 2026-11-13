@@ -1,6 +1,6 @@
-# WP56: Generators whose memory stays flat: a string builder, and a region per file
+# WP56: Generators whose memory stays flat: a string builder, and a scope per file
 
-**State:** Accepted · **Done:** 0 of 5 · **Design note:** [`docs/wp56-flat-memory-generators.md`](https://github.com/amritk/nish/blob/main/docs/wp56-flat-memory-generators.md)
+**State:** Proposed · **Done:** 0 of 5 · **Design note:** [`docs/wp56-flat-memory-generators.md`](https://github.com/amritk/nish/blob/main/docs/wp56-flat-memory-generators.md)
 
 ## Stages
 
@@ -12,7 +12,7 @@
 
 ## Next
 
-S0, the baseline: [§8 The proof](https://github.com/amritk/nish/blob/main/docs/wp56-flat-memory-generators.md#8-the-proof). Every open question is decided ([§10](https://github.com/amritk/nish/blob/main/docs/wp56-flat-memory-generators.md#10-decisions)).
+S0, the baseline: [§8 The proof](https://github.com/amritk/nish/blob/main/docs/wp56-flat-memory-generators.md#8-the-proof). The design is accepted and every open question is decided ([§10](https://github.com/amritk/nish/blob/main/docs/wp56-flat-memory-generators.md#10-decisions)).
 
 ## Not planned
 

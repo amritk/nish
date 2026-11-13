@@ -1,4 +1,4 @@
-# WP56: Generators whose memory stays flat: a string builder, and a region per file
+# WP56: Generators whose memory stays flat: a string builder, and a scope per file
 
 **Status: accepted (owner, 2026-11-13), design only.** Nothing here is
 built. §10 records the owner's decisions: the builder is `builder()` from
@@ -55,7 +55,7 @@ peaks at 11 MB (`tests/cases/perf_arena_pass_drop`).
 
 ### What a user cannot do today
 
-- **Build a large string in linear memory with an API made for it.** The compiler has a `StringBuilder` (`src/strings.ts:21`), a `string[]` and one `join`, but it is not exported, and `std/` has none. `std/yaml-write.ts`'s `YamlWriter` is a private `u8[]` serializer.
+- **Build a large string in linear memory with an API made for it.** The compiler has a `StringBuilder` (`src/strings.ts:21`), a `string[]` and one `join`, but it is the compiler's own, and `std/` has none. `std/yaml-write.ts`'s `YamlWriter` is a private `u8[]` serializer.
 - **Append to a builder from a loop and keep the loop's pass scope.** Any builder written in Nish over `string[]` or `u8[]` grows an array that is older than the pass. That refuses the pass its scope, so the temporaries of every pass stay (§2). `mem_join_parts_scope` keeps the scope only for a `parts` array that the function itself declared and that nothing else touches.
 - **Write a file incrementally.** `appendFileSync` opens and closes the file on every call. `writeFileSync` and `writeFileBytesSync` take the whole file at once. There is no write handle to match WP44's `fileOpen`/`fileReadAt`.
 - **Find out from the documentation how to structure such a program.** [memory.md](guide/language/memory.md) explains the warnings, and [regions.md](guide/language/regions.md) explains sessions. No page shows a batch program that produces many outputs, and no test runs file I/O inside a region's `enter`.
@@ -66,7 +66,7 @@ Some programs can already be written with flat memory. S1 documents how, and
 S0 measures it:
 
 1. **One function per file that answers a number.** `const emit = (schema: Schema): i32 => { ...; writeFileSync(path, text); return 0; }`. This function returns no pointer and stores nothing outward, so it takes a function scope. The outer loop's pass then has nothing left behind and keeps its scope too. Within a file, `parts.push` + `join` on a local `parts` is linear. The pass temporaries are still kept until the function returns, which costs about one file's worth of garbage.
-2. **`using a = arena()` around one file's work** (memory.md, "Freeing a batch yourself"). This applies when the work cannot move into a function. The block refuses stores outward (NL2418) and growth of an older array (NL2422), so the builder has to be declared inside the block.
+2. **`using a = arena()` around one file's work** (memory.md, "Freeing a batch yourself"). This applies when the work cannot move into a function. The block refuses stores outward (NL2418 to NL2421) and growth of an older array (NL2422), so the builder has to be declared inside the block.
 3. **A region per target** (`nish:region`). This is for state that has to outlive one pass but not the program, such as one output that gathers fragments from several passes over the model. `enter` cannot answer a string (NL2611), so the file has to be written inside `enter`. Region memory is live until `free`, so this ought to work, but no test covers it.
 
 Where these stop:
@@ -98,7 +98,10 @@ a region's `free`, or `main` returning. This adds no new lifetime rule. The
 header is an ordinary allocation, so the existing escape analysis already
 proves it is unreachable when its scope releases. The storage only has to die
 at the same moment. A builder can then sit in a region's root, a field or a
-local, and needs no `using`. The runtime mechanism is in §5.
+local, and needs no `using`. The mechanism is in §5: the compiler emits a
+release of the scope's builders at every exit of a scope that may make one,
+beside the arena rewind it already emits there. It cannot be left to the
+arena, because most rewinds never call the runtime.
 
 **D3. The checker treats `append` like a write to a file.** A call to any
 appending method (§4) stores no allocation, grows no array, allocates nothing
@@ -159,7 +162,8 @@ appendFileSync(path: string, text: Builder): void;
 fileCreate(path: string, mode: i32): i32;            // fd, or negative errno; truncates
 fileWrite(fd: i32, text: Builder): i32;        // bytes written or negative errno; all of it
 fileWriteBytes(fd: i32, bytes: readonly u8[], start: i32, end: i32): i32;
-// fileClose (WP44) closes either kind
+// fileClose (WP44) closes either kind; it is fs.read today, and S3 lets a
+// program granted only fs.write close the handles fileCreate gave it
 ```
 
 The limits are the same as for a string. Storage past 2^31 − 1 bytes fails
@@ -175,18 +179,25 @@ differential tests hold the two sides byte-identical. Unlike `nish:region`,
 
 ## 5. The runtime
 
-- **Layout.** The header is `{ char *data; uint32_t len; uint32_t cap; struct nish_ext *rec; }`. It is an arena object that is never placed on the stack, because D2 hangs the storage's lifetime off the header's arena position. A stack header in a function without a scope would still be correct, but it would be harder to reason about. The layout is two-sided, `src/runtime.ts` and `runtime/nish.h` together, and the layout test pins it (orientation rule 4).
+- **Layout.** The header is `{ char *data; uint32_t len; uint32_t cap; uint32_t slot; }`. It is an ordinary object: an arena object, or a stack slot where escape analysis allows one. The layout is two-sided, `src/runtime.ts` and `runtime/nish.h` together, and the layout test pins it (orientation rule 4).
 - **Growth.** If `len + n` exceeds `cap`, the new capacity is `max(2 × cap, len + n, 64)`, capped at 2^31 − 1. The block is grown with `realloc`, and the size computation is overflow-checked before the call. `malloc`, `realloc` and `free` are already reserved in `src/c-symbols.ts`. `node tests/run.js c-symbols` confirms nothing new is needed.
-- **Ownership (D2).** Each arena has a newest-first list of *external blocks*: the main arena, each thread's arena, and each region's arena. Constructing a builder bump-allocates a small record `{ prev, header }` in the current arena and pushes it onto the list. `nish_arena_release(mark)` already finds the chunks newer than `mark`. It also pops from the head every record that lies in a chunk being freed, or at or above `mark` in the chunk it keeps, and frees that record's block. Records are bump-allocated in order, so the ones to free are always a prefix of the list. When no builder exists, the extra cost of a release is one load and one compare against null. `nish_region_free` frees its arena's whole list. `nish_reset_arena`, for a C host, frees the main list. When `main` returns, the process exit reclaims the rest.
-- **`nish_arena_keep`** moves a returned string down onto a mark. It never moves a builder, because a builder is not a string. A function that answers a `Builder` answers a pointer, so it takes no function scope, and its caller's position owns the builder. That is already the rule for any object.
-- **Where it lives.** The builder is new C code, so it either goes in `runtime/runtime-text.c` under `RUNTIME_TEXT_UNIT_BUDGET` (`tests/runtime-budgets.js`, which it would have to raise), or in a new `runtime/runtime-builder.c`. A new file needs a row in [security/runtime.md](security/runtime.md)'s scope table, because `node scripts/security-scope.mjs` refuses an unscoped file. Its findings take the RT-n numbering, and the growth limit gets a test on both sides in `tests/runtime-test.c`, as RT-2 has. The release hook changes `runtime.c` and `runtime-region.c`, so their records move with it.
-- **wasm32.** `runtime-wasm.c` has its own allocator and no `realloc`. The builder there takes its storage from the same allocator, which grows by copying, and the ownership list is the same code. If S2 cannot do that within the wasm size budget, the builtin is refused on that target with a code (Q5). It must not be miscompiled silently.
+- **Ownership (D2): a stack of live blocks, outside the arena.** Each thread has a `malloc`'d, growable stack of entries, one per live builder, each holding its block's pointer. A region has a stack of its own, swapped in and out with its arena by `nish_region_swap`. That struct is separate from `struct nish_arena`, whose 32-byte layout the static asserts pin, so the arena's layout does not change. `builder()` pushes an entry, and the header records its index in `slot`. A `realloc` that moves the block updates the entry through `slot`. Two runtime calls do the rest:
+  - `nish_builders_depth()` answers the stack's height.
+  - `nish_builders_release(depth)` frees every block above `depth` and pops its entry.
+
+  Nothing lives in arena memory, so the arena is free to rewind, reuse or move whatever it likes. That covers the inline `store` of a pass rewind (`src/emit.ts`, `releasePass`), `nish_arena_keep`'s `memmove`, and `nish_rewind`'s reuse of a chunk.
+- **What the compiler emits.** A function *makes builders* when it calls `builder()`, or calls a function that makes builders, through the whole-program fixpoint, joined over a [WP51](wp51-function-references.md) reference's set as every other fact is. Every scope the compiler already brackets with a mark and a release also brackets the builder stack when its body makes builders: a function scope, a loop pass, a `using a = arena()` block, and the call-site reclaim of item 3. It reads `nish_builders_depth()` beside the mark, and calls `nish_builders_release(depth)` on every exit edge, *before* the arena rewind or the `nish_arena_keep`. Scopes nest the way their marks do, so the entries above `depth` are exactly the builders made inside the scope. The escape analysis has already proved those builders unreachable, or the scope would not have been given a mark. A scope whose body makes no builders emits nothing new, so **no existing program's IR moves**, and nish-cmp needs no `DECLARED` entry for S2.
+- **Whole-arena releases.** `nish_region_free` frees the region's whole stack. `nish_free_arena`, at the exit of a thread or an async task, frees that thread's stack. So does `nish_reset_arena`, whether a C host calls it or a worker job does. When `main` returns, the process exit reclaims the rest.
+- **What S2 refuses rather than supports.** A body run by `parallelMap` and its siblings, a `spawn`ed or `scope()` task, or an `awaitAll` lane may not make builders (§6). These bodies rewind with `nish_rewind` and `nish_reset_arena`, or hand their memory to another arena with `nish_region_adopt`. Splicing the stacks there is possible later, but no stage of this package needs it.
+- **Where it lives.** The builder is new C code. It goes either in `runtime/runtime-text.c`, which has to raise `RUNTIME_TEXT_UNIT_BUDGET` in `tests/runtime-budgets.js`, or in a new `runtime/runtime-builder.c`. A new file needs a row in the scope table of [security/runtime.md](security/runtime.md), because `node scripts/security-scope.mjs` refuses an unscoped file. Its findings take the RT-n numbering, and the growth limit gets a test on both sides of it in `tests/runtime-test.c`, as RT-2 has. The stack swap in `runtime-region.c` and the frees in `runtime.c`, `runtime-parallel.c` and `runtime-async.c` move their records and their text budgets (`RUNTIME_TEXT_BUDGET`, `RUNTIME_THREADS_TEXT_BUDGET`, `RUNTIME_REGION_TEXT_BUDGET`) with them.
+- **wasm32: refused in S2 (Q5).** `runtime-wasm.c` has no allocator but its bump arena. Builder storage there would be arena storage, which a scoped pass rewinds while the builder still holds it, so the miscompile D3 must never allow. S2 refuses `nish:string` on the wasm profile with a code. A later stage can lift that once `runtime-wasm.c` has a free-list allocator.
 
 ## 6. The checker
 
 - **Facts for each method (D3).** In the builtin effect table that the escape analysis and `src/attributes.ts` read, the append methods and `clear` *write through* their receiver but store no pointer and allocate nothing in the arena. `toString` allocates one string and stores nothing. `length` is a pure read. These facts are what let `tests/cases/mem_builder_pass_scope` hold `Arena.mark()` unmoved over 1,000,000 appends of a template from a loop whose builder is older than the loop.
-- **Construction is an allocation** and follows every rule an object does: a pass that stores a fresh builder outward has no scope, NL2418 applies inside `using a = arena()`, and NL2609 or NL2610 apply at a region's edge. A builder made inside a region may live in its root, and its storage dies at `free`.
-- **Threads (Q3).** A builder stays on the thread that made it. Passing it to `spawn`, a `scope()` task, a channel, a parallel body or across `nish/sync` is refused with the next free code in the checker's `NL2xxx` band. The reason is that two threads appending through one header could race the `realloc`.
+- **Construction is an allocation** and follows every rule an object does: a pass that stores a fresh builder outward has no scope, NL2418 to NL2421 apply inside `using a = arena()`, and NL2609 or NL2610 apply at a region's edge. A builder made inside a region may live in its root, and its storage dies at `free`.
+- **Threads (Q3).** A builder stays on the thread that made it. Passing it to `spawn`, a `scope()` task, a channel, a parallel body or across `nish/sync` is refused with the next free code in the checker's `NL2xxx` band. The reason is that two threads appending through one header could race the `realloc`. A body that one of these runs, or an `awaitAll` lane, also may not *make* builders, directly or through a callee (§5).
+- **The new fact.** *Makes builders* is a per-function fact in the fixpoint (§5). It is what the emitter reads to bracket a scope's builder stack. The `--emit-arena` report prints it beside each scope, so a test can pin which scopes take the bracket.
 - **Interop.** A `Builder` in an exported signature (C header, wasm `.d.ts`, N-API) is refused by the checker, with the next free `NL2xxx` code, and by the sidecar generator (`NL4xxx`) for a module it is asked to wrap. A host gets a string from `toString()`.
 - **The capability report (WP35).** The builder needs no capability. The `nish:fs` additions are `fs.write`, as `writeFileSync` is, and are refused where `writeFileSync` is.
 - **Codes.** Each refusal takes the next free number in its band in `src/codes.ts`, one code for each reason, and gets a negative test. Numbers are assigned when S2 is built, not here.
@@ -199,16 +210,17 @@ regions.md. It uses one running example, a generator over a JSON spec, and
 introduces three shapes in this order:
 
 1. **A function per file that answers a number.** This is the default. The page shows `--explain-memory` reporting the outer loop as clean, and the inner loop appending to a `builder()` with its pass scope intact.
-2. **`using a = arena()` per file**, for a file built inline in a loop body. The builder is declared inside the block.
+2. **`using a = arena()` per file**, for a file built inline in a loop body. The builder is declared inside the block. The block refuses the outward stores of NL2418 to NL2421.
 3. **A region per target**, for an output that gathers fragments across several passes over the model, such as a barrel file or one module per tag. `regionWith(target, open)` makes a root that holds a `Builder`, `enterWith` appends on each pass, one last `enter` writes the file, and `free` releases it all. The builder's storage goes with it (D2).
 
 The page also covers flushing a large file through `fileCreate`/`fileWrite`
 every 64 KiB. It explains why `s = s + t` and pushing onto an outer array keep
 memory, with numbers from S0's table. It shows how to watch `Arena.mark()`
 across files to check a program, rather than `Arena.used()`, which wobbles
-with each chunk (wp46 §7). Each shape gets a cookbook program:
-`docs/cookbook/mem-builder.ts`, `mem-builder-flush.ts` and
-`mem-region-per-target.ts`.
+with each chunk (wp46 §1). Each shape has a cookbook program:
+`docs/cookbook/mem-file-per-function.ts` and `mem-region-per-target.ts` come in
+S1. Shape 2 already has `mem-using-arena.ts`. S2 adds `mem-builder.ts`, and S3
+adds `mem-builder-flush.ts`.
 
 ## 8. The proof
 
@@ -242,8 +254,8 @@ Each stage is one pull request.
 | Stage | Lands | Done when |
 | --- | --- | --- |
 | **S0** Baseline | `bench/wp56-generator/` (spec maker, `naive.ts`, `today.ts`, `run.sh`); the table in `docs/BENCHMARKS.md` | the table has both generators at four sizes, with a noise band |
-| **S1** The patterns with today's tools | `tests/cases`/`tests/link` for file I/O inside `enter` (read and write), and `region_per_target`; the guide page with shapes 1 to 3 written over `parts` + `join`; cookbook entries; memory.md and regions.md link to it | `node tests/run.js region` and `node tests/run.js cookbook` pass; the page's examples run under `nish:ok` |
-| **S2** `builder()` from `nish:string` | runtime (§5) with its security record rows; the checker facts and refusals (§6); the `nish:string` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp `DECLARED` entries if any corpus IR moves |
+| **S1** The patterns with today's tools | `tests/cases`/`tests/link` for file I/O inside `enter` (read and write), and `region_per_target`; the guide page with shapes 1 to 3 written over `parts` + `join`; `mem-file-per-function.ts` and `mem-region-per-target.ts` in the cookbook; memory.md and regions.md link to it | `node tests/run.js region` and `node tests/run.js cookbook` pass; the page's examples run under `nish:ok` |
+| **S2** `builder()` from `nish:string` | runtime (§5) with its security record rows; the *makes builders* fact, the builder-stack brackets and the refusals (§6), the wasm32 refusal among them; the `nish:string` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; `--emit-arena` pins which scopes take the bracket; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp reports no difference, because no existing program makes a builder (§5) |
 | **S3** Files from a builder | `writeFileSync`/`appendFileSync` overloads; `fileCreate`, `fileWrite`, `fileWriteBytes`; capability rows; guide flush section; `flush.ts` | G2's flush bound; `tests/link` covers a short write and `EINTR` as WP44's tests do on the read side |
 | **S4** Diagnostics and the gate | NL9002, NL9016 and NL9018 hints naming the builder, with their wordings and goldens; `docs/AI.md`; `gen_flat_memory` (G3) | G1 to G3 green in CI, and the roadmap page ticked |
 
@@ -258,10 +270,10 @@ Each stage is one pull request.
 The owner decided these on 2026-11-13. S2 builds what they say.
 
 - **Q1. The name and module: `builder()` from `nish:string`.** It answers a `Builder`, as `region()` answers a `Region`. The note had proposed `StringBuilder` from `nish:builder`. `nish:string` names what the module is about and leaves room for other string builtins later. It is a different specifier from `std`'s `nish/text`, so the two do not collide.
-- **Q2. Lifetime: D2.** The arena position that made the builder owns its storage. No `using` is required, so a builder can be held in a field or a region's root, and §7's third shape works.
+- **Q2. Lifetime: D2.** The scope that made the builder owns its storage. No `using` is required, so a builder can be held in a field or a region's root, and §7's third shape works. Review of the first draft showed that hanging the storage off the arena could not work. Pass rewinds are an inline store, and `nish_arena_keep` moves memory. So the stack of §5 is kept outside the arena, and the compiler releases it, but only in scopes that make builders. The decision itself is unchanged.
 - **Q3. Threads: confined.** A builder stays on the thread that made it (§6). Moving one to another thread by transfer can be designed later, if a program needs it.
 - **Q4. Number appends: in S2.** `appendInt` and `appendF64` ship with the builder, each held byte-identical to a template's formatting under Node by the differential tests.
-- **Q5. wasm32: supported.** The builder takes its storage from `runtime-wasm.c`'s allocator, which grows by copying (§5). If that does not fit the wasm size budget, S2 refuses the builder on that target with a code and says so in its PR. It never miscompiles it.
+- **Q5. wasm32: refused in S2.** The decision was to support it, or to refuse it with a code where support does not fit. `runtime-wasm.c` has no allocator other than the arena, so S2 refuses it (§5). Supporting it waits for a free-list allocator there.
 - **Q6. `s += t` on strings: stays refused.** Its message gains the hint to use `builder()` from `nish:string` (S4).
 
 ## 11. Alternatives considered

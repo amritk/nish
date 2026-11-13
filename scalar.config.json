@@ -1332,6 +1332,7 @@
                   "/wp46-long-running-memory": { "type": "page", "title": "WP46: Memory for programs that do not exit: regions", "filepath": "docs/roadmap/wp46-long-running-memory.md" },
                   "/wp49-async-server": { "type": "page", "title": "WP49: async/await on the server, and the TechEmpower top", "filepath": "docs/roadmap/wp49-async-server.md" },
                   "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
+                  "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
                   "/wp44-streaming-files": { "type": "page", "title": "WP44: Streaming file reads", "filepath": "docs/roadmap/wp44-streaming-files.md" },
                   "/wp48-compressed-references": { "type": "page", "title": "WP48: Compressed 32-bit references", "filepath": "docs/roadmap/wp48-compressed-references.md" },
                   "/wp51-function-references": { "type": "page", "title": "WP51: References to capture-free top-level functions", "filepath": "docs/roadmap/wp51-function-references.md" }
@@ -1377,7 +1378,6 @@
                   "/wp52-run-rebuilds": { "type": "page", "title": "WP52: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp52-run-rebuilds.md" },
                   "/wp53-ffi-buffers-handles": { "type": "page", "title": "WP53: Buffers and handles across declare function", "filepath": "docs/roadmap/wp53-ffi-buffers-handles.md" },
                   "/wp55-persistent-root": { "type": "page", "title": "WP55: An object graph a WebAssembly module keeps between calls", "filepath": "docs/roadmap/wp55-persistent-root.md" },
-                  "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
                   "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
                   "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
                 }

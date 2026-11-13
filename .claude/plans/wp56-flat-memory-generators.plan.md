@@ -31,15 +31,15 @@ stages:
         content: Write docs/guide/using-nish/generating-files.md with the function-per-file, arena-block and region-per-target shapes, and its scalar.config.json route — see S1 the patterns
         status: pending
       - id: cookbook-today
-        content: Add docs/cookbook/mem-region-per-target.ts and link memory.md and regions.md to the new page — see S1 the patterns
+        content: Add docs/cookbook/mem-file-per-function.ts and mem-region-per-target.ts, and link memory.md and regions.md to the new page — see S1 the patterns
         status: pending
   - id: s2-builder
     title: S2 — builder() from nish:string
-    goal: A built-in Builder, made by builder() from nish:string, whose bytes live outside the arena, owned by the arena position that made it, whose appends keep every enclosing scope.
-    verification: mem_builder_pass_scope holds Arena.mark() over 1,000,000 appends; builder.ts meets G1 and G2; wasi, performance, c-symbols and self sections pass.
+    goal: A built-in Builder, made by builder() from nish:string, whose bytes live outside the arena and are freed by the scope that made it, and whose appends keep every enclosing scope.
+    verification: mem_builder_pass_scope holds Arena.mark() over 1,000,000 appends; builder.ts meets G1 and G2; nish-cmp shows no difference; wasi, performance, c-symbols and self sections pass.
     todos:
       - id: builder-runtime
-        content: Add the builder and the external-block list to the runtime, hook nish_arena_release, nish_region_free and nish_reset_arena, with RT rows and runtime-test.c limits — see S2 builder
+        content: Add the builder and its out-of-arena block stack with nish_builders_depth and nish_builders_release, swapped by regions and freed by region free, free_arena and reset_arena, with RT rows and runtime-test.c limits — see S2 builder
         status: pending
       - id: builder-layout
         content: Mirror the header layout in src/runtime.ts and runtime/nish.h under the layout test — see S2 builder
@@ -48,10 +48,10 @@ stages:
         content: Register nish:string in src/nish-modules.ts and declare builder and Builder in runtime/nish.d.ts with doc comments, then regenerate docs/reference — see S2 builder
         status: pending
       - id: builder-facts
-        content: Give the methods their escape and attribute facts, and add the new Builder, thread and interop refusals with new codes in src/codes.ts — see S2 builder
+        content: Give the methods their escape facts, add the makes-builders fixpoint fact and the new Builder, thread, parallel-body, interop and wasm32 refusals with new codes in src/codes.ts — see S2 builder
         status: pending
       - id: builder-emit
-        content: Lower the methods in the emitter, and in emit-ts as a string[] class held to byte equality by differential tests — see S2 builder
+        content: Bracket every scope that makes builders with depth and release before its rewind or keep, lower the methods, and lower them in emit-ts as a string[] class held to byte equality by differential tests — see S2 builder
         status: pending
       - id: builder-tests
         content: Add golden .ll, llvm-as, native round trip, mem_builder_pass_scope and one negative test per refusal — see S2 builder
@@ -91,7 +91,7 @@ stages:
 
 # WP56 — generators whose memory stays flat
 
-The design, its reasons and its open questions are in [docs/wp56-flat-memory-generators.md](../../docs/wp56-flat-memory-generators.md). This file tracks the stages. Where the two disagree, the design note is the authority. Each stage is one pull request, and that pull request ticks its box on [docs/roadmap/wp56-flat-memory-generators.md](../../docs/roadmap/wp56-flat-memory-generators.md).
+The design, its reasons and the owner's decisions are in [docs/wp56-flat-memory-generators.md](../../docs/wp56-flat-memory-generators.md). This file tracks the stages. Where the two disagree, the design note is the authority. Each stage is one pull request, and that pull request ticks its box on [docs/roadmap/wp56-flat-memory-generators.md](../../docs/roadmap/wp56-flat-memory-generators.md).
 
 ## Context
 
@@ -112,9 +112,9 @@ The arena rewinds a pass only when nothing the pass made outlives it. `s = s + t
 ## S2 builder
 
 - The API is design note §4. The runtime is §5, and the checker is §6.
-- The owner's decisions are in design note §10: `builder()` from `nish:string`, storage owned by the arena position, thread-confined, `appendInt` and `appendF64` included, wasm32 supported or refused with a code, `s += t` still refused.
+- The owner's decisions are in design note §10: `builder()` from `nish:string`, storage freed by the scope that made it through an out-of-arena block stack (§5), thread-confined, `appendInt` and `appendF64` included, wasm32 refused with a code in S2, `s += t` still refused.
 - `src/` may not use the builtin until it is released (the rolling freeze), so `src/strings.ts` stays.
-- Run `nish-cmp`. Add `DECLARED` entries if any corpus program's IR moves, for example through a release-path change in the runtime declarations.
+- Run `nish-cmp`. It must show no difference: only a scope that makes builders gets the new bracket, and no corpus program makes one. A difference is a bug in the fact, not a `DECLARED` entry.
 - Security: either a new row in `docs/security/runtime.md` for `runtime-builder.c`, or the `runtime-text.c` row widened and `RUNTIME_TEXT_UNIT_BUDGET` raised. Add a limit test on both sides, as RT-2 has.
 
 ## S3 files from a builder
