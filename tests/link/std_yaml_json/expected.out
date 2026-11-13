@@ -12,6 +12,8 @@ PASS  numbers: a hex integer past 256 digits
 PASS  numbers: at it
 PASS  numbers: the sign's node is an int
 PASS  numbers: a lone sign is read in its span
+PASS  strings: the plain scalar is marked verbatim
+PASS  strings: a verbatim span past the text is refused
 PASS  not finite: .inf is refused
 PASS  not finite: .inf at its node
 PASS  not finite: .inf leaves the document empty
@@ -104,4 +106,4 @@ PASS  depth: 64 deep loads
 PASS  document: the first loads
 PASS  document: an empty one is null
 PASS  names: an unknown code
-std/yaml-json: 106 passed, 0 failed, 0 skipped
+std/yaml-json: 108 passed, 0 failed, 0 skipped

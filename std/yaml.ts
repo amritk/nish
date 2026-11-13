@@ -271,6 +271,12 @@ const YAML_CLIP: i32 = 0
 const YAML_STRIP: i32 = 1
 const YAML_KEEP: i32 = 2
 
+/**
+ * A flow scalar's `extras` when its span holds no line break and, quoted, no
+ * escape or doubled quote: its body is its source span, byte for byte.
+ */
+export const YAML_VERBATIM: i32 = 1
+
 // ---- Options -------------------------------------------------------------------
 
 /** How `parseYamlWith` reads a stream. Make one with `new YamlOptions()` and set what differs. */
@@ -319,7 +325,8 @@ export class YamlStream {
   counts: i32[]
   /**
    * Per node: a block scalar's content indent, whether it was written, and its
-   * chomping, as `(indent + 1) * 8 + explicit * 4 + chomp`.
+   * chomping, as `(indent + 1) * 8 + explicit * 4 + chomp`; a flow scalar's
+   * `YAML_VERBATIM` when its source span is its body.
    * @internal Used by `yamlDecode` and `YamlParser`.
    */
   extras: i32[]
@@ -2530,6 +2537,8 @@ class YamlParser {
     let indentReported: boolean = parentIndent < 0
     let closed: boolean = false
     let contentEnd: i32 = this.len
+    // No break, escape or doubled quote met: the span is the body.
+    let verbatim: boolean = true
     while (i < this.len) {
       const at: i32 = toI32(indexOfAny(this.text, single ? YAML_SINGLE_STOPS : YAML_DOUBLE_STOPS, i))
       if (at < 0) {
@@ -2540,6 +2549,7 @@ class YamlParser {
       const c: i32 = this.at(i)
       if (c === YAML_SQUOTE) {
         if (this.at(i + 1) === YAML_SQUOTE) {
+          verbatim = false
           i += 2
           continue
         }
@@ -2555,6 +2565,7 @@ class YamlParser {
         break
       }
       if (c === YAML_BACKSLASH) {
+        verbatim = false
         const e: i32 = this.at(i + 1)
         if (e < 0) {
           i = this.len
@@ -2571,6 +2582,7 @@ class YamlParser {
         continue
       }
       // A line break.
+      verbatim = false
       const after: i32 = yamlAfterBreak(this.text, i)
       if (this.isDocMarker(after)) {
         contentEnd = i
@@ -2593,6 +2605,9 @@ class YamlParser {
     )
     yamlPut(this.stream.firsts, node, start + 1)
     yamlPut(this.stream.counts, node, contentEnd)
+    if (verbatim && closed) {
+      yamlPut(this.stream.extras, node, YAML_VERBATIM)
+    }
     this.pos = i
     return node
   }
@@ -2761,6 +2776,8 @@ class YamlParser {
   private scanPlainScalar(parentIndent: i32): i32 {
     const start: i32 = this.pos
     let valueEnd: i32 = this.plainLineEnd(start)
+    // The first line's end: a scalar that stops there has no break in its span.
+    const firstEnd: i32 = valueEnd
     let colonReported: boolean = false
     const firstColon: i32 = this.plainColonAt(start, valueEnd)
     if (firstColon >= 0) {
@@ -2811,6 +2828,9 @@ class YamlParser {
     const node: i32 = this.stream.newNode(YAML_SCALAR, YAML_PLAIN, start, valueEnd)
     yamlPut(this.stream.firsts, node, start)
     yamlPut(this.stream.counts, node, valueEnd)
+    if (valueEnd === firstEnd) {
+      yamlPut(this.stream.extras, node, YAML_VERBATIM)
+    }
     return node
   }
 
@@ -3240,7 +3260,9 @@ class YamlParser {
     let valueEnd: i32 = this.trimEnd(start, i)
     if (!yamlIsBreak(this.at(i))) {
       this.pos = i
-      return this.plainNode(start, valueEnd)
+      const one: i32 = this.plainNode(start, valueEnd)
+      yamlPut(this.stream.extras, one, YAML_VERBATIM)
+      return one
     }
     let scan: i32 = yamlAfterBreak(this.text, i)
     while (true) {

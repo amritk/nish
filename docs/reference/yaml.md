@@ -52,6 +52,7 @@ import {
   YAML_SEQ,
   YAML_SINGLE_QUOTED,
   YAML_STRING,
+  YAML_VERBATIM,
   YamlOptions,
   YamlStream,
   keyText,
@@ -856,6 +857,15 @@ A `'...'` scalar.
 `YAML_STRING: i32`
 
 Every other scalar; a quoted or block scalar is one unless a `!!` core tag that fits its text says otherwise.
+
+</scalar-card>
+
+<scalar-card title="1" icon="phosphor/regular/hash">
+
+`YAML_VERBATIM: i32`
+
+A flow scalar's `extras` when its span holds no line break and, quoted, no
+escape or doubled quote: its body is its source span, byte for byte.
 
 </scalar-card>
 

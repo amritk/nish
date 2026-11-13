@@ -9,10 +9,10 @@ import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 unsafe import 51:10 wrappingAdd from "nish:unsafe"
 unsafe import 51:23 wrappingMul from "nish:unsafe"
 unsafe import 51:36 wrappingSub from "nish:unsafe"
-unsafe call 1738:13 wrappingAdd (node 7386)
-unsafe call 1738:25 wrappingMul (node 7390)
-unsafe call 1741:31 wrappingSub (node 7419)
-unsafe call 4582:12 wrappingMul (node 22343)
+unsafe call 1745:13 wrappingAdd (node 7393)
+unsafe call 1745:25 wrappingMul (node 7397)
+unsafe call 1748:31 wrappingSub (node 7426)
+unsafe call 4604:12 wrappingMul (node 22425)
 const YAML_SCALAR: i32 = 1 [exported]
 const YAML_MAP: i32 = 2 [exported]
 const YAML_SEQ: i32 = 3 [exported]
@@ -105,6 +105,7 @@ const YAML_SAW_INLINE_NODE: i32 = 4
 const YAML_CLIP: i32 = 0
 const YAML_STRIP: i32 = 1
 const YAML_KEEP: i32 = 2
+const YAML_VERBATIM: i32 = 1 [exported]
 const YAML_FNV_OFFSET: i32 = -2128831035
 const YAML_FNV_PRIME: i32 = 16777619
 const YAML_KEY_SET_SLOTS: i32 = 64
@@ -1707,31 +1708,33 @@ function YamlParser.scanQuoted(this: YamlParser, quote: i32, parentIndent: i32):
   calls: nish.YamlParser.at nish.YamlParser.checkQuotedIndent nish.YamlParser.error nish.YamlParser.isDocMarker nish.YamlParser.reportBadEscape nish.YamlStream.newNode nish.indexOfAny nish.yamlAfterBreak nish.yamlEscapeKind nish.yamlIsBreak nish.yamlPut nish_panic_overflow
   pointer this: size=176 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.reportBadEscape#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.checkQuotedIndent#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
-  local -69:11 start: i32 (const)
-  local -68:11 single: boolean (const)
-  local -67:9 i: i32 (let)
-  local -66:9 indentReported: boolean (let)
-  local -65:9 closed: boolean (let)
-  local -64:9 contentEnd: i32 (let)
-  local -62:13 at: i32 (const)
-  callee -62:29 indexOfAny -> @nish.indexOfAny
-  local -56:13 c: i32 (const)
-  callee -56:22 YamlParser.at -> @nish.YamlParser.at
-  callee -54:13 YamlParser.at -> @nish.YamlParser.at
-  local -38:15 e: i32 (const)
-  callee -38:24 YamlParser.at -> @nish.YamlParser.at
-  callee -33:13 yamlIsBreak -> @nish.yamlIsBreak
-  callee -29:13 yamlEscapeKind -> @nish.yamlEscapeKind
-  callee -28:11 YamlParser.reportBadEscape -> @nish.YamlParser.reportBadEscape
-  local -22:13 after: i32 (const)
-  callee -22:26 yamlAfterBreak -> @nish.yamlAfterBreak
-  callee -21:11 YamlParser.isDocMarker -> @nish.YamlParser.isDocMarker
-  callee -15:26 YamlParser.checkQuotedIndent -> @nish.YamlParser.checkQuotedIndent
-  callee -10:7 YamlParser.error -> @nish.YamlParser.error
-  local -8:11 node: i32 (const)
-  callee -8:23 YamlStream.newNode -> @nish.YamlStream.newNode
-  callee -2:5 yamlPut -> @nish.yamlPut
-  callee -1:5 yamlPut -> @nish.yamlPut
+  local -77:11 start: i32 (const)
+  local -76:11 single: boolean (const)
+  local -75:9 i: i32 (let)
+  local -74:9 indentReported: boolean (let)
+  local -73:9 closed: boolean (let)
+  local -72:9 contentEnd: i32 (let)
+  local -70:9 verbatim: boolean (let)
+  local -68:13 at: i32 (const)
+  callee -68:29 indexOfAny -> @nish.indexOfAny
+  local -62:13 c: i32 (const)
+  callee -62:22 YamlParser.at -> @nish.YamlParser.at
+  callee -60:13 YamlParser.at -> @nish.YamlParser.at
+  local -42:15 e: i32 (const)
+  callee -42:24 YamlParser.at -> @nish.YamlParser.at
+  callee -37:13 yamlIsBreak -> @nish.yamlIsBreak
+  callee -33:13 yamlEscapeKind -> @nish.yamlEscapeKind
+  callee -32:11 YamlParser.reportBadEscape -> @nish.YamlParser.reportBadEscape
+  local -25:13 after: i32 (const)
+  callee -25:26 yamlAfterBreak -> @nish.yamlAfterBreak
+  callee -24:11 YamlParser.isDocMarker -> @nish.YamlParser.isDocMarker
+  callee -18:26 YamlParser.checkQuotedIndent -> @nish.YamlParser.checkQuotedIndent
+  callee -13:7 YamlParser.error -> @nish.YamlParser.error
+  local -11:11 node: i32 (const)
+  callee -11:23 YamlStream.newNode -> @nish.YamlStream.newNode
+  callee -5:5 yamlPut -> @nish.yamlPut
+  callee -4:5 yamlPut -> @nish.yamlPut
+  callee -2:7 yamlPut -> @nish.yamlPut
 function YamlParser.scanAlias(this: YamlParser): i32 -> @nish.YamlParser.scanAlias [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1836,9 +1839,10 @@ function YamlParser.scanPlainScalar(this: YamlParser, parentIndent: i32): i32 ->
   calls: nish.YamlParser.at nish.YamlParser.endsAtComment nish.YamlParser.isDocMarker nish.YamlParser.nextLineStart nish.YamlParser.plainColonAt nish.YamlParser.plainLineEnd nish.YamlParser.reportPlainColon nish.YamlStream.newNode nish.yamlIsBlank nish.yamlIsBreak nish.yamlPut nish_panic_overflow
   pointer this: size=176 writesThrough=true captured=false passedTo=nish.YamlParser.plainLineEnd#0 nish.YamlParser.plainColonAt#0 nish.YamlParser.reportPlainColon#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.endsAtComment#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.plainColonAt#0 nish.YamlParser.reportPlainColon#0 nish.YamlParser.nextLineStart#0
   stackSites=0 stackLocals=0
-  local -48:11 start: i32 (const)
-  local -47:9 valueEnd: i32 (let)
-  callee -47:25 YamlParser.plainLineEnd -> @nish.YamlParser.plainLineEnd
+  local -50:11 start: i32 (const)
+  local -49:9 valueEnd: i32 (let)
+  callee -49:25 YamlParser.plainLineEnd -> @nish.YamlParser.plainLineEnd
+  local -47:11 firstEnd: i32 (const)
   local -46:9 colonReported: boolean (let)
   local -45:11 firstColon: i32 (const)
   callee -45:29 YamlParser.plainColonAt -> @nish.YamlParser.plainColonAt
@@ -1869,6 +1873,7 @@ function YamlParser.scanPlainScalar(this: YamlParser, parentIndent: i32): i32 ->
   callee +1:23 YamlStream.newNode -> @nish.YamlStream.newNode
   callee +2:5 yamlPut -> @nish.yamlPut
   callee +3:5 yamlPut -> @nish.yamlPut
+  callee +5:7 yamlPut -> @nish.yamlPut
 function YamlParser.checkBlockHeaderEnd(this: YamlParser): void -> @nish.YamlParser.checkBlockHeaderEnd [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.error
@@ -2129,7 +2134,7 @@ function YamlParser.flowPlainLineEnd(this: YamlParser, from: i32, lineStart: i32
 function YamlParser.scanFlowPlain(this: YamlParser): i32 -> @nish.YamlParser.scanFlowPlain [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.YamlParser.at nish.YamlParser.checkFlowIndent nish.YamlParser.flowColonEnds nish.YamlParser.flowPlainLineEnd nish.YamlParser.isDocMarker nish.YamlParser.plainNode nish.YamlParser.trimEnd nish.yamlAfterBreak nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
+  calls: nish.YamlParser.at nish.YamlParser.checkFlowIndent nish.YamlParser.flowColonEnds nish.YamlParser.flowPlainLineEnd nish.YamlParser.isDocMarker nish.YamlParser.plainNode nish.YamlParser.trimEnd nish.yamlAfterBreak nish.yamlIsBlank nish.yamlIsBreak nish.yamlPut nish_panic_overflow
   pointer this: size=176 writesThrough=true captured=false passedTo=nish.YamlParser.flowPlainLineEnd#0 nish.YamlParser.trimEnd#0 nish.YamlParser.at#0 nish.YamlParser.plainNode#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.flowColonEnds#0 nish.YamlParser.checkFlowIndent#0 nish.YamlParser.flowPlainLineEnd#0 nish.YamlParser.trimEnd#0 nish.YamlParser.at#0 nish.YamlParser.plainNode#0 nish.YamlParser.plainNode#0
   stackSites=0 stackLocals=0
   local -4:11 start: i32 (const)
@@ -2139,27 +2144,29 @@ function YamlParser.scanFlowPlain(this: YamlParser): i32 -> @nish.YamlParser.sca
   callee -2:25 YamlParser.trimEnd -> @nish.YamlParser.trimEnd
   callee -1:10 yamlIsBreak -> @nish.yamlIsBreak
   callee -1:22 YamlParser.at -> @nish.YamlParser.at
-  callee +1:14 YamlParser.plainNode -> @nish.YamlParser.plainNode
-  local +3:9 scan: i32 (let)
-  callee +3:21 yamlAfterBreak -> @nish.yamlAfterBreak
-  local +5:11 j: i32 (let)
-  callee +6:14 yamlIsBlank -> @nish.yamlIsBlank
-  callee +6:26 YamlParser.at -> @nish.YamlParser.at
-  local +9:13 c: i32 (const)
-  callee +9:22 YamlParser.at -> @nish.YamlParser.at
-  callee +10:11 yamlIsBreak -> @nish.yamlIsBreak
-  callee +11:16 yamlAfterBreak -> @nish.yamlAfterBreak
-  callee +20:25 YamlParser.isDocMarker -> @nish.YamlParser.isDocMarker
-  callee +23:31 YamlParser.flowColonEnds -> @nish.YamlParser.flowColonEnds
-  callee +27:9 YamlParser.checkFlowIndent -> @nish.YamlParser.checkFlowIndent
-  local +29:13 lineEnd: i32 (const)
-  callee +29:28 YamlParser.flowPlainLineEnd -> @nish.YamlParser.flowPlainLineEnd
-  callee +30:18 YamlParser.trimEnd -> @nish.YamlParser.trimEnd
-  callee +31:12 yamlIsBreak -> @nish.yamlIsBreak
-  callee +31:24 YamlParser.at -> @nish.YamlParser.at
-  callee +33:16 YamlParser.plainNode -> @nish.YamlParser.plainNode
-  callee +35:14 yamlAfterBreak -> @nish.yamlAfterBreak
-  callee +38:12 YamlParser.plainNode -> @nish.YamlParser.plainNode
+  local +1:13 one: i32 (const)
+  callee +1:24 YamlParser.plainNode -> @nish.YamlParser.plainNode
+  callee +2:7 yamlPut -> @nish.yamlPut
+  local +5:9 scan: i32 (let)
+  callee +5:21 yamlAfterBreak -> @nish.yamlAfterBreak
+  local +7:11 j: i32 (let)
+  callee +8:14 yamlIsBlank -> @nish.yamlIsBlank
+  callee +8:26 YamlParser.at -> @nish.YamlParser.at
+  local +11:13 c: i32 (const)
+  callee +11:22 YamlParser.at -> @nish.YamlParser.at
+  callee +12:11 yamlIsBreak -> @nish.yamlIsBreak
+  callee +13:16 yamlAfterBreak -> @nish.yamlAfterBreak
+  callee +22:25 YamlParser.isDocMarker -> @nish.YamlParser.isDocMarker
+  callee +25:31 YamlParser.flowColonEnds -> @nish.YamlParser.flowColonEnds
+  callee +29:9 YamlParser.checkFlowIndent -> @nish.YamlParser.checkFlowIndent
+  local +31:13 lineEnd: i32 (const)
+  callee +31:28 YamlParser.flowPlainLineEnd -> @nish.YamlParser.flowPlainLineEnd
+  callee +32:18 YamlParser.trimEnd -> @nish.YamlParser.trimEnd
+  callee +33:12 yamlIsBreak -> @nish.yamlIsBreak
+  callee +33:24 YamlParser.at -> @nish.YamlParser.at
+  callee +35:16 YamlParser.plainNode -> @nish.YamlParser.plainNode
+  callee +37:14 yamlAfterBreak -> @nish.yamlAfterBreak
+  callee +40:12 YamlParser.plainNode -> @nish.YamlParser.plainNode
 function YamlParser.plainNode(this: YamlParser, start: i32, end: i32): i32 -> @nish.YamlParser.plainNode [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlStream.newNode

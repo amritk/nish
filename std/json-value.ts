@@ -149,6 +149,7 @@
  * the same under `--number-mode f64`, and it runs under the Node prelude, where
  * `tests/run.js` holds every method to the native answers.
  */
+import { uncheckedSet } from "nish:unsafe"
 import { JSON_WRITE_FULL, JSON_WRITE_OK, JSON_WRITER_MAX_DEPTH, JsonWriter } from "nish/json"
 import {
   JSON_TOK_ARRAY_BEGIN,
@@ -1829,12 +1830,46 @@ export class JsonDocument {
       if (code === stop || (code <= JSON_VALUE_CR && (code === JSON_VALUE_LF || code === JSON_VALUE_CR))) {
         return -1
       }
-      if (k < end) {
-        buf[k] = toU8(code)
-        k += 1
-      }
+      // `k` runs `at` to `end` as `j` runs `from` to `to`: in `buf`.
+      uncheckedSet(buf, k, toU8(code))
+      k += 1
     }
-    this.byteTop = at + n
+    this.byteTop = end
+    return n
+  }
+
+  /**
+   * Appends the bytes of `text[from, to)` to the end of `bytes`, as
+   * `storeSpan` does with nothing to refuse: for a caller that knows the span
+   * holds no line break.
+   *
+   * @param text - the text the bytes are copied from.
+   * @param from - the offset of the first byte.
+   * @param to - one past the offset of the last byte.
+   * @returns how many bytes were stored, or `-1` when the span is not in `text`.
+   *
+   * @internal Read by std/yaml-json.ts, for a scalar the parser found to be
+   *   its own body.
+   */
+  copySpan(text: string, from: i32, to: i32): i32 {
+    const at: i32 = this.byteTop
+    const n: i32 = to - from
+    if (from < 0 || n < 0 || to > toI32(text.length) || at < 0) {
+      return -1
+    }
+    const buf: u8[] = jsonValueRoom(this.bytes, at + n)
+    this.bytes = buf
+    if (at + n > toI32(buf.length)) {
+      return -1
+    }
+    const end: i32 = at + n
+    let k: i32 = at
+    for (let j: i32 = from; j < to; j += 1) {
+      // `k` runs `at` to `end` as `j` runs `from` to `to`: in `buf`.
+      uncheckedSet(buf, k, toU8(text.charCodeAt(j)))
+      k += 1
+    }
+    this.byteTop = end
     return n
   }
 

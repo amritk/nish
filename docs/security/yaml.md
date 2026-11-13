@@ -100,7 +100,7 @@ check is named by its exact string.
   the loader refuses it at the value").
 - **A map's own keys are unique by the parser's check**: a map with no merge
   key, in a stream parsed with `uniqueKeys` (`YamlStream.uniqueKeys`), is
-  built from its pairs in order by `buildOwnMap` (`std/yaml-json.ts:862`),
+  built from its pairs in order by `buildOwnMap` (`std/yaml-json.ts:866`),
   which does not look for a repeated key itself. It relies on `parseYaml`'s
   check, which matches keys by the same `keyText` the loader stores, so a
   repeat is a parse error and the document never loads. The loader trusts the
@@ -108,9 +108,9 @@ check is named by its exact string.
   only by the parser, to its `YamlOptions.uniqueKeys` (`std/yaml.ts:1904`); a
   program that sets it on a stream the parser did not check gets a document
   that may repeat a key. The guard that sends a map to the general path is
-  `mergeShaped` (`std/yaml-json.ts:1072`): any key shaped as a merge key (a
+  `mergeShaped` (`std/yaml-json.ts:1076`): any key shaped as a merge key (a
   plain `<<`, untagged or `!!merge`), or a pair with no key, turns `buildMap`
-  (`:784`) away from `buildOwnMap`. A stream parsed without the check takes `buildMap`'s
+  (`:788`) away from `buildOwnMap`. A stream parsed without the check takes `buildMap`'s
   general path, which refuses a repeat with `JSON_VALUE_ERR_DUPLICATE`. Checks
   of `tests/link/std_yaml_json_own_keys`, run by the check
   "link/std_yaml_json_own_keys: exits with 0 and stdout matches expected.out",
@@ -130,7 +130,7 @@ check is named by its exact string.
   only after its length, so an empty key at the end of the text is not read
   past: "an empty last key loads".
 - **A number is stored from its source only when the source is already its
-  JSON text**: `storeJsonNumber` (`std/yaml-json.ts:672`) copies a plain int
+  JSON text**: `storeJsonNumber` (`std/yaml-json.ts:676`) copies a plain int
   or float scalar's span straight into the document only when the span, and
   nothing past it, reads as RFC 8259's number grammar less `-0`; anything else
   (a sign, `0x`, `0o`, a leading `0` or `+`, `1.`, `.5`) answers `-1` with
@@ -142,6 +142,21 @@ check is named by its exact string.
   `tests/link/std_yaml_json_golden`, whose output was produced by the loader
   before this path and is compared byte for byte: "link/std_yaml_json_golden:
   exits with 0 and stdout matches expected.out".
+- **A scalar the parser marks verbatim is copied with no search for a line
+  break, and never past its text or its buffer**: the parser sets
+  `YAML_VERBATIM` in a flow scalar's `extras` (`std/yaml.ts:278`) only when
+  its span is one line and, quoted, holds no escape or doubled quote, and
+  `storeScalar` (`std/yaml-json.ts:646`) then copies the span with
+  `JsonDocument.copySpan` rather than `storeSpan`, which refuses a break. Both
+  copies test the whole span against the text and the grown buffer once, then
+  store each byte with `uncheckedSet` (`std/json-value.ts`); the store index
+  runs from `byteTop` to `byteTop + (to - from)` in step with the read, so the
+  one test bounds every store. A mark on a stream edited after the parse is
+  trusted for its break and nothing else: a span marked verbatim that runs
+  past the text is refused whole and the scalar is read by `stream.text`.
+  Pinned by "strings: a verbatim span past the text is refused" and by
+  `tests/link/std_yaml_json_golden`, compared byte for byte with the output of
+  the loader before the mark.
 - **With `merge` off, `<<` is an ordinary key**: "merge off: loads", "merge
   off: `<<` is an ordinary key".
 - **Depth is bounded** (`:454`; a chain of merges past `YAML_JSON_MERGE_HOPS`

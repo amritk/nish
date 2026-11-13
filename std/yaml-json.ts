@@ -118,6 +118,7 @@ import {
   YAML_SCALAR,
   YAML_SEQ,
   YAML_SINGLE_QUOTED,
+  YAML_VERBATIM,
   YamlStream,
   keyText,
   parseYaml,
@@ -654,7 +655,10 @@ export class YamlJsonLoader {
         } else if (style === YAML_DOUBLE_QUOTED) {
           stop = YAML_JSON_BACKSLASH
         }
-        const n: i32 = this.doc.storeSpan(stream.source, firsts[at], counts[at], stop)
+        const n: i32 =
+          yamlJsonAt(stream.extras, at) === YAML_VERBATIM
+            ? this.doc.copySpan(stream.source, firsts[at], counts[at])
+            : this.doc.storeSpan(stream.source, firsts[at], counts[at], stop)
         if (n >= 0) {
           return n
         }
@@ -721,8 +725,8 @@ export class YamlJsonLoader {
     if (i !== to) {
       return -1
     }
-    const noStop: i32 = -1
-    return this.doc.storeSpan(source, from, to, noStop)
+    // Digits, a dot, `e` and signs only: no break to look for.
+    return this.doc.copySpan(source, from, to)
   }
 
   /** Stores key node `key`'s text, as `keyText` spells it, in the document and answers its length. */
