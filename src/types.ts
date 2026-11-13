@@ -358,6 +358,9 @@ export class TypeTable {
    */
   memberEnums: i32[]
   memberTables: i32[][]
+  /** The enum `enumMemberOf` last looked up and its `memberTables` index: runs ask for one enum. */
+  lastMemberEnum: i32
+  lastMemberAt: i32
   /**
    * `nish:secret`: the struct id of every `Secret<T>` instance -> the id of
    * its `T`, recorded when the instance is laid out (`src/generics.ts`). On the
@@ -400,6 +403,8 @@ export class TypeTable {
     this.index = new StringMap()
     this.memberEnums = []
     this.memberTables = []
+    this.lastMemberEnum = -1
+    this.lastMemberAt = -1
     this.secrets = new StringMap()
     let scalar = 0
     while (scalar < T_FIRST_DERIVED) {
@@ -539,13 +544,18 @@ export class TypeTable {
     if (value < 0 || value >= MEMBER_TABLE_LIMIT) {
       return this.internAll(K_ENUM_MEMBER, enumType, name, value, R_UNKNOWN, false)
     }
-    let at = this.memberEnums.indexOf(enumType)
+    let at = this.lastMemberAt
+    if (enumType !== this.lastMemberEnum) {
+      at = this.memberEnums.indexOf(enumType)
+    }
     if (at < 0) {
       at = this.memberEnums.length
       this.memberEnums.push(enumType)
       const fresh: i32[] = []
       this.memberTables.push(fresh)
     }
+    this.lastMemberEnum = enumType
+    this.lastMemberAt = at
     const ids = this.memberTables[at]
     while (ids.length <= value) {
       ids.push(0)

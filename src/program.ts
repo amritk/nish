@@ -1816,6 +1816,9 @@ export class CheckedProgram {
    */
   enumMemberTypes: i32[]
   enumMemberLists: i32[][]
+  /** The enum `enumMembersOf` last answered and its index there: a run of tests asks for one. */
+  lastListEnum: i32
+  lastListAt: i32
   /**
    * Scratch for the member-set operations in `expressions.ts`: type id ->
    * the stamp of the last pass that marked it, so a pass asks whether a
@@ -2133,6 +2136,8 @@ export class CheckedProgram {
     this.memberListSizes = []
     this.enumMemberTypes = []
     this.enumMemberLists = []
+    this.lastListEnum = -1
+    this.lastListAt = -1
     this.memberMarks = []
     this.memberStamp = 0
     this.narrowMemo = []

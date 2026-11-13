@@ -630,20 +630,27 @@ const memberConstantType = (ctx: CheckContext, bare: Node): i32 => {
 const setsDisjoint = (ctx: CheckContext, left: Node, right: Node): boolean => {
   const a = unwrapParens(left)
   const b = unwrapParens(right)
-  const aConstant = ctx.program.isEnumMember(ctx.table, a)
-  const bConstant = ctx.program.isEnumMember(ctx.table, b)
+  // A side that is no member constant and whose read recorded no set names no
+  // members, which no comparison is refused for: most reads, enum or not.
+  const aSet = ctx.program.memberSets[a.id]
+  const aConstant = a.kind === N_MEMBER && ctx.program.isEnumMember(ctx.table, a)
+  if (!aConstant && !namesMembers(aSet)) {
+    return false
+  }
+  const bSet = ctx.program.memberSets[b.id]
+  const bConstant = b.kind === N_MEMBER && ctx.program.isEnumMember(ctx.table, b)
+  if (!bConstant && !namesMembers(bSet)) {
+    return false
+  }
   if (aConstant !== bConstant) {
-    const set = aConstant ? ctx.program.memberSets[b.id] : ctx.program.memberSets[a.id]
-    if (!namesMembers(set)) {
-      return false
-    }
+    const set = aConstant ? bSet : aSet
     const member = memberConstantType(ctx, aConstant ? a : b)
     const enumType = intAt(ctx.program.memberListEnums, listIndex(set))
     if (set < MEMBERS_NONE && enumType >= 0 && ctx.table.isMemberOf(member, enumType)) {
       return !setHas(ctx, set, member)
     }
   }
-  return membersDisjoint(ctx, memberSetOf(ctx, left), memberSetOf(ctx, right))
+  return membersDisjoint(ctx, memberSetOf(ctx, a), memberSetOf(ctx, b))
 }
 
 /** The members a `memberSets` id names: a list, a member type, a union's tags, or none. */
@@ -2602,9 +2609,15 @@ const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local
  * change it.
  */
 export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
-  const at = ctx.program.enumMemberTypes.indexOf(enumType)
+  const program = ctx.program
+  if (enumType === program.lastListEnum) {
+    return program.enumMemberLists[program.lastListAt]
+  }
+  const at = program.enumMemberTypes.indexOf(enumType)
   if (at >= 0) {
-    return ctx.program.enumMemberLists[at]
+    program.lastListEnum = enumType
+    program.lastListAt = at
+    return program.enumMemberLists[at]
   }
   const members: i32[] = []
   for (const info of ctx.program.enumList) {
@@ -2612,7 +2625,6 @@ export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
       // A value the table looks up by value alone is one id whatever the
       // name, and the first member with it names it, so ids are kept the
       // first time they are marked; any other value is matched by value.
-      const program = ctx.program
       program.memberStamp = program.memberStamp + 1
       const stamp = program.memberStamp
       const seen: i32[] = []
@@ -3101,11 +3113,15 @@ const exhaustedMessage = (name: string): string =>
  */
 export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
   const read = unwrapParens(node)
-  if (read.kind !== N_MEMBER || isOptionalChain(read) || ctx.program.isEnumMember(ctx.table, read)) {
+  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
     return null
   }
   const receiver = testedRead(read.children[0])
   if (receiver.kind !== N_IDENT) {
+    return null
+  }
+  // A member constant, `Kind.A`, reads no variable: its receiver is no value.
+  if (ctx.program.nodeTypes[receiver.id] < 0 && ctx.program.isEnumMember(ctx.table, read)) {
     return null
   }
   const local = scope.lookup(receiver.text)
