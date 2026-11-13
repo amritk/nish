@@ -5586,14 +5586,16 @@ if (!only || "performance".includes(only)) {
   // each pass allocates, because each pass stores into a structure older than
   // the loop and so gets no scope. The warning sits on the innermost loop that
   // releases nothing (the counted `for` inside `rounds`, which nothing outside
-  // it bounds either), names the first site and counts the rest.
+  // it bounds either), names the first site and counts the rest. A `while` that
+  // compares (`drain`), a `for...of` that pushes onto what it walks (`walk`) and
+  // a condition that allocates (`probe`) are unbounded too.
   const unbounded = compile("perf_arena_unbounded_pass", "perf_arena_unbounded_pass_report.ll")
   const unboundedLines = summaries(unbounded.stderr)
   check(
     "performance: a loop nothing bounds that keeps what each pass allocates warns once, naming the site and the arena block",
     unbounded.status === 0 &&
-      unboundedLines.length === 3 &&
-      positions(unboundedLines) === "33:3,49:5,61:3" &&
+      unboundedLines.length === 6 &&
+      positions(unboundedLines) === "33:3,49:5,61:3,74:3,84:3,97:3" &&
       unboundedLines[0].includes(
         "this loop keeps what each pass allocates until the memory of `serve`'s caller is released, because the " +
           "allocation on line 36 is stored into memory, where this analysis stops following it, and nothing bounds " +
@@ -5602,7 +5604,10 @@ if (!only || "performance".includes(only)) {
           "which the compiler refuses if anything allocated there could outlive the block"
       ) &&
       unboundedLines[1].includes("so the string built on line 50 piles up") &&
-      unboundedLines[2].includes("so the string built on line 62 and 1 more allocation pile up"),
+      unboundedLines[2].includes("so the string built on line 62 and 1 more allocation pile up") &&
+      unboundedLines[3].includes("so the string built on line 75 piles up") &&
+      unboundedLines[4].includes("so the string built on line 85 piles up") &&
+      unboundedLines[5].includes("so the string built on line 97 piles up"),
     unbounded.stderr
   )
   // Silent for the same temporary in a `using a = arena()` block, a counted
@@ -11768,18 +11773,18 @@ if (dealtHere("unboundedPass")) {
       }
     })
   check(
-    'nl9018: --json reports each of perf_arena_unbounded_pass\'s three warnings with "code":"NL9018"',
+    'nl9018: --json reports each of perf_arena_unbounded_pass\'s six warnings with "code":"NL9018"',
     js.status === 0 &&
-      objects.length === 3 &&
+      objects.length === 6 &&
       objects.every((o) => o !== null && o.code === "NL9018" && o.severity === "performance") &&
-      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3",
+      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3,74:3,84:3,97:3",
     shown(js)
   )
   const off = caseCompile("off.ll", ["--no-warn-performance"])
   check(
     "nl9018: --no-warn-performance silences it and leaves the IR byte-identical",
     plain.status === 0 &&
-      nl9018Lines(plain.stderr).length === 3 &&
+      nl9018Lines(plain.stderr).length === 6 &&
       off.status === 0 &&
       !off.stderr.includes("performance:") &&
       stripHeader(fs.readFileSync(path.join(srvDir, "off.ll"), "utf8")) ===

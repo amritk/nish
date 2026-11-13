@@ -67,6 +67,38 @@ const pair = (log: Log): void => {
   }
 };
 
+// An ordering comparison does not bound a loop: `sent` never moves toward
+// `total`, so the poll alone decides how many passes run.
+const drain = (log: Log, total: i32): void => {
+  const sent = 0;
+  while (sent < total && more(log)) {
+    const line = `sent ${log.total}`;
+    log.total = log.total + line.length;
+    log.last = new Entry(sent);
+  }
+};
+
+// A `for...of` whose body pushes onto what it walks is not counted: each pass
+// may add the next one.
+const walk = (log: Log, queue: i32[]): void => {
+  for (const id of queue) {
+    const tag = `id ${id}`;
+    log.total = log.total + tag.length;
+    log.last = new Entry(id);
+    if (more(log)) {
+      queue.push(id + 1);
+    }
+  }
+};
+
+// A condition that allocates runs outside the scope a pass takes, on every
+// pass of a loop that nothing bounds.
+const probe = (log: Log): void => {
+  while (`${log.left}`.length > 0 && more(log)) {
+    log.last = new Entry(log.left);
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -75,5 +107,11 @@ export const main = (): void => {
   rounds(log, 3);
   log.left = 2;
   pair(log);
+  log.left = 2;
+  drain(log, 5);
+  log.left = 2;
+  walk(log, [7]);
+  log.left = 2;
+  probe(log);
   console.log(`${log.total} ${log.last.id}`);
 };

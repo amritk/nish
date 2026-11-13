@@ -212,8 +212,6 @@ export const main = (): i32 => {
     if (next === null) {
       if (fresh.error.length > 0) {
         // Expected during a renewal: two files written by somebody else, not at the same instant.
-        // The line goes back with this block, so a relay that renews for months does not keep them all.
-        using a = arena()
         writeError(`[relay] ${fresh.error}; keeping the one already loaded\n`)
       }
     } else {
