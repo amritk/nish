@@ -1514,7 +1514,11 @@ YAML says.
 `YamlStream` into a `nish/json-value` `JsonDocument`, so a program that reads
 JSON reads YAML with the same code. `load(stream, d, doc)` clears `doc` and
 answers the root, with every value's range (`start`, `end`) and every key's
-(`keyStart`, `keyEnd`) set to the YAML node's bytes.
+(`keyStart`, `keyEnd`) set to the YAML node's bytes. When you have the text
+and need nothing else from the stream, `loadText(text, d, doc)` parses and
+loads in one call and is faster: it builds the values as it reads the nodes,
+with no second walk, and answers exactly what `load(parseYaml(text), d, doc)`
+would, refusals included.
 
 A scalar is typed by the core schema: `0x1F` and `0o17` load as the exact
 decimal numbers `31` and `15`, and `.inf`, `-.inf` and `.nan`, which JSON
@@ -1529,7 +1533,6 @@ JSON or from YAML:
 ```ts nish:ok
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
-import { parseYaml } from "nish/yaml";
 import { YamlJsonLoader } from "nish/yaml-json";
 import { YamlLineIndex } from "nish/yaml-lines";
 
@@ -1546,7 +1549,7 @@ export const main = (): i32 => {
   const fromYaml = new JsonDocument(new JsonLimits());
   const loader = new YamlJsonLoader();
   const a = fromJson.parseTextRanged(json);
-  const b = loader.load(parseYaml(yaml), 0, fromYaml);
+  const b = loader.loadText(yaml, 0, fromYaml);
   console.log(`json ${place(json, fromJson, a)}, yaml ${place(yaml, fromYaml, b)}`);
   return b < 0 ? 1 : 0;
 };

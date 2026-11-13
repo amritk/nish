@@ -5,6 +5,8 @@
 // styles, and every refusal answers its code and range: `.inf` and `.nan`, an
 // alias bomb, too deep a document, a repeated key. Numbers keep exact JSON
 // text, hex and octal included, and merge keys let the map's own keys win.
+// Every text loads both ways, `loadText` and `load(parseYaml(text))`, and the
+// two must answer the same values, ranges and refusals.
 import { JSON_TOK_ERR_TOTAL_LIMIT, JsonLimits } from "nish/json-tokenizer";
 import {
   JSON_VALUE_ARRAY,
@@ -32,6 +34,10 @@ import {
   yamlJsonErrorName,
 } from "nish/yaml-json";
 import { YamlLineIndex } from "nish/yaml-lines";
+import { yjdRun } from "../std_yaml_json_direct/compare";
+
+/** How many texts `yjLoad` loaded both ways, and how many of them differed. */
+const YJ_DIRECT = new Int32Array(2);
 
 const yjDoc = (): JsonDocument => new JsonDocument(new JsonLimits());
 
@@ -39,9 +45,19 @@ const yjDoc = (): JsonDocument => new JsonDocument(new JsonLimits());
 const yjSlice = (text: string, a: i32, b: i32): string =>
   a < 0 || b < a || b > toI32(text.length) ? `- ${a} ${b}` : text.substring(a, b);
 
-/** Loads document 0 of `text`; the root, or the loader's code. */
-const yjLoad = (loader: YamlJsonLoader, doc: JsonDocument, text: string): JsonValue =>
-  loader.load(parseYaml(text), 0, doc);
+/**
+ * Loads document 0 of `text` with `loadText`; the root, or the loader's code.
+ * A fresh loader's `load(parseYaml(text))` must answer the same.
+ */
+const yjLoad = (loader: YamlJsonLoader, doc: JsonDocument, text: string): JsonValue => {
+  const run = yjdRun(loader, doc, text, 0);
+  YJ_DIRECT[0] += 1;
+  if (run.differs !== "") {
+    YJ_DIRECT[1] += 1;
+    console.log(`DIFFERS ${text}\n${run.differs}`);
+  }
+  return run.root;
+};
 
 /** Loads document 0 of `text`, parsed with repeated keys let through to the loader. */
 const yjLoose = (loader: YamlJsonLoader, doc: JsonDocument, text: string): JsonValue => {
@@ -409,5 +425,7 @@ export const main = (): number => {
   yjMergeBomb(t);
   yjMergeShapes(t);
   yjRefusals(t);
+  t.eqI32("direct: every text above loaded both ways", YJ_DIRECT[0], 37);
+  t.eqI32("direct: loadText answers as load(parseYaml(text)) does", YJ_DIRECT[1], 0);
   return t.done();
 };

@@ -387,6 +387,13 @@ export class YamlStream {
    */
   mergeStamps: i32[]
   /**
+   * Per node: one past its slot in `keyNames` once `keyName` has decoded it,
+   * else 0; grown to the node count by the first decode.
+   */
+  private keySlots: i32[]
+  /** The key texts `keyName` has decoded, each once. */
+  private keyNames: string[]
+  /**
    * Per node: its `YAML_*` kind, style and core-schema type (`YAML_UNRESOLVED` until read).
    * @internal Used by `YamlJsonLoader` in yaml-json.ts.
    */
@@ -464,6 +471,8 @@ export class YamlStream {
     this.commentStarts = []
     this.commentEnds = []
     this.mergeStamps = []
+    this.keySlots = []
+    this.keyNames = []
   }
 
   // ---- Documents ---------------------------------------------------------------
@@ -884,6 +893,27 @@ export class YamlStream {
   comment(i: i32): string {
     const from: i32 = this.commentStart(i)
     return from < 0 ? "" : this.source.substring(from + 1, this.commentEnd(i))
+  }
+
+  /**
+   * `yamlKeyText` of `node`, decoded the first time it is asked for and kept,
+   * so the parser's duplicate-key check and a loader share one decode.
+   * @internal Called by `YamlParser` and `YamlJsonLoader` in yaml-json.ts.
+   */
+  keyName(node: i32): string {
+    if (node >= 0 && node < toI32(this.keySlots.length)) {
+      const slot: i32 = this.keySlots[node]
+      if (slot > 0) {
+        return this.keyNames[slot - 1]
+      }
+    }
+    const text: string = yamlKeyText(this, node)
+    if (node >= 0 && node < this.top) {
+      this.keySlots = yamlRoomI32(this.keySlots, this.top)
+      this.keyNames.push(text)
+      this.keySlots[node] = toI32(this.keyNames.length)
+    }
+    return text
   }
 
   // ---- Building ----------------------------------------------------------------
@@ -3678,10 +3708,10 @@ class YamlParser {
         let same: boolean = this.sameKeyBytes(other, key)
         if (!same && !this.isMergeKey(other)) {
           if (!decoded) {
-            text = yamlKeyText(stream, key)
+            text = stream.keyName(key)
             decoded = true
           }
-          same = yamlKeyText(stream, other) === text
+          same = stream.keyName(other) === text
         }
         if (same) {
           this.reportDuplicateKey(key)
@@ -3702,12 +3732,12 @@ class YamlParser {
       while (i < this.scratchTop) {
         const other: i32 = stream.key(yamlAt(this.scratch, i))
         if (!this.isMergeKey(other)) {
-          this.keySets[held].add(yamlKeyText(stream, other))
+          this.keySets[held].add(stream.keyName(other))
         }
         i += 1
       }
     }
-    if (!this.keySets[held].add(yamlKeyText(stream, key))) {
+    if (!this.keySets[held].add(stream.keyName(key))) {
       this.reportDuplicateKey(key)
     }
     return held

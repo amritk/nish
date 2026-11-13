@@ -1463,18 +1463,7 @@ export class JsonDocument {
     if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
-    this.ownRanges()
-    const r: JsonValueRanges = this.rangeArrays()
-    // Values between the last current one and `x` have no range yet.
-    for (let y: i32 = this.rangeTop; y < x; y += 1) {
-      jsonValuePut(r.valueStart, y, -1)
-      jsonValuePut(r.valueEnd, y, -1)
-    }
-    jsonValuePut(r.valueStart, x, start)
-    jsonValuePut(r.valueEnd, x, end)
-    if (x >= this.rangeTop) {
-      this.rangeTop = x + 1
-    }
+    this.placeRange(x, start, end)
     return JSON_VALUE_OK
   }
 
@@ -1497,17 +1486,7 @@ export class JsonDocument {
     if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
-    this.ownRanges()
-    const r: JsonValueRanges = this.rangeArrays()
-    for (let t: i32 = this.slotRangeTop; t < s; t += 1) {
-      jsonValuePut(r.slotKeyStart, t, -1)
-      jsonValuePut(r.slotKeyEnd, t, -1)
-    }
-    jsonValuePut(r.slotKeyStart, s, start)
-    jsonValuePut(r.slotKeyEnd, s, end)
-    if (s >= this.slotRangeTop) {
-      this.slotRangeTop = s + 1
-    }
+    this.placeKeyRange(s, start, end)
     return JSON_VALUE_OK
   }
 
@@ -1821,6 +1800,170 @@ export class JsonDocument {
     }
     this.byteTop = at + n
     return n
+  }
+
+  /**
+   * Gives the empty container at index `c` exactly `n` slots at the end of
+   * the slot arrays, so that `n` appends fill them without moving.
+   *
+   * @internal Read by std/yaml-json.ts, which builds each container once it
+   *   knows its members.
+   */
+  reserve(c: i32, n: i32): void {
+    const start: i32 = this.slotTop
+    jsonValuePut(this.first, c, start)
+    jsonValuePut(this.room, c, n)
+    this.slotTop = start + n
+    this.slotValue = jsonValueRoomI32(this.slotValue, this.slotTop)
+    this.slotKeyAt = jsonValueRoomI32(this.slotKeyAt, this.slotTop)
+    this.slotKeyLength = jsonValueRoomI32(this.slotKeyLength, this.slotTop)
+  }
+
+  /**
+   * `setRange` for index `x`, unchecked: the caller made `x` and
+   * `0 <= start <= end` holds.
+   *
+   * @internal Read by std/yaml-json.ts, which builds a document from YAML
+   *   through it.
+   */
+  placeRange(x: i32, start: i32, end: i32): void {
+    this.ownRanges()
+    const r: JsonValueRanges = this.rangeArrays()
+    // Values between the last current one and `x` have no range yet.
+    for (let y: i32 = this.rangeTop; y < x; y += 1) {
+      jsonValuePut(r.valueStart, y, -1)
+      jsonValuePut(r.valueEnd, y, -1)
+    }
+    jsonValuePut(r.valueStart, x, start)
+    jsonValuePut(r.valueEnd, x, end)
+    if (x >= this.rangeTop) {
+      this.rangeTop = x + 1
+    }
+  }
+
+  /**
+   * `setKeyRange` for slot `s`, unchecked: the slot is an object member's
+   * and `0 <= start <= end` holds.
+   *
+   * @internal Read by std/yaml-json.ts, which builds a document from YAML
+   *   through it.
+   */
+  placeKeyRange(s: i32, start: i32, end: i32): void {
+    this.ownRanges()
+    const r: JsonValueRanges = this.rangeArrays()
+    for (let t: i32 = this.slotRangeTop; t < s; t += 1) {
+      jsonValuePut(r.slotKeyStart, t, -1)
+      jsonValuePut(r.slotKeyEnd, t, -1)
+    }
+    jsonValuePut(r.slotKeyStart, s, start)
+    jsonValuePut(r.slotKeyEnd, s, end)
+    if (s >= this.slotRangeTop) {
+      this.slotRangeTop = s + 1
+    }
+  }
+
+  /**
+   * The slot of member `i` of the container at index `c`; the caller knows
+   * it has one.
+   *
+   * @internal Read by std/yaml-json.ts, which merges members it built.
+   */
+  memberSlot(c: i32, i: i32): i32 {
+    return jsonValueGet(this.first, c) + i
+  }
+
+  /**
+   * A copy of `v` and everything in it, in this document: new values,
+   * slots, string and key bytes, each value and key with the range its
+   * original has, and the copy itself with `[start, end)`. Every value counts
+   * against `maxValues`, as a value built anew would; the caller holds the
+   * bytes to its limit.
+   *
+   * @internal Read by std/yaml-json.ts, which expands an alias by copying
+   *   the value its anchor built.
+   * @returns the copy, or `JSON_VALUE_ERR_VALUES` when the document fills;
+   *   then part of the copy may be made, in no container.
+   */
+  copyValue(v: JsonValue, start: i32, end: i32): JsonValue {
+    const y: i32 = this.copyAt(this.index(v))
+    if (y >= 0) {
+      this.placeRange(y, start, end)
+    }
+    return this.handle(y)
+  }
+
+  /**
+   * A copy of the value of member `i` of container `c`, with its range, as
+   * `copyValue` makes one.
+   *
+   * @internal Read by std/yaml-json.ts, which merges a map's members into
+   *   another by copying them.
+   * @returns the copy, or `JSON_VALUE_ERR_VALUES` when the document fills.
+   */
+  copyMember(c: JsonValue, i: i32): JsonValue {
+    return this.handle(this.copySlot(this.memberSlot(this.index(c), i)))
+  }
+
+  /** A copy of the value in slot `s`, with its range when it has one; its index. */
+  private copySlot(s: i32): i32 {
+    const from: i32 = jsonValueGet(this.slotValue, s)
+    const y: i32 = this.copyAt(from)
+    if (y >= 0 && this.hasValueRange(from)) {
+      const r: JsonValueRanges = this.rangeArrays()
+      this.placeRange(y, jsonValueGet(r.valueStart, from), jsonValueGet(r.valueEnd, from))
+    }
+    return y
+  }
+
+  /** `copyValue`'s recursion, without the copy's own range. */
+  private copyAt(x: i32): i32 {
+    const kind: i32 = this.kindAt(x)
+    const first: i32 = jsonValueGet(this.first, x)
+    const n: i32 = jsonValueGet(this.count, x)
+    if (kind === JSON_VALUE_NUMBER || kind === JSON_VALUE_STRING) {
+      const at: i32 = this.byteTop
+      this.copyBytes(first, n)
+      return this.newNode(kind, at, n)
+    }
+    if (kind !== JSON_VALUE_ARRAY && kind !== JSON_VALUE_OBJECT) {
+      return this.newNode(kind, first, n)
+    }
+    const c: i32 = this.newNode(kind, this.slotTop, 0)
+    if (c < 0) {
+      return c
+    }
+    this.reserve(c, n)
+    const object: boolean = kind === JSON_VALUE_OBJECT
+    for (let i: i32 = 0; i < n; i += 1) {
+      const s: i32 = first + i
+      const v: i32 = this.copySlot(s)
+      if (v < 0) {
+        return v
+      }
+      const keyLength: i32 = jsonValueGet(this.slotKeyLength, s)
+      let keyAt: i32 = jsonValueGet(this.slotKeyAt, s)
+      if (object) {
+        keyAt = this.byteTop
+        this.copyBytes(jsonValueGet(this.slotKeyAt, s), keyLength)
+      }
+      this.append(c, v, keyAt, keyLength)
+      if (object && this.hasKeyRange(s)) {
+        const r: JsonValueRanges = this.rangeArrays()
+        this.placeKeyRange(this.memberSlot(c, i), jsonValueGet(r.slotKeyStart, s), jsonValueGet(r.slotKeyEnd, s))
+      }
+    }
+    return c
+  }
+
+  /** Appends `bytes[from, from + n)` to the end of `bytes`. */
+  private copyBytes(from: i32, n: i32): void {
+    const at: i32 = this.byteTop
+    const buf: u8[] = jsonValueRoom(this.bytes, at + n)
+    this.bytes = buf
+    for (let i: i32 = 0; i < n && from + i < at && at + i < toI32(buf.length); i += 1) {
+      buf[at + i] = buf[from + i]
+    }
+    this.byteTop = at + n
   }
 
   // ---- Writing ----------------------------------------------------------------

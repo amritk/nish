@@ -14,6 +14,11 @@
  *     // root < 0: loader.failed, loader.errorStart, loader.errorEnd
  *
  * `load` clears the document and builds document `d` of the stream into it.
+ * `loadText(text, d, doc)` parses `text` and does the same with no second
+ * walk of the node tree, about 7% fewer instructions when nothing else
+ * needs the stream; its values, ranges and refusals are `load(parseYaml(text), d,
+ * doc)`'s, and it falls back to `load` for any document it cannot build in
+ * one sweep (a refusal, a merge it cannot copy, an alias to a later node).
  * Every value's `start` and `end` are the byte range of the YAML node it came
  * from, as `YamlStream.start` and `end` give it (an anchor or a tag in front
  * is not included), and every key's `keyStart` and `keyEnd` the range of its
@@ -111,11 +116,11 @@ import {
   YAML_INT,
   YAML_MAP,
   YAML_NULL,
+  YAML_PAIR,
   YAML_PLAIN,
   YAML_SCALAR,
   YAML_SEQ,
   YamlStream,
-  keyText,
   parseYaml,
 } from "nish/yaml"
 
@@ -151,6 +156,11 @@ export const YAML_JSON_SCAN_KEYS: i32 = 16
 
 /** How many merge keys deep a merged map is searched, as `YAML_ALIAS_HOPS` bounds `pathNode`. */
 const YAML_JSON_MERGE_HOPS: i32 = 100
+
+/** `loadText`'s marks on a node: not built, with all it holds; not built itself; a merge key's pair. */
+const YAML_JSON_SKIP: i32 = 1
+const YAML_JSON_SKIP_SELF: i32 = 2
+const YAML_JSON_MERGE_PAIR: i32 = 4
 
 /** The decimal limb `yamlJsonRadix` works in: four digits, so a limb times 16 plus a carry fits an `i32`. */
 const YAML_JSON_LIMB: i32 = 10000
@@ -222,6 +232,26 @@ export class YamlJsonLoader {
   private mergeStamp: i32 = 0
   /** The merged pairs the load may still visit. */
   private mergeBudget: i32 = 0
+  /** Each entry's key range, beside `entryKeys`, for `loadText`. */
+  private entryStarts: i32[]
+  private entryEnds: i32[]
+  /**
+   * `loadText`'s facts per node of the document, from its first node: what
+   * `sweep` skips (`YAML_JSON_SKIP*`), and what the node expands to, as
+   * `load` would build it: its value count, how many collections deep it
+   * nests, the merged pairs it charges, how many merge keys deep it merges.
+   */
+  private flags: i32[]
+  private totals: i32[]
+  private heights: i32[]
+  private charges: i32[]
+  private chains: i32[]
+  /** Per node, the value `sweep` built for it (`-1` for none). */
+  private values: i32[]
+  /** Per map node `sweep` built, where its keys start in `memberKeys`. */
+  private memberBase: i32[]
+  private memberKeys: string[]
+  private memberTop: i32 = 0
 
   /** A loader that holds collections to `JSON_WRITER_MAX_DEPTH`, so whatever it loads can be written back out. */
   constructor() {
@@ -236,6 +266,16 @@ export class YamlJsonLoader {
     this.entryValues = []
     this.seen = new Map<string, i32>()
     this.mergeMarks = []
+    this.entryStarts = []
+    this.entryEnds = []
+    this.flags = []
+    this.totals = []
+    this.heights = []
+    this.charges = []
+    this.chains = []
+    this.values = []
+    this.memberBase = []
+    this.memberKeys = []
   }
 
   /**
@@ -294,7 +334,440 @@ export class YamlJsonLoader {
    *   `errorStart` and `errorEnd`.
    */
   loadText(text: string, d: i32, doc: JsonDocument): JsonValue {
-    return this.load(parseYaml(text), d, doc)
+    const stream: YamlStream = parseYaml(text)
+    const v: JsonValue = this.sweep(stream, d, doc)
+    if (v >= 0) {
+      this.failed = 0
+      this.errorStart = -1
+      this.errorEnd = -1
+      return v
+    }
+    return this.load(stream, d, doc)
+  }
+
+  // ---- The direct load -------------------------------------------------------------
+
+  /**
+   * Document `d` built in one pass over its nodes, children before the
+   * collection that holds them, as the stream numbers them: each collection
+   * is built once, an alias is a copy of what its anchor built, and a merged
+   * member a copy of the member the merged map holds. `-1` when the load is
+   * not one this pass is sure to build exactly as `load` would: any refusal,
+   * and any document within reach of a limit, counted the way `load` counts
+   * it or more. `loadText` then runs `load`, which answers the refusal.
+   */
+  private sweep(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue {
+    this.stream = stream
+    this.doc = doc
+    this.entryTop = 0
+    this.memberTop = 0
+    this.byteCap = doc.tok.maxTotalBytes
+    doc.clear()
+    if (d < 0 || d >= stream.documentCount()) {
+      return -1
+    }
+    for (let i: i32 = 0; i < stream.diagnosticCount(); i += 1) {
+      if (stream.diagnosticDocument(i) === d && !stream.diagnosticIsWarning(i)) {
+        return -1
+      }
+    }
+    const root: i32 = stream.documentRoot(d)
+    if (root < 0) {
+      return -1
+    }
+    let lo: i32 = 0
+    for (let e: i32 = d - 1; e >= 0; e -= 1) {
+      const r: i32 = stream.documentRoot(e)
+      if (r >= 0) {
+        lo = r + 1
+        break
+      }
+    }
+    const room: i32 = doc.maxValues < JSON_VALUE_MAX_VALUES ? doc.maxValues : JSON_VALUE_MAX_VALUES
+    this.cap = room
+    const budget: i32 = room + toI32(stream.kinds.length)
+    if (lo > root || !this.markSkips(lo, root)) {
+      return -1
+    }
+    for (let n: i32 = lo; n <= root; n += 1) {
+      if (!this.sweepNode(n, budget)) {
+        return -1
+      }
+    }
+    const v: JsonValue = this.valueOf(root, 0)
+    return doc.byteTop > this.byteCap ? -1 : v
+  }
+
+  /**
+   * Readies the per-node arrays for nodes `lo` to `root` and marks what
+   * `sweep` does not build: every key, with all it holds, since a key is its
+   * text; and a merge key's sequence, whose maps are merged, not held. Visits
+   * a collection before what it holds, which the stream numbers lower.
+   * `false` when a node holds one numbered outside `[lo, itself)`.
+   */
+  private markSkips(lo: i32, root: i32): boolean {
+    const stream: YamlStream = this.stream
+    const nodes: i32 = toI32(stream.kinds.length)
+    const flags: i32[] = this.flags
+    while (toI32(flags.length) < nodes) {
+      flags.push(0)
+      this.totals.push(0)
+      this.heights.push(0)
+      this.charges.push(0)
+      this.chains.push(0)
+      this.values.push(-1)
+      this.memberBase.push(0)
+    }
+    for (let n: i32 = lo; n <= root && n < nodes; n += 1) {
+      flags[n] = 0
+    }
+    for (let n: i32 = root; n >= lo && n < nodes; n -= 1) {
+      const kind: i32 = stream.kind(n)
+      const skip: i32 = flags[n] & YAML_JSON_SKIP
+      if (kind === YAML_MAP || kind === YAML_SEQ) {
+        for (let i: i32 = 0; i < stream.count(n); i += 1) {
+          const c: i32 = stream.child(n, i)
+          if (c >= n || (c >= 0 && c < lo)) {
+            return false
+          }
+          if (c >= 0) {
+            flags[c] |= skip
+          }
+        }
+      } else if (kind === YAML_PAIR) {
+        const k: i32 = stream.key(n)
+        const v: i32 = stream.value(n)
+        if (k >= n || v >= n || (k >= 0 && k < lo) || (v >= 0 && v < lo)) {
+          return false
+        }
+        if (k >= 0) {
+          flags[k] |= YAML_JSON_SKIP
+        }
+        if (this.isMergeKey(k)) {
+          flags[n] |= YAML_JSON_MERGE_PAIR
+          if (v >= 0 && skip === 0 && stream.kind(v) === YAML_SEQ) {
+            flags[v] |= YAML_JSON_SKIP_SELF
+          }
+        }
+        if (v >= 0) {
+          flags[v] |= skip
+        }
+      }
+    }
+    return true
+  }
+
+  /**
+   * Node `n`'s counts, from those of the nodes it holds, and its value
+   * when it is a collection `sweep` builds; `false` when one of the counts
+   * reaches a limit, or the value cannot be built.
+   */
+  private sweepNode(n: i32, budget: i32): boolean {
+    const stream: YamlStream = this.stream
+    const kind: i32 = stream.kind(n)
+    if (kind === YAML_SCALAR) {
+      this.totals[n] = 1
+      this.heights[n] = 0
+      this.charges[n] = 0
+      this.chains[n] = 0
+      return true
+    }
+    if (kind === YAML_ALIAS) {
+      const r: i32 = stream.resolved(n)
+      if (r < 0 || r >= n || stream.kind(r) === YAML_ALIAS || stream.kind(r) === YAML_PAIR) {
+        return false
+      }
+      this.totals[n] = this.totals[r]
+      this.heights[n] = this.heights[r]
+      this.charges[n] = this.charges[r]
+      this.chains[n] = this.chains[r]
+      return true
+    }
+    if (kind === YAML_SEQ) {
+      let size: i32 = 1
+      let height: i32 = 0
+      let charge: i32 = 0
+      for (let i: i32 = 0; i < stream.count(n); i += 1) {
+        const c: i32 = stream.child(n, i)
+        size += c < 0 ? 1 : this.totals[c]
+        if (c >= 0) {
+          height = height > this.heights[c] ? height : this.heights[c]
+          charge += this.charges[c]
+        }
+        if (size > this.cap || charge > budget) {
+          return false
+        }
+      }
+      this.totals[n] = size
+      this.heights[n] = height + 1
+      this.charges[n] = charge
+      this.chains[n] = 0
+    } else if (kind === YAML_MAP) {
+      if (!this.mapCounts(n, budget)) {
+        return false
+      }
+    } else {
+      return true
+    }
+    if (this.heights[n] > this.maxDepth) {
+      return false
+    }
+    if ((this.flags[n] & (YAML_JSON_SKIP | YAML_JSON_SKIP_SELF)) !== 0) {
+      return true
+    }
+    const v: JsonValue = kind === YAML_MAP ? this.sweepMap(n) : this.sweepSeq(n)
+    this.values[n] = v
+    return v >= 0 && this.doc.byteTop <= this.byteCap
+  }
+
+  /**
+   * Map `n`'s counts. Its size is `sizeOf`'s; its height, charge and merge
+   * chain are at least what `load` reaches building it, which may stop
+   * short of them where an own key hides a merged one, or a map is merged
+   * twice.
+   */
+  private mapCounts(n: i32, budget: i32): boolean {
+    const stream: YamlStream = this.stream
+    let size: i32 = 1
+    let height: i32 = 0
+    let charge: i32 = 0
+    let chain: i32 = -1
+    for (let i: i32 = 0; i < stream.count(n); i += 1) {
+      const pair: i32 = stream.child(n, i)
+      const value: i32 = stream.value(pair)
+      const part: i32 = value < 0 ? 1 : this.totals[value]
+      if ((this.flags[pair] & YAML_JSON_MERGE_PAIR) === 0) {
+        size += part
+        if (value >= 0) {
+          height = height > this.heights[value] ? height : this.heights[value]
+          charge += this.charges[value]
+        }
+      } else {
+        const source: i32 = value < 0 ? -1 : stream.resolved(value)
+        const sourceKind: i32 = stream.kind(source)
+        if (sourceKind === YAML_MAP) {
+          size += part - 1
+          charge += this.mergeCharge(source)
+          height = height > this.heights[source] - 1 ? height : this.heights[source] - 1
+          chain = chain > this.chains[source] ? chain : this.chains[source]
+        } else if (sourceKind === YAML_SEQ) {
+          size += part - 1 - stream.count(source)
+          charge += stream.count(source)
+          for (let j: i32 = 0; j < stream.count(source); j += 1) {
+            const m: i32 = stream.resolved(stream.child(source, j))
+            if (stream.kind(m) !== YAML_MAP) {
+              return false
+            }
+            charge += this.mergeCharge(m)
+            height = height > this.heights[m] - 1 ? height : this.heights[m] - 1
+            chain = chain > this.chains[m] ? chain : this.chains[m]
+            if (charge > budget) {
+              return false
+            }
+          }
+        } else {
+          return false
+        }
+      }
+      if (size > this.cap || charge > budget) {
+        return false
+      }
+    }
+    this.totals[n] = size
+    this.heights[n] = height + 1
+    this.charges[n] = charge
+    this.chains[n] = chain + 1
+    return chain + 1 < YAML_JSON_MERGE_HOPS
+  }
+
+  /** What merging map `m` charges to `load`'s merge budget, at most. */
+  private mergeCharge(m: i32): i32 {
+    return this.stream.count(m) + 1 + this.charges[m]
+  }
+
+  /** Sequence `n`'s array, its entries built or copied. */
+  private sweepSeq(n: i32): JsonValue {
+    const stream: YamlStream = this.stream
+    const doc: JsonDocument = this.doc
+    const items: i32 = stream.count(n)
+    const base: i32 = this.entryTop
+    for (let i: i32 = 0; i < items; i += 1) {
+      const v: JsonValue = this.valueOf(stream.child(n, i), stream.end(n))
+      if (v < 0) {
+        return -1
+      }
+      this.pushEntry(-1, "", v, 0, 0)
+    }
+    this.entryTop = base
+    const a: JsonValue = doc.newArray()
+    if (a < 0) {
+      return -1
+    }
+    const ax: i32 = doc.index(a)
+    doc.reserve(ax, items)
+    for (let e: i32 = base; e < base + items; e += 1) {
+      doc.append(ax, doc.index(this.entryValues[e]), 0, 0)
+    }
+    doc.placeRange(ax, stream.start(n), stream.end(n))
+    return a
+  }
+
+  /**
+   * Map `n`'s object: its own keys, in order, then each merged map's
+   * members it does not have yet, copied, the first map listed winning. A
+   * merged map's members are its own keys and then those it merged, so
+   * taking them in that order is `mergeInto`'s walk, which skips a map
+   * merged already: every key under that map is taken by then.
+   */
+  private sweepMap(n: i32): JsonValue {
+    const stream: YamlStream = this.stream
+    const doc: JsonDocument = this.doc
+    const base: i32 = this.entryTop
+    if (this.seen.size > 0) {
+      this.seen.clear()
+    }
+    for (let i: i32 = 0; i < stream.count(n); i += 1) {
+      const pair: i32 = stream.child(n, i)
+      if ((this.flags[pair] & YAML_JSON_MERGE_PAIR) === 0) {
+        const keyNode: i32 = stream.key(pair)
+        const key: string = keyNode < 0 ? "" : stream.keyName(keyNode)
+        if (this.findEntry(base, key) >= 0) {
+          return -1
+        }
+        const v: JsonValue = this.valueOf(stream.value(pair), stream.end(pair))
+        if (v < 0) {
+          return -1
+        }
+        const keyStart: i32 = keyNode < 0 ? stream.start(pair) : stream.start(keyNode)
+        this.pushEntry(base, key, v, keyStart, keyNode < 0 ? keyStart : stream.end(keyNode))
+      }
+    }
+    for (let i: i32 = 0; i < stream.count(n); i += 1) {
+      const pair: i32 = stream.child(n, i)
+      if ((this.flags[pair] & YAML_JSON_MERGE_PAIR) !== 0) {
+        const source: i32 = stream.resolved(stream.value(pair))
+        if (stream.kind(source) === YAML_MAP) {
+          if (!this.mergeMembers(base, source)) {
+            return -1
+          }
+        } else {
+          for (let j: i32 = 0; j < stream.count(source); j += 1) {
+            if (!this.mergeMembers(base, stream.resolved(stream.child(source, j)))) {
+              return -1
+            }
+          }
+        }
+      }
+    }
+    const top: i32 = this.entryTop
+    this.entryTop = base
+    const o: JsonValue = doc.newObject()
+    if (o < 0) {
+      return -1
+    }
+    const ox: i32 = doc.index(o)
+    doc.reserve(ox, top - base)
+    this.memberBase[n] = this.memberTop
+    for (let e: i32 = base; e < top; e += 1) {
+      const key: string = this.entryKeys[e]
+      doc.append(ox, doc.index(this.entryValues[e]), doc.byteTop, doc.storeText(key))
+      doc.placeKeyRange(doc.memberSlot(ox, e - base), this.entryStarts[e], this.entryEnds[e])
+      if (this.memberTop < toI32(this.memberKeys.length)) {
+        this.memberKeys[this.memberTop] = key
+      } else {
+        this.memberKeys.push(key)
+      }
+      this.memberTop += 1
+    }
+    doc.placeRange(ox, stream.start(n), stream.end(n))
+    return o
+  }
+
+  /** Copies the members of map `m`'s object that the entries from `base` do not have. */
+  private mergeMembers(base: i32, m: i32): boolean {
+    const doc: JsonDocument = this.doc
+    const o: JsonValue = this.values[m]
+    if (o < 0) {
+      return false
+    }
+    const keys: i32 = this.memberBase[m]
+    for (let i: i32 = 0; i < doc.length(o); i += 1) {
+      const key: string = this.memberKeys[keys + i]
+      if (this.findEntry(base, key) < 0) {
+        const v: JsonValue = doc.copyMember(o, i)
+        if (v < 0) {
+          return false
+        }
+        this.pushEntry(base, key, v, doc.keyStart(o, i), doc.keyEnd(o, i))
+      }
+    }
+    return true
+  }
+
+  /**
+   * Adds an entry: its key, the value made for it, and the key's range;
+   * indexed in `seen` past the first `YAML_JSON_SCAN_KEYS` from `base`,
+   * unless `base` is `-1`.
+   */
+  private pushEntry(base: i32, key: string, v: JsonValue, keyStart: i32, keyEnd: i32): void {
+    const e: i32 = this.entryTop
+    if (e < toI32(this.entryStarts.length)) {
+      this.entryKeys[e] = key
+      this.entryValues[e] = v
+      this.entryStarts[e] = keyStart
+      this.entryEnds[e] = keyEnd
+    } else {
+      while (toI32(this.entryKeys.length) < e) {
+        this.entryKeys.push("")
+        this.entryPairs.push(-1)
+        this.entryValues.push(-1)
+      }
+      if (e < toI32(this.entryKeys.length)) {
+        this.entryKeys[e] = key
+        this.entryValues[e] = v
+      } else {
+        this.entryKeys.push(key)
+        this.entryPairs.push(-1)
+        this.entryValues.push(v)
+      }
+      this.entryStarts.push(keyStart)
+      this.entryEnds.push(keyEnd)
+    }
+    this.entryTop = e + 1
+    if (base >= 0 && e - base >= YAML_JSON_SCAN_KEYS) {
+      this.seen.set(key, e)
+    }
+  }
+
+  /**
+   * The value of node `c` where it is held, a missing one being a null at
+   * `at`: a scalar built, a collection's value, or an alias's copy with the
+   * alias's range. `-1` when it cannot be made.
+   */
+  private valueOf(c: i32, at: i32): JsonValue {
+    const stream: YamlStream = this.stream
+    const doc: JsonDocument = this.doc
+    if (c < 0) {
+      const v: JsonValue = doc.newNull()
+      if (v >= 0) {
+        doc.placeRange(doc.index(v), at, at)
+      }
+      return v < 0 ? -1 : v
+    }
+    const r: i32 = stream.resolved(c)
+    const kind: i32 = stream.kind(r)
+    let v: JsonValue = -1
+    if (kind === YAML_SCALAR) {
+      v = this.buildScalar(r)
+      if (v >= 0) {
+        doc.placeRange(doc.index(v), stream.start(c), stream.end(c))
+      }
+    } else if (r === c) {
+      return this.values[c]
+    } else if (this.values[r] >= 0) {
+      v = doc.copyValue(this.values[r], stream.start(c), stream.end(c))
+    }
+    return v < 0 || doc.byteTop > this.byteCap ? -1 : v
   }
 
   /** Records a failed load, clearing the document, and answers `code`. */
@@ -712,7 +1185,7 @@ export class YamlJsonLoader {
   private addEntry(base: i32, pair: i32, own: boolean): i32 {
     const stream: YamlStream = this.stream
     const keyNode: i32 = stream.key(pair)
-    const key: string = keyNode < 0 ? "" : keyText(stream, keyNode)
+    const key: string = keyNode < 0 ? "" : stream.keyName(keyNode)
     const found: i32 = this.findEntry(base, key)
     if (found >= 0) {
       if (!own) {

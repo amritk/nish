@@ -1,0 +1,21 @@
+PASS  suite: the cases load
+PASS  suite: documents compared, one past the last of each case included
+PASS  suite: documents that load rather than refuse
+PASS  suite: loadText answers as load(parseYaml(text)) does on every one, and so does the same loader's load after it
+PASS  alias bomb: refused
+PASS  alias bomb: at *f
+PASS  alias bomb: nothing kept
+PASS  merge budget: refused
+PASS  merge budget: at a merge key
+PASS  merge budget: the default budget loads it
+PASS  depth: 65 deep is refused
+PASS  depth: at the one too deep
+PASS  depth: 64 deep loads
+PASS  depth: an alias copy counts its own depth
+PASS  byte cap: copies past maxTotalBytes are refused
+PASS  byte cap: at the copy that does not fit
+PASS  byte cap: nothing kept
+PASS  yaml: a document with an error
+PASS  document: past the last
+PASS  after a refusal, a load succeeds and clears the code
+std/yaml-json loadText: 20 passed, 0 failed, 0 skipped

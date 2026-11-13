@@ -102,4 +102,6 @@ PASS  depth: 64 deep loads
 PASS  document: the first loads
 PASS  document: an empty one is null
 PASS  names: an unknown code
-std/yaml-json: 104 passed, 0 failed, 0 skipped
+PASS  direct: every text above loaded both ways
+PASS  direct: loadText answers as load(parseYaml(text)) does
+std/yaml-json: 106 passed, 0 failed, 0 skipped
