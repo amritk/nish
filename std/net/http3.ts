@@ -822,14 +822,17 @@ export class Http3Connection {
    * request's head has waited `headTimeout`, and otherwise answers when to
    * look again. `Http3Server` calls it on every flush of the slot; a program
    * driving a connection itself calls it after each `next` and when the
-   * time it answered comes. It allocates nothing.
+   * time it answered comes. It allocates nothing. The clock starts with
+   * HTTP/3, on the first `next` after the handshake chose `h3`: a connection
+   * the program runs another protocol on, and never asks for an event, is
+   * left to QUIC's own idle timeout.
    *
    * @param now The current millisecond on the caller's monotonic clock.
-   * @returns The millisecond the clock next needs a look, or -1 when it needs none: every request in hand
-   *   is past its head, or the connection is closed (by this call too).
+   * @returns The millisecond the clock next needs a look, or -1 when it needs none: HTTP/3 has not
+   *   started, every request in hand is past its head, or the connection is closed (by this call too).
    */
   clock(now: i64): i64 {
-    if (this.quic.closed()) {
+    if (this.ownDecoder < 0 || this.quic.closed()) {
       return -1
     }
     let mode: i32 = H3_CLOCK_BUSY

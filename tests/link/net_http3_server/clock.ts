@@ -10,9 +10,15 @@
 import { netLocalPort, udpBind } from "nish:net";
 import { Suite } from "nish/testing";
 import { H3_EXCESSIVE_LOAD, H3_NO_ERROR } from "nish/net/http3-frame";
+import { H3_ALPN, Http3Connection } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
+import { QuicConnection } from "nish/net/quic";
+import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
+import { fromHex } from "../crypto_x509/hex";
+import { CLIENT_SCID, QcClient, qcConnect } from "../net_quic_conn/client";
+import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { H3Limits, H3Peer, h3Config, h3QuicConfig, h3WireConnect } from "../net_http3/peer";
+import { H3Limits, H3Peer, h3Config, h3Hello, h3QuicConfig, h3WireConnect } from "../net_http3/peer";
 import { listenerEntropy } from "./loopback";
 
 /** The shared clock: `p`'s, and every later step's, is at least `now`. */
@@ -105,7 +111,36 @@ const clocked = (t: Suite): void => {
   server.stop();
 };
 
+/**
+ * A connection the program never asks for an event is not HTTP/3's to time:
+ * the interop server runs `hq-interop` in an `Http3Server` slot this way, and
+ * a transfer slower than `idleTimeout` was closed with H3_NO_ERROR under it.
+ * QUIC's own idle timeout still bounds such a connection.
+ */
+const unstarted = (t: Suite): void => {
+  const limits = new H3Limits();
+  limits.alpn = "hq-interop";
+  const quicConfig = h3QuicConfig(limits);
+  quicConfig.alpn = [H3_ALPN, "hq-interop"];
+  const config = h3Config();
+  config.idleTimeout = n32(1000);
+  const conn = new QuicConnection(quicConfig, fixedEntropy());
+  const h3 = new Http3Connection(config, conn);
+  const c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
+  if (!t.ok("a client that chose hq-interop connects", qcConnect(conn, c, h3Hello(limits)) && conn.alpn === "hq-interop")) {
+    return;
+  }
+  const first: i64 = h3.clock(n64(10));
+  const later: i64 = h3.clock(n64(5000));
+  t.eqStr(
+    "past idleTimeout, the clock of a connection never asked for an event neither closes it nor asks for a look",
+    `${first} ${later} ${conn.closed()}`,
+    "-1 -1 false"
+  );
+};
+
 /** Every check of this file. */
 export const clockChecks = (t: Suite): void => {
   clocked(t);
+  unstarted(t);
 };

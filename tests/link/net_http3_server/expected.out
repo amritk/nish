@@ -98,4 +98,6 @@ PASS  between 400 and 900 ms in, the trickler is closed with H3_EXCESSIVE_LOAD a
 PASS  the trickler's close is the application's
 PASS  past 1,000 ms, the idle client is closed with H3_NO_ERROR
 PASS  and the active client keeps its slot, every GET answered
-http3 server: 100 passed, 0 failed, 0 skipped
+PASS  a client that chose hq-interop connects
+PASS  past idleTimeout, the clock of a connection never asked for an event neither closes it nor asks for a look
+http3 server: 102 passed, 0 failed, 0 skipped
