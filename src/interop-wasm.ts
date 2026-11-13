@@ -965,7 +965,9 @@ const panicLoader = (hosts: boolean): string[] => {
  * allocated in the arena is given back after the result has been read
  * (`keepsRoots`: all but what root storage reaches, WP55 §4); and
  * anything but a refused argument that escapes the call (a panic, a trap, or
- * an exception out of a host function) leaves the module dead.
+ * an exception out of a host function) leaves the module dead. A release or
+ * keep that fails after the export returned also kills the module, keeps the
+ * panic kind it recorded, and throws in place of the export's result.
  */
 const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
   const lines: string[] = []
@@ -1005,9 +1007,15 @@ const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
     // WP55 §4: with root storage, what the roots reach outlives the call.
     lines.push(keepsRoots ? "          raw.nish_root_keep(mark);" : "          raw.nish_arena_release(mark);")
     lines.push("        } catch (e) {")
+    // A panic inside the keep (its scratch outgrowing memory is "memory") has
+    // recorded its own kind through the panic import; only a bare trap has not.
+    lines.push("          if (state.dead === null) {")
     lines.push(
-      '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      '            state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
     )
+    lines.push("          }")
+    // Thrown from `finally`, this replaces the call's result: the module is
+    // dead, and the caller hears it from this call rather than the next.
     lines.push("          throw e;")
     lines.push("        }")
     lines.push("      }")
