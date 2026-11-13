@@ -26,7 +26,7 @@ import TypeTable from "./types" -> struct TypeTable
 function rangeNote(table: TypeTable, fn: ExternalFunction): string -> @rangeNote
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged TypeTable.rangeHi TypeTable.rangeLo nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
   pointer fn: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 ranges: string[] (const)
@@ -38,7 +38,7 @@ function rangeNote(table: TypeTable, fn: ExternalFunction): string -> @rangeNote
 function docComment(table: TypeTable, fn: ExternalFunction): string -> @docComment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat rangeNote tsSignatureLine
-  pointer table: size=128 writesThrough=false captured=false passedTo=tsSignatureLine#0 rangeNote#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=tsSignatureLine#0 rangeNote#0
   pointer fn: size=32 writesThrough=false captured=false passedTo=rangeNote#1
   stackSites=0 stackLocals=0
   callee +0:3 tsSignatureLine -> @tsSignatureLine
@@ -97,7 +97,7 @@ function namesString(fns: ExternalFunction[]): boolean -> @namesString
 function bridgesHandle(table: TypeTable, bridged: ExternalFunction[]): boolean -> @bridgesHandle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isHostHandle
-  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isHostHandle#0 TypeTable.isHostHandle#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isHostHandle#0 TypeTable.isHostHandle#0
   pointer bridged: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 fn: ExternalFunction (const)
@@ -120,7 +120,7 @@ function importsType(compilation: Compilation, specifiers: string[]): string[] -
 function namesBigint(table: TypeTable, sig: FunctionSig): boolean -> @namesBigint
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBigintWidth
-  pointer table: size=128 writesThrough=false captured=false passedTo=isBigintWidth#0 isBigintWidth#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=isBigintWidth#0 isBigintWidth#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isBigintWidth -> @isBigintWidth
@@ -130,7 +130,7 @@ function isBigintWidth(table: TypeTable, t: i32): boolean -> @isBigintWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf
-  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.kindOf#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)
   callee +0:16 TypeTable.kindOf -> @TypeTable.kindOf

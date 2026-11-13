@@ -35,7 +35,7 @@ import TypeTable from "./types" -> struct TypeTable
 function elementNotes(table: TypeTable, fn: ExternalFunction): string -> @elementNotes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged TypeTable.rangeHi TypeTable.rangeLo elementNote nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer table: size=128 writesThrough=false captured=false passedTo=elementNote#1 TypeTable.isRanged#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0 elementNote#1
+  pointer table: size=136 writesThrough=false captured=false passedTo=elementNote#1 TypeTable.isRanged#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0 elementNote#1
   pointer fn: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 notes: string[] (const)
@@ -53,8 +53,8 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf TypeTable.refOf cStructName cType inlineElementStruct nish_str_concat
-  pointer program: size=880 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 inlineElementStruct#1 cType#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 inlineElementStruct#1 cType#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.kindOf -> @TypeTable.kindOf
   local +3:9 elem: i32 (const)
@@ -124,7 +124,7 @@ function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
 function prototypeComment(table: TypeTable, fn: ExternalFunction): string -> @prototypeComment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: cAliasReason cFunctionName elementNotes nish_str_concat tsSignatureLine
-  pointer table: size=128 writesThrough=false captured=false passedTo=tsSignatureLine#0 elementNotes#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=tsSignatureLine#0 elementNotes#0
   pointer fn: size=32 writesThrough=false captured=false passedTo=elementNotes#1
   stackSites=0 stackLocals=0
   local +0:9 name: CName (const)

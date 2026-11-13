@@ -393,7 +393,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   calls: AsyncRegistry.constructor DebugInfo.constructor FunctionFacts.constructor IRFunction.constructor IRModule.constructor PanicSiteTable.constructor StringMap.constructor StringSet.constructor TbaaCache.constructor internalErrorFor isWasmBuild nish_alloc_struct nish_array_grow nish_exit nish_str_concat resolveTarget targetHeader
   pointer this: size=376 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
-  pointer table: size=128 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
+  pointer table: size=136 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
   pointer opts: size=216 writesThrough=true captured=true passedTo=isWasmBuild#0 isWasmBuild#0
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
@@ -1695,7 +1695,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   escaping: registry
   calls: Emitter.constructor Emitter.emitModule nish_alloc_struct
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
-  pointer table: size=128 writesThrough=true captured=true passedTo=Emitter.constructor#2
+  pointer table: size=136 writesThrough=true captured=true passedTo=Emitter.constructor#2
   pointer opts: size=216 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=24 writesThrough=true captured=true passedTo=Emitter.constructor#5

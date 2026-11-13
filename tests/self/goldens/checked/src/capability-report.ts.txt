@@ -470,7 +470,7 @@ function pushPanics(out: string[], program: CheckedProgram, sig: FunctionSig, pa
   escaping: path
   calls: nish_array_grow nish_panic_overflow siteReportEntry sitesOf
   pointer out: size=0 writesThrough=true captured=false
-  pointer program: size=880 writesThrough=false captured=false passedTo=sitesOf#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=sitesOf#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=siteReportEntry#2
   stackSites=0 stackLocals=0
