@@ -590,6 +590,7 @@ class HttpOptions
 | `new HttpOptions()` |  |
 | `connectTimeoutMs: i32` | The budget for the lookup and the connect together; 0 or less for none but the total. |
 | `crossOriginRedirects: boolean` | Let a followed redirect go to another origin (see the module comment). |
+| `distrustSpkiSha256: u8[][] \| null` | Keys no https server's chain may hold, each the SHA-256 of a certificate's subjectPublicKeyInfo DER, 32 bytes: a chain with a leaf, intermediate or root whose key is listed fails with `HTTP_E_CERTIFICATE` (`tlsClientDistrustSpki`). Null, the default, for none; a hash of another length fails every https fetch rather than being skipped. |
 | `dns: DnsConfig \| null` | The resolver settings a name is looked up with, as `dnsParseResolvConf` fills them; null reads `/etc/resolv.conf`. `/etc/hosts` is consulted either way. Only read, so one config can serve many fetches. |
 | `followRedirects: boolean` | Follow a redirect rather than answer it; only to the same origin unless `crossOriginRedirects` is set. |
 | `maxBodyBytes: i64` | 256 MiB by default; a body past it fails with `HTTP_E_BODY_TOO_LARGE`. |

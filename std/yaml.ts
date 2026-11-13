@@ -414,6 +414,12 @@ export class YamlStream {
    */
   mergeStep: i32 = 0
   /**
+   * How many sequence items the parser's merge checks have read, so a test
+   * can see that a shared merge sequence is read once, not once per use.
+   * @internal Used by `YamlParser`.
+   */
+  mergeItemsChecked: i32 = 0
+  /**
    * Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is.
    */
   merge: boolean = true
@@ -1811,6 +1817,11 @@ class YamlParser {
   private scratch: i32[]
   /** Hash sets for the duplicate check of maps past YAML_PAIRWISE_KEYS pairs, reused as maps nest and end. */
   private keySets: YamlKeySet[]
+  /**
+   * Per sequence node an alias merge has named: `0` not yet checked, `1`
+   * every item merges a map, `2` one does not, so a shared sequence is read once.
+   */
+  private mergeVerdicts: u8[]
   private pos: i32 = 0
   private len: i32 = 0
   private depth: i32 = 0
@@ -1857,6 +1868,7 @@ class YamlParser {
     this.handlePrefixes = []
     this.scratch = []
     this.keySets = []
+    this.mergeVerdicts = []
     this.len = toI32(text.length)
     this.maxDepth = options.maxDepth
     this.uniqueKeys = options.uniqueKeys
@@ -3542,7 +3554,8 @@ class YamlParser {
    * Reports the value of merge key `key` unless it is a map, an alias
    * to one or a sequence of those; an empty value is reported on the key, a
    * sequence on each item that is not, and an alias to a sequence on the alias.
-   * An alias with no target is already reported.
+   * An alias with no target is already reported. An aliased sequence's
+   * verdict is kept, so a sequence many merges name is read once (YJ-5).
    */
   private checkMerge(key: i32, value: i32): void {
     const stream: YamlStream = this.stream
@@ -3553,15 +3566,18 @@ class YamlParser {
     const onAlias: boolean = stream.kind(value) === YAML_ALIAS
     const seq: i32 = onAlias ? stream.target(value) : value
     if (seq >= 0 && stream.kind(seq) === YAML_SEQ) {
+      if (onAlias) {
+        if (!this.aliasedSeqMerges(seq)) {
+          this.badMerge(stream.start(value), stream.end(value))
+        }
+        return
+      }
       const count: i32 = stream.count(seq)
       let i: i32 = 0
       while (i < count) {
         const item: i32 = stream.child(seq, i)
+        stream.mergeItemsChecked += 1
         if (!this.mergesMap(item)) {
-          if (onAlias) {
-            this.badMerge(stream.start(value), stream.end(value))
-            return
-          }
           this.badMerge(stream.start(item), stream.end(item))
         }
         i += 1
@@ -3569,6 +3585,34 @@ class YamlParser {
     } else if (!this.mergesMap(value)) {
       this.badMerge(stream.start(value), stream.end(value))
     }
+  }
+
+  /**
+   * Whether every item of sequence `seq`, which an alias merge names, merges
+   * a map: read up to its first item that does not the first time, then
+   * answered from the verdict kept for it.
+   */
+  private aliasedSeqMerges(seq: i32): boolean {
+    const stream: YamlStream = this.stream
+    this.mergeVerdicts = yamlRoomU8(this.mergeVerdicts, seq + 1)
+    const verdicts: u8[] = this.mergeVerdicts
+    if (seq < 0 || seq >= toI32(verdicts.length)) {
+      return false
+    }
+    const kept: i32 = toI32(verdicts[seq])
+    if (kept !== 0) {
+      return kept === 1
+    }
+    const count: i32 = stream.count(seq)
+    let good: boolean = true
+    let i: i32 = 0
+    while (good && i < count) {
+      stream.mergeItemsChecked += 1
+      good = this.mergesMap(stream.child(seq, i))
+      i += 1
+    }
+    verdicts[seq] = good ? toU8(1) : toU8(2)
+    return good
   }
 
   /** Whether `n` is a map, an alias to one or an alias with no target, which merges nothing and is reported as such. */

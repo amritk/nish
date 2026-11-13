@@ -8,6 +8,7 @@ import {
   PKI_ERR_BAD_SIGNATURE,
   PKI_ERR_BUDGET,
   PKI_ERR_CHAIN_TOO_LONG,
+  PKI_ERR_DISTRUSTED,
   PKI_ERR_EXPIRED,
   PKI_ERR_EXT_KEY_USAGE,
   PKI_ERR_HOSTNAME,
@@ -26,12 +27,14 @@ import {
   PKI_OK,
   PkiResult,
   PkiTrustStore,
+  pkiDistrustSpki,
   pkiMatchHostname,
   pkiReason,
   pkiTrustStore,
   pkiVerifyServer,
   pkiVerifySignature,
 } from "nish/crypto/pki"
+import { sha256 } from "nish/crypto/sha256"
 import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509"
 import { fromHex } from "../crypto_x25519/hex"
 import {
@@ -94,6 +97,8 @@ import {
   LEAF_FUTURE,
   LEAF_KU,
   LEAF_LOOP,
+  LEAF_MAPPED,
+  LEAF_MAPPED_OTHER,
   LEAF_NOSUBJ,
   LEAF_ROLL,
   LEAF_SELFISS,
@@ -105,10 +110,17 @@ import {
   LEAF_SAME,
   LEAF_SUB,
   LEAF_SUFFIX,
+  LEAF_V4,
   LOOPA,
   LOOPA0,
   LOOPB,
   LOOPB0,
+  MINT,
+  MINT_EX4,
+  MINT_EX6,
+  MINT_EX6ALL,
+  MINT_PERM4,
+  MROOT,
   END_MS,
   NOW_MS,
   OTHER,
@@ -153,6 +165,10 @@ const verify = (hexes: string[], host: string): i32 =>
   pkiVerifyServer(ders(hexes), host, NOW_MS, store()).code
 
 const verifyAt = (nowMs: i64): i32 => pkiVerifyServer(ders([LEAF, INT]), "example.com", nowMs, store()).code
+
+/** The code for `hexes` and example.com under the mapped-address root alone. */
+const mverify = (hexes: string[]): i32 =>
+  pkiVerifyServer(ders(hexes), "example.com", NOW_MS, pkiTrustStore([cert(MROOT)])).code
 
 /** `count` copies of `hex`, after `first`. */
 const copies = (first: string, hex: string, count: i32): u8[][] => {
@@ -398,6 +414,18 @@ export const constraints = (mode: string): i32 => {
   eqCode(s, "a wildcard over a permitted subtree", verify([LEAF, INT_NC_WILDPERM], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a dNSName subtree of . excludes every name", verify([LEAF, INT_NC_DOTEXCL], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a self-issued leaf outside a permitted subject", verify([LEAF_SELFISS, INT_NC_OK], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  // PKI-33: an excluded IPv4 subtree also holds the IPv4-mapped IPv6 form of
+  // its addresses, and an excluded subtree inside ::ffff:0:0/96 the IPv4
+  // addresses it maps; permitted subtrees still hold only their own family.
+  eqCode(s, "a mapped address under no constraint", mverify([LEAF_MAPPED, MINT]), PKI_OK)
+  eqCode(s, "an IPv4-mapped address in an excluded IPv4 subtree", mverify([LEAF_MAPPED, MINT_EX4]), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "an IPv4 address in an excluded mapped subtree", mverify([LEAF_V4, MINT_EX6]), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "a mapped address outside the excluded IPv4 subtree", mverify([LEAF_MAPPED_OTHER, MINT_EX4]), PKI_OK)
+  eqCode(s, "an IPv4 address beside an excluded ::/0", mverify([LEAF_V4, MINT_EX6ALL]), PKI_OK)
+  eqCode(s, "a mapped address is not in a permitted IPv4 subtree", mverify([LEAF_MAPPED, MINT_PERM4]), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "an IPv4 address in a permitted IPv4 subtree", mverify([LEAF_V4, MINT_PERM4]), PKI_OK)
+  s.ok("a mapped SAN does not name its IPv4 host", !pkiMatchHostname(cert(LEAF_MAPPED), "192.0.2.1"))
+  s.ok("an IPv4 SAN does not name its mapped host", !pkiMatchHostname(cert(LEAF_V4), "::ffff:192.0.2.1"))
   return s.done()
 }
 
@@ -526,7 +554,7 @@ export const reasons = (mode: string): i32 => {
   const s = new Suite(`pki reasons${mode}`)
   const seen: string[] = []
   let distinct: boolean = true
-  for (let code: i32 = 0; code <= 16; code++) {
+  for (let code: i32 = 0; code <= 17; code++) {
     const r: string = pkiReason(code)
     if (r.length === 0 || seen.indexOf(r) >= 0) {
       distinct = false
@@ -535,5 +563,64 @@ export const reasons = (mode: string): i32 => {
   }
   s.ok("every code has a sentence of its own", distinct)
   s.ok("an unknown code has one too", pkiReason(99).length > 0)
+  return s.done()
+}
+
+/** A store of the two roots that distrusts the key of each certificate in `hexes`. */
+const distrusting = (hexes: string[]): PkiTrustStore => {
+  const st: PkiTrustStore = store()
+  for (const h of hexes) {
+    pkiDistrustSpki(st, sha256(cert(h).spki))
+  }
+  return st
+}
+
+/** The code for `hexes` and example.com under `st`. */
+const dverify = (hexes: string[], st: PkiTrustStore): i32 => pkiVerifyServer(ders(hexes), "example.com", NOW_MS, st).code
+
+/** Whether `whole` ends with `tail`. */
+const endsWith = (whole: u8[], tail: u8[]): boolean => {
+  const off: i32 = toI32(whole.length) - toI32(tail.length)
+  if (off < 0) {
+    return false
+  }
+  for (let i: i32 = 0; i < toI32(tail.length) && off + i < toI32(whole.length); i++) {
+    if (whole[off + i] !== tail[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+export const distrust = (mode: string): i32 => {
+  const s = new Suite(`pki distrust${mode}`)
+  const int: X509Certificate = cert(INT)
+  s.ok(
+    "spki is the whole subjectPublicKeyInfo, ending with the key",
+    toI32(int.spki.length) > toI32(int.publicKey.length) && int.spki[0] === toU8(0x30) && endsWith(int.spki, int.publicKey)
+  )
+  eqCode(s, "a store distrusts nothing by default", dverify([LEAF, INT], store()), PKI_OK)
+  eqCode(s, "a distrusted intermediate's key", dverify([LEAF, INT], distrusting([INT])), PKI_ERR_DISTRUSTED)
+  eqCode(
+    s,
+    "and every certificate of that key, under any extensions",
+    dverify([LEAF, INT_SERVER], distrusting([INT])),
+    PKI_ERR_DISTRUSTED
+  )
+  eqCode(s, "a distrusted root's key", dverify([LEAF, INT], distrusting([ROOT])), PKI_ERR_DISTRUSTED)
+  eqCode(s, "a distrusted leaf's key", dverify([LEAF, INT], distrusting([LEAF])), PKI_ERR_DISTRUSTED)
+  eqCode(s, "a leaf straight under a distrusted root", dverify([LEAF_ED], distrusting([EDROOT])), PKI_ERR_DISTRUSTED)
+  eqCode(s, "a distrusted key off the path changes nothing", dverify([LEAF, INT], distrusting([EDROOT])), PKI_OK)
+  eqCode(s, "nor does one only in the pool", dverify([LEAF, INT, OTHER], distrusting([OTHER])), PKI_OK)
+  eqCode(s, "nor an intermediate sent but not on the path", dverify([LEAF, INT, SUB], distrusting([SUB])), PKI_OK)
+  eqCode(s, "a leaf of the distrusted key, under another issuer", dverify([LEAF_SUB, SUB, INT], distrusting([LEAF])), PKI_ERR_DISTRUSTED)
+  const wide: PkiTrustStore = store()
+  pkiDistrustSpki(wide, sha256(int.publicKey))
+  eqCode(s, "the hash is of the subjectPublicKeyInfo, not the bare key", dverify([LEAF, INT], wide), PKI_OK)
+  const short: PkiTrustStore = store()
+  s.ok("a hash of 31 bytes is not added", !pkiDistrustSpki(short, sha256(int.spki).slice(0, 31)))
+  eqCode(s, "and distrusts nothing", dverify([LEAF, INT], short), PKI_OK)
+  s.ok("a hash of 32 bytes is added", pkiDistrustSpki(short, sha256(int.spki)))
+  eqCode(s, "and is refused from then on", dverify([LEAF, INT], short), PKI_ERR_DISTRUSTED)
   return s.done()
 }

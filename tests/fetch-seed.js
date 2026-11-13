@@ -366,7 +366,7 @@ const installSandbox = (version) => {
   return { dir, name, tarball, release, home: path.join(dir, "home", "nish") }
 }
 
-const install = (box, args) =>
+const install = (box, args, env = {}) =>
   spawnSync("sh", [installSh, ...args], {
     encoding: "utf8",
     env: {
@@ -377,6 +377,8 @@ const install = (box, args) =>
       GH_MODE: path.join(box.dir, "gh-mode"),
       GH_LOG: path.join(box.dir, "gh.log"),
       NISH_VERSION: "",
+      NISH_REQUIRE_ATTESTATION: "",
+      ...env,
     },
   })
 const ran = (box) => fs.existsSync(path.join(box.dir, "ran"))
@@ -514,6 +516,53 @@ for (const [mode, reason] of [
   check(
     "install.sh asks for no attestation from 0.21.0, which predates them",
     r.status === 0 && ran(box) && ghCalls(box) === "",
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+
+// NISH_REQUIRE_ATTESTATION=1 (SC-32): CI's seed fetches may not skip the
+// check. With no usable gh the install is refused, the compiler never runs and
+// gh is never asked to verify; with a gh that accepts it, it installs as
+// before; and a release too old to carry an attestation is refused, before gh
+// is asked anything.
+for (const [mode, reason] of [
+  ["signed-out", "not signed in"],
+  ["old", "too old"],
+]) {
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, mode)
+  const r = install(box, ["9.9.9", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  check(
+    `install.sh with NISH_REQUIRE_ATTESTATION=1 refuses when gh is ${mode}, without running it`,
+    refused(box, r) &&
+      r.stderr.includes("NISH_REQUIRE_ATTESTATION=1 refuses") &&
+      r.stderr.includes(reason) &&
+      !ghCalls(box)
+        .split("\n")
+        .some((call) => call.startsWith("attestation verify ") && call !== "attestation verify --help"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+{
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, "pass")
+  const r = install(box, ["9.9.9", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  check(
+    "install.sh with NISH_REQUIRE_ATTESTATION=1 installs a release whose attestation gh accepts",
+    r.status === 0 && ran(box) && r.stdout.includes("verified:"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+{
+  const box = installSandbox("0.21.0")
+  withSums(box)
+  ghMode(box, "pass")
+  const r = install(box, ["0.21.0", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  check(
+    "install.sh with NISH_REQUIRE_ATTESTATION=1 refuses 0.21.0, which predates attestations",
+    refused(box, r) && r.stderr.includes("predates build provenance attestations") && ghCalls(box) === "",
     `${told(box, r)}\ngh:\n${ghCalls(box)}`
   )
 }
@@ -874,6 +923,59 @@ const runScripts = (text) => {
   check("every action a workflow uses is pinned to a full commit SHA", loose.length === 0, loose.join("\n"))
 }
 
+// SC-30: no workflow lets a dependency run code at install time, and every
+// job runs the one Node release CI pins, named exactly. The one exception is
+// rebuild.yml's `ddc` job, which installs old tags' lockfiles that npm 11
+// refuses; it pins its own older release, as exactly.
+{
+  const scripted = workflows.flatMap(({ file, text }) =>
+    [...text.matchAll(/^\s*(?:- )?run:\s*(npm ci\b[^\n]*)/gm)]
+      .filter((m) => !m[1].includes("--ignore-scripts"))
+      .map((m) => `${file}: ${m[1]}`)
+  )
+  check("every `npm ci` a workflow runs passes --ignore-scripts", scripted.length === 0, scripted.join("\n"))
+  const versions = workflows.flatMap(({ file, text }) =>
+    [...text.matchAll(/node-version:\s*(\S+)/g)].map((m) => ({ file, v: m[1].replace(/^["']|["']$/g, "") }))
+  )
+  const historical = versions.filter(({ file, v }) => file === "rebuild.yml" && v.startsWith("22."))
+  check(
+    `rebuild.yml's ddc job alone pins an older Node, exactly (${historical.map(({ v }) => v).join(", ")})`,
+    historical.length === 1 && /^\d+\.\d+\.\d+$/.test(historical[0].v),
+    historical.map(({ file, v }) => `${file}: ${v}`).join("\n")
+  )
+  const current = versions.filter((entry) => !historical.includes(entry))
+  const distinct = [...new Set(current.map(({ v }) => v))]
+  check(
+    `every other workflow pins one exact Node release (${distinct.join(", ")})`,
+    current.length > 0 && distinct.length === 1 && /^\d+\.\d+\.\d+$/.test(distinct[0]),
+    current.map(({ file, v }) => `${file}: ${v}`).join("\n")
+  )
+}
+
+// SC-32: a seed CI fetches has its build provenance checked, or the fetch
+// fails; install.sh's warn-and-continue is for a person's machine.
+{
+  const unchecked = workflows.flatMap(({ file, text }) => {
+    const steps = text.split(/\n(?=\s*- (?:name|uses|run):)/)
+    return steps
+      .filter((step) => /^\s*(?:- )?(?:run: )?bash scripts\/fetch-seed\.sh/m.test(step))
+      .filter(
+        (step) =>
+          !/NISH_REQUIRE_ATTESTATION: "1"/.test(step) || !/GH_TOKEN: \$\{\{ github\.token \}\}/.test(step)
+      )
+      .map((step) => `${file}: ${step.trim().split("\n")[0]}`)
+  })
+  const fetches = workflows.filter(({ text }) =>
+    /^\s*(?:- )?(?:run: )?bash scripts\/fetch-seed\.sh/m.test(text)
+  )
+  const ungranted = fetches.filter(({ text }) => !/\n\s+attestations: read\n/.test(text))
+  check(
+    `every workflow step that fetches the seed requires its attestation, with a token that may read it (${fetches.length} files)`,
+    fetches.length > 0 && unchecked.length === 0 && ungranted.length === 0,
+    `${unchecked.join("\n")}\nno attestations: read: ${ungranted.map((w) => w.file).join(", ")}`
+  )
+}
+
 // The two triggers that run a fork's pull request with the base repository's
 // secrets and a write token, and the explicit token every file narrows.
 {
@@ -887,17 +989,16 @@ const runScripts = (text) => {
 }
 
 // release.yml: the job holding `contents: write` does not leave the token in
-// .git/config while `npm ci` runs install scripts, the release carries a
-// SHA256SUMS for install.sh to check, and the npm that publishes is an exact
-// version rather than whatever a range resolves to on the day.
+// .git/config, the release carries a SHA256SUMS for install.sh to check, and
+// the npm that publishes is the one the pinned Node ships, never a download
+// made under id-token: write (SC-14, SC-30).
 {
   const release = workflows.find((w) => w.file === "release.yml").text
   const job = (name) => jobOf(release, name)
   const releaseJob = job("release")
   check(
     "release.yml's release job checks out without persisting its write token",
-    /uses: actions\/checkout@\S+[^\n]*\n\s+with:\n\s+persist-credentials: false/.test(releaseJob) &&
-      releaseJob.includes("npm ci"),
+    /uses: actions\/checkout@\S+[^\n]*\n\s+with:\n\s+persist-credentials: false/.test(releaseJob),
     releaseJob
   )
   check(
@@ -906,9 +1007,23 @@ const runScripts = (text) => {
       /gh release create[^\n]*\\\n(?:[^\n]*\\\n)*\s+build\/release\/SHA256SUMS \\/.test(releaseJob),
     releaseJob
   )
+  const code = release.replace(/^\s*#.*$/gm, "")
   check(
-    "release.yml publishes with an exact npm version, not a range",
-    /npm install -g npm@\d+\.\d+\.\d+\n/.test(job("npm")) && !/npm@[\^~]/.test(release),
+    "release.yml installs no npm package in any job, and restores no npm or apt cache another run saved",
+    !/\bnpm (ci|install|i)\b/.test(code) &&
+      !/cache: npm/.test(code) &&
+      !/registry-url:/.test(code) &&
+      /uses: \.\/\.github\/actions\/apt-install\n\s+with:\n\s+packages: [^\n]+\n\s+cache: "false"\n/.test(
+        job("binaries")
+      ),
+    job("binaries")
+  )
+  check(
+    "release.yml's npm job publishes in the npm environment with the npm its pinned Node ships",
+    /\n {4}environment: npm\n/.test(job("npm")) &&
+      /node-version: \d+\.\d+\.\d+\n/.test(job("npm")) &&
+      !/npm@/.test(job("npm").replace(/^\s*#.*$/gm, "")) &&
+      !/environment:/.test(release.replace(job("npm"), "").replace(/^\s*#.*$/gm, "")),
     job("npm")
   )
   // The release job hands its sums to the npm job as an output, and the npm job

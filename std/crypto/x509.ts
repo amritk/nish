@@ -248,6 +248,11 @@ export class X509Certificate {
   subject: u8[]
   /** The subjectPublicKey BIT STRING's octets: for a P-256 key, the 65-byte uncompressed point. */
   publicKey: u8[]
+  /**
+   * The subjectPublicKeyInfo's DER, whole: the key and its algorithm, as a
+   * key pin or `nish/crypto/pki`'s `pkiDistrustSpki` hashes it.
+   */
+  spki: u8[]
   /** The signatureValue BIT STRING's octets: for ECDSA, the DER `SEQUENCE { r, s }`. */
   signature: u8[]
   /** The first instant the certificate is valid, inclusive (RFC 5280 §4.1.2.5). */
@@ -347,6 +352,7 @@ export class X509Certificate {
     this.issuer = []
     this.subject = []
     this.publicKey = []
+    this.spki = []
     this.signature = []
     this.sanDns = []
     this.sanIp = []
@@ -2275,6 +2281,7 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   out.issuer = x509DerWhole(der, issuer)
   out.subject = x509DerWhole(der, subject)
   out.publicKey = publicKey
+  out.spki = x509DerWhole(der, spki)
   out.p256 = out.keyType === X509_KEY_P256
   out.notBefore = before
   out.notAfter = after

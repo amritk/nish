@@ -30,7 +30,8 @@
 #   request's runs, and the entries every branch reads are written only by
 #   runs on main, of any workflow and any event (push, schedule or
 #   dispatch). Whoever could plant an index there already runs code in that
-#   ref's CI.
+#   ref's CI. A caller that trusts no other run's entry, as the release
+#   does, passes `cache: "false"` and takes the network path every time.
 # - The bound: on the network path each download attempt is cut at a minute
 #   and retried, since apt has no deadline of its own for a transfer that
 #   trickles.
@@ -47,6 +48,13 @@ inputs:
   packages:
     description: Space-separated package names for apt-get install
     required: true
+  cache:
+    description: >-
+      "false" skips the Actions cache both ways, so apt verifies a fresh index
+      and downloads every .deb. release.yml passes it: a release build trusts
+      no entry another run saved.
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -64,6 +72,7 @@ runs:
 
     - name: Restore apt packages
       id: cache
+      if: inputs.cache != 'false'
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
@@ -137,7 +146,7 @@ runs:
         sudo chown -R "$(id -u):$(id -g)" "$archives" "$lists"
 
     - name: Save apt packages
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: inputs.cache != 'false' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
