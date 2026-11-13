@@ -1,7 +1,8 @@
 // `nish/raster`: the colour helpers' exact arithmetic, each shape drawn into
 // module storage (as a wasm module's frame is) and read back pixel by pixel,
-// every shape clipped at the frame's edges, and a frame too short for its
-// size drawing only the rows it has. A shape off the frame, a radius of 0,
+// pinned to exact values at a disc's edge and in a glyph's strokes, every
+// shape clipped at the frame's edges, and a frame too short for its size
+// drawing into the rows it has. A shape off the frame, a radius of 0,
 // a scale under 1 and a NaN must all draw nothing and never panic.
 import {
   RASTER_GLYPH_ADVANCE,
@@ -57,6 +58,21 @@ const changed = (c: i32): i32 => {
   return n
 }
 
+/** Rows `0` to `rows - 1` of `frame`, `w` wide, as `#` for `ink`, `.` for `paper` and `+` for anything else, joined by `|`. */
+const picture = (frame: Int32Array, w: i32, rows: i32, cols: i32, ink: i32, paper: i32): string => {
+  let s: string = ""
+  for (let y: i32 = 0; y < rows; y++) {
+    if (y > 0) {
+      s = s + "|"
+    }
+    for (let x: i32 = 0; x < cols; x++) {
+      const c: i32 = frame[y * w + x]
+      s = s + (c === ink ? "#" : c === paper ? "." : "+")
+    }
+  }
+  return s
+}
+
 export const main = (): number => {
   const t = new Suite("raster")
 
@@ -97,7 +113,8 @@ export const main = (): number => {
   rasterDisc(FRAME, W, H, ONE * 8.0, ONE * 4.0, ONE * 3.0, 0xff0000, ONE)
   t.eqI32("disc: the centre is the colour", FRAME[4 * W + 8], 0xff0000)
   t.eqI32("disc: a corner is untouched", FRAME[0], 0)
-  t.ok("disc: an edge pixel is blended", FRAME[4 * W + 5] > 0 && FRAME[4 * W + 5] < 0xff0000)
+  // Pixel (5, 4)'s centre is √6.5 from the disc's: weight 3.5 − √6.5 ≈ 0.95, 242 of 255.
+  t.eqI32("disc: an edge pixel is blended by its coverage", FRAME[4 * W + 5], 0xf20000)
   const lit: i32 = changed(0)
   rasterDisc(FRAME, W, H, ONE * 8.0, ONE * 4.0, ZERO, 0xffffff, ONE)
   rasterDisc(FRAME, W, H, ONE * 8.0, ONE * 4.0, ZERO / ZERO, 0xffffff, ONE)
@@ -116,8 +133,12 @@ export const main = (): number => {
   t.eqI32("text width: scale 0", rasterTextWidth("A", 0), 0)
   clear(0)
   rasterText(FRAME, W, H, 0, 0, 1, "I", 0xffffff)
+  t.eqStr(
+    "text: a glyph lights exactly its strokes",
+    picture(FRAME, W, 8, 6, 0xffffff, 0),
+    ".###..|..#...|..#...|..#...|..#...|..#...|.###..|......",
+  )
   const strokes: i32 = changed(0)
-  t.ok("text: a glyph lights some pixels", strokes > 0 && strokes < 5 * 7)
   rasterText(FRAME, W, H, 0, 0, 0, "I", 0x00ff00)
   rasterText(FRAME, W, H, 99, 0, 1, "I", 0x00ff00)
   t.eqI32("text: scale 0 or off the frame draws nothing", changed(0), strokes)
@@ -154,7 +175,12 @@ export const main = (): number => {
   t.eqI32("short frame: its last word is drawn", SHORT[2 * W - 1], 0xffffff)
   rasterDisc(SHORT, W, H, ONE * 8.0, ONE * 6.0, ONE * 4.0, 0xff0000, ONE)
   rasterText(SHORT, W, H, 0, 0, 2, "W", 0xff0000)
-  t.pass("short frame: rows past its length are never written")
+  // The disc's top (row 1.5, 4.5 from its centre) has weight 0; "W" at scale 2 opens with #...#.
+  t.eqStr(
+    "short frame: the rows it has hold the drawing, the rest never written",
+    picture(SHORT, W, 2, W, 0xff0000, 0xffffff),
+    "##......##......|##......##......",
+  )
 
   const grid: i32[] = new Array<i32>(W * H)
   grid.fill(0)

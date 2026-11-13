@@ -146,8 +146,12 @@ drains the ring into a `nish/input` `StepInput`: its `events` become this
 step's events and its `keys` (a `KeyState`) keep which keys are held, for
 `isDown`. A page sees every key go up, so it sends a release for every press
 (`keyup`) and a lost focus on `blur`, which releases every held key; the
-reader turns `KeyState`'s synthetic releases off. A pointer event's x and y
-are set as both the event's cell (`x`, `y`) and its pixel (`px`, `py`).
+reader turns `KeyState`'s synthetic releases off. A page has no terminal to
+quit, so Ctrl-C arrives as an ordinary key press, never `EVENT_QUIT`. Nor
+does the reader make up auto-repeat: a page that wants it sends
+`ACTION_REPEAT` records itself (a `keydown` with `repeat` set, say). A
+pointer event's x and y are set as both the event's cell (`x`, `y`) and its
+pixel (`px`, `py`).
 A record with an unknown kind is dropped, and so is a trailing part-record
 a page pushed out of protocol.
 
@@ -160,6 +164,21 @@ the page calls an export of the game's once per id at start, which
 synthesizes the sound (with `nish/synth`, say) and hands it to
 `gameWriteSamples`; the page then reads `GAME_INFO[2]` samples of
 `GAME_SAMPLES` at `GAME_INFO[3]` Hz into an `AudioBuffer`.
+
+</scalar-detail>
+
+<scalar-detail title="Building it">
+
+A page's game is compiled with `--target wasm32` and
+linked by `scripts/build.sh` with `--profile wasm-host`, which exports the
+storage above for the loader's `views()`, and `--memory <MiB>`, which pins
+the memory so those views never go stale. The
+storage alone is about 2.5 MB (`GAME_FRAME` 2 MB, `GAME_SAMPLES` 384 KB,
+the rings 2 KB), so pin at least 4 MiB, more for what the game itself
+allocates. The `GAME_*` names are the page's keys and are reserved: when
+two modules declare storage of one name, the later module's is keyed by its
+symbol instead, so a program's own `GAME_FRAME` could move this module's
+off the key the page reads.
 
 </scalar-detail>
 
@@ -211,7 +230,8 @@ Drain the page's input into `input`: every whole record on `GAME_INPUT`
 becomes a `TermEvent`, and `input.events` becomes what `input.keys.apply`
 makes of them at `nowMs`, so `input.isDown` answers for the keys still held.
 The page sends real key releases, so the key state's synthetic releases are
-turned off. A trailing part-record is dropped.
+turned off, and Ctrl-C is an ordinary key (a page's copy), not a quit. A
+trailing part-record is dropped.
 
 ```ts
 function gameReadInput(

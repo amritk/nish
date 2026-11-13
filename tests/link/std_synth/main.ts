@@ -1,7 +1,8 @@
 // `nish/synth`: silence's length, each voice's shape and loudness, voices
 // adding into what is there, a voice stopping at the end of the array, the
 // refusals (a rate, start, length or pitch that is not positive, or too long
-// to count) adding nothing, noise repeating call for call, and semitones.
+// to count) adding nothing, noise following its generator level for level and repeating call for call,
+// and semitones.
 import { SYNTH_NOISE, SYNTH_SQUARE, SYNTH_TRIANGLE, synthSemitone, synthSilence, synthTone } from "nish/synth"
 import { Suite } from "nish/testing"
 
@@ -41,6 +42,17 @@ const same = (a: f64[], b: f64[]): boolean => {
     }
   }
   return true
+}
+
+/** The noise voice's levels worked out apart from the module: xorshift from its seed, one level a period. */
+const noiseLevel = (k: i32): f64 => {
+  let x: i32 = 22695477
+  for (let i: i32 = 0; i <= k; i++) {
+    x = x ^ (x << 13)
+    x = x ^ (x >> 17)
+    x = x ^ (x << 5)
+  }
+  return toF64(x & 65535) / 32767.5 - 1.0
 }
 
 export const main = (): number => {
@@ -96,6 +108,12 @@ export const main = (): number => {
   t.ok("noise: sounds", sounding(a) > 400)
   t.ok("noise: inside the volume", peak(a) <= HALF)
   t.ok("noise: the same call, the same samples", same(a, b))
+  const levels: f64[] = synthSilence(HALF, RATE)
+  synthTone(levels, RATE, ZERO, HALF, ONE * 100.0, ONE * 100.0, SYNTH_NOISE, ONE, ZERO)
+  for (let k: i32 = 0; k < 5; k++) {
+    t.eqF64(`noise: period ${k} holds the generator's level ${k}`, levels[10 * k + 5], noiseLevel(k))
+  }
+  t.ok("noise: the levels differ", levels[5] !== levels[15] && levels[15] !== levels[25])
   const other: f64[] = synthSilence(HALF, RATE)
   synthTone(other, RATE, ZERO, HALF, ONE * 200.0, ONE * 20.0, 7, HALF, ONE * 2.0)
   t.ok("noise: an unknown wave is noise", same(a, other))
