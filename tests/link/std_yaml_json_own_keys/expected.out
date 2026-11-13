@@ -1,0 +1,18 @@
+PASS  1 and "1": refused by the parser
+PASS  1 and "1": refused by the loader
+PASS  1 and "1": at the second key
+PASS  a and 'a': refused by the parser
+PASS  a and 'a': refused by the loader
+PASS  a and 'a': at the second key
+PASS  a flow key and its text: refused by the parser
+PASS  a flow key and its text: refused by the loader
+PASS  a flow key and its text: at the second key
+PASS  a null key and the empty string: refused by the parser
+PASS  a null key and the empty string: refused by the loader
+PASS  a null key and the empty string: at the second key
+PASS  quoted and flow keys, in order
+PASS  a quoted key's range has its quotes
+PASS  a flow key's range is its source
+PASS  an empty last key loads
+PASS  merge off after the parse: repeated << refused
+std/yaml-json own keys: 17 passed, 0 failed, 0 skipped

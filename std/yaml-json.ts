@@ -99,6 +99,7 @@ import { JSON_TOK_ERR_TOTAL_LIMIT, JsonLimits } from "nish/json-tokenizer"
 import {
   JSON_VALUE_DUPLICATE_LAST,
   JSON_VALUE_ERR_DUPLICATE,
+  JSON_VALUE_ERR_RANGE,
   JSON_VALUE_ERR_VALUES,
   JSON_VALUE_MAX_VALUES,
   JsonDocument,
@@ -107,6 +108,7 @@ import {
 import {
   YAML_ALIAS,
   YAML_BOOL,
+  YAML_DOUBLE_QUOTED,
   YAML_FLOAT,
   YAML_INT,
   YAML_MAP,
@@ -114,6 +116,7 @@ import {
   YAML_PLAIN,
   YAML_SCALAR,
   YAML_SEQ,
+  YAML_SINGLE_QUOTED,
   YamlStream,
   keyText,
   parseYaml,
@@ -160,6 +163,11 @@ const YAML_JSON_DASH: i32 = 45
 const YAML_JSON_DOT: i32 = 46
 const YAML_JSON_ZERO: i32 = 48
 const YAML_JSON_LT: i32 = 60
+/** The bytes that end a quoted scalar's run of text with nothing to decode: `'` and `\`. */
+const YAML_JSON_SQUOTE: i32 = 39
+const YAML_JSON_BACKSLASH: i32 = 92
+/** The key words of a member with no key, and both words of an array's member. */
+const YAML_JSON_NO_WORD: i32 = 0
 
 /**
  * A load failure's name, for a message.
@@ -298,8 +306,12 @@ export class YamlJsonLoader {
     if (v < 0) {
       return this.fail(v, start, end)
     }
-    const code: i32 = this.doc.setRange(v, start, end)
-    return code < 0 ? this.fail(code, start, end) : v
+    if (start < 0 || end < start) {
+      return this.fail(JSON_VALUE_ERR_RANGE, start, end)
+    }
+    // `v` was just made, so its index is current: what `setRange` would check.
+    this.doc.rangeAt(this.doc.index(v), start, end)
+    return v
   }
 
   /** A null with the empty range at `at`. */
@@ -456,10 +468,11 @@ export class YamlJsonLoader {
   /** Builds node `n`, nested `depth` collections deep, with `n`'s range on the value it answers. */
   private build(n: i32, depth: i32): JsonValue {
     const stream: YamlStream = this.stream
-    const at: i32 = stream.resolved(n)
-    const kind: i32 = stream.kind(at)
+    const nodeKind: i32 = stream.kind(n)
+    const at: i32 = nodeKind === YAML_ALIAS ? yamlJsonAt(stream.firsts, n) : n
+    const kind: i32 = at === n ? nodeKind : stream.kind(at)
     let v: JsonValue = 0
-    const outer: boolean = this.copying < 0 && stream.kind(n) === YAML_ALIAS
+    const outer: boolean = this.copying < 0 && nodeKind === YAML_ALIAS
     if (outer) {
       this.copying = n
     }
@@ -515,7 +528,44 @@ export class YamlJsonLoader {
       }
       return doc.newNumber(text)
     }
-    return doc.newString(stream.text(at))
+    const textAt: i32 = doc.byteTop
+    return doc.newStoredString(textAt, this.storeScalar(at))
+  }
+
+  /**
+   * Stores scalar `at`'s decoded text in the document and answers its
+   * length. A flow scalar with no break, and no `'` or `\\` when quoted, is
+   * its own body, copied straight from the source in the scan that finds so.
+   */
+  private storeScalar(at: i32): i32 {
+    const stream: YamlStream = this.stream
+    const style: i32 = stream.style(at)
+    if (style === YAML_PLAIN || style === YAML_SINGLE_QUOTED || style === YAML_DOUBLE_QUOTED) {
+      const firsts: i32[] = stream.firsts
+      const counts: i32[] = stream.counts
+      if (at >= 0 && at < toI32(firsts.length) && at < toI32(counts.length)) {
+        let stop: i32 = -1
+        if (style === YAML_SINGLE_QUOTED) {
+          stop = YAML_JSON_SQUOTE
+        } else if (style === YAML_DOUBLE_QUOTED) {
+          stop = YAML_JSON_BACKSLASH
+        }
+        const n: i32 = this.doc.storeSpan(stream.source, firsts[at], counts[at], stop)
+        if (n >= 0) {
+          return n
+        }
+      }
+    }
+    return this.doc.storeText(stream.text(at))
+  }
+
+  /** Stores key node `key`'s text, as `keyText` spells it, in the document and answers its length. */
+  private storeKey(key: i32): i32 {
+    const stream: YamlStream = this.stream
+    if (stream.kind(key) === YAML_SCALAR) {
+      return stream.type(key) === YAML_NULL ? 0 : this.storeScalar(key)
+    }
+    return this.doc.storeText(keyText(stream, key))
   }
 
   /** A sequence's array, each entry built in turn. */
@@ -526,27 +576,50 @@ export class YamlJsonLoader {
     if (a < 0) {
       return this.fail(a, stream.start(at), stream.end(at))
     }
-    for (let i: i32 = 0; i < stream.count(at); i += 1) {
-      const c: i32 = stream.child(at, i)
+    const ax: i32 = doc.index(a)
+    const n: i32 = stream.count(at)
+    doc.reserve(ax, n)
+    // `at` is a seq, so its items are `kids[first, first + n)`, as `child` reads them.
+    const kids: i32[] = stream.kids
+    const first: i32 = yamlJsonAt(stream.firsts, at)
+    for (let i: i32 = 0; i < n; i += 1) {
+      const c: i32 = yamlJsonAt(kids, first + i)
       const v: JsonValue = c < 0 ? this.nullAt(stream.end(at)) : this.build(c, depth)
       if (v < 0) {
         return v
       }
-      const code: i32 = doc.push(a, v)
-      if (code < 0) {
-        return this.fail(code, stream.start(at), stream.end(at))
-      }
+      // `v` was just made, so it is in no container: what `push` would check.
+      doc.append(ax, doc.index(v), YAML_JSON_NO_WORD, YAML_JSON_NO_WORD)
     }
     return a
   }
 
   /**
-   * A map's object. Its members are gathered first, own keys then
-   * merged ones, with repeats settled; then each value is built and added.
+   * A map's object. A map with no merge key, in a stream whose parser
+   * reported every repeated key, is its own pairs in order (`buildOwnMap`).
+   * Otherwise its members are gathered first, own keys then merged ones, with
+   * repeats settled; then each value is built and added.
    */
   private buildMap(at: i32, depth: i32): JsonValue {
     const stream: YamlStream = this.stream
     const doc: JsonDocument = this.doc
+    const pairs: i32 = stream.count(at)
+    let own: boolean = stream.uniqueKeys
+    let merges: boolean = false
+    const kids: i32[] = stream.kids
+    const first: i32 = yamlJsonAt(stream.firsts, at)
+    for (let i: i32 = 0; i < pairs; i += 1) {
+      const key: i32 = stream.key(yamlJsonAt(kids, first + i))
+      if (key < 0) {
+        own = false
+      } else if (this.mergeShaped(key)) {
+        own = false
+        merges = merges || stream.merge
+      }
+    }
+    if (own) {
+      return this.buildOwnMap(at, pairs, depth)
+    }
     const base: i32 = this.entryTop
     // Clearing costs the table's capacity, which a large map leaves behind.
     if (this.seen.size > 0) {
@@ -558,11 +631,13 @@ export class YamlJsonLoader {
         return this.failed
       }
     }
-    const outer: i32 = 0
-    this.newMergeStamp()
-    this.markMerged(at)
-    if (this.mergeInto(base, at, outer) < 0) {
-      return this.failed
+    if (merges) {
+      const outer: i32 = 0
+      this.newMergeStamp()
+      this.markMerged(at)
+      if (this.mergeInto(base, at, outer) < 0) {
+        return this.failed
+      }
     }
     const top: i32 = this.entryTop
     const o: JsonValue = doc.newObject()
@@ -570,6 +645,7 @@ export class YamlJsonLoader {
       return this.fail(o, stream.start(at), stream.end(at))
     }
     const ox: i32 = doc.index(o)
+    doc.reserve(ox, top - base)
     for (let e: i32 = base; e < top; e += 1) {
       const pair: i32 = this.entryPairs[e]
       const valueNode: i32 = this.entryValues[e]
@@ -579,20 +655,69 @@ export class YamlJsonLoader {
       }
       const key: string = this.entryKeys[e]
       const keyAt: i32 = doc.byteTop
-      doc.append(ox, doc.index(v), keyAt, doc.storeText(key))
+      const slot: i32 = doc.append(ox, doc.index(v), keyAt, doc.storeText(key))
       const keyNode: i32 = stream.key(pair)
       if (doc.byteTop > this.byteCap) {
         return this.tooMuchText(keyNode < 0 ? pair : keyNode)
       }
       const keyStart: i32 = keyNode < 0 ? stream.start(pair) : stream.start(keyNode)
       const keyEnd: i32 = keyNode < 0 ? keyStart : stream.end(keyNode)
-      const code: i32 = doc.setKeyRange(o, e - base, keyStart, keyEnd)
-      if (code < 0) {
-        return this.fail(code, keyStart, keyEnd)
+      if (this.keyRange(slot, keyStart, keyEnd) < 0) {
+        return this.failed
       }
     }
     this.entryTop = base
     return o
+  }
+
+  /**
+   * Map `at`'s object when its `pairs` pairs are all its members: no
+   * merge key, and no two keys alike, which the parser has reported under
+   * `uniqueKeys` (a document with an error never loads). Each key is
+   * stored from its node as `keyText` spells it, after its value is built.
+   */
+  private buildOwnMap(at: i32, pairs: i32, depth: i32): JsonValue {
+    const stream: YamlStream = this.stream
+    const doc: JsonDocument = this.doc
+    const o: JsonValue = doc.newObject()
+    if (o < 0) {
+      return this.fail(o, stream.start(at), stream.end(at))
+    }
+    const ox: i32 = doc.index(o)
+    doc.reserve(ox, pairs)
+    // `buildMap` found every pair's key, so each child is a pair, whose key
+    // and value are its `firsts` and `counts`, as `key` and `value` read them.
+    const kids: i32[] = stream.kids
+    const firsts: i32[] = stream.firsts
+    const counts: i32[] = stream.counts
+    const first: i32 = yamlJsonAt(firsts, at)
+    for (let i: i32 = 0; i < pairs; i += 1) {
+      const pair: i32 = yamlJsonAt(kids, first + i)
+      const valueNode: i32 = yamlJsonAt(counts, pair)
+      const v: JsonValue = valueNode < 0 ? this.nullAt(stream.end(pair)) : this.build(valueNode, depth)
+      if (v < 0) {
+        return v
+      }
+      const keyNode: i32 = yamlJsonAt(firsts, pair)
+      const keyAt: i32 = doc.byteTop
+      const slot: i32 = doc.append(ox, doc.index(v), keyAt, this.storeKey(keyNode))
+      if (doc.byteTop > this.byteCap) {
+        return this.tooMuchText(keyNode)
+      }
+      if (this.keyRange(slot, stream.start(keyNode), stream.end(keyNode)) < 0) {
+        return this.failed
+      }
+    }
+    return o
+  }
+
+  /** Gives member slot `slot` the key range `[start, end)`; a negative answer is the failure, recorded. */
+  private keyRange(slot: i32, start: i32, end: i32): i32 {
+    if (start < 0 || end < start) {
+      return this.fail(JSON_VALUE_ERR_RANGE, start, end)
+    }
+    this.doc.keyRangeAt(slot, start, end)
+    return 0
   }
 
   /**
@@ -749,19 +874,35 @@ export class YamlJsonLoader {
 
   /**
    * Whether `key` is a merge key, as the stream reads one: a plain
-   * `<<`, untagged or `!!merge`. Keep in step with `yamlIsMergeKey` in
-   * `std/yaml.ts`, which is not exported.
+   * `<<`, untagged or `!!merge`, while the stream merges. Keep in step with
+   * `yamlIsMergeKey` in `std/yaml.ts`, which is not exported.
    */
   private isMergeKey(key: i32): boolean {
+    return this.stream.merge && this.mergeShaped(key)
+  }
+
+  /**
+   * Whether `key` is shaped as a merge key, whatever `stream.merge` now
+   * says: the parser checked repeats with the flag as it was then, so a map
+   * holding one is not a map of unique keys.
+   */
+  private mergeShaped(key: i32): boolean {
     const stream: YamlStream = this.stream
-    if (!stream.merge || key < 0 || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {
+    if (key < 0) {
       return false
     }
+    // Almost every key is turned away by its length or its first byte; the
+    // length is read first, so an empty key at the end of the text is not
+    // read past.
     const start: i32 = stream.start(key)
     if (
+      start < 0 ||
       stream.end(key) !== start + 2 ||
+      start + 2 > toI32(stream.source.length) ||
       toI32(stream.source.charCodeAt(start)) !== YAML_JSON_LT ||
-      toI32(stream.source.charCodeAt(start + 1)) !== YAML_JSON_LT
+      toI32(stream.source.charCodeAt(start + 1)) !== YAML_JSON_LT ||
+      stream.kind(key) !== YAML_SCALAR ||
+      stream.style(key) !== YAML_PLAIN
     ) {
       return false
     }
@@ -769,6 +910,9 @@ export class YamlJsonLoader {
     return tag === "" || tag === "merge"
   }
 }
+
+/** `a[i]`, or `-1` outside it, as `YamlStream`'s accessors read their arrays. */
+const yamlJsonAt = (a: i32[], i: i32): i32 => (i >= 0 && i < toI32(a.length) ? a[i] : -1)
 
 // ---- Numbers ---------------------------------------------------------------------
 

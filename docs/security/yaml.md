@@ -27,7 +27,7 @@ findings, all fixed.
 
 | File | Functions |
 | --- | --- |
-| `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; `yamlJsonErrorName` |
+| `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `buildOwnMap`, `storeScalar`, `storeKey`, `keyRange`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; `yamlJsonErrorName` |
 | `std/yaml.ts` | `YamlParser`: `checkMerge`, `aliasedSeqMerges`, `mergesMap` (the merge-value check only) |
 
 Out of scope: the rest of `std/yaml.ts` (the parser and its anchors) and
@@ -98,6 +98,27 @@ check is named by its exact string.
   mapping is refused", "merge shape ${i}: at the value") and by the loader
   itself ("merge shape ${i}: the loader refuses it too", "merge shape ${i}:
   the loader refuses it at the value").
+- **A map's own keys are unique by the parser's check**: a map with no merge
+  key, in a stream parsed with `uniqueKeys` (`YamlStream.uniqueKeys`), is
+  built from its pairs in order by `buildOwnMap`, which does not look for a
+  repeated key itself. It relies on `parseYaml`'s check, which matches keys by
+  the same `keyText` the loader stores, so a repeat is a parse error and the
+  document never loads. A stream parsed without the check takes `buildMap`'s
+  general path, which refuses a repeat with `JSON_VALUE_ERR_DUPLICATE`. Checks
+  of `tests/link/std_yaml_json_own_keys`, run by the check
+  "link/std_yaml_json_own_keys: exits with 0 and stdout matches expected.out",
+  for a plain `1` and a quoted `"1"`, a plain `a` and a quoted `'a'`, a
+  flow-collection key and its flow text, and a null `~` and a quoted `""`:
+  "${name}: refused by the parser",
+  "${name}: refused by the loader" (the stream parsed with `uniqueKeys` off),
+  "${name}: at the second key"; and for the keys it stores and the ranges it
+  gives them, "quoted and flow keys, in order", "a quoted key's range has its
+  quotes", "a flow key's range is its source". A key shaped as a merge key
+  turns the map to the general path whatever `stream.merge` says at the load,
+  since the parser checked repeats with the flag as it was then: "merge off
+  after the parse: repeated << refused". The shape check reads a key's bytes
+  only after its length, so an empty key at the end of the text is not read
+  past: "an empty last key loads".
 - **With `merge` off, `<<` is an ordinary key**: "merge off: loads", "merge
   off: `<<` is an ordinary key".
 - **Depth is bounded** (`:454`; a chain of merges past `YAML_JSON_MERGE_HOPS`

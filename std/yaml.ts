@@ -328,8 +328,12 @@ export class YamlStream {
    * @internal Used by `YamlParser`.
    */
   props: i32[]
-  /** Every collection's children, one collection after another. */
-  private kids: i32[]
+  /**
+   * Every collection's children, one collection after another.
+   * @internal Used by `YamlParser`, and read by std/yaml-json.ts, which walks
+   *   each collection's children in turn.
+   */
+  kids: i32[]
   /**
    * Per property slot: the anchor's name (after `&`), the tag as written, and the anchor table entry.
    * @internal Used by `YamlParser`.
@@ -423,6 +427,11 @@ export class YamlStream {
    * Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is.
    */
   merge: boolean = true
+  /**
+   * Whether the parser reported every map that repeats a key, as `YamlOptions.uniqueKeys` said.
+   * `false` for a stream built by hand, so a reader that relies on it checks for itself.
+   */
+  uniqueKeys: boolean = false
 
   /**
    * An empty stream over `text`, for the parser to fill; get a parsed one from
@@ -1873,6 +1882,7 @@ class YamlParser {
     this.maxDepth = options.maxDepth
     this.uniqueKeys = options.uniqueKeys
     this.stream.merge = options.merge
+    this.stream.uniqueKeys = options.uniqueKeys
     this.keepComments = options.keepComments
     this.firstOnly = options.firstDocumentOnly
   }

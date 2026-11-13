@@ -9,10 +9,10 @@ import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 unsafe import 51:10 wrappingAdd from "nish:unsafe"
 unsafe import 51:23 wrappingMul from "nish:unsafe"
 unsafe import 51:36 wrappingSub from "nish:unsafe"
-unsafe call 1710:13 wrappingAdd (node 7261)
-unsafe call 1710:25 wrappingMul (node 7265)
-unsafe call 1713:31 wrappingSub (node 7294)
-unsafe call 4553:12 wrappingMul (node 22211)
+unsafe call 1719:13 wrappingAdd (node 7266)
+unsafe call 1719:25 wrappingMul (node 7270)
+unsafe call 1722:31 wrappingSub (node 7299)
+unsafe call 4563:12 wrappingMul (node 22223)
 const YAML_SCALAR: i32 = 1 [exported]
 const YAML_MAP: i32 = 2 [exported]
 const YAML_SEQ: i32 = 3 [exported]
@@ -157,6 +157,7 @@ struct YamlStream (class) size=280 align=8 exported
   field mergeStep: i32 index=36 offset=268 initialized
   field mergeItemsChecked: i32 index=37 offset=272 initialized
   field merge: boolean index=38 offset=276 initialized
+  field uniqueKeys: boolean index=39 offset=277 initialized
   constructor -> @nish.YamlStream.constructor
   method documentCount -> @nish.YamlStream.documentCount
   method documentRoot -> @nish.YamlStream.documentRoot
