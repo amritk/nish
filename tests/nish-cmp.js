@@ -4210,6 +4210,14 @@ const DECLARED = [
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
     }
   ),
+  // #1416: Http1Connection keeps its last response head, and the head-reuse
+  // test reads the internal `headCopies` counter that counts its copies.
+  {
+    program: "tests/link/net_http1_server_head_reuse/main.ts",
+    file: "exit",
+    changelog: "repeated HTTP/1 response head once per Date tick",
+    why: "the program reads Http1Connection.headCopies, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  },
   // WP49 stage 6: `Router.match` walks the path once, recording where it
   // ends, and HttpRequest gains `headLength`, so every program reaching
   // std/net/router.ts lays it out again, and a module naming HttpRequest's
