@@ -975,7 +975,12 @@ The copy is an ordinary Nish string, so it outlives `free(p)`. `readCString`
 is in `nish:unsafe` because nothing proves the pointer is live or that its
 bytes end in a NUL: reading a freed or unterminated buffer is undefined
 behaviour, and the import is where a module says it takes that on. It takes a
-`CPtr`, not a `CPtr | null`, so an unnarrowed pointer is refused.
+`CPtr`, not a `CPtr | null`, so an unnarrowed pointer is refused. A C function
+declared to answer `CPtr` may still answer `NULL`, so `readCString` tests its
+pointer first: `NULL` stops the program with
+`` `readCString` read a NULL pointer `` on stderr and exit status 1, and
+`--deny-panics` refuses the call for that reason. Declare a result that may be
+`NULL` as `CPtr | null` and narrow it instead.
 
 A `NULL` reaches C only where the source spells it. A nullable pointer held in
 a variable is refused, because the path that passes it `NULL` is one nobody

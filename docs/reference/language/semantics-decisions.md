@@ -1225,12 +1225,16 @@ holds a NUL byte, which C would read as the end of the string:
 is `NULL`:
 `` `name` returned NULL for a `string` result; declare it `string | null` ``;
 or the pointer of a [`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)
-call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``
+call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``;
+or the pointer of a
+[`readCString`](declarations.md#readcstring-a-string-out-of-a-buffer-c-owns) call that is
+`NULL`: `` `readCString` read a NULL pointer ``
 
 - *What proves it away:* nothing: a result declared `string | null` reads
   `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`); the
-  `readStruct` test stays at every call
-  (`tests/cases/panics_ffi_read_struct_null`)
+  `readStruct` and `readCString` tests stay at every call
+  (`tests/cases/panics_ffi_read_struct_null`,
+  `tests/cases/panics_ffi_read_cstring_null`)
 
 **`ffi-length`**: a call to a
 [`declare function`](declarations.md#a-u8-parameter-a-buffer-and-its-count) whose count is
@@ -1260,12 +1264,11 @@ through further calls
 
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
-behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated (`readStruct` tests its pointer for `NULL`, so it is an
-`ffi-null` site below)
+behaviour (`readCString` and `readStruct` test their pointer for `NULL`, so
+each is an `ffi-null` site above)
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
-  author's word that the index is in range, or that the pointer is, not a
+  author's word that the index is in range, not a
   proof, and the `nish:unsafe` import its module must write is the opt-in to
   that word, so it is listed with `"allowed": true` and, like `oom`, never
   makes a function one that may panic (`tests/cases/deny_panics_unsafe`)

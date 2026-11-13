@@ -1195,6 +1195,14 @@ const pgTls = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PG_TLS, why }))
   )
 
+/** The changelog words of the QUIC NAT-rebind fix (#1511). */
+const quicRebind = byFinding(
+  "QUIC transfer survives a NAT rebind while one hole fills the stream buffer"
+).bind(
+  null,
+  "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves"
+)
+
 const DECLARED = [
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
@@ -5569,6 +5577,75 @@ const DECLARED = [
     changelog: "A process.spawn grant that lets a program start helpers",
     why: "the 0.38.0 seed reads `process.spawn=exec:env` as a program named `exec:env`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
   },
+  // #1511: QuicConnection gains a field (752 to 760 bytes) and QuicStreams
+  // gains `bufferBlocked`, so every module laying either out moves.
+  ...quicRebind({
+    "tests/link/net_interop_server/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_interop_server_f64/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_quic_prefork/main.ts": [
+      "common.ll",
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+    ],
+    "tests/link/net_quic_recovery/main.ts": [
+      "net_quic_conn_common.ll",
+      "net_quic_stream_common.ll",
+      "pmtu.ll",
+    ],
+    "tests/link/net_quic_recovery_f64/main.ts": [
+      "net_quic_conn_common.ll",
+      "net_quic_stream_common.ll",
+      "pmtu.ll",
+    ],
+    "tests/link/net_quic_stream/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
+    "tests/link/net_quic_stream_f64/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
+    "tests/link/net_quic_worker/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_common.ll",
+      "net_quic_conn_replay_server.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+    ],
+    "tests/link/net_webtransport/main.ts": ["clock.ll"],
+    "tests/link/net_webtransport_bad_idle/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "net_webtransport_peer.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+      "webtransport.ll",
+    ],
+    "tests/link/net_webtransport_bad_rate/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "net_webtransport_peer.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+      "webtransport.ll",
+    ],
+    "tests/link/net_webtransport_f64/main.ts": ["clock.ll"],
+  }),
 ]
 
 /**
