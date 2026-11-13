@@ -490,8 +490,12 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
   const bare = unwrapParens(node)
   const members: i32[] = []
   if (ctx.program.isEnumMember(ctx.table, bare)) {
-    const type = ctx.table.enumBase(ctx.program.nodeTypes[bare.id])
-    members.push(ctx.table.enumMemberOf(type, ctx.program.nodeEnumValues[bare.id], bare.text))
+    const read = ctx.program.nodeTypes[bare.id]
+    const value = ctx.program.nodeEnumValues[bare.id]
+    // A read still typed as its member is that member's type, which
+    // `enumMemberOf` would answer: one per enum and value.
+    const known = ctx.table.isEnumMemberType(read) && ctx.table.memberValue(read) === value
+    members.push(known ? read : ctx.table.enumMemberOf(ctx.table.enumBase(read), value, bare.text))
     return members
   }
   return membersOfSet(ctx, ctx.program.memberSets[bare.id])
@@ -2441,8 +2445,17 @@ const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local
   }
 }
 
-/** Every member of the enum `enumType` as member types, one per value; none when this module cannot name it. */
+/**
+ * Every member of the enum `enumType` as member types, one per value; none
+ * when this module cannot name it. Built once per enum
+ * (`CheckedProgram.enumMemberLists`), so the list is shared: read it, never
+ * change it.
+ */
 export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
+  const at = ctx.program.enumMemberTypes.indexOf(enumType)
+  if (at >= 0) {
+    return ctx.program.enumMemberLists[at]
+  }
   const members: i32[] = []
   for (const info of ctx.program.enumList) {
     if (info.type === enumType && members.length === 0) {
@@ -2455,7 +2468,112 @@ export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
       }
     }
   }
+  if (members.length > 0) {
+    ctx.program.enumMemberTypes.push(enumType)
+    ctx.program.enumMemberLists.push(members)
+  }
   return members
+}
+
+/**
+ * Mark the members `first` and `second` name, for `namedBy`, and give the
+ * stamp that marks them; 0 when one is not a member of `enumType`. Member
+ * types are interned by enum and value, so among one enum's members the same
+ * id is the same value and a mark answers in one read; a member of another
+ * enum, which only a refused comparison or store brings, is matched by value.
+ */
+const stampMembers = (ctx: CheckContext, enumType: i32, first: i32[], second: i32[]): i32 => {
+  const program = ctx.program
+  program.memberStamp = program.memberStamp + 1
+  const stamp = program.memberStamp
+  for (const member of first) {
+    if (!markMember(ctx, enumType, member, stamp)) {
+      return 0
+    }
+  }
+  for (const member of second) {
+    if (!markMember(ctx, enumType, member, stamp)) {
+      return 0
+    }
+  }
+  return stamp
+}
+
+/** Whether `type` is a member type of the enum `enumType`. */
+const isMemberOf = (ctx: CheckContext, enumType: i32, type: i32): boolean =>
+  ctx.table.isEnumMemberType(type) && ctx.table.enumBase(type) === enumType
+
+/** Mark `member` with `stamp`, when it is a member of `enumType`. */
+const markMember = (ctx: CheckContext, enumType: i32, member: i32, stamp: i32): boolean => {
+  if (!isMemberOf(ctx, enumType, member)) {
+    return false
+  }
+  const marks = ctx.program.memberMarks
+  while (marks.length <= member) {
+    marks.push(0)
+  }
+  marks[member] = stamp
+  return true
+}
+
+/** Whether `first` or `second`, which `stampMembers` stamped `stamp`, names the value `member` holds. */
+const namedBy = (
+  ctx: CheckContext,
+  enumType: i32,
+  member: i32,
+  stamp: i32,
+  first: i32[],
+  second: i32[]
+): boolean => {
+  if (stamp > 0 && isMemberOf(ctx, enumType, member)) {
+    return member < ctx.program.memberMarks.length && ctx.program.memberMarks[member] === stamp
+  }
+  const value = ctx.table.memberValue(member)
+  for (const other of first) {
+    if (ctx.table.memberValue(other) === value) {
+      return true
+    }
+  }
+  for (const other of second) {
+    if (ctx.table.memberValue(other) === value) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Narrow the enum variable `local` from `current`, what it holds, to the
+ * members `first` or `second` names (`keep`), or to those neither does, when
+ * that is fewer. Counted before any list is built, so a test that leaves
+ * `local` as it was allocates nothing.
+ */
+const holdNamed = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  current: i32[],
+  first: i32[],
+  second: i32[],
+  keep: boolean
+): void => {
+  const stamp = stampMembers(ctx, local.type, first, second)
+  let count = 0
+  for (const member of current) {
+    if (namedBy(ctx, local.type, member, stamp, first, second) === keep) {
+      count = count + 1
+    }
+  }
+  if (current.length === 0 || count === current.length) {
+    return
+  }
+  const kept: i32[] = []
+  for (const member of current) {
+    if (namedBy(ctx, local.type, member, stamp, first, second) === keep) {
+      kept.push(member)
+    }
+  }
+  holdKept(ctx, scope, local, kept)
 }
 
 /** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
@@ -2480,23 +2598,7 @@ export const narrowHeld = (
   members: i32[],
   keep: boolean
 ): void => {
-  const current = heldMembers(ctx, scope, local)
-  const kept: i32[] = []
-  for (const member of current) {
-    let named = false
-    for (const test of members) {
-      if (ctx.table.memberValue(test) === ctx.table.memberValue(member)) {
-        named = true
-      }
-    }
-    if (named === keep) {
-      kept.push(member)
-    }
-  }
-  if (current.length === 0 || kept.length === current.length) {
-    return
-  }
-  holdKept(ctx, scope, local, kept)
+  holdNamed(ctx, scope, local, heldMembers(ctx, scope, local), members, [], keep)
 }
 
 /** Record that the enum variable `local` holds one of `kept`, fewer members than it could before. */
@@ -2662,29 +2764,7 @@ export const addLocals = (into: Local[], locals: Local[]): void => {
 /** Narrow the enum variable `local` to the members `first` or `second` leaves it, when fewer than it holds. */
 const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
   const current = heldMembers(ctx, scope, local)
-  const fromFirst = heldMembers(ctx, first, local)
-  const fromSecond = heldMembers(ctx, second, local)
-  const kept: i32[] = []
-  for (const member of current) {
-    let named = false
-    for (const other of fromFirst) {
-      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-        named = true
-      }
-    }
-    for (const other of fromSecond) {
-      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-        named = true
-      }
-    }
-    if (named) {
-      kept.push(member)
-    }
-  }
-  if (current.length === 0 || kept.length === current.length) {
-    return
-  }
-  holdKept(ctx, scope, local, kept)
+  holdNamed(ctx, scope, local, current, heldMembers(ctx, first, local), heldMembers(ctx, second, local), true)
 }
 
 /**
@@ -3747,19 +3827,10 @@ export const heldAcross = (ctx: CheckContext, node: Node, scope: Scope): Scope =
     const written: i32[] = []
     if (ctx.table.isEnum(local.type) && collectWritten(ctx, node, local, scope, written)) {
       const kept: i32[] = []
+      const before = heldMembers(ctx, scope, local)
+      const stamp = stampMembers(ctx, local.type, before, written)
       for (const member of enumMembersOf(ctx, local.type)) {
-        let named = false
-        for (const other of heldMembers(ctx, scope, local)) {
-          if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-            named = true
-          }
-        }
-        for (const other of written) {
-          if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-            named = true
-          }
-        }
-        if (named) {
+        if (namedBy(ctx, local.type, member, stamp, before, written)) {
           kept.push(member)
         }
       }

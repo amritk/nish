@@ -1799,6 +1799,20 @@ export class CheckedProgram {
    * `Scope.hold` name one by its index, encoded below -2.
    */
   memberLists: i32[][]
+  /**
+   * Every member of an enum as member types (`enumMembersOf`), built the
+   * first time a test reads it: `enumMemberTypes[i]` is the enum and
+   * `enumMemberLists[i]` its members. Shared and read-only, as `memberLists`.
+   */
+  enumMemberTypes: i32[]
+  enumMemberLists: i32[][]
+  /**
+   * Scratch for the member-set operations in `expressions.ts`: type id ->
+   * the stamp of the last pass that marked it, so a pass asks whether a
+   * member is in a set in one read rather than a walk of it.
+   */
+  memberMarks: i32[]
+  memberStamp: i32
   /** `isCollections()`, decided once: the package and the path never change. */
   collectionsLibrary: boolean
   /** `isSecretLibrary()`, decided once, as `collectionsLibrary` is. */
@@ -2093,6 +2107,10 @@ export class CheckedProgram {
     this.spreadCopies = []
     this.memberSets = new Array<i32>(nodeCount)
     this.memberLists = []
+    this.enumMemberTypes = []
+    this.enumMemberLists = []
+    this.memberMarks = []
+    this.memberStamp = 0
     let i = 0
     while (i < nodeCount) {
       this.nodeTypes[i] = -1
