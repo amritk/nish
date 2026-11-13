@@ -58,12 +58,14 @@ L3, so in the `-dram` shapes a connection's lines come from DRAM; cachegrind's
 LL (512 MiB, 32-way) misses about 9 to 11 times per request there, against 0
 in `idle`.
 
-With the idle shape (or `--rss N`) it also reports the peak RSS one idle
-connection costs: each binary's `rss` mode builds the idle pool, serves one
-request on every connection so each parks, and prints its `VmHWM` from
-`/proc/self/status`; the table gives, over `--rss` runs (default 5), the
-median and min–max of the peak at `--connections` less the peak at 0,
-divided by `--connections`. `getrusage`'s `ru_maxrss` cannot stand in for
+With the idle shape (or `--rss N`, or `--shape rss` for the memory alone) it
+also reports the peak RSS one idle connection costs: each binary's `rss` mode
+builds the idle pool with `idleInput`, its `rss-default` mode on the default
+`Http1Config`, serves every connection one request, or `--passes` (default 4)
+in turn so each has kept its response head, so each parks, and prints its
+`VmHWM` from `/proc/self/status`; the table gives a row for each of the four,
+over `--rss` runs (default 5), the median and min–max of the peak at
+`--connections` less the peak at 0, divided by `--connections`. `getrusage`'s `ru_maxrss` cannot stand in for
 it, because it keeps the peak of the image `exec` replaced too, and under
 `taskset` from Node that is larger than the bench at 0 connections.
 
