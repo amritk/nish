@@ -4249,10 +4249,13 @@ export class QuicConnection {
    * datagram goes regardless of the window (a PING when nothing else is
    * queued), so the client always has one to answer, from wherever it now
    * is (RFC 9000 §9.3). One per acknowledgment that advances the space, so
-   * at most about two a round trip, a buffer-limited transfer that lost
-   * nothing included; none while the sent ring is full, where a probe would
-   * resend the oldest packet in flight instead. The probe timeout still runs
-   * as before. With the NAT beside the client, a rebind after the probe
+   * up to two full datagrams a round trip, a buffer-limited transfer that
+   * lost nothing included, since the probe carries any other stream's queued
+   * data; none while the sent ring is full, where a probe would resend the
+   * oldest packet in flight instead. After a validated migration
+   * `resetPath` puts the smoothed RTT back to the 333 ms initial RTT, so the
+   * probe waits about 166 ms until the new path's first sample. The probe
+   * timeout still runs as before. With the NAT beside the client, a rebind after the probe
    * arrives and before the next burst does is still missed: only the client
    * sending can close that half round trip.
    */
