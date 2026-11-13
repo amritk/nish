@@ -234,6 +234,8 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
   if (!only || "ffi_struct checks".includes(only)) {
     if (process.platform !== "linux") {
       skip("skipped: ffi_struct: RLIMIT_NOFILE is 7 on Linux only: getrlimit is not compared with ulimit")
+    } else if (!has("clang")) {
+      skip("skipped: ffi_struct: no clang to link the getrlimit program: it is not compared with ulimit")
     } else {
       const source = write("limits.ts", LIMITS)
       const exe = path.join(dir, "limits")
