@@ -1847,6 +1847,16 @@ export class JsonDocument {
     return this.handle(this.newNode(JSON_VALUE_STRING, at, n))
   }
 
+  /**
+   * A new number of the `n` bytes stored from `at`, as a handle; the caller
+   * has checked they are one RFC 8259 number, which `newNumber` would check.
+   *
+   * @internal Read by std/yaml-json.ts, after `storeSpan`.
+   */
+  newStoredNumber(at: i32, n: i32): JsonValue {
+    return this.handle(this.newNode(JSON_VALUE_NUMBER, at, n))
+  }
+
   /** A new value of `kind` holding `s`'s bytes, as a handle. */
   private newStored(kind: i32, s: string): JsonValue {
     return this.handle(this.newNode(kind, this.byteTop, this.storeText(s)))

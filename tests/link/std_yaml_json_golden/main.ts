@@ -1,8 +1,9 @@
 // `nish/yaml-json`'s every answer, written out: each document of each
-// yaml-test-suite case (tests/yaml-suite/cases.txt) and of each input
-// tests/link/std_yaml_json gives the loader, loaded under every option set
-// below with one loader and one document reused throughout, as a program
-// would. A load that succeeds prints the JSON it wrote and every value's and
+// yaml-test-suite case (tests/yaml-suite/cases.txt), of each input
+// tests/link/std_yaml_json gives the loader and of each edge case below,
+// loaded under every option set below with one loader and one document
+// reused throughout, as a program would. A load that succeeds prints the
+// values the document holds (`top`), the JSON it wrote and every value's and
 // key's range in walk order; a refusal prints its code, its range and what
 // the document holds after it. The expected output was written by the loader
 // as it was before its fast paths, so it pins them to the old answers, not to
@@ -69,6 +70,7 @@ const ygConfigs = (): YgConfig[] => {
     new YgConfig("default", true, true, false, false),
     new YgConfig("loose", false, true, false, false),
     new YgConfig("loose-last", false, true, false, true),
+    new YgConfig("unique-last", true, true, false, true),
     new YgConfig("no-merge", true, false, false, false),
     new YgConfig("loader-merge", true, false, true, false),
     new YgConfig("loose-loader-merge", false, false, true, true),
@@ -135,7 +137,7 @@ const ygRun = (
     } else {
       const ranges: string[] = [];
       ygRanges(doc, root, ranges);
-      ygPrint(`${c.name} ${key} ${d} ok ${doc.stringify(root)}`);
+      ygPrint(`${c.name} ${key} ${d} ok top ${doc.top} ${doc.stringify(root)}`);
       ygPrint(
         `  ${ranges.join(" ")} | ${loader.errorStart} ${loader.errorEnd} ${loader.failed}`,
       );
@@ -152,7 +154,7 @@ const ygRepeat = (unit: string, n: i32): string => {
   return parts.join("");
 };
 
-/** The inputs tests/link/std_yaml_json gives the loader, and a small OpenAPI-shaped one like the bench's. */
+/** The inputs tests/link/std_yaml_json gives the loader, the loader's fast paths' edge cases, and a small OpenAPI-shaped one like the bench's. */
 const ygInputs = (): string[] => {
   const inputs: string[] = [
     "name: pets\nn: 3\nok: true\nnone: null\ntags:\n  - a\n  - b\ndeep:\n  x: [1.5, {y: z}]\n",
@@ -193,6 +195,33 @@ const ygInputs = (): string[] => {
     `${ygRepeat("[", 64)}${ygRepeat("]", 64)}`,
     "a: {b: {c: {d: 1}}}\n",
     "a: &a {b: {c: 1}}\nx: {y: *a}\n",
+    // Keys spelled two ways that are one JSON key, or two that look alike and are not.
+    "a: &k x\n*k : 1\nx: 2\n",
+    "a: &k x\n*k : 1\nb: 2\n",
+    "!!str ~: 1\n\"~\": 2\n",
+    "!!str ~: 1\n~: 2\n",
+    "\"a\\tb\": 1\n\"a\tb\": 2\n",
+    "\"a\\tb\": 1\na b: 2\n",
+    "? |\n  ab\n: 1\n\"ab\\n\": 2\n",
+    "? >-\n  ab\n: 1\nab: 2\n",
+    // Numbers as values and as keys.
+    "[-0, 0, 1.5e3, 01, +1, 1., 0x1F, -0.0, 1_0, 0b1, 1e, .e1, -a, +a]",
+    "-0: a\n0: b\n1.5e3: c\n01: d\n+1: e\n1.: f\n0x1F: g\n",
+    "0: a\n-0: b\n",
+    // Keys that are null, and keys that start like one and are not.
+    "~: a\n",
+    "null: a\n",
+    "Null: a\n",
+    "NULL: a\n",
+    "n: a\nN: b\nnul: c\nnulls: d\nnULL: e\n~~: f\nNo: g\n",
+    ": a\n",
+    "'null': a\n\"~\": b\n",
+    "null: a\nNULL: b\n",
+    "[true, True, TRUE, tRUE, t, false, False, FALSE, fALSE, f, null, Null, NULL, nULL, ~, ~~, truex, falsey, nullx]",
+    "!!null x: a\n!!bool true: b\n!!int 1: c\n!!float 2.5: d\n",
+    // A stream of several documents, each sized from its own nodes.
+    "--- {a: 1}\n--- {b: [1, 2, {c: 3}]}\n--- 3\n--- [x, {y: z}]\n",
+    "--- &a [1, 2]\n--- {k: v}\n--- &b {x: [1, 2, 3]}\n",
   ];
   const bomb: string[] = ["a: &a [x, x, x, x, x, x, x, x, x, x]\n"];
   const names: string[] = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];

@@ -444,7 +444,6 @@ class YamlStream
 | `errors: i32` | How many of the diagnostics are errors; the same as `errorCount()`. |
 | `merge: boolean` | Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is. |
 | `source: string` | The text the stream was parsed from; every offset is into it. |
-| `uniqueKeys: boolean` | Whether the parser reported every map that repeats a key, as `YamlOptions.uniqueKeys` said. `false` for a stream built by hand, so a reader that relies on it checks for itself. |
 | `warnings: i32` | How many of the diagnostics are warnings; the same as `warningCount()`. |
 | `anchor(n: i32): string` | Node `n`'s anchor name. |
 | `boolValue(n: i32): boolean` | A boolean scalar's value. |

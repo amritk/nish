@@ -2544,6 +2544,7 @@ struct JsonDocument (class) size=248 align=8 exported
   method reserve -> @nish.JsonDocument.reserve
   method storeSpan -> @nish.JsonDocument.storeSpan
   method newStoredString -> @nish.JsonDocument.newStoredString
+  method newStoredNumber -> @nish.JsonDocument.newStoredNumber
   method newStored -> @nish.JsonDocument.newStored
   method moveSlots -> @nish.JsonDocument.moveSlots
   method moveKeyRanges -> @nish.JsonDocument.moveKeyRanges
@@ -3526,6 +3527,15 @@ function JsonDocument.storeSpan(this: JsonDocument, text: string, from: i32, to:
   local +5:14 j: i32 (let)
   local +6:13 code: i32 (const)
 function JsonDocument.newStoredString(this: JsonDocument, at: i32, n: i32): i32 -> @nish.JsonDocument.newStoredString [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDocument.newNode
+  escaping: at n
+  calls: nish.JsonDocument.handle nish.JsonDocument.newNode
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.JsonDocument.handle#0 nish.JsonDocument.newNode#0
+  stackSites=0 stackLocals=0
+  callee +0:12 JsonDocument.handle -> @nish.JsonDocument.handle
+  callee +0:24 JsonDocument.newNode -> @nish.JsonDocument.newNode
+function JsonDocument.newStoredNumber(this: JsonDocument, at: i32, n: i32): i32 -> @nish.JsonDocument.newStoredNumber [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.newNode
   escaping: at n

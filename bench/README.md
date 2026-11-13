@@ -2439,38 +2439,43 @@ input (default 32). It is run by hand and is not in `tests/run.js`.
 
 Against `main` at `e0a1661e`, before the load built a map with no merge key
 straight from its own pairs (the parser having checked them for repeats),
-stored scalars and keys from the source span, and sized each container
-before filling it: both commits' `main.ts` built twice each (`cmp` found each
-pair byte-identical), the four binaries interleaved on both workloads, 31
-rounds, the whole measurement done twice, on a 4-core cloud container, 1,107,038
-bytes and 30 documents a run. Every run gave the same checksum. Milliseconds a
-document, the two builds' medians, and the band between them:
+stored scalars and keys from the source span, sized each container before
+filling it, and resolved, typed and decoded each scalar once (a plain number
+stored without the tokenizer's second check): both commits' `main.ts` built
+twice each (`cmp` found each pair byte-identical), the four binaries
+interleaved on both workloads, 31 rounds, the whole measurement done twice, on
+a 4-core cloud container, 1,107,038 bytes and 30 documents a run. Every run
+gave the same checksum. Milliseconds a document, the two builds' medians, and
+the band between them:
 
 | Workload | Run | Before | Band | After | Band | After / before |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| parse | 1 | 15.954 / 16.172 | 1.4% | 16.236 / 16.285 | 0.3% | 1.012 |
-| parse | 2 | 15.999 / 16.277 | 1.7% | 16.145 / 16.405 | 1.6% | 1.008 |
-| load | 1 | 30.470 / 30.315 | 0.5% | 25.495 / 25.825 | 1.3% | 0.844 |
-| load | 2 | 30.294 / 31.564 | 4.2% | 26.430 / 25.699 | 2.8% | 0.843 |
+| parse | 1 | 16.173 / 15.995 | 1.1% | 16.126 / 16.257 | 0.8% | 1.007 |
+| parse | 2 | 16.219 / 16.564 | 2.1% | 16.458 / 16.018 | 2.7% | 0.991 |
+| load | 1 | 31.310 / 29.721 | 5.3% | 24.651 / 24.742 | 0.4% | 0.809 |
+| load | 2 | 31.650 / 31.891 | 0.8% | 24.742 / 24.506 | 1.0% | 0.775 |
 
 Both rows time the whole binary, so **load** includes the parse. Parse plus
-load went from 1.89x and 1.92x the parse alone to 1.58x and 1.60x. The parse,
-whose code and instruction count did not change, read 1.2% and 0.8% slower,
-about its band; an earlier pair of runs read it 5.5% slower and 5.9% faster. Under
-`valgrind --tool=cachegrind --cache-sim=no`, steady state a document:
+load went from 1.90x and 1.94x the parse alone to 1.53x and 1.52x. The parse
+read 0.7% slower and 0.9% faster, inside its band; its instruction count is
+the firmer figure. Under `valgrind --tool=cachegrind --cache-sim=no`, steady
+state a document:
 
 | Workload | Before | After |
 | --- | ---: | ---: |
-| parse | 135.82M | 135.82M |
-| parse + load | 298.85M | 253.16M |
-| load step alone | 163.03M | 117.34M |
+| parse | 135.82M | 135.06M |
+| parse + load | 298.85M | 237.27M |
+| load step alone | 163.03M | 102.21M |
 
-The load step is 0.86x the parse in instructions. What is left of it, from
-`callgrind`: copying scalar text into the document (about 14M, some 17
-instructions a byte over 834 KB of text), `build`'s own dispatch (15M),
-merge keys (10M), the document's value table (`jsonValuePut`, 9M), scalar type
-resolution (8M), and appending members (7.6M), making nodes (5.6M) and their
-source ranges (9.5M).
+#1072 recorded 309M and 173M for the same input on its own head; `main` at
+`e0a1661e`, with the compiler and library changes since, measures the
+298.85M and 163.03M above, and that is the baseline here. The load step is
+now 0.76x the parse in instructions. What is left of it, from `callgrind`:
+`build`'s own dispatch (about 24.5M), copying scalar text into the document
+(`storeSpan`, 19M), decoding quoted and escaped scalars (`yamlDecode`, 16.7M),
+storing scalars (16.4M), reading node types (12M over two call sites), array
+bound checks (13.2M), appending members (7.6M), merge keys (12M) and making
+nodes (5.3M).
 
 ```bash
 node bench/yaml-json/run.mjs

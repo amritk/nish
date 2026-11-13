@@ -33,9 +33,27 @@ export const main = (): number => {
   const t = new Suite("std/yaml-json own keys");
   const loader = new YamlJsonLoader();
   const doc = new JsonDocument(new JsonLimits());
-  const pairs: string[] = ['1: a\n"1": b\n', "a: 1\n'a': 2\n", '[a, b]: 1\n"[ a, b ]": 2\n', '~: 1\n"": 2\n'];
-  const names: string[] = ['1 and "1"', "a and 'a'", "a flow key and its text", "a null key and the empty string"];
-  const seconds: string[] = ['"1"', "'a'", '"[ a, b ]"', '""'];
+  const pairs: string[] = [
+    '1: a\n"1": b\n',
+    "a: 1\n'a': 2\n",
+    '[a, b]: 1\n"[ a, b ]": 2\n',
+    '~: 1\n"": 2\n',
+    "a: &k x\n*k : 1\nx: 2\n",
+    '!!str ~: 1\n"~": 2\n',
+    '"a\\tb": 1\n"a\tb": 2\n',
+    '? |\n  ab\n: 1\n"ab\\n": 2\n',
+  ];
+  const names: string[] = [
+    '1 and "1"',
+    "a and 'a'",
+    "a flow key and its text",
+    "a null key and the empty string",
+    "an alias key and its anchor's text",
+    '!!str ~ and "~"',
+    "an escaped tab and a tab",
+    "a block scalar key and its text",
+  ];
+  const seconds: string[] = ['"1"', "'a'", '"[ a, b ]"', '""', "x", '"~"', '"a\tb"', '"ab\\n"'];
   for (let i: i32 = 0; i < toI32(pairs.length); i += 1) {
     t.eqI32(`${names[i]}: refused by the parser`, loader.load(parseYaml(pairs[i]), 0, doc), YAML_JSON_ERR_YAML);
     t.eqI32(`${names[i]}: refused by the loader`, okLoose(loader, doc, pairs[i]), JSON_VALUE_ERR_DUPLICATE);

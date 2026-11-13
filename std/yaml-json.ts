@@ -113,6 +113,7 @@ import {
   YAML_INT,
   YAML_MAP,
   YAML_NULL,
+  YAML_PAIR,
   YAML_PLAIN,
   YAML_SCALAR,
   YAML_SEQ,
@@ -163,6 +164,10 @@ const YAML_JSON_DASH: i32 = 45
 const YAML_JSON_DOT: i32 = 46
 const YAML_JSON_ZERO: i32 = 48
 const YAML_JSON_LT: i32 = 60
+/** The bytes a core-schema null can start with: `~`, `n` and `N`. */
+const YAML_JSON_TILDE: i32 = 126
+const YAML_JSON_LOWER_N: i32 = 110
+const YAML_JSON_UPPER_N: i32 = 78
 /** The bytes that end a quoted scalar's run of text with nothing to decode: `'` and `\`. */
 const YAML_JSON_SQUOTE: i32 = 39
 const YAML_JSON_BACKSLASH: i32 = 92
@@ -204,6 +209,8 @@ export class YamlJsonLoader {
   /** The nodes the last count set a size on, the first `countedTop` of them: all a count clears. */
   private counted: i32[]
   private countedTop: i32 = 0
+  /** `quickCount`'s sizes, by node; each pass writes every one it reads. */
+  private quickSizes: i32[]
   /** The count's own stack of nodes. */
   private pending: i32[]
   /** The most values the document may hold; a size saturates one past it. */
@@ -237,6 +244,7 @@ export class YamlJsonLoader {
     this.stream = parseYaml("")
     this.doc = new JsonDocument(new JsonLimits())
     this.sizes = []
+    this.quickSizes = []
     this.counted = []
     this.pending = []
     this.entryKeys = []
@@ -281,7 +289,7 @@ export class YamlJsonLoader {
       return this.nullAt(at)
     }
     const room: i32 = doc.maxValues < JSON_VALUE_MAX_VALUES ? doc.maxValues : JSON_VALUE_MAX_VALUES
-    if (this.count(root, room) > room) {
+    if (this.quickCount(this.firstNode(d), root, room) > room && this.count(root, room) > room) {
       if (this.bigAlias >= 0) {
         return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(this.bigAlias), stream.end(this.bigAlias))
       }
@@ -373,6 +381,89 @@ export class YamlJsonLoader {
       }
     }
     return sizes[root]
+  }
+
+  /** The first node of document `d`: the one after the last earlier document's root. */
+  private firstNode(d: i32): i32 {
+    for (let e: i32 = d - 1; e >= 0; e -= 1) {
+      const root: i32 = this.stream.documentRoot(e)
+      if (root >= 0) {
+        return root + 1
+      }
+    }
+    return 0
+  }
+
+  /**
+   * What `count(root, cap)` answers, found in one pass over nodes `lo` to
+   * `root` when that is enough: the parser numbers a node after its parts and
+   * an alias after its anchor, so each part's size is known when its node is
+   * reached. A part outside that span (a cycle, or a node of another
+   * document) counts as too many, so an answer over `cap` sends `load` to
+   * `count`, which also finds the alias to blame. Sizes are kept apart from
+   * `count`'s, and every one read was written by this pass, so none is cleared.
+   */
+  private quickCount(lo: i32, root: i32, cap: i32): i32 {
+    const stream: YamlStream = this.stream
+    const kinds: u8[] = stream.kinds
+    const over: i32 = cap + 1
+    if (lo < 0 || root < lo || root >= toI32(kinds.length) || root >= stream.top) {
+      return over
+    }
+    const sizes: i32[] = this.quickSizes
+    while (toI32(sizes.length) <= root) {
+      sizes.push(0)
+    }
+    this.cap = cap
+    const firsts: i32[] = stream.firsts
+    const counts: i32[] = stream.counts
+    const kids: i32[] = stream.kids
+    const top: i32 = stream.top
+    const merging: boolean = stream.merge
+    for (let n: i32 = lo; n <= root && n < toI32(kinds.length); n += 1) {
+      const kind: i32 = toI32(kinds[n])
+      let total: i32 = 1
+      if (kind === YAML_ALIAS) {
+        total = this.quickPart(yamlJsonAt(firsts, n), lo, n)
+      } else if (kind === YAML_SEQ || kind === YAML_MAP) {
+        const from: i32 = yamlJsonAt(firsts, n)
+        const parts: i32 = yamlJsonAt(counts, n)
+        for (let i: i32 = 0; i < parts; i += 1) {
+          const child: i32 = yamlJsonAt(kids, from + i)
+          if (kind === YAML_SEQ) {
+            total = this.plus(total, this.quickPart(child, lo, n))
+          } else {
+            // As `sizeOf` takes a merge's members in, less the merge itself;
+            // read straight, as `stream.value` and `stream.key` read a pair.
+            const pair: boolean =
+              child >= 0 && child < top && child < toI32(kinds.length) && toI32(kinds[child]) === YAML_PAIR
+            const value: i32 = pair ? yamlJsonAt(counts, child) : -1
+            const merged: boolean = pair && merging && this.mergeShaped(yamlJsonAt(firsts, child))
+            const part: i32 = this.quickPart(value, lo, n)
+            let less: i32 = merged ? 1 : 0
+            if (merged && stream.kind(stream.resolved(value)) === YAML_SEQ) {
+              less += stream.count(stream.resolved(value))
+            }
+            total = part > cap ? over : this.plus(total, part - less)
+          }
+        }
+      }
+      if (n < toI32(sizes.length)) {
+        sizes[n] = total
+      }
+    }
+    return sizes[root]
+  }
+
+  /** Part `p`'s size in `quickCount` at node `n`: `1` for a missing node, too many for one outside `[lo, n)`. */
+  private quickPart(p: i32, lo: i32, n: i32): i32 {
+    if (p < 0) {
+      return 1
+    }
+    if (p < lo || p >= n || p >= toI32(this.quickSizes.length)) {
+      return this.cap + 1
+    }
+    return this.quickSizes[p]
   }
 
   /** Pushes node `n` onto the count's stack unless it is counted; answers the new top. */
@@ -468,7 +559,9 @@ export class YamlJsonLoader {
   /** Builds node `n`, nested `depth` collections deep, with `n`'s range on the value it answers. */
   private build(n: i32, depth: i32): JsonValue {
     const stream: YamlStream = this.stream
-    const nodeKind: i32 = stream.kind(n)
+    // Read straight, as `kind` reads it, for the node every value starts from.
+    const kinds: u8[] = stream.kinds
+    const nodeKind: i32 = n >= 0 && n < stream.top && n < toI32(kinds.length) ? toI32(kinds[n]) : -1
     const at: i32 = nodeKind === YAML_ALIAS ? yamlJsonAt(stream.firsts, n) : n
     const kind: i32 = at === n ? nodeKind : stream.kind(at)
     let v: JsonValue = 0
@@ -511,6 +604,13 @@ export class YamlJsonLoader {
   private buildScalar(at: i32): JsonValue {
     const stream: YamlStream = this.stream
     const doc: JsonDocument = this.doc
+    // A quoted or block scalar with no properties is a string, as `type`
+    // would resolve it, with no tag to read; anything else asks `type`.
+    const style: i32 = stream.style(at)
+    if (style !== YAML_PLAIN && yamlJsonAt(stream.props, at) < 0) {
+      const quotedAt: i32 = doc.byteTop
+      return doc.newStoredString(quotedAt, this.storeScalar(at, style))
+    }
     const type: i32 = stream.type(at)
     if (type === YAML_NULL) {
       return doc.newNull()
@@ -519,6 +619,11 @@ export class YamlJsonLoader {
       return doc.newBoolean(stream.boolValue(at))
     }
     if (type === YAML_INT || type === YAML_FLOAT) {
+      const numberAt: i32 = doc.byteTop
+      const stored: i32 = this.storeJsonNumber(at)
+      if (stored >= 0) {
+        return doc.newStoredNumber(numberAt, stored)
+      }
       const text: string = yamlJsonNumber(stream.text(at))
       if (text === "") {
         return this.fail(YAML_JSON_ERR_NOT_FINITE, stream.start(at), stream.end(at))
@@ -529,7 +634,7 @@ export class YamlJsonLoader {
       return doc.newNumber(text)
     }
     const textAt: i32 = doc.byteTop
-    return doc.newStoredString(textAt, this.storeScalar(at))
+    return doc.newStoredString(textAt, this.storeScalar(at, style))
   }
 
   /**
@@ -537,9 +642,8 @@ export class YamlJsonLoader {
    * length. A flow scalar with no break, and no `'` or `\\` when quoted, is
    * its own body, copied straight from the source in the scan that finds so.
    */
-  private storeScalar(at: i32): i32 {
+  private storeScalar(at: i32, style: i32): i32 {
     const stream: YamlStream = this.stream
-    const style: i32 = stream.style(at)
     if (style === YAML_PLAIN || style === YAML_SINGLE_QUOTED || style === YAML_DOUBLE_QUOTED) {
       const firsts: i32[] = stream.firsts
       const counts: i32[] = stream.counts
@@ -559,11 +663,84 @@ export class YamlJsonLoader {
     return this.doc.storeText(stream.text(at))
   }
 
+  /**
+   * Stores number scalar `at` straight from its source when its text is
+   * already the JSON spelling `yamlJsonNumber` would give it, and answers its
+   * length; `-1`, with nothing stored, otherwise. That spelling is RFC 8259's
+   * number grammar, less `-0`, which `yamlJsonNumber` writes as `0`.
+   */
+  private storeJsonNumber(at: i32): i32 {
+    const stream: YamlStream = this.stream
+    if (stream.style(at) !== YAML_PLAIN) {
+      return -1
+    }
+    const source: string = stream.source
+    const from: i32 = yamlJsonAt(stream.firsts, at)
+    const to: i32 = yamlJsonAt(stream.counts, at)
+    if (from < 0 || to <= from || to > toI32(source.length)) {
+      return -1
+    }
+    let i: i32 = from
+    if (toI32(source.charCodeAt(i)) === YAML_JSON_DASH) {
+      i += 1
+    }
+    const lead: i32 = yamlJsonByte(source, i)
+    if (lead === YAML_JSON_ZERO) {
+      i += 1
+      if (i === to && i - from === 2) {
+        return -1
+      }
+    } else if (yamlJsonIsDigit(lead)) {
+      i = yamlJsonDigits(source, i, to)
+    } else {
+      return -1
+    }
+    if (i < to && toI32(source.charCodeAt(i)) === YAML_JSON_DOT) {
+      const fraction: i32 = yamlJsonDigits(source, i + 1, to)
+      if (fraction === i + 1) {
+        return -1
+      }
+      i = fraction
+    }
+    if (i < to && (toI32(source.charCodeAt(i)) | 32) === 101) {
+      i += 1
+      const sign: i32 = yamlJsonByte(source, i)
+      if (i < to && (sign === YAML_JSON_PLUS || sign === YAML_JSON_DASH)) {
+        i += 1
+      }
+      const exponent: i32 = yamlJsonDigits(source, i, to)
+      if (exponent === i) {
+        return -1
+      }
+      i = exponent
+    }
+    if (i !== to) {
+      return -1
+    }
+    const noStop: i32 = -1
+    return this.doc.storeSpan(source, from, to, noStop)
+  }
+
   /** Stores key node `key`'s text, as `keyText` spells it, in the document and answers its length. */
   private storeKey(key: i32): i32 {
     const stream: YamlStream = this.stream
     if (stream.kind(key) === YAML_SCALAR) {
-      return stream.type(key) === YAML_NULL ? 0 : this.storeScalar(key)
+      const style: i32 = stream.style(key)
+      if (yamlJsonAt(stream.props, key) < 0) {
+        // Untagged, only a plain key that is empty or starts `~`, `n` or `N` can be a null.
+        const start: i32 = stream.start(key)
+        const c: i32 = yamlJsonByte(stream.source, start)
+        if (
+          style !== YAML_PLAIN ||
+          (stream.end(key) > start &&
+            c !== YAML_JSON_TILDE &&
+            c !== YAML_JSON_LOWER_N &&
+            c !== YAML_JSON_UPPER_N)
+        ) {
+          return this.storeScalar(key, style)
+        }
+      }
+      return stream.type(key) === YAML_NULL ? 0 : this.storeScalar(key, style)
     }
     return this.doc.storeText(keyText(stream, key))
   }
@@ -655,8 +832,10 @@ export class YamlJsonLoader {
       }
       const key: string = this.entryKeys[e]
       const keyAt: i32 = doc.byteTop
-      const slot: i32 = doc.append(ox, doc.index(v), keyAt, doc.storeText(key))
       const keyNode: i32 = stream.key(pair)
+      // `key` is `keyText(keyNode)`, which `storeKey` spells from the node without the copy.
+      const keyLength: i32 = keyNode < 0 ? doc.storeText(key) : this.storeKey(keyNode)
+      const slot: i32 = doc.append(ox, doc.index(v), keyAt, keyLength)
       if (doc.byteTop > this.byteCap) {
         return this.tooMuchText(keyNode < 0 ? pair : keyNode)
       }
@@ -989,6 +1168,15 @@ const yamlJsonByte = (text: string, i: i32): i32 =>
   i >= 0 && i < toI32(text.length) ? toI32(text.charCodeAt(i)) : -1
 
 const yamlJsonIsDigit = (c: i32): boolean => c >= YAML_JSON_ZERO && c <= 57
+
+/** The end of the run of decimal digits in `text[from, to)` that starts at `from`. */
+const yamlJsonDigits = (text: string, from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i < to && yamlJsonIsDigit(yamlJsonByte(text, i))) {
+    i += 1
+  }
+  return i
+}
 
 /** A hex digit's value; the text is the stream's, already checked to be digits of its base. */
 const yamlJsonHexValue = (c: i32): i32 => {

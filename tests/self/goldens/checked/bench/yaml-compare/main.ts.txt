@@ -9,10 +9,10 @@ import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 unsafe import 51:10 wrappingAdd from "nish:unsafe"
 unsafe import 51:23 wrappingMul from "nish:unsafe"
 unsafe import 51:36 wrappingSub from "nish:unsafe"
-unsafe call 1719:13 wrappingAdd (node 7266)
-unsafe call 1719:25 wrappingMul (node 7270)
-unsafe call 1722:31 wrappingSub (node 7299)
-unsafe call 4563:12 wrappingMul (node 22223)
+unsafe call 1738:13 wrappingAdd (node 7386)
+unsafe call 1738:25 wrappingMul (node 7390)
+unsafe call 1741:31 wrappingSub (node 7419)
+unsafe call 4582:12 wrappingMul (node 22343)
 const YAML_SCALAR: i32 = 1 [exported]
 const YAML_MAP: i32 = 2 [exported]
 const YAML_SEQ: i32 = 3 [exported]
@@ -1092,45 +1092,57 @@ function yamlResolve(stream: YamlStream, n: i32): i32 -> @nish.yamlResolve
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.yamlDecode
   escaping: n
-  calls: nish.YamlStream.end nish.YamlStream.start nish.YamlStream.style nish.YamlStream.tag nish.yamlDecode nish.yamlPlainType nish_str_eq
-  pointer stream: size=280 writesThrough=false captured=false passedTo=nish.YamlStream.tag#0 nish.YamlStream.style#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.yamlDecode#0
+  calls: nish.YamlStream.end nish.YamlStream.start nish.YamlStream.style nish.YamlStream.tag nish.yamlAt nish.yamlDecode nish.yamlPlainType nish_str_eq
+  pointer stream: size=280 writesThrough=false captured=false passedTo=nish.YamlStream.style#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.YamlStream.tag#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.yamlDecode#0
   stackSites=0 stackLocals=0
-  local +0:9 tag: string (const)
-  callee +0:23 YamlStream.tag -> @nish.YamlStream.tag
-  local +1:9 plain: boolean (const)
-  callee +1:26 YamlStream.style -> @nish.YamlStream.style
+  local +0:9 plain: boolean (const)
+  callee +0:26 YamlStream.style -> @nish.YamlStream.style
+  callee +2:35 yamlAt -> @nish.yamlAt
   callee +3:20 yamlPlainType -> @nish.yamlPlainType
   callee +3:49 YamlStream.start -> @nish.YamlStream.start
   callee +3:66 YamlStream.end -> @nish.YamlStream.end
-  local +8:7 found: i32 (let)
-  callee +10:13 yamlPlainType -> @nish.yamlPlainType
-  callee +10:42 YamlStream.start -> @nish.YamlStream.start
-  callee +10:59 YamlStream.end -> @nish.YamlStream.end
-  local +12:11 decoded: string (const)
-  callee +12:29 yamlDecode -> @nish.yamlDecode
-  callee +13:13 yamlPlainType -> @nish.yamlPlainType
+  local +5:9 tag: string (const)
+  callee +5:23 YamlStream.tag -> @nish.YamlStream.tag
+  callee +7:20 yamlPlainType -> @nish.yamlPlainType
+  callee +7:49 YamlStream.start -> @nish.YamlStream.start
+  callee +7:66 YamlStream.end -> @nish.YamlStream.end
+  local +12:7 found: i32 (let)
+  callee +14:13 yamlPlainType -> @nish.yamlPlainType
+  callee +14:42 YamlStream.start -> @nish.YamlStream.start
+  callee +14:59 YamlStream.end -> @nish.YamlStream.end
+  local +16:11 decoded: string (const)
+  callee +16:29 yamlDecode -> @nish.yamlDecode
+  callee +17:13 yamlPlainType -> @nish.yamlPlainType
 function yamlPlainType(text: string, from: i32, to: i32): i32 -> @nish.yamlPlainType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from text to
-  calls: nish.yamlByte nish.yamlIntBase nish.yamlIsDigit nish.yamlIsFloatForm nish.yamlIsWord nish.yamlSpecialFloat
+  calls: nish.yamlByte nish.yamlIntBase nish.yamlIsDigit nish.yamlIsFloatForm nish.yamlSpecialFloat nish.yamlWordType nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 c: i32 (const)
   callee +0:18 yamlByte -> @nish.yamlByte
   local +1:9 letter: boolean (const)
   callee +2:19 yamlIsDigit -> @nish.yamlIsDigit
-  callee +6:5 yamlIsWord -> @nish.yamlIsWord
-  callee +7:5 yamlIsWord -> @nish.yamlIsWord
-  callee +8:5 yamlIsWord -> @nish.yamlIsWord
-  callee +9:5 yamlIsWord -> @nish.yamlIsWord
+  callee +10:12 yamlWordType -> @nish.yamlWordType
+  callee +12:7 yamlIntBase -> @nish.yamlIntBase
+  callee +15:7 yamlSpecialFloat -> @nish.yamlSpecialFloat
+  callee +15:47 yamlIsFloatForm -> @nish.yamlIsFloatForm
+function yamlWordType(text: string, from: i32, to: i32, c: i32): i32 -> @nish.yamlWordType
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from text to
+  calls: nish.yamlIsWord
+  stackSites=0 stackLocals=0
+  local +0:11 isNull: boolean (const)
+  callee +1:7 yamlIsWord -> @nish.yamlIsWord
+  callee +2:7 yamlIsWord -> @nish.yamlIsWord
+  callee +3:7 yamlIsWord -> @nish.yamlIsWord
+  local +7:11 isTrue: boolean (const)
+  callee +8:7 yamlIsWord -> @nish.yamlIsWord
+  callee +9:7 yamlIsWord -> @nish.yamlIsWord
+  callee +10:7 yamlIsWord -> @nish.yamlIsWord
+  local +13:9 isFalse: boolean (const)
   callee +14:5 yamlIsWord -> @nish.yamlIsWord
   callee +15:5 yamlIsWord -> @nish.yamlIsWord
   callee +16:5 yamlIsWord -> @nish.yamlIsWord
-  callee +17:5 yamlIsWord -> @nish.yamlIsWord
-  callee +18:5 yamlIsWord -> @nish.yamlIsWord
-  callee +19:5 yamlIsWord -> @nish.yamlIsWord
-  callee +26:7 yamlIntBase -> @nish.yamlIntBase
-  callee +29:7 yamlSpecialFloat -> @nish.yamlSpecialFloat
-  callee +29:47 yamlIsFloatForm -> @nish.yamlIsFloatForm
 function yamlIntBase(text: string, from: i32, to: i32): i32 -> @nish.yamlIntBase
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from text

@@ -27,7 +27,7 @@ findings, all fixed.
 
 | File | Functions |
 | --- | --- |
-| `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `buildOwnMap`, `storeScalar`, `storeKey`, `keyRange`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; `yamlJsonErrorName` |
+| `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `buildOwnMap`, `storeScalar`, `storeKey`, `storeJsonNumber`, `quickCount`, `quickPart`, `firstNode`, `mergeShaped`, `keyRange`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; `yamlJsonErrorName` |
 | `std/yaml.ts` | `YamlParser`: `checkMerge`, `aliasedSeqMerges`, `mergesMap` (the merge-value check only) |
 
 Out of scope: the rest of `std/yaml.ts` (the parser and its anchors) and

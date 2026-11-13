@@ -428,8 +428,10 @@ export class YamlStream {
    */
   merge: boolean = true
   /**
-   * Whether the parser reported every map that repeats a key, as `YamlOptions.uniqueKeys` said.
-   * `false` for a stream built by hand, so a reader that relies on it checks for itself.
+   * @internal Set by `YamlParser`, and read by std/yaml-json.ts. Whether the
+   * parser reported every map that repeats a key, as `YamlOptions.uniqueKeys`
+   * said; `false` for a stream built by hand, so a reader that relies on it
+   * checks for itself.
    */
   uniqueKeys: boolean = false
 
@@ -1545,8 +1547,12 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
 
 /** Internal: scalar `n`'s core-schema type, from its text and its tag. */
 const yamlResolve = (stream: YamlStream, n: i32): i32 => {
-  const tag: string = stream.tag(n)
   const plain: boolean = stream.style(n) === YAML_PLAIN
+  // A node with no properties has no tag, which spares reading its text.
+  if (n < 0 || n >= stream.top || yamlAt(stream.props, n) < 0) {
+    return plain ? yamlPlainType(stream.source, stream.start(n), stream.end(n)) : YAML_STRING
+  }
+  const tag: string = stream.tag(n)
   if (tag === "") {
     return plain ? yamlPlainType(stream.source, stream.start(n), stream.end(n)) : YAML_STRING
   }
@@ -1582,26 +1588,12 @@ const yamlPlainType = (text: string, from: i32, to: i32): i32 => {
   if (!letter && !yamlIsDigit(c) && c !== YAML_DOT && c !== YAML_DASH && c !== YAML_PLUS && c !== 126) {
     return YAML_STRING
   }
-  if (
-    yamlIsWord(text, from, to, "~") ||
-    yamlIsWord(text, from, to, "null") ||
-    yamlIsWord(text, from, to, "Null") ||
-    yamlIsWord(text, from, to, "NULL")
-  ) {
+  // Each word is told by its first byte, so a text is compared with its own three at most.
+  if (c === 126 && to - from === 1) {
     return YAML_NULL
   }
-  if (
-    yamlIsWord(text, from, to, "true") ||
-    yamlIsWord(text, from, to, "True") ||
-    yamlIsWord(text, from, to, "TRUE") ||
-    yamlIsWord(text, from, to, "false") ||
-    yamlIsWord(text, from, to, "False") ||
-    yamlIsWord(text, from, to, "FALSE")
-  ) {
-    return YAML_BOOL
-  }
   if (letter) {
-    return YAML_STRING
+    return yamlWordType(text, from, to, c)
   }
   if (yamlIntBase(text, from, to) > 0) {
     return YAML_INT
@@ -1610,6 +1602,33 @@ const yamlPlainType = (text: string, from: i32, to: i32): i32 => {
     return YAML_FLOAT
   }
   return YAML_STRING
+}
+
+/**
+ * The type of the plain scalar `text[from, to)`, whose first byte `c` is one
+ * of `nNtTfF`: `YAML_NULL` for a `null`, `YAML_BOOL` for a `true` or `false`,
+ * in the core schema's three spellings each, and `YAML_STRING` otherwise.
+ */
+const yamlWordType = (text: string, from: i32, to: i32, c: i32): i32 => {
+  if (c === 110 || c === 78) {
+    const isNull: boolean =
+      yamlIsWord(text, from, to, "null") ||
+      yamlIsWord(text, from, to, "Null") ||
+      yamlIsWord(text, from, to, "NULL")
+    return isNull ? YAML_NULL : YAML_STRING
+  }
+  if (c === 116 || c === 84) {
+    const isTrue: boolean =
+      yamlIsWord(text, from, to, "true") ||
+      yamlIsWord(text, from, to, "True") ||
+      yamlIsWord(text, from, to, "TRUE")
+    return isTrue ? YAML_BOOL : YAML_STRING
+  }
+  const isFalse: boolean =
+    yamlIsWord(text, from, to, "false") ||
+    yamlIsWord(text, from, to, "False") ||
+    yamlIsWord(text, from, to, "FALSE")
+  return isFalse ? YAML_BOOL : YAML_STRING
 }
 
 /** The base of the core-schema integer `text[from, to)`, signed, decimal, `0x` or `0o`; `0` for none. */
