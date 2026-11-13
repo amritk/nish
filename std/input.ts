@@ -27,7 +27,7 @@ import { KeyState, TermEvent } from "nish/term"
 
 /** The input of one step: the events since the last step and which keys are down. */
 export class StepInput {
-  /** The events since the last step, in the order they arrived. */
+  /** The events since the last step, in the order they arrived; the step may filter them in place. */
   events: TermEvent[]
   /** Which keys are down, for `isDown`. */
   keys: KeyState

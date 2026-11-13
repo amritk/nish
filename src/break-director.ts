@@ -218,7 +218,7 @@ const directorSoundChanged = (d: BreakDirector): void => {
 }
 
 /** A `GRAPHICS_*` setting as it reads in a toast, -1 being the host's choice. */
-export const breakGraphicsLabel = (graphics: i32): string => {
+const breakGraphicsLabel = (graphics: i32): string => {
   if (graphics === GRAPHICS_KITTY) {
     return "kitty"
   }
@@ -241,7 +241,7 @@ export const breakGraphicsToast = (graphics: i32): string =>
   graphics < 0 ? "graphics: auto" : `graphics: ${breakGraphicsLabel(graphics)}, from the next release`
 
 /** Whether this step's events press q (either case) or Esc. */
-export const breakQuitPressed = (events: TermEvent[]): boolean => {
+const breakQuitPressed = (events: TermEvent[]): boolean => {
   for (const e of events) {
     if (e.type === EVENT_KEY && e.action === ACTION_PRESS) {
       if (e.key === KEY_ESCAPE || (e.key === KEY_CHAR && (e.code === 113 || e.code === 81))) {
@@ -250,6 +250,17 @@ export const breakQuitPressed = (events: TermEvent[]): boolean => {
     }
   }
   return false
+}
+
+/**
+ * Record that the host has just opened the terminal with the settings as they
+ * are now, so neither the frame rate nor the graphics reads as changed.
+ *
+ * @param d The director.
+ */
+export const breakTerminalOpened = (d: BreakDirector): void => {
+  d.openFps = d.settings.fps
+  d.openGraphics = d.settings.graphics
 }
 
 /** Whether `e` is a press of one of the director's keys, F3 to F9. */

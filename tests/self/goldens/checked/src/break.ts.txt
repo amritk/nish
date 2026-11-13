@@ -3259,6 +3259,7 @@ import StepInput from "../std/input" -> struct StepInput
 import BreakDirector from "./break-director" -> struct BreakDirector
 import adaptBreakResolution from "./break-director" -> function @adaptBreakResolution
 import breakGraphicsToast from "./break-director" -> function @breakGraphicsToast
+import breakTerminalOpened from "./break-director" -> function @breakTerminalOpened
 import drawBreakDirector from "./break-director" -> function @drawBreakDirector
 import keptSettings from "./break-director" -> function @keptSettings
 import sizeBreakFramebuffer from "./break-director" -> function @sizeBreakFramebuffer
@@ -3362,7 +3363,7 @@ function wallCentre(screen: Screen, y: i32, text: string): void -> @wallCentre
 function wallRender(run: WallRun, frame: Frame): void -> @wallRender$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: adaptBreakResolution drawBreakDirector nish.Framebuffer.resize nish.Screen.clear nish_monotonic_nanos nish_panic_overflow nish_str_eq sizeBreakFramebuffer toastBreak wallCellPx wallCentre wallReopenToast
+  calls: adaptBreakResolution breakTerminalOpened drawBreakDirector nish.Framebuffer.resize nish.Screen.clear nish_monotonic_nanos nish_panic_overflow nish_str_eq sizeBreakFramebuffer toastBreak wallCellPx wallCentre wallReopenToast
   pointer run: size=40 writesThrough=true captured=false
   pointer frame: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -3373,19 +3374,20 @@ function wallRender(run: WallRun, frame: Frame): void -> @wallRender$
   local +3:11 said: string (const)
   callee +3:26 wallReopenToast -> @wallReopenToast
   callee +5:7 toastBreak -> @toastBreak
-  callee +13:7 Framebuffer.resize -> @nish.Framebuffer.resize
-  callee +15:5 wallCentre -> @wallCentre
-  callee +18:3 adaptBreakResolution -> @adaptBreakResolution
-  local +20:9 backend: i32 (const)
-  local +21:9 pixels: boolean (const)
-  local +22:9 cols: i32 (const)
-  local +23:9 rows: i32 (const)
-  local +24:9 roomW: i32 (const)
+  callee +7:5 breakTerminalOpened -> @breakTerminalOpened
+  callee +12:7 Framebuffer.resize -> @nish.Framebuffer.resize
+  callee +14:5 wallCentre -> @wallCentre
+  callee +17:3 adaptBreakResolution -> @adaptBreakResolution
+  local +19:9 backend: i32 (const)
+  local +20:9 pixels: boolean (const)
+  local +21:9 cols: i32 (const)
+  local +22:9 rows: i32 (const)
+  local +23:9 roomW: i32 (const)
+  callee +23:38 wallCellPx -> @wallCellPx
+  local +24:9 roomH: i32 (const)
   callee +24:38 wallCellPx -> @wallCellPx
-  local +25:9 roomH: i32 (const)
-  callee +25:38 wallCellPx -> @wallCellPx
-  callee +26:3 sizeBreakFramebuffer -> @sizeBreakFramebuffer
-  callee +27:3 drawBreakDirector -> @drawBreakDirector
+  callee +25:3 sizeBreakFramebuffer -> @sizeBreakFramebuffer
+  callee +26:3 drawBreakDirector -> @drawBreakDirector
 function wallOptions(s: BreakSettings): TerminalOptions -> @wallOptions
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=64
   calls: fpsChoice nish.TerminalOptions.constructor nish_alloc_struct

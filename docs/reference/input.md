@@ -54,6 +54,6 @@ class StepInput
 | Member | |
 | --- | --- |
 | `new StepInput(keys: KeyState)` | An input with no events yet. |
-| `events: TermEvent[]` | The events since the last step, in the order they arrived. |
+| `events: TermEvent[]` | The events since the last step, in the order they arrived; the step may filter them in place. |
 | `keys: KeyState` | Which keys are down, for `isDown`. |
 | `isDown(key: i32, code: i32): boolean` | Whether a key is down. |

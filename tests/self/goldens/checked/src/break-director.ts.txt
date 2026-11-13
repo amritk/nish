@@ -2320,7 +2320,7 @@ function directorSoundChanged(d: BreakDirector): void -> @directorSoundChanged
   pointer d: size=136 writesThrough=true captured=false passedTo=toastBreak#0
   stackSites=0 stackLocals=0
   callee -1:3 toastBreak -> @toastBreak
-function breakGraphicsLabel(graphics: i32): string -> @breakGraphicsLabel [exported]
+function breakGraphicsLabel(graphics: i32): string -> @breakGraphicsLabel
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function breakGraphicsToast(graphics: i32): string -> @breakGraphicsToast [exported]
@@ -2329,11 +2329,16 @@ function breakGraphicsToast(graphics: i32): string -> @breakGraphicsToast [expor
   calls: breakGraphicsLabel nish_str_concat
   stackSites=0 stackLocals=0
   callee +0:50 breakGraphicsLabel -> @breakGraphicsLabel
-function breakQuitPressed(events: TermEvent[]): boolean -> @breakQuitPressed [exported]
+function breakQuitPressed(events: TermEvent[]): boolean -> @breakQuitPressed
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer events: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 e: TermEvent (const)
+function breakTerminalOpened(d: BreakDirector): void -> @breakTerminalOpened [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  pointer d: size=136 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function directorHotkey(e: TermEvent): boolean -> @directorHotkey
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer e: size=80 writesThrough=false captured=false

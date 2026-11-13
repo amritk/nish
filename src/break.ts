@@ -36,6 +36,7 @@ import {
   BreakDirector,
   adaptBreakResolution,
   breakGraphicsToast,
+  breakTerminalOpened,
   drawBreakDirector,
   keptSettings,
   sizeBreakFramebuffer,
@@ -171,8 +172,7 @@ const wallRender = (run: WallRun, frame: Frame): void => {
     if (said !== "") {
       toastBreak(d, said)
     }
-    d.openFps = d.settings.fps
-    d.openGraphics = d.settings.graphics
+    breakTerminalOpened(d)
   }
   d.small = screen.width < WALL_MIN_COLS || screen.height < WALL_MIN_ROWS
   if (d.small) {
