@@ -35,7 +35,12 @@
  * response it owes.
  *
  * **One exchange at a time.** A request is answered before the next one on
- * the connection is read: `respond`, any number of `write`s, `end`. The
+ * the connection is read: `respond`, any number of `write`s, `end`. A
+ * response with a length is over once its last byte is written, and one with
+ * no body (`Content-Length: 0`, HEAD, 204, 304) once its head is, so `end` is
+ * optional for both; a chunked body, and an unframed one to HTTP/1.0, has no
+ * length to count and is over only at `end`, without which the connection
+ * waits and the next request is never answered. The
  * program may answer at once (before the body has arrived) or after
  * `H1_END`; either way the request's body is read to its end before the next
  * request starts, which is what keeps pipelined requests in order (§9.3.2).
@@ -1254,6 +1259,13 @@ export class Http1Connection {
   private nextRequest(): i32 {
     while (true) {
       if (this.requestEnded) {
+        // A body with nothing left to send is over, `end()` or not: no body
+        // at all, or a length met in full. Chunked and unframed bodies have
+        // no length to count, so only `end()` finishes them.
+        const counted: boolean = this.responseFraming >= 0 && this.responseLeft === 0
+        if (this.response === H1_R_BODY && (this.responseEmpty || counted)) {
+          this.response = H1_R_DONE
+        }
         if (this.response !== H1_R_DONE) {
           return H1_NEED_MORE
         }
@@ -1467,6 +1479,11 @@ export class Http1Connection {
    * name or value `http1WriteResponseHead` refuses, or a head larger than the
    * output; `H1_AGAIN` when the output has no room for it yet (`H1_WRITE`
    * says when to try again); `H1_CLOSED` with no request to answer.
+   *
+   * A response with no body (a `bodyLength` of 0, a HEAD, a 204 or a 304) is
+   * finished once this returns 0, and one with a length once `write` or
+   * `sendBody` has taken all of it: `end` is optional for both. A chunked
+   * body is finished only by `end`.
    *
    * @param status the HTTP status code to send, 100 to 599 but not 101
    * @param names the program's field names, one per field; nothing checks their
@@ -1683,7 +1700,8 @@ export class Http1Connection {
    * everything was taken, `H1_WRITE` says when to try the rest; `H1_AGAIN`
    * when nothing was. A response with no body takes everything and sends
    * nothing. `H1_CLOSED` with no response under way. A window outside `buf`
-   * panics.
+   * panics. Once the bytes taken reach the `Content-Length`, the response is
+   * finished whether or not `end` follows; a chunked body still needs `end`.
    *
    * @param buf the body bytes to send, which stay the caller's
    * @param off where in `buf` the window starts
@@ -1745,7 +1763,8 @@ export class Http1Connection {
    * carrier) copy all of it: it is `write`, with the same bytes on the wire.
    * Answers what `write` answers, `H1_INVALID` for more than the response still
    * owes; `H1_CLOSED` also when the socket failed during the send, which aborts
-   * the connection. A window outside `buf` panics.
+   * the connection. A window outside `buf` panics. As with `write`, a
+   * `Content-Length` body sent in full needs no `end`.
    *
    * @param buf the body bytes to send, free for the caller to reuse once this returns
    * @param off where in `buf` the window starts
@@ -1797,6 +1816,13 @@ export class Http1Connection {
    * `H1_INVALID` for a response with a length that still owes bytes;
    * `H1_AGAIN` when the last chunk does not fit yet; `H1_CLOSED` with no
    * response under way.
+   *
+   * Required for a chunked body, and for an unframed one (a chunked response
+   * to HTTP/1.0), which only `end` can say is over: without it the connection
+   * waits and the next request is never read. Optional for a response with
+   * no body or a `Content-Length` written in full, which the connection
+   * finishes itself when it moves to the next request; called before then it
+   * answers 0, and after then `H1_CLOSED`.
    *
    * @returns 0 once the response is complete, else `H1_INVALID`, `H1_AGAIN` or `H1_CLOSED` as above
    */
