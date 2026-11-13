@@ -1808,6 +1808,7 @@ const DEALT_SECTIONS = {
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
   fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
+  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
   differential: { name: "the WP13 differential section", selected: selects("differential") },
   p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
   netStartup: { name: "the net servers' startup links", selected: true, tail: true },
@@ -11587,6 +11588,34 @@ if (dealtHere("fileServer")) {
         )
       }
     }
+  }
+}
+
+// ---- break-web: the game behind the docs hero terminal ---------------------------
+// docs/site/site.js imports docs/site/break/break.mjs when the hero terminal is
+// asked for the game; examples/break-web/build.mjs builds that directory and it
+// is committed. tests/break-web/check.mjs runs the trigger and the page side
+// under Node with a fake DOM and prints a line per check.
+if (dealtHere("breakWeb")) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // The count is pinned, as game-page's is: a check that goes missing is caught.
+  const BREAK_WEB_CHECKS = 20
+  const lines = res.stdout.split("\n")
+  const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = lines.find((line) => line.startsWith("checks: "))
+  check(
+    "break-web: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${results.length}` && results.length === BREAK_WEB_CHECKS,
+    shown(res)
+  )
+  for (const line of results) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`break-web: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
   }
 }
 
