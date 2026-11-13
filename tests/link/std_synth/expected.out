@@ -1,0 +1,26 @@
+PASS  silence: seconds × rate samples
+PASS  silence: zero seconds is one sample
+PASS  silence: NaN is one sample
+PASS  silence: too long to count is one sample
+PASS  silence: all zero
+PASS  square: inside the volume
+PASS  square: full volume after the attack, first half up
+PASS  square: second half of the period down
+PASS  triangle: inside the volume
+PASS  triangle: rises through its first quarter
+PASS  triangle: falls through its third
+PASS  decay: later is quieter
+PASS  add: a second voice adds into the first
+PASS  end: the array does not grow
+PASS  end: nothing before the start
+PASS  end: sound from the start
+PASS  refused: no rate, a negative start, no length, no pitch, NaN, too long
+PASS  noise: sounds
+PASS  noise: inside the volume
+PASS  noise: the same call, the same samples
+PASS  noise: an unknown wave is noise
+PASS  semitone: an octave doubles
+PASS  semitone: none is the base
+PASS  semitone: a fifth
+PASS  semitone: down an octave halves
+synth: 25 passed, 0 failed, 0 skipped

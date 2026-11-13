@@ -1,0 +1,78 @@
+PASS  input: a record is seven words
+PASS  press: two events
+PASS  press: the first is the arrow
+PASS  press: the second's code
+PASS  press: the second's modifiers
+PASS  press: the ring is drained
+PASS  press: the arrow is held
+PASS  press: the letter is held
+PASS  held: a quiet step has no events
+PASS  held: the arrow stays down, since releases are real
+PASS  release: one event
+PASS  release: its action
+PASS  release: the arrow is up
+PASS  release: the letter is still down
+PASS  pointer: one event
+PASS  pointer: the button
+PASS  pointer: x in pixels
+PASS  pointer: y in pixels
+PASS  pointer: x as the cell
+PASS  blur: the focus event arrives
+PASS  blur: the letter is let go
+PASS  unknown: dropped, and the next record still reads
+PASS  unknown: the record after it
+PASS  part-record: dropped, leaving the ring empty
+PASS  sound: queued 0
+PASS  sound: queued 1
+PASS  sound: queued 2
+PASS  sound: queued 3
+PASS  sound: queued 4
+PASS  sound: queued 5
+PASS  sound: queued 6
+PASS  sound: queued 7
+PASS  sound: queued 8
+PASS  sound: queued 9
+PASS  sound: queued 10
+PASS  sound: queued 11
+PASS  sound: queued 12
+PASS  sound: queued 13
+PASS  sound: queued 14
+PASS  sound: queued 15
+PASS  sound: queued 16
+PASS  sound: queued 17
+PASS  sound: queued 18
+PASS  sound: queued 19
+PASS  sound: queued 20
+PASS  sound: queued 21
+PASS  sound: queued 22
+PASS  sound: queued 23
+PASS  sound: queued 24
+PASS  sound: queued 25
+PASS  sound: queued 26
+PASS  sound: queued 27
+PASS  sound: queued 28
+PASS  sound: queued 29
+PASS  sound: queued 30
+PASS  sound: queued 31
+PASS  sound: a full queue drops the next
+PASS  sound: no room left
+PASS  sound: first in, first out
+PASS  sound: then the second
+PASS  samples: all five written
+PASS  samples: inside the range kept
+PASS  samples: above clipped to 1
+PASS  samples: below clipped to -1
+PASS  samples: a negative kept
+PASS  samples: NaN is silence
+PASS  samples: the count recorded
+PASS  samples: the rate recorded
+PASS  samples: cut off at the limit
+PASS  size: the width held to the most
+PASS  size: the height held to 0
+PASS  size: a word the page wrote still reads in range
+PASS  frame: the background
+PASS  frame: inside the box, a row is the width
+PASS  frame: the box's far corner
+PASS  frame: just past it
+PASS  frame: past the size is untouched
+game: 77 passed, 0 failed, 0 skipped

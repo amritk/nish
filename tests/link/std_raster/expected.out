@@ -1,0 +1,45 @@
+PASS  rgb: packs
+PASS  rgb: clamps each channel
+PASS  weight: 0
+PASS  weight: a half
+PASS  weight: past 1 is solid
+PASS  weight: NaN is 0
+PASS  mix: halfway
+PASS  mix: all the way
+PASS  add: saturates
+PASS  dim: half
+PASS  hue: 0 is red
+PASS  hue: a whole turn is red again
+PASS  hue: NaN is red
+PASS  pixel: rounds down
+PASS  pixel: negative rounds down
+PASS  gradient: the first row is the top
+PASS  gradient: the last row is the bottom
+PASS  gradient: a middle row between
+PASS  rect: clipped at the top left
+PASS  rect: clipped at the bottom right
+PASS  rect: off the frame or weightless draws nothing
+PASS  rect: a half weight blends
+PASS  disc: the centre is the colour
+PASS  disc: a corner is untouched
+PASS  disc: an edge pixel is blended
+PASS  disc: radius 0, NaN or off the frame draws nothing
+PASS  glow: the centre adds nearly the full red
+PASS  glow: past the radius adds nothing
+PASS  text width: one glyph
+PASS  text width: two at scale 2
+PASS  text width: empty
+PASS  text width: scale 0
+PASS  text: a glyph lights some pixels
+PASS  text: scale 0 or off the frame draws nothing
+PASS  text: outside ASCII draws as ?, one a UTF-8 byte
+PASS  trail: holds its capacity
+PASS  trail: the oldest forgotten point is not drawn
+PASS  trail: the newest point is drawn
+PASS  particles: moved by velocity × dt
+PASS  particles: a live particle draws
+PASS  particles: a dead particle draws nothing
+PASS  short frame: its last word is drawn
+PASS  short frame: rows past its length are never written
+PASS  frame: an i32[] is drawn in place
+raster: 44 passed, 0 failed, 0 skipped

@@ -442,7 +442,7 @@ const rasterGlyphRow = (c: i32, row: i32): i32 => {
  * The width text takes in the 5×7 font: six font pixels a glyph, less the
  * last gap.
  *
- * @param text - the text, one glyph a UTF-16 unit
+ * @param text - the text, one glyph a byte, so a character outside ASCII takes one per UTF-8 byte
  * @param scale - the font scale, frame pixels per font pixel
  * @returns the width in frame pixels, 0 for empty text or a scale under 1
  */
@@ -456,8 +456,9 @@ export const rasterTextWidth = (text: string, scale: i32): i32 => {
 
 /**
  * Text in the 5×7 font, each font pixel a `scale` × `scale` block of frame
- * pixels. Text is pixel art, so it sits on whole pixels and is never blended;
- * a character outside ASCII 32..126 draws as `?`.
+ * pixels. Text is pixel art, so it sits on whole pixels and is never blended.
+ * A byte outside ASCII 32..126 draws as `?`, so a character outside ASCII
+ * draws as one `?` for each of its UTF-8 bytes.
  *
  * @param pixels - the frame, row-major
  * @param width - the frame's width in pixels
