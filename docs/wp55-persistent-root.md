@@ -183,8 +183,13 @@ bytes once compacted, is 1.6 MB of live data; the kept heap after the last
 call is 2,213,360 bytes, the static data and the nodes pushed since the last
 compaction at the 16 bytes each was allocated, and linear memory peaks at
 14,090,240 bytes, 8.8× the live data. The break director, with fewer and
-larger blocks, keeps 3.26 MB in 3.34 MB. The bound is loose for most graphs,
-so the practical sizing is to run the module once without `--memory`, read
+larger blocks, has a kept heap of 3.26 MB in 3.34 MB of memory; the kept heap
+is the arena's offset after a keep (the static data, what the roots reach and
+what has been kept since the last compaction), not the live graph alone. The
+bound is loose for most graphs, but it is the safe default: the peak grows
+with the live graph, so a measurement holds only for a graph as large as the
+one measured. To size `--memory` below it, run the module once without
+`--memory` through the largest session or graph the program will reach, read
 the peak `memory.buffer.byteLength`, and give `--memory` about 1.5× that.
 
 The amortised cost of a call is at most twice what it allocated. A compaction
@@ -228,7 +233,12 @@ alone, which is sound because a store through a root is an escape.
   shim (`--emit-napi`, `--emit-napi-async`, `--emit-header`) is different:
   the shim marks the arena before a call that passes a string or an array
   and releases it after, which would free what a root reaches. Root storage
-  is refused there (NL2769) rather than traced.
+  is refused there (NL2769) rather than traced. So is a `--profile wasi`
+  build with `--emit-dts` (NL2770): its loader releases the arena after
+  every call, and it is not a page module, so no `nish_root_keep` is emitted
+  for it to call instead. A freestanding `--target wasm32` build without
+  `--emit-dts` emits the keep but writes no loader: its host's own loader
+  must call `nish_root_keep(mark)` in place of `nish_arena_release(mark)`.
 - **`--emit-ts`.** Root storage is an `Array` of objects filled with `null`; the
   JS heap keeps the graph.
 - **`--deterministic`.** A compaction depends only on the bytes allocated, not
@@ -247,6 +257,7 @@ alone, which is sound because a store through a root is an escape.
 | `export` of root storage | NL2767 |
 | root storage in a program that loads `nish/threads` or `nish:region` (§4.2) | NL2768 |
 | root storage in a build that writes a native shim: `--emit-napi`, `--emit-napi-async` or `--emit-header` (§4.2) | NL2769 |
+| root storage in a `--profile wasi` build with `--emit-dts`, whose loader releases the arena (§4.2) | NL2770 |
 | the element of root storage something other than `C \| null` for a class `C` (`C` alone, an interface, a record) | NL2686, as today |
 
 ## 6. Proof

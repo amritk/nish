@@ -235,15 +235,17 @@ right for 100,000 steps with memory and the kept heap flat", "persist:
 director answers right for 100,000 steps with memory and the kept heap flat,
 the first 40,000 frame for frame as a run that never compacts"). Cycles, one
 object two slots and two root storages share, arrays of arrays and empty
-arrays and strings keep every identity through 10,000 compactions ("persist:
-graph keeps cycles, shared objects and nested and empty arrays exact through
-10,000 compactions"); a compactor that skipped one slot rewrite in five failed
+arrays and strings keep every identity through a compaction at least every
+third call, 6,667 or more in 20,000 steps ("persist: graph keeps cycles,
+shared objects and nested and empty arrays exact through a compaction at least
+every third step"); a compactor that skipped one slot rewrite in five failed
 it on the first step.
 
 **A deep graph does not exhaust the stack.** The trace keeps its work list,
 the blocks it reached and the slots to rewrite in scratch above `off`, and
 sorts with a heapsort, so nothing in it recurses: "persist: chain keeps a
-200,000-node list through every compaction" traces one list 200,000 nodes
+200,000-node list through every compaction, packed to 8 bytes a node, memory
+under 10x live" traces one list 200,000 nodes
 long. The scratch is linear in the number of blocks and pointer slots, at
 worst about 220 bytes an object and 32 bytes a slot, and a vector that grows
 hands its old copy back for reuse: that list, 1.6 MB of live nodes (a

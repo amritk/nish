@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 927
+export const RULE_COUNT: i32 = 928
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -117,6 +117,8 @@ const diagnosticRules = (): string[] => [
   "NL2393",
   "The arrow reads `this`: an arrow argument may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the arrow needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
   "NL2590",
+  "` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host",
+  "NL2770",
   "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` (`const self = this`, `const k = this.k`)",
   "NL2507",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",

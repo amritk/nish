@@ -511,9 +511,12 @@ several times its size. At worst the peak is
                 + 220 B × objects + 32 B × pointer slots
 
 where an array counts as two objects (its header and its data). That bound
-is loose, so size `--memory` by measuring: run the module once without
-`--memory`, read the largest `memory.buffer.byteLength` it reaches, and give
-`--memory` about 1.5 times that.
+is loose but safe, so use it when you cannot measure. The peak grows with the
+live graph, so a measurement holds only for a graph as large as the one
+measured: run the module once without `--memory` through the largest session
+the program will reach (the longest game, the biggest level), read the largest
+`memory.buffer.byteLength` it reaches, and give `--memory` about 1.5 times
+that.
 
 - What a root reaches must be numbers, booleans, enums, strings, arrays,
   classes and unions of classes. A `Map`, a `Set`, an interface or a C type
@@ -525,7 +528,13 @@ is loose, so size `--memory` by measuring: run the module once without
 - A native program keeps root storage like any module storage, with nothing
   to free between calls. A build that writes a native shim (`--emit-napi`,
   `--emit-napi-async`, `--emit-header`) cannot: the shim frees what a call
-  allocated when the call passes a string or an array (NL2769).
+  allocated when the call passes a string or an array (NL2769). Nor can a
+  `--profile wasi` build with `--emit-dts`, whose loader frees everything a
+  call allocated (NL2770).
+- A `--target wasm32` build without `--emit-dts` writes no loader. If your
+  own host calls its exports, call `nish_root_keep(mark)` after each call
+  where you would call `nish_arena_release(mark)`; releasing frees what the
+  roots reach.
 
 The rules and the IR: [LANGUAGE.md → Root storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#root-storage-an-object-graph-kept-between-calls).
 

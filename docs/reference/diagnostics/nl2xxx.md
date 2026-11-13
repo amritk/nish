@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 761 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 762 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14755,4 +14755,35 @@ export const nameLength = (): i32 => {
 
 ```text
 Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+## NL2770
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
+```
+
+[`nl2770_root_storage_wasi_dts.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2770_root_storage_wasi_dts.ts) (compiled with `--profile wasi --emit-dts build/test/wordings/nl2770_root_storage_wasi_dts.d.ts`):
+
+```ts
+// A WASI build's loader releases the arena after every call, and only a page
+// module emits the keep a loader would call instead.
+class Player {
+  score: i32 = 0
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (score: i32): i32 => {
+  const p = new Player()
+  p.score = score
+  player[0] = p
+  return score
+}
+```
+
+```text
+Root storage `player` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
 ```

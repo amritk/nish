@@ -16,7 +16,10 @@
 //      an argument the callee writes through (`fill(xs)`): copy the arena
 //      bytes back into the caller's typed array, so the wasm and N-API builds
 //      agree (N-API borrows the buffer, so writes land directly);
-//   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
+//   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing;
+//      a program with root storage calls `nish_root_keep(mark)` there
+//      instead, which keeps what a root reaches and releases the rest
+//      (WP55 §4).
 // `memory.buffer` is re-read after every module call because `memory.grow`
 // detaches the previous ArrayBuffer. A string result is decoded out of the
 // arena (`stringOut`) before step 5; a string argument is refused, and the

@@ -199,6 +199,14 @@ typedef struct nish_root {
   const nish_trace *desc;
 } nish_root;
 
+/* The two layouts above are what src/emit-root.ts writes as wasm32 IR: three
+ * `i32`s and two 4-byte pointers, and a pointer, an `i32` and a pointer. A
+ * target with another pointer size would read every descriptor at the wrong
+ * offsets, so the build refuses it here rather than tracing garbage. */
+_Static_assert(sizeof(void *) == 4, "root descriptors are emitted for wasm32's 4-byte pointers");
+_Static_assert(sizeof(nish_trace) == 20, "%nish.trace layout is ABI: src/emit-root.ts");
+_Static_assert(sizeof(nish_root) == 12, "%nish.root layout is ABI: src/emit-root.ts");
+
 static const nish_root *const *nish_roots;
 static int32_t nish_root_count;
 static uint64_t nish_root_floor = (uint64_t)-1;

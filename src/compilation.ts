@@ -1408,6 +1408,7 @@ export class Compilation {
     }
     this.rejectRootWithArenas()
     this.rejectRootInShim()
+    this.rejectRootInWasiLoader()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -3172,6 +3173,31 @@ export class Compilation {
             info.decl.start,
             info.decl.end,
             `Root storage \`${info.name}\` cannot be kept in a build that writes a native shim (\`--emit-napi\`, \`--emit-napi-async\` or \`--emit-header\`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a WASI build that writes a loader
+   * (`--emit-dts`). The loader releases the arena after every call, and only
+   * a page module (`buildsPageModule`) emits the `nish_root_keep` a loader
+   * calls in its place, so what a root reaches would be freed.
+   */
+  rejectRootInWasiLoader(): void {
+    const opts = this.opts
+    if (opts.emitDts.length === 0 || !isWasmBuild(opts) || buildsPageModule(opts)) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a WASI build that writes a loader (\`--emit-dts\`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (\`--target wasm32\`) or as an \`--emit-dts\` compile for the host`
           )
         }
       }

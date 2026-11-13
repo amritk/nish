@@ -35832,8 +35832,8 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // call to 200,000 nodes, which every compaction traces end to end: a trace
 // that recursed would run out of stack. A fourth, tests/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
-// and empty arrays and strings through a compaction every other call, checking
-// each identity after each. A fifth, tests/persist/shapes.ts, keeps the
+// and empty arrays and strings through a compaction at least every third call
+// (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/persist/shapes.ts, keeps the
 // layouts a wrong offset or stride would corrupt silently: an array of records
 // kept in place, a union and a nullable-union field, a `(C | null)[]` and
 // `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
@@ -35841,12 +35841,13 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
 // without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
 // union is fine in a page build's `.d.ts` but refused once a C header is asked
-// for, which has no spelling for it.
+// for, which has no spelling for it; and root storage whose class is declared
+// after the `const` still gets that class's descriptor.
 if (!only || "persist".includes(only)) {
   const unionDir = path.join(buildDir, "persist-union")
   fs.rmSync(unionDir, { recursive: true, force: true })
   fs.mkdirSync(unionDir, { recursive: true })
-  const unionArgs = ["tests/persist/union_field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
+  const unionArgs = ["tests/persist/union-field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
   const dtsOnly = spawnSync(NISH, unionArgs, { cwd: root, encoding: "utf8" })
   check("persist: a union field in a class compiles with --emit-dts alone", dtsOnly.status === 0, shown(dtsOnly))
   const withHeader = spawnSync(NISH, [...unionArgs, "--emit-header", path.join(unionDir, "u.h")], { cwd: root, encoding: "utf8" })
@@ -35854,6 +35855,18 @@ if (!only || "persist".includes(only)) {
     "persist: the same union field is refused once --emit-header asks for a C layout",
     withHeader.status !== 0 && withHeader.stderr.includes("which holds a union no sidecar can describe"),
     shown(withHeader)
+  )
+  const late = spawnSync(
+    NISH,
+    ["tests/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const lateIr = late.status === 0 ? fs.readFileSync(path.join(unionDir, "late-class.ll"), "utf8") : ""
+  check(
+    "persist: root storage whose class is declared after the const gets the class's trace descriptor and the keep",
+    lateIr.includes("@nish.trace.0 = internal constant %nish.trace { i32 0,") &&
+      lateIr.includes("define void @nish_root_keep(i64 %mark)"),
+    shown(late)
   )
   const why = wasmHostTools()
   if (why !== null) {
@@ -35865,7 +35878,7 @@ if (!only || "persist".includes(only)) {
       ["world", "tests/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
       ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
-      ["graph", "tests/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through 10,000 compactions"],
+      ["graph", "tests/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
     ]) {
       const out = path.join(dir, stem)

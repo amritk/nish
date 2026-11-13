@@ -262,10 +262,12 @@ imports it from beside the `.wasm`. `--memory 16` fixes the module's memory at
 with room to spare: a fixed memory never moves, so the page reads the
 framebuffer in place every frame without copying it. A game that keeps its
 world in root storage needs room on top for the runtime to move it, several
-times the world's size when it is many small objects: measure the peak once
-without `--memory` and give about 1.5 times that
-([sizing](interop.md#keeping-objects-between-calls-root-storage)). The break
-director keeps 3.3 MB in 3.34 MB.
+times the world's size when it is many small objects. The worst-case
+formula in [sizing](interop.md#keeping-objects-between-calls-root-storage) is
+the safe default; to size closer, measure the peak without `--memory` through
+the largest world the game reaches (the peak grows with it) and give about 1.5
+times that. The break director's kept heap, the arena's offset after a keep
+rather than its live objects alone, reaches 3.26 MB in 3.34 MB of memory.
 
 ## The page
 
