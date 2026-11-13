@@ -33,7 +33,7 @@ from `a.com`.
 | File | Functions |
 | --- | --- |
 | `std/net/url.ts` | `urlQueryStart`, `percentDecode`, `percentDecodeErrorAt`, `percentDecodePathSegment`; `UrlPathSegments` (`reset`, `next`); `UrlQueryLimits`; `UrlQuery` (`reset`, `next`); `urlQueryFind`; the string forms `urlDecode` and `urlQueryGet`; the helpers `urlCheckWindow`, `urlHexValue`, `urlEscapeAt`, `urlDecodeRun`, `urlKeyEquals`, `urlIsUtf8`, `urlBytesOf`, `urlDecodeString` |
-| `std/net/url.ts` (URL parser) | `Url`; `urlParse`, `urlResolve`, `urlSerialize`, `urlDefaultPort`, `urlOrigin`; the helpers `urlLowerString`, `urlFind`, `urlIsAlpha`, `urlIsDigit`, `urlIsUnreserved`, `urlIsIpv4`, `urlIsIpv6`, `urlLooksNumeric`, `urlReadAuthority`, `urlReadReference`, `urlDotAt`, `urlDotSegment`, `urlSlashFrom`, `urlRemoveDotSegments`, `urlFinish`, `urlMerge`, `urlHostText` |
+| `std/net/url.ts` (URL parser) | `Url`; `urlParse`, `urlResolve`, `urlSerialize`, `urlDefaultPort`, `urlOrigin`; the helpers `urlLowerString`, `urlFind`, `urlIsAlpha`, `urlIsDigit`, `urlIsUnreserved`, `urlIsIpv4`, `urlIsIpv6`, `urlLooksNumeric`, `urlReadAuthority`, `urlHostEnd`, `urlPortOf`, `urlIsHostPort` (also `http1EndOfHead`'s `Host` check, H1-9 in [`http1-codec.md`](http1-codec.md)), `urlReadReference`, `urlDotAt`, `urlDotSegment`, `urlSlashFrom`, `urlRemoveDotSegments`, `urlFinish`, `urlMerge`, `urlHostText` |
 
 Out of scope: the HTTP/1.1 parser that hands the target over
 (`docs/security/http1-codec.md`); the WHATWG URL Standard's lenient parse (a

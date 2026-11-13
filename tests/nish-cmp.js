@@ -1208,6 +1208,15 @@ const quicRebind = byFinding(
   "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves"
 )
 
+/**
+ * The release-note words of the security pass that closes HTTP/1 chunk
+ * extensions and Host, the HTTP/2 SETTINGS walk, the HTTP/3 reset budget,
+ * WebSocket Origin, YAML merge reuse and the PKI mapped-IPv4 and distrust
+ * paths. They land as one squashed pull request, so every declaration of it
+ * names its title; each entry's `why` says which fix moved the file.
+ */
+const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+
 const DECLARED = [
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
@@ -5819,6 +5828,146 @@ const DECLARED = [
     ],
     "tests/link/net_webtransport_f64/main.ts": ["clock.ll"],
   }),
+  // The security fixes of this release move the std modules they touch and
+  // every program that lays out or calls what they changed.
+  {
+    file: "url.ll",
+    changelog: SECURITY_PATHS,
+    why: "url.ts gains the authority checks the HTTP/1 Host test calls (`urlFind` and its neighbours), and nish/net/http1-codec now imports it, so every program reaching the codec writes url.ll and its IR moves",
+  },
+  {
+    file: "http1-codec.ll",
+    changelog: SECURITY_PATHS,
+    why: "http1-codec.ts parses a chunk extension's grammar whole (`http1ChunkExtValid`) and checks a request's Host against url.ts (`hostField`), so the module and its string table move",
+  },
+  {
+    file: "http1-client-codec.ll",
+    changelog: SECURITY_PATHS,
+    why: "the client codec refuses a malformed chunk extension with a new message, which renumbers its string table and every use of it",
+  },
+  {
+    file: "http1-server.ll",
+    changelog: SECURITY_PATHS,
+    why: "Http1Parser gains `hostField`, so the server's GEPs into the parser move by one",
+  },
+  {
+    file: "x509.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate gains `spki`, kept from the parse, so the certificate grows 8 bytes and the module moves",
+  },
+  {
+    file: "pki.ll",
+    changelog: SECURITY_PATHS,
+    why: 'PkiTrustStore gains a `distrusted` set checked on every path, and the name constraints exclude the IPv4-mapped form of an excluded IPv4 subtree ("exclude the IPv4-mapped form"), so the module moves',
+  },
+  {
+    file: "pki-roots.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate gains `spki`, so the roots module's struct and the constructor's dereferenceable size move",
+  },
+  {
+    file: "verify.ll",
+    changelog: SECURITY_PATHS,
+    why: "the TLS verifier passes a caller's distrusted keys to the trust store, and X509Certificate and PkiTrustStore grow, so the module moves",
+  },
+  {
+    file: "tls-tcp.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate and PkiTrustStore grow, so the TLS transport that lays them out moves",
+  },
+  {
+    file: "postgres-carrier.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate and PkiTrustStore grow, so the Postgres carrier that lays them out moves",
+  },
+  {
+    file: "http2.ll",
+    changelog: SECURITY_PATHS,
+    why: "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice per frame, so the module moves",
+  },
+  {
+    file: "http2-cleartext.ll",
+    changelog: SECURITY_PATHS,
+    why: "http2-cleartext declares Http2Connection's methods, which gain `windowPassesMax`, so its declarations renumber",
+  },
+  {
+    file: "yaml.ll",
+    changelog: SECURITY_PATHS,
+    why: "parseYaml checks a shared merge sequence once (`mergeItemsChecked`), so the module moves",
+  },
+  ...byFinding(SECURITY_PATHS)(
+    "http1-codec now imports nish/net/url to check a request's Host (`hostField` on Http1Parser, `urlFind` and the authority checks in url.ts), so the parser grows a field, the header's url structs come first, and every module laying the parser out or calling the url helpers moves; a refused-by-the-reference row is a program naming the new export",
+    {
+      "examples/file-server.ts": ["file-server.ll"],
+      "tests/link/net_http1_server_bad_linger/main.ts": ["main.ll"],
+      "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["main.ll"],
+      "tests/link/net_http1_server_head_reuse/main.ts": ["main.ll"],
+      "tests/link/net_serve_burst/main.ts": ["handler.ll", "serve.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll"],
+      "tests/link/region_sessions_soak/main.ts": ["main.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_tls/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["handler.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the YAML loader gains `mergeItemsChecked` and checks a shared merge sequence once, so the loader's struct and the modules laying it out move",
+    {
+      "bench/yaml-compare/main.ts": ["main.h", "main.ll"],
+      "bench/yaml-json/main.ts": ["main.h"],
+      "tests/link/std_yaml_bad_depth_high/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_yaml_bad_depth_low/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_yaml_json/main.ts": ["main.h"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "X509Certificate gains `spki`, PkiTrustStore gains a `distrusted` set and HttpOptions gains `distrustSpkiSha256`, so every module laying them out moves and a program naming `PKI_ERR_DISTRUSTED` or `spki` compiles only under the candidate",
+    {
+      "tests/link/crypto_pki/main.ts": ["exit"],
+      "tests/link/crypto_pki_f64/main.ts": ["exit"],
+      "tests/link/crypto_x509/main.ts": ["extensions.ll", "main.ll"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["main.ll"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["main.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["exit"],
+      "tests/link/std_postgres_tls/main.ts": ["main.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["main.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["main.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the program calls `http1ChunkExtValid`, which only the candidate's nish/net/http1-codec exports",
+    { "tests/link/net_http1_parse_diff/main.ts": ["exit"] }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice, so the modules that declare or call its methods move",
+    {
+      "tests/link/net_http2/main.ts": ["checks.ll", "peer.ll"],
+      "tests/link/net_http2_bad_idle/main.ts": ["main.ll"],
+      "tests/link/net_http2_bad_timeout/main.ts": ["main.ll"],
+      "tests/link/net_http2_cleartext/main.ts": ["checks.ll", "harness.ll", "main.ll", "peer.ll"],
+      "tests/link/net_http2_cleartext_bad_slots/main.ts": ["main.ll"],
+      "tests/link/net_http2_cleartext_bad_timeout/main.ts": ["main.ll"],
+      "tests/link/net_http2_f64/main.ts": ["checks.ll", "peer.ll"],
+      "tests/link/net_http2_tls/main.ts": ["peer.ll"],
+      "tests/link/net_http2_tls_f64/main.ts": ["peer.ll"],
+      "tests/link/net_interop_server/main.ts": ["net_http2_peer.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["net_http2_peer.ll"],
+      "tests/link/net_loopback/main.ts": ["net_http2_peer.ll"],
+      "tests/link/net_loopback_f64/main.ts": ["net_http2_peer.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the program sets `Http3Config.resetBudget`, which only the candidate's nish/net/http3 has",
+    { "tests/link/net_http3_bad_reset_budget/main.ts": ["exit"] }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
+    { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
+  ),
 ]
 
 /**
