@@ -1949,7 +1949,11 @@ export class JsonDocument {
       this.append(c, v, keyAt, keyLength)
       if (object && this.hasKeyRange(s)) {
         const r: JsonValueRanges = this.rangeArrays()
-        this.placeKeyRange(this.memberSlot(c, i), jsonValueGet(r.slotKeyStart, s), jsonValueGet(r.slotKeyEnd, s))
+        this.placeKeyRange(
+          this.memberSlot(c, i),
+          jsonValueGet(r.slotKeyStart, s),
+          jsonValueGet(r.slotKeyEnd, s)
+        )
       }
     }
     return c
