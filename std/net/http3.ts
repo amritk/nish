@@ -317,13 +317,13 @@ const H3_FLAG_LATE: i32 = 512
 const H3_STATE_OPEN: i32 = 0
 const H3_STATE_FAILED: i32 = 1
 
-/**
- * What `clock` saw: no request in hand, a request short of its head, or every request past its head;
- * or OFF, HTTP/3 not yet chosen (no `next` since the handshake picked `h3`).
- */
+/** The clock's modes. OFF: no `next` has found `h3` chosen yet, so nothing is timed. */
 const H3_CLOCK_OFF: i32 = -1
+/** IDLE: no request in hand; timed by `idleTimeout`. */
 const H3_CLOCK_IDLE: i32 = 0
+/** HEAD: a request short of its head; timed by `headTimeout` and `idleTimeout`. */
 const H3_CLOCK_HEAD: i32 = 1
+/** BUSY: every request in hand past its head; not timed. */
 const H3_CLOCK_BUSY: i32 = 2
 
 /** What `requestFrame` answers when it read a frame header and the stream has more to read. */
@@ -606,8 +606,8 @@ export class Http3Connection {
   private againCount: i32 = 0
   private waitCount: i32 = 0
   /**
-   * The heads delivered, wrapping, and the count and `H3_CLOCK_*` mode `clock` last saw: -1, OFF,
-   * until `next` finds the handshake chose `h3`.
+   * The heads delivered, wrapping, and the count and `H3_CLOCK_*` mode `clock` last saw. The mode is
+   * OFF (-1) from construction and `restart` until `next` finds `h3` chosen and sets it to IDLE.
    */
   private heads: i32 = 0
   private clockHeads: i32 = 0
