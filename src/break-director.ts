@@ -558,7 +558,11 @@ export const sizeBreakFramebuffer = (d: BreakDirector, fb: Framebuffer, roomW: i
 /** A whole number of `x`, for the stats line. */
 const directorWhole = (x: f64): i32 => (x > -1000000000.0 && x < 1000000000.0 ? toI32(Math.round(x)) : 0)
 
-/** The director's text over the scene: the stats when they are on, and the toast while it lasts. */
+/**
+ * The director's text over the scene: the stats when they are on, and the
+ * toast while it lasts. With no terminal the stats name no graphics backend
+ * and no frame-rate setting.
+ */
 const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): void => {
   const view: View = d.view
   viewFor(view, fb, 0.0, 0.0)
@@ -578,13 +582,16 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
       rasterRgb(255, 255, 255),
       shadow
     )
+    // With no terminal there is no graphics backend or frame-rate setting to name: only the size.
     const fps: i32 = fpsChoice(s.fps)
     drawTextShadow(
       view,
       3.0,
       11.0,
       scale,
-      `${breakGraphicsLabel(stats.backend)} ${fb.width}x${fb.height} ${fps === 0 ? "auto" : `${fps}`}fps`,
+      d.terminal
+        ? `${breakGraphicsLabel(stats.backend)} ${fb.width}x${fb.height} ${fps === 0 ? "auto" : `${fps}`}fps`
+        : `${fb.width}x${fb.height}`,
       rasterRgb(200, 200, 200),
       shadow
     )

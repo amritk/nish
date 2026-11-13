@@ -81,4 +81,6 @@ PASS  the menu knows there is no terminal
 PASS  Settings goes round every row but the frame rate and graphics
 PASS  Enter on the first row shown cycles the resolution
 PASS  and leaves the frame rate
-break_core: 78 passed, 0 failed, 0 skipped
+PASS  the stats name no backend or frame rate with no terminal
+PASS  a terminal's stats name the backend
+break_core: 80 passed, 0 failed, 0 skipped

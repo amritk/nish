@@ -2505,14 +2505,14 @@ function directorDrawText(d: BreakDirector, fb: Framebuffer, stats: TermStats): 
   callee +14:59 directorWhole -> @directorWhole
   callee +14:108 directorWhole -> @directorWhole
   callee +15:7 rasterRgb -> @rasterRgb
-  local +18:11 fps: i32 (const)
-  callee +18:22 fpsChoice -> @fpsChoice
-  callee +19:5 drawTextShadow -> @drawTextShadow
-  callee +24:10 breakGraphicsLabel -> @breakGraphicsLabel
-  callee +25:7 rasterRgb -> @rasterRgb
-  callee +30:5 blendRect -> @blendRect
-  callee +31:5 drawTextCentred -> @drawTextCentred
-  callee +31:74 rasterRgb -> @rasterRgb
+  local +19:11 fps: i32 (const)
+  callee +19:22 fpsChoice -> @fpsChoice
+  callee +20:5 drawTextShadow -> @drawTextShadow
+  callee +26:14 breakGraphicsLabel -> @breakGraphicsLabel
+  callee +28:7 rasterRgb -> @rasterRgb
+  callee +33:5 blendRect -> @blendRect
+  callee +34:5 drawTextCentred -> @drawTextCentred
+  callee +34:74 rasterRgb -> @rasterRgb
 function drawBreakDirector(d: BreakDirector, fb: Framebuffer, alpha: f64, stats: TermStats): void -> @drawBreakDirector [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drawBreakIntro
