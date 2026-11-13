@@ -391,8 +391,16 @@ const runSite = (load) => {
   term.dispatch("pointerleave", event("pointerleave"))
   check("a clicked terminal keeps focus, and its hold, as the mouse leaves", hero.document.activeElement === input && held() !== undefined)
   input.blur()
-  check("blurred, it lets go", held() === undefined, held())
+  check("a clicked terminal stays held for good, even blurred", held() !== undefined, held())
+}
 
+{
+  // Hovered, then typed into: the hold is for good.
+  const asked = []
+  const hero = runSite((specifier) => (asked.push(specifier), new Promise(() => {})))
+  const term = hero.terminal
+  const input = term.find("nish-hero__input")
+  const held = () => term.attributes["data-held"]
   term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse" }))
   typeIn(input, "l")
   term.dispatch("pointerleave", event("pointerleave"))

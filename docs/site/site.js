@@ -246,6 +246,8 @@
     const term = el("div.nish-hero__window.nish-hero__terminal", {}, bar, code, input)
     const lines = [] // entered while the shell loads
     let shell = null
+    // A click, like a key, keeps the hold for good.
+    let kept = false
     let hovered = false
     // Leaving blurs the input only if hovering focused it.
     let byHover = false
@@ -259,14 +261,17 @@
       term.setAttribute("data-held", at < 0.43 || at >= 0.85 ? "blank" : "")
     }
     const release = () => {
-      if (shell === null && !hovered && document.activeElement !== input) {
+      if (!kept && shell === null && !hovered && document.activeElement !== input) {
         term.removeAttribute("data-held")
         term.style.minHeight = ""
       }
     }
     term.addEventListener("click", () => {
-      byHover = false
-      getSelection().isCollapsed && input.focus()
+      if (getSelection().isCollapsed) {
+        kept = true
+        byHover = false
+        input.focus()
+      }
     })
     // A mouse focuses the input only when no other field has focus.
     term.addEventListener("pointerenter", (event) => {
