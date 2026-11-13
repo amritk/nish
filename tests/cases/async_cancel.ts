@@ -6,6 +6,13 @@
 // 10 ms with `cancelAfter`, so its one-second sleep answers false, and its next
 // wait answers false without waiting. `main`'s own handle is 0 and cancelling
 // it does nothing. Every line prints long before a second has passed.
+//
+// The print order is structural, not timed: `nap` is spawned only after
+// `await quiet(fd)` returns, so `quiet:` is printed before `nap` exists. The
+// one clock left is `main`'s closing sleep, which must outlast `nap`'s 10 ms
+// cancellation; 200 ms leaves a wide margin on a loaded runner and stays far
+// under the one-second sleeps. When the two waits raced from the same moment,
+// a slow machine printed `nap:` first.
 import { cancel, cancelAfter, cancelled, readableWithin, sleep, spawn, taskId, writableWithin } from "nish:async"
 import { netClose, udpBind } from "nish:net"
 
@@ -41,9 +48,9 @@ export async function main(): Promise<i32> {
   const slot = new Slot()
   spawn(parked(slot))
   console.log(`main: ${taskId()}, cancel main ${cancel(taskId())}, cancel parked ${cancel(slot.id)}, again ${cancel(slot.id)}`)
-  spawn(nap())
   await quiet(fd)
-  await sleep(30)
+  spawn(nap())
+  await sleep(200)
   netClose(fd)
   return 0
 }
