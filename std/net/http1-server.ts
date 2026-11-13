@@ -681,6 +681,8 @@ export class Http1OutputPool {
   private size: i32 = 0
   /** How many buffers the pool has made. */
   made: i32 = 0
+  /** How many buffers `free` has room for without growing. */
+  private room: i32 = 0
 
   /**
    * An empty pool: no buffer is made until the first `take`.
@@ -704,11 +706,25 @@ export class Http1OutputPool {
       return buf
     }
     this.made = this.made + 1
-    return new Array<u8>(this.size)
+    const buf: u8[] = new Array<u8>(this.size)
+    // `free` gets room for every buffer made here, while this allocates
+    // anyway, so `give` never grows it: a slot's first park can come long
+    // after its take, when the arena is meant to be flat.
+    if (this.made > this.room) {
+      const want: i32 = this.made * 2
+      for (let i: i32 = 0; i < want; i++) {
+        this.free.push(buf)
+      }
+      while (this.free.length > 0) {
+        this.free.pop()
+      }
+      this.room = want
+    }
+    return buf
   }
 
   /**
-   * Takes back a buffer `take` gave.
+   * Takes back a buffer `take` gave, into the room `take` made: it allocates nothing.
    *
    * @internal Called by `Http1Connection` in this module, from `release` and `park`, once a borrowed buffer holds nothing it still needs.
    */

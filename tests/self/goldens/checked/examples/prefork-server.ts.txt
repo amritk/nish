@@ -128,10 +128,11 @@ struct Http1Config (class) size=48 align=4 exported
   field lingerTimeout: i32 index=9 offset=36 initialized
   field lingerBytes: i32 index=10 offset=40 initialized
   field idleInput: boolean index=11 offset=44 initialized
-struct Http1OutputPool (class) size=16 align=8 exported
+struct Http1OutputPool (class) size=24 align=8 exported
   field free: u8[][] index=0 offset=0
   field size: i32 index=1 offset=8 initialized
   field made: i32 index=2 offset=12 initialized
+  field room: i32 index=3 offset=16 initialized
   constructor -> @nish.Http1OutputPool.constructor
   method take -> @nish.Http1OutputPool.take
   method give -> @nish.Http1OutputPool.give
@@ -439,21 +440,24 @@ function http1ServerReserved(name: u8[]): boolean -> @nish.http1ServerReserved
 function Http1OutputPool.constructor(this: Http1OutputPool, size: i32): void -> @nish.Http1OutputPool.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: size
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1OutputPool.take(this: Http1OutputPool): u8[] -> @nish.Http1OutputPool.take [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=16 writesThrough=true captured=false
+  calls: nish_array_grow nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:13 buf: u8[] (const)
+  local +4:11 buf: u8[] (const)
+  local +9:13 want: i32 (const)
+  local +10:16 i: i32 (let)
 function Http1OutputPool.give(this: Http1OutputPool, buf: u8[]): void -> @nish.Http1OutputPool.give [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: buf
   calls: nish_array_grow
-  pointer this: size=16 writesThrough=false captured=false
+  pointer this: size=24 writesThrough=false captured=false
   pointer buf: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Http1Connection.constructor(this: Http1Connection, config: Http1Config, date: HttpDate | null): void -> @nish.Http1Connection.constructor [exported constructor]
