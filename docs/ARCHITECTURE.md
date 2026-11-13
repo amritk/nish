@@ -680,7 +680,9 @@ ordinary class.
   within the package that declares it — which is what lets two dependencies
   each keep a private `helper()`. The root package's prefix is empty, so for a
   single-package program the symbol, the rule and the message are all exactly
-  what they were.
+  what they were. [wp57-module-scoped-names.md](wp57-module-scoped-names.md)
+  proposes a module qualifier for a private symbol that would clash; it is not
+  built.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
   `src/target.ts` (strings copied from `clang --target=<triple> -S

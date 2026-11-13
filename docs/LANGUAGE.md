@@ -2945,7 +2945,9 @@ and their `.ll` goldens are byte-identical files.
   second namespace: the whole-program attribute analysis is keyed by symbol
   name, so two functions sharing one would be emitted with each other's
   attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag.
+  does not depend on the flag. A proposal to qualify a private function's
+  symbol by its module when it would clash is
+  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
 
 ### `main`
 

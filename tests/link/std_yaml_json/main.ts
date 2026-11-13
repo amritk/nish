@@ -183,6 +183,37 @@ const yjNumbers = (t: Suite): void => {
   const loader = new YamlJsonLoader();
   t.eqI32("numbers: a hex integer past 256 digits", yjLoad(loader, doc, `[1, ${wide}]`), YAML_JSON_ERR_NUMBER);
   t.eqI32("numbers: at it", loader.errorStart, 4);
+  // An int whose span is cut to its sign: the digit past the span is not
+  // its own, so the scalar is `-`, which main's path writes as `0`.
+  const signText = "a: -1\n";
+  const sign = parseYaml(signText);
+  let signAt: i32 = -1;
+  for (let i: i32 = 0; i < toI32(sign.firsts.length); i += 1) {
+    if (sign.firsts[i] === 3 && sign.counts[i] === 5) {
+      signAt = i;
+    }
+  }
+  t.eqI32("numbers: the sign's node is an int", sign.type(signAt), 2);
+  sign.counts[signAt] = 4;
+  const signDoc = yjDoc();
+  const signLoader = new YamlJsonLoader();
+  t.eqStr("numbers: a lone sign is read in its span", yjWalk(signDoc, signLoader.load(sign, 0, signDoc)), "{<a>:#0}");
+  // A span marked verbatim that runs past the text: the copy refuses it whole
+  // and the scalar is what `stream.text` reads, which ends at the text.
+  const pastText = "a: b\n";
+  const past = parseYaml(pastText);
+  let pastAt: i32 = -1;
+  for (let i: i32 = 0; i < toI32(past.firsts.length); i += 1) {
+    if (past.firsts[i] === 3 && past.counts[i] === 4) {
+      pastAt = i;
+    }
+  }
+  // `YAML_VERBATIM`, spelled as its value so the last release still compiles this.
+  t.eqI32("strings: the plain scalar is marked verbatim", past.extras[pastAt], 1);
+  past.counts[pastAt] = 64;
+  const pastDoc = yjDoc();
+  const pastLoader = new YamlJsonLoader();
+  t.eqStr("strings: a verbatim span past the text is refused", yjWalk(pastDoc, pastLoader.load(past, 0, pastDoc)), `{<a>:<${past.text(pastAt)}>}`);
 };
 
 const yjNotFinite = (t: Suite): void => {

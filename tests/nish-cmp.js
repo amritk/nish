@@ -1219,6 +1219,9 @@ const quicRebind = byFinding(
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
 
+/** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
+const YAML_LOAD_CUTS = "Build own-key maps and known-size containers directly"
+
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
 const DECLARED = [
@@ -6408,6 +6411,13 @@ const DECLARED = [
       "tests/link/std_yaml_bad_depth_high/main.ts": ["main.h", "main.ll"],
       "tests/link/std_yaml_bad_depth_low/main.ts": ["main.h", "main.ll"],
       "tests/link/std_yaml_json/main.ts": ["main.h"],
+    }
+  ),
+  ...byFinding(YAML_LOAD_CUTS)(
+    "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickCount` and `quickPart` over `quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
+    {
+      "tests/link/std_yaml_json_golden/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
     }
   ),
   ...byFinding(SECURITY_PATHS)(
