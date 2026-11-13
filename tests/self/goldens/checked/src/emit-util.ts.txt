@@ -6,15 +6,6 @@ import isNetWrittenLetter from "./nish-modules" -> function @isNetWrittenLetter
 import CheckedProgram from "./program" -> struct CheckedProgram
 import inlineElementStruct from "./program" -> function @inlineElementStruct
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import Local from "./symbols" -> struct Local
 import T_STRING from "./types" -> const T_STRING
@@ -70,7 +61,7 @@ function rangedStoreOf(program: CheckedProgram, table: TypeTable, node: Node): i
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 writesBack: boolean (const)
-  callee +3:56 isAssignmentOperator -> @isAssignmentOperator
+  callee +3:63 isAssignmentOperator -> @isAssignmentOperator
   local +7:9 target: i32 (const)
   callee +8:10 TypeTable.isRanged -> @TypeTable.isRanged
 function isAssignmentOperator(op: string): boolean -> @isAssignmentOperator [exported]
@@ -83,7 +74,7 @@ function isAssignmentTarget(parent: Node | null, node: Node): boolean -> @isAssi
   pointer parent: size=40 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:69 isAssignmentOperator -> @isAssignmentOperator
+  callee +0:76 isAssignmentOperator -> @isAssignmentOperator
 function methodReceiver(call: Node): Node | null -> @methodReceiver [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index

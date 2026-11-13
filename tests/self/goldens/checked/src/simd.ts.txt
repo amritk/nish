@@ -18,7 +18,6 @@ import isSimdOp from "./nish-modules" -> function @isSimdOp
 import simdMaskWidth from "./nish-modules" -> function @simdMaskWidth
 import simdSuffix from "./nish-modules" -> function @simdSuffix
 import simdTypeLane from "./nish-modules" -> function @simdTypeLane
-import N_NUMBER from "./nodes" -> const N_NUMBER
 import Node from "./nodes" -> struct Node
 import Scope from "./symbols" -> struct Scope
 import T_BOOL from "./types" -> const T_BOOL

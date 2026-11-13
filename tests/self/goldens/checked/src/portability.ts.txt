@@ -7,12 +7,6 @@ import Edit from "./diagnostics" -> struct Edit
 import numericLiteralValue from "./constants" -> function @numericLiteralValue
 import StringSet from "./map" -> struct StringSet
 import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import ParentTable from "./parents" -> struct ParentTable
@@ -113,9 +107,9 @@ function isZeroLength(walk: PortabilityWalk, expr: Node): boolean -> @isZeroLeng
   stackSites=0 stackLocals=0
   callee +0:12 numericLiteralValue -> @numericLiteralValue
   callee +3:12 isZeroLength -> @isZeroLength
-  callee +6:12 isZeroLength -> @isZeroLength
-  local +8:9 constant: ConstInfo | null (const)
-  callee +12:10 isFloat -> @isFloat
+  callee +10:12 isZeroLength -> @isZeroLength
+  local +12:9 constant: ConstInfo | null (const)
+  callee +16:10 isFloat -> @isFloat
 function zeroFillFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @zeroFillFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

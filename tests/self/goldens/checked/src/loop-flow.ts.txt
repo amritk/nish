@@ -12,44 +12,6 @@ import narrowToVariants from "./expressions" -> function @narrowToVariants
 import writesLeft from "./expressions" -> function @writesLeft
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_AS from "./nodes" -> const N_AS
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BINDING_PATTERN from "./nodes" -> const N_BINDING_PATTERN
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_BREAK from "./nodes" -> const N_BREAK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_CONTINUE from "./nodes" -> const N_CONTINUE
-import N_DO from "./nodes" -> const N_DO
-import N_DEFAULT from "./nodes" -> const N_DEFAULT
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LABELED from "./nodes" -> const N_LABELED
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_NULL from "./nodes" -> const N_NULL
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SWITCH from "./nodes" -> const N_SWITCH
-import N_THIS from "./nodes" -> const N_THIS
-import N_THROW from "./nodes" -> const N_THROW
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_TRY from "./nodes" -> const N_TRY
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR from "./nodes" -> const N_VAR
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
-import N_WITH from "./nodes" -> const N_WITH
 import Node from "./nodes" -> struct Node
 import StructInfo from "./program" -> struct StructInfo
 import Scope from "./symbols" -> struct Scope
@@ -99,24 +61,24 @@ function flowScanNode(node: Node, top: boolean, scan: FlowScan): void -> @flowSc
   pointer node: size=40 writesThrough=false captured=false passedTo=flowNamesIn#0
   pointer scan: size=48 writesThrough=true captured=false passedTo=flowNamesIn#1 flowScanNode#2
   stackSites=0 stackLocals=0
-  local -2:9 kind: i32 (const)
+  local -7:9 kind: NodeKind (const)
   callee +14:5 flowNamesIn -> @flowNamesIn
   callee +18:5 flowAddName -> @flowAddName
   local +21:11 name: string (const)
   callee +23:7 flowAddName -> @flowAddName
   callee +25:5 flowAddName -> @flowAddName
   local +28:16 decl: Node (const)
-  callee +34:28 writesLeft -> @writesLeft
-  local +35:11 target: Node (const)
-  local +38:13 root: string (const)
-  callee +38:20 flowRootName -> @flowRootName
-  callee +40:9 flowAddName -> @flowAddName
-  local +45:11 root: string (const)
-  callee +45:18 flowRootName -> @flowRootName
-  callee +47:7 flowAddName -> @flowAddName
-  local +50:7 i: i32 (let)
-  local +51:14 child: Node (const)
-  callee +54:5 flowScanNode -> @flowScanNode
+  callee +38:35 writesLeft -> @writesLeft
+  local +39:11 target: Node (const)
+  local +42:13 root: string (const)
+  callee +42:20 flowRootName -> @flowRootName
+  callee +44:9 flowAddName -> @flowAddName
+  local +49:11 root: string (const)
+  callee +49:18 flowRootName -> @flowRootName
+  callee +51:7 flowAddName -> @flowAddName
+  local +54:7 i: i32 (let)
+  local +55:14 child: Node (const)
+  callee +58:5 flowScanNode -> @flowScanNode
 function flowDead(s: i32[]): boolean -> @flowDead
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer s: size=0 writesThrough=false captured=false
@@ -266,12 +228,12 @@ function flowConstEnum(ctx: CheckContext, f: LoopFlow, node: Node): i32 -> @flow
   stackSites=0 stackLocals=0
   local +0:9 bare: Node (const)
   callee +0:16 unwrapParens -> @unwrapParens
-  callee +1:33 isOptionalChain -> @isOptionalChain
+  callee +1:40 isOptionalChain -> @isOptionalChain
   local +4:9 owner: Node (const)
-  callee +5:33 Scope.lookup -> @Scope.lookup
-  local +8:9 info: EnumInfo | null (const)
-  callee +8:16 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
-  callee +9:25 EnumInfo.hasMember -> @EnumInfo.hasMember
+  callee +7:5 Scope.lookup -> @Scope.lookup
+  local +12:9 info: EnumInfo | null (const)
+  callee +12:16 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
+  callee +13:25 EnumInfo.hasMember -> @EnumInfo.hasMember
 function flowConstValue(ctx: CheckContext, node: Node): i32 -> @flowConstValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.enumNamed EnumInfo.memberValue nish_panic_index unwrapParens
@@ -372,7 +334,7 @@ function flowStructOf(ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): S
   local +3:11 name: string (const)
   local +4:11 local: Local | null (const)
   callee +4:19 Scope.lookup -> @Scope.lookup
-  callee +6:41 isOptionalChain -> @isOptionalChain
+  callee +6:48 isOptionalChain -> @isOptionalChain
   local +7:11 owner: StructInfo | null (const)
   callee +7:19 flowStructOf -> @flowStructOf
   local +9:13 field: FieldInfo | null (const)
@@ -428,26 +390,26 @@ function flowKnown(ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
   callee +48:7 TypeTable.enumBase -> @TypeTable.enumBase
   callee +50:14 flowDomainBit -> @flowDomainBit
   callee +50:34 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +54:70 isOptionalChain -> @isOptionalChain
-  local +55:11 access: Node (const)
-  local +56:11 info: StructInfo | null (const)
-  callee +56:18 flowStructOf -> @flowStructOf
-  local +60:11 method: FunctionSig | null (const)
-  callee +60:20 StructInfo.method -> @StructInfo.method
-  callee +61:34 flowMemberBit -> @flowMemberBit
-  callee +63:33 isOptionalChain -> @isOptionalChain
-  local +67:11 j: i32 (const)
-  callee +67:15 flowIndex -> @flowIndex
-  local +69:13 base: i32 (const)
-  callee +69:20 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +70:25 TypeTable.tagNameOf -> @TypeTable.tagNameOf
-  callee +70:54 TypeTable.tagEnumOf -> @TypeTable.tagEnumOf
-  callee +71:16 flowDomainOf -> @flowDomainOf
-  local +75:9 info: StructInfo | null (const)
-  callee +75:16 flowStructOf -> @flowStructOf
-  local +79:9 field: FieldInfo | null (const)
-  callee +79:17 StructInfo.field -> @StructInfo.field
-  callee +80:31 flowMemberBit -> @flowMemberBit
+  callee +57:6 isOptionalChain -> @isOptionalChain
+  local +59:11 access: Node (const)
+  local +60:11 info: StructInfo | null (const)
+  callee +60:18 flowStructOf -> @flowStructOf
+  local +64:11 method: FunctionSig | null (const)
+  callee +64:20 StructInfo.method -> @StructInfo.method
+  callee +65:34 flowMemberBit -> @flowMemberBit
+  callee +67:40 isOptionalChain -> @isOptionalChain
+  local +71:11 j: i32 (const)
+  callee +71:15 flowIndex -> @flowIndex
+  local +73:13 base: i32 (const)
+  callee +73:20 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +74:25 TypeTable.tagNameOf -> @TypeTable.tagNameOf
+  callee +74:54 TypeTable.tagEnumOf -> @TypeTable.tagEnumOf
+  callee +75:16 flowDomainOf -> @flowDomainOf
+  local +79:9 info: StructInfo | null (const)
+  callee +79:16 flowStructOf -> @flowStructOf
+  local +83:9 field: FieldInfo | null (const)
+  callee +83:17 StructInfo.field -> @StructInfo.field
+  callee +84:31 flowMemberBit -> @flowMemberBit
 function flowNarrowTo(ctx: CheckContext, f: LoopFlow, k: i32, other: Node, s: i32[], same: boolean): i32[] -> @flowNarrowTo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via flowKnown
@@ -487,7 +449,7 @@ function flowEquality(ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
   callee +9:27 flowSet -> @flowSet
   local +16:11 read: Node (const)
   callee +16:18 unwrapParens -> @unwrapParens
-  callee +17:36 isOptionalChain -> @isOptionalChain
+  callee +17:43 isOptionalChain -> @isOptionalChain
   local +18:13 receiver: Node (const)
   callee +18:24 flowTestedRead -> @flowTestedRead
   local +23:15 local: Local | null (const)
@@ -555,8 +517,8 @@ function flowExec(ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] -
   pointer node: size=40 writesThrough=true captured=true passedTo=flowNested#2 flowSwitch#2
   pointer s: size=0 writesThrough=true captured=true passedTo=flowDead#0 flowValueBits#4 flowSet#0 flowJoin#2 flowJoin#2 flowCond#3 flowCond#3 flowNested#3 flowSwitch#3
   stackSites=0 stackLocals=0
-  callee -13:7 flowDead -> @flowDead
-  local -10:9 kind: i32 (const)
+  callee -18:7 flowDead -> @flowDead
+  local -15:9 kind: NodeKind (const)
   local -5:9 state: i32[] (let)
   local -4:9 i: i32 (let)
   callee -2:11 flowDead -> @flowDead
@@ -598,7 +560,7 @@ function flowSubject(ctx: CheckContext, f: LoopFlow, subject: Node, s: i32[]): i
   callee +0:16 unwrapParens -> @unwrapParens
   local +2:11 k: i32 (const)
   callee +2:15 flowIndex -> @flowIndex
-  callee +5:34 isOptionalChain -> @isOptionalChain
+  callee +5:41 isOptionalChain -> @isOptionalChain
   local +6:11 k: i32 (const)
   callee +6:15 flowIndex -> @flowIndex
   callee +8:28 TypeTable.tagNameOf -> @TypeTable.tagNameOf
@@ -694,7 +656,7 @@ function flowFixpoint(ctx: CheckContext, f: LoopFlow, before: i32[]): void -> @f
   local -26:7 body: Node (let)
   local -24:11 init: Node (const)
   callee -22:15 flowExec -> @flowExec
-  callee -22:67 flowStatementOf -> @flowStatementOf
+  callee -22:73 flowStatementOf -> @flowStatementOf
   callee -17:16 flowStatementOf -> @flowStatementOf
   local -7:7 entry: i32[] (let)
   callee -7:15 flowCopy -> @flowCopy

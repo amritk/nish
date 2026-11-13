@@ -20,10 +20,6 @@ import isStdModule from "./std-modules" -> function @isStdModule
 import dirname from "./paths" -> function @dirname
 import relativePath from "./paths" -> function @relativePath
 import resolvePath from "./paths" -> function @resolvePath
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_CALL from "./nodes" -> const N_CALL
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_STRING from "./nodes" -> const N_STRING
 import Node from "./nodes" -> struct Node
 import SourceFile from "./diagnostics" -> struct SourceFile
 import CheckedProgram from "./program" -> struct CheckedProgram
@@ -283,7 +279,7 @@ function literalReaches(compilation: Compilation, reach: DependencyReach): Liter
   local +25:15 a: i32 (let)
   local +28:19 literal: Node (let)
   callee +29:25 capabilityIndex -> @capabilityIndex
-  callee +34:26 new LiteralReach -> @LiteralReach.constructor
+  callee +36:26 new LiteralReach -> @LiteralReach.constructor
 function numericHost(host: string): boolean -> @numericHost [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: host

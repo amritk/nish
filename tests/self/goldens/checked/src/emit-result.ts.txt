@@ -6,8 +6,6 @@ import emitPanicTail from "./emit-builtins" -> function @emitPanicTail
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import ResultLayout from "./result" -> struct ResultLayout
 import resultLayout from "./result" -> function @resultLayout
-import N_CALL from "./nodes" -> const N_CALL
-import N_MEMBER from "./nodes" -> const N_MEMBER
 import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import CheckedProgram from "./program" -> struct CheckedProgram
@@ -245,7 +243,7 @@ function emitPackedResult(emitter: Emitter, expr: Node, type: i32, isPrivate: bo
   pointer expr: size=40 writesThrough=true captured=true passedTo=isResultConstructorCall#2 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
-  callee +1:31 isResultConstructorCall -> @isResultConstructorCall
+  callee +1:38 isResultConstructorCall -> @isResultConstructorCall
   local +2:11 args: Node (const)
   local +3:11 hasPayload: boolean (const)
   local +4:11 payload: string (const)

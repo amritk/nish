@@ -6,12 +6,6 @@ import roundUpTo from "./structs" -> function @roundUpTo
 import CheckContext from "./context" -> struct CheckContext
 import checkExpression from "./expressions" -> function @checkExpression
 import isParameterValue from "./generics" -> function @isParameterValue
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import Local from "./symbols" -> struct Local
@@ -334,6 +328,6 @@ function markResultReads(program: CheckedProgram, node: Node, declarations: Node
   local -2:11 at: i32 (const)
   callee -2:16 declarationIndex -> @declarationIndex
   local +4:9 assigns: boolean (const)
-  local +5:7 index: i32 (let)
-  local +6:14 child: Node (const)
-  callee +8:7 markResultReads -> @markResultReads
+  local +6:7 index: i32 (let)
+  local +7:14 child: Node (const)
+  callee +9:7 markResultReads -> @markResultReads

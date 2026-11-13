@@ -9,11 +9,6 @@ import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_MEMBER from "./nodes" -> const N_MEMBER
 import Node from "./nodes" -> struct Node
 import packageSymbolPrefix from "./packages" -> function @packageSymbolPrefix
 import PanicSite from "./panics" -> struct PanicSite
@@ -934,7 +929,7 @@ function CheckedProgram.growTables(this: CheckedProgram, nodeCount: i32): void -
   local -4:11 noConstant: ConstInfo | null (const)
   local -3:11 noSig: FunctionSig | null (const)
   local -2:11 noCopy: SpreadCopy | null (const)
-function CheckedProgram.newNode(this: CheckedProgram, kind: i32, start: i32, end: i32, text: string, children: Node[]): Node -> @CheckedProgram.newNode [exported method]
+function CheckedProgram.newNode(this: CheckedProgram, kind: NodeKind, start: i32, end: i32, text: string, children: Node[]): Node -> @CheckedProgram.newNode [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
   escaping: children end kind start text

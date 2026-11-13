@@ -13,7 +13,6 @@ import StringSet from "./map" -> struct StringSet
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import hasFunctionParameter from "./generics" -> function @hasFunctionParameter
 import basename from "./paths" -> function @basename
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
 import Node from "./nodes" -> struct Node
 import FieldInfo from "./program" -> struct FieldInfo
 import FunctionSig from "./program" -> struct FunctionSig

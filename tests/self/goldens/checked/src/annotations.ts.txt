@@ -26,22 +26,9 @@ import SIMD_SPECIFIER from "./nish-modules" -> const SIMD_SPECIFIER
 import simdMaskWidth from "./nish-modules" -> function @simdMaskWidth
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
-import FLAG_REST from "./nodes" -> const FLAG_REST
 import FLAG_READONLY from "./nodes" -> const FLAG_READONLY
+import FLAG_REST from "./nodes" -> const FLAG_REST
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
-import N_FIELD from "./nodes" -> const N_FIELD
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
-import N_TYPE_FUNCTION from "./nodes" -> const N_TYPE_FUNCTION
-import N_TYPE_LITERAL from "./nodes" -> const N_TYPE_LITERAL
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_OPERATOR from "./nodes" -> const N_TYPE_OPERATOR
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_READONLY from "./nodes" -> const N_TYPE_READONLY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import Node from "./nodes" -> struct Node
 import CPTR_NAME from "./types" -> const CPTR_NAME
 import K_ARRAY from "./types" -> const K_ARRAY
@@ -191,7 +178,7 @@ function unwrapTypeParen(node: Node): Node -> @unwrapTypeParen
   calls: nish_panic_index unwrapTypeParen
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee +0:32 unwrapTypeParen -> @unwrapTypeParen
+  callee +0:38 unwrapTypeParen -> @unwrapTypeParen
 function resolveFunctionReference(node: Node, ctx: CheckContext): i32 -> @resolveFunctionReference
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -415,7 +402,7 @@ function rangedBound(ctx: CheckContext, bound: Node): i64 -> @rangedBound
   pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.textOf#0 CheckContext.error#0 CheckContext.error#0
   pointer bound: size=40 writesThrough=false captured=false passedTo=isStringLiteralType#0 CheckContext.error#1 CheckContext.textOf#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee +0:40 isStringLiteralType -> @isStringLiteralType
+  callee +0:46 isStringLiteralType -> @isStringLiteralType
   callee +1:5 CheckContext.error -> @CheckContext.error
   callee +3:75 CheckContext.textOf -> @CheckContext.textOf
   local +7:9 text: string (const)

@@ -162,41 +162,7 @@ import SHA256_HW from "./kernels" -> const SHA256_HW
 import SHA256_KERNEL from "./kernels" -> const SHA256_KERNEL
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_BREAK from "./nodes" -> const N_BREAK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_CONTINUE from "./nodes" -> const N_CONTINUE
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
 import FLAG_USING from "./nodes" -> const FLAG_USING
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LABELED from "./nodes" -> const N_LABELED
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_STRING from "./nodes" -> const N_STRING
-import N_SWITCH from "./nodes" -> const N_SWITCH
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_THIS from "./nodes" -> const N_THIS
-import N_THROW from "./nodes" -> const N_THROW
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR from "./nodes" -> const N_VAR
-import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import nodeName from "./nodes" -> function @nodeName
 import Options from "./options" -> struct Options
@@ -1346,7 +1312,7 @@ function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCal
   stackSites=4 stackLocals=3
   local -1:11 asyncMode: i32 (const)
   local +1:11 callee: Node (const)
-  callee +2:38 receiverIsValue -> @receiverIsValue
+  callee +2:45 receiverIsValue -> @receiverIsValue
   callee +6:16 emitBuiltinCall -> @emitBuiltinCall
   callee +6:44 dottedName -> @dottedName
   local +9:13 receiver: i32 (const)

@@ -25,13 +25,6 @@ import widenEntryFacts from "./bounds" -> function @widenEntryFacts
 import walkWithRanges from "./bounds" -> function @walkWithRanges
 import CheckContext from "./context" -> struct CheckContext
 import Diagnostic from "./diagnostics" -> struct Diagnostic
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
@@ -443,7 +436,7 @@ function scanStores(node: Node, scan: StoreScan, inArrow: boolean): void -> @sca
   stackSites=0 stackLocals=0
   local -15:9 ctx: CheckContext (const)
   local -14:9 program: CheckedProgram (const)
-  local -13:9 kind: i32 (const)
+  local -13:9 kind: NodeKind (const)
   callee -11:9 isBoundsAssignment -> @isBoundsAssignment
   callee -10:7 noteStore -> @noteStore
   callee -8:5 noteOpenArithmetic -> @noteOpenArithmetic
@@ -539,4 +532,4 @@ function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
   pointer proved: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 access: Node (const)
-  local +6:11 index: Node (const)
+  local +9:11 index: Node (const)

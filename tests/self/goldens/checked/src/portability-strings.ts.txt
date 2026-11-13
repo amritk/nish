@@ -10,28 +10,6 @@ import isPushCall from "./emit-util" -> function @isPushCall
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import isAsciiText from "./strings" -> function @isAsciiText
 import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_DO from "./nodes" -> const N_DO
-import N_FOR from "./nodes" -> const N_FOR
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_PROPERTY from "./nodes" -> const N_PROPERTY
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_STRING from "./nodes" -> const N_STRING
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
@@ -164,10 +142,10 @@ function sourceKind(walk: PortabilityWalk, node: Node): i32 -> @sourceKind
   pointer walk: size=56 writesThrough=false captured=false passedTo=isString#0 isString#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:59 isString -> @isString
+  callee +0:66 isString -> @isString
   local +6:9 callee: Node (const)
   callee +6:18 unwrapParens -> @unwrapParens
-  callee +7:36 isString -> @isString
+  callee +7:43 isString -> @isString
 function needleSpan(walk: PortabilityWalk, source: Node): f64 -> @needleSpan
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: asciiValue nish_panic_index nish_str_eq unwrapParens
@@ -183,7 +161,7 @@ function sourceReceiver(source: Node): Node -> @sourceReceiver
   calls: nish_panic_index unwrapParens
   pointer source: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:51 unwrapParens -> @unwrapParens
+  callee +0:58 unwrapParens -> @unwrapParens
 function isProvablyAscii(walk: PortabilityWalk, expr: Node, assumed: Local[]): boolean -> @isProvablyAscii
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -250,10 +228,10 @@ function writesOf(walk: PortabilityWalk, node: Node, local: Local, writes: Node[
   pointer writes: size=0 writesThrough=true captured=false passedTo=writesOf#3
   stackSites=0 stackLocals=0
   local -2:7 declared: boolean (let)
-  callee -1:35 names -> @names
+  callee -1:41 names -> @names
   local +3:11 target: Node (const)
   callee +3:20 unwrapParens -> @unwrapParens
-  callee +4:36 names -> @names
+  callee +4:43 names -> @names
   local +8:14 child: Node (const)
   callee +9:9 writesOf -> @writesOf
 function asciiConstant(walk: PortabilityWalk, ident: Node): string | null -> @asciiConstant
@@ -304,15 +282,15 @@ function followFrom(trail: Trail, value: Node, from: Node, holder: Local | null)
   local +9:11 parent: Node | null (const)
   callee +9:20 ParentTable.parentOf -> @ParentTable.parentOf
   callee +15:7 followOutOfArrow -> @followOutOfArrow
-  local +22:13 call: Node | null (const)
-  callee +22:20 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +24:9 followIntoParameter -> @followIntoParameter
-  callee +30:12 isConversion -> @isConversion
-  callee +31:9 followIntoCall -> @followIntoCall
-  callee +36:23 isNeedleStep -> @isNeedleStep
-  callee +43:12 followThroughBinary -> @followThroughBinary
-  callee +50:9 Trail.report -> @Trail.report
-  callee +54:7 followIntoPlace -> @followIntoPlace
+  local +25:13 call: Node | null (const)
+  callee +25:20 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +27:9 followIntoParameter -> @followIntoParameter
+  callee +33:12 isConversion -> @isConversion
+  callee +34:9 followIntoCall -> @followIntoCall
+  callee +39:23 isNeedleStep -> @isNeedleStep
+  callee +46:12 followThroughBinary -> @followThroughBinary
+  callee +53:9 Trail.report -> @Trail.report
+  callee +57:7 followIntoPlace -> @followIntoPlace
 function followIntoCall(trail: Trail, call: Node, arg: Node, value: Node, holder: Local | null): void -> @followIntoCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Trail.report
@@ -327,10 +305,10 @@ function followIntoCall(trail: Trail, call: Node, arg: Node, value: Node, holder
   local +1:9 callee: Node (const)
   callee +1:18 unwrapParens -> @unwrapParens
   local +2:9 name: string (const)
-  callee +2:43 dottedName -> @dottedName
+  callee +2:50 dottedName -> @dottedName
   local +3:9 sig: FunctionSig | null (const)
   callee +5:5 Trail.report -> @Trail.report
-  callee +8:35 isPushCall -> @isPushCall
+  callee +8:42 isPushCall -> @isPushCall
   callee +9:5 Trail.report -> @Trail.report
   local +15:9 role: i32 (const)
   callee +15:16 parallelRoleOf -> @parallelRoleOf
@@ -556,17 +534,17 @@ function isCursor(walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | n
   callee +4:34 isNumberLiteral -> @isNumberLiteral
   callee +5:11 unwrapParens -> @unwrapParens
   local +10:9 local: Local | null (const)
-  callee +10:52 sourceLocal -> @sourceLocal
+  callee +10:59 sourceLocal -> @sourceLocal
   local +14:9 reads: Node[] (const)
   callee +15:3 readsOf -> @readsOf
   local +16:14 read: Node (const)
   local +17:9 at: Node (let)
   local +18:9 parent: Node | null (let)
   callee +18:18 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +21:64 isArithmetic -> @isArithmetic
+  callee +21:78 isArithmetic -> @isArithmetic
   callee +24:16 ParentTable.parentOf -> @ParentTable.parentOf
   local +29:11 call: Node | null (const)
-  callee +29:56 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +29:63 ParentTable.parentOf -> @ParentTable.parentOf
   local +31:13 callee: Node (const)
   callee +31:22 unwrapParens -> @unwrapParens
   callee +34:9 isString -> @isString
@@ -680,9 +658,9 @@ function readsOf(walk: PortabilityWalk, node: Node, local: Local, reads: Node[])
   pointer local: size=64 writesThrough=false captured=false passedTo=names#2 readsOf#2
   pointer reads: size=0 writesThrough=true captured=false passedTo=readsOf#3
   stackSites=0 stackLocals=0
-  callee -3:32 names -> @names
-  local -2:11 parent: Node | null (const)
-  callee -2:20 ParentTable.parentOf -> @ParentTable.parentOf
+  callee -8:39 names -> @names
+  local -7:11 parent: Node | null (const)
+  callee -7:20 ParentTable.parentOf -> @ParentTable.parentOf
   local +4:14 child: Node (const)
   callee +5:5 readsOf -> @readsOf
 function holdsOffset(walk: PortabilityWalk, expr: Node, throughLocals: boolean): boolean -> @holdsOffset
@@ -695,14 +673,14 @@ function holdsOffset(walk: PortabilityWalk, expr: Node, throughLocals: boolean):
   local +0:9 e: Node (const)
   callee +0:13 unwrapParens -> @unwrapParens
   callee +1:7 sourceKind -> @sourceKind
-  callee +4:30 isArithmetic -> @isArithmetic
+  callee +4:37 isArithmetic -> @isArithmetic
   callee +5:12 holdsOffset -> @holdsOffset
   callee +5:63 holdsOffset -> @holdsOffset
   local +7:9 local: Local | null (const)
-  local +11:9 writes: Node[] (const)
-  callee +12:3 writesOf -> @writesOf
-  local +13:14 write: Node (const)
-  callee +14:9 holdsOffset -> @holdsOffset
+  local +12:9 writes: Node[] (const)
+  callee +13:3 writesOf -> @writesOf
+  local +14:14 write: Node (const)
+  callee +15:9 holdsOffset -> @holdsOffset
 function isComparison(op: string): boolean -> @isComparison
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -753,7 +731,7 @@ function sliceFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding
   stackSites=0 stackLocals=0
   local -21:9 callee: Node (const)
   callee -21:18 unwrapParens -> @unwrapParens
-  callee -20:63 isString -> @isString
+  callee -20:70 isString -> @isString
   local -15:7 found: Node | null (let)
   local -14:7 negative: boolean (let)
   local -13:14 bound: Node (const)

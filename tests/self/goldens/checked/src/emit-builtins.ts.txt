@@ -31,7 +31,6 @@ import netOption from "./nish-modules" -> function @netOption
 import isNetRangeBuffer from "./nish-modules" -> function @isNetRangeBuffer
 import netRangeBuffer from "./nish-modules" -> function @netRangeBuffer
 import netSymbol from "./nish-modules" -> function @netSymbol
-import N_IDENT from "./nodes" -> const N_IDENT
 import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import CheckedProgram from "./program" -> struct CheckedProgram
