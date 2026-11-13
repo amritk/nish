@@ -6,18 +6,29 @@
 //
 // It is pure, like the scenes: no terminal, no file, no clock and no process.
 // A host owns it and does what it cannot. `break.ts` is the terminal's host;
-// a page or a test is another. Each step the host hands it a `StepInput`
-// (`stepBreakDirector`), then reads what the step asks of it:
+// a page or a test is another. A host says whether it opens a terminal (the
+// constructor's `terminal`): only then are the frame rate and the graphics
+// settings at all, so without one Settings leaves those rows out, F4 and F6
+// do nothing and `reopen` is never set.
+//
+// The settings are the host's to keep. It loads them before it makes the
+// director, which edits them in place from then on, and writes
+// `keptSettings` whenever a step sets `saveWanted` and when the run ends; a
+// host with nowhere to keep them passes the defaults and writes nothing.
+//
+// Each step the host hands it a `StepInput` (`stepBreakDirector`), then reads
+// what the step asks of it:
 //
 // - `sounds`, the ids the scene asked for, to play when `settings.sound` is on;
 // - `soundChanged`, sound just turned on or off: the host finds a player and
-//   plays the hello, and when `soundToastWanted` still holds, says how it went
-//   in a toast (`toastBreak`), as no later toast of the step has replaced it;
+//   plays the hello `soundTurnedOn` times (once per turn on), and when
+//   `soundToastWanted` still holds, as no later toast of the step has replaced
+//   it, says how it went (`sayBreakSound`);
 // - `saveWanted`, the settings to keep (`keptSettings`, with the sound the
 //   player chose rather than one an override set) written now, since an
 //   interrupt could end the run before its end;
-// - `reopen`, a setting (the frame rate) that only a host which opens the
-//   terminal with it can apply.
+// - `reopen`, a setting (the frame rate) that only a terminal opened again
+//   with it can apply.
 //
 // Each frame the host sizes the framebuffer (`sizeBreakFramebuffer`, from the
 // room it has), reports how fast the frames are going (`adaptBreakResolution`,
@@ -139,6 +150,8 @@ export class BreakDirector {
   openFps: i32
   openGraphics: i32
   toastSteps: i32
+  /** How many times this step turned sound on: the hellos the host plays. */
+  soundTurnedOn: i32
   /** The most lines auto resolution allows now; it starts at `DIRECTOR_AUTO_LINES` and only falls. */
   autoLines: i32
   /** The sound setting to keep: the one the host gave, until the player changes sound, so an override is never kept. */
@@ -152,6 +165,8 @@ export class BreakDirector {
   soundToastWanted: boolean
   /** Whether the host's room is too small to play in, which holds the scene still; the host sets it. */
   small: boolean
+  /** Whether the host opens a terminal, so the frame rate and graphics are settings. */
+  terminal: boolean
 
   /**
    * A director at the start of the intro.
@@ -159,14 +174,17 @@ export class BreakDirector {
    * @param seed The seed of every scene's randomness; games after the first add their count to it.
    * @param settings The settings to start from, which the host loaded.
    * @param help The help text the intro breaks apart, with its colours.
+   * @param terminal Whether the host opens a terminal, which the frame rate and graphics settings are for.
    */
-  constructor(seed: i64, settings: BreakSettings, help: string) {
+  constructor(seed: i64, settings: BreakSettings, help: string, terminal: boolean) {
+    this.terminal = terminal
     this.settings = settings
     this.keptSound = settings.sound
     this.seed = seed
     this.intro = newBreakIntro(help, seed)
     this.scene = SCENE_INTRO
     this.menu = newBreakMenuWith(1, seed, settings)
+    this.menu.terminal = terminal
     this.game = newBreakGame(1, seed)
     this.startLevel = 1
     this.games = 0
@@ -174,6 +192,7 @@ export class BreakDirector {
     this.saveWanted = false
     this.soundChanged = false
     this.soundToastWanted = false
+    this.soundTurnedOn = 0
     this.openFps = settings.fps
     this.openGraphics = settings.graphics
     this.small = false
@@ -210,11 +229,25 @@ export const toastBreak = (d: BreakDirector, text: string): void => {
   d.soundToastWanted = false
 }
 
+/**
+ * Say `text` in place of the sound toast's words, for as long as that toast
+ * has left: what the host found when sound was turned on or off this step.
+ *
+ * @param d The director.
+ * @param text What came of the change, such as the player found.
+ */
+export const sayBreakSound = (d: BreakDirector, text: string): void => {
+  d.toast = text
+}
+
 /** Sound was just turned on or off: the host says how it went, unless a later toast of the step replaces it. */
 const directorSoundChanged = (d: BreakDirector): void => {
   toastBreak(d, d.settings.sound ? "sound on" : "sound off")
   d.soundChanged = true
   d.soundToastWanted = true
+  if (d.settings.sound) {
+    d.soundTurnedOn = d.soundTurnedOn + 1
+  }
 }
 
 /** A `GRAPHICS_*` setting as it reads in a toast, -1 being the host's choice. */
@@ -296,9 +329,13 @@ const directorSave = (d: BreakDirector): void => {
 /**
  * Apply the director's key `key`: step its setting as Settings does, say so,
  * ask for a reopening where it needs one, and ask for the settings to be kept
- * now, since an interrupt could end the run before its end keeps them.
+ * now, since an interrupt could end the run before its end keeps them. With
+ * no terminal, F4 and F6 step nothing.
  */
 const directorApplyKey = (d: BreakDirector, key: i32): void => {
+  if (!d.terminal && (key === KEY_F4 || key === KEY_F6)) {
+    return
+  }
   const s: BreakSettings = d.settings
   cycleSetting(s, directorKeyRow(key), 1)
   if (key === KEY_F3) {
@@ -358,6 +395,7 @@ const directorStartGame = (d: BreakDirector, level: i32): void => {
 /** Back to the title card, offering the level the last game started at, with the same settings. */
 const directorBackToMenu = (d: BreakDirector): void => {
   d.menu = newBreakMenuWith(d.startLevel, d.seed + toI64(d.games), d.settings)
+  d.menu.terminal = d.terminal
   d.scene = SCENE_MENU
 }
 
@@ -412,6 +450,7 @@ export const stepBreakDirector = (d: BreakDirector, input: StepInput): boolean =
   d.saveWanted = false
   d.soundChanged = false
   d.soundToastWanted = false
+  d.soundTurnedOn = 0
   directorTakeHotkeys(d, input.events)
   // What the hotkeys left, so a change the menu makes below is told apart from theirs.
   const resolution: i32 = d.settings.resolution

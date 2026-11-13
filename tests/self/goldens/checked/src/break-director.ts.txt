@@ -2279,27 +2279,29 @@ struct BreakDirector (class) size=136 align=8 exported
   field openFps: i32 index=15 offset=108
   field openGraphics: i32 index=16 offset=112
   field toastSteps: i32 index=17 offset=116
-  field autoLines: i32 index=18 offset=120
-  field keptSound: boolean index=19 offset=124
-  field reopen: boolean index=20 offset=125
-  field saveWanted: boolean index=21 offset=126
-  field soundChanged: boolean index=22 offset=127
-  field soundToastWanted: boolean index=23 offset=128
-  field small: boolean index=24 offset=129
+  field soundTurnedOn: i32 index=18 offset=120
+  field autoLines: i32 index=19 offset=124
+  field keptSound: boolean index=20 offset=128
+  field reopen: boolean index=21 offset=129
+  field saveWanted: boolean index=22 offset=130
+  field soundChanged: boolean index=23 offset=131
+  field soundToastWanted: boolean index=24 offset=132
+  field small: boolean index=25 offset=133
+  field terminal: boolean index=26 offset=134
   constructor -> @BreakDirector.constructor
-function BreakDirector.constructor(this: BreakDirector, seed: i64, settings: BreakSettings, help: string): void -> @BreakDirector.constructor [exported constructor]
+function BreakDirector.constructor(this: BreakDirector, seed: i64, settings: BreakSettings, help: string, terminal: boolean): void -> @BreakDirector.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via newBreakMenuWith
-  escaping: help seed settings
+  sharedWrite: +0:5
+  escaping: help seed settings terminal
   calls: BreakSettings.constructor View.constructor newBreakGame newBreakIntro newBreakMenuWith nish_alloc_struct
   pointer this: size=136 writesThrough=true captured=false
   pointer settings: size=20 writesThrough=true captured=true passedTo=newBreakMenuWith#2
   stackSites=0 stackLocals=0
-  callee +0:18 newBreakIntro -> @newBreakIntro
-  callee +2:17 newBreakMenuWith -> @newBreakMenuWith
-  callee +3:17 newBreakGame -> @newBreakGame
-  callee +15:17 new View -> @View.constructor
-  callee +18:17 new BreakSettings -> @BreakSettings.constructor
+  callee -3:18 newBreakIntro -> @newBreakIntro
+  callee -1:17 newBreakMenuWith -> @newBreakMenuWith
+  callee +1:17 newBreakGame -> @newBreakGame
+  callee +14:17 new View -> @View.constructor
+  callee +17:17 new BreakSettings -> @BreakSettings.constructor
 function keptSettings(d: BreakDirector): BreakSettings -> @keptSettings [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=20
   sharedWrite: +0:3
@@ -2313,10 +2315,16 @@ function toastBreak(d: BreakDirector, text: string): void -> @toastBreak [export
   escaping: text
   pointer d: size=136 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function directorSoundChanged(d: BreakDirector): void -> @directorSoundChanged
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+function sayBreakSound(d: BreakDirector, text: string): void -> @sayBreakSound [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: toastBreak
+  escaping: text
+  pointer d: size=136 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function directorSoundChanged(d: BreakDirector): void -> @directorSoundChanged
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: nish_panic_overflow toastBreak
   pointer d: size=136 writesThrough=true captured=false passedTo=toastBreak#0
   stackSites=0 stackLocals=0
   callee -1:3 toastBreak -> @toastBreak
@@ -2436,16 +2444,16 @@ function stepBreakDirector(d: BreakDirector, input: StepInput): boolean -> @step
   pointer d: size=136 writesThrough=true captured=false passedTo=directorTakeHotkeys#0 directorStepMenu#0 directorBackToMenu#0
   pointer input: size=16 writesThrough=false captured=false passedTo=stepBreakIntro#1 directorStepMenu#1 stepBreakGame#1
   stackSites=0 stackLocals=0
-  callee +4:3 directorTakeHotkeys -> @directorTakeHotkeys
-  local +6:9 resolution: i32 (const)
-  local +7:9 sound: boolean (const)
-  callee +15:13 breakQuitPressed -> @breakQuitPressed
-  local +19:11 answer: i32 (const)
-  callee +19:25 stepBreakIntro -> @stepBreakIntro
-  callee +30:12 directorStepMenu -> @directorStepMenu
-  local +33:9 answer: i32 (const)
-  callee +33:23 stepBreakGame -> @stepBreakGame
-  callee +36:5 directorBackToMenu -> @directorBackToMenu
+  callee +5:3 directorTakeHotkeys -> @directorTakeHotkeys
+  local +7:9 resolution: i32 (const)
+  local +8:9 sound: boolean (const)
+  callee +16:13 breakQuitPressed -> @breakQuitPressed
+  local +20:11 answer: i32 (const)
+  callee +20:25 stepBreakIntro -> @stepBreakIntro
+  callee +31:12 directorStepMenu -> @directorStepMenu
+  local +34:9 answer: i32 (const)
+  callee +34:23 stepBreakGame -> @stepBreakGame
+  callee +37:5 directorBackToMenu -> @directorBackToMenu
 function directorStepDown(lines: i32): i32 -> @directorStepDown
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: lines

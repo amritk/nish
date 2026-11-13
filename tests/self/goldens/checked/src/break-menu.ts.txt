@@ -1853,6 +1853,7 @@ struct BreakMenu (class) size=232 align=8 exported
   field outroTick: i32 index=31 offset=220
   field rngState: i32 index=32 offset=224
   field outroAnswered: boolean index=33 offset=228
+  field terminal: boolean index=34 offset=229
   constructor -> @BreakMenu.constructor
 function fpsChoice(index: i32): i32 -> @fpsChoice [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2050,15 +2051,37 @@ function actOnHowTo(menu: BreakMenu, act: i32): i32 -> @actOnHowTo
 function actOnSettings(menu: BreakMenu, act: i32): i32 -> @actOnSettings
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: cycleSetting leaveSettings wrap
-  pointer menu: size=232 writesThrough=true captured=false passedTo=leaveSettings#0
+  calls: cycleSetting leaveSettings nextRow
+  pointer menu: size=232 writesThrough=true captured=false passedTo=nextRow#0 leaveSettings#0
   stackSites=0 stackLocals=0
-  callee +0:16 wrap -> @wrap
+  callee +0:16 nextRow -> @nextRow
   callee +2:5 cycleSetting -> @cycleSetting
   callee +4:12 leaveSettings -> @leaveSettings
   callee +6:5 cycleSetting -> @cycleSetting
+function rowShown(menu: BreakMenu, row: i32): boolean -> @rowShown
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer menu: size=232 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function nextRow(menu: BreakMenu, by: i32): i32 -> @nextRow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: by
+  calls: rowShown wrap
+  pointer menu: size=232 writesThrough=false captured=false passedTo=rowShown#0
+  stackSites=0 stackLocals=0
+  local +0:7 row: i32 (let)
+  callee +0:18 wrap -> @wrap
+  callee +1:11 rowShown -> @rowShown
+  callee +2:11 wrap -> @wrap
+function rowLine(menu: BreakMenu, row: i32): i32 -> @rowLine
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow rowShown
+  pointer menu: size=232 writesThrough=false captured=false passedTo=rowShown#0
+  stackSites=0 stackLocals=0
+  local +0:7 line: i32 (let)
+  local +1:12 r: i32 (let)
+  callee +2:9 rowShown -> @rowShown
 function leaveSettings(menu: BreakMenu): i32 -> @leaveSettings
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: snapHighlight
   pointer menu: size=232 writesThrough=true captured=false passedTo=snapHighlight#0
@@ -2085,11 +2108,13 @@ function graphicsAt(slot: i32): i32 -> @graphicsAt
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function highlightTarget(menu: BreakMenu): f64 -> @highlightTarget
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer menu: size=232 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: rowLine
+  pointer menu: size=232 writesThrough=false captured=false passedTo=rowLine#0
   stackSites=0 stackLocals=0
+  callee +0:23 rowLine -> @rowLine
 function slideHighlight(menu: BreakMenu): void -> @slideHighlight
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: highlightTarget llvm.fabs.f64
   pointer menu: size=232 writesThrough=true captured=false passedTo=highlightTarget#0
@@ -2098,7 +2123,7 @@ function slideHighlight(menu: BreakMenu): void -> @slideHighlight
   callee -2:23 highlightTarget -> @highlightTarget
   local -1:9 next: f64 (const)
 function snapHighlight(menu: BreakMenu): void -> @snapHighlight
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: highlightTarget
   pointer menu: size=232 writesThrough=true captured=false passedTo=highlightTarget#0
@@ -2415,8 +2440,8 @@ function drawSettings(menu: BreakMenu, view: View, alpha: f64, time: f64): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drawPanel
   escaping: alpha time
-  calls: drawBar drawPanel drawText drawTextCentred drawTextShadow hue lerp lineScale rowHint rowName rowValue
-  pointer menu: size=232 writesThrough=false captured=false
+  calls: drawBar drawPanel drawText drawTextCentred drawTextShadow hue lerp lineScale nish_panic_overflow rowHint rowName rowShown rowValue
+  pointer menu: size=232 writesThrough=false captured=false passedTo=rowShown#0
   pointer view: size=64 writesThrough=false captured=false passedTo=drawPanel#0 lineScale#0 drawTextCentred#0 drawTextCentred#0 drawBar#0 drawTextShadow#0 drawText#0 drawTextCentred#0 drawText#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   callee +0:3 drawPanel -> @drawPanel
@@ -2430,18 +2455,20 @@ function drawSettings(menu: BreakMenu, view: View, alpha: f64, time: f64): void 
   callee +8:23 hue -> @hue
   callee +9:3 drawBar -> @drawBar
   callee +9:17 lerp -> @lerp
-  local +10:12 r: i32 (let)
-  local +11:11 y: f64 (const)
-  local +12:11 on: boolean (const)
-  callee +13:5 drawTextShadow -> @drawTextShadow
-  callee +13:42 rowName -> @rowName
-  local +15:13 arrows: i32 (const)
-  callee +16:7 drawText -> @drawText
-  callee +17:7 drawTextCentred -> @drawTextCentred
-  callee +17:46 rowValue -> @rowValue
-  callee +18:7 drawText -> @drawText
-  callee +21:3 drawTextCentred -> @drawTextCentred
-  callee +21:54 rowHint -> @rowHint
+  local +10:7 line: i32 (let)
+  local +11:12 r: i32 (let)
+  callee +12:10 rowShown -> @rowShown
+  local +15:11 y: f64 (const)
+  local +17:11 on: boolean (const)
+  callee +18:5 drawTextShadow -> @drawTextShadow
+  callee +18:42 rowName -> @rowName
+  local +20:13 arrows: i32 (const)
+  callee +21:7 drawText -> @drawText
+  callee +22:7 drawTextCentred -> @drawTextCentred
+  callee +22:46 rowValue -> @rowValue
+  callee +23:7 drawText -> @drawText
+  callee +26:3 drawTextCentred -> @drawTextCentred
+  callee +26:54 rowHint -> @rowHint
 function rowName(r: i32): string -> @rowName
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

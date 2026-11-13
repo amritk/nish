@@ -414,7 +414,7 @@ export class BreakMenu {
   selected: i32
   /** The level Play and Start level begin at, 1 to 6. */
   level: i32
-  /** The Settings row selected, 0 to 6. */
+  /** The Settings row selected, `ROW_FPS` to `ROW_BACK`. */
   row: i32
   /** The frame rate and graphics when Settings opened, to tell whether leaving needs `MENU_APPLY`. */
   entryFps: i32
@@ -425,6 +425,11 @@ export class BreakMenu {
   rngState: i32
   /** Whether the outro has answered the level, so later steps do not answer it again. */
   outroAnswered: boolean
+  /**
+   * Whether the host opens a terminal, which the frame rate and graphics rows
+   * are settings of; without one Settings leaves them out. True until a host says otherwise.
+   */
+  terminal: boolean
 
   /** A menu on the title screen; `newBreakMenu` is the way to make one. */
   constructor(level: i32, seed: i32, settings: BreakSettings) {
@@ -440,6 +445,7 @@ export class BreakMenu {
     this.entryGraphics = settings.graphics
     this.outroTick = 0
     this.outroAnswered = false
+    this.terminal = true
     const bricks: i32 = logoBrickCount()
     this.homeXs = new Array<f64>(bricks)
     this.homeXs.fill(0.0)
@@ -685,7 +691,7 @@ const pickTitle = (menu: BreakMenu): i32 => {
     menu.screen = SCREEN_HOWTO
   } else if (menu.selected === ITEM_SETTINGS) {
     menu.screen = SCREEN_SETTINGS
-    menu.row = ROW_FPS
+    menu.row = menu.terminal ? ROW_FPS : ROW_RESOLUTION
     menu.entryFps = menu.settings.fps
     menu.entryGraphics = menu.settings.graphics
     snapHighlight(menu)
@@ -712,7 +718,7 @@ const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
     return MENU_QUIT
   }
   if (act === ACT_UP || act === ACT_DOWN) {
-    menu.row = wrap(menu.row, act === ACT_UP ? -1 : 1, ROW_COUNT)
+    menu.row = nextRow(menu, act === ACT_UP ? -1 : 1)
   } else if (act === ACT_LEFT || act === ACT_RIGHT) {
     cycleSetting(menu.settings, menu.row, act === ACT_LEFT ? -1 : 1)
   } else if (act === ACT_BACK || (act === ACT_PICK && menu.row === ROW_BACK)) {
@@ -721,6 +727,30 @@ const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
     cycleSetting(menu.settings, menu.row, 1)
   }
   return MENU_STAY
+}
+
+/** Whether Settings shows `row`: the frame rate and graphics only when the host opens a terminal. */
+const rowShown = (menu: BreakMenu, row: i32): boolean =>
+  menu.terminal || (row !== ROW_FPS && row !== ROW_GRAPHICS)
+
+/** The next row Settings shows from the selected one, a step of `by` (1 or -1) at a time, wrapping. */
+const nextRow = (menu: BreakMenu, by: i32): i32 => {
+  let row: i32 = wrap(menu.row, by, ROW_COUNT)
+  while (!rowShown(menu, row)) {
+    row = wrap(row, by, ROW_COUNT)
+  }
+  return row
+}
+
+/** How many shown rows are above `row`: its line on the Settings screen. */
+const rowLine = (menu: BreakMenu, row: i32): i32 => {
+  let line: i32 = 0
+  for (let r: i32 = 0; r < row; r++) {
+    if (rowShown(menu, r)) {
+      line++
+    }
+  }
+  return line
 }
 
 /** Back to the title, answering `MENU_APPLY` when the frame rate or graphics changed while Settings was open. */
@@ -764,7 +794,7 @@ const graphicsAt = (slot: i32): i32 => (slot <= 0 || slot > 4 ? -1 : 4 - slot)
 /** The world y the highlight bar belongs at for the screen's selection. */
 const highlightTarget = (menu: BreakMenu): f64 =>
   menu.screen === SCREEN_SETTINGS
-    ? ROW_TOP + toF64(menu.row) * ROW_GAP
+    ? ROW_TOP + toF64(rowLine(menu, menu.row)) * ROW_GAP
     : ITEM_TOP + toF64(menu.selected) * ITEM_GAP
 
 /** Move the highlight part of the way to its target, so it slides and settles. */
@@ -1200,8 +1230,13 @@ const drawSettings = (menu: BreakMenu, view: View, alpha: f64, time: f64): void 
   }
   const accent: i32 = hue(time / 400.0)
   drawBar(view, lerp(menu.prevHighlightY, menu.highlightY, alpha), 240.0, accent, 1.0)
+  let line: i32 = 0
   for (let r: i32 = 0; r < ROW_COUNT; r++) {
-    const y: f64 = ROW_TOP + toF64(r) * ROW_GAP
+    if (!rowShown(menu, r)) {
+      continue
+    }
+    const y: f64 = ROW_TOP + toF64(line) * ROW_GAP
+    line++
     const on: boolean = r === menu.row
     drawTextShadow(view, 48.0, y, scale, rowName(r), on ? WHITE : TEXT, SHADOW)
     if (r !== ROW_BACK) {

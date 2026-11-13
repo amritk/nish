@@ -39,6 +39,7 @@ import {
   breakTerminalOpened,
   drawBreakDirector,
   keptSettings,
+  sayBreakSound,
   sizeBreakFramebuffer,
   stepBreakDirector,
   toastBreak,
@@ -73,7 +74,8 @@ class WallRun {
     this.director = new BreakDirector(
       seed,
       loadBreakSettings(settingsPath),
-      helpText(new Style(true, true), "")
+      helpText(new Style(true, true), ""),
+      true
     )
     this.step = new StepInput(new KeyState())
     this.sound = new BreakSound()
@@ -89,18 +91,24 @@ const wallGetenv = (name: string): string => {
 }
 
 /**
- * Sound has just been turned on or off: on, find a player and play the
- * hello, or say there is none. Answers the toast.
+ * Sound has just been turned on `turnedOn` times, and perhaps off after:
+ * find a player and play the hello for each time on, then say how sound
+ * ends up, or that there is no player. Answers the toast.
  */
-const wallSoundToast = (run: WallRun): string => {
+const wallSoundToast = (run: WallRun, turnedOn: i32): string => {
+  let found: boolean = true
+  for (let i: i32 = 0; i < turnedOn && found; i++) {
+    found = prepareSound(run.sound, monotonicNanos())
+    if (found) {
+      playSound(run.sound, SOUND_HELLO, monotonicNanos())
+    }
+  }
   if (!run.director.settings.sound) {
     return "sound off"
   }
-  if (!prepareSound(run.sound, monotonicNanos())) {
-    return "sound: no player found (afplay, pw-play, paplay, aplay or ffplay)"
-  }
-  playSound(run.sound, SOUND_HELLO, monotonicNanos())
-  return `sound on, through ${soundPlayer(run.sound)}`
+  return found
+    ? `sound on, through ${soundPlayer(run.sound)}`
+    : "sound: no player found (afplay, pw-play, paplay, aplay or ffplay)"
 }
 
 /**
@@ -115,9 +123,9 @@ const wallUpdate = (run: WallRun, input: TermInput): boolean => {
   run.step.keys = input.keys
   const going: boolean = stepBreakDirector(d, run.step)
   if (d.soundChanged) {
-    const said: string = wallSoundToast(run)
+    const said: string = wallSoundToast(run, d.soundTurnedOn)
     if (d.soundToastWanted) {
-      toastBreak(d, said)
+      sayBreakSound(d, said)
     }
   }
   if (d.saveWanted) {
@@ -223,7 +231,7 @@ export const playBreak = (): i32 => {
   const d: BreakDirector = run.director
   if (wallGetenv("NISH_BREAK_SOUND") === "1") {
     d.settings.sound = true
-    toastBreak(d, wallSoundToast(run))
+    toastBreak(d, wallSoundToast(run, 1))
   }
   d.reopen = true
   let code: i32 = 0

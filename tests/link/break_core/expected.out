@@ -14,4 +14,71 @@ level: scene 1, 480x270, hash 713440167
 paddle left: scene 1, 480x270, hash 2653233388
 PASS  holding left changes the frame
 PASS  still playing
-break_core: 11 passed, 0 failed, 0 skipped
+PASS  F3 steps on
+PASS  F3 turns the stats on
+PASS  F3 says so
+PASS  a hotkey's toast has stepped once
+PASS  F3 asks for the settings kept
+PASS  the hotkey is taken out of the events
+PASS  the next step asks for nothing kept
+PASS  and the toast steps on
+PASS  F4 stops the step to reopen
+PASS  F4 asks for a reopening
+PASS  F4 steps the frame rate
+PASS  F4 asks for the settings kept
+PASS  F5 steps the resolution
+PASS  F5 starts auto resolution from the top
+PASS  F5 says the lines
+PASS  F6 steps the graphics to kitty
+PASS  F6 records the graphics announced
+PASS  F6 says when it applies
+PASS  F7 turns smoothing off
+PASS  F7 says so
+PASS  F8 steps the effects
+PASS  F9 turns sound on
+PASS  F9 says sound changed
+PASS  F9 turned sound on once
+PASS  F9's sound is the one kept
+PASS  the sound toast is the host's to say
+PASS  the host's words replace the toast's
+PASS  and leave how long it has
+PASS  the change is said once
+PASS  F9 twice in a step: off then on
+PASS  turned on once in the step
+PASS  F9 three times: off, on, off
+PASS  turned on once of three
+PASS  four presses from off turn it on twice
+PASS  a later toast in the step takes the sound toast's place
+PASS  and is the one shown
+PASS  still in the intro
+PASS  an override plays
+PASS  but the sound kept is the loaded one
+PASS  the rest is kept as it is
+PASS  F9 turns the override off
+PASS  which is kept
+PASS  F9 on again is the player's choice, kept
+PASS  a slow frame alone changes nothing
+PASS  nor a second later
+PASS  1.5 s slow steps down a choice
+PASS  it waits 2 s before looking again
+PASS  60 fps starts the wait again
+PASS  then it steps on down
+PASS  a slow link is not the frames' fault
+PASS  a chosen resolution is left alone
+PASS  a small room keeps going
+PASS  and holds the intro
+PASS  q quits it
+PASS  a room big enough again goes on
+PASS  F4 keeps the step going
+PASS  F4 asks for no reopening
+PASS  F4 asks for nothing kept
+PASS  F6 keeps the step going
+PASS  the frame rate is as it was
+PASS  the graphics are as they were
+PASS  no toast
+PASS  to the menu
+PASS  the menu knows there is no terminal
+PASS  Settings goes round every row but the frame rate and graphics
+PASS  Enter on the first row shown cycles the resolution
+PASS  and leaves the frame rate
+break_core: 78 passed, 0 failed, 0 skipped

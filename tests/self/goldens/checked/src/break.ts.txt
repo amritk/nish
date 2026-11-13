@@ -3262,6 +3262,7 @@ import breakGraphicsToast from "./break-director" -> function @breakGraphicsToas
 import breakTerminalOpened from "./break-director" -> function @breakTerminalOpened
 import drawBreakDirector from "./break-director" -> function @drawBreakDirector
 import keptSettings from "./break-director" -> function @keptSettings
+import sayBreakSound from "./break-director" -> function @sayBreakSound
 import sizeBreakFramebuffer from "./break-director" -> function @sizeBreakFramebuffer
 import stepBreakDirector from "./break-director" -> function @stepBreakDirector
 import toastBreak from "./break-director" -> function @toastBreak
@@ -3299,28 +3300,30 @@ function WallRun.constructor(this: WallRun, seed: i64, settingsPath: string): vo
   callee +2:7 loadBreakSettings -> @loadBreakSettings
   callee +3:7 helpText -> @helpText
   callee +3:16 new Style -> @Style.constructor
-  callee +5:17 new StepInput -> @StepInput.constructor
-  callee +5:31 new KeyState -> @nish.KeyState.constructor
-  callee +6:18 new BreakSound -> @BreakSound.constructor
+  callee +6:17 new StepInput -> @StepInput.constructor
+  callee +6:31 new KeyState -> @nish.KeyState.constructor
+  callee +7:18 new BreakSound -> @BreakSound.constructor
 function wallGetenv(name: string): string -> @wallGetenv
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv
   stackSites=0 stackLocals=0
   local +0:9 v: string | null (const)
-function wallSoundToast(run: WallRun): string -> @wallSoundToast
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function wallSoundToast(run: WallRun, turnedOn: i32): string -> @wallSoundToast
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via prepareSound
   calls: nish_monotonic_nanos nish_str_concat playSound prepareSound soundPlayer
   pointer run: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:8 prepareSound -> @prepareSound
-  callee +3:3 playSound -> @playSound
-  callee +4:31 soundPlayer -> @soundPlayer
+  local +0:7 found: boolean (let)
+  local +1:12 i: i32 (let)
+  callee +2:13 prepareSound -> @prepareSound
+  callee +4:7 playSound -> @playSound
+  callee +11:28 soundPlayer -> @soundPlayer
 function wallUpdate(run: WallRun, input: TermInput): boolean -> @wallUpdate$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish_monotonic_nanos playSound saveBreakSettings stepBreakDirector toastBreak wallSoundToast
+  calls: nish_monotonic_nanos playSound saveBreakSettings sayBreakSound stepBreakDirector wallSoundToast
   pointer run: size=40 writesThrough=false captured=false passedTo=wallSoundToast#0
   pointer input: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -3329,7 +3332,7 @@ function wallUpdate(run: WallRun, input: TermInput): boolean -> @wallUpdate$
   callee +2:26 stepBreakDirector -> @stepBreakDirector
   local +4:11 said: string (const)
   callee +4:26 wallSoundToast -> @wallSoundToast
-  callee +6:7 toastBreak -> @toastBreak
+  callee +6:7 sayBreakSound -> @sayBreakSound
   callee +10:5 saveBreakSettings -> @saveBreakSettings
   local +13:11 now: i64 (const)
   local +14:16 id: i32 (const)
