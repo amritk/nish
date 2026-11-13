@@ -829,12 +829,29 @@ const RUNTIME_SQLITE_TEXT_BUDGET = 2048
  * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
  * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
  * connection built. Each connection is built on the first accept into its slot,
- * 3,976 bytes on the same defaults. Built eagerly, as every slot was before, a
+ * 752 bytes on the same defaults (2026-11-13). Built eagerly, as every slot was before, a
  * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
  * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
  * next 256-byte boundary above the measurement, as every ceiling here was set.
  */
 export const HTTP1_SERVER_START_BYTES = 16896
+
+/**
+ * Ceiling on what one idle keep-alive `Http1Server` connection holds in the arena on
+ * the default `Http1Config` -- not a `.text` budget: `tests/run.js` links
+ * `tests/link/net_http1_server/startup.ts`, which builds a connection as the server
+ * builds a slot's, on its outputs and shared `Date`, serves it four GETs, parks it
+ * and prints the bytes, after a first connection has served the same so that what
+ * the pool keeps for every connection is not counted.
+ *
+ * Measured **2,232 bytes** on 2026-11-13 with clang 18 on linux-x64, against 3,384
+ * on the base before the idle trims: a built connection no longer allocates a
+ * `Date` it drops or spans and fields it replaces on the first request, and the
+ * head it keeps to write again is sized to that head, not `H1_HEAD_KEEP`'s 1 KB.
+ * The budget is the next 256-byte boundary above the measurement,
+ * as every ceiling here was set.
+ */
+export const HTTP1_SERVER_IDLE_BYTES = 2304
 
 /**
  * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena
