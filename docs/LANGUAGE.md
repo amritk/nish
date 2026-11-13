@@ -13757,6 +13757,25 @@ without one grants the capability whole, as before:
   `process.spawn=<program>` grant allows, null when none is named:
   `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
   The four-operand call in "The sandbox" below predates it.
+- `process.spawn=exec:<program>` grants the program as `process.spawn=<program>`
+  does, and lets it start others: under `--sandbox` a granted program is held
+  to its own start (no program it starts may exec again), and an `exec:` one
+  is not, so its subtree may run anything the allowlist's EXECUTE reaches, its
+  loaders included. The prefix is read before the program is resolved:
+  `process.spawn=exec:` with no program is NL3046
+  (`caps_dep_manifest_spawn_exec_refused`); the literal check treats
+  `exec:<program>` as `<program>` (`caps_dep_arg_spawn_exec_too_narrow`,
+  `caps_dep_spawn_exec_granted`); a program granted both ways is `exec:`; and
+  the lockfile records the prefix, so adding it is NL2593
+  (`caps_dep_lock_spawn_exec_widened`). The program is
+  listed with three leading slashes, the same file to the kernel. For
+  `tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`, on an
+  x86_64 glibc machine (illustrative: the paths, the loader and the length
+  are the machine's; `tests/run.js` pins only the `///` entry for `env`):
+
+  ```llvm
+  @.sandbox.exec = private unnamed_addr constant [78 x i8] c"///usr/bin/env\00/usr/bin/true\00//usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"
+  ```
 
 ##### The capability lockfile
 

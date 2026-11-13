@@ -120,7 +120,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
 
       # The same two installs release.yml's `binaries` job makes, so that a
       # difference is the release's and not this workflow's.
@@ -170,6 +170,7 @@ jobs:
       - name: Fetch the seed (the release before)
         env:
           GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           ASSET: ${{ matrix.target.asset }}
           PREVIOUS: ${{ needs.latest.outputs.previous }}
         run: |
@@ -229,9 +230,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Node 22, not the 26 the rest of CI runs: the chain installs each old
+      # tag's own lockfile, and npm 11 refuses the ones whose platform
+      # packages are optional dependencies without a version
+      # ("Missing: @amritk/nish-x86_64-linux@ from lock file"). Every install
+      # is `npm ci --ignore-scripts` of a tagged lockfile, so the older npm
+      # reads nothing the tag did not already pin.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.23.4
 
       - name: Install LLVM 18 + lld
         uses: ./.github/actions/apt-install
@@ -252,6 +259,7 @@ jobs:
         env:
           TAG: ${{ needs.latest.outputs.tag }}
         run: |
+          set -o pipefail
           bash scripts/ddc-chain.sh --work "$RUNNER_TEMP/ddc" --to "$TAG" | tee "$RUNNER_TEMP/chain.txt"
           echo "nish=$(tail -n 1 "$RUNNER_TEMP/chain.txt")" >> "$GITHUB_OUTPUT"
 

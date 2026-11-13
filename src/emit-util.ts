@@ -13,26 +13,14 @@
 
 import { bufferSignature, isNetWrittenLetter } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
-import {
-  FLAG_OPTIONAL,
-  N_BINARY,
-  N_CALL,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_PAREN,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
 import { Local } from "./symbols"
 import { T_STRING, TypeTable } from "./types"
 
 /** Through `(e)`, which is transparent to every rule here. */
 export const unwrapParens = (expr: Node): Node => {
   let inner = expr
-  while (inner.kind === N_PAREN) {
+  while (inner.kind === NodeKind.Paren) {
     inner = inner.children[0]
   }
   return inner
@@ -47,7 +35,7 @@ export const unwrapParens = (expr: Node): Node => {
  */
 export const coalescesMaybe = (program: CheckedProgram, table: TypeTable, coalesce: Node): boolean => {
   const left = unwrapParens(coalesce.children[0])
-  const local: Local | null = left.kind === N_IDENT ? program.nodeLocals[left.id] : null
+  const local: Local | null = left.kind === NodeKind.Ident ? program.nodeLocals[left.id] : null
   return table.isMaybe(local !== null ? local.type : program.nodeTypes[left.id])
 }
 
@@ -60,7 +48,7 @@ export const coalescesMaybe = (program: CheckedProgram, table: TypeTable, coales
  */
 export const isOptionalChain = (expr: Node): boolean => {
   let node = expr
-  while (node.kind === N_MEMBER || node.kind === N_CALL || node.kind === N_INDEX) {
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
     if ((node.flags & FLAG_OPTIONAL) !== 0) {
       return true
     }
@@ -76,7 +64,7 @@ export const isOptionalChain = (expr: Node): boolean => {
  * `""`, so the two readings cannot be confused.
  */
 export const dottedName = (expr: Node): string => {
-  if (expr.kind !== N_MEMBER || expr.children[0].kind !== N_IDENT) {
+  if (expr.kind !== NodeKind.Member || expr.children[0].kind !== NodeKind.Ident) {
     return ""
   }
   return `${expr.children[0].text}.${expr.text}`
@@ -109,9 +97,9 @@ export const intrinsicType = (program: CheckedProgram, expr: Node): i32 => {
  */
 export const rangedStoreOf = (program: CheckedProgram, table: TypeTable, node: Node): i32 => {
   const writesBack =
-    node.kind === N_UNARY
+    node.kind === NodeKind.Unary
       ? node.text === "++" || node.text === "--"
-      : node.kind === N_BINARY && node.text !== "=" && isAssignmentOperator(node.text)
+      : node.kind === NodeKind.Binary && node.text !== "=" && isAssignmentOperator(node.text)
   if (!writesBack) {
     return -1
   }
@@ -136,12 +124,12 @@ export const isAssignmentTarget = (parent: Node | null, node: Node): boolean => 
   if (parent === null) {
     return false
   }
-  return parent.kind === N_BINARY && parent.children[0] === node && isAssignmentOperator(parent.text)
+  return parent.kind === NodeKind.Binary && parent.children[0] === node && isAssignmentOperator(parent.text)
 }
 
 /** The receiver of `recv.m(...)`, or `null` when `call` is not a method call. */
 export const methodReceiver = (call: Node): Node | null => {
-  if (call.kind !== N_CALL || call.children[0].kind !== N_MEMBER) {
+  if (call.kind !== NodeKind.Call || call.children[0].kind !== NodeKind.Member) {
     return null
   }
   return call.children[0].children[0]
@@ -188,11 +176,11 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * every call and most answers are "".
  */
 export const builtinArgumentLetters = (program: CheckedProgram, call: Node): string => {
-  if (call.kind !== N_CALL) {
+  if (call.kind !== NodeKind.Call) {
     return ""
   }
   const callee = call.children[0]
-  if (callee.kind === N_IDENT) {
+  if (callee.kind === NodeKind.Ident) {
     if (program.nodeCallees[call.id] !== null) {
       return ""
     }
@@ -239,7 +227,11 @@ export const builtinNameOf = (program: CheckedProgram, call: Node): string => {
  * `xs[i]` does.
  */
 export const isUncheckedAccess = (program: CheckedProgram, call: Node): boolean => {
-  if (call.kind !== N_CALL || call.children[0].kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
+  if (
+    call.kind !== NodeKind.Call ||
+    call.children[0].kind !== NodeKind.Ident ||
+    program.nodeCallees[call.id] !== null
+  ) {
     return false
   }
   const name = builtinNameOf(program, call)
@@ -252,8 +244,8 @@ export const isUncheckedAccess = (program: CheckedProgram, call: Node): boolean 
  * imported under another name, so the text is the whole test.
  */
 export const isArenaCall = (program: CheckedProgram, call: Node): boolean =>
-  call.kind === N_CALL &&
-  call.children[0].kind === N_IDENT &&
+  call.kind === NodeKind.Call &&
+  call.children[0].kind === NodeKind.Ident &&
   call.children[0].text === "arena" &&
   program.nodeCallees[call.id] === null
 
@@ -303,7 +295,7 @@ export const isStringMethodCall = (program: CheckedProgram, call: Node): boolean
  * `String.fromCharCode(c)` or `String.fromBytes(bytes, start, end)`.
  */
 export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean => {
-  if (call.kind !== N_CALL) {
+  if (call.kind !== NodeKind.Call) {
     return false
   }
   const callee = call.children[0]
@@ -321,20 +313,20 @@ export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean 
 }
 
 /**
- * A `N_TEMPLATE` with at least one hole. A template with none is a plain
+ * A `NodeKind.Template` with at least one hole. A template with none is a plain
  * string literal — stage0's `src/` parses `` `abc` `` as a
  * `NoSubstitutionTemplateLiteral`, which is not a `TemplateExpression` and so
  * is neither an allocation site nor a concatenation, and this is the test that
  * keeps the two trees answering the same way.
  */
 export const isTemplateExpression = (node: Node): boolean =>
-  node.kind === N_TEMPLATE && node.children.length > 1
+  node.kind === NodeKind.Template && node.children.length > 1
 
 /** Head, holes and middles/tail in order, with the empty text parts dropped. */
 export const templateParts = (node: Node): Node[] => {
   const parts: Node[] = []
   for (const child of node.children) {
-    if (child.kind === N_TEMPLATE_TEXT) {
+    if (child.kind === NodeKind.TemplateText) {
       if (child.text.length > 0) {
         parts.push(child)
       }
@@ -353,7 +345,7 @@ export const templateParts = (node: Node): Node[] => {
 export const unwrapStringPassthrough = (program: CheckedProgram, expr: Node): Node => {
   let inner = expr
   for (;;) {
-    if (inner.kind === N_PAREN) {
+    if (inner.kind === NodeKind.Paren) {
       inner = inner.children[0]
       continue
     }
@@ -361,7 +353,7 @@ export const unwrapStringPassthrough = (program: CheckedProgram, expr: Node): No
       const parts = templateParts(inner)
       if (
         parts.length === 1 &&
-        parts[0].kind !== N_TEMPLATE_TEXT &&
+        parts[0].kind !== NodeKind.TemplateText &&
         program.nodeTypes[parts[0].id] === T_STRING
       ) {
         inner = parts[0]

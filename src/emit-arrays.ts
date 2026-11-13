@@ -49,22 +49,7 @@ import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BINDING_PATTERN,
-  N_CALL,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_THIS,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
 import {
   ConstInfo,
@@ -279,7 +264,7 @@ const NO_PATH = (): ArrayPath => new ArrayPath(null, "", -1)
  */
 const pathOf = (emitter: Emitter, expr: Node): ArrayPath => {
   const inner = unwrapParens(expr)
-  if (inner.kind === N_IDENT || inner.kind === N_THIS) {
+  if (inner.kind === NodeKind.Ident || inner.kind === NodeKind.This) {
     const local = emitter.program.nodeLocals[inner.id]
     if (local === null || (local.storage !== STORAGE_PARAM && local.mutable)) {
       return NO_PATH()
@@ -288,7 +273,7 @@ const pathOf = (emitter: Emitter, expr: Node): ArrayPath => {
     // needs.
     return new ArrayPath(local, "", local.type)
   }
-  if (inner.kind !== N_MEMBER) {
+  if (inner.kind !== NodeKind.Member) {
     return NO_PATH()
   }
   const below = pathOf(emitter, inner.children[0])
@@ -355,7 +340,7 @@ const emitArrayBase = (emitter: Emitter, expr: Node): ArrayBase => {
  */
 const inlineField = (emitter: Emitter, expr: Node): FieldInfo | null => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_MEMBER) {
+  if (e.kind !== NodeKind.Member) {
     return null
   }
   // Read the table rather than `typeOf`: `process.argv` is a member whose
@@ -493,17 +478,17 @@ export const emitInlineArrayAssignment = (emitter: Emitter, expr: Node, field: F
   const rhs = unwrapParens(expr.children[1])
   const values: string[] = []
   let source = ""
-  if (rhs.kind === N_ARRAY) {
+  if (rhs.kind === NodeKind.Array) {
     for (const element of rhs.children) {
       values.push(emitter.emitExpression(element))
     }
-  } else if (rhs.kind !== N_NEW) {
+  } else if (rhs.kind !== NodeKind.New) {
     source = emitter.emitExpression(rhs)
   }
   const header = inlineHeaderPointer(emitter, info, receiver, field)
   const data = n > 0 ? inlineDataPointer(emitter, info, receiver, field) : ""
   const ty = slotType(emitter, elem)
-  if (rhs.kind === N_ARRAY) {
+  if (rhs.kind === NodeKind.Array) {
     if (n > 0) {
       const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`)
       let i = 0
@@ -515,7 +500,7 @@ export const emitInlineArrayAssignment = (emitter: Emitter, expr: Node, field: F
     }
   } else if (n > 0) {
     const a = emitter.opts.optimizeAttributes ? "align 8 " : ""
-    if (rhs.kind === N_NEW) {
+    if (rhs.kind === NodeKind.New) {
       emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
       emitter.fn.emit(
         `call void @${MEMSET}(i8* ${a}${data}, i8 0, i64 ${n * size}, i1 false)${elementAccess(emitter)}`
@@ -592,7 +577,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
   const rhs = unwrapParens(expr.children[1])
   let len = ""
   let data = ""
-  if (rhs.kind === N_ARRAY) {
+  if (rhs.kind === NodeKind.Array) {
     const values: string[] = []
     for (const element of rhs.children) {
       values.push(emitter.emitExpression(element))
@@ -609,7 +594,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
         i = i + 1
       }
     }
-  } else if (rhs.kind === N_NEW) {
+  } else if (rhs.kind === NodeKind.New) {
     len = emitNewArrayLength(emitter, rhs.children[2].children[0], size)
     const bytes = size === 1 ? len : emitter.fn.emitValue(`mul i64 ${len}, ${size}`)
     data = emitData(emitter, rhs, elem, -1, bytes)
@@ -698,7 +683,7 @@ const callMayResize = (emitter: Emitter, node: Node): boolean => {
   }
   // A `new` holds its class's constructor, and a class with none stores
   // constants only; `new Array` holds nothing.
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     const callee = emitter.program.nodeCallees[node.id]
     if (callee !== null) {
       const facts = emitter.facts.get(callee.name)
@@ -735,26 +720,26 @@ const callMayResize = (emitter: Emitter, node: Node): boolean => {
  */
 const storedFields = (emitter: Emitter, node: Node, names: string[], records: i32[]): boolean => {
   let opaque = false
-  if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
+    if (target.kind === NodeKind.Member && names.indexOf(target.text) < 0) {
       names.push(target.text)
     }
-    if (target.kind === N_INDEX) {
+    if (target.kind === NodeKind.Index) {
       // A record rewritten in place, every field of it unnamed (#180).
       const stored = recordStoreType(emitter.program, emitter.table, target)
       if (stored !== NO_RECORD && records.indexOf(stored) < 0) {
         records.push(stored)
       }
     }
-  } else if (node.kind === N_UNARY) {
+  } else if (node.kind === NodeKind.Unary) {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
+    if (target.kind === NodeKind.Member && names.indexOf(target.text) < 0) {
       names.push(target.text)
     }
-  } else if (node.kind === N_NEW) {
+  } else if (node.kind === NodeKind.New) {
     opaque = true // the constructor stores fields, and not only its own
-  } else if (node.kind === N_CALL) {
+  } else if (node.kind === NodeKind.Call) {
     const callee = emitter.program.nodeCallees[node.id]
     if (callee !== null) {
       const facts = emitter.facts.get(callee.name)
@@ -778,11 +763,11 @@ const storedFields = (emitter: Emitter, node: Node, names: string[], records: i3
  * the declaration: #1326 lifted an `a[0]` above the `awaitAll` that binds `a`.
  */
 const localsDeclaredIn = (emitter: Emitter, node: Node, out: Local[]): void => {
-  const local: Local | null = node.kind === N_VAR_DECL ? emitter.program.nodeLocals[node.id] : null
+  const local: Local | null = node.kind === NodeKind.VarDecl ? emitter.program.nodeLocals[node.id] : null
   if (local !== null) {
     out.push(local)
   }
-  if (node.kind === N_BINDING_PATTERN) {
+  if (node.kind === NodeKind.BindingPattern) {
     for (const name of node.children) {
       const bound = emitter.program.nodeLocals[name.id]
       if (bound !== null) {
@@ -822,7 +807,7 @@ const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean,
  * is the whole test: a local `store` closure has none.
  */
 const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
-  if (call.kind !== N_CALL || call.children[1].children.length < 2) {
+  if (call.kind !== NodeKind.Call || call.children[1].children.length < 2) {
     return false
   }
   const name = emitter.program.nodeBuiltins[call.id]
@@ -841,10 +826,10 @@ const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
 const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
   // WP29: an arrow argument's body is a function of its own, whose parameters
   // do not exist in this one, so nothing it reads can be hoisted here.
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_INDEX) {
+  if (node.kind === NodeKind.Index) {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
@@ -858,7 +843,7 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     // with no `data`, and the load took that empty value as its pointer.
     const args = node.children[1].children
     noteArrayUse(emitter, args[args.length - 2], true, true, out)
-  } else if (node.kind === N_MEMBER && node.text === "length") {
+  } else if (node.kind === NodeKind.Member && node.text === "length") {
     noteArrayUse(emitter, node.children[0], true, false, out)
   }
   for (const child of node.children) {
@@ -877,7 +862,7 @@ const pathHoldsRecord = (emitter: Emitter, expr: Node, records: i32[]): boolean 
     return false
   }
   let link = unwrapParens(expr)
-  while (link.kind === N_MEMBER) {
+  while (link.kind === NodeKind.Member) {
     const holder = pathOf(emitter, link.children[0]).type
     for (const stored of records) {
       if (recordReaches(stored, holder)) {
@@ -892,7 +877,7 @@ const pathHoldsRecord = (emitter: Emitter, expr: Node, records: i32[]): boolean 
 /** Whether any link of a path names a field the loop stores to. */
 const pathIsShadowed = (expr: Node, names: string[]): boolean => {
   let link = unwrapParens(expr)
-  while (link.kind === N_MEMBER) {
+  while (link.kind === NodeKind.Member) {
     if (names.indexOf(link.text) >= 0) {
       return true
     }
@@ -1079,7 +1064,7 @@ export const emitIndex = (emitter: Emitter, expr: Node): string => {
   const literal = unwrapParens(expr)
   // Fold the widening of a constant index. The `i32` truncation is the one the
   // checker already allows for; an i64 or unsigned literal is exact as written.
-  if (literal.kind === N_NUMBER && !isFloat(type)) {
+  if (literal.kind === NodeKind.Number && !isFloat(type)) {
     const value = parseIntegerLiteral(literal.text)
     return type === T_I32 ? `${toI32(value)}` : `${value}`
   }
@@ -1167,7 +1152,7 @@ const emitHeader = (emitter: Emitter, n: string, site: Node): string => {
  */
 export const literalLength = (expr: Node): i32 => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_NUMBER) {
+  if (e.kind !== NodeKind.Number) {
     return -1
   }
   const n: f64 = numericLiteralValue(e.text)
@@ -1251,7 +1236,7 @@ export const newArrayLengthChecked = (
   table: TypeTable
 ): boolean => {
   const literal = unwrapParens(length)
-  if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
+  if (literal.kind === NodeKind.Number && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
     return false
   }
   if (table.isRanged(type)) {
@@ -1867,7 +1852,7 @@ export const emitOffset = (emitter: Emitter, expr: Node): string => {
 
 /** `expr` is an integer literal, which `emitIndex` folds to its value. */
 const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
-  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
+  unwrapParens(expr).kind === NodeKind.Number && !isFloat(emitter.typeOf(expr))
 
 /**
  * JavaScript's relative index, which `fill` takes for each end: a negative

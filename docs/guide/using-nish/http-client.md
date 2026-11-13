@@ -216,6 +216,7 @@ TypeScript uses `fetchSync`.
 | `crossOriginRedirects` | false | Whether a hop may go to another origin |
 | `useEnvProxy` | true | Whether the proxy variables are read |
 | `rootsPemPath` | null | A PEM file of the roots an https server must chain to, in place of the system's |
+| `distrustSpkiSha256` | null | Keys no certificate of an https server's chain may hold, each the SHA-256 of a subjectPublicKeyInfo |
 | `outbound` | null | The [outbound policy](#fetching-a-url-someone-else-chose) for URLs your program did not choose |
 | `dns` | null | The resolver settings a name is looked up with, a `DnsConfig` as `dnsParseResolvConf` fills it, in place of `/etc/resolv.conf`; `/etc/hosts` is read either way |
 
@@ -254,7 +255,10 @@ A certificate that is expired, for another name, or from a root you
 do not trust is `HTTP_E_CERTIFICATE`, and so is a fetch when no root can be
 read at all, refused before any connection is opened. There is no switch that
 turns the check off: to talk to a server with its own certificate authority,
-point `rootsPemPath` at that authority's root. A server that does not speak
+point `rootsPemPath` at that authority's root. A chain through a key you
+list in `distrustSpkiSha256` is `HTTP_E_CERTIFICATE` too, and a hash there
+that is not 32 bytes fails every https fetch rather than being skipped
+([Distrusting a key](tls-certificates.md#distrusting-a-key)). A server that does not speak
 TLS, and a body cut off without TLS's `close_notify`, are `HTTP_E_TLS`.
 Revocation is not checked.
 

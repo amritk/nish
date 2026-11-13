@@ -9,25 +9,6 @@ import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
 import FLAG_SCRIPT from "./nodes" -> const FLAG_SCRIPT
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_DO from "./nodes" -> const N_DO
-import N_ENUM from "./nodes" -> const N_ENUM
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_LABELED from "./nodes" -> const N_LABELED
-import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
-import N_SWITCH from "./nodes" -> const N_SWITCH
-import N_THROW from "./nodes" -> const N_THROW
-import N_TRY from "./nodes" -> const N_TRY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_VAR from "./nodes" -> const N_VAR
-import N_WHILE from "./nodes" -> const N_WHILE
-import N_WITH from "./nodes" -> const N_WITH
 import Node from "./nodes" -> struct Node
 struct LateUse (class) size=16 align=8 exported
   field stmt: Node index=0 offset=0
@@ -62,7 +43,7 @@ function bindsAny(stmt: Node, names: StringSet): boolean -> @bindsAny
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=0 stackLocals=0
   local +0:14 decl: Node (const)
-  callee +1:46 StringSet.has -> @StringSet.has
+  callee +1:53 StringSet.has -> @StringSet.has
 function declaresMain(file: Node): boolean -> @declaresMain
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq

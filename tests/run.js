@@ -61,7 +61,8 @@ import {
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
-import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
+import { linkCompiler } from "./self/compiler-cache.js"
+import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
@@ -105,6 +106,8 @@ import {
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
+// What the wasm page tests run a host module with an `enum` under: see tests/ts-transform.js.
+const TS_TRANSFORM = pathToFileURL(path.join(root, "tests", "ts-transform.js")).href
 /**
  * The compiler under test: stage1, `src/` linked by the seed once per run,
  * and every compile in this file is a spawn of it.
@@ -581,9 +584,10 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs but
-// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts), about
-// 200 s from the job's start with its setup steps (measured in docs/wp10-ci.md,
-// "Shards and time limits"). Shard 1 then runs every section after them that
+// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts) and the
+// golden cases' work past their IR check, which `caseShard` deals by position:
+// every shard compiles every case, since later sections read that compile, and
+// does the rest for its own eighth. Shard 1 then runs every section after them that
 // is not dealt, and
 // the link programs a later section reads the output of (`LINK_READ_LATER`);
 // a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
@@ -631,11 +635,16 @@ if (seed.error !== undefined) {
   }
   summarise()
 }
+// A run before that linked the same inputs left its binary in
+// `build/cache/compiler-under-test/` (`tests/self/compiler-cache.js` says what
+// the key covers), and copying it saves the minute the link takes.
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true })
+const underTest = linkCompiler(seed, path.join("src", "compile.ts"), NISH)
 if (
   !check(
-    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test`,
-    linkWith(seed, path.join("src", "compile.ts"), NISH) !== null,
+    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test` +
+      (underTest?.reused ? ` (kept from a run with the same inputs, key ${underTest.key})` : ""),
+    underTest !== null,
     "(the seed's report is on stderr above)"
   )
 ) {
@@ -648,7 +657,9 @@ if (
 // run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
 // cases are independent of each other and the sections after this one are not
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
-// case has finished before the next section starts, and the checks are
+// case has finished before the next section starts; in a sharded run every
+// shard still compiles every case for that reason, and does the rest of the
+// work only for the cases `caseShard` deals it. The checks are
 // reported in corpus order, which keeps the output the same at any width.
 // The filter is the first argument that is neither a flag nor the value of
 // one (`--shard 2/4`, `--jobs 4`).
@@ -701,6 +712,48 @@ const caseEnv = (file) => {
 }
 
 const selectedCases = cases.filter((name) => !only || name.includes(only))
+
+/**
+ * The shard that does a golden case's dealt work: everything after its IR is
+ * held to the golden -- `llvm-as`, the `--warn-portability`,
+ * `--emit-capabilities`, `--emit-panics`, `--emit-arena` and
+ * `--explain-memory` compiles, and the native link and run. Every shard still
+ * compiles every case and checks its IR, because that compile is what later
+ * sections read: `build/test/<name>.ll` (the arrays, crypto, runtime and
+ * bench blocks, and shard 1's checks after the link programs, most of them
+ * behind an `existsSync` that would skip silently) and `caseResults`. None of
+ * them reads what the dealt work writes. Section A took 59 s of shard 2 in run
+ * 43369900293 and 30 s with the deal (`docs/wp10-ci.md`, "Where the wall
+ * clock goes"); what is left is mostly the compiles every shard keeps.
+ *
+ * The deal is by position, the linked cases and the compiled-only ones apart,
+ * so each shard gets an eighth of each kind whatever the corpus's order. The
+ * first linked case with and without `--threads` stays in shard 1: it is the
+ * specimen the `runtime objects:` checks replay there (`keepSpecimen`), and
+ * an unsharded run keeps the same one. A rejection or a `.stdout` case has no
+ * dealt work. A filtered run deals only the cases it selects, as it does the
+ * link programs.
+ */
+const caseShard = (() => {
+  if (SHARDS === 1) {
+    return () => SHARD
+  }
+  const exists = (name, ext) => fs.existsSync(path.join(casesDir, `${name}.${ext}`))
+  const dealt = selectedCases.filter((name) => !exists(name, "err") && !exists(name, "stdout"))
+  const linked = dealt.filter((name) => exists(name, "out"))
+  const specimens = [false, true]
+    .map((threads) => linked.find((name) => caseArgs(name).includes("--threads") === threads))
+    .filter((name) => name !== undefined)
+  const shardOf = new Map(specimens.map((name) => [name, 1]))
+  for (const group of [linked, dealt.filter((name) => !exists(name, "out"))]) {
+    let next = 0
+    for (const name of group.filter((name) => !shardOf.has(name))) {
+      shardOf.set(name, (next % SHARDS) + 1)
+      next++
+    }
+  }
+  return (name) => shardOf.get(name) ?? SHARD
+})()
 
 /**
  * Makes, in `dir`, the files the WP44 file cases open and cannot make
@@ -936,7 +989,9 @@ const runCase = async (name) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
-  const done = { compiled: r, steps, panicFunctions: 0 }
+  const done = { compiled: r, steps, panicFunctions: 0, dealtTo: 0 }
+  // Whether this shard does the case's work past its IR check (`caseShard`).
+  const mine = caseShard(name) === SHARD
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -963,7 +1018,7 @@ const runCase = async (name) => {
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
     expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
-  if (fs.existsSync(side("portability"))) {
+  if (mine && fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
@@ -992,7 +1047,7 @@ const runCase = async (name) => {
       "the two .ll files differ"
     )
   }
-  if (fs.existsSync(side("caps.json"))) {
+  if (mine && fs.existsSync(side("caps.json"))) {
     // WP35: the capability report, compiled a second time for the same reason
     // the portability warnings are -- the flag is not in `.args`, because the
     // tools that compile `tests/cases/` with the last release would refuse it.
@@ -1055,6 +1110,10 @@ const runCase = async (name) => {
     actual === expected,
     `--- expected\n${expected}\n--- actual\n${actual}`
   )
+  if (!mine) {
+    done.dealtTo = caseShard(name)
+    return done
+  }
 
   if (HAS_LLVM_AS) {
     const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
@@ -1249,6 +1308,21 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     reported++
   }
 })
+// What this shard left to the others, per `caseShard`: each named once, by count.
+{
+  const byShard = new Map()
+  for (const run of caseRuns) {
+    if (run.dealtTo > 0) {
+      byShard.set(run.dealtTo, (byShard.get(run.dealtTo) ?? 0) + 1)
+    }
+  }
+  for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
+    delegate(
+      `llvm-as, the side compiles and the native run of ${count} golden case(s) whose IR this shard checked`,
+      shardJob(i)
+    )
+  }
+}
 // The bound on native runs, held to what it promises with a bound of half a
 // second, because the real one takes two minutes to prove. `runNative` is the
 // helper both case loops run their programs through, so a change that drops
@@ -1335,12 +1409,15 @@ const caseResults = caseRuns.map((run) => run.compiled)
 // The oracle above passes vacuously on a function it never finds, so the run
 // says how many it read: every golden with a clean function contributes, and
 // a symbol spelling the oracle stopped recognising would take this to zero.
+// A shard reads only the cases dealt to it (`caseShard`), about an eighth of
+// the corpus's 2,861 functions, so the floor is shared out the same way.
 if (only === undefined) {
   const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
+  const floor = Math.floor(500 / SHARDS)
   check(
     `--emit-panics: the IR oracle read ${read} functions with nothing left that can panic`,
-    read >= 500,
-    "fewer than 500: the oracle is no longer finding the functions it is handed"
+    read >= floor,
+    `fewer than ${floor}: the oracle is no longer finding the functions it is handed`
   )
 }
 
@@ -7812,7 +7889,7 @@ if (dealtHere("selfHosting")) {
   )
 
   // And the half of the parser the oracle cannot see: recovery. A failed
-  // parse is an `N_ERROR` node and a diagnostic, and the declaration after
+  // parse is a `NodeKind.Error` node and a diagnostic, and the declaration after
   // it still parses (docs/wp14-selfhost.md §3a D1).
   const astDumper = path.join(buildDir, "self", "dump_ast")
   const builtAst = spawnSync(NISH, [path.join(selfDir, "dump-ast.ts"), "--link", astDumper], {
@@ -11764,10 +11841,10 @@ if (dealtHere("p256Seams")) {
     })
   }
 
-  // #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
-  // and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
-  // `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
-  // 10,000 scalars. Neither inversion is exported, so the program reaches them
+  // #758: the scalar inverse by safegcd (`p256ScalarInverse`, which both
+  // signing paths and `p256Verify` use) against Fermat's a^(n-2), which the
+  // seam keeps as the reference, byte for byte, on the edges and a seeded
+  // corpus of 10,000 scalars. The inversion is not exported, so the program reaches it
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
   // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
@@ -11796,7 +11873,7 @@ if (dealtHere("p256Seams")) {
     const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
     check(
       "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
-      r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+      r.status === 0 && r.stdout === "gen-p256-table: 5632 limbs, as generated\n",
       shown(r)
     )
   }
@@ -14714,14 +14791,19 @@ if (dealtHere("arrayChecks")) {
         run ? String(run.stdout) + String(run.stderr) : String(cc.stderr)
       )
     }
-    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array")
-    if (fs.existsSync(scopeExe)) {
-      const run = spawnSync(scopeExe)
-      const lines = String(run.stdout).trim().split("\n")
+    // Linked here from section A's compile rather than taken from its binary:
+    // every shard compiles every case, but only the shard `caseShard` deals the
+    // case to links it, and this block runs wherever its group was dealt.
+    const scopeLl = path.join(buildDir, "mem_scope_dynamic_array.ll")
+    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array_flat")
+    if (fs.existsSync(scopeLl)) {
+      const cc = linkNative(scopeExe, scopeLl, { driver: null, libm: true })
+      const run = cc.status === 0 ? spawnSync(scopeExe) : null
+      const lines = run === null ? [] : String(run.stdout).trim().split("\n")
       check(
         "mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
-        run.status === 0 && lines.length === 4 && lines[1] === lines[3],
-        String(run.stdout) + String(run.stderr)
+        run !== null && run.status === 0 && lines.length === 4 && lines[1] === lines[3],
+        run === null ? String(cc.stderr) : String(run.stdout) + String(run.stderr)
       )
     }
   }
@@ -22189,8 +22271,8 @@ if (dealtHere("cliChecks")) {
       ["    checkSoleReferences(ctx, body, flow.sites)\n", ""],
       ["  const ref = results.refOf(need)\n", "  const ref = results.refOf(need).substring(0, 0)\n"],
       [
-        "    if (named.kind === N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
-        "    if (named.kind === N_CONDITIONAL && named.kind !== N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional && named.kind !== NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
       ],
     ]
     let mutated = live
@@ -27838,6 +27920,649 @@ if (dealtHere("runCache")) {
       }
     }
   }
+
+  // `nish upgrade` and the update notice (src/upgrade.ts, std/release.ts,
+  // docs/security/release.md). A local server stands in for GitHub: its
+  // `/<name>/releases/latest` answers as the name says, and every request is
+  // logged so a check can say none was made. The notice is read through a
+  // pseudo-terminal (`script`), the only way stderr is a TTY here.
+  if (selects("upgrade", "nish/release", "update-notice")) {
+    if (!HAS_CLANG) {
+      skip("nish upgrade: clang not on PATH, so the release helper cannot be linked")
+    } else {
+      const upDir = path.join(buildDir, "upgrade")
+      fs.rmSync(upDir, { recursive: true, force: true })
+      fs.mkdirSync(upDir, { recursive: true })
+      const cacheHome = path.join(upDir, "cache")
+      const requests = path.join(upDir, "requests.log")
+      fs.writeFileSync(requests, "")
+      const serverJs = path.join(upDir, "server.cjs")
+      fs.writeFileSync(
+        serverJs,
+        `const http = require("http")
+const fs = require("fs")
+const log = process.argv[2]
+const server = http.createServer((req, res) => {
+  fs.appendFileSync(log, req.url + "\\n")
+  const at = \`http://127.0.0.1:\${server.address().port}\`
+  const [, name, ...rest] = req.url.split("/")
+  const tail = rest.join("/")
+  if (tail === "releases/latest") {
+    if (name === "newer") return res.writeHead(302, { Location: \`\${at}/newer/releases/tag/v99.0.0\` }).end()
+    if (name === "older") return res.writeHead(302, { Location: \`\${at}/older/releases/tag/v0.0.1\` }).end()
+    if (name === "elsewhere") return res.writeHead(302, { Location: \`\${at}/other/releases/tag/v99.0.0\` }).end()
+    if (name === "login") return res.writeHead(302, { Location: "https://example.com/login?v99.0.0" }).end()
+    if (name === "refuse") return res.writeHead(500).end("no")
+    if (name === "garbage") return res.writeHead(200).end("v99.0.0\\n<html>")
+    if (name === "slow") return
+  }
+  if (name === "raw" && tail.endsWith("/install.sh")) {
+    return res.writeHead(200).end('printf "%s\\\\n" "$@" > "$3/installed-with"\\n')
+  }
+  res.writeHead(404).end()
+})
+server.listen(0, "127.0.0.1", () => console.log(server.address().port))
+`,
+      )
+      const server = spawn(process.execPath, [serverJs, requests], { stdio: ["ignore", "pipe", "inherit"] })
+      const port = await new Promise((resolve) => server.stdout.once("data", (d) => resolve(String(d).trim())))
+      const origin = `http://127.0.0.1:${port}`
+      const asked = () => fs.readFileSync(requests, "utf8").split("\n").filter(Boolean)
+      const env = (name, extra = {}) => {
+        const e = {
+          ...process.env,
+          XDG_CACHE_HOME: cacheHome,
+          NISH_RELEASE_URL: `${origin}/${name}`,
+          NISH_RELEASE_RAW_URL: `${origin}/raw`,
+        }
+        delete e.CI
+        delete e.NISH_NO_UPDATE_CHECK
+        return { ...e, ...extra }
+      }
+      const up = (args, name = "newer", extra = {}, exe = NISH) =>
+        spawnSync(exe, ["upgrade", ...args], { encoding: "utf8", env: env(name, extra), timeout: 120000 })
+      try {
+        // The library's pure half, from a program: what a version is, which is newer, and what a redirect names.
+        const probe = path.join(upDir, "release_probe.ts")
+        fs.writeFileSync(
+          probe,
+          `import { releaseBaseAllowed, releaseCacheRead, releaseCompare, releaseIsNewer, releaseParseVersion, releaseTagFromLocation, releaseValidVersion } from "nish/release"
+
+export const main = (): number => {
+  const b = "https://github.com/o/r"
+  console.log(\`\${releaseValidVersion("0.40.0")} \${releaseValidVersion("1.0.0-rc.1+b.2")} \${releaseValidVersion("1.0.0/../x")} \${releaseValidVersion("0.40.0?x")} \${releaseValidVersion("1.0.0%2f")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0")} \${releaseCompare("0.10.0", "0.9.0")} \${releaseCompare("1.0.0+a", "1.0.0+b")}\`)
+  console.log(\`\${releaseIsNewer("0.40.0", "0.39.0")} \${releaseIsNewer("0.39.0", "0.39.0")} \${releaseIsNewer("0.38.0", "0.39.0")}\`)
+  const t = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0\`)
+  const other = releaseTagFromLocation(b, "https://github.com/o/other/releases/tag/v0.40.0")
+  const list = releaseTagFromLocation(b, \`\${b}/releases\`)
+  const escape = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0/../../x\`)
+  console.log(\`\${t === null ? "null" : t} \${other === null} \${list === null} \${escape === null}\`)
+  console.log(\`\${releaseBaseAllowed(b)} \${releaseBaseAllowed("http://127.0.0.1:8/x")} \${releaseBaseAllowed("http://example.com")} \${releaseBaseAllowed("http://127.0.0.1.example.com")}\`)
+  const bare = releaseTagFromLocation(b, b + "/releases/tag/0.40.0")
+  console.log(\`\${releaseParseVersion("1.0.0-01") === null} \${releaseParseVersion("1.0.0+01") !== null} \${bare === null} \${releaseBaseAllowed("http://localhost:@evil.example")} \${releaseBaseAllowed("http://localhost:8080")}\`)
+  console.log(\`\${releaseCacheRead(${JSON.stringify(path.join(upDir, "shared", "notice"))}) === null} \${releaseCacheRead(${JSON.stringify(path.join(upDir, "private", "notice"))}) !== null}\`)
+  console.log(\`\${releaseValidVersion("1.0.0#x")} \${releaseValidVersion("1.0.0 x")} \${releaseValidVersion("1.0.0\\tx")} \${releaseValidVersion("1.0.0\\nx")} \${releaseValidVersion("1.0.0%2e")}\`)
+  const query = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0?x\`)
+  const fragment = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0#x\`)
+  console.log(\`\${query === null} \${fragment === null}\`)
+  console.log(\`\${releaseIsNewer("garbage", "0.39.0")} \${releaseIsNewer("0.40.0", "garbage")} \${releaseIsNewer("x", "y")} \${releaseCompare("garbage", "0.1.0")} \${releaseCompare("0.1.0", "garbage")} \${releaseCompare("x", "y")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0-rc.2")} \${releaseCompare("1.0.0-1", "1.0.0-a")} \${releaseCompare("1.0.0-alpha", "1.0.0-alpha.1")} \${releaseCompare("1.0.0-2", "1.0.0-10")} \${releaseCompare("1.0.0-rc.10", "1.0.0-rc.2")} \${releaseCompare("1.0.0-alpha.beta", "1.0.0-beta")}\`)
+  console.log(\`\${releaseCompare("1.0.0-9999999999999999", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-20000000000000000", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-a", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-10000000000000000", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-99", "1.0.0-100000000000000000")}\`)
+  return 0
+}
+`,
+        )
+        for (const [dir, mode] of [["shared", 0o775], ["private", 0o700]]) {
+          fs.mkdirSync(path.join(upDir, dir), { recursive: true })
+          fs.writeFileSync(path.join(upDir, dir, "notice"), "checked 1\nlatest 99.0.0\n", { mode: 0o600 })
+          fs.chmodSync(path.join(upDir, dir), mode)
+        }
+        const lib = spawnSync(NISH, ["run", probe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }) })
+        check(
+          "nish/release: versions, ordering, redirects and bases",
+          lib.status === 0 &&
+            lib.stdout ===
+              "true true false false false\n-1 1 0\ntrue false false\n0.40.0 true true true\ntrue true false false\ntrue true true false true\ntrue true\n" +
+                "false false false false false\ntrue true\nfalse false false -1 1 0\n-1 -1 -1 -1 1 -1\n-1 1 1 0 -1\n",
+          `${lib.status}: ${lib.stdout}${lib.stderr}`,
+        )
+
+        // The library's cache, from a program: written private and over a planted link, read only when
+        // believed, fresh for less than its age and never when dated ahead, and the cached check asking at most once.
+        const cacheDir = path.join(upDir, "libcache")
+        const cachePaths = {
+          good: path.join(cacheDir, "r", "good"),
+          link: path.join(cacheDir, "r", "link"),
+          groupWritable: path.join(cacheDir, "r", "group-writable"),
+          garbage: path.join(cacheDir, "r", "garbage"),
+          missing: path.join(cacheDir, "r", "missing"),
+          foreignFile: path.join(cacheDir, "foreign-file", "c"),
+          foreignDir: path.join(cacheDir, "foreign-dir", "c"),
+          fifo: path.join(cacheDir, "r", "fifo"),
+        }
+        fs.mkdirSync(path.join(cacheDir, "r"), { recursive: true, mode: 0o700 })
+        fs.mkdirSync(path.join(cacheDir, "s"), { mode: 0o700 })
+        fs.writeFileSync(cachePaths.good, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+        fs.symlinkSync(cachePaths.good, cachePaths.link)
+        fs.writeFileSync(cachePaths.groupWritable, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+        fs.chmodSync(cachePaths.groupWritable, 0o620)
+        fs.writeFileSync(cachePaths.garbage, "latest 1.0.0\nchecked 7\n", { mode: 0o600 })
+        // A private FIFO is this user's and writable by nobody else, so only the file-kind check refuses it.
+        const madeFifo = spawnSync("sh", ["-c", 'mkfifo -m 600 "$1"', "sh", cachePaths.fifo]).status === 0
+        const linkTarget = path.join(cacheDir, "s", "target")
+        fs.writeFileSync(linkTarget, "kept\n", { mode: 0o600 })
+        fs.symlinkSync(linkTarget, path.join(cacheDir, "s", "c"))
+        // Another user's file, or directory, needs root or sudo to make: the test makes them where it can.
+        const modeOf = (p) => fs.lstatSync(p).mode & 0o777
+        const privileged = (args) =>
+          process.getuid() === 0 ? spawnSync(args[0], args.slice(1)) : spawnSync("sudo", ["-n", ...args])
+        const canChown = process.platform === "linux" && privileged(["true"]).status === 0
+        if (canChown) {
+          fs.mkdirSync(path.dirname(cachePaths.foreignFile), { mode: 0o700 })
+          // World-readable, so only the owner check can refuse it: an unprivileged run reads it.
+          fs.writeFileSync(cachePaths.foreignFile, "checked 7\nlatest 1.0.0\n", { mode: 0o644 })
+          fs.mkdirSync(path.dirname(cachePaths.foreignDir), { mode: 0o755 })
+          fs.writeFileSync(cachePaths.foreignDir, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+          privileged(["chown", "65534", cachePaths.foreignFile, path.dirname(cachePaths.foreignDir)])
+        }
+        try {
+          const cacheProbe = path.join(upDir, "release_cache_probe.ts")
+          const q = (p) => JSON.stringify(p)
+          fs.writeFileSync(
+            cacheProbe,
+            `import { ReleaseCache, releaseCacheFresh, releaseCacheParse, releaseCacheRead, releaseCacheWrite, releaseCheckCached, releaseFileTrusted } from "nish/release"
+
+  const show = (c: ReleaseCache | null): string => (c === null ? "null" : \`\${c.checkedMs}/\${c.latest}\`)
+  const orNull = (s: string | null): string => (s === null ? "null" : s)
+
+  export const main = (): number => {
+    const d = ${q(cacheDir)}
+    console.log(\`\${releaseCacheWrite(\`\${d}/w/c\`, "99.0.0", 1000)} \${show(releaseCacheRead(\`\${d}/w/c\`))} \${releaseCacheWrite(\`\${d}/s/c\`, "1.0.0", 3)} \${show(releaseCacheRead(\`\${d}/s/c\`))}\`)
+    const c = releaseCacheParse("checked 1000\\nlatest 99.0.0\\n")
+    if (c === null) {
+      return 1
+    }
+    const day: i64 = 86400000
+    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
+    console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
+    console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
+    const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const again = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const current = releaseCheckCached(${q(`${origin}/newer`)}, "99.0.0", \`\${d}/k/c\`, day, 5000)
+    const refused = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    const kept = releaseCacheRead(\`\${d}/f/c\`)
+    const refusedAgain = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    console.log(\`\${orNull(newer)} \${orNull(again)} \${orNull(current)} \${orNull(refused)} [\${kept === null ? "null" : kept.latest}] \${orNull(refusedAgain)}\`)
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignFile)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignDir)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.fifo)})))
+    return 0
+  }
+  `,
+          )
+          const lookupsOf = (name) => asked().filter((u) => u === `/${name}/releases/latest`).length
+          const [newerBefore, refuseBefore] = [lookupsOf("newer"), lookupsOf("refuse")]
+          // A writer waits on the FIFO, so a read that opened it would get a believable cache, not hang.
+          const fifoWriter = madeFifo
+            ? spawn("sh", ["-c", 'printf "checked 7\\nlatest 1.0.0\\n" > "$1"', "sh", cachePaths.fifo], { stdio: "ignore" })
+            : null
+          const cacheRun = spawnSync(NISH, ["run", cacheProbe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }), timeout: 120000 })
+          if (fifoWriter !== null) fifoWriter.kill()
+          const cacheLines = (cacheRun.stdout || "").split("\n")
+          check(
+            "nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it",
+            cacheRun.status === 0 &&
+              cacheLines[0] === "true 1000/99.0.0 true 3/1.0.0" &&
+              modeOf(path.join(cacheDir, "w", "c")) === 0o600 &&
+              modeOf(path.join(cacheDir, "w")) === 0o700 &&
+              fs.lstatSync(path.join(cacheDir, "s", "c")).isFile() &&
+              fs.readFileSync(linkTarget, "utf8") === "kept\n",
+            `${cacheRun.status}: ${cacheRun.stdout}${cacheRun.stderr}`,
+          )
+          check(
+            "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
+            cacheLines[1] === "true true false false",
+            cacheLines[1],
+          )
+          check(
+            "nish/release: a cache parses only as its two lines, with a valid or empty version and nothing after them",
+            cacheLines[2] === "5/ null null null null null 5/1.0.0",
+            cacheLines[2],
+          )
+          check(
+            "nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed",
+            cacheLines[3] === "7/1.0.0 null null null null true false",
+            cacheLines[3],
+          )
+          check(
+            "nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none",
+            cacheLines[4] === "99.0.0 99.0.0 null null [] null" &&
+              lookupsOf("newer") === newerBefore + 1 &&
+              lookupsOf("refuse") === refuseBefore + 1,
+            `${cacheLines[4]}; ${lookupsOf("newer") - newerBefore} and ${lookupsOf("refuse") - refuseBefore} lookups`,
+          )
+          if (madeFifo) {
+            check("nish/release: a private FIFO at the cache path is not believed", cacheLines[7] === "null", cacheLines[7])
+          } else {
+            skip("nish/release: a FIFO at the cache path: mkfifo failed")
+          }
+          if (canChown) {
+            // Each is readable by this run and otherwise private, so the owner check alone refuses it.
+            const readable = (p) => {
+              try {
+                return fs.readFileSync(p, "utf8") === "checked 7\nlatest 1.0.0\n"
+              } catch {
+                return false
+              }
+            }
+            check(
+              "nish/release: a world-readable cache file owned by another user is not believed",
+              cacheLines[5] === "null" && readable(cachePaths.foreignFile),
+              `${cacheLines[5]}; readable ${readable(cachePaths.foreignFile)}`,
+            )
+            check(
+              "nish/release: a cache in a directory owned by another user is not believed",
+              cacheLines[6] === "null" && readable(cachePaths.foreignDir),
+              `${cacheLines[6]}; readable ${readable(cachePaths.foreignDir)}`,
+            )
+          } else {
+            skip("nish/release: a cache owned by another user: making one needs root or passwordless sudo")
+          }
+        } finally {
+          if (canChown) privileged(["chown", "-R", String(process.getuid()), cacheDir])
+        }
+
+        // Refusals that need no network: a version that is not one, an unknown flag.
+        // The CLI's own `validVersion` (src/upgrade.ts) runs first, so it is held to the library's cases too.
+        for (const bad of [
+          "1.0.0/../x",
+          "0.40.0?x",
+          "v0.40.0",
+          "--yes",
+          "1.2",
+          "01.2.3",
+          "1.2.3.4",
+          "1.2.3-",
+          "1.0.0-01",
+          "1.0.0#x",
+          "1.0.0 x",
+          "1.0.0\tx",
+          "1.0.0\nx",
+          "1.0.0%2e",
+          "1.0.0%2f",
+        ]) {
+          const before = asked().length
+          const r = up([bad])
+          check(
+            `nish upgrade ${/\s/.test(bad) ? JSON.stringify(bad) : bad}: exit 2, before any network access`,
+            r.status === 2 && r.stderr.includes("usage: nish upgrade") && asked().length === before,
+            `${r.status}: ${r.stderr}`,
+          )
+        }
+        for (const flag of ["--help", "-h"]) {
+          const before = asked().length
+          const r = up([flag])
+          check(
+            `nish upgrade ${flag}: the usage on stdout, exit 0, no network access`,
+            r.status === 0 && r.stdout.startsWith("usage: nish upgrade") && r.stderr === "" && asked().length === before,
+            `${r.status}: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // Refused before any request, naming the override; a bad raw URL beside a good release URL too.
+        for (const [what, extra, named] of [
+          ["a release URL that is plain http to another host", { NISH_RELEASE_URL: "http://example.com/x" }, "NISH_RELEASE_URL"],
+          ["a loopback release URL that names another host after the colon", { NISH_RELEASE_URL: "http://localhost:@example.com/x" }, "NISH_RELEASE_URL"],
+          ["a raw URL that is plain http to another host, beside a good release URL", { NISH_RELEASE_RAW_URL: "http://example.com/x" }, "NISH_RELEASE_RAW_URL"],
+        ]) {
+          const before = asked().length
+          const r = up(["--check"], "newer", extra)
+          check(
+            `nish upgrade: ${what} is refused (exit 2), named, before any request`,
+            r.status === 2 && r.stderr.includes(`${named} must be`) && r.stdout === "" && asked().length === before,
+            `${r.status}: ${r.stderr}; ${asked().length - before} requests`,
+          )
+        }
+
+        // --check: current and latest, exit 0; no answer of any kind, exit 3 and nothing on stdout.
+        const checked = up(["--check"])
+        const version = spawnSync(NISH, ["--version"], { encoding: "utf8" }).stdout.trim().split(" ")[1]
+        check(
+          "nish upgrade --check: prints current and latest, exit 0",
+          checked.status === 0 && checked.stdout === `current ${version}\nlatest  99.0.0\n`,
+          `${checked.status}: ${checked.stdout}${checked.stderr}`,
+        )
+        // Each server but `down` (no server at all) is asked once; `slow` is ended by the lookup's 2 s limit.
+        for (const name of ["elsewhere", "login", "refuse", "garbage", "slow", "down"]) {
+          const before = asked().filter((u) => u === `/${name}/releases/latest`).length
+          const started = Date.now()
+          const r = up(["--check"], name, name === "down" ? { NISH_RELEASE_URL: "http://127.0.0.1:9/x" } : {})
+          const took = Date.now() - started
+          const reached = asked().filter((u) => u === `/${name}/releases/latest`).length - before
+          check(
+            `nish upgrade --check: a server that is ${name} gives exit 3 within the lookup's time`,
+            r.status === 3 &&
+              r.stdout === "" &&
+              took < 15000 &&
+              reached === (name === "down" ? 0 : 1) &&
+              (name !== "slow" || took >= 1900),
+            `${r.status} after ${took} ms, ${reached} requests: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // A check that learns nothing leaves the cache as it was: a newer release it names is not forgotten.
+        const kept = path.join(cacheHome, "nish", "release", `notice-${version}`)
+        fs.mkdirSync(path.dirname(kept), { recursive: true, mode: 0o700 })
+        fs.writeFileSync(kept, "checked 1\nnewer 99.0.0\n", { mode: 0o600 })
+        const failed = up(["--check"], "refuse")
+        check(
+          "nish upgrade --check: a failed check keeps the newer release the cache names",
+          failed.status === 3 && fs.readFileSync(kept, "utf8") === "checked 1\nnewer 99.0.0\n",
+          `${failed.status}: ${fs.readFileSync(kept, "utf8")}`,
+        )
+
+        // npm's install and a checkout's: refused with the way to upgrade, exit 2, nothing fetched or changed.
+        const npmExe = path.join(upDir, "npm", "node_modules", "@amritk", "nish-linux-x64", "nish")
+        fs.mkdirSync(path.dirname(npmExe), { recursive: true })
+        fs.copyFileSync(NISH, npmExe)
+        fs.chmodSync(npmExe, 0o755)
+        const before = asked().length
+        const npm = up(["0.40.0"], "newer", {}, npmExe)
+        check(
+          "nish upgrade: an npm install prints the npm line and exits 2",
+          npm.status === 2 && npm.stderr.includes("npm install -g nish@0.40.0") && asked().length === before,
+          `${npm.status}: ${npm.stderr}`,
+        )
+        const source = up([])
+        check(
+          "nish upgrade: a build from a checkout refuses, exit 2",
+          source.status === 2 && source.stderr.includes("not installed by install.sh") && asked().length === before,
+          `${source.status}: ${source.stderr}`,
+        )
+
+        // A curl install: install.sh comes from the tag and is run with the version and the install directory.
+        const inst = path.join(upDir, "curl-install")
+        fs.mkdirSync(path.join(inst, "libexec"), { recursive: true })
+        fs.mkdirSync(path.join(inst, "bin"))
+        fs.mkdirSync(path.join(inst, "scripts"))
+        fs.copyFileSync(NISH, path.join(inst, "libexec", "nish"))
+        fs.chmodSync(path.join(inst, "libexec", "nish"), 0o755)
+        fs.writeFileSync(
+          path.join(inst, "bin", "nish"),
+          `#!/bin/sh\n# Written by install.sh.\nexec '${path.join(inst, "libexec", "nish")}' "$@"\n`,
+          { mode: 0o755 },
+        )
+        fs.cpSync(path.join(root, "std"), path.join(inst, "std"), { recursive: true })
+        fs.cpSync(path.join(root, "runtime"), path.join(inst, "runtime"), { recursive: true })
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(inst, "scripts", "build.sh"))
+        fs.copyFileSync(path.join(root, "package.json"), path.join(inst, "package.json"))
+        const wrapper = path.join(inst, "bin", "nish")
+        const installedWith = path.join(inst, "installed-with")
+        const latest = up([], "newer", {}, wrapper)
+        check(
+          "nish upgrade: a curl install runs the tag's install.sh with the latest version and its directory",
+          latest.status === 0 &&
+            asked().includes("/raw/v99.0.0/install.sh") &&
+            fs.existsSync(installedWith) &&
+            fs.readFileSync(installedWith, "utf8") === `99.0.0\n--dir\n${inst}\n`,
+          `${latest.status}: ${latest.stderr}`,
+        )
+        fs.rmSync(installedWith, { force: true })
+        const older = up([], "older", {}, wrapper)
+        check(
+          "nish upgrade: with no version, an older latest installs nothing",
+          older.status === 0 && older.stderr.includes("up to date") && !fs.existsSync(installedWith),
+          `${older.status}: ${older.stderr}`,
+        )
+        const pinned = up(["0.1.0"], "newer", {}, wrapper)
+        check(
+          "nish upgrade 0.1.0: an explicit older version says it is a downgrade and installs it",
+          pinned.status === 0 &&
+            pinned.stderr.includes("downgrade") &&
+            fs.readFileSync(installedWith, "utf8") === `0.1.0\n--dir\n${inst}\n`,
+          `${pinned.status}: ${pinned.stderr}`,
+        )
+
+        // The notice, read through a terminal.
+        if (process.platform !== "linux" || !has("script")) {
+          skip("update notice: needs util-linux script for a terminal")
+        } else {
+          const cacheFile = path.join(cacheHome, "nish", "release", `notice-${version}`)
+          const notice = `nish 99.0.0 is available (you have ${version}); run \`nish upgrade\``
+          const plant = (checkedMs, newer = "99.0.0") => {
+            fs.rmSync(cacheFile, { force: true })
+            fs.mkdirSync(path.dirname(cacheFile), { recursive: true, mode: 0o700 })
+            fs.writeFileSync(cacheFile, `checked ${checkedMs}\nnewer${newer === "" ? "" : ` ${newer}`}\n`, { mode: 0o600 })
+          }
+          // `runAs` prefixes the command, to run it as another user.
+          const tty = (args, extra = {}, runAs = []) => {
+            const cmd = [...runAs, "script", "-qec", '"$NISH_UP_EXE" $NISH_UP_ARGS', "/dev/null"]
+            const r = spawnSync(cmd[0], cmd.slice(1), {
+              encoding: "utf8",
+              env: env("newer", { NISH_UP_EXE: NISH, NISH_UP_ARGS: args, ...extra }),
+              timeout: 60000,
+            })
+            return { status: r.status, out: (r.stdout || "").replace(/\r/g, "") }
+          }
+          const hello = path.join(upDir, "hello.ts")
+          fs.writeFileSync(hello, 'export const main = (): number => {\n  console.log("hi")\n  return 0\n}\n')
+          const lines = (out) => out.split("\n").filter((l) => l === notice).length
+          plant(Date.now())
+          const quiet = tty("--version", { NISH_NO_UPDATE_CHECK: "1" })
+          const shown = tty("--version")
+          check(
+            "update notice: nish --version on a terminal prints the line once, exit unchanged",
+            shown.status === 0 && lines(shown.out) === 1 && shown.out.replace(`${notice}\n`, "") === quiet.out,
+            JSON.stringify(shown),
+          )
+          const compiled = tty(`${hello} -o ${path.join(upDir, "hello.ll")}`)
+          check("update notice: a compile on a terminal prints the line once", compiled.status === 0 && lines(compiled.out) === 1, JSON.stringify(compiled))
+          for (const [what, args, extra] of [
+            ["NISH_NO_UPDATE_CHECK=1", "--version", { NISH_NO_UPDATE_CHECK: "1" }],
+            ["CI=true", "--version", { CI: "true" }],
+            ["--json", `--json ${hello} -o ${path.join(upDir, "hello.ll")}`, {}],
+            ["nish run", `run ${hello}`, {}],
+            ["a usage error", "--number-mode", {}],
+          ]) {
+            const r = tty(args, extra)
+            check(`update notice: not shown with ${what}`, lines(r.out) === 0, JSON.stringify(r))
+          }
+          const piped = spawnSync(NISH, ["--version"], { encoding: "utf8", env: env("newer") })
+          check("update notice: not shown when stderr is not a terminal", !piped.stderr.includes("available"), piped.stderr)
+
+          // A cache that is not to be believed: no line, whatever it says. Each run starts a check in the
+          // background; it asks the refusing server, so it never writes a cache over the next case's plant.
+          const refusing = { NISH_RELEASE_URL: `${origin}/refuse` }
+          const refuseLookups = () => asked().filter((u) => u === "/refuse/releases/latest").length
+          const refusedBefore = refuseLookups()
+          fs.rmSync(cacheFile, { force: true })
+          const planted = path.join(upDir, "planted")
+          fs.writeFileSync(planted, `checked ${Date.now()}\nnewer 99.0.0\n`, { mode: 0o600 })
+          fs.symlinkSync(planted, cacheFile)
+          const planting = fs.readFileSync(planted, "utf8")
+          check("update notice: a cache that is a symlink is not believed", lines(tty("--version", refusing).out) === 0)
+          check(
+            "update notice: the cache written over a planted link replaces the link and leaves its target alone",
+            !fs.lstatSync(cacheFile).isSymbolicLink() && fs.readFileSync(planted, "utf8") === planting && modeOf(cacheFile) === 0o600,
+            `${fs.lstatSync(cacheFile).isSymbolicLink()} ${modeOf(cacheFile).toString(8)}`,
+          )
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          check("update notice: a group-writable cache is not believed", lines(tty("--version", refusing).out) === 0)
+          plant(Date.now())
+          fs.chmodSync(path.dirname(cacheFile), 0o777)
+          check(
+            "update notice: a cache in a world-writable directory is not believed",
+            lines(tty("--version", refusing).out) === 0,
+          )
+          // That run made the directory 0700 and wrote the cache with no newer: plant again, and the next run believes it.
+          const dirMode = fs.statSync(path.dirname(cacheFile)).mode & 0o777
+          plant(Date.now())
+          const believed = tty("--version", refusing)
+          check(
+            "update notice: a world-writable cache directory is made 0700, so the next run believes it",
+            dirMode === 0o700 && lines(believed.out) === 1,
+            `${dirMode.toString(8)}; ${JSON.stringify(believed)}`,
+          )
+          // A private cache whose newer is not a version, an escape sequence or a path: no line, and no ESC.
+          let refusedRuns = 3
+          for (const [what, newer] of [
+            ["an escape sequence", "\x1b[31m9.9.9"],
+            ["a path", "1.0.0/../x"],
+          ]) {
+            plant(Date.now(), newer)
+            const r = tty("--version", refusing)
+            check(
+              `update notice: a private cache whose newer is ${what} is not believed`,
+              lines(r.out) === 0 && !r.out.includes("available") && !r.out.includes("\x1b"),
+              JSON.stringify(r),
+            )
+            refusedRuns++
+          }
+          // A private cache with a line after its two, or a checked time that is not one: no line.
+          for (const [what, text] of [
+            ["a third line", `checked ${Date.now()}\nnewer 99.0.0\nnewer 99.0.0\n`],
+            ["a checked time that is not a number", "checked x\nnewer 99.0.0\n"],
+          ]) {
+            plant(Date.now())
+            fs.writeFileSync(cacheFile, text, { mode: 0o600 })
+            const r = tty("--version", refusing)
+            check(`update notice: a private cache with ${what} is not believed`, lines(r.out) === 0, JSON.stringify(r))
+            refusedRuns++
+          }
+          // A private FIFO is this user's and writable by nobody else: only the regular-file pattern refuses it.
+          // A writer waits on it, so a run that opened it would read a believable cache, not hang.
+          fs.rmSync(cacheFile, { force: true })
+          if (spawnSync("sh", ["-c", 'mkfifo -m 600 "$1"', "sh", cacheFile]).status === 0) {
+            const writer = spawn("sh", ["-c", 'printf "checked %s\\nnewer 99.0.0\\n" "$2" > "$1"', "sh", cacheFile, String(Date.now())], {
+              stdio: "ignore",
+            })
+            spawnSync("sleep", ["0.5"])
+            const r = tty("--version", refusing)
+            writer.kill()
+            check("update notice: a private FIFO at the cache path is not believed", lines(r.out) === 0, JSON.stringify(r))
+            refusedRuns++
+          } else {
+            skip("update notice: a FIFO at the cache path: mkfifo failed")
+          }
+          // Another user's cache, readable and otherwise private: only the owner check (\`-O\`) refuses it.
+          if (canChown) {
+            plant(Date.now())
+            fs.chmodSync(cacheFile, 0o644)
+            privileged(["chown", "65534", cacheFile])
+            try {
+              const r = tty("--version", refusing)
+              check("update notice: a world-readable cache owned by another user is not believed", lines(r.out) === 0, JSON.stringify(r))
+              refusedRuns++
+            } finally {
+              privileged(["rm", "-f", cacheFile])
+            }
+          } else {
+            skip("update notice: a cache owned by another user: making one needs root or passwordless sudo")
+          }
+
+          // At most one network check a day: a fresh cache asks nothing, a stale or future one is refreshed once.
+          // Polls until `ok`, for at most `ms`. Waiting out a short `ms` for what must not happen ends early when it does.
+          const waitFor = (ok, ms = 20000) => {
+            const until = Date.now() + ms
+            while (!ok() && Date.now() < until) spawnSync("sleep", ["0.2"])
+            return ok()
+          }
+          const lookups = () => asked().filter((u) => u === "/newer/releases/latest").length
+          // The checks the refused caches above started have each asked, and so are done with the cache.
+          check(
+            "update notice: each refused cache started one check",
+            waitFor(() => refuseLookups() === refusedBefore + refusedRuns),
+            `${refuseLookups() - refusedBefore} lookups`,
+          )
+          // The check is detached: a run that starts one against a server that never answers is back before the
+          // lookup's 2 s limit could end it, and the check still asks.
+          const slowLookups = () => asked().filter((u) => u === "/slow/releases/latest").length
+          const slowBefore = slowLookups()
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          const startedAt = Date.now()
+          const detached = tty("--version", { NISH_RELEASE_URL: `${origin}/slow` })
+          const took = Date.now() - startedAt
+          check(
+            "update notice: a run that starts a check is not held by it",
+            detached.status === 0 && took < 2000 && waitFor(() => slowLookups() === slowBefore + 1),
+            `${took} ms; ${slowLookups() - slowBefore} lookups`,
+          )
+          plant(Date.now())
+          let base = lookups()
+          const fresh = fs.readFileSync(cacheFile, "utf8")
+          tty("--version")
+          tty("--version")
+          // A started check rewrites the cache before it asks, so an unchanged cache shows none started.
+          const unchanged = fs.readFileSync(cacheFile, "utf8") === fresh
+          check(
+            "update notice: two runs on a fresh cache make no network check",
+            unchanged && !waitFor(() => lookups() !== base, 3000),
+            `cache unchanged ${unchanged}; ${lookups() - base} lookups`,
+          )
+          for (const [what, when] of [
+            ["older than 24 h", Date.now() - 25 * 3600 * 1000],
+            ["dated in the future", Date.now() + 3600 * 1000],
+          ]) {
+            plant(when, "")
+            base = lookups()
+            tty("--version")
+            tty("--version")
+            const refreshed = waitFor(() => /newer 99\.0\.0/.test(fs.readFileSync(cacheFile, "utf8")))
+            // A second check, if the second run started one, would ask within the wait.
+            const second = waitFor(() => lookups() > base + 1, 3000)
+            check(
+              `update notice: a cache ${what} is refreshed by exactly one check`,
+              refreshed && !second && lookups() === base + 1 && modeOf(cacheFile) === 0o600,
+              `${lookups() - base} lookups, mode ${modeOf(cacheFile).toString(8)}; ${fs.readFileSync(cacheFile, "utf8")}`,
+            )
+          }
+          // This user's private cache in another user's directory. At 0755 only the directory half of the owner
+          // check refuses it; at 0777 the mode check does, and only the failed `chmod 700` keeps the run from
+          // writing its cache there and starting a check (REL-5). A started check rewrites the cache first, and
+          // then asks the server. Root may chmod any directory, so under root the run is made as uid 65534,
+          // which is given the cache's other directories (where the release helper is built) while the cache's
+          // own stays root's; otherwise sudo gives the cache's directory to 65534.
+          const asOther = process.getuid() === 0
+          if (canChown && (!asOther || has("setpriv"))) {
+            const dir = path.dirname(cacheFile)
+            const runAs = asOther ? ["setpriv", "--reuid=65534", "--regid=65534", "--clear-groups"] : []
+            const foreignLookups = () => asked().filter((u) => u === "/foreign/releases/latest").length
+            try {
+              if (asOther) privileged(["chown", "-R", "65534", cacheHome])
+              for (const mode of [0o755, 0o777]) {
+                plant(Date.now())
+                const before = fs.readFileSync(cacheFile, "utf8")
+                fs.chmodSync(dir, mode)
+                privileged(["chown", asOther ? "0" : "65534", dir])
+                if (asOther) privileged(["chown", "65534", cacheFile])
+                try {
+                  const r = tty("--version", { NISH_RELEASE_URL: `${origin}/foreign` }, runAs)
+                  const after = fs.readFileSync(cacheFile, "utf8")
+                  check(
+                    `update notice: a private cache in a ${mode.toString(8)} directory owned by another user is not believed or rewritten`,
+                    r.status === 0 && lines(r.out) === 0 && after === before,
+                    `${JSON.stringify(r)}; cache ${JSON.stringify(after)}`,
+                  )
+                } finally {
+                  privileged(["chown", "-R", asOther ? "65534" : String(process.getuid()), dir])
+                  fs.chmodSync(dir, 0o700)
+                }
+              }
+              const asking = waitFor(() => foreignLookups() > 0, 5000)
+              check("update notice: a cache in another user's directory starts no network check", !asking, `${foreignLookups()} lookups`)
+            } finally {
+              privileged(["chown", "-R", String(process.getuid()), cacheHome])
+            }
+          } else {
+            skip("update notice: a cache in another user's directory: needs root with setpriv, or passwordless sudo")
+          }
+        }
+      } finally {
+        server.kill()
+      }
+    }
+  }
 }
 
 // A filtered run's `tail` groups are shard 1's, and the line below names them.
@@ -29466,9 +30191,9 @@ if (!only || "sandbox dependency grants".includes(only)) {
       // different shape, follow where the machine has them.
       const once = "sandbox_dep_exec_once"
       const onceTo = "sandbox_dep_exec_once_to"
-      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here. */
-      const withHelper = (fixture, grants) => {
-        const copy = `${fixture}_helper`
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here, with `prefix` (`exec:`) before it. */
+      const withHelper = (fixture, grants, prefix = "", tag = "") => {
+        const copy = `${fixture}_helper${prefix === "" ? "" : "_exec"}${grants.length === 0 ? "" : "_more"}${tag}`
         const to = path.join(dir, copy)
         fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
         fs.mkdirSync(path.join(to, "bin"), { recursive: true })
@@ -29499,7 +30224,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
         )
         const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
         const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
-        manifest.nish.capabilities.dependencies.pkg_runner = ["process.spawn=./bin/exec-args", ...grants]
+        manifest.nish.capabilities.dependencies.pkg_runner = [`process.spawn=${prefix}./bin/exec-args`, ...grants]
         fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
         return cc.status === 0 ? copy : null
       }
@@ -29777,6 +30502,123 @@ if (!only || "sandbox dependency grants".includes(only)) {
               /^12[67]\n$/.test(rOtherHeld.stdout) &&
               rTrueStill.stdout === "0\n",
             `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+        // WP40 §2a: a program granted `process.spawn=exec:<program>` keeps
+        // its subtree's reach of the allowlist (docs/security/sandbox.md,
+        // "Limits"). The compiler marks it `///` and the runtime starts it
+        // without the one-exec filter, through the same identity check: it
+        // runs another granted program and, through the loader, an ungranted
+        // binary, where the same helper granted plainly gets 111 (above). A
+        // program granted both ways is granted `exec:`. The loader named
+        // directly is refused still, and without `--sandbox` the runs agree.
+        // Beside the `exec:` grant, a second program granted plainly is held
+        // to its one exec all the same when it is a copy, a file of its own;
+        // a hard link is the `exec:` program under another name, and the
+        // runtime, which decides by file identity, starts it unheld.
+        for (const [grants, how, second] of [
+          [[], "granted exec:", null],
+          [["process.spawn=./bin/exec-args"], "granted exec: and plainly", null],
+          [["process.spawn=./bin/exec-copy"], "granted exec: beside a copy granted plainly", "copy"],
+          [["process.spawn=./bin/exec-link"], "granted exec: beside a hard link granted plainly", "link"],
+        ]) {
+          const freed = withHelper(once, grants, "exec:", second === null ? "" : `_${second}`)
+          if (freed !== null && second !== null) {
+            const from = path.join(dir, freed, "bin", "exec-args")
+            const to = path.join(dir, freed, "bin", `exec-${second}`)
+            fs.rmSync(to, { force: true })
+            if (second === "copy") {
+              fs.copyFileSync(from, to)
+              fs.chmodSync(to, 0o755)
+            } else {
+              fs.linkSync(from, to)
+            }
+          }
+          const fAllow = freed === null ? null : build(freed, ["--sandbox"], dir)
+          const fOpen = freed === null ? null : build(freed, [], dir)
+          if (fAllow === null || fOpen === null) {
+            skip(`sandbox dependency grants: clang could not build the exec-args helper ${how}; exec: is not checked`)
+            continue
+          }
+          const fHelper = fs.realpathSync(path.join(dir, freed, "bin", "exec-args"))
+          const fList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(freed))
+          const fEntries = fList === null ? [] : fList[1].split("\\00")
+          const rLoaderOnce = run(fAllow, ["sync", fHelper, loader, ungranted])
+          const rLoaderOpen = run(fOpen, ["sync", fHelper, loader, ungranted])
+          const rSelfOnce = run(fAllow, ["sync", fHelper, fHelper])
+          const rDirect = run(fAllow, ["sync", loader, ungranted])
+          check(
+            `sandbox dependency grants: a program ${how} starts the loader with an ungranted binary, and itself (WP40 §2a)`,
+            fEntries.includes(`//${fHelper}`) &&
+              !fEntries.includes(fHelper) &&
+              rLoaderOnce.status === 0 &&
+              rLoaderOnce.signal === null &&
+              rLoaderOnce.stdout === "sbx-1\n0\n" &&
+              rLoaderOpen.stdout === "sbx-1\n0\n" &&
+              rSelfOnce.status === 0 &&
+              rSelfOnce.stdout === "0\n" &&
+              rDirect.status === 0 &&
+              rDirect.stdout === "-1\n",
+            `${fEntries.join(" ")}\n${said(rLoaderOnce)}\n--- without --sandbox\n${said(rLoaderOpen)}\n--- itself\n${said(rSelfOnce)}\n--- the loader directly\n${said(rDirect)}`
+          )
+          if (second !== null) {
+            const fSecond = fs.realpathSync(path.join(dir, freed, "bin", `exec-${second}`))
+            const rSecondOnce = run(fAllow, ["sync", fSecond, loader, ungranted])
+            const rSecondOpen = run(fOpen, ["sync", fSecond, loader, ungranted])
+            const unheld = second === "link"
+            check(
+              unheld
+                ? "sandbox dependency grants: a hard link of a program granted exec:, granted plainly, is that program and starts unheld (WP40 §2a)"
+                : "sandbox dependency grants: a program granted plainly beside another's exec: grant is held to its one exec (WP40 §2a)",
+              fEntries.includes(fSecond) &&
+                rSecondOnce !== null &&
+                rSecondOnce.status === 0 &&
+                rSecondOnce.signal === null &&
+                (unheld
+                  ? rSecondOnce.stdout === "sbx-1\n0\n"
+                  : rSecondOnce.stdout === "111\n" && rSecondOnce.stderr.includes("exec-args: ")) &&
+                rSecondOpen !== null &&
+                rSecondOpen.stdout === "sbx-1\n0\n",
+              `${fEntries.join(" ")}\n${said(rSecondOnce)}\n--- without --sandbox\n${said(rSecondOpen)}`
+            )
+          }
+        }
+        check(
+          "sandbox dependency grants: an allowlist with no exec: grant marks nothing /// (WP40 §2a)",
+          !hList[1].split("\\00").some((p) => p.startsWith("///")),
+          hList[1]
+        )
+        // The grant written in a checked-in manifest, with the machine's own
+        // tools: `env`, granted `exec:`, runs `true`, granted plainly, where
+        // the plain `env` of sandbox_dep_exec_once could not (above). `true`
+        // run on its own only shows the plain grant still starts; it execs
+        // nothing, so the hold on a plain grant beside an `exec:` one is
+        // checked with the built helper's copy (above), not here.
+        const optin = "sandbox_dep_exec_optin"
+        const rOptinOpen = rOther === null || rOther.stdout !== "0\n" ? null : run(build(optin, []), ["sync", "env", "true"])
+        if (realOnPath("env") !== null && realOnPath("env") === realOnPath("true")) {
+          // A multicall coreutils (uutils) is one file for both, which the
+          // grant then names both ways, so `true` is `exec:` too and the
+          // allowlist has no plain entry for it to check.
+          skip(
+            `sandbox dependency grants: \`env\` and \`true\` are one file here (${realOnPath("env")}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOptinOpen)}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else {
+          const xAllow = build(optin, ["--sandbox"])
+          const rOptin = run(xAllow, ["sync", "env", "true"])
+          const rTrueHeld = run(xAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: env granted exec: runs another granted program (WP40 §2a)",
+            rOptin !== null &&
+              rOptin.status === 0 &&
+              rOptin.stdout === "0\n" &&
+              rTrueHeld.stdout === "0\n" &&
+              /@\.sandbox\.exec = [^"]*c"[^"]*\/\/\/[^"\\]*env\\00/.test(ir(optin)),
+            `${said(rOptin)}\n--- true\n${said(rTrueHeld)}\n${ir(optin)}`
           )
         }
       }
@@ -33472,7 +34314,7 @@ if (!only || "host-import-window".includes(only)) {
       )
       if (linked.status === 0) {
         fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\", \"stored\", \"stored\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -33551,7 +34393,7 @@ if (!only || "host-import-text".includes(only)) {
         loader.split("\n").filter((line) => line.includes("text(")).join("\n")
       )
       if (linked.status === 0) {
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -33674,7 +34516,7 @@ if (!only || "host-import-text".includes(only)) {
     const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", readingDir], { cwd: root, encoding: "utf8" })
     const readingRan =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(readingDir, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(readingDir, "entry.ts")], {
             cwd: readingDir,
             encoding: "utf8",
           })
@@ -34039,7 +34881,7 @@ if (!only || "host-import".includes(only)) {
             "console.log(refused)",
           ].join("\n")
         )
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34117,7 +34959,7 @@ if (!only || "host-import".includes(only)) {
     })
     const ran =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(emitted, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(emitted, "entry.ts")], {
             cwd: emitted,
             encoding: "utf8",
           })
@@ -34389,7 +35231,7 @@ if (!only || "module-storage".includes(only)) {
           ].join("\n")
         )
         const drive = (wasm) =>
-          spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
+          spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
             cwd: dir,
             encoding: "utf8",
           })
@@ -34434,7 +35276,7 @@ if (!only || "module-storage".includes(only)) {
             "",
           ].join("\n")
         )
-        const reading = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+        const reading = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34638,7 +35480,7 @@ if (!only || "wasm-host-panic".includes(only)) {
         const drive = (wasm, what) => {
           const res = spawnSync(
             process.execPath,
-            ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
+            ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
             { cwd: dir, encoding: "utf8" }
           )
           return { res, lines: res.status === 0 ? res.stdout.trim().split("\n") : [] }
@@ -34880,7 +35722,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at("main.wasm")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at("main.wasm")], {
         cwd: dir,
         encoding: "utf8",
       })
@@ -34949,7 +35791,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
         cwd: dir,
         encoding: "utf8",
       })

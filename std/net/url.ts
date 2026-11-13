@@ -861,50 +861,98 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
     }
     h = at + 1
   }
-  let portAt: i32 = b
+  const portAt: i32 = urlHostEnd(bytes, h, b)
+  if (portAt < 0) {
+    return false
+  }
   if (h < b && toI32(bytes[h]) === URL_OPEN_BRACKET) {
-    const close: i32 = urlFind(bytes, h, b, URL_CLOSE_BRACKET)
-    if (close === b || !urlIsIpv6(bytes, h + 1, close)) {
-      return false
-    }
-    u.host = urlLowerString(bytes, h + 1, close)
-    if (close + 1 < b) {
-      if (toI32(bytes[close + 1]) !== URL_COLON) {
-        return false
-      }
-      portAt = close + 1
-    }
+    u.host = urlLowerString(bytes, h + 1, portAt - 1)
   } else {
-    portAt = urlFind(bytes, h, b, URL_COLON)
-    let i: i32 = h
-    while (i >= 0 && i < portAt && i < toI32(bytes.length) && urlIsUnreserved(toI32(bytes[i]))) {
-      i += 1
-    }
-    if (i < portAt) {
-      return false
-    }
-    if (urlLooksNumeric(bytes, h, portAt) && !urlIsIpv4(bytes, h, portAt)) {
-      return false
-    }
     u.host = urlLowerString(bytes, h, portAt)
   }
   if (portAt + 1 < b) {
-    let port: i32 = 0
-    let i: i32 = portAt + 1
-    while (i >= 0 && i < b && i < toI32(bytes.length)) {
-      const c: i32 = toI32(bytes[i])
-      if (!urlIsDigit(c)) {
-        return false
-      }
-      port = port * 10 + c - 48
-      if (port > URL_MAX_PORT) {
-        return false
-      }
-      i += 1
+    const port: i32 = urlPortOf(bytes, portAt + 1, b)
+    if (port < 0) {
+      return false
     }
     u.port = port
   }
   return true
+}
+
+/**
+ * Where the host that starts `bytes[h, b)` ends: the index of the `:` that
+ * starts its port, or `b` when there is none; -1 when the host breaks a rule
+ * `urlParse` names. The host is a bracketed IPv6 address, or a reg-name of
+ * unreserved bytes that is a dotted-decimal IPv4 address if it reads as a
+ * number at all. An empty host is allowed.
+ */
+const urlHostEnd = (bytes: u8[], h: i32, b: i32): i32 => {
+  if (h >= 0 && h < b && h < toI32(bytes.length) && toI32(bytes[h]) === URL_OPEN_BRACKET) {
+    const close: i32 = urlFind(bytes, h, b, URL_CLOSE_BRACKET)
+    if (close === b || !urlIsIpv6(bytes, h + 1, close)) {
+      return -1
+    }
+    if (close + 1 < b && toI32(bytes[close + 1]) !== URL_COLON) {
+      return -1
+    }
+    return close + 1
+  }
+  const portAt: i32 = urlFind(bytes, h, b, URL_COLON)
+  let i: i32 = h
+  while (i >= 0 && i < portAt && i < toI32(bytes.length) && urlIsUnreserved(toI32(bytes[i]))) {
+    i += 1
+  }
+  if (i < portAt) {
+    return -1
+  }
+  if (urlLooksNumeric(bytes, h, portAt) && !urlIsIpv4(bytes, h, portAt)) {
+    return -1
+  }
+  return portAt
+}
+
+/** The port `bytes[a, b)` names, digits up to 65535, or -1 when it is not one. */
+const urlPortOf = (bytes: u8[], a: i32, b: i32): i32 => {
+  let port: i32 = 0
+  let i: i32 = a
+  while (i >= 0 && i < b && i < toI32(bytes.length)) {
+    const c: i32 = toI32(bytes[i])
+    if (!urlIsDigit(c)) {
+      return -1
+    }
+    port = port * 10 + c - 48
+    if (port > URL_MAX_PORT) {
+      return -1
+    }
+    i += 1
+  }
+  return port
+}
+
+/**
+ * Whether `bytes[a, b)` is `uri-host [ ":" port ]` (RFC 3986 §3.2.2, §3.2.3)
+ * by the rules `urlParse` holds a URL's host and port to: a bracketed IPv6
+ * address, a dotted-decimal IPv4 address, or a reg-name of unreserved bytes
+ * that does not read as a number, then an optional `:` and a port of digits
+ * up to 65535. An empty host and an empty port are allowed, as in a URL; a
+ * percent-encoded or sub-delims byte in a reg-name is not. It is the rule an
+ * HTTP server holds a `Host` field to (RFC 9112 §3.2). Allocates nothing.
+ *
+ * @param bytes The bytes that hold the value.
+ * @param a The index of the value's first byte.
+ * @param b The index past the value's last byte.
+ * @returns True when the bytes are a host and an optional port; false otherwise, and for a window outside `bytes`.
+ */
+export const urlIsHostPort = (bytes: u8[], a: i32, b: i32): boolean => {
+  if (a < 0 || b < a || b > toI32(bytes.length)) {
+    return false
+  }
+  const portAt: i32 = urlHostEnd(bytes, a, b)
+  if (portAt < 0) {
+    return false
+  }
+  return portAt + 1 >= b || urlPortOf(bytes, portAt + 1, b) >= 0
 }
 
 /**

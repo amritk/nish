@@ -940,6 +940,17 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "a 0x before the chunk size", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0x5\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
   refused(t, "whitespace after the chunk size with no extension", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5 \r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
   refused(t, "a control byte in a chunk extension", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a\u0001\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  // A chunk extension is parsed whole (§7.1.1), since a proxy that reads a
+  // quoted-string across the line's end frames the body differently.
+  refused(t, "a chunk extension with no name", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;=\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  refused(t, "a chunk extension name with a space in it", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a b\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  refused(t, "a chunk extension with an empty value", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a=\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  refused(t, "a chunk extension value that is not a token", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b\"c\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  refused(t, "an unclosed quoted chunk extension", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;a=\"\r\nx\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  refused(t, "a quoted chunk extension whose closing quote is escaped", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a=\"b\\\"\r\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_CHUNK);
+  accepted(t, "a chunk extension name=value", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b\r\nhello\r\n0\r\n\r\n", plain());
+  accepted(t, "a quoted chunk extension with BWS, a semicolon and an escaped quote", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5 ; a = \"x;y\\\"z\"\r\nhello\r\n0\r\n\r\n", plain());
+  accepted(t, "two chunk extensions, the first with no value", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a;b=c\r\nhello\r\n0\r\n\r\n", plain());
   refused(t, "chunk data followed by something else", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXY0\r\n\r\n", plain(), HTTP1_E_CHUNK);
   refused(t, "chunk data followed by a bare LF", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\n0\r\n\r\n", plain(), HTTP1_E_BARE_LF);
   refused(t, "a chunk-size line ended in a bare LF", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\nhello\r\n0\r\n\r\n", plain(), HTTP1_E_BARE_LF);

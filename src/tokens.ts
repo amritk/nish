@@ -1,8 +1,8 @@
 // The token kinds of the subset the self-hosted compiler is
 // written in (docs/wp14-selfhost.md §2). They live here as module constants so
-// that the lexer, the parser and the diagnostics all name the same numbers;
-// the language has no `enum`, and a magic number repeated at forty use sites
-// is how a bootstrap compiler starts to rot.
+// that the lexer, the parser and the diagnostics all name the same numbers (a
+// magic number repeated at forty use sites is how a bootstrap compiler rots);
+// they predate Nish-0's numeric enums (`NodeKind`) and stay `i32` constants.
 //
 // The values are contiguous from 0, which lets a later dispatch switch on them
 // densely, and grouped so that a range check answers "is this a keyword?"

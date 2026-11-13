@@ -26,16 +26,6 @@ import SECRET_SPECIFIER from "./nish-modules" -> const SECRET_SPECIFIER
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
 import FLAG_SCRIPT from "./nodes" -> const FLAG_SCRIPT
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_ENUM from "./nodes" -> const N_ENUM
-import N_EXPORT_ASSIGNMENT from "./nodes" -> const N_EXPORT_ASSIGNMENT
-import N_EXPORT_DECLARATION from "./nodes" -> const N_EXPORT_DECLARATION
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IMPORT from "./nodes" -> const N_IMPORT
-import N_IMPORT_EQUALS from "./nodes" -> const N_IMPORT_EQUALS
-import N_INTERFACE from "./nodes" -> const N_INTERFACE
-import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
-import N_TYPE_ALIAS from "./nodes" -> const N_TYPE_ALIAS
 import Node from "./nodes" -> struct Node
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import dirname from "./paths" -> function @dirname
@@ -103,7 +93,7 @@ function isModule(file: Node): boolean -> @isModule
   pointer file: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 stmt: Node (const)
-  local +1:11 kind: i32 (const)
+  local +1:11 kind: NodeKind (const)
   local +10:11 declares: boolean (const)
 function importOffset(text: string): i32 -> @importOffset
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false

@@ -11,7 +11,6 @@ import IRParam from "./ir" -> struct IRParam
 import paramSuffix from "./ir" -> function @paramSuffix
 import isDigit from "./lexer" -> function @isDigit
 import StringMap from "./map" -> struct StringMap
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import FunctionSig from "./program" -> struct FunctionSig
 import StringBuilder from "./strings" -> struct StringBuilder

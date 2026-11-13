@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-manifest-spawn-exec-refused",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_tool": [
+          "process.spawn=exec:"
+        ]
+      }
+    }
+  }
+}

@@ -17,11 +17,6 @@ import isUndefinedTest from "./emit-map" -> function @isUndefinedTest
 import emitConcat from "./emit-strings" -> function @emitConcat
 import emitStrictEquality from "./emit-strings" -> function @emitStrictEquality
 import unwrapParens from "./emit-util" -> function @unwrapParens
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import ConstInfo from "./program" -> struct ConstInfo
 import f32Hex from "./strings" -> function @f32Hex

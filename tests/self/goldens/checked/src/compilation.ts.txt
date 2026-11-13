@@ -41,7 +41,6 @@ import nishModuleExports from "./nish-modules" -> function @nishModuleExports
 import REGION_SPECIFIER from "./nish-modules" -> const REGION_SPECIFIER
 import SECRET_SPECIFIER from "./nish-modules" -> const SECRET_SPECIFIER
 import unsafeModule from "./nish-modules" -> function @unsafeModule
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
 import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import layoutInlineArrays from "./inline-arrays" -> function @layoutInlineArrays
@@ -196,6 +195,7 @@ import CheckContext from "./context" -> struct CheckContext
 import NUMBER_MODE_F64 from "./context" -> const NUMBER_MODE_F64
 const SLASH: i32 = 47
 const PACKAGE_WALK_LIMIT: i32 = 256
+const EXEC_GRANT: string = "exec:"
 struct ResolvedModule (interface) size=32 align=8 exported
   field path: string index=0 offset=0
   field name: string index=1 offset=8
@@ -959,7 +959,7 @@ function Compilation.grantArgument(this: Compilation, source: SourceFile, at: i3
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   escaping: arg at base end
-  calls: DiagnosticSink.report capabilityIndex findProgram nish_is_dir nish_realpath nish_str_at nish_str_concat numericHost resolvePath
+  calls: DiagnosticSink.report capabilityIndex findProgram nish_is_dir nish_panic_slice nish_realpath nish_str_at nish_str_concat nish_str_new numericHost resolvePath
   pointer this: size=208 writesThrough=false captured=false
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1 DiagnosticSink.report#1 DiagnosticSink.report#1
   stackSites=0 stackLocals=0
@@ -967,12 +967,13 @@ function Compilation.grantArgument(this: Compilation, source: SourceFile, at: i3
   callee +1:12 numericHost -> @numericHost
   callee +2:9 DiagnosticSink.report -> @DiagnosticSink.report
   callee +12:15 capabilityIndex -> @capabilityIndex
-  local +13:11 found: string | null (let)
-  callee +15:17 findProgram -> @findProgram
-  callee +18:9 DiagnosticSink.report -> @DiagnosticSink.report
-  local +27:11 real: string | null (const)
-  callee +27:72 resolvePath -> @resolvePath
-  callee +29:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +16:13 program: string (const)
+  local +17:11 found: string | null (let)
+  callee +19:17 findProgram -> @findProgram
+  callee +22:9 DiagnosticSink.report -> @DiagnosticSink.report
+  local +31:11 real: string | null (const)
+  callee +31:72 resolvePath -> @resolvePath
+  callee +33:7 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.grantArguments(this: Compilation, g: i32, c: i32, texts: boolean): string[] -> @Compilation.grantArguments [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: g
@@ -1182,15 +1183,15 @@ function Compilation.refuseNarrowLiteral(this: Compilation, reach: DependencyRea
   local +11:13 relative: boolean (const)
   local +12:11 found: string | null (let)
   callee +14:17 findProgram -> @findProgram
-  callee +21:51 beneathAny -> @beneathAny
-  callee +21:62 normalizePath -> @normalizePath
-  local +23:15 real: string | null (const)
-  local +24:15 parent: string | null (const)
-  callee +24:37 dirname -> @dirname
-  callee +24:45 normalizePath -> @normalizePath
-  callee +26:29 beneathAny -> @beneathAny
-  callee +26:78 beneathAny -> @beneathAny
-  callee +30:7 Compilation.reportNarrowGrant -> @Compilation.reportNarrowGrant
+  callee +22:51 beneathAny -> @beneathAny
+  callee +22:62 normalizePath -> @normalizePath
+  local +24:15 real: string | null (const)
+  local +25:15 parent: string | null (const)
+  callee +25:37 dirname -> @dirname
+  callee +25:45 normalizePath -> @normalizePath
+  callee +27:29 beneathAny -> @beneathAny
+  callee +27:78 beneathAny -> @beneathAny
+  callee +31:7 Compilation.reportNarrowGrant -> @Compilation.reportNarrowGrant
 function Compilation.anyGrantScoped(this: Compilation): boolean -> @Compilation.anyGrantScoped [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=208 writesThrough=false captured=false
@@ -2081,44 +2082,47 @@ function Compilation.sandboxWidened(this: Compilation, caps: i32): i32 -> @Compi
   local +8:11 deny: i32 (const)
 function Compilation.narrowSandbox(this: Compilation, facts: FactsTable): void -> @Compilation.narrowSandbox [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
-  calls: Compilation.anyGrantScoped addOnce capabilityIndex dependencyMasks dependencyPackages functionIndex nish_array_grow nish_str_concat nish_str_eq programInterpreter rootReach
+  sharedWrite: +0:11
+  calls: Compilation.anyGrantScoped addOnce capabilityIndex dependencyMasks dependencyPackages functionIndex nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq programInterpreter rootReach
   pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 functionIndex#0 rootReach#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=functionIndex#1 rootReach#1
-  stackSites=2 stackLocals=1
-  local -77:11 caps: i32 (const)
-  callee -76:23 capabilityIndex -> @capabilityIndex
-  callee -76:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
-  local -73:11 reach: DependencyReach (const)
-  callee -73:19 dependencyPackages -> @dependencyPackages
-  local -69:11 index: FunctionIndex (const)
-  callee -69:19 functionIndex -> @functionIndex
-  callee -68:5 dependencyMasks -> @dependencyMasks
-  local -67:11 root: i32 (const)
-  callee -67:18 rootReach -> @rootReach
-  local -66:16 c: i32 (const)
-  callee -65:7 capabilityIndex -> @capabilityIndex
-  callee -64:7 capabilityIndex -> @capabilityIndex
-  callee -63:7 capabilityIndex -> @capabilityIndex
-  local -61:13 bit: i32 (const)
-  local -60:11 cli: string[] (let)
-  callee -59:17 capabilityIndex -> @capabilityIndex
-  callee -57:24 capabilityIndex -> @capabilityIndex
-  local -51:13 values: string[] (const)
-  local -50:11 reached: boolean (let)
-  local -49:11 scoped: boolean (let)
-  local -48:11 p: i32 (let)
-  local -42:17 g: i32 (const)
-  local -41:15 named: boolean (let)
-  local -39:17 j: i32 (let)
-  callee -31:17 addOnce -> @addOnce
-  local -13:13 granted: i32 (const)
-  callee -12:17 capabilityIndex -> @capabilityIndex
-  local -11:13 k: i32 (let)
-  local -9:17 interpreter: string | null (const)
-  callee -9:31 programInterpreter -> @programInterpreter
-  callee -7:13 addOnce -> @addOnce
-  local -2:11 v: i32 (let)
+  stackSites=3 stackLocals=2
+  local -88:11 caps: i32 (const)
+  callee -87:23 capabilityIndex -> @capabilityIndex
+  callee -87:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
+  local -84:11 reach: DependencyReach (const)
+  callee -84:19 dependencyPackages -> @dependencyPackages
+  local -80:11 index: FunctionIndex (const)
+  callee -80:19 functionIndex -> @functionIndex
+  callee -79:5 dependencyMasks -> @dependencyMasks
+  local -78:11 root: i32 (const)
+  callee -78:18 rootReach -> @rootReach
+  local -77:16 c: i32 (const)
+  callee -76:7 capabilityIndex -> @capabilityIndex
+  callee -75:7 capabilityIndex -> @capabilityIndex
+  callee -74:7 capabilityIndex -> @capabilityIndex
+  local -72:13 bit: i32 (const)
+  local -71:11 cli: string[] (let)
+  callee -70:17 capabilityIndex -> @capabilityIndex
+  callee -68:24 capabilityIndex -> @capabilityIndex
+  local -62:13 values: string[] (const)
+  local -61:13 execs: string[] (const)
+  local -60:11 reached: boolean (let)
+  local -59:11 scoped: boolean (let)
+  local -58:11 p: i32 (let)
+  local -52:17 g: i32 (const)
+  local -51:15 named: boolean (let)
+  local -49:17 j: i32 (let)
+  callee -40:17 addOnce -> @addOnce
+  callee -38:19 addOnce -> @addOnce
+  local -15:13 granted: i32 (const)
+  callee -14:17 capabilityIndex -> @capabilityIndex
+  local -13:13 k: i32 (let)
+  local -11:17 interpreter: string | null (const)
+  callee -11:31 programInterpreter -> @programInterpreter
+  callee -9:13 addOnce -> @addOnce
+  local -4:11 v: i32 (let)
+  local -2:15 value: string (const)
 function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.emit [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2197,14 +2201,14 @@ function passedOnlyTo(f: FunctionFacts | null, name: string): string -> @passedO
 function importsCollection(program: CheckedProgram, name: string): boolean -> @importsCollection
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 imp: ImportBinding (const)
 function declarationNameOf(program: CheckedProgram, name: string): Node | null -> @declarationNameOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownAlias CheckedProgram.ownEnum CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
   stackSites=0 stackLocals=0
   local +0:9 struct: StructInfo | null (const)
   callee +0:18 CheckedProgram.struct -> @CheckedProgram.struct
@@ -2283,7 +2287,7 @@ function describePackage(packageName: string): string -> @describePackage
 function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig, previousFile: string, file: string, packageName: string): string -> @clashMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer previous: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2302,7 +2306,7 @@ function sameSignature(a: FunctionSig, b: FunctionSig): boolean -> @sameSignatur
 function signatureText(table: TypeTable, sig: FunctionSig): string -> @signatureText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_alloc_struct nish_array_grow nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 params: string[] (const)
@@ -2312,7 +2316,7 @@ function signatureText(table: TypeTable, sig: FunctionSig): string -> @signature
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0

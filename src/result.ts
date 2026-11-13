@@ -21,7 +21,7 @@ import { roundUpTo } from "./structs"
 import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
 import { isParameterValue } from "./generics"
-import { N_BINARY, N_CALL, N_EMPTY, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { CheckedProgram } from "./program"
 import { Local, Scope } from "./symbols"
 import { R_ERR, R_OK, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
@@ -164,7 +164,7 @@ export const checkResultConstructor = (ctx: CheckContext, call: Node, scope: Sco
  */
 const narrowHint = (ctx: CheckContext, receiverExpr: Node, payload: string): string => {
   const test = payload === "value" ? "isOk()" : "isErr()"
-  if (receiverExpr.kind !== N_IDENT) {
+  if (receiverExpr.kind !== NodeKind.Ident) {
     const text = ctx.textOf(receiverExpr)
     return `only a local is narrowed, so bind it first: \`const r = ${text}; if (r.${test}) { ... r.${payload} ... }\``
   }
@@ -352,11 +352,11 @@ export const checkResultMethod = (
 export const narrowResultTest = (cond: Node, scope: Scope, table: TypeTable, whenTrue: boolean): boolean => {
   let receiver: Node | null = null
   let positive = true
-  if (cond.kind === N_MEMBER && cond.text === "ok") {
+  if (cond.kind === NodeKind.Member && cond.text === "ok") {
     receiver = cond.children[0]
-  } else if (cond.kind === N_CALL) {
+  } else if (cond.kind === NodeKind.Call) {
     const access = cond.children[0]
-    if (access.kind !== N_MEMBER || cond.children[1].children.length > 0) {
+    if (access.kind !== NodeKind.Member || cond.children[1].children.length > 0) {
       return false
     }
     if (access.text !== "isOk" && access.text !== "isErr") {
@@ -367,7 +367,7 @@ export const narrowResultTest = (cond: Node, scope: Scope, table: TypeTable, whe
   } else {
     return false
   }
-  if (receiver === null || receiver.kind !== N_IDENT) {
+  if (receiver === null || receiver.kind !== NodeKind.Ident) {
     return false
   }
   const local = scope.lookup(receiver.text)
@@ -401,7 +401,7 @@ export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32, 
   if (!ctx.table.isResult(type)) {
     return
   }
-  if (expr.kind === N_BINARY && expr.text === "=") {
+  if (expr.kind === NodeKind.Binary && expr.text === "=") {
     return
   }
   if (isParameterValue(ctx, expr, scope)) {
@@ -469,23 +469,23 @@ const rejectUnreadOverwrites = (
   declarations: Node[],
   unread: boolean[]
 ): void => {
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const initializer = node.children[2]
     rejectUnreadOverwrites(ctx, initializer, declarations, unread)
     const at = declarationIndex(ctx.program, declarations, ctx.program.nodeLocals[node.id])
     if (at >= 0) {
-      unread[at] = initializer.kind !== N_EMPTY
+      unread[at] = initializer.kind !== NodeKind.Empty
     }
     return
   }
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const at = declarationIndex(ctx.program, declarations, ctx.program.nodeLocals[node.id])
     if (at >= 0) {
       unread[at] = false
     }
     return
   }
-  if (node.kind === N_BINARY && node.text === "=" && node.children[0].kind === N_IDENT) {
+  if (node.kind === NodeKind.Binary && node.text === "=" && node.children[0].kind === NodeKind.Ident) {
     const target = node.children[0]
     rejectUnreadOverwrites(ctx, node.children[1], declarations, unread)
     const local = ctx.program.nodeLocals[target.id]
@@ -525,7 +525,7 @@ const declarationIndex = (program: CheckedProgram, declarations: Node[], local: 
 
 /** Every `Result`-typed `let`/`const` declared anywhere in `node`, in source order. */
 const collectResultLocals = (program: CheckedProgram, table: TypeTable, node: Node, out: Node[]): void => {
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const local = program.nodeLocals[node.id]
     if (local !== null && table.isResult(local.type)) {
       out.push(node)
@@ -548,14 +548,15 @@ const markResultReads = (
   declarations: Node[],
   read: boolean[]
 ): void => {
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const at = declarationIndex(program, declarations, program.nodeLocals[node.id])
     if (at >= 0) {
       read[at] = true
     }
     return
   }
-  const assigns = node.kind === N_BINARY && node.text === "=" && node.children[0].kind === N_IDENT
+  const assigns =
+    node.kind === NodeKind.Binary && node.text === "=" && node.children[0].kind === NodeKind.Ident
   let index = 0
   for (const child of node.children) {
     if (!assigns || index !== 0) {

@@ -40,7 +40,7 @@ Compilation                                                            src/compi
 | --- | --- | --- |
 | CLI | `src/compile.ts`, `src/options.ts`, `src/ice.ts` | Flag parsing, output planning (`-o file.ll`, `-o dir/`, `--link exe` intermediates, every directory in the way made with `mkdirSync`), running `bash scripts/build.sh` through `spawnSync` for the link, exit codes (0 ok, 1 compile error, 2 usage, 3 toolchain, 70 internal). `ice.ts` prints the internal-error report a broken invariant exits 70 with. |
 | Compilation | `src/compilation.ts` | Owns every `ModuleUnit` of one program: loads roots and imports (keyed by resolved path, so cycles terminate), runs the checker passes in the right order, rejects symbol clashes, runs the attribute analysis over all modules, emits one `.ll` per module, and computes output stems. It does not decide where output goes; `compile.ts` writes it. |
-| Parser | `src/tokens.ts`, `src/lexer.ts`, `src/nodes.ts`, `src/parser.ts`, `src/parents.ts` | The compiler's own scanner and parser. The tree is one `Node` class with a `kind: i32` discriminant and dense ids; the child layout per kind is written beside each kind in `nodes.ts`. A syntax error is a diagnostic like any other. |
+| Parser | `src/tokens.ts`, `src/lexer.ts`, `src/nodes.ts`, `src/parser.ts`, `src/parents.ts` | The compiler's own scanner and parser. The tree is one `Node` class with a `kind: NodeKind` discriminant and dense ids; the child layout per kind is written beside each kind in `nodes.ts`. A syntax error is a diagnostic like any other. |
 | Validator | `src/validator.ts` | One pre-order walk, dispatched by a `switch` on the node kind; decides everything from syntax alone (no types, no scopes). What is here is forbidden by design; what the checker refuses with `Unsupported ...` is merely not implemented yet. Defence in depth: it sees nodes the checker never visits. |
 | Types | `src/types.ts`, `src/annotations.ts` | A type is an `i32` interned in the compilation's one `TypeTable`, so type equality is an integer compare. `types.ts` holds `llvmType`, `alignOf`, `assignable` and the numeric predicates (two types are the same type when their ids are equal); `annotations.ts` turns a written annotation into a type id. |
 | Checker | `src/checker.ts` + `declarations.ts`, `structs.ts`, `constants.ts`, `assignment.ts` (definite assignment), `statements.ts`, `expressions.ts`, `members.ts`, `arrays.ts`, `builtins.ts`, `result.ts`, `generics.ts`, `bounds.ts`, `symbols.ts`, `context.ts`, `module-storage.ts` (WP50's module storage: which top-level `new` is storage, and the rules that keep its bytes where a page finds them) | Pass 1 collects signatures and struct layouts; pass 1b binds imports; pass 2 checks bodies. Every statement and expression goes through the central `switch` of its category (see below) and its type is recorded in a side table. |
@@ -169,7 +169,7 @@ own source until the seed compiles it, which is the next release.
    `tests/emit-ts/`, so `node tests/run.js emit-ts` runs it both ways; one
    that cannot be written yet is refused with an `NL40xx` code, never
    written with JavaScript's meaning.
-2. **Parser and validator.** New syntax needs a node kind in `src/nodes.ts`
+2. **Parser and validator.** New syntax needs a `NodeKind` member in `src/nodes.ts`
    (with its child layout written beside it) and a production in
    `src/parser.ts`. If the construct can *never* be compiled, add a rule to
    `src/validator.ts` and a `tests/cases/reject_<x>.ts` + `.err`. If it is

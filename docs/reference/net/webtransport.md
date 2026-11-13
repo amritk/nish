@@ -338,7 +338,7 @@ class WebTransportConfig
 | --- | --- |
 | `new WebTransportConfig()` |  |
 | `idleTimeout: i32` | Milliseconds a session may go without activity before `expire` ends it, 1 to 86,400,000: a session asked for counts from its request, an accepted one from its last datagram or stream event either way, and one this side closed from its close. |
-| `maxDatagramsPerSecond: i32` | Datagrams one session may deliver in a second, 1 to 1,048,576; the rest are dropped and counted. |
+| `maxDatagramsPerSecond: i32` | Datagrams one session may deliver in a second, 1 to 1,048,576; the rest are dropped and counted in `datagramsDropped`. Dropping is the whole defence: no count of drops closes the session. Datagrams are unreliable by contract (RFC 9297), so a dropped one is a loss the application already handles; a drop costs O(1); a close would punish a browser that bursts; and a client past the cap gains nothing but the CPU its datagrams cost to drop. |
 | `maxPending: i32` | Streams that may wait at once for a session not yet answered or not yet arrived (draft-02 §4.5). |
 | `maxStreams: i32` | Streams one session may have at once, both kinds and both openers together. |
 

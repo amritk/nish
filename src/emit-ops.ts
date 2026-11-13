@@ -28,7 +28,7 @@ import { emitFieldAssignment } from "./emit-classes"
 import { emitCoalesce, emitUndefinedTest, isUndefinedTest } from "./emit-map"
 import { emitConcat, emitStrictEquality } from "./emit-strings"
 import { unwrapParens } from "./emit-util"
-import { N_INDEX, N_MEMBER, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { ConstInfo } from "./program"
 import { f32Hex, f64Hex } from "./strings"
 import { Local } from "./symbols"
@@ -358,16 +358,16 @@ const constantCount = (expr: Node): ConstantCount => {
   let inner = expr
   let negative = false
   for (;;) {
-    if (inner.kind === N_PAREN) {
+    if (inner.kind === NodeKind.Paren) {
       inner = inner.children[0]
-    } else if (inner.kind === N_UNARY && inner.text === "-") {
+    } else if (inner.kind === NodeKind.Unary && inner.text === "-") {
       negative = !negative
       inner = inner.children[0]
     } else {
       break
     }
   }
-  if (inner.kind !== N_NUMBER) {
+  if (inner.kind !== NodeKind.Number) {
     return new ConstantCount(false, toI64(0))
   }
   const value = parseIntegerLiteral(inner.text)
@@ -495,7 +495,7 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
   if (op === "-") {
     const type = emitter.typeOf(operand)
     const literal = unwrapParens(operand)
-    if (isInteger(type) && literal.kind === N_NUMBER) {
+    if (isInteger(type) && literal.kind === NodeKind.Number) {
       return negatedLiteral(literal.text, type)
     }
     const value = emitter.emitExpression(operand)
@@ -550,10 +550,10 @@ export const targetLocal = (emitter: Emitter, target: Node): Local => {
 /** `x = e`, `x op= e` and their field and element forms, keyed by the target. */
 export const emitAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0]
-  if (target.kind === N_MEMBER) {
+  if (target.kind === NodeKind.Member) {
     return emitFieldAssignment(emitter, expr)
   }
-  if (target.kind === N_INDEX) {
+  if (target.kind === NodeKind.Index) {
     return emitElementAssignment(emitter, expr)
   }
   const op = expr.text

@@ -18,11 +18,6 @@ import unwrapParens from "./emit-util" -> function @unwrapParens
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import IRBlock from "./ir" -> struct IRBlock
 import FLAG_POSTFIX from "./nodes" -> const FLAG_POSTFIX
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CASE from "./nodes" -> const N_CASE
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_VAR from "./nodes" -> const N_VAR
 import Node from "./nodes" -> struct Node
 import SWITCH_COVERED from "./program" -> const SWITCH_COVERED
 import isFloat from "./types" -> function @isFloat
@@ -58,7 +53,7 @@ function isAlwaysTrue(cond: Node): boolean -> @isAlwaysTrue
   calls: unwrapParens
   pointer cond: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  callee +0:72 unwrapParens -> @unwrapParens
+  callee +0:35 unwrapParens -> @unwrapParens
 function emitLoopBody(emitter: Emitter, body: Node, loop: LoopTarget): void -> @emitLoopBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
