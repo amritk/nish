@@ -14715,9 +14715,14 @@ by the caller.
     what it allocates. A temporary handed to a callee that keeps it is passed
     on, so it is not counted. A temporary from which every path leaves the
     loop, by `return`, `throw` or a `break` out of it, is built at most once
-    each time the loop runs, so it is not counted either. The walk that
-    proves it gives up at a `switch`, a `try` or a nested loop, so a
-    temporary that a `return` inside a `switch` leaves with still counts.
+    each time the loop runs, so it is not counted either. Inside nested
+    loops it has to leave every unbounded loop out to where its memory is
+    released, not only the innermost: an unlabelled `break` ends only its
+    own loop, so a temporary that breaks out of a `for...of` inside a
+    `while (poll())` still counts, while a `return` or a `break` to a label
+    on the outer loop leaves both. The walk that proves it gives up at a
+    `switch`, a `try` or a nested loop, so a temporary that a `return`
+    inside a `switch` leaves with still counts.
 
     Not reported for:
     - a bounded loop;

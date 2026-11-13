@@ -46,7 +46,7 @@ struct Around (class) size=40 align=8
   field block: Node | null index=1 offset=8
   field loop: Node | null index=2 offset=16
   field loopScope: LoopScope | null index=3 offset=24
-  field unbounded: boolean index=4 offset=32
+  field unbounded: Node[] index=4 offset=32
   constructor -> @Around.constructor
 struct ArenaWalk (class) size=112 align=8
   field program: CheckedProgram index=0 offset=0
@@ -72,7 +72,7 @@ function ArenaSite.constructor(this: ArenaSite, node: Node, kind: string, placem
   pointer node: size=40 writesThrough=true captured=true
   pointer around: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function Around.constructor(this: Around, pass: LoopScope | null, block: Node | null, loop: Node | null, loopScope: LoopScope | null, unbounded: boolean): void -> @Around.constructor [constructor]
+function Around.constructor(this: Around, pass: LoopScope | null, block: Node | null, loop: Node | null, loopScope: LoopScope | null, unbounded: Node[]): void -> @Around.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: block loop loopScope pass unbounded
   pointer this: size=40 writesThrough=true captured=false
@@ -80,6 +80,7 @@ function Around.constructor(this: Around, pass: LoopScope | null, block: Node | 
   pointer block: size=40 writesThrough=true captured=true
   pointer loop: size=40 writesThrough=true captured=true
   pointer loopScope: size=40 writesThrough=true captured=true
+  pointer unbounded: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ArenaWalk.constructor(this: ArenaWalk, unit: AnalysisUnit, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, table: TypeTable | null): void -> @ArenaWalk.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -189,16 +190,20 @@ function walkNode(walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
   callee +24:50 new Around -> @Around.constructor
   callee +30:7 walkNode -> @walkNode
 function growingAround(walk: ArenaWalk, node: Node, loop: LoopScope | null, around: Around): Around -> @growingAround
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
-  calls: Around.constructor boundedPasses nish_alloc_struct
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: +0:5
+  escaping: node
+  calls: Around.constructor boundedPasses nish_alloc_struct nish_array_grow
   pointer walk: size=112 writesThrough=false captured=false passedTo=boundedPasses#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=boundedPasses#1 Around.constructor#3
-  pointer loop: size=40 writesThrough=true captured=true passedTo=Around.constructor#4
+  pointer node: size=40 writesThrough=true captured=true passedTo=boundedPasses#1 Around.constructor#3 Around.constructor#3
+  pointer loop: size=40 writesThrough=true captured=true passedTo=Around.constructor#4 Around.constructor#4
   pointer around: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 bounded: boolean (const)
-  callee +0:42 boundedPasses -> @boundedPasses
-  callee +1:10 new Around -> @Around.constructor
+  callee -5:30 boundedPasses -> @boundedPasses
+  callee -4:12 new Around -> @Around.constructor
+  local -2:9 unbounded: Node[] (const)
+  local -1:14 outer: Node (const)
+  callee +3:10 new Around -> @Around.constructor
 function boundedPasses(walk: ArenaWalk, loop: Node): boolean -> @boundedPasses
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: bodyExtendsWalked comparesInChain nish_panic_index readsOnly
@@ -425,16 +430,23 @@ function unboundedPassFindings(unit: AnalysisUnit, table: TypeTable, facts: Fact
   callee +28:18 unboundedFinding -> @unboundedFinding
 function pilesUp(walk: ArenaWalk, site: ArenaSite): boolean -> @pilesUp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get leavesLoop nish_panic_index nish_str_eq
+  calls: FactsTable.get leavesUnbounded nish_panic_index nish_str_eq
   pointer walk: size=112 writesThrough=false captured=false
+  pointer site: size=48 writesThrough=false captured=false passedTo=leavesUnbounded#1
+  stackSites=0 stackLocals=0
+  callee +0:52 leavesUnbounded -> @leavesUnbounded
+  local +3:9 id: i32 (const)
+  local +4:9 call: CallSite | null (const)
+  local +8:9 callee: FunctionFacts | null (const)
+  callee +8:18 FactsTable.get -> @FactsTable.get
+function leavesUnbounded(unit: AnalysisUnit, site: ArenaSite): boolean -> @leavesUnbounded
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: leavesLoop
+  pointer unit: size=16 writesThrough=false captured=false passedTo=leavesLoop#0
   pointer site: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 loop: Node | null (const)
-  callee +1:24 leavesLoop -> @leavesLoop
-  local +4:9 id: i32 (const)
-  local +5:9 call: CallSite | null (const)
-  local +9:9 callee: FunctionFacts | null (const)
-  callee +9:18 FactsTable.get -> @FactsTable.get
+  local +0:14 loop: Node (const)
+  callee +1:10 leavesLoop -> @leavesLoop
 function leavesLoop(unit: AnalysisUnit, node: Node, loop: Node): boolean -> @leavesLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -462,30 +474,41 @@ function childIndex(parent: Node, child: Node): i32 -> @childIndex
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
 function restLeaves(unit: AnalysisUnit, list: Node[], from: i32, loop: Node): i32 -> @restLeaves
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: from
-  calls: mayContinue mustLeave nish_panic_index
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: mayContinue mustLeave nish_panic_overflow
   pointer unit: size=16 writesThrough=false captured=false passedTo=mustLeave#0
   pointer list: size=0 writesThrough=false captured=false
   pointer loop: size=40 writesThrough=false captured=false passedTo=mustLeave#2
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
-  local +2:11 statement: Node (const)
-  callee +3:9 mayContinue -> @mayContinue
-  callee +6:9 mustLeave -> @mustLeave
+  local +1:14 statement: Node (const)
+  callee +3:11 mayContinue -> @mayContinue
+  callee +6:11 mustLeave -> @mustLeave
 function mustLeave(unit: AnalysisUnit, statement: Node, loop: Node): boolean -> @mustLeave
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: labelsAround mayContinue mustLeave nish_panic_index nish_str_eq restLeaves
-  pointer unit: size=16 writesThrough=false captured=false passedTo=labelsAround#0 restLeaves#0 mustLeave#0 mustLeave#0
-  pointer statement: size=40 writesThrough=false captured=false
-  pointer loop: size=40 writesThrough=false captured=false passedTo=labelsAround#1 restLeaves#3 mustLeave#2 mustLeave#2
+  calls: breaksOut labelsAround mayContinue mustLeave nish_panic_index nish_str_eq restLeaves
+  pointer unit: size=16 writesThrough=false captured=false passedTo=breaksOut#0 labelsAround#0 restLeaves#0 mustLeave#0 mustLeave#0
+  pointer statement: size=40 writesThrough=false captured=false passedTo=breaksOut#1
+  pointer loop: size=40 writesThrough=false captured=false passedTo=breaksOut#2 labelsAround#1 restLeaves#3 mustLeave#2 mustLeave#2
   stackSites=0 stackLocals=0
   local +0:9 kind: NodeKind (const)
-  callee +5:37 labelsAround -> @labelsAround
+  callee +5:36 breaksOut -> @breaksOut
+  callee +5:71 labelsAround -> @labelsAround
   callee +8:12 restLeaves -> @restLeaves
   callee +12:8 mayContinue -> @mayContinue
   callee +13:7 mustLeave -> @mustLeave
   callee +14:7 mustLeave -> @mustLeave
+function breaksOut(unit: AnalysisUnit, brk: Node, loop: Node): boolean -> @breaksOut
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: ParentTable.parentOf isLoopKind
+  pointer unit: size=16 writesThrough=false captured=false
+  pointer brk: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
+  pointer loop: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 at: Node | null (let)
+  callee +0:12 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +2:9 isLoopKind -> @isLoopKind
+  callee +8:10 ParentTable.parentOf -> @ParentTable.parentOf
 function labelsAround(unit: AnalysisUnit, loop: Node, label: string): boolean -> @labelsAround
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf nish_str_eq

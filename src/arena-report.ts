@@ -78,9 +78,10 @@ class ArenaSite {
  * The scopes the walk is inside at a node: the innermost scoped pass and
  * `using a = arena()` block around it, which are where memory goes back, and
  * the innermost loop since then whose pass releases nothing, around which a
- * site's memory piles up. `unbounded` says some loop between the node and that
- * release has nothing bounding its passes (`boundedPasses`), so nothing bounds
- * the pile (NL9018).
+ * site's memory piles up. `unbounded` lists the loops between the node and
+ * that release, innermost last, that have nothing bounding their passes
+ * (`boundedPasses`): unless a site leaves every one of them, nothing bounds its
+ * pile (NL9018).
  */
 class Around {
   pass: LoopScope | null
@@ -89,14 +90,15 @@ class Around {
   loop: Node | null
   /** `loop`'s scope, when it has an entry in `f.loopScopes`. */
   loopScope: LoopScope | null
-  unbounded: boolean
+  /** The loops since the release whose passes nothing bounds, outermost first. */
+  unbounded: Node[]
 
   constructor(
     pass: LoopScope | null,
     block: Node | null,
     loop: Node | null,
     loopScope: LoopScope | null,
-    unbounded: boolean
+    unbounded: Node[]
   ) {
     this.pass = pass
     this.block = block
@@ -317,7 +319,7 @@ const walkNode = (walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
     const child = node.children[i]
     if (node.kind === NodeKind.Block && isArenaUsing(program, child)) {
       inner = SCOPE_BLOCK
-      innerAround = new Around(around.pass, child, null, null, false)
+      innerAround = new Around(around.pass, child, null, null, [])
     }
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
@@ -330,7 +332,7 @@ const walkNode = (walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
         node.kind === NodeKind.Block ? innerAround : around
       )
     } else if (loop !== null && child === loop.body && loop.scoped) {
-      walkNode(walk, program, child, SCOPE_PASS, new Around(loop, around.block, null, null, false))
+      walkNode(walk, program, child, SCOPE_PASS, new Around(loop, around.block, null, null, []))
     } else {
       // The body of a loop whose pass nothing releases, or the head of any
       // loop: an enclosing scope still releases it, but only once this loop
@@ -344,8 +346,15 @@ const walkNode = (walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
 
 /** `around` inside `node`, a loop whose pass releases nothing of what `around` holds. */
 const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, around: Around): Around => {
-  const bounded = walk.table === null || boundedPasses(walk, node)
-  return new Around(around.pass, around.block, node, loop, around.unbounded || !bounded)
+  if (walk.table === null || boundedPasses(walk, node)) {
+    return new Around(around.pass, around.block, node, loop, around.unbounded)
+  }
+  const unbounded: Node[] = []
+  for (const outer of around.unbounded) {
+    unbounded.push(outer)
+  }
+  unbounded.push(node)
+  return new Around(around.pass, around.block, node, loop, unbounded)
 }
 
 /**
@@ -586,7 +595,7 @@ const comparesInChain = (condition: Node): boolean => {
 }
 
 /** The scopes around a function's body: none. */
-const outsideLoops = (): Around => new Around(null, null, null, null, false)
+const outsideLoops = (): Around => new Around(null, null, null, null, [])
 
 /**
  * The `--emit-arena` file: every function the program defines with a body, in
@@ -725,11 +734,7 @@ export const unboundedPassFindings = (
  * it was given allocates nothing.
  */
 const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
-  if (!site.accumulates || !site.around.unbounded || site.kind === "push") {
-    return false
-  }
-  const loop = site.around.loop
-  if (loop !== null && leavesLoop(walk.unit, site.node, loop)) {
+  if (!site.accumulates || site.kind === "push" || leavesUnbounded(walk.unit, site)) {
     return false
   }
   const id = site.node.id
@@ -744,8 +749,25 @@ const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
 }
 
 /**
+ * True when `site` leaves every loop around it whose passes nothing bounds, up
+ * to where its memory is released, so each runs it at most once per entry and
+ * only bounded loops multiply it. Leaving the innermost loop is not enough: an
+ * unlabelled `break` from a `for...of` inside a `while (poll())` still runs the
+ * site once per pass of the `while`.
+ */
+const leavesUnbounded = (unit: AnalysisUnit, site: ArenaSite): boolean => {
+  for (const loop of site.around.unbounded) {
+    if (!leavesLoop(unit, site.node, loop)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
  * True when every path from `node` to the end of `loop`'s pass leaves the
- * loop: a `return`, a `throw`, or a `break` out of this loop or one around it.
+ * loop: a `return`, a `throw`, a `break` whose own loop is this one, or a
+ * labelled `break` out of this loop or one around it.
  * Such a site runs at most once each time the loop is entered, so nothing it
  * allocates piles up pass after pass. A `continue`, or falling through to the
  * next pass, does not leave. The climb answers false at a `switch`, a `try` or
@@ -813,14 +835,15 @@ const childIndex = (parent: Node, child: Node): i32 => {
  * pass by a `continue`, and `REST_FALLS` when a path runs off their end.
  */
 const restLeaves = (unit: AnalysisUnit, list: Node[], from: i32, loop: Node): i32 => {
-  let i = from
-  while (i < list.length) {
-    const statement = list[i]
-    if (mayContinue(statement, true)) {
-      return REST_CONTINUES
-    }
-    if (mustLeave(unit, statement, loop)) {
-      return REST_LEAVES
+  let i = 0
+  for (const statement of list) {
+    if (i >= from) {
+      if (mayContinue(statement, true)) {
+        return REST_CONTINUES
+      }
+      if (mustLeave(unit, statement, loop)) {
+        return REST_LEAVES
+      }
     }
     i = i + 1
   }
@@ -834,7 +857,7 @@ const mustLeave = (unit: AnalysisUnit, statement: Node, loop: Node): boolean => 
     return true
   }
   if (kind === NodeKind.Break) {
-    return statement.text === "" || labelsAround(unit, loop, statement.text)
+    return statement.text === "" ? breaksOut(unit, statement, loop) : labelsAround(unit, loop, statement.text)
   }
   if (kind === NodeKind.Block) {
     return restLeaves(unit, statement.children, 0, loop) === REST_LEAVES
@@ -845,6 +868,21 @@ const mustLeave = (unit: AnalysisUnit, statement: Node, loop: Node): boolean => 
       mustLeave(unit, statement.children[1], loop) &&
       mustLeave(unit, statement.children[2], loop)
     )
+  }
+  return false
+}
+
+/** True when the unlabelled `brk` ends `loop` itself: the innermost loop around it, with no `switch` it would end first. */
+const breaksOut = (unit: AnalysisUnit, brk: Node, loop: Node): boolean => {
+  let at = unit.parents.parentOf(brk)
+  while (at !== null) {
+    if (isLoopKind(at)) {
+      return at === loop
+    }
+    if (at.kind === NodeKind.Switch || at.kind === NodeKind.Arrow || at.kind === NodeKind.FunctionDecl) {
+      return false
+    }
+    at = unit.parents.parentOf(at)
   }
   return false
 }

@@ -5597,14 +5597,17 @@ if (!only || "performance".includes(only)) {
   // or by label (`labelled`). A `return` inside a `switch` still warns
   // (`switched`): the leave walk stops at a `switch`. A walk also counts as
   // unbounded when its array goes through a function reference (`passed`), is
-  // written by index (`stores`) or is given another name (`renames`).
+  // written by index (`stores`) or is given another name (`renames`). An
+  // unlabelled `break` from a loop inside a polled one ends only its own loop,
+  // so the polled loop runs it again: two levels (`nested`) and three, with the
+  // `break` in the middle loop (`deep`), both warn.
   const unbounded = compile("perf_arena_unbounded_pass", "perf_arena_unbounded_pass_report.ll")
   const unboundedLines = summaries(unbounded.stderr)
   check(
     "performance: a loop nothing bounds that keeps what each pass allocates warns once, naming the site and the arena block",
     unbounded.status === 0 &&
-      unboundedLines.length === 17 &&
-      positions(unboundedLines) === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3" &&
+      unboundedLines.length === 19 &&
+      positions(unboundedLines) === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5" &&
       unboundedLines[0].includes(
         "this loop keeps what each pass allocates until the memory of `serve`'s caller is released, because the " +
           "allocation on line 36 is stored into memory, where this analysis stops following it, and nothing bounds " +
@@ -5627,7 +5630,9 @@ if (!only || "performance".includes(only)) {
       unboundedLines[13].includes("so the string built on line 212 piles up") &&
       unboundedLines[14].includes("so the string built on line 229 piles up") &&
       unboundedLines[15].includes("so the string built on line 243 piles up") &&
-      unboundedLines[16].includes("so the string built on line 255 piles up"),
+      unboundedLines[16].includes("so the string built on line 255 piles up") &&
+      unboundedLines[17].includes("so the string built on line 273 piles up") &&
+      unboundedLines[18].includes("so the string built on line 287 piles up"),
     unbounded.stderr
   )
   // Silent for the same temporary in a `using a = arena()` block, a counted
@@ -5638,7 +5643,9 @@ if (!only || "performance".includes(only)) {
   // leaves the loop (`finds`), a temporary handed to a callee that keeps it
   // (`posts`), a walk whose array goes to a call that only reads it (`reads`),
   // temporaries left by an `if` with no `else`, by both arms of an `if` and by
-  // a labelled `break` (`leaves`),
+  // a labelled `break` (`leaves`), a labelled `break` out of a polled loop
+  // from a loop inside it (`exitsLabelled`), a `return` from such a loop
+  // (`exitsReturn`), an inner loop whose own passes are scoped (`innerScoped`),
   // and a drop NL9016 already names, with its value on the target's line or the next:
   // two warnings, both NL9016's.
   const unboundedQuiet = compile("perf_arena_unbounded_quiet", "perf_arena_unbounded_quiet.ll")
@@ -11802,18 +11809,18 @@ if (dealtHere("unboundedPass")) {
       }
     })
   check(
-    'nl9018: --json reports each of perf_arena_unbounded_pass\'s seventeen warnings with "code":"NL9018"',
+    'nl9018: --json reports each of perf_arena_unbounded_pass\'s nineteen warnings with "code":"NL9018"',
     js.status === 0 &&
-      objects.length === 17 &&
+      objects.length === 19 &&
       objects.every((o) => o !== null && o.code === "NL9018" && o.severity === "performance") &&
-      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3",
+      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5",
     shown(js)
   )
   const off = caseCompile("off.ll", ["--no-warn-performance"])
   check(
     "nl9018: --no-warn-performance silences it and leaves the IR byte-identical",
     plain.status === 0 &&
-      nl9018Lines(plain.stderr).length === 17 &&
+      nl9018Lines(plain.stderr).length === 19 &&
       off.status === 0 &&
       !off.stderr.includes("performance:") &&
       stripHeader(fs.readFileSync(path.join(srvDir, "off.ll"), "utf8")) ===

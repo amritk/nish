@@ -262,6 +262,38 @@ const renames = (log: Log): void => {
   }
 };
 
+// An unlabelled `break` from an inner loop ends only that loop: the next pass
+// of the outer loop, which a poll drives, runs the inner one again, so its
+// temporary piles up pass after pass of the outer loop.
+const nested = (log: Log, xs: i32[]): void => {
+  while (more(log)) {
+    log.last = new Entry(0);
+    for (const x of xs) {
+      log.last = new Entry(x);
+      const t = `t${x}`;
+      log.total = log.total + t.length;
+      break;
+    }
+  }
+};
+
+// Three levels, with the `break` in the middle loop: it ends the middle loop
+// only, and the outermost runs it again.
+const deep = (log: Log, xs: i32[]): void => {
+  while (more(log)) {
+    log.last = new Entry(0);
+    for (const x of xs) {
+      log.last = new Entry(x);
+      const m = `m${x}`;
+      log.total = log.total + m.length;
+      for (const y of xs) {
+        log.last = new Entry(y);
+      }
+      break;
+    }
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -294,5 +326,9 @@ export const main = (): void => {
   passed(log);
   stores(log);
   renames(log);
+  log.left = 2;
+  nested(log, [1, 2]);
+  log.left = 2;
+  deep(log, [3, 4]);
   console.log(`${log.total} ${log.last.id}`);
 };

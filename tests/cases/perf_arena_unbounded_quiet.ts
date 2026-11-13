@@ -237,6 +237,45 @@ const leaves = (log: Log): i32 => {
   return 0;
 };
 
+// From an inner loop, a labelled `break` out of the outer loop leaves both
+// loops, so the temporary is built once per call.
+const exitsLabelled = (log: Log, xs: i32[]): void => {
+  outer: while (more(log)) {
+    log.last = new Entry(0);
+    for (const x of xs) {
+      log.last = new Entry(x);
+      const a = `a${x}`;
+      log.total = log.total + a.length;
+      break outer;
+    }
+  }
+};
+
+// A `return` from an inner loop leaves every loop around it.
+const exitsReturn = (log: Log, xs: i32[]): i32 => {
+  while (more(log)) {
+    log.last = new Entry(0);
+    for (const x of xs) {
+      log.last = new Entry(x);
+      const r = `r${x}`;
+      return r.length;
+    }
+  }
+  return 0;
+};
+
+// An inner loop whose passes keep nothing gets a scope of its own, so each of
+// its passes releases its temporary even inside a loop no pass of which does.
+const innerScoped = (log: Log, xs: i32[]): void => {
+  while (more(log)) {
+    log.last = new Entry(0);
+    for (const x of xs) {
+      const s = `s${x}`;
+      log.total = log.total + s.length;
+    }
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -259,5 +298,11 @@ export const main = (): void => {
   reads(log);
   log.left = 9;
   log.total = log.total + leaves(log);
+  log.left = 2;
+  exitsLabelled(log, [1, 2]);
+  log.left = 2;
+  log.total = log.total + exitsReturn(log, [3]);
+  log.left = 2;
+  innerScoped(log, [4, 5]);
   console.log(`${log.total} ${log.last.id} ${d} ${e} ${k} ${f} ${board.title}`);
 };
