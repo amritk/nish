@@ -1197,6 +1197,28 @@ const DECLARED = [
     changelog: "safegcd",
     why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
   })),
+  // WP39 G4: P256PointScratch gains `comb`, the recoded scalar m, so
+  // every module laying it out (a C header, or a test that makes its own
+  // scratch) has a wider struct and renumbered fields.
+  ...[
+    ["bench/jwt-verify/main.ts", "main.h"],
+    ["bench/p256.ts", "p256.h"],
+    ["bench/sha256-block/main.ts", "main.h"],
+    ["tests/link/crypto_jwt/main.ts", "main.h"],
+    ["tests/link/crypto_jwt_f64/main.ts", "main.h"],
+    ["tests/link/crypto_p256/main.ts", "scratch.ll"],
+    ["tests/link/crypto_p256_ecdh/main.ts", "main.h"],
+    ["tests/link/crypto_p256_f64/main.ts", "scratch.ll"],
+    ["tests/link/crypto_p256_sign_into_message_window/main.ts", "main.h main.ll"],
+    ["tests/link/crypto_p256_sign_into_signature_window/main.ts", "main.h main.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: "fixed-base table for P-256",
+      why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
+    }))
+  ),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.
