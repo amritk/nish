@@ -1,10 +1,9 @@
 // P-256's two scalar inversions held to each other, bit for bit (#758).
 //
-// `p256Sign` and `p256SignSha256Into` invert the nonce with
-// `p256ScalarInverse`, Bernstein and Yang's safegcd in 20 batches of 30
-// divsteps; `p256ScalarInvert`, the Fermat ladder `a^(n - 2)` it replaced,
-// stays in the module as the reference (and as `p256Verify`'s inversion of the
-// public `s`). This program requires the two to answer the same 32 bytes for
+// `p256Sign` and `p256SignSha256Into` invert the nonce, and `p256Verify` its
+// public `s`, with `p256ScalarInverse`, Bernstein and Yang's safegcd in 20
+// batches of 30 divsteps; the Fermat ladder `a^(n - 2)` it replaced lives on in
+// `seam.ts.in` as the reference. This program requires the two to answer the same 32 bytes for
 // every scalar below, and prints how many did.
 //
 // **The seam.** Neither inversion is exported, and this test adds no public

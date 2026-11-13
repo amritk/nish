@@ -45,11 +45,11 @@
  *  And `square` reads its input's eight limbs into locals first, which changes
  *  no arithmetic; it kept the input's pointer from being spilled in a way the
  *  aarch64 disassembly check once misread (#334). The scalar functions use the
- *  field's four helpers, which fiat generates identically for both. The nonce's
+ *  field's four helpers, which fiat generates identically for both. The scalar
  *  inverse, `p256ScalarInverse`, and the field's, `p256FieldInvert`, are
  *  libsecp256k1's 32-bit safegcd (`modinv32`), function for function; the
  *  section that holds it says what changes. Everything else in this file — the
- *  curve, the encodings, verification's inversion and ECDSA — is written for
+ *  curve, the encodings, the comb and ECDSA — is written for
  *  this module from the documents it names.
  *
  * **The curve** is `y^2 = x^3 - 3x + b` over GF(p),
@@ -88,10 +88,12 @@
  *  The signer inverts the nonce by Bernstein and Yang's safegcd,
  *  `p256ScalarInverse`: twenty batches of thirty divsteps, each a fixed run of
  *  masks and adds, whatever the scalar, so its loops count constants and no
- *  branch or address follows the nonce; Fermat's `p256ScalarInvert` is the
- *  reference it is held to bit for bit (`tests/link/crypto_p256_inverse`) and
- *  what verification still uses, raising to the public exponent n - 2, so its
- *  branches follow a constant. Every field inversion — of a Z that follows the
+ *  branch or address follows the nonce. Verification inverts its public s with
+ *  the same function: a variable-time twin could stop once g is zero, but it
+ *  would save at most the constant-time one's 33,620 Ir and add a second path
+ *  to audit. Fermat's a^(n - 2), which both used before, is the reference the
+ *  safegcd is held to bit for bit, in the test's seam
+ *  (`tests/link/crypto_p256_inverse`). Every field inversion — of a Z that follows the
  *  key or the nonce in the public key, ECDH and signing — is the same safegcd
  *  modulo p, `p256FieldInvert`, on the same divstep and update functions.
  *
@@ -3759,38 +3761,6 @@ const p256ReduceOnce = (out: u32[], a: u32[], m: u32[]): void => {
   p256FiatSelectznz(out, p256SubBorrow(d, a, m), d, a)
 }
 
-/**
- * Whether bit `i` (0 the least significant) of the plain limbs `e` is set.
- * Only ever asked of a public exponent.
- */
-const p256Bit = (e: u32[], i: i32): boolean => {
-  const limb: i32 = i >> 5
-  if (limb < 0 || limb >= 8 || toI32(e.length) < 8) {
-    return false
-  }
-  return ((e[limb] >> toU32(i & 31)) & 1) === 1
-}
-
-/**
- * `out = 1 / a` mod n, as `a^(n - 2)` with the scalar Montgomery multiply;
- * the exponent is public, so the square-and-multiply branches only on a
- * constant. Verification inverts s with it; the signer's `p256ScalarInverse`
- * is held to it bit for bit (`tests/link/crypto_p256_inverse`).
- */
-const p256ScalarInvert = (out: u32[], a: u32[]): void => {
-  const e: u32[] = p256Order()
-  e[0] = 0xfc63254f
-  const acc: u32[] = p256Limbs()
-  p256FiatScalarSetOne(acc)
-  for (let i: i32 = 255; i >= 0; i--) {
-    p256FiatScalarMul(acc, acc, acc)
-    if (p256Bit(e, i)) {
-      p256FiatScalarMul(acc, acc, a)
-    }
-  }
-  p256Copy(out, acc)
-}
-
 // ---- The nonce's and the field's inverses by safegcd -------------------------
 //
 // Bernstein and Yang's constant-time inversion ("Fast constant-time gcd
@@ -4069,7 +4039,8 @@ const p256Safegcd = (out: u32[], a: u32[], m: u32[], inverse30: u32): void => {
 
 /**
  * `out = 1 / a` mod n for `a` in the Montgomery domain, zero for a zero `a`:
- * the signing paths' inversion of the nonce, by `p256Safegcd`. The divsteps
+ * the signing paths' inversion of the nonce and verification's of s, by
+ * `p256Safegcd`. The divsteps
  * invert `a R` as a plain number; one Montgomery multiply by R^3 takes
  * `(a R)^-1` to `a^-1 R`.
  */
@@ -5910,7 +5881,7 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   // w = s^-1 in the Montgomery domain; u1 = z w and u2 = r w multiply a
   // plain value by it, so they come out plain.
   p256FiatScalarMul(w, w, r2)
-  p256ScalarInvert(w, w)
+  p256ScalarInverse(w, w)
   const u1: u32[] = p256Limbs()
   const u2: u32[] = p256Limbs()
   p256FiatScalarMul(u1, z, w)

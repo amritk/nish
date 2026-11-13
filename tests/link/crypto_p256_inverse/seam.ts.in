@@ -5,7 +5,27 @@
 // it computes u1 G + u2 Q, so tests/link/crypto_p256_inverse can
 // hold them to each other without the module growing a public API for it.
 
-/** `k mod n`, inverted by `p256ScalarInverse` (safegcd) or `p256ScalarInvert` (Fermat), as 32 big-endian bytes. */
+/**
+ * `out = 1 / a` mod n as `a^(n - 2)`, square-and-multiply with the scalar
+ * Montgomery multiply on the public exponent: the Fermat ladder the module
+ * used before `p256ScalarInverse`, kept here as its reference.
+ */
+const p256SeamScalarFermat = (out: u32[], a: u32[]): void => {
+  const e: u32[] = p256Order()
+  e[0] = e[0] - 2
+  const acc: u32[] = p256Limbs()
+  p256FiatScalarSetOne(acc)
+  for (let bit: i32 = 255; bit >= 0; bit--) {
+    p256FiatScalarMul(acc, acc, acc)
+    const word: u32 = e[bit / 32]
+    if (((word >> toU32(bit % 32)) & 1) === 1) {
+      p256FiatScalarMul(acc, acc, a)
+    }
+  }
+  p256Copy(out, acc)
+}
+
+/** `k mod n`, inverted by `p256ScalarInverse` (safegcd) or the seam's Fermat ladder, as 32 big-endian bytes. */
 const p256SeamInvertWith = (k: u8[], safegcd: boolean): u8[] => {
   const plain: u32[] = p256Limbs()
   const a: u32[] = p256Limbs()
@@ -15,7 +35,7 @@ const p256SeamInvertWith = (k: u8[], safegcd: boolean): u8[] => {
   if (safegcd) {
     p256ScalarInverse(a, a)
   } else {
-    p256ScalarInvert(a, a)
+    p256SeamScalarFermat(a, a)
   }
   p256FiatScalarMul(a, a, p256PlainOne())
   const out: u8[] = new Array<u8>(32)
@@ -23,7 +43,7 @@ const p256SeamInvertWith = (k: u8[], safegcd: boolean): u8[] => {
   return out
 }
 
-/** 1 / (k mod n) by safegcd, the signing paths' inversion. */
+/** 1 / (k mod n) by safegcd, the signing and verify paths' inversion. */
 export const p256SeamInverse = (k: u8[]): u8[] => p256SeamInvertWith(k, true)
 
 /** 1 / (k mod n) by Fermat, the reference. */
