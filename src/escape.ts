@@ -297,11 +297,20 @@ class Outcome {
    * this frame, whose own outcome it takes instead.
    */
   escapes: boolean
+  /**
+   * Stable but for a `let` on the path being assigned again: whatever the
+   * local holds when it is read, nothing else keeps a pointer to it. A
+   * `Result` site with this and a `local` flow outside every loop may be
+   * its own alloca (`decide`), because each site then runs once a call and
+   * the slot it fills is never written again while the local can name it.
+   */
+  settled: boolean
 
   constructor(flow: i32, stable: boolean, escapes: boolean) {
     this.flow = flow
     this.stable = stable
     this.escapes = escapes
+    this.settled = stable
   }
 }
 
@@ -836,8 +845,24 @@ class EscapeAnalysis {
       return carried
     }
     const target = this.assignedLocal(expr)
-    const escapes = target === null ? true : this.localOutcome(target, visiting).escapes
-    return new Outcome(FLOW_LEAKS, true, escapes)
+    if (target === null) {
+      return new Outcome(FLOW_LEAKS, true, true)
+    }
+    // `visiting` keeps every local entered for this site, not just the path,
+    // so one in it without a memo is still being decided: a cycle back into
+    // it (`r = c ? r : Ok(0)`) gets a placeholder, not the local's outcome.
+    const pending = this.memoised(target) === null && holdsLocal(visiting, target)
+    const held = this.localOutcome(target, visiting)
+    // A `Result` assigned to a `let` of this frame goes where the `let` goes:
+    // its flow and whether it is settled are the local's, and it is never
+    // `stable`, so the slot rule for `const` still refuses it. A cycle keeps
+    // the old answer.
+    if (!this.listing && !pending && this.table.isResult(this.table.stripNull(target.type))) {
+      const followed = new Outcome(held.flow, false, held.escapes)
+      followed.settled = held.settled
+      return followed
+    }
+    return new Outcome(FLOW_LEAKS, true, held.escapes)
   }
 
   /**
@@ -892,6 +917,7 @@ class EscapeAnalysis {
   captureOutcome(v: Local): Outcome | null {
     let flow = FLOW_LOCAL
     let stable = true
+    let settled = true
     let escapes = false
     let i = 0
     while (i < this.captured.length && i < this.captureTargets.length) {
@@ -910,11 +936,14 @@ class EscapeAnalysis {
         }
         flow = worse(flow, step.flow)
         stable = stable && step.stable
+        settled = settled && step.settled
         escapes = escapes || step.escapes
       }
       i = i + 1
     }
-    return new Outcome(flow, stable, escapes)
+    const outcome = new Outcome(flow, stable, escapes)
+    outcome.settled = settled
+    return outcome
   }
 
   /**
@@ -1338,6 +1367,7 @@ class EscapeAnalysis {
     visiting.push(v)
     let flow = captures.flow
     let stable = captures.stable
+    let settled = captures.settled
     let escapes = captures.escapes
     for (const ref of this.refsOf(v)) {
       const parent = this.unit.parents.parentOf(ref)
@@ -1355,9 +1385,11 @@ class EscapeAnalysis {
       const step = this.valueOutcome(ref, visiting)
       flow = worse(flow, step.flow)
       stable = stable && step.stable
+      settled = settled && step.settled
       escapes = escapes || step.escapes
     }
     const outcome = new Outcome(flow, stable, escapes)
+    outcome.settled = settled
     this.outcomeLocals.push(v)
     this.outcomeValues.push(outcome)
     return outcome
@@ -1464,6 +1496,31 @@ class EscapeAnalysis {
 
   // ---- Decisions ----------------------------------------------------------------------
 
+  /** `Ok(v)`, `Err(e)`, or a call answering a by-value `Result`. */
+  isResultSite(node: Node): boolean {
+    if (node.kind !== NodeKind.Call) {
+      return false
+    }
+    const program = this.unit.program
+    const callee = program.nodeCallees[node.id]
+    if (callee !== null) {
+      return this.table.resultByValue(callee.returnType)
+    }
+    return isResultConstructorCall(program, this.table, node)
+  }
+
+  /** Whether `node` can run more than once a call: a loop of this function encloses it. */
+  inLoop(node: Node): boolean {
+    let at = this.unit.parents.parentOf(node)
+    while (at !== null && at.kind !== NodeKind.Arrow && at.kind !== NodeKind.FunctionDecl) {
+      if (isLoopKind(at)) {
+        return true
+      }
+      at = this.unit.parents.parentOf(at)
+    }
+    return false
+  }
+
   decide(): void {
     for (const site of this.sites) {
       const fresh: Local[] = []
@@ -1510,6 +1567,18 @@ class EscapeAnalysis {
         continue
       }
       if (site.stackable && this.opts.stackAlloc && flow === FLOW_LOCAL && outcome.stable) {
+        this.result.stackSites[site.node.id] = true
+        continue
+      }
+      if (
+        site.stackable &&
+        this.opts.stackAlloc &&
+        flow === FLOW_LOCAL &&
+        !escapes &&
+        outcome.settled &&
+        this.isResultSite(site.node) &&
+        !this.inLoop(site.node)
+      ) {
         this.result.stackSites[site.node.id] = true
         continue
       }
