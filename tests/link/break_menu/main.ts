@@ -23,7 +23,7 @@ import {
   KeyState,
   TermEvent,
 } from "nish/term"
-import { TermInput } from "nish/term-io"
+import { StepInput } from "../../../std/input"
 import { Framebuffer } from "nish/term-pixels"
 import {
   BreakMenu,
@@ -68,10 +68,10 @@ const WIPE: i32 = 0x05040c
 const BALL: i32 = 0xfff4d8
 
 /** An input with no events: a step where the player does nothing. */
-const quiet = (): TermInput => new TermInput(new KeyState())
+const quiet = (): StepInput => new StepInput(new KeyState())
 
 /** An input holding one key event of `key` (`code` for `KEY_CHAR`) with `action`. */
-const keyInput = (key: i32, code: i32, action: i32): TermInput => {
+const keyInput = (key: i32, code: i32, action: i32): StepInput => {
   const input = quiet()
   const e = new TermEvent(EVENT_KEY)
   e.key = key

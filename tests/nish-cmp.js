@@ -1146,6 +1146,12 @@ const pathMtu = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
+/** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
+const VECTOR_ACCESS_TBAA = "vector loads and stores in range"
+const vectorAccessTbaa = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: VECTOR_ACCESS_TBAA, why }))
+  )
 
 /**
  * The words WP39 G6's changelog line starts with: the branch's runtime commit
@@ -1189,7 +1195,65 @@ const pgTls = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PG_TLS, why }))
   )
 
+/** The changelog words of the QUIC NAT-rebind fix (#1511). */
+const quicRebind = byFinding(
+  "QUIC transfer survives a NAT rebind while one hole fills the stream buffer"
+).bind(
+  null,
+  "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves"
+)
+
 const DECLARED = [
+  // A vector load or store carries the scope and TBAA tag a scalar element
+  // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
+  ...vectorAccessTbaa(
+    "a nish:simd vector load or store gains the !alias.scope, !noalias and !tbaa a scalar element access of its lane type carries, and src/bounds.ts drops its check where a guard proves every lane in range (`i <= n - 16`, a literal index into a known length); a scalar index under an `i < w.length - c` guard is proven too, so the modules with such an access move",
+    {
+      "tests/cases/simd_access.ts": ["simd_access.ll"],
+      "tests/cases/simd_access_alias.ts": ["simd_access_alias.ll"],
+      "tests/cases/simd_access_oob_guard.ts": ["simd_access_oob_guard.ll"],
+      "tests/cases/simd_access_oob_resized.ts": ["simd_access_oob_resized.ll"],
+      "tests/cases/simd_access_oob_unfloored.ts": ["simd_access_oob_unfloored.ll"],
+      "tests/cases/simd_access_oob_loop_pop.ts": ["simd_access_oob_loop_pop.ll"],
+      "tests/cases/simd_access_oob_alias_pop.ts": ["simd_access_oob_alias_pop.ll"],
+      "tests/cases/simd_access_oob_field_swap.ts": ["simd_access_oob_field_swap.ll"],
+      "tests/cases/simd_access_oob_strict.ts": ["simd_access_oob_strict.ll"],
+      "tests/cases/simd_access_oob_below.ts": ["simd_access_oob_below.ll"],
+      "tests/cases/simd_access_oob_huge_offset.ts": ["simd_access_oob_huge_offset.ll"],
+      "tests/cases/simd_access_oob_huge_literal.ts": ["simd_access_oob_huge_literal.ll"],
+      "tests/cases/simd_access_order.ts": ["simd_access_order.ll"],
+      "tests/cases/simd_access_proven.ts": ["simd_access_proven.ll"],
+      "tests/cases/simd_values.ts": ["simd_values.ll"],
+      "tests/cases/simd_zero_fill.ts": ["simd_zero_fill.ll"],
+      "tests/cases/simd_access_oob.ts": ["simd_access_oob.ll"],
+      "tests/cases/simd_access_oob_first.ts": ["simd_access_oob_first.ll"],
+      "tests/cases/simd_access_oob_negative.ts": ["simd_access_oob_negative.ll"],
+      "tests/cases/simd_chacha_quarter.ts": ["simd_chacha_quarter.ll"],
+      "tests/cases/simd_load_field_loop.ts": ["simd_load_field_loop.ll"],
+      "tests/cases/simd_store_field_reload.ts": ["simd_store_field_reload.ll"],
+      "tests/cases/simd_store_oob.ts": ["simd_store_oob.ll"],
+      "docs/cookbook/simd-load-store.ts": ["simd-load-store.ll"],
+      "bench/http1-parse/main.ts": ["old-copy.ll", "old.ll"],
+      "tests/link/net_http1_parse_diff/main.ts": ["old.ll"],
+      "tests/link/simd_parallel_capture/main.ts": ["main.ll"],
+      "examples/http-get-json.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["outbound.ll"],
+      "tests/link/net_outbound/main.ts": ["outbound.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream_release/main.ts": ["outbound.ll"],
+    }
+  ),
   // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
   // by one interleaved wNAF pass, so the module every importer writes moves.
   ...["p256.ll", "std_crypto_p256.ll"].map((file) => ({
@@ -1301,6 +1365,30 @@ const DECLARED = [
     file: "exit",
     changelog: "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
     why: "the program reaches getenv from a --target wasm32 build, which the 0.38.0 seed compiles and then fails to link, and the candidate refuses with NL2404 naming the chain, so only the reference compiles it",
+  })),
+  // H3-5: the bad-config tests set Http3Config.idleTimeout or headTimeout,
+  // new in std/net.
+  ...[
+    "tests/link/net_http3_server_bad_head_timeout/main.ts",
+    "tests/link/net_http3_server_bad_idle_timeout/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "(H3-5)",
+    why: "the program sets Http3Config.idleTimeout or headTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  })),
+  // H3-5: Http3Config gains idleTimeout and headTimeout, so the C header of
+  // every program that exports a type reaching it gains the two fields.
+  ...[
+    "tests/link/net_quic_prefork/main.ts",
+    "tests/link/net_quic_worker/main.ts",
+    "tests/link/net_webtransport_bad_idle/main.ts",
+    "tests/link/net_webtransport_bad_rate/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "(H3-5)",
+    why: "Http3Config gains the int32_t fields idleTimeout and headTimeout, which the seed's std/net does not have, so the program's header declares two more fields",
   })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
@@ -3888,6 +3976,12 @@ const DECLARED = [
     why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
   },
   {
+    program: "tests/link/sandbox_dep_exec_once/main.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: 'the fixture calls `spawnPipedWithin`, which the 0.38.0 seed refuses with "Unknown function" (#1387)',
+  },
+  {
     program: "tests/cases/io_spawn_piped_within.ts",
     file: "exit",
     changelog: SPAWN_PIPED_WITHIN,
@@ -4270,6 +4364,14 @@ const DECLARED = [
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
     }
   ),
+  // #1416: Http1Connection keeps its last response head, and the head-reuse
+  // test reads the internal `headCopies` counter that counts its copies.
+  {
+    program: "tests/link/net_http1_server_head_reuse/main.ts",
+    file: "exit",
+    changelog: "repeated HTTP/1 response head once per Date tick",
+    why: "the program reads Http1Connection.headCopies, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  },
   // WP49 stage 6: `Router.match` walks the path once, recording where it
   // ends, and HttpRequest gains `headLength`, so every program reaching
   // std/net/router.ts lays it out again, and a module naming HttpRequest's
@@ -5553,6 +5655,87 @@ const DECLARED = [
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
+  {
+    program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:sh` as a program named `exec:sh`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
+  {
+    program: "tests/link/sandbox_dep_exec_optin/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:env` as a program named `exec:env`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
+  // #1511: QuicConnection gains a field (752 to 760 bytes) and QuicStreams
+  // gains `bufferBlocked`, so every module laying either out moves.
+  ...quicRebind({
+    "tests/link/net_interop_server/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_interop_server_f64/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_quic_prefork/main.ts": [
+      "common.ll",
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+    ],
+    "tests/link/net_quic_recovery/main.ts": [
+      "net_quic_conn_common.ll",
+      "net_quic_stream_common.ll",
+      "pmtu.ll",
+    ],
+    "tests/link/net_quic_recovery_f64/main.ts": [
+      "net_quic_conn_common.ll",
+      "net_quic_stream_common.ll",
+      "pmtu.ll",
+    ],
+    "tests/link/net_quic_stream/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
+    "tests/link/net_quic_stream_f64/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
+    "tests/link/net_quic_worker/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_common.ll",
+      "net_quic_conn_replay_server.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+    ],
+    "tests/link/net_webtransport/main.ts": ["clock.ll"],
+    "tests/link/net_webtransport_bad_idle/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "net_webtransport_peer.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+      "webtransport.ll",
+    ],
+    "tests/link/net_webtransport_bad_rate/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "net_webtransport_peer.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+      "webtransport.ll",
+    ],
+    "tests/link/net_webtransport_f64/main.ts": ["clock.ll"],
+  }),
 ]
 
 /**

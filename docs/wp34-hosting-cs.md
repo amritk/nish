@@ -1095,7 +1095,8 @@ binary printed the pinned checksum, 1238268086. The machine is an
 
 The twin matches to the instruction, so the band is 0 Ir. The comb moves
 key generation and signing. The inversion moves verification by 742,318 Ir,
-which is Fermat's ~776k less safegcd's ~33.6k.
+about Fermat's 776,501 less safegcd's 33,661, as ECC-4 measures each through
+the inverse test's seam.
 
 **Wall clock** (`node bench/p256.mjs --self --binary <bf63d260>`, 9 rounds of
 3): at the minimum, head is 63.6 µs against 84.4 µs for the public key, 72.1

@@ -52,7 +52,7 @@ the record that found it. The notes below the table name each such finding.
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16, RT-18 and RT-51 to RT-53 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`, `structs.ts`, `emit-classes.ts`, `annotations.ts`, `interop-abi.ts`, `interop-header.ts`) | 0 / 3 / 21 / 17 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 6 ⁹ | 0 / 0 / 0 / 2 |
-| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 10 ¹¹ | 0 / 0 / 0 / 0 |
+| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 11 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
 | HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
@@ -60,7 +60,7 @@ the record that found it. The notes below the table name each such finding.
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 1 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
-| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
+| HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 0 ⁷ |
 | QUIC on every core | [quic-multicore.md](quic-multicore.md) | the UDP path of `nish/net/prefork`; the worker byte in `std/net/quic.ts`, `std/net/quic-listener.ts` and `std/net/quic-conn-cid.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ²⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts`; the global `Map`'s key hashes: `std/collections.ts`, `src/emit-map.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ¹⁰ |
@@ -72,7 +72,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts`; the spawn-target check in `runtime/runtime-os.c` | 0 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts`; the spawn handed to the sandbox in `runtime/runtime-os.c` | 0 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts`, `src/shm-window.ts`, `src/emit-shm-window.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
@@ -89,7 +89,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 16 / 83 / 182** | **0 / 0 / 3 / 37** |
+| **Total** ⁸ | | | **3 / 16 / 83 / 183** | **0 / 0 / 3 / 36** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -182,12 +182,13 @@ the record that found it. The notes below the table name each such finding.
    (Medium) is counted as fixed: its Linux rows gate, and its macOS rows
    report rather than gate, for the reason its record gives.
 7. H2-2, H3-4, WT-3, WT-4 and WT-5 (Low) are accepted, with the reason in
-   their records, and are not counted, as SC-17 is not. H3-5 is open: the
-   program owns the loop and the clock. H1-2, H2-3 and WT-2 are closed and
-   counted as fixed: each layer takes the clock from the program's `expire`,
-   as H1-1's does. WT-1 repeats H3-1 and
-   is counted in its own record. H3-1, H3-2, H3-3, H3-6, H3-7, H3-8 and WT-1
-   are closed and counted as fixed, and QUIC-9, the microsecond pacer H3-8
+   their records, and are not counted, as SC-17 is not. H1-2, H2-3 and WT-2
+   are closed and counted as fixed: each layer takes the clock from the
+   program's `expire`, as H1-1's does. H3-5 is closed and counted as a fixed
+   Low: `Http3Server` closes an idle slot at `idleTimeout` and one trickling a
+   request's head at `headTimeout`, with no program code. WT-1 repeats H3-1 and
+   is counted in its own record. H3-1, H3-2, H3-3, H3-5, H3-6, H3-7, H3-8 and
+   WT-1 are closed and counted as fixed, and QUIC-9, the microsecond pacer H3-8
    rests on, is closed and counted as a fixed Low in the QUIC row.
 
    H1-1
@@ -277,6 +278,11 @@ the record that found it. The notes below the table name each such finding.
     QUIC-11 (Low), a peer's address change not followed, was closed by
     #1210: a NAT rebinding is followed after path validation, within the
     anti-amplification limit; it is counted as a fixed Low.
+    QUIC-12 (Low), a NAT rebinding missed while a stream's send buffer
+    waited behind one lost packet, was closed by #1485: the server sends an
+    ACK-eliciting probe half a round trip after its last ACK-eliciting
+    packet, so the client answers from its new port; it is counted as a
+    fixed Low.
 12. URL-1 to URL-8 (Low) are accepted, with the reason in their record, and
     are not counted: the byte API's output is not checked as UTF-8, a
     refused decode leaves the bytes before the refusal written, a repeated
@@ -496,8 +502,7 @@ only.
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
 | HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `fetch.ts` and `websocket.ts` to spans mode |
 | H2C-1 | Low | `std/net/http2-cleartext.ts` | Cleartext by design: no confidentiality or integrity on the path. Serve h2c only behind a TLS-terminating proxy, on loopback or a private network | — |
-| H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WebTransport sessions have their own clock (WT-2) | — |
-| AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
+| AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_block`, `nish_aes_ctr`, `nish_aes_ghash`) | Each kernel now clears every vector register and caller-saved general register before it returns (`nish_aes_clear`), spills no vector register, and wipes the two stack buffers it owns; tests/run.js reads all three in the `-O2` assembly on x86-64, x86-64-v3 and aarch64. What is left: the `debug` profile's `-O0` stack, a signal frame taken while a kernel runs, and the operating system's saved context, none of which a store or clear in the kernel reaches | — |
 | SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`) | On the SHA-NI and ARMv8 SHA-256 path the state, the message words and every round's intermediates pass through vector registers, and on x86-64 seven spills of them, which no store from C or the language can wipe; the kernel keeps no buffer and writes only the new state to `h`, which HMAC wipes (K1-7). Recorded rather than reached, as AEAD-4 | — |
 | CHACHAHW-2 | Low | `runtime/runtime-chacha20.c` (`nish_chacha20_xor`) | On the AVX2 and NEON path the state, every round's working words and the keystream pass through vector registers, and `clang -O2` spills some to the stack, which no store from C or the language can wipe; the stack buffers the kernel names are wiped by volatile stores, and the caller's state is the caller's to wipe. Recorded rather than reached, as AEAD-4 | — |
 | RT-38 | Low | `runtime/runtime-net.c` (`nish_recv_fd`) | On Darwin a descriptor `recvFd` keeps is made close-on-exec by an `fcntl` after `recvmsg`, so a child another thread spawns in between inherits it; Linux marks it in the receive. The window RT-30 records for pipes, recorded rather than reached | — |

@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -28,6 +28,10 @@
     "./page": {
       "types": "./runtime/page.d.ts",
       "default": "./runtime/page.mjs"
+    },
+    "./page/frame": {
+      "types": "./runtime/page-frame.d.ts",
+      "default": "./runtime/page-frame.mjs"
     },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",

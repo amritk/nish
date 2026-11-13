@@ -880,11 +880,11 @@ const checkCrypto = (
  * `readCString(p)`, from `nish:unsafe` (WP27 S3.3, `docs/wp27-ffi.md` §8e):
  * the `NUL`-terminated bytes at `p`, copied into the arena as a `string`.
  *
- * The argument is a `CPtr` and never a `CPtr | null`, so a null address cannot
- * reach the copy: the only `CPtr` a program holds came back from a C function,
- * and one that may be null is narrowed with `!== null` before it is accepted
- * here. What the type cannot say — that the address is a C string, and still
- * live — is why the call is in `nish:unsafe`.
+ * The argument is a `CPtr`, but a C function declared to answer a plain
+ * `CPtr` may still answer `NULL`, so the emitter tests the pointer first and
+ * panics with `ffi-null`, as `readStruct` does (`emitFfiNullTest`). What
+ * nothing can test — that the address is a C string, and still live — is why
+ * the call is in `nish:unsafe`.
  */
 const checkReadCString = (ctx: CheckContext, call: Node, scope: Scope, args: Node): i32 => {
   if (checkBuiltinArity(ctx, call, "readCString", args, 1)) {
