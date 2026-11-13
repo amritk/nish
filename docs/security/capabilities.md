@@ -247,7 +247,8 @@ names the granted program by its absolute path". A grant
 `process.spawn=exec:<program>` is held to the same literals
 (`link/caps_dep_arg_spawn_exec_too_narrow`, `link/caps_dep_spawn_exec_granted`),
 and `exec:` with no program is NL3046
-(`link/caps_dep_manifest_spawn_exec_refused`); what it lifts at run time is in
+(`link/caps_dep_manifest_spawn_exec_refused`); the lockfile records the prefix, so a move from
+`process.spawn=<program>` to it is NL2593 (`link/caps_dep_lock_spawn_exec_widened`); what it lifts at run time is in
 [sandbox.md](sandbox.md#limits).
 
 **The lockfile records the arguments** (CAPS-20):

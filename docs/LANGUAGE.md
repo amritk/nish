@@ -13658,7 +13658,8 @@ without one grants the capability whole, as before:
   (`caps_dep_manifest_spawn_exec_refused`); the literal check treats
   `exec:<program>` as `<program>` (`caps_dep_arg_spawn_exec_too_narrow`,
   `caps_dep_spawn_exec_granted`); a program granted both ways is `exec:`; and
-  the lockfile records the prefix, so adding it is NL2593. The program is
+  the lockfile records the prefix, so adding it is NL2593
+  (`caps_dep_lock_spawn_exec_widened`). The program is
   listed with three leading slashes, the same file to the kernel
   (`tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`):
 
