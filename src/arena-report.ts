@@ -461,11 +461,12 @@ const walksOwnArray = (unit: AnalysisUnit, loop: Node): boolean => {
 }
 
 /**
- * How many times `node`'s subtree declares the walked array, counting the
- * identifiers spelled as `local` is in it, or -1 when one of them is a use that could
- * resize or alias the array. `iterable` itself, the name its declaration binds,
- * an element access and a `.length` read are the safe uses; a shadowing
- * binding of the same name counts against it.
+ * Counts the declarations of the walked array in `node`'s subtree, or gives
+ * -1 when an identifier named `local.name` is a use that could resize or alias
+ * the array. The safe uses are `iterable` itself, the name the array's own
+ * declaration binds, an element read or write (`a[i]`) and a `.length` read
+ * that is not assigned. Any other use gives -1, including a shadowing binding
+ * of the same name.
  */
 const walkedUses = (unit: AnalysisUnit, node: Node, local: Local, iterable: Node): i32 => {
   let declarations = 0

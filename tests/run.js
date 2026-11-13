@@ -11858,8 +11858,14 @@ if (dealtHere("unboundedPass")) {
           resolve(r)
         }
         const deadline = setTimeout(() => finish({ error: "no answer within 60 s" }), 60_000)
-        const rss = () =>
-          Number(/VmRSS:\s+(\d+) kB/.exec(fs.readFileSync(`/proc/${server.pid}/status`, "utf8"))?.[1] ?? -1)
+        const rss = () => {
+          try {
+            return Number(/VmRSS:\s+(\d+) kB/.exec(fs.readFileSync(`/proc/${server.pid}/status`, "utf8"))?.[1] ?? -1)
+          } catch {
+            // The server is gone; -1 makes the batch an error, not an uncaught throw.
+            return -1
+          }
+        }
         server.on("error", (e) => finish({ error: String(e) }))
         server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
         server.stdout.on("data", (d) => {
@@ -11889,7 +11895,12 @@ if (dealtHere("unboundedPass")) {
               pending = pending.subarray(end + 4 + length)
               left--
               if (left === 0) {
-                readings.push(rss())
+                const kb = rss()
+                if (kb < 0) {
+                  finish({ error: "could not read the server's VmRSS from /proc" })
+                  return
+                }
+                readings.push(kb)
                 batch++
                 if (batch === counts.length) {
                   finish({ readings })

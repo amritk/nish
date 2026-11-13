@@ -622,49 +622,79 @@ by the caller.
     whose pass can `return` what it allocated, which no bracket could
     release, so there is no rewrite to name.
   - **a pass of an unbounded loop that keeps what it allocates** (NL9018) —
-    an allocation that `--emit-arena` marks `"accumulates":true` (it runs on
-    every pass of a loop that releases nothing per pass, and nothing reaches
-    it once the pass ends), where some loop between it and its release has
-    nothing bounding how many passes it runs. That is the shape of a request
-    loop on `Http1Server`: its pass calls `accept` or `respond`, which store
-    into the server's memory, so the pass is refused its scope, and a reply
-    string built in the handler stays allocated for as long as the server runs
-    (`tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests;
-    the rewrite grew none). A loop is bounded, and NL9018 stays silent for
-    it, when either of these holds: it is a `while`, `do` or `for` whose
-    condition, taken as its top-level `&&` chain, has at least one conjunct
-    that is an order comparison (`<`, `<=`, `>`, `>=`), and that calls nothing
-    but the numeric conversions (`toI32` and its kin) and reads nothing but
-    locals, fields (`.length` among them) and constants; or it is a
-    `for...of` whose body cannot extend what it walks and that does not
-    re-read a map's entry count, the test that also decides a function's
-    `willreturn`, or that walks a local array nothing else can resize: a
-    `const` the function declares with a fresh array (not a parameter or a
-    field), never passed to a call, stored or assigned, and never pushed,
-    popped or spliced by name, whatever else the body calls. A call to any function of the program or of `std/` anywhere
-    in the condition makes the loop unbounded. So every other loop is
-    unbounded: `while (true)` and `for (;;)`, a flag with no comparison
-    (`while (running)`), equalities only (`while (a !== X && a !== Y)`), a
-    top-level `||` (`while (next >= 0 || next === FULL)`), a call in the
-    condition (`while (more(log))`, `while (k < n && poll())`), a `for...of`
-    that extends what it walks, and a bounded loop inside an unbounded one
-    that releases nothing. The rule has a known blind spot: a comparison loop
-    whose body never moves toward its bound still counts as bounded. There is at most one
-    warning per loop, at the innermost loop whose pass releases nothing; it
-    names the first site and its kind, how many more there are, where the
-    memory goes back, why the pass has no scope, and the rewrite: move the
-    per-pass work that builds the temporary into a block inside the loop body
-    that opens with [`using a = arena()`](builtins.md#using-a--arena), which the compiler
-    refuses (NL2416 and its family) if anything allocated there could outlive
-    it (`tests/cases/perf_arena_unbounded_pass`). Only a temporary the pass
-    drops counts: an array a `push` grows, a value stored or passed on, and a
-    call to a function that stores what it allocates are not. Not reported for
-    a bounded loop, for the same temporary inside the block, for a loop whose
-    pass takes its scope, or for a site NL9002, NL9003, NL9011 or NL9016
-    already reports, as the value of the assignment or the call that warning
-    sits on (`tests/cases/perf_arena_unbounded_quiet`). It reads the
-    `"accumulates"` fact `--emit-arena` prints, then keeps only the temporaries
-    a pass drops, and changes no byte of the IR.
+    an allocation that `--emit-arena` marks `"accumulates":true`, where some
+    loop between it and its release has nothing bounding how many passes it
+    runs. `"accumulates"` means the allocation runs on every pass of a loop
+    that releases nothing per pass, and nothing reaches it once the pass ends.
+
+    That is the shape of a request loop on `Http1Server`. Its pass calls
+    `accept` or `respond`, which store into the server's memory, so the pass
+    is refused its scope. A reply string built in the handler then stays
+    allocated for as long as the server runs:
+    `tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests,
+    and the rewrite grew none.
+
+    A loop is bounded, and NL9018 stays silent for it, when one of these
+    holds:
+
+    - It is a `while`, `do` or `for` whose condition has an order comparison
+      (`<`, `<=`, `>`, `>=`) as a conjunct of its top-level `&&` chain. The
+      condition must call nothing but the numeric conversions (`toI32` and
+      its kin), and read nothing but locals, fields (`.length` among them)
+      and constants. A call to any function of the program or of `std/`
+      anywhere in the condition makes the loop unbounded.
+    - It is a `for...of` whose body cannot extend what it walks and that
+      does not re-read a map's entry count. This is the same test that
+      decides a function's `willreturn`.
+    - It is a `for...of` over a local array nothing else can resize. The
+      array is a `const` the function declares with a fresh array (not a
+      parameter or a field). Every other mention of its name in the function
+      is an element read or write (`a[i]`) or a `.length` read that is not
+      assigned. Any other use forfeits the credit: passing it to a call,
+      storing or assigning it, a method call such as `a.push`, `a.indexOf`
+      or `a.slice`, or a second `for...of` over it. Calls the body makes on
+      other values do not matter.
+
+    Every other loop is unbounded:
+    - `while (true)` and `for (;;)`;
+    - a flag with no comparison (`while (running)`);
+    - equalities only (`while (a !== X && a !== Y)`);
+    - a top-level `||` (`while (next >= 0 || next === FULL)`);
+    - a call in the condition (`while (more(log))`,
+      `while (k < n && poll())`);
+    - a `for...of` that extends what it walks;
+    - a bounded loop inside an unbounded one that releases nothing.
+
+    The rule has a known blind spot: a comparison loop whose body never
+    moves toward its bound still counts as bounded.
+
+    There is at most one warning per loop, at the innermost loop whose pass
+    releases nothing. It names:
+    - the first site and its kind, and how many more there are;
+    - where the memory goes back;
+    - why the pass has no scope;
+    - the rewrite.
+
+    The rewrite moves the per-pass work that builds the temporary into a
+    block inside the loop body that opens with
+    [`using a = arena()`](builtins.md#using-a--arena). The compiler refuses that block
+    (NL2416 and its family) if anything allocated there could outlive it
+    (`tests/cases/perf_arena_unbounded_pass`).
+
+    Only a temporary the pass drops counts. These do not: an array a `push`
+    grows, a value stored or passed on, and a call to a function that stores
+    what it allocates.
+
+    Not reported for:
+    - a bounded loop;
+    - the same temporary inside the block;
+    - a loop whose pass takes its scope;
+    - a site NL9002, NL9003, NL9011 or NL9016 already reports, as the value
+      of the assignment or the call that warning sits on
+      (`tests/cases/perf_arena_unbounded_quiet`).
+
+    It reads the `"accumulates"` fact `--emit-arena` prints, then keeps only
+    the temporaries a pass drops, and changes no byte of the IR.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
