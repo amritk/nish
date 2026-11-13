@@ -2507,6 +2507,33 @@ const pathRoot = (ctx: CheckContext, node: Node, scope: Scope): Local | null => 
 }
 
 /**
+ * Whether `node` is a chain of property reads, none optional, from a name or
+ * `this`: `h.s.kind`. Its `pathKey` is `@` and the names, so two such chains
+ * from one root are one path when their names match (`samePlainPath`).
+ */
+const plainPath = (node: Node): boolean => {
+  let read = unwrapParens(node)
+  while (read.kind === N_MEMBER && (read.flags & FLAG_OPTIONAL) === 0) {
+    read = unwrapParens(read.children[0])
+  }
+  return read.kind === N_IDENT || read.kind === N_THIS
+}
+
+/** Whether the plain path `read` (`plainPath`) and the path `other` read the same names in turn. */
+const samePlainPath = (read: Node, other: Node): boolean => {
+  let a = unwrapParens(read)
+  let b = unwrapParens(other)
+  while (a.kind === N_MEMBER) {
+    if (b.kind !== N_MEMBER || (b.flags & FLAG_OPTIONAL) !== 0 || a.text !== b.text) {
+      return false
+    }
+    a = unwrapParens(a.children[0])
+    b = unwrapParens(b.children[0])
+  }
+  return b.kind === N_IDENT || b.kind === N_THIS
+}
+
+/**
  * The variable the property path `node` stands for when it reads an enum —
  * `h.k`, `this.k`, `h.s.kind`, `xs[0].kind` — made on its first test
  * (`create`), so that a test narrows the members the path holds as it does a
@@ -2530,17 +2557,41 @@ const pathVariable = (
   if (!ctx.table.isEnum(type) || ctx.program.isEnumMember(ctx.table, read)) {
     return null
   }
-  const key = pathKey(ctx, read, scope)
-  if (key === "") {
+  // A lookup that would make nothing answers null unless a path from this
+  // root was made: most reads, which no test before them named.
+  if (!create && ctx.pathLocals.length === 0) {
     return null
   }
   const root = pathRoot(ctx, read, scope)
   if (root === null) {
     return null
   }
+  if (!create) {
+    let at = 0
+    while (at < ctx.pathRoots.length && ctx.pathRoots[at] !== root) {
+      at = at + 1
+    }
+    if (at === ctx.pathRoots.length) {
+      return null
+    }
+  }
+  // A chain of plain property reads, the common `h.kind`, is matched node to
+  // node, so its key is spelled once, when its variable is made.
+  const plain = plainPath(read)
+  let key = ""
+  if (!plain) {
+    key = pathKey(ctx, read, scope)
+    if (key === "") {
+      return null
+    }
+  }
   let i = 0
   while (i < ctx.pathLocals.length) {
-    if (ctx.pathRoots[i] === root && ctx.pathKeys[i] === key && ctx.pathLocals[i].type === type) {
+    if (
+      ctx.pathRoots[i] === root &&
+      ctx.pathLocals[i].type === type &&
+      (plain ? samePlainPath(read, ctx.pathNodes[i]) : ctx.pathKeys[i] === key)
+    ) {
       return ctx.pathLocals[i]
     }
     i = i + 1
@@ -2548,10 +2599,14 @@ const pathVariable = (
   if (!create) {
     return null
   }
+  if (plain) {
+    key = pathKey(ctx, read, scope)
+  }
   const local = new Local(key, type, true, STORAGE_LOCAL)
   ctx.pathLocals.push(local)
   ctx.pathRoots.push(root)
   ctx.pathKeys.push(key)
+  ctx.pathNodes.push(read)
   return local
 }
 

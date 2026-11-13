@@ -243,12 +243,13 @@ export class CheckContext {
    * A property path an enum test reads — `h.k`, `this.k`, `xs[0].kind` — and
    * the variable each stands for, so a test narrows what the path holds as it
    * would a local's (`pathVariable` in `src/expressions.ts`): `pathLocals[i]`
-   * is the path `pathKeys[i]` written from the variable `pathRoots[i]`, and
-   * `thisRoot` stands for `this`.
+   * is the path `pathKeys[i]` written from the variable `pathRoots[i]` and
+   * first read as `pathNodes[i]`, and `thisRoot` stands for `this`.
    */
   pathLocals: Local[]
   pathRoots: Local[]
   pathKeys: string[]
+  pathNodes: Node[]
   thisRoot: Local
   /** How many variables have been given a `$n` index key (`Local.pathIndex`). */
   pathIndexCount: i32
@@ -411,6 +412,7 @@ export class CheckContext {
     this.pathLocals = []
     this.pathRoots = []
     this.pathKeys = []
+    this.pathNodes = []
     this.thisRoot = new Local("this", T_ERROR, false, STORAGE_PARAM)
     this.pathIndexCount = 0
     this.arrowFns = []
