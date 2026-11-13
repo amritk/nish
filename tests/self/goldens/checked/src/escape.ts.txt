@@ -1868,7 +1868,7 @@ function loopUpdate(loop: Node): Node | null -> @loopUpdate
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer loop: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function keptUntil(unit: AnalysisUnit, f: FunctionFacts, isMain: boolean, pass: LoopScope | null, block: Node | null): string -> @keptUntil
+function keptUntil(unit: AnalysisUnit, f: FunctionFacts, isMain: boolean, pass: LoopScope | null, block: Node | null): string -> @keptUntil [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf nish_str_concat nish_str_from_i32
   pointer unit: size=16 writesThrough=false captured=false
@@ -1879,7 +1879,7 @@ function keptUntil(unit: AnalysisUnit, f: FunctionFacts, isMain: boolean, pass: 
   local +0:9 source: SourceFile (const)
   callee +3:61 SourceFile.lineOf -> @SourceFile.lineOf
   callee +6:50 SourceFile.lineOf -> @SourceFile.lineOf
-function loopKeptReason(unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string -> @loopKeptReason
+function loopKeptReason(unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string -> @loopKeptReason [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat passReason
   pointer unit: size=16 writesThrough=false captured=false passedTo=passReason#0

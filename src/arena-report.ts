@@ -56,7 +56,14 @@ class ArenaSite {
   /** The scopes around the site, which say where an accumulating site piles up and whether anything bounds it. */
   around: Around
 
-  constructor(node: Node, kind: string, placement: string, callee: string, accumulates: boolean, around: Around) {
+  constructor(
+    node: Node,
+    kind: string,
+    placement: string,
+    callee: string,
+    accumulates: boolean,
+    around: Around
+  ) {
     this.node = node
     this.kind = kind
     this.placement = placement
@@ -71,7 +78,8 @@ class ArenaSite {
  * `using a = arena()` block around it, which are where memory goes back, and
  * the innermost loop since then whose pass releases nothing, around which a
  * site's memory piles up. `unbounded` says some loop between the node and that
- * release is not counted (`isCountedLoop`), so nothing bounds the pile (NL9018).
+ * release has nothing bounding its passes (`boundedPasses`), so nothing bounds
+ * the pile (NL9018).
  */
 class Around {
   pass: LoopScope | null
@@ -119,7 +127,13 @@ class ArenaWalk {
   /** The type table `isCountedLoop` reads, or null when nothing asks whether a pile is bounded. */
   table: TypeTable | null
 
-  constructor(unit: AnalysisUnit, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, table: TypeTable | null) {
+  constructor(
+    unit: AnalysisUnit,
+    facts: FactsTable,
+    sig: FunctionSig,
+    f: FunctionFacts,
+    table: TypeTable | null
+  ) {
     const program = unit.program
     this.unit = unit
     this.program = program
@@ -330,8 +344,40 @@ const walkNode = (walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
 /** `around` inside `node`, a loop whose pass releases nothing of what `around` holds. */
 const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, around: Around): Around => {
   const table = walk.table
-  const counted = table === null || isCountedLoop(walk.unit, table, node, walk.facts)
-  return new Around(around.pass, around.block, node, loop, around.unbounded || !counted)
+  const bounded = table === null || boundedPasses(walk, table, node)
+  return new Around(around.pass, around.block, node, loop, around.unbounded || !bounded)
+}
+
+/**
+ * True when something the program holds bounds how many passes `loop` runs: it
+ * is counted (`isCountedLoop`), it walks a collection (`for...of`), or its
+ * condition compares with `<`, `<=`, `>` or `>=`, the scan of a length or a
+ * budget. What is left runs for as long as the program decides at run time:
+ * `while (true)`, `for (;;)`, `while (poll())`, `while (event !== DONE)`.
+ */
+const boundedPasses = (walk: ArenaWalk, table: TypeTable, loop: Node): boolean => {
+  if (loop.kind === NodeKind.ForOf || isCountedLoop(walk.unit, table, loop, walk.facts)) {
+    return true
+  }
+  if (loop.kind === NodeKind.While) {
+    return comparesOrder(loop.children[0])
+  }
+  return (loop.kind === NodeKind.Do || loop.kind === NodeKind.For) && comparesOrder(loop.children[1])
+}
+
+/** True when `condition`, or a conjunct of it, is an ordering comparison. */
+const comparesOrder = (condition: Node): boolean => {
+  if (condition.kind === NodeKind.Paren) {
+    return comparesOrder(condition.children[0])
+  }
+  if (condition.kind !== NodeKind.Binary) {
+    return false
+  }
+  const op = condition.text
+  if (op === "&&") {
+    return comparesOrder(condition.children[0]) || comparesOrder(condition.children[1])
+  }
+  return op === "<" || op === "<=" || op === ">" || op === ">="
 }
 
 /** The scopes around a function's body: none. */
@@ -399,9 +445,9 @@ export const arenaJson = (units: AnalysisUnit[], facts: FactsTable): string => {
 //
 // A performance warning read off the sites `--emit-arena` marks
 // `"accumulates":true`, so the warning and the audit file cannot disagree. Of
-// those, it keeps the ones no count of passes bounds: some loop between the
-// site and the scope that releases its memory is not counted
-// (`isCountedLoop`). That is the shape of a request loop that builds a
+// those, it keeps the ones nothing bounds: some loop between the site and the
+// scope that releases its memory has no count, collection or ordering
+// comparison bounding its passes (`boundedPasses`). That is the shape of a request loop that builds a
 // temporary per request: the pile grows for as long as the program serves.
 
 /** One loop the warning names, and the sites it keeps that nothing bounds. */
@@ -417,7 +463,7 @@ class UnboundedLoop {
 
 /**
  * The NL9018 warnings of one module: one per loop whose pass releases nothing,
- * at that loop, for the accumulating sites inside it that no counted loop
+ * at that loop, for the accumulating sites inside it that nothing
  * bounds. A site on one of the lines in `named`, which another retention
  * warning of the module already reports, is left to that warning.
  */
@@ -431,7 +477,8 @@ export const unboundedPassFindings = (
   const program = unit.program
   const entry = program.entryMain
   for (const sig of program.functions) {
-    const f: FunctionFacts | null = sig.definedIn(program.source) && !sig.foreign() ? facts.get(sig.name) : null
+    const f: FunctionFacts | null =
+      sig.definedIn(program.source) && !sig.foreign() ? facts.get(sig.name) : null
     const body = sig.body()
     if (f === null || body === null) {
       continue
@@ -462,13 +509,15 @@ export const unboundedPassFindings = (
 }
 
 /**
- * Whether `site` is one the warning names: it accumulates, no counted loop
- * bounds it, and it allocates. Growing an array is not counted: the buffers a
- * `push` outgrows add up to less than the array it fills, which the program
- * still holds, so they grow with what it keeps and not with its passes. A call is a site of `--emit-arena` for the
- * memory its callee may hand over, but only a callee that leaves memory
- * behind (`netAllocates`) adds to the pile: an accessor that returns a
- * pointer it was given allocates nothing.
+ * Whether `site` is one the warning names: it accumulates, nothing bounds it,
+ * and what it allocates is a temporary the pass drops, so a `using a = arena()`
+ * block around it would be accepted. Growing an array is not counted: the
+ * buffers a `push` outgrows add up to less than the array it fills, which the
+ * program still holds, so they grow with what it keeps and not with its
+ * passes. A call is a site of `--emit-arena` for the memory its callee may hand
+ * over, but only a callee that leaves memory behind (`netAllocates`) and stores
+ * none of it (`contained`) adds to the pile: an accessor that returns a pointer
+ * it was given allocates nothing.
  */
 const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
   if (!site.accumulates || !site.around.unbounded || site.kind === "push") {
@@ -480,7 +529,9 @@ const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
     return walk.arenaFlow[id] === FLOW_LOCAL && !walk.escapes[id]
   }
   const callee = walk.facts.get(call.callee)
-  return callee !== null && callee.netAllocates && callee.contained && call.flow === FLOW_LOCAL && !call.escapes
+  return (
+    callee !== null && callee.netAllocates && callee.contained && call.flow === FLOW_LOCAL && !call.escapes
+  )
 }
 
 /** Count `site` under the loop it piles up around, or start that loop's entry. */

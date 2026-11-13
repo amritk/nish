@@ -527,7 +527,7 @@ by the caller.
   checked when one of its instantiations is finished, and the padding rule below
   is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  The thirteen below each name the rewrite; the class also holds NL9012, a
+  The fourteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
   ([Data parallelism](declarations.md#data-parallelism-nishthreads)), and the retired NL9014
   and NL9015, which noted the removed `--unchecked-indexing` and `--wrapping`:
@@ -621,6 +621,35 @@ by the caller.
     when the result is returned, stored, pushed or passed on; or in a loop
     whose pass can `return` what it allocated, which no bracket could
     release, so there is no rewrite to name.
+  - **a pass of an unbounded loop that keeps what it allocates** (NL9018) —
+    an allocation that `--emit-arena` marks `"accumulates":true` (it runs on
+    every pass of a loop that releases nothing per pass, and nothing reaches
+    it once the pass ends), where some loop between it and its release has
+    nothing bounding how many passes it runs. That is the shape of a request
+    loop on `Http1Server`: its pass calls `accept` or `respond`, which store
+    into the server's memory, so the pass is refused its scope, and a reply
+    string built in the handler stays allocated for as long as the server runs
+    (`tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests;
+    the rewrite grew none). A loop counts as bounded when it is a `for ... of`,
+    a counted loop, or one whose condition, or a conjunct of an `&&` in it,
+    compares with `<`, `<=`, `>` or `>=`: the pile then grows with the input,
+    not with the time the program runs. `while (true)`, `for (;;)`,
+    `while (poll())` and `while (event !== H1_NEED_MORE)` are unbounded, and so
+    is a counted `for` inside one that releases nothing. There is at most one
+    warning per loop, at the innermost loop whose pass releases nothing; it
+    names the first site and its kind, how many more there are, where the
+    memory goes back, why the pass has no scope, and the rewrite: move the
+    per-pass work that builds the temporary into a block inside the loop body
+    that opens with [`using a = arena()`](builtins.md#using-a--arena), which the compiler
+    refuses (NL2416 and its family) if anything allocated there could outlive
+    it (`tests/cases/perf_arena_unbounded_pass`). Only a temporary the pass
+    drops counts: an array a `push` grows, a value stored or passed on, and a
+    call to a function that stores what it allocates are not. Not reported for
+    a bounded loop, for the same temporary inside the block, for a loop whose
+    pass takes its scope, or on a line NL9002, NL9003, NL9011 or NL9016
+    already reports (`tests/cases/perf_arena_unbounded_quiet`). It reads the
+    facts `--emit-arena` prints, so the two cannot disagree, and changes no
+    byte of the IR.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -1399,7 +1428,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Four performance warnings are exactly that finding, and
+killed. Five performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
@@ -1409,19 +1438,20 @@ modules:
 | NL9003, an allocation dropped by an assignment | the value the local held |
 | NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
 | NL9016, an allocation dropped on every pass | the value each pass replaced |
+| NL9018, a pass of an unbounded loop that keeps what it allocates | the temporary each pass built, for as long as the loop runs |
 
 - **The error keeps the warning.** Its text is the warning's, after the code of
   the rule that found it, so it names the same rewrite:
   `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
   (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
-  `reject_deny_retention_loop`, `reject_deny_retention_concat`). The warning it
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`, `reject_deny_retention_unbounded_pass`). The warning it
   restates is not printed as well, and `--no-warn-performance` does not
   silence the error.
 - **The program's own modules only.** A module of the root package is held to
   it; a dependency's warnings stay warnings, as its panic sites stay outside
   the [no-panic scope](#the-no-panic-scope), because the program's author
   cannot change that code (`tests/link/deny_retention_dependency`).
-- **What it does not promise.** The four warnings are conservative in the
+- **What it does not promise.** The five warnings are conservative in the
   direction of silence: each fires only where the compiler can name the memory
   and the rewrite, so a program it accepts can still retain memory in a shape
   no rule recognises ([wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md), "Left out"). Nor does it

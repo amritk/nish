@@ -3520,7 +3520,7 @@ function nameWriteVia(graph: FactGraph, list: FunctionFacts[]): void -> @nameWri
   local +17:15 callee: string (const)
   callee +19:11 writesShared -> @writesShared
   callee +20:11 writesAnArgument -> @writesAnArgument
-function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node, known: FactsTable | null): boolean -> @isCountedLoop
+function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node, known: FactsTable | null): boolean -> @isCountedLoop [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: absOf bodyDisturbs bodyMayExtend isName nish_array_grow nish_panic_index nish_str_eq numericLiteralValue stepOf unwrapParens
   pointer unit: size=16 writesThrough=false captured=false

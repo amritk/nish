@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 923
+export const RULE_COUNT: i32 = 924
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1907,12 +1907,12 @@ const performanceRules = (): string[] => [
   "NL9003",
   "is computed in i32 and can overflow it before",
   "NL9005",
+  "and nothing bounds how many passes it runs",
+  "NL9018",
   "this computes with overflow: the result",
   "NL9006",
   "drops the one the pass before gave it",
   "NL9016",
-  "and nothing bounds how many passes it runs",
-  "NL9018",
   "is called here inside a loop and",
   "NL9008",
   "is not proven to be in range for",
