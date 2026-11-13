@@ -502,6 +502,17 @@ export const hmacChecks = (): i32 => {
       sha256IntoHex(key6, data6) === "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54" &&
       sha256IntoHex(key6, data7) === tag7Sha256
   );
+  // The tag window may end exactly at the array's end: at = size - 32, with at > 0.
+  const edgeMac = new HmacSha256(key1);
+  edgeMac.update(data1, start, toI32(data1.length));
+  const tight: u8[] = new Array<u8>(33);
+  const one: i32 = 1;
+  edgeMac.digestInto(tight, one);
+  t.eqStr(
+    "HmacSha256.digestInto writes a window that ends at the array's last byte",
+    hexOf(tight),
+    "00b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+  );
   // A scratch keyed with a key longer than its block hashes the key in its
   // inner hasher first; starting that hasher again must not leave the key's
   // last partial block behind in it.

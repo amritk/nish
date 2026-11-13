@@ -355,6 +355,16 @@ export const sha256Checks = (): i32 => {
     "55ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
   );
   t.eqI32("and leaves the byte after the window alone", toI32(window[33]), fill);
+  // The window may end exactly at the array's end: at = size - 32, with at > 0.
+  const edge: Sha256 = new Sha256();
+  edge.update(msg896, start, abc);
+  const tight: u8[] = repeated(0x55, 33);
+  edge.digestInto(tight, at);
+  t.eqStr(
+    "digestInto writes a window that ends at the array's last byte",
+    hexOf(tight),
+    "55ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  );
   const noBytes: i64 = 0;
   t.eqI64("digestInto allocates nothing", digestIntoCost(msg896), noBytes);
 

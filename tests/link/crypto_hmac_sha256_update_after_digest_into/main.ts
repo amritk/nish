@@ -1,8 +1,8 @@
 // `HmacSha256.digestInto` ends the computation as `digest` does: a later
 // `update` panics in the inner `Sha256` ("Sha256: update after digest", on
 // stderr) rather than hashing message after the padding. Exit 1, and stdout
-// stops at the line printed after the tag. The link harness compares stdout and
-// the exit code only, so the message is named here rather than pinned.
+// stops at the line printed after the tag. expected.stderr
+// pins the message, so another guard firing fails the test.
 import { HmacSha256 } from "nish/crypto/hmac";
 
 export const main = (): i32 => {

@@ -572,7 +572,8 @@ export class Sha256 {
    * big-endian order) at `out[at .. at + 32)` and ends the computation, with
    * nothing allocated. A window outside `out` panics before anything is
    * written or the hasher is finished, rather than writing the part of the
-   * digest that fits.
+   * digest that fits. A second `digest` or `digestInto` panics, and so does an
+   * `update` after it.
    *
    * @param out The caller's array the digest is written into.
    * @param at Where the 32 digest bytes start in `out`.
@@ -615,12 +616,15 @@ export class Sha256 {
       const word: u32 = state[i]
       const p: i32 = at + 4 * i
       // Always true once the window check above passed; written out so the
-      // prover sees each byte's index is inside `out`.
+      // prover sees each byte's index is inside `out`, and a panic rather
+      // than a skipped write if an edit ever makes it false.
       if (p >= 0 && p + 3 < toI32(out.length)) {
         out[p] = toU8(word >>> 24)
         out[p + 1] = toU8(word >>> 16)
         out[p + 2] = toU8(word >>> 8)
         out[p + 3] = toU8(word)
+      } else {
+        panic("Sha256: a digest word fell outside its window")
       }
     }
   }
