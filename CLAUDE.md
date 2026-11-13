@@ -71,7 +71,17 @@ release ships it — the rolling freeze, checked by CI's `bootstrap` job. Run
 `bash scripts/fetch-seed.sh --force` if the seed may be stale. A change to
 `src/` also runs `node tests/run.js wasi` and `node tests/run.js performance`
 before it is pushed (read the `wasi` skip line; it needs
-`WASI_SYSROOT=/usr`).
+`WASI_SYSROOT=/usr`): a new index in `src/` the prover cannot discharge is an
+NL9007 warning, and that run's ratchet fails on it. A change to `runtime/*.c`
+runs `node tests/run.js c-symbols`, which fails on a new libc call until
+`src/c-symbols.ts` reserves it (`.claude/selfhost.md` →
+["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)).
+
+**CI's runners are not this container.** A spawn or sandbox check in
+`tests/run.js` runs on ubuntu with uutils coreutils and with descriptors the
+runner hands node: it proves behaviour by the exit status of a helper it
+builds, never by a tool's message text or the test process's own descriptor
+count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 
 **Generated goldens are regenerated, never edited or merged by hand.**
 `tests/self/goldens/checked/` (one file per module) moves with any change to
