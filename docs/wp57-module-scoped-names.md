@@ -189,14 +189,18 @@ module declares. Pass 1b appends imported signatures later. The step groups
 every defined, non-foreign free function's symbol and every function
 template's symbol by spelling. A method or constructor (`sig.owner !== null`)
 is left out: its symbol is `Owner.method`, scoped by its class's name, which
-is S3's, and `--emit-header` gives it an asm label of that spelling. For each spelling held by more than one definition:
+is S3's, and `--emit-header` gives it an asm label of that spelling. So is a
+generic method's template, keyed `Owner.method` in `templateList`
+(`src/generics.ts`). For each spelling held by more than one definition:
 
 - every **private** party is qualified, both of two private ones included, so
   which module keeps the bare name never depends on load order;
 - an **exported** party keeps its bare symbol;
 - a private function named `main` in a module other than the entry is
   qualified rather than refused (today the message says it "collides with the
-  entry wrapper `@main`").
+  entry wrapper `@main`"). An *exported* `main` outside the entry stays
+  refused as today, since an exported party keeps its bare symbol and the
+  wrapper owns `@main`.
 
 Two constraints decide where the step goes:
 

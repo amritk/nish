@@ -78,9 +78,7 @@ Four more rules come from compiling the whole program at once:
 - **A function's name is unique across the program**, exported or not. Two
   files of your program cannot each have a private `helper`; name them apart.
   (Packages are kept apart for you, so a dependency's `helper` does not
-  clash with yours.) Lifting this for private functions is proposed in
-  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md);
-  until it ships, the rule holds.
+  clash with yours.)
 - **A class or interface name is unique across the program too**, for the
   same reason.
 - **Classes and interfaces cannot be renamed on import.** `import { Point as P }`

@@ -20,7 +20,7 @@ stages:
         content: Add WP57 to docs/roadmap/index.md "In progress and proposed" (not "Up next"), its route in scalar.config.json, its row in docs/README.md and docs/MASTER_PLAN.md — see S1 — the WP57 proposal
         status: completed
       - id: rule-pointers
-        content: Link the note from every doc that states the uniqueness rule (LANGUAGE.md, wp5-modules.md, guide/language/modules.md, AI.md, ARCHITECTURE.md and any other grep finds) without changing the rule's wording — see S1 — the WP57 proposal
+        content: Link the note from every doc that states the uniqueness rule (LANGUAGE.md, wp5-modules.md, AI.md, ARCHITECTURE.md, wp15, wp26; not the guide, which names no work package per docs/README.md) without changing the rule's wording — see S1 — the WP57 proposal
         status: completed
 ---
 
@@ -31,7 +31,7 @@ stages:
 Owns: `docs/wp57-module-scoped-names.md`, `docs/roadmap/wp57-module-scoped-names.md`,
 `docs/roadmap/index.md`, `docs/README.md`, `docs/MASTER_PLAN.md`,
 `scalar.config.json`, `docs/LANGUAGE.md`, `docs/wp5-modules.md`,
-`docs/guide/language/modules.md`, `docs/AI.md`, `docs/ARCHITECTURE.md`,
+`docs/AI.md`, `docs/ARCHITECTURE.md`,
 `docs/wp15-performance.md`, `docs/wp26-stdlib.md`, `docs/reference/language/declarations.md`,
 `.claude/plans/wp57-module-scoped-names.plan.md`.
 
