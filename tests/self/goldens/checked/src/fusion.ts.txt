@@ -6,22 +6,6 @@ import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import isCollectionStruct from "./generics" -> function @isCollectionStruct
 import isMapOwner from "./generics" -> function @isMapOwner
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_STRING from "./nodes" -> const N_STRING
-import N_THIS from "./nodes" -> const N_THIS
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FUSE_PROBE from "./program" -> const FUSE_PROBE
@@ -119,13 +103,13 @@ function isFusablePlace(program: CheckedProgram, node: Node): boolean -> @isFusa
   pointer program: size=888 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=isThisPath#0
   stackSites=0 stackLocals=0
-  callee +0:66 isThisPath -> @isThisPath
+  callee +0:73 isThisPath -> @isThisPath
 function isThisPath(node: Node): boolean -> @isThisPath
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isThisPath nish_panic_index
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:36 isThisPath -> @isThisPath
+  callee +0:43 isThisPath -> @isThisPath
 function isFusableKey(program: CheckedProgram, node: Node): boolean -> @isFusableKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isFusablePlace isKeyLiteral

@@ -5,15 +5,6 @@ import Lexer from "./lexer" -> struct Lexer
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_ENUM from "./nodes" -> const N_ENUM
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_TYPE_ALIAS from "./nodes" -> const N_TYPE_ALIAS
-import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
-import N_TYPE_FUNCTION from "./nodes" -> const N_TYPE_FUNCTION
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_READONLY from "./nodes" -> const N_TYPE_READONLY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
 import Parser from "./parser" -> struct Parser
@@ -312,7 +303,7 @@ function dropRefused(file: Node, refusals: HostRefusal[]): void -> @dropRefused 
   callee -8:5 StringSet.add -> @StringSet.add
   local -6:9 kept: Node[] (const)
   local -5:14 stmt: Node (const)
-  callee -4:38 StringSet.has -> @StringSet.has
+  callee -4:49 StringSet.has -> @StringSet.has
 function hostTypeProblem(where: string, name: string, spelled: string): string -> @hostTypeProblem [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -457,7 +448,7 @@ function unparen(type: Node): Node -> @unparen
   calls: nish_panic_index unparen
   pointer type: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee +0:69 unparen -> @unparen
+  callee +0:75 unparen -> @unparen
 function isTypeNamed(type: Node, name: string): boolean -> @isTypeNamed
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -476,15 +467,15 @@ function isBuffer(type: Node, typed: StringSet, scalars: StringSet): boolean -> 
   local +7:13 args: i32 (const)
   callee +8:28 isScalarRef -> @isScalarRef
   callee +8:40 unparen -> @unparen
-  callee +12:40 isScalarRef -> @isScalarRef
-  callee +12:52 unparen -> @unparen
+  callee +12:46 isScalarRef -> @isScalarRef
+  callee +12:58 unparen -> @unparen
 function isScalarRef(type: Node, scalars: StringSet): boolean -> @isScalarRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.has nish_str_eq
   pointer type: size=40 writesThrough=false captured=false
   pointer scalars: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=0 stackLocals=0
-  callee +0:31 StringSet.has -> @StringSet.has
+  callee +0:3 StringSet.has -> @StringSet.has
 function crosses(type: Node, scalars: StringSet, local: StringSet): boolean -> @crosses
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.has
@@ -492,8 +483,8 @@ function crosses(type: Node, scalars: StringSet, local: StringSet): boolean -> @
   pointer scalars: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   pointer local: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=0 stackLocals=0
-  callee +0:32 StringSet.has -> @StringSet.has
-  callee +0:58 StringSet.has -> @StringSet.has
+  callee +0:38 StringSet.has -> @StringSet.has
+  callee +0:64 StringSet.has -> @StringSet.has
 function spell(type: Node): string -> @spell
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

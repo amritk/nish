@@ -62,48 +62,7 @@ import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
 import { isBuiltinSpecifier, isExecutorCall, isNetExport, nishExport } from "./nish-modules"
-import {
-  FLAG_FOREIGN,
-  FLAG_OPTIONAL,
-  FLAG_TYPE_ONLY,
-  N_ARRAY,
-  N_ARROW,
-  N_AS,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CLASS,
-  N_CONSTRUCTOR,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FIELD,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_IMPORT,
-  N_IMPORT_SPEC,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_METHOD,
-  N_MODULE_CONST,
-  N_NEW,
-  N_OBJECT,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_SPREAD,
-  N_SWITCH,
-  N_TEMPLATE,
-  N_THROW,
-  N_TYPE_REF,
-  N_UNARY,
-  N_VAR,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind } from "./nodes"
 import { CheckedProgram, Instantiation, STRUCT_INTERFACE } from "./program"
 import { sourceOrder } from "./script"
 import { StringBuilder } from "./strings"
@@ -420,13 +379,13 @@ export class Walk {
     // it never runs. A static member is not a template member: it is typed
     // once, outside any instance, and reaches the composer with its types.
     for (const template of program.structTemplateList) {
-      if (template.origin === source && template.count === 0 && template.decl.kind === N_CLASS) {
+      if (template.origin === source && template.count === 0 && template.decl.kind === NodeKind.Class) {
         for (const member of template.decl.children[3].children) {
-          if (member.kind === N_METHOD) {
+          if (member.kind === NodeKind.Method) {
             this.stub(member, nodeCount, `${template.sourceName}.${member.children[0].text}`)
-          } else if (member.kind === N_CONSTRUCTOR) {
+          } else if (member.kind === NodeKind.Constructor) {
             this.stub(member, nodeCount, `${template.sourceName}.constructor`)
-          } else if (member.kind === N_FIELD && member.children[2].kind !== N_EMPTY) {
+          } else if (member.kind === NodeKind.Field && member.children[2].kind !== NodeKind.Empty) {
             this.stub(member, nodeCount, `${template.sourceName}.${member.children[0].text}`)
           }
         }
@@ -603,7 +562,7 @@ const listedWord = (names: string, name: string): boolean => names.indexOf(` ${n
  * import, of a name `nish/runtime` exports.
  */
 const ambientCallee = (walk: Walk, node: Node): string => {
-  if (node.kind !== N_CALL || node.children.length === 0 || node.children[0].kind !== N_IDENT) {
+  if (node.kind !== NodeKind.Call || node.children.length === 0 || node.children[0].kind !== NodeKind.Ident) {
     return ""
   }
   const program = walk.program
@@ -630,15 +589,15 @@ const ambientCallee = (walk: Walk, node: Node): string => {
  * as where `helperName` aliased it, else the empty string.
  */
 const observe = (walk: Walk, node: Node): string => {
-  if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
+  if (node.kind === NodeKind.TypeRef && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
     return ""
   }
-  if (node.kind === N_TYPE_REF && node.text === "HostHandle") {
+  if (node.kind === NodeKind.TypeRef && node.text === "HostHandle") {
     walk.hostHandle = true
     return ""
   }
-  if (node.kind !== N_CALL || node.children.length === 0 || node.children[0].kind !== N_IDENT) {
+  if (node.kind !== NodeKind.Call || node.children.length === 0 || node.children[0].kind !== NodeKind.Ident) {
     return ""
   }
   const program = walk.program
@@ -683,17 +642,17 @@ const MATH_ROUTED: string =
  * (ECMA-262 `Number::remainder`), so a float `%` is left as it is written.
  */
 const mathCallee = (walk: Walk, node: Node): string => {
-  if (!walk.deterministic || node.kind !== N_CALL || node.children.length === 0) {
+  if (!walk.deterministic || node.kind !== NodeKind.Call || node.children.length === 0) {
     return ""
   }
   const head = node.children[0]
   const spelled =
-    (head.kind === N_MEMBER &&
+    (head.kind === NodeKind.Member &&
       head.children.length === 1 &&
-      head.children[0].kind === N_IDENT &&
+      head.children[0].kind === NodeKind.Ident &&
       head.children[0].text === "Math" &&
       listedWord(MATH_ROUTED, head.text + "F64")) ||
-    (head.kind === N_IDENT &&
+    (head.kind === NodeKind.Ident &&
       (head.text === "f64ToBits" ||
         head.text === "f32ToBits" ||
         head.text === "Number" ||
@@ -715,7 +674,7 @@ const mathCallee = (walk: Walk, node: Node): string => {
 /** Whether `call` is `r.expect(m)` or `r.unwrapOr(d)`, whose argument runs only when `r` is an `Err`. */
 const isLazyCall = (call: Node): boolean => {
   const callee = call.children[0]
-  return callee.kind === N_MEMBER && (callee.text === "expect" || callee.text === "unwrapOr")
+  return callee.kind === NodeKind.Member && (callee.text === "expect" || callee.text === "unwrapOr")
 }
 
 /**
@@ -726,40 +685,40 @@ const isLazyCall = (call: Node): boolean => {
  */
 const hoistChild = (node: Node, i: i32): boolean => {
   const kind = node.kind
-  if (kind === N_BINARY) {
+  if (kind === NodeKind.Binary) {
     return i === 0 || (node.text !== "&&" && node.text !== "||" && node.text !== "??")
   }
-  if (kind === N_IF || kind === N_SWITCH || kind === N_FOR) {
+  if (kind === NodeKind.If || kind === NodeKind.Switch || kind === NodeKind.For) {
     return i === 0
   }
-  if (kind === N_FOR_OF) {
+  if (kind === NodeKind.ForOf) {
     return i < 2
   }
   // `expect` and `unwrapOr` run their argument on the `Err` path only (#182),
   // so nothing in it may hoist ahead of the call.
-  if (kind === N_CALL && i > 0 && isLazyCall(node)) {
+  if (kind === NodeKind.Call && i > 0 && isLazyCall(node)) {
     return false
   }
-  if (kind === N_CALL || kind === N_MEMBER || kind === N_INDEX) {
+  if (kind === NodeKind.Call || kind === NodeKind.Member || kind === NodeKind.Index) {
     return i === 0 || !inOptionalChain(node)
   }
   return (
-    kind === N_VAR ||
-    kind === N_MODULE_CONST ||
-    kind === N_LIST ||
-    kind === N_VAR_DECL ||
-    kind === N_EXPR_STMT ||
-    kind === N_RETURN ||
-    kind === N_THROW ||
-    kind === N_NEW ||
-    kind === N_PAREN ||
-    kind === N_UNARY ||
-    kind === N_ARRAY ||
-    kind === N_OBJECT ||
-    kind === N_PROPERTY ||
-    kind === N_TEMPLATE ||
-    kind === N_AS ||
-    kind === N_SPREAD
+    kind === NodeKind.Var ||
+    kind === NodeKind.ModuleConst ||
+    kind === NodeKind.List ||
+    kind === NodeKind.VarDecl ||
+    kind === NodeKind.ExprStmt ||
+    kind === NodeKind.Return ||
+    kind === NodeKind.Throw ||
+    kind === NodeKind.New ||
+    kind === NodeKind.Paren ||
+    kind === NodeKind.Unary ||
+    kind === NodeKind.Array ||
+    kind === NodeKind.Object ||
+    kind === NodeKind.Property ||
+    kind === NodeKind.Template ||
+    kind === NodeKind.As ||
+    kind === NodeKind.Spread
   )
 }
 
@@ -770,7 +729,7 @@ const hoistChild = (node: Node, i: i32): boolean => {
  */
 const inOptionalChain = (node: Node): boolean => {
   let link = node
-  while (link.kind === N_CALL || link.kind === N_MEMBER || link.kind === N_INDEX) {
+  while (link.kind === NodeKind.Call || link.kind === NodeKind.Member || link.kind === NodeKind.Index) {
     if ((link.flags & FLAG_OPTIONAL) !== 0) {
       return true
     }
@@ -781,16 +740,16 @@ const inOptionalChain = (node: Node): boolean => {
 
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */
 const hasEffect = (node: Node): boolean => {
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     return true
   }
-  if (node.kind === N_VAR_DECL) {
-    return node.children[2].kind !== N_EMPTY
+  if (node.kind === NodeKind.VarDecl) {
+    return node.children[2].kind !== NodeKind.Empty
   }
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     return node.text === "++" || node.text === "--"
   }
-  if (node.kind !== N_BINARY) {
+  if (node.kind !== NodeKind.Binary) {
     return false
   }
   const op = node.text
@@ -813,7 +772,7 @@ const hasEffect = (node: Node): boolean => {
  */
 const mayPanic = (walk: Walk, node: Node): boolean => {
   const program = walk.program
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     const op = node.text
     if (op === "/" || op === "%" || op === "/=" || op === "%=") {
       const left = walk.typeAt(node.children[0])
@@ -829,10 +788,10 @@ const mayPanic = (walk: Walk, node: Node): boolean => {
  */
 const readsLocal = (walk: Walk, node: Node, i: i32): boolean => {
   const child = node.children[i]
-  if (child.kind !== N_IDENT || walk.program.nodeLocals[child.id] === null) {
+  if (child.kind !== NodeKind.Ident || walk.program.nodeLocals[child.id] === null) {
     return false
   }
-  return !(i === 0 && node.kind === N_BINARY && node.text === "=")
+  return !(i === 0 && node.kind === NodeKind.Binary && node.text === "=")
 }
 
 /**
@@ -842,10 +801,15 @@ const readsLocal = (walk: Walk, node: Node, i: i32): boolean => {
  * the hoist too, which is more than it needs.
  */
 const writes = (node: Node): boolean => {
-  if (node.kind === N_ARROW || node.kind === N_FUNCTION) {
+  if (node.kind === NodeKind.Arrow || node.kind === NodeKind.FunctionDecl) {
     return false
   }
-  if (hasEffect(node) && node.kind !== N_CALL && node.kind !== N_NEW && node.kind !== N_VAR_DECL) {
+  if (
+    hasEffect(node) &&
+    node.kind !== NodeKind.Call &&
+    node.kind !== NodeKind.New &&
+    node.kind !== NodeKind.VarDecl
+  ) {
     return true
   }
   for (const child of node.children) {
@@ -863,16 +827,16 @@ const writes = (node: Node): boolean => {
  */
 const readsState = (walk: Walk, node: Node, i: i32): boolean => {
   const child = node.children[i]
-  if (child.kind !== N_MEMBER && child.kind !== N_INDEX) {
+  if (child.kind !== NodeKind.Member && child.kind !== NodeKind.Index) {
     return false
   }
-  if (i === 0 && node.kind === N_BINARY && node.text === "=") {
+  if (i === 0 && node.kind === NodeKind.Binary && node.text === "=") {
     return false
   }
   const target = child.children[0]
   return !(
-    child.kind === N_MEMBER &&
-    target.kind === N_IDENT &&
+    child.kind === NodeKind.Member &&
+    target.kind === NodeKind.Ident &&
     walk.program.nodeLocals[target.id] === null &&
     walk.program.enumNamed(target.text) !== null
   )
@@ -929,14 +893,14 @@ const statementText = (walk: Walk, stmt: Node, out: Operands, slot: i32): void =
  */
 const needsTypes = (node: Node): boolean => {
   if (
-    (node.kind === N_TYPE_REF || node.kind === N_IDENT) &&
+    (node.kind === NodeKind.TypeRef || node.kind === NodeKind.Ident) &&
     (node.text === "i64" || node.text === "u64" || node.text === "f32")
   ) {
     return true
   }
-  if (node.kind === N_CALL && node.children.length > 0) {
+  if (node.kind === NodeKind.Call && node.children.length > 0) {
     const callee = node.children[0]
-    if (callee.kind === N_IDENT && isBuiltinFunction(callee.text)) {
+    if (callee.kind === NodeKind.Ident && isBuiltinFunction(callee.text)) {
       return true
     }
   }
@@ -953,19 +917,19 @@ const needsTypes = (node: Node): boolean => {
  * field's initializer; -1 where it has none, as a `declare`d one.
  */
 const bodyIndex = (node: Node): i32 => {
-  if (node.kind === N_FIELD) {
-    return node.children[2].kind !== N_EMPTY ? 2 : -1
+  if (node.kind === NodeKind.Field) {
+    return node.children[2].kind !== NodeKind.Empty ? 2 : -1
   }
-  const at = node.kind === N_CONSTRUCTOR ? 1 : 3
-  return node.children.length > at && node.children[at].kind === N_BLOCK ? at : -1
+  const at = node.kind === NodeKind.Constructor ? 1 : 3
+  return node.children.length > at && node.children[at].kind === NodeKind.Block ? at : -1
 }
 
 /** The width types the signature of a stub names, which its text keeps. */
 const observeWidths = (walk: Walk, node: Node): void => {
-  if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
+  if (node.kind === NodeKind.TypeRef && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
   }
-  if (node.kind === N_TYPE_REF && node.text === "HostHandle") {
+  if (node.kind === NodeKind.TypeRef && node.text === "HostHandle") {
     walk.hostHandle = true
   }
   for (const child of node.children) {
@@ -981,7 +945,7 @@ const observeWidths = (walk: Walk, node: Node): void => {
  */
 const stubText = (walk: Walk, node: Node): string => {
   const text = walk.source.text
-  if (node.kind === N_FIELD) {
+  if (node.kind === NodeKind.Field) {
     // A field's initializer: a thrown error is a `never`, which any field type takes.
     const init = node.children[2]
     return `${text.substring(node.start, init.start)}(() => {\n    throw new Error("--emit-ts: a generic no instance reaches")\n  })()${text.substring(init.end, node.end)}`
@@ -1076,7 +1040,7 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   while (i < node.children.length) {
     operands.texts.push("")
     operands.changed.push(false)
-    if (node.kind === N_BLOCK) {
+    if (node.kind === NodeKind.Block) {
       statementText(walk, node.children[i], operands, i)
     } else {
       walk.hoistHere = here && hoistChild(node, i)
@@ -1302,7 +1266,7 @@ const lastOf = (text: string, needle: string): i32 => {
  * binding of the module.
  */
 const collectNames = (walk: Walk, node: Node): void => {
-  if (node.kind === N_IDENT || node.kind === N_IMPORT_SPEC) {
+  if (node.kind === NodeKind.Ident || node.kind === NodeKind.ImportSpec) {
     walk.names.add(node.text)
   }
   const ambient = ambientCallee(walk, node).length > 0
@@ -1334,14 +1298,14 @@ const propertyImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
   if (
     !isBuiltinSpecifier(stmt.text) ||
     stmt.children.length === 0 ||
-    stmt.children[0].kind !== N_LIST ||
+    stmt.children[0].kind !== NodeKind.List ||
     (stmt.flags & FLAG_TYPE_ONLY) !== 0
   ) {
     return ""
   }
   const sb = new StringBuilder()
   for (const spec of stmt.children[0].children) {
-    if (spec.kind !== N_IMPORT_SPEC || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
+    if (spec.kind !== NodeKind.ImportSpec || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
       continue
     }
     const exported = spec.children.length > 0 ? spec.children[0].text : spec.text
@@ -1373,15 +1337,15 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
   // An entry's top-level code is written back where it stands
   // (`src/script.ts`), so the `main` built around it is not written at all.
   for (const stmt of sourceOrder(file)) {
-    if (stmt.kind === N_IMPORT) {
+    if (stmt.kind === NodeKind.Import) {
       if (
         stmt.children.length > 0 &&
-        stmt.children[0].kind === N_LIST &&
+        stmt.children[0].kind === NodeKind.List &&
         (stmt.flags & FLAG_TYPE_ONLY) === 0
       ) {
         for (const spec of stmt.children[0].children) {
           if (
-            spec.kind === N_IMPORT_SPEC &&
+            spec.kind === NodeKind.ImportSpec &&
             (spec.flags & FLAG_TYPE_ONLY) === 0 &&
             walk.typeNames.has(spec.text)
           ) {
@@ -1409,7 +1373,10 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
       }
       continue
     }
-    if ((stmt.kind === N_FUNCTION || stmt.kind === N_CLASS) && (stmt.flags & FLAG_FOREIGN) !== 0) {
+    if (
+      (stmt.kind === NodeKind.FunctionDecl || stmt.kind === NodeKind.Class) &&
+      (stmt.flags & FLAG_FOREIGN) !== 0
+    ) {
       walk.refuse(stmt, FOREIGN_REFUSAL)
       continue
     }

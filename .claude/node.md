@@ -136,9 +136,9 @@ on, so an unformatted file fails CI the way a lint error does. So:
   fixes) before you commit. An agent does not need to: the `PostToolUse` hook
   in `.claude/settings.json` formats each file as it is edited.
 - The rule set is the recommended preset, plus the rules that mirror what the
-  validator refuses (`noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
-  `noVoid`, `noParameterAssign`, `useExplicitLengthCheck`,
-  `useConsistentArrayType`), plus the house style in `linting.md`: kebab-case
+  validator refuses (`noVar`, `noExplicitAny`, `noNamespace`, `noVoid`,
+  `noParameterAssign`, `useExplicitLengthCheck`, `useConsistentArrayType`,
+  and `noEnum` in the JavaScript tooling only), plus the house style in `linting.md`: kebab-case
   file names, `useNamingConvention`, braces on every block, `noShadow`, an
   arrow bound to a `const` rather than a `function` declaration (the
   `biome-plugins/no-function-declaration.grit` plugin, because Biome ships no

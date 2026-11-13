@@ -60,52 +60,13 @@ import isValueReceiver from "./members" -> function @isValueReceiver
 import neverNullMessage from "./members" -> function @neverNullMessage
 import structOf from "./members" -> function @structOf
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
-import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
-import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import FLAG_ANGLE from "./nodes" -> const FLAG_ANGLE
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
+import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_SATISFIES from "./nodes" -> const FLAG_SATISFIES
 import FLAG_SCRIPT from "./nodes" -> const FLAG_SCRIPT
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_AS from "./nodes" -> const N_AS
-import N_BIGINT from "./nodes" -> const N_BIGINT
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FOR from "./nodes" -> const N_FOR
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_PROPERTY from "./nodes" -> const N_PROPERTY
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SPREAD from "./nodes" -> const N_SPREAD
-import N_STRING from "./nodes" -> const N_STRING
-import N_SUPER from "./nodes" -> const N_SUPER
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_THIS from "./nodes" -> const N_THIS
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR from "./nodes" -> const N_VAR
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
+import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import Node from "./nodes" -> struct Node
 import fitArguments from "./declarations" -> function @fitArguments
 import checkReferenceCall from "./fnrefs" -> function @checkReferenceCall
@@ -210,12 +171,12 @@ function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32)
   pointer expr: size=40 writesThrough=true captured=true passedTo=takesRangeContext#0 computeType#1 pathVariable#1 refuseInferredTag#1 joinArmMembers#1 refuseMaybe#1 recordRangeEntry#1 enterMember#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=computeType#2 pathVariable#2 Scope.heldBy#0
   stackSites=0 stackLocals=0
-  local -16:9 welcome: boolean (const)
-  callee -16:42 TypeTable.isMaybe -> @TypeTable.isMaybe
-  local -10:9 entry: i32 (const)
-  callee -10:17 TypeTable.isRanged -> @TypeTable.isRanged
-  local -9:9 keepsRange: boolean (const)
-  local -8:7 inner: i32 (let)
+  local -19:9 welcome: boolean (const)
+  callee -19:42 TypeTable.isMaybe -> @TypeTable.isMaybe
+  local -13:9 entry: i32 (const)
+  callee -13:17 TypeTable.isRanged -> @TypeTable.isRanged
+  local -12:9 keepsRange: boolean (const)
+  local -11:7 inner: i32 (let)
   callee -3:29 takesRangeContext -> @takesRangeContext
   local +1:9 computed: i32 (const)
   callee +1:20 computeType -> @computeType
@@ -455,9 +416,9 @@ function setsDisjoint(ctx: CheckContext, left: Node, right: Node): boolean -> @s
   local +1:9 b: Node (const)
   callee +1:13 unwrapParens -> @unwrapParens
   local +5:9 aConstant: boolean (const)
-  callee +5:44 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
+  callee +5:51 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
   local +6:9 bConstant: boolean (const)
-  callee +6:44 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
+  callee +6:51 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
   local +7:9 aMember: i32 (const)
   callee +7:31 memberConstantType -> @memberConstantType
   local +8:9 bMember: i32 (const)
@@ -973,7 +934,7 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @check
   callee +30:45 CheckContext.textOf -> @CheckContext.textOf
   callee +31:9 typeArgumentFix -> @typeArgumentFix
   local +37:11 left: Node (const)
-  callee +38:34 Scope.lookup -> @Scope.lookup
+  callee +38:41 Scope.lookup -> @Scope.lookup
   local +39:13 imported: BuiltinExport | null (const)
   callee +39:24 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
   callee +41:9 CheckContext.error -> @CheckContext.error
@@ -1102,7 +1063,7 @@ function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node
   callee +7:72 literalHint -> @literalHint
   callee +9:12 checkExpression -> @checkExpression
   callee +13:13 checkExpression -> @checkExpression
-  callee +17:37 literalHint -> @literalHint
+  callee +17:44 literalHint -> @literalHint
   callee +29:10 isNumeric -> @isNumeric
   local +30:13 hint: string (const)
   callee +34:14 CheckContext.errorType -> @CheckContext.errorType
@@ -1246,7 +1207,7 @@ function readForTruthiness(parents: ParentTable, expr: Node): boolean -> @readFo
   local +0:7 node: Node (let)
   local +1:7 parent: Node | null (let)
   callee +1:16 linkedParent -> @linkedParent
-  callee +2:57 isLogical -> @isLogical
+  callee +2:64 isLogical -> @isLogical
   callee +4:14 linkedParent -> @linkedParent
 function isLogical(node: Node): boolean -> @isLogical
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1477,9 +1438,9 @@ function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   local +20:9 left: Node (const)
   local +21:9 right: Node (const)
   local +22:9 rightAbsent: boolean (const)
-  callee +22:48 isUndefinedValue -> @isUndefinedValue
+  callee +22:55 isUndefinedValue -> @isUndefinedValue
   local +23:9 leftAbsent: boolean (const)
-  callee +23:46 isUndefinedValue -> @isUndefinedValue
+  callee +23:53 isUndefinedValue -> @isUndefinedValue
   callee +25:5 narrowTag -> @narrowTag
   local +28:9 variable: Node (const)
   local +32:9 local: Local | null (const)
@@ -1631,7 +1592,7 @@ function assignsVariable(node: Node, name: string): boolean -> @assignsVariable 
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 target: Node | null (let)
-  callee +1:33 writesLeft -> @writesLeft
+  callee +1:40 writesLeft -> @writesLeft
   callee +2:14 unwrapParens -> @unwrapParens
   callee +4:14 unwrapParens -> @unwrapParens
   local +9:14 child: Node (const)
@@ -1646,7 +1607,7 @@ function bindsName(node: Node, name: string): boolean -> @bindsName
   stackSites=0 stackLocals=0
   callee +0:12 bindsName -> @bindsName
   local +5:14 child: Node (const)
-  callee +6:66 bindsName -> @bindsName
+  callee +6:79 bindsName -> @bindsName
 function pathRoot(ctx: CheckContext, node: Node, scope: Scope): Local | null -> @pathRoot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Scope.lookup nish_panic_index unwrapParens
@@ -1657,7 +1618,7 @@ function pathRoot(ctx: CheckContext, node: Node, scope: Scope): Local | null -> 
   local +0:7 read: Node (let)
   callee +0:14 unwrapParens -> @unwrapParens
   callee +2:12 unwrapParens -> @unwrapParens
-  callee +7:34 Scope.lookup -> @Scope.lookup
+  callee +7:41 Scope.lookup -> @Scope.lookup
 function plainPath(node: Node): boolean -> @plainPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapParens
@@ -2105,7 +2066,7 @@ function tagVariable(ctx: CheckContext, node: Node, scope: Scope): Local | null 
   stackSites=0 stackLocals=0
   local +0:9 read: Node (const)
   callee +0:16 unwrapParens -> @unwrapParens
-  callee +1:33 isOptionalChain -> @isOptionalChain
+  callee +1:40 isOptionalChain -> @isOptionalChain
   local +4:9 receiver: Node (const)
   callee +4:20 testedRead -> @testedRead
   callee +9:49 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
@@ -2315,7 +2276,7 @@ function maybeOperand(ctx: CheckContext, operand: Node, scope: Scope): i32 -> @m
   local +1:9 bare: Node (const)
   callee +1:16 unwrapParens -> @unwrapParens
   local +2:9 local: Local | null (const)
-  callee +2:55 Scope.lookup -> @Scope.lookup
+  callee +2:62 Scope.lookup -> @Scope.lookup
   callee +3:45 TypeTable.isMaybe -> @TypeTable.isMaybe
 function checkCoalesce(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkCoalesce
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -2374,7 +2335,7 @@ function checkNullableCoalesce(ctx: CheckContext, expr: Node, scope: Scope, left
   callee +1:12 CheckContext.errorType -> @CheckContext.errorType
   local +8:9 value: i32 (const)
   callee +8:17 TypeTable.stripNull -> @TypeTable.stripNull
-  local +12:9 fallbackKind: i32 (const)
+  local +12:9 fallbackKind: NodeKind (const)
   callee +12:24 unwrapParens -> @unwrapParens
   local +13:9 mayBeNull: boolean (const)
   local +14:9 fallback: i32 (const)
@@ -2420,18 +2381,18 @@ function maybeDefaultFix(ctx: CheckContext, expr: Node, type: i32, reason: strin
   local +3:9 call: Node (const)
   callee +3:16 unwrapParens -> @unwrapParens
   local +4:9 isGet: boolean (const)
-  callee +8:67 isArithmeticOperand -> @isArithmeticOperand
-  callee +9:16 CheckContext.edit -> @CheckContext.edit
-  callee +10:14 isArithmeticOperand -> @isArithmeticOperand
-  callee +11:16 CheckContext.edit -> @CheckContext.edit
+  callee +11:67 isArithmeticOperand -> @isArithmeticOperand
   callee +12:16 CheckContext.edit -> @CheckContext.edit
+  callee +13:14 isArithmeticOperand -> @isArithmeticOperand
+  callee +14:16 CheckContext.edit -> @CheckContext.edit
+  callee +15:16 CheckContext.edit -> @CheckContext.edit
 function isArithmeticOperand(parent: Node | null, value: i32): boolean -> @isArithmeticOperand
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
   calls: isNumeric nish_str_eq
   pointer parent: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:55 isNumeric -> @isNumeric
+  callee +0:62 isNumeric -> @isNumeric
   local +3:9 op: string (const)
 function zeroLiteralOf(type: i32): string -> @zeroLiteralOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2555,7 +2516,7 @@ function assignInto(ctx: CheckContext, expr: Node, scope: Scope, local: Local | 
   callee +19:35 checkExpression -> @checkExpression
   local +20:9 rhs: i32 (const)
   callee +20:15 checkExpression -> @checkExpression
-  callee +24:31 literalHint -> @literalHint
+  callee +24:38 literalHint -> @literalHint
   callee +27:5 Scope.clearNarrowing -> @Scope.clearNarrowing
   callee +28:5 clearPaths -> @clearPaths
   callee +33:8 isNumeric -> @isNumeric
@@ -2712,7 +2673,7 @@ function refuseForeignNullable(ctx: CheckContext, sig: FunctionSig, i: i32, arg:
   callee +4:8 TypeTable.isNullable -> @TypeTable.isNullable
   callee +4:38 TypeTable.stripNull -> @TypeTable.stripNull
   callee +7:7 unwrapParens -> @unwrapParens
-  callee +7:64 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +7:71 TypeTable.isNullable -> @TypeTable.isNullable
   callee +10:3 CheckContext.error -> @CheckContext.error
   callee +12:49 TypeTable.typeName -> @TypeTable.typeName
 function checkDirectCall(ctx: CheckContext, expr: Node, sig: FunctionSig, shown: string, scope: Scope): i32 -> @checkDirectCall
@@ -2751,7 +2712,7 @@ function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope):
   pointer node: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=false captured=false passedTo=clearTarget#2 clearTarget#2 clearNarrowingsAssignedIn#2
   stackSites=0 stackLocals=0
-  callee +0:33 writesLeft -> @writesLeft
+  callee +0:40 writesLeft -> @writesLeft
   callee +1:5 clearTarget -> @clearTarget
   callee +3:5 clearTarget -> @clearTarget
   local +5:14 child: Node (const)
@@ -2778,7 +2739,7 @@ function localsAssignedIn(ctx: CheckContext, node: Node, scope: Scope, into: Loc
   pointer into: size=0 writesThrough=true captured=false passedTo=addLocals#0 pathsCovered#3 localsAssignedIn#3
   stackSites=1 stackLocals=0
   local +0:7 target: Node | null (let)
-  callee +1:33 writesLeft -> @writesLeft
+  callee +1:40 writesLeft -> @writesLeft
   local +7:11 local: Local | null (const)
   callee +7:19 Scope.lookup -> @Scope.lookup
   callee +9:7 addLocals -> @addLocals
@@ -2825,9 +2786,9 @@ function writtenMembers(ctx: CheckContext, value: Node, scope: Scope): i32[] -> 
   local +0:9 bare: Node (const)
   callee +0:16 unwrapParens -> @unwrapParens
   local +1:9 members: i32[] (const)
-  callee +2:34 isOptionalChain -> @isOptionalChain
+  callee +2:41 isOptionalChain -> @isOptionalChain
   local +3:11 receiver: Node (const)
-  callee +4:38 Scope.lookup -> @Scope.lookup
+  callee +4:45 Scope.lookup -> @Scope.lookup
   local +7:11 info: EnumInfo | null (const)
   callee +7:18 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
   callee +8:26 EnumInfo.hasMember -> @EnumInfo.hasMember
@@ -2855,7 +2816,7 @@ function collectWritten(ctx: CheckContext, node: Node, local: Local, scope: Scop
   stackSites=1 stackLocals=1
   local -33:7 target: Node | null (let)
   local -32:7 stored: Node | null (let)
-  callee -31:33 writesLeft -> @writesLeft
+  callee -31:40 writesLeft -> @writesLeft
   local -25:7 named: Local | null (let)
   callee -23:13 Scope.lookup -> @Scope.lookup
   local -18:11 covered: Local[] (const)

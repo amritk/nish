@@ -41,25 +41,7 @@ import {
 import { StringMap, StringSet } from "./map"
 import { CheckContext } from "./context"
 import { jsonQuote } from "./strings"
-import {
-  FLAG_COMPUTED,
-  FLAG_DEFINITE,
-  FLAG_OPTIONAL,
-  FLAG_READONLY,
-  N_ARRAY,
-  N_EMPTY,
-  N_FALSE,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_PROPERTY,
-  N_SPREAD,
-  N_STRING,
-  N_TEMPLATE,
-  N_TRUE,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { FLAG_COMPUTED, FLAG_DEFINITE, FLAG_OPTIONAL, FLAG_READONLY, Node, NodeKind } from "./nodes"
 import { T_BOOL, T_F64, T_I32, T_I64, T_STRING, T_U32, T_U64, TypeTable } from "./types"
 
 /** A value that is one scalar: an integer, an `f64`, a `boolean` or a `string`. */
@@ -158,11 +140,11 @@ export const jsonOptionsShapeMessage = (shown: string): string =>
 
 /** A string written as a literal: `"a"`, or a template with no holes. */
 const jsonIsStringLiteral = (node: Node): boolean =>
-  node.kind === N_STRING || (node.kind === N_TEMPLATE && node.children.length <= 1)
+  node.kind === NodeKind.String || (node.kind === NodeKind.Template && node.children.length <= 1)
 
 /** The text of a string literal `jsonIsStringLiteral` accepted. */
 const jsonStringLiteral = (node: Node): string => {
-  if (node.kind === N_STRING) {
+  if (node.kind === NodeKind.String) {
     return node.text
   }
   return node.children.length > 0 ? node.children[0].text : ""
@@ -223,13 +205,13 @@ const jsonIsUtf8 = (s: string): boolean => {
 
 /** Any other literal: a number, `true`, `false`, `null`, an object or an array. */
 const jsonIsOtherLiteral = (node: Node): boolean =>
-  node.kind === N_NUMBER ||
-  node.kind === N_TRUE ||
-  node.kind === N_FALSE ||
-  node.kind === N_NULL ||
-  node.kind === N_OBJECT ||
-  node.kind === N_ARRAY ||
-  (node.kind === N_UNARY && node.children.length > 0 && node.children[0].kind === N_NUMBER)
+  node.kind === NodeKind.Number ||
+  node.kind === NodeKind.True ||
+  node.kind === NodeKind.False ||
+  node.kind === NodeKind.Null ||
+  node.kind === NodeKind.Object ||
+  node.kind === NodeKind.Array ||
+  (node.kind === NodeKind.Unary && node.children.length > 0 && node.children[0].kind === NodeKind.Number)
 
 /** `where` in the class's options is not written as the literal it must be. */
 const jsonNotLiteral = (ctx: CheckContext, info: StructInfo, node: Node, where: string): void => {
@@ -283,7 +265,7 @@ const jsonDuplicate = (ctx: CheckContext, info: StructInfo, node: Node, detail: 
 
 /** `rename: { field: "key", ... }`: each field's key on the wire. */
 const jsonReadRename = (ctx: CheckContext, info: StructInfo, value: Node): void => {
-  if (value.kind !== N_OBJECT) {
+  if (value.kind !== NodeKind.Object) {
     jsonNotLiteral(ctx, info, value, "'s `rename`")
     return
   }
@@ -292,12 +274,12 @@ const jsonReadRename = (ctx: CheckContext, info: StructInfo, value: Node): void 
     if (ctx.errored) {
       return
     }
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       jsonSpread(ctx, info, prop, "'s `rename`")
       return
     }
     // A computed key was refused by Phase 0 (NL1041).
-    if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
+    if (prop.kind !== NodeKind.Property || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
       continue
     }
     const to = prop.children[0]
@@ -333,7 +315,7 @@ const jsonReadRename = (ctx: CheckContext, info: StructInfo, value: Node): void 
 
 /** `optional: ["field", ...]`: the fields a missing key sets to their initializer. */
 const jsonReadOptional = (ctx: CheckContext, info: StructInfo, value: Node): void => {
-  if (value.kind !== N_ARRAY) {
+  if (value.kind !== NodeKind.Array) {
     jsonNotLiteral(ctx, info, value, "'s `optional`")
     return
   }
@@ -399,7 +381,7 @@ const jsonPresenceFlagIs = (
  * wire: neither route reads or writes it.
  */
 const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): void => {
-  if (value.kind !== N_OBJECT) {
+  if (value.kind !== NodeKind.Object) {
     jsonNotLiteral(ctx, info, value, "'s `presence`")
     return
   }
@@ -407,12 +389,12 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
     if (ctx.errored) {
       return
     }
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       jsonSpread(ctx, info, prop, "'s `presence`")
       return
     }
     // A computed key was refused by Phase 0 (NL1041).
-    if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
+    if (prop.kind !== NodeKind.Property || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
       continue
     }
     const to = prop.children[0]
@@ -533,15 +515,15 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
   if (
     (decl.flags & FLAG_READONLY) === 0 ||
     (decl.flags & (FLAG_OPTIONAL | FLAG_DEFINITE)) !== 0 ||
-    decl.children[1].kind !== N_EMPTY ||
+    decl.children[1].kind !== NodeKind.Empty ||
     info.instance !== null
   ) {
     ctx.error(decl, jsonOptionsShapeMessage(ctx.table.typeName(info.type)))
     return
   }
   const literal = decl.children[2]
-  if (literal.kind !== N_OBJECT) {
-    jsonNotLiteral(ctx, info, literal.kind === N_EMPTY ? decl : literal, "")
+  if (literal.kind !== NodeKind.Object) {
+    jsonNotLiteral(ctx, info, literal.kind === NodeKind.Empty ? decl : literal, "")
     return
   }
   const given = new StringSet()
@@ -549,11 +531,11 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
     if (ctx.errored) {
       return
     }
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       jsonSpread(ctx, info, prop, "")
       return
     }
-    if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
+    if (prop.kind !== NodeKind.Property || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
       continue
     }
     const option = prop.text

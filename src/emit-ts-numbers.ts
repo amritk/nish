@@ -55,24 +55,7 @@
 import { Operands, Walk } from "./emit-ts-edits"
 import { elementArguments, idxArguments } from "./emit-ts-records"
 import { isAssignmentOperator } from "./emit-util"
-import {
-  FLAG_POSTFIX,
-  N_BINARY,
-  N_BIGINT,
-  N_CALL,
-  N_EXPR_STMT,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_PAREN,
-  N_THIS,
-  N_TYPE_REF,
-  N_VAR_DECL,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { FLAG_POSTFIX, Node, NodeKind } from "./nodes"
 import {
   T_F32,
   T_F64,
@@ -90,25 +73,25 @@ import {
 /** The numbers row's rewrite of `node`, or `null` to leave it to the next row. */
 export const numbersRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const kind = node.kind
-  if (kind === N_NUMBER) {
+  if (kind === NodeKind.Number) {
     return wideLiteral(walk, node)
   }
-  if (kind === N_BINARY) {
+  if (kind === NodeKind.Binary) {
     return binaryRow(walk, node, operands)
   }
-  if (kind === N_UNARY) {
+  if (kind === NodeKind.Unary) {
     return unaryRow(walk, node, operands)
   }
-  if (kind === N_CALL) {
+  if (kind === NodeKind.Call) {
     return callRow(walk, node, operands)
   }
-  if (kind === N_EXPR_STMT) {
+  if (kind === NodeKind.ExprStmt) {
     return statementRow(walk, node)
   }
-  if (kind === N_VAR_DECL) {
+  if (kind === NodeKind.VarDecl) {
     return typedConstant(walk, node, operands)
   }
-  if (kind === N_NEW) {
+  if (kind === NodeKind.New) {
     arrayLength(walk, node, operands)
     return null
   }
@@ -216,7 +199,7 @@ const typedConstant = (walk: Walk, node: Node, operands: Operands): string | nul
   }
   const annotation = node.children[1]
   const init = node.children[2]
-  const type = annotation.kind === N_TYPE_REF ? spelledType(annotation.text) : -1
+  const type = annotation.kind === NodeKind.TypeRef ? spelledType(annotation.text) : -1
   if (type < 0 || typeOf(walk, init) >= 0) {
     return null
   }
@@ -240,19 +223,23 @@ const spelledType = (name: string): i32 => {
 
 /** `node`, a folded initializer, written at `type`; null for a node this does not write. */
 const foldedText = (walk: Walk, node: Node, type: i32): string | null => {
-  if (node.kind === N_NUMBER) {
+  if (node.kind === NodeKind.Number) {
     return isBig(type) ? bigLiteral(node.text) : node.text
   }
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     return node.text
   }
-  if (node.kind === N_PAREN && node.children.length === 1) {
+  if (node.kind === NodeKind.Paren && node.children.length === 1) {
     const inner = foldedText(walk, node.children[0], type)
     return inner === null
       ? null
       : `${between(walk, node.start, node.children[0].start)}${inner}${between(walk, node.children[0].end, node.end)}`
   }
-  if (node.kind === N_UNARY && node.children.length === 1 && (node.text === "-" || node.text === "~")) {
+  if (
+    node.kind === NodeKind.Unary &&
+    node.children.length === 1 &&
+    (node.text === "-" || node.text === "~")
+  ) {
     const x = foldedText(walk, node.children[0], type)
     if (x === null) {
       return null
@@ -260,7 +247,7 @@ const foldedText = (walk: Walk, node: Node, type: i32): string | null => {
     const negated = negation(walk, node, type, x)
     return negated === null ? `${node.text}${x}` : negated
   }
-  if (node.kind === N_BINARY && node.children.length === 2 && !isCompound(node.text)) {
+  if (node.kind === NodeKind.Binary && node.children.length === 2 && !isCompound(node.text)) {
     const left = node.children[0]
     const right = node.children[1]
     const a = foldedText(walk, left, type)
@@ -286,14 +273,14 @@ const isSigned = (type: i32): boolean => isInteger(type) && !isUnsigned(type)
  * `pure` index.
  */
 const repeatable = (node: Node): boolean => {
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     return true
   }
-  if (node.kind === N_MEMBER && node.children.length === 1) {
+  if (node.kind === NodeKind.Member && node.children.length === 1) {
     const receiver = node.children[0]
-    return receiver.kind === N_THIS || repeatable(receiver)
+    return receiver.kind === NodeKind.This || repeatable(receiver)
   }
-  if (node.kind === N_INDEX && node.children.length === 2) {
+  if (node.kind === NodeKind.Index && node.children.length === 2) {
     const index = node.children[1]
     return repeatable(node.children[0]) && pure(index)
   }
@@ -306,21 +293,21 @@ const repeatable = (node: Node): boolean => {
  * second runs.
  */
 const pure = (node: Node): boolean => {
-  if (node.kind === N_IDENT || node.kind === N_NUMBER || node.kind === N_BIGINT) {
+  if (node.kind === NodeKind.Ident || node.kind === NodeKind.Number || node.kind === NodeKind.Bigint) {
     return true
   }
-  if (node.kind === N_PAREN) {
+  if (node.kind === NodeKind.Paren) {
     return pure(node.children[0])
   }
-  if (node.kind === N_MEMBER && node.children.length === 1) {
+  if (node.kind === NodeKind.Member && node.children.length === 1) {
     // A field, never a getter, of a name: `seen.length`.
     const receiver = node.children[0]
-    return receiver.kind === N_THIS || receiver.kind === N_IDENT
+    return receiver.kind === NodeKind.This || receiver.kind === NodeKind.Ident
   }
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     return node.text !== "++" && node.text !== "--" && pure(node.children[0])
   }
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     return !isAssignmentOperator(node.text) && pure(node.children[0]) && pure(node.children[1])
   }
   return false
@@ -332,10 +319,10 @@ const pure = (node: Node): boolean => {
  * Only an index is rewritten below a target, so the property name ends it.
  */
 const rewrittenTarget = (target: Node, text: string): boolean => {
-  if (target.kind === N_INDEX) {
+  if (target.kind === NodeKind.Index) {
     return true
   }
-  return target.kind === N_MEMBER && text.endsWith(`.${target.text}`)
+  return target.kind === NodeKind.Member && text.endsWith(`.${target.text}`)
 }
 
 /** The message the refusal of a compound assignment over an impure target carries; `src/codes.ts` keys its code on it. */
@@ -369,7 +356,7 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
     // after the right side ran, as the right side can shrink the array. The
     // records row writes one whose index is unproven as `idx(a, i)`, which is
     // no target; a proven one keeps its plain read.
-    if (target.kind === N_INDEX) {
+    if (target.kind === NodeKind.Index) {
       const args =
         operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
       if (args !== "") {
@@ -489,7 +476,7 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
   const zero = isBig(type) ? "0n" : "0"
   const signed = isSigned(type)
   // A negative literal is the constant itself, never a negation that can overflow.
-  const literal = node.children[0].kind === N_NUMBER || node.children[0].kind === N_BIGINT
+  const literal = node.children[0].kind === NodeKind.Number || node.children[0].kind === NodeKind.Bigint
   if (signed && literal) {
     // `-0` is a negative zero in JavaScript and the integer zero natively.
     return zeroLiteral(node.children[0].text) ? zero : null
@@ -543,7 +530,7 @@ const stepped = (walk: Walk, node: Node, name: string, postfix: boolean, bare: b
  */
 const statementRow = (walk: Walk, node: Node): string | null => {
   const expr = node.children[0]
-  if (expr.kind !== N_UNARY || (expr.text !== "++" && expr.text !== "--")) {
+  if (expr.kind !== NodeKind.Unary || (expr.text !== "++" && expr.text !== "--")) {
     return null
   }
   // A step's target is a plain local, so no row has rewritten it.
@@ -569,24 +556,28 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   }
   const callee = node.children[0]
   const args = node.children[1]
-  if (callee.kind === N_IDENT && walk.program.nodeCallees[node.id] === null) {
+  if (callee.kind === NodeKind.Ident && walk.program.nodeCallees[node.id] === null) {
     const name =
       walk.program.nodeBuiltins[node.id].length > 0 ? walk.program.nodeBuiltins[node.id] : callee.text
     return conversion(walk, name, args, operands)
   }
   if (
-    callee.kind === N_MEMBER &&
+    callee.kind === NodeKind.Member &&
     callee.children.length === 1 &&
     typeOf(walk, callee.children[0]) === T_STRING
   ) {
     indexArguments(walk, node, operands, 0)
     return null
   }
-  if (callee.kind === N_MEMBER && callee.children.length === 1 && arrayOffsets(walk, node)) {
+  if (callee.kind === NodeKind.Member && callee.children.length === 1 && arrayOffsets(walk, node)) {
     indexArguments(walk, node, operands, 1)
     return null
   }
-  if (callee.kind !== N_MEMBER || callee.children.length !== 1 || callee.children[0].kind !== N_IDENT) {
+  if (
+    callee.kind !== NodeKind.Member ||
+    callee.children.length !== 1 ||
+    callee.children[0].kind !== NodeKind.Ident
+  ) {
     return null
   }
   if (callee.children[0].text === "console") {
@@ -679,7 +670,11 @@ const wrappedFrom = (walk: Walk, args: Node, i: i32, from: i32, end: i32): strin
  * records row builds its zero-filled `newArray` from the converted length.
  */
 const arrayLength = (walk: Walk, node: Node, operands: Operands): void => {
-  if (node.children.length !== 3 || node.children[0].kind !== N_IDENT || node.children[0].text !== "Array") {
+  if (
+    node.children.length !== 3 ||
+    node.children[0].kind !== NodeKind.Ident ||
+    node.children[0].text !== "Array"
+  ) {
     return
   }
   const args = node.children[2]

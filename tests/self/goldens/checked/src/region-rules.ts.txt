@@ -12,30 +12,6 @@ import methodReceiver from "./emit-util" -> function @methodReceiver
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import isScalarArgument from "./escape" -> function @isScalarArgument
 import StringSet from "./map" -> struct StringSet
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_AS from "./nodes" -> const N_AS
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_PROPERTY from "./nodes" -> const N_PROPERTY
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SPREAD from "./nodes" -> const N_SPREAD
-import N_STRING from "./nodes" -> const N_STRING
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import capturesOf from "./parallel" -> function @capturesOf
 import isThreadsLayout from "./parallel" -> function @isThreadsLayout
@@ -559,27 +535,27 @@ function RegionWalk.origin(this: RegionWalk, expr: Node): i32 -> @RegionWalk.ori
   callee +0:15 unwrapParens -> @unwrapParens
   callee +1:9 isCopied -> @isCopied
   callee +1:30 RegionWalk.typeOf -> @RegionWalk.typeOf
-  local +4:11 kind: i32 (const)
+  local +4:11 kind: NodeKind (const)
   callee +9:14 RegionWalk.identOrigin -> @RegionWalk.identOrigin
-  callee +12:14 RegionWalk.origin -> @RegionWalk.origin
-  local +19:11 out: i32 (let)
-  local +20:18 part: Node (const)
-  callee +21:15 joinOrigin -> @joinOrigin
-  callee +21:31 RegionWalk.origin -> @RegionWalk.origin
-  callee +26:14 RegionWalk.join -> @RegionWalk.join
-  callee +26:24 RegionWalk.origin -> @RegionWalk.origin
-  callee +26:52 RegionWalk.origin -> @RegionWalk.origin
-  callee +29:11 isAssignmentOperator -> @isAssignmentOperator
-  callee +30:16 RegionWalk.origin -> @RegionWalk.origin
-  local +33:13 left: i32 (const)
-  callee +33:20 RegionWalk.origin -> @RegionWalk.origin
-  local +34:13 right: i32 (const)
-  callee +34:21 RegionWalk.origin -> @RegionWalk.origin
-  local +35:13 either: i32 (const)
-  callee +35:39 joinOrigin -> @joinOrigin
-  callee +35:65 RegionWalk.join -> @RegionWalk.join
-  callee +36:31 joinOrigin -> @joinOrigin
-  callee +39:14 RegionWalk.callOrigin -> @RegionWalk.callOrigin
+  callee +18:14 RegionWalk.origin -> @RegionWalk.origin
+  local +25:11 out: i32 (let)
+  local +26:18 part: Node (const)
+  callee +27:15 joinOrigin -> @joinOrigin
+  callee +27:31 RegionWalk.origin -> @RegionWalk.origin
+  callee +32:14 RegionWalk.join -> @RegionWalk.join
+  callee +32:24 RegionWalk.origin -> @RegionWalk.origin
+  callee +32:52 RegionWalk.origin -> @RegionWalk.origin
+  callee +35:11 isAssignmentOperator -> @isAssignmentOperator
+  callee +36:16 RegionWalk.origin -> @RegionWalk.origin
+  local +39:13 left: i32 (const)
+  callee +39:20 RegionWalk.origin -> @RegionWalk.origin
+  local +40:13 right: i32 (const)
+  callee +40:21 RegionWalk.origin -> @RegionWalk.origin
+  local +41:13 either: i32 (const)
+  callee +41:39 joinOrigin -> @joinOrigin
+  callee +41:65 RegionWalk.join -> @RegionWalk.join
+  callee +42:31 joinOrigin -> @joinOrigin
+  callee +45:14 RegionWalk.callOrigin -> @RegionWalk.callOrigin
 function RegionWalk.identOrigin(this: RegionWalk, e: Node): i32 -> @RegionWalk.identOrigin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.join
@@ -627,7 +603,7 @@ function RegionWalk.callOrigin(this: RegionWalk, call: Node): i32 -> @RegionWalk
   callee +15:23 RegionWalk.handedTo -> @RegionWalk.handedTo
   local +16:13 a: Node (const)
   callee +16:17 unwrapParens -> @unwrapParens
-  callee +17:49 RegionWalk.reaches -> @RegionWalk.reaches
+  callee +17:56 RegionWalk.reaches -> @RegionWalk.reaches
   callee +21:13 RegionWalk.joinHanded -> @RegionWalk.joinHanded
 function RegionWalk.reaches(this: RegionWalk, arg: Node, answer: i32): boolean -> @RegionWalk.reaches [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -753,7 +729,7 @@ function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.vis
   pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.origin#0 RegionWalk.visitAssignment#0 RegionWalk.visitCall#0 RegionWalk.visitNew#0 RegionWalk.visitLiteral#0 RegionWalk.visit#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitAssignment#1 RegionWalk.visitCall#1 RegionWalk.visitNew#1 RegionWalk.visitLiteral#1
   stackSites=0 stackLocals=0
-  local +0:11 kind: i32 (const)
+  local +0:11 kind: NodeKind (const)
   local +6:13 init: Node (const)
   callee +8:9 RegionWalk.visit -> @RegionWalk.visit
   local +9:15 origin: i32 (const)
@@ -764,7 +740,7 @@ function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.vis
   callee +16:13 RegionWalk.bind -> @RegionWalk.bind
   callee +23:7 RegionWalk.bind -> @RegionWalk.bind
   callee +25:9 RegionWalk.origin -> @RegionWalk.origin
-  callee +27:37 isAssignmentOperator -> @isAssignmentOperator
+  callee +27:44 isAssignmentOperator -> @isAssignmentOperator
   callee +28:7 RegionWalk.visitAssignment -> @RegionWalk.visitAssignment
   callee +31:7 RegionWalk.visitCall -> @RegionWalk.visitCall
   callee +34:7 RegionWalk.visitNew -> @RegionWalk.visitNew
@@ -930,8 +906,8 @@ function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSi
   local +10:13 a: Node (const)
   callee +10:17 unwrapParens -> @unwrapParens
   local +12:13 o: i32 (const)
-  callee +12:38 RegionWalk.arrowResult -> @RegionWalk.arrowResult
-  callee +12:60 RegionWalk.origin -> @RegionWalk.origin
+  callee +12:45 RegionWalk.arrowResult -> @RegionWalk.arrowResult
+  callee +12:67 RegionWalk.origin -> @RegionWalk.origin
   callee +14:30 mayBeReleased -> @mayBeReleased
   local +16:11 name: string (const)
   callee +16:18 regionCalleeName -> @regionCalleeName
@@ -1248,8 +1224,8 @@ function ChildSites.scan(this: ChildSites, program: CheckedProgram, node: Node):
   stackSites=0 stackLocals=0
   local -3:13 local: Local | null (const)
   local -2:13 init: Node (const)
-  callee -1:54 ChildSites.makesPlain -> @ChildSites.makesPlain
-  callee +4:42 isAssignmentOperator -> @isAssignmentOperator
+  callee -1:61 ChildSites.makesPlain -> @ChildSites.makesPlain
+  callee +4:49 isAssignmentOperator -> @isAssignmentOperator
   local +5:13 target: Node (const)
   callee +5:22 unwrapParens -> @unwrapParens
   local +6:13 local: Local | null (const)

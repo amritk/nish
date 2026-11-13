@@ -51,59 +51,6 @@ import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_TYPE_ONLY from "./nodes" -> const FLAG_TYPE_ONLY
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_BREAK from "./nodes" -> const N_BREAK
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_CONTINUE from "./nodes" -> const N_CONTINUE
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FIELD from "./nodes" -> const N_FIELD
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_VAR from "./nodes" -> const N_VAR
-import N_IF from "./nodes" -> const N_IF
-import N_EXPORT_ASSIGNMENT from "./nodes" -> const N_EXPORT_ASSIGNMENT
-import N_EXPORT_DECLARATION from "./nodes" -> const N_EXPORT_DECLARATION
-import N_IMPORT from "./nodes" -> const N_IMPORT
-import N_IMPORT_EQUALS from "./nodes" -> const N_IMPORT_EQUALS
-import N_IMPORT_SPEC from "./nodes" -> const N_IMPORT_SPEC
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_INTERFACE from "./nodes" -> const N_INTERFACE
-import N_LABELED from "./nodes" -> const N_LABELED
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
-import N_NAMESPACE_EXPORT from "./nodes" -> const N_NAMESPACE_EXPORT
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_CALL from "./nodes" -> const N_CALL
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_PROPERTY from "./nodes" -> const N_PROPERTY
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SWITCH from "./nodes" -> const N_SWITCH
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_THROW from "./nodes" -> const N_THROW
-import N_TRY from "./nodes" -> const N_TRY
-import N_ENUM from "./nodes" -> const N_ENUM
-import N_TYPE_ALIAS from "./nodes" -> const N_TYPE_ALIAS
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
-import N_WITH from "./nodes" -> const N_WITH
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
 import checkStorageUses from "./module-storage" -> function @checkStorageUses
@@ -303,15 +250,15 @@ function Checker.collectSignatures(this: Checker): void -> @Checker.collectSigna
   callee +46:11 declareMethodTypeParameters -> @declareMethodTypeParameters
   callee +49:9 Checker.collectConstants -> @Checker.collectConstants
   callee +51:9 Checker.collectFunction -> @Checker.collectFunction
-  callee +53:9 refuseTopLevelForm -> @refuseTopLevelForm
-  local +60:16 info: StructInfo (const)
-  callee +63:9 checkImplements -> @checkImplements
-  callee +64:9 checkDefiniteAssignment -> @checkDefiniteAssignment
-  callee +70:5 Checker.finishPendingStructs -> @Checker.finishPendingStructs
-  callee +72:5 checkExportedLayouts -> @checkExportedLayouts
-  local +79:16 alias: AliasInfo (const)
-  callee +82:9 aliasType -> @aliasType
-  callee +86:5 Checker.qualifySymbols -> @Checker.qualifySymbols
+  callee +57:9 refuseTopLevelForm -> @refuseTopLevelForm
+  local +64:16 info: StructInfo (const)
+  callee +67:9 checkImplements -> @checkImplements
+  callee +68:9 checkDefiniteAssignment -> @checkDefiniteAssignment
+  callee +74:5 Checker.finishPendingStructs -> @Checker.finishPendingStructs
+  callee +76:5 checkExportedLayouts -> @checkExportedLayouts
+  local +83:16 alias: AliasInfo (const)
+  callee +86:9 aliasType -> @aliasType
+  callee +90:5 Checker.qualifySymbols -> @Checker.qualifySymbols
 function Checker.importCollections(this: Checker): void -> @Checker.importCollections [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via scanCollectionNames
@@ -606,7 +553,7 @@ function Checker.collectConstants(this: Checker, stmt: Node): void -> @Checker.c
   callee +0:22 isExported -> @isExported
   local +1:16 decl: Node (const)
   local +2:13 name: string (const)
-  callee +3:48 Checker.collectStorage -> @Checker.collectStorage
+  callee +3:55 Checker.collectStorage -> @Checker.collectStorage
   callee +7:9 CheckContext.error -> @CheckContext.error
   callee +11:9 CheckContext.error -> @CheckContext.error
   local +14:13 type: i32 (const)
@@ -1211,15 +1158,15 @@ function guardStatement(body: Node, access: Node): Node | null -> @guardStatemen
   local +20:11 down: Node (const)
   local +21:11 first: boolean (const)
   local +22:11 logical: boolean (const)
-  local +23:11 branches: boolean (const)
-  local +26:11 chained: boolean (const)
-  callee +27:55 isOptionalChain -> @isOptionalChain
-  callee +27:71 unwrapParens -> @unwrapParens
-  local +28:11 repeats: boolean (const)
-  local +30:11 crosses: boolean (const)
-  local +38:9 stmt: Node (const)
-  local +41:9 head: boolean (const)
-  callee +42:10 hasEffectOffPath -> @hasEffectOffPath
+  local +24:11 branches: boolean (const)
+  local +31:11 chained: boolean (const)
+  callee +32:62 isOptionalChain -> @isOptionalChain
+  callee +32:78 unwrapParens -> @unwrapParens
+  local +33:11 repeats: boolean (const)
+  local +38:11 crosses: boolean (const)
+  local +49:9 stmt: Node (const)
+  local +52:9 head: boolean (const)
+  callee +54:10 hasEffectOffPath -> @hasEffectOffPath
 function pathTo(node: Node, target: Node, path: Node[]): boolean -> @pathTo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -1241,16 +1188,16 @@ function hasEffectOffPath(node: Node, path: Node[]): boolean -> @hasEffectOffPat
   local +0:7 onPath: boolean (let)
   local +1:14 step: Node (const)
   local +5:11 callee: Node (const)
-  callee +5:43 unwrapPerfParens -> @unwrapPerfParens
+  callee +5:50 unwrapPerfParens -> @unwrapPerfParens
   local +6:11 reads: boolean (const)
-  callee +13:35 isAssignmentOperator -> @isAssignmentOperator
-  local +17:14 child: Node (const)
-  callee +18:9 hasEffectOffPath -> @hasEffectOffPath
+  callee +14:42 isAssignmentOperator -> @isAssignmentOperator
+  local +18:14 child: Node (const)
+  callee +19:9 hasEffectOffPath -> @hasEffectOffPath
 function isNameDeclaration(node: Node): boolean -> @isNameDeclaration
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 k: i32 (const)
+  local +0:9 k: NodeKind (const)
 function declaresName(node: Node, name: string): boolean -> @declaresName
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -1456,7 +1403,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @
   callee +6:12 accumulates -> @accumulates
   callee +6:55 accumulates -> @accumulates
   local +9:16 part: Node (const)
-  callee +10:44 accumulates -> @accumulates
+  callee +10:50 accumulates -> @accumulates
 function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean -> @isDynamicArrayAllocation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray isNonNegativeInteger nish_panic_index unwrapPerfParens
@@ -1465,11 +1412,11 @@ function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean -> @is
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
-  callee +1:28 TypeTable.isArray -> @TypeTable.isArray
+  callee +1:35 TypeTable.isArray -> @TypeTable.isArray
   local +4:9 args: Node (const)
   local +10:9 length: Node (const)
   callee +10:18 unwrapPerfParens -> @unwrapPerfParens
-  callee +11:39 isNonNegativeInteger -> @isNonNegativeInteger
+  callee +11:46 isNonNegativeInteger -> @isNonNegativeInteger
 function isNonNegativeInteger(text: string): boolean -> @isNonNegativeInteger
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1484,10 +1431,10 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
   pointer own: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3
   stackSites=0 stackLocals=0
   callee +0:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee +2:32 isLocalRef -> @isLocalRef
+  callee +2:39 isLocalRef -> @isLocalRef
   callee +3:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee +5:59 isLocalRef -> @isLocalRef
-  callee +8:33 isLocalRef -> @isLocalRef
+  callee +5:66 isLocalRef -> @isLocalRef
+  callee +8:39 isLocalRef -> @isLocalRef
   callee +10:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
   callee +11:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
   local +16:11 bound: Local | null (const)
@@ -1519,8 +1466,8 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean -> @perfAl
   local +9:16 part: Node (const)
   local +17:11 callee: Node (const)
   callee +17:20 unwrapPerfParens -> @unwrapPerfParens
-  callee +18:39 perfIsReadBuiltin -> @perfIsReadBuiltin
-  callee +18:74 StringMap.has -> @StringMap.has
+  callee +18:46 perfIsReadBuiltin -> @perfIsReadBuiltin
+  callee +18:81 StringMap.has -> @StringMap.has
 function perfIsPointerType(ctx: CheckContext, type: i32): boolean -> @perfIsPointerType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -1546,7 +1493,7 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
   callee +19:11 perfMayYieldLocal -> @perfMayYieldLocal
   callee +26:12 perfMayYieldLocal -> @perfMayYieldLocal
   callee +29:12 perfMayYieldLocal -> @perfMayYieldLocal
-  callee +31:57 perfMayYieldLocal -> @perfMayYieldLocal
+  callee +31:64 perfMayYieldLocal -> @perfMayYieldLocal
 function perfMayYieldLocal(ctx: CheckContext, expr: Node, local: Local): boolean -> @perfMayYieldLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isLocalRef nish_panic_index perfMayYieldLocal unwrapPerfParens
@@ -1568,7 +1515,7 @@ function perfReceiverMayBeKept(ctx: CheckContext, callee: Node, local: Local): b
   stackSites=0 stackLocals=0
   local +0:9 c: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
-  callee +1:31 isLocalRef -> @isLocalRef
+  callee +1:38 isLocalRef -> @isLocalRef
   callee +4:38 TypeTable.isArray -> @TypeTable.isArray
 function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean -> @perfHeldValueMayBeReachable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1841,8 +1788,8 @@ function noteAnnotatedNew(decl: Node, program: CheckedProgram, hideMap: boolean,
   pointer decl: size=40 writesThrough=false captured=false
   pointer program: size=888 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -11:9 annotation: Node (const)
-  local -10:9 init: Node (const)
+  local -15:9 annotation: Node (const)
+  local -14:9 init: Node (const)
   local -6:9 name: string (const)
   local -5:9 global: boolean (const)
   callee -1:3 StringMap.set -> @StringMap.set
@@ -1934,7 +1881,7 @@ function skipBlanks(text: string, at: i32): i32 -> @skipBlanks [exported]
 function isBlank(byte: i32): boolean -> @isBlank
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function syntaxKindName(kind: i32): string -> @syntaxKindName [exported]
+function syntaxKindName(kind: NodeKind): string -> @syntaxKindName [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: kind
   stackSites=0 stackLocals=0
