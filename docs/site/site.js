@@ -194,7 +194,14 @@
           )
         ),
         terminal(
-          el("div.nish-hero__bar", { "aria-hidden": "true" }, el("i"), el("i"), el("i"), el("span", {}, "terminal")),
+          el(
+            "div.nish-hero__bar",
+            { "aria-hidden": "true" },
+            el("i"),
+            el("i"),
+            el("i"),
+            el("span", {}, "terminal")
+          ),
           el(
             "pre.nish-hero__code",
             { "aria-hidden": "true" },
@@ -222,7 +229,14 @@
       "div.nish-hero__window.nish-hero__terminal",
       { tabindex: "0", role: "textbox", "aria-label": "Terminal" },
       ...children,
-      el("pre.nish-hero__code.nish-hero__line-in", {}, said, el("b", {}, "$ "), typed, el("i.nish-hero__caret"))
+      el(
+        "pre.nish-hero__code.nish-hero__line-in",
+        {},
+        said,
+        el("b", {}, "$ "),
+        typed,
+        el("i.nish-hero__caret")
+      )
     )
     let opening = null
     const say = (text) => (said.textContent = text)
