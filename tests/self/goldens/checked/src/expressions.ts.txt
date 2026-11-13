@@ -332,7 +332,7 @@ function memberListId(ctx: CheckContext, members: i32[]): i32 -> @memberListId
 function memberSetOf(ctx: CheckContext, node: Node): i32[] -> @memberSetOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.enumMemberOf
-  calls: CheckedProgram.isEnumMember TypeTable.enumBase TypeTable.enumMemberOf membersOfSet nish_array_grow nish_panic_index unwrapParens
+  calls: CheckedProgram.isEnumMember TypeTable.enumBase TypeTable.enumMemberOf TypeTable.isEnumMemberType TypeTable.memberValue membersOfSet nish_array_grow nish_panic_index unwrapParens
   pointer ctx: size=336 writesThrough=false captured=false passedTo=membersOfSet#0
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -340,10 +340,14 @@ function memberSetOf(ctx: CheckContext, node: Node): i32[] -> @memberSetOf [expo
   callee +0:16 unwrapParens -> @unwrapParens
   local +1:9 members: i32[] (const)
   callee +2:7 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
-  local +3:11 type: i32 (const)
-  callee +3:18 TypeTable.enumBase -> @TypeTable.enumBase
-  callee +4:18 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
-  callee +7:10 membersOfSet -> @membersOfSet
+  local +3:11 read: i32 (const)
+  local +4:11 value: i32 (const)
+  local +7:11 known: boolean (const)
+  callee +7:19 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +7:55 TypeTable.memberValue -> @TypeTable.memberValue
+  callee +8:33 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
+  callee +8:56 TypeTable.enumBase -> @TypeTable.enumBase
+  callee +11:10 membersOfSet -> @membersOfSet
 function membersOfSet(ctx: CheckContext, set: i32): i32[] -> @membersOfSet [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: set
@@ -1572,16 +1576,90 @@ function pathsCovered(ctx: CheckContext, target: Node, scope: Scope, into: Local
   callee +19:7 addLocals -> @addLocals
 function enumMembersOf(ctx: CheckContext, enumType: i32): i32[] -> @enumMembersOf [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via TypeTable.enumMemberOf
-  calls: EnumInfo.memberNameOf TypeTable.enumMemberOf nish_array_grow
+  sharedWrite: +0:5
+  escaping: enumType
+  calls: EnumInfo.memberNameOf TypeTable.enumMemberOf nish_array_grow nish_panic_index
   pointer ctx: size=336 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local +0:9 members: i32[] (const)
-  local +1:14 info: EnumInfo (const)
-  local +3:13 seen: i32[] (const)
-  local +4:18 value: i32 (const)
-  callee +7:24 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
-  callee +7:65 EnumInfo.memberNameOf -> @EnumInfo.memberNameOf
+  local -17:9 at: i32 (const)
+  local -13:9 members: i32[] (const)
+  local -12:14 info: EnumInfo (const)
+  local -10:13 seen: i32[] (const)
+  local -9:18 value: i32 (const)
+  callee -6:24 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
+  callee -6:65 EnumInfo.memberNameOf -> @EnumInfo.memberNameOf
+function stampMembers(ctx: CheckContext, enumType: i32, current: i32[], first: i32[], second: i32[]): i32 -> @stampMembers
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: enumType
+  calls: TypeTable.isMemberOf markMember nish_array_grow nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false
+  pointer current: size=0 writesThrough=false captured=false
+  pointer first: size=0 writesThrough=false captured=false
+  pointer second: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -7:9 program: CheckedProgram (const)
+  local -6:9 marks: i32[] (const)
+  local -5:14 member: i32 (const)
+  callee -4:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  local +3:14 member: i32 (const)
+  callee +4:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  local +8:14 member: i32 (const)
+  callee +9:10 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  local +14:9 stamp: i32 (const)
+  local +15:14 member: i32 (const)
+  callee +16:5 markMember -> @markMember
+  local +18:14 member: i32 (const)
+  callee +19:5 markMember -> @markMember
+function markMember(marks: i32[], member: i32, stamp: i32): void -> @markMember
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: member stamp
+  calls: nish_array_grow nish_panic_index
+  pointer marks: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function isMarked(marks: i32[], member: i32, stamp: i32): boolean -> @isMarked
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: member
+  pointer marks: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function namedBy(ctx: CheckContext, member: i32, first: i32[], second: i32[]): boolean -> @namedBy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: member
+  calls: TypeTable.memberValue
+  pointer ctx: size=336 writesThrough=false captured=false
+  pointer first: size=0 writesThrough=false captured=false
+  pointer second: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 value: i32 (const)
+  callee +0:17 TypeTable.memberValue -> @TypeTable.memberValue
+  local +1:14 other: i32 (const)
+  callee +2:9 TypeTable.memberValue -> @TypeTable.memberValue
+  local +6:14 other: i32 (const)
+  callee +7:9 TypeTable.memberValue -> @TypeTable.memberValue
+function holdNamed(ctx: CheckContext, scope: Scope, local: Local, current: i32[], first: i32[], second: i32[], keep: boolean): void -> @holdNamed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: holdKept isMarked namedBy nish_array_grow nish_panic_overflow stampMembers
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=stampMembers#0 namedBy#0 namedBy#0 holdKept#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=holdKept#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=holdKept#2
+  pointer current: size=0 writesThrough=false captured=false passedTo=stampMembers#2
+  pointer first: size=0 writesThrough=false captured=false passedTo=stampMembers#3 namedBy#2 namedBy#2
+  pointer second: size=0 writesThrough=false captured=false passedTo=stampMembers#4 namedBy#3 namedBy#3
+  stackSites=0 stackLocals=0
+  local -14:9 stamp: i32 (const)
+  callee -14:17 stampMembers -> @stampMembers
+  local -13:9 marks: i32[] (const)
+  local -12:7 count: i32 (let)
+  local -11:14 member: i32 (const)
+  callee -10:22 isMarked -> @isMarked
+  callee -10:55 namedBy -> @namedBy
+  local -3:9 kept: i32[] (const)
+  local -2:14 member: i32 (const)
+  callee -1:22 isMarked -> @isMarked
+  callee -1:55 namedBy -> @namedBy
+  callee +3:3 holdKept -> @holdKept
 function heldMembers(ctx: CheckContext, scope: Scope, local: Local): i32[] -> @heldMembers [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via enumMembersOf
@@ -1596,23 +1674,17 @@ function heldMembers(ctx: CheckContext, scope: Scope, local: Local): i32[] -> @h
   callee +4:31 membersOfSet -> @membersOfSet
   callee +4:57 enumMembersOf -> @enumMembersOf
 function narrowHeld(ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void -> @narrowHeld [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: TypeTable.memberValue heldMembers holdKept nish_array_grow
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldMembers#0 holdKept#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=heldMembers#1 holdKept#1
-  pointer local: size=64 writesThrough=true captured=true passedTo=heldMembers#2 holdKept#2
-  pointer members: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local -10:9 current: i32[] (const)
-  callee -10:19 heldMembers -> @heldMembers
-  local -9:9 kept: i32[] (const)
-  local -8:14 member: i32 (const)
-  local -7:9 named: boolean (let)
-  local -6:16 test: i32 (const)
-  callee -5:11 TypeTable.memberValue -> @TypeTable.memberValue
-  callee -5:43 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +6:3 holdKept -> @holdKept
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via holdNamed
+  escaping: keep
+  calls: heldMembers holdNamed
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdNamed#0 heldMembers#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=holdNamed#1 heldMembers#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=holdNamed#2 heldMembers#2
+  pointer members: size=0 writesThrough=false captured=false passedTo=holdNamed#4
+  stackSites=1 stackLocals=0
+  callee +0:3 holdNamed -> @holdNamed
+  callee +0:32 heldMembers -> @heldMembers
 function holdKept(ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void -> @holdKept [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Scope.hold
@@ -1742,31 +1814,20 @@ function addLocals(into: Local[], locals: Local[]): void -> @addLocals [exported
   local -7:9 seen: boolean (let)
   local -6:16 had: Local (const)
 function joinHeld(ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void -> @joinHeld
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: TypeTable.memberValue heldMembers holdKept nish_array_grow
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldMembers#0 heldMembers#0 heldMembers#0 holdKept#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=heldMembers#1 holdKept#1
-  pointer local: size=64 writesThrough=true captured=true passedTo=heldMembers#2 heldMembers#2 heldMembers#2 holdKept#2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via heldMembers
+  calls: heldMembers holdNamed
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldMembers#0 holdNamed#0 heldMembers#0 heldMembers#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=heldMembers#1 holdNamed#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=heldMembers#2 holdNamed#2 heldMembers#2 heldMembers#2
   pointer first: size=56 writesThrough=false captured=false passedTo=heldMembers#1
   pointer second: size=56 writesThrough=false captured=false passedTo=heldMembers#1
   stackSites=0 stackLocals=0
-  local -17:9 current: i32[] (const)
-  callee -17:19 heldMembers -> @heldMembers
-  local -16:9 fromFirst: i32[] (const)
-  callee -16:21 heldMembers -> @heldMembers
-  local -15:9 fromSecond: i32[] (const)
-  callee -15:22 heldMembers -> @heldMembers
-  local -14:9 kept: i32[] (const)
-  local -13:14 member: i32 (const)
-  local -12:9 named: boolean (let)
-  local -11:16 other: i32 (const)
-  callee -10:11 TypeTable.memberValue -> @TypeTable.memberValue
-  callee -10:44 TypeTable.memberValue -> @TypeTable.memberValue
-  local -6:16 other: i32 (const)
-  callee -5:11 TypeTable.memberValue -> @TypeTable.memberValue
-  callee -5:44 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +6:3 holdKept -> @holdKept
+  local +0:9 current: i32[] (const)
+  callee +0:19 heldMembers -> @heldMembers
+  callee +1:3 holdNamed -> @holdNamed
+  callee +1:41 heldMembers -> @heldMembers
+  callee +1:73 heldMembers -> @heldMembers
 function variantsIn(ctx: CheckContext, union: i32, type: i32): i32[] -> @variantsIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type union
@@ -2411,30 +2472,30 @@ function collectWritten(ctx: CheckContext, node: Node, local: Local, scope: Scop
 function heldAcross(ctx: CheckContext, node: Node, scope: Scope): Scope -> @heldAcross [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=56
   sharedWrite: +0:11
-  calls: Scope.constructor Scope.hold TypeTable.isEnum TypeTable.memberValue collectWritten enumMembersOf heldMembers localsAssignedIn memberListId nish_alloc_struct nish_array_grow
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=localsAssignedIn#0 collectWritten#0 enumMembersOf#0 heldMembers#0 memberListId#0
+  calls: Scope.constructor Scope.hold TypeTable.isEnum collectWritten enumMembersOf heldMembers isMarked localsAssignedIn memberListId namedBy nish_alloc_struct nish_array_grow stampMembers
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=localsAssignedIn#0 collectWritten#0 heldMembers#0 enumMembersOf#0 stampMembers#0 namedBy#0 memberListId#0
   pointer node: size=40 writesThrough=false captured=false passedTo=localsAssignedIn#1 collectWritten#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=localsAssignedIn#2 collectWritten#3 heldMembers#1
   stackSites=2 stackLocals=2
-  local -20:9 held: Scope (const)
-  callee -20:16 new Scope -> @Scope.constructor
-  local -19:9 assigned: Local[] (const)
-  callee -18:3 localsAssignedIn -> @localsAssignedIn
-  local -17:14 local: Local (const)
-  local -16:11 written: i32[] (const)
-  callee -15:9 TypeTable.isEnum -> @TypeTable.isEnum
-  callee -15:41 collectWritten -> @collectWritten
-  local -14:13 kept: i32[] (const)
-  local -13:18 member: i32 (const)
-  callee -13:28 enumMembersOf -> @enumMembersOf
-  local -12:13 named: boolean (let)
-  local -11:20 other: i32 (const)
-  callee -11:29 heldMembers -> @heldMembers
-  callee -10:15 TypeTable.memberValue -> @TypeTable.memberValue
-  callee -10:48 TypeTable.memberValue -> @TypeTable.memberValue
-  local -6:20 other: i32 (const)
-  callee -5:15 TypeTable.memberValue -> @TypeTable.memberValue
-  callee -5:48 TypeTable.memberValue -> @TypeTable.memberValue
+  local -13:9 held: Scope (const)
+  callee -13:16 new Scope -> @Scope.constructor
+  local -12:9 assigned: Local[] (const)
+  callee -11:3 localsAssignedIn -> @localsAssignedIn
+  local -10:14 local: Local (const)
+  local -9:11 written: i32[] (const)
+  callee -8:9 TypeTable.isEnum -> @TypeTable.isEnum
+  callee -8:41 collectWritten -> @collectWritten
+  local -7:13 kept: i32[] (const)
+  local -6:13 before: i32[] (const)
+  callee -6:22 heldMembers -> @heldMembers
+  local -5:13 every: i32[] (const)
+  callee -5:21 enumMembersOf -> @enumMembersOf
+  local -4:13 stamp: i32 (const)
+  callee -4:21 stampMembers -> @stampMembers
+  local -3:13 marks: i32[] (const)
+  local -2:18 member: i32 (const)
+  callee -1:25 isMarked -> @isMarked
+  callee -1:58 namedBy -> @namedBy
   callee +4:9 Scope.hold -> @Scope.hold
   callee +6:9 Scope.hold -> @Scope.hold
   callee +6:26 memberListId -> @memberListId

@@ -76,6 +76,7 @@ struct TypeTable (class) size=112 align=8 exported
   method isEnum -> @TypeTable.isEnum
   method enumMemberOf -> @TypeTable.enumMemberOf
   method isEnumMemberType -> @TypeTable.isEnumMemberType
+  method isMemberOf -> @TypeTable.isMemberOf
   method isEntered -> @TypeTable.isEntered
   method memberValue -> @TypeTable.memberValue
   method enumBase -> @TypeTable.enumBase
@@ -348,6 +349,12 @@ function TypeTable.enumMemberOf(this: TypeTable, enumType: i32, value: i32, name
   stackSites=0 stackLocals=0
   callee +0:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isEnumMemberType(this: TypeTable, type: i32): boolean -> @TypeTable.isEnumMemberType [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: nish_panic_index
+  pointer this: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function TypeTable.isMemberOf(this: TypeTable, type: i32, enumType: i32): boolean -> @TypeTable.isMemberOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: nish_panic_index

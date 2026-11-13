@@ -302,7 +302,7 @@ function rejectUnreadOverwrites(ctx: CheckContext, node: Node, declarations: Nod
 function declarationIndex(program: CheckedProgram, declarations: Node[], local: Local | null): i32 -> @declarationIndex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=832 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -313,7 +313,7 @@ function collectResultLocals(program: CheckedProgram, table: TypeTable, node: No
   sharedWrite: +0:7
   escaping: node
   calls: TypeTable.isResult collectResultLocals nish_array_grow nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false passedTo=collectResultLocals#0
+  pointer program: size=832 writesThrough=false captured=false passedTo=collectResultLocals#0
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isResult#0 collectResultLocals#1
   pointer node: size=40 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false passedTo=collectResultLocals#3
@@ -326,7 +326,7 @@ function markResultReads(program: CheckedProgram, node: Node, declarations: Node
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: declarationIndex markResultReads nish_panic_index nish_panic_overflow nish_str_eq
-  pointer program: size=800 writesThrough=false captured=false passedTo=declarationIndex#0 markResultReads#0
+  pointer program: size=832 writesThrough=false captured=false passedTo=declarationIndex#0 markResultReads#0
   pointer node: size=40 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false passedTo=declarationIndex#1 markResultReads#2
   pointer read: size=0 writesThrough=true captured=false passedTo=markResultReads#3

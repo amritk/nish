@@ -93,7 +93,7 @@ function JsonPart.constructor(this: JsonPart, kind: i32, info: StructInfo | null
   pointer info: size=176 writesThrough=true captured=true
   pointer value: size=64 writesThrough=true captured=true
   pointer receiver: size=176 writesThrough=true captured=true
-  pointer home: size=800 writesThrough=true captured=true
+  pointer home: size=832 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function jsonPartName(kind: i32, subject: string): string -> @jsonPartName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -402,7 +402,7 @@ function jsonLibraryReach(emitter: Emitter, library: CheckedProgram): FunctionSi
   sharedWrite: via libraryReach
   calls: FactsTable.get FunctionSig.definedIn StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size jsonMapCallees libraryReach mapIntrinsicOf nish_array_grow
   pointer emitter: size=376 writesThrough=false captured=false passedTo=jsonMapCallees#0 libraryReach#0
-  pointer library: size=800 writesThrough=false captured=false passedTo=libraryReach#1
+  pointer library: size=832 writesThrough=false captured=false passedTo=libraryReach#1
   stackSites=5 stackLocals=4
   local +0:9 bySymbol: StringSet (const)
   callee +0:20 new StringSet -> @StringSet.constructor
