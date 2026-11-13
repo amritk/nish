@@ -236,7 +236,7 @@ and an unframed one to HTTP/1.0, ends only at `end`, since the connection has
 no length to count: one byte short of the length, or chunked without `end`,
 and the next request is neither read nor answered, and no last chunk goes out.
 A program that forgot `end` on a length-framed response used to leave a
-kept-alive client waiting forever with nothing reported;
+kept-alive client waiting forever with nothing reported.
 
 **The head stays the request's until it is answered** (`std_http1_end_head`):
 at `HTTP1_END` of a kept-alive request with the next one already fed behind
