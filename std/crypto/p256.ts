@@ -4026,9 +4026,8 @@ const p256Safegcd = (out: u32[], a: u32[], m: u32[], inverse30: u32): void => {
 /**
  * `out = 1 / a` mod n for `a` in the Montgomery domain, zero for a zero `a`:
  * the signing paths' inversion of the nonce and verification's of s, by
- * `p256Safegcd`. The divsteps
- * invert `a R` as a plain number; one Montgomery multiply by R^3 takes
- * `(a R)^-1` to `a^-1 R`.
+ * `p256Safegcd`. The divsteps invert `a R` as a plain number; one Montgomery
+ * multiply by R^3 takes `(a R)^-1` to `a^-1 R`.
  */
 const p256ScalarInverse = (out: u32[], a: u32[]): void => {
   p256Safegcd(out, a, p256Order30(), 0x11ff43b1)
