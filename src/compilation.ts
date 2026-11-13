@@ -59,7 +59,7 @@ import {
   explainMemory,
   keptMemoryFindings,
   loopReachedFunctions,
-  MemoryReport
+  MemoryReport,
 } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
@@ -391,11 +391,7 @@ export class EmittedModule {
 
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
-  code === "NL9002" ||
-  code === "NL9003" ||
-  code === "NL9011" ||
-  code === "NL9016" ||
-  code === "NL9018"
+  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016" || code === "NL9018"
 
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of

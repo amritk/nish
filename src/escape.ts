@@ -3184,7 +3184,11 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
  * walked, with its own side tables installed, because a loop that calls a
  * function parameter calls the argument inside the instantiation.
  */
-export const loopReachedFunctions = (units: AnalysisUnit[], table: TypeTable, facts: FactsTable): StringSet => {
+export const loopReachedFunctions = (
+  units: AnalysisUnit[],
+  table: TypeTable,
+  facts: FactsTable
+): StringSet => {
   const reached = new StringSet()
   const work: string[] = []
   for (const unit of units) {
