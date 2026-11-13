@@ -331,36 +331,163 @@ function memberListId(ctx: CheckContext, members: i32[]): i32 -> @memberListId
   pointer ctx: size=336 writesThrough=false captured=false
   pointer members: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+  local -1:9 program: CheckedProgram (const)
+function dropMember(ctx: CheckContext, enumType: i32, set: i32, member: i32, size: i32): i32 -> @dropMember
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: enumType member set size
+  calls: nish_array_grow nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 program: CheckedProgram (const)
+  local -1:9 unbuilt: i32[] (const)
+function intAt(values: i32[], at: i32): i32 -> @intAt
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  pointer values: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function listIndex(set: i32): i32 -> @listIndex
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function listAt(program: CheckedProgram, at: i32): i32[] -> @listAt
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  pointer program: size=880 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 none: i32[] (const)
+function listOfEnum(ctx: CheckContext, enumType: i32, set: i32): boolean -> @listOfEnum
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: set
+  calls: intAt listIndex
+  pointer ctx: size=336 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 at: i32 (const)
+  callee +0:14 listIndex -> @listIndex
+  callee +1:10 intAt -> @intAt
+  callee +1:57 intAt -> @intAt
+function setSize(ctx: CheckContext, enumType: i32, set: i32): i32 -> @setSize
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via enumMembersOf
+  escaping: enumType set
+  calls: enumMembersOf intAt listIndex
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=enumMembersOf#0
+  stackSites=0 stackLocals=0
+  callee +0:16 enumMembersOf -> @enumMembersOf
+  callee +0:54 intAt -> @intAt
+  callee +0:89 listIndex -> @listIndex
+function setHas(ctx: CheckContext, set: i32, member: i32): boolean -> @setHas
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: set
+  calls: intAt listAt listIndex nish_arena_mark nish_arena_release
+  pointer ctx: size=336 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 program: CheckedProgram (const)
+  local +1:7 at: i32 (let)
+  local +3:11 index: i32 (const)
+  callee +3:19 listIndex -> @listIndex
+  local +4:11 drop: i32 (const)
+  callee +4:18 intAt -> @intAt
+  callee +6:14 listAt -> @listAt
+  callee +11:10 intAt -> @intAt
+function buildExclusion(ctx: CheckContext, index: i32): i32[] -> @buildExclusion
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: index
+  calls: enumMembersOf intAt isMarked listAt listIndex markMember nish_array_grow nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=enumMembersOf#0
+  stackSites=0 stackLocals=0
+  local -1:9 program: CheckedProgram (const)
+  local +1:9 stamp: i32 (const)
+  local +2:7 at: i32 (let)
+  local +3:7 base: i32[] (let)
+  local +4:7 found: boolean (let)
+  local +6:11 drop: i32 (const)
+  callee +6:18 intAt -> @intAt
+  local +7:11 built: i32[] (const)
+  callee +7:19 listAt -> @listAt
+  callee +12:7 markMember -> @markMember
+  local +13:13 next: i32 (const)
+  callee +13:20 intAt -> @intAt
+  callee +15:16 enumMembersOf -> @enumMembersOf
+  callee +15:35 intAt -> @intAt
+  callee +18:12 listIndex -> @listIndex
+  local +21:9 members: i32[] (const)
+  local +22:14 member: i32 (const)
+  callee +23:10 isMarked -> @isMarked
 function memberSetOf(ctx: CheckContext, node: Node): i32[] -> @memberSetOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via TypeTable.enumMemberOf
-  calls: CheckedProgram.isEnumMember TypeTable.enumBase TypeTable.enumMemberOf TypeTable.isEnumMemberType TypeTable.memberValue membersOfSet nish_array_grow nish_panic_index unwrapParens
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=membersOfSet#0
+  sharedWrite: via memberConstantType
+  calls: CheckedProgram.isEnumMember memberConstantType membersOfSet nish_array_grow nish_panic_index unwrapParens
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=memberConstantType#0 membersOfSet#0
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 bare: Node (const)
   callee +0:16 unwrapParens -> @unwrapParens
   local +1:9 members: i32[] (const)
   callee +2:7 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
-  local +3:11 read: i32 (const)
-  local +4:11 value: i32 (const)
-  local +7:11 known: boolean (const)
-  callee +7:19 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +7:55 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +8:33 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
-  callee +8:56 TypeTable.enumBase -> @TypeTable.enumBase
-  callee +11:10 membersOfSet -> @membersOfSet
-function membersOfSet(ctx: CheckContext, set: i32): i32[] -> @membersOfSet [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: set
-  calls: TypeTable.isEnumMemberType TypeTable.isUnion TypeTable.tagsOf nish_array_grow nish_panic_index nish_panic_overflow
+  callee +3:18 memberConstantType -> @memberConstantType
+  callee +6:10 membersOfSet -> @membersOfSet
+function memberConstantType(ctx: CheckContext, bare: Node): i32 -> @memberConstantType
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via TypeTable.enumMemberOf
+  calls: TypeTable.enumBase TypeTable.enumMemberOf TypeTable.isEnumMemberType TypeTable.memberValue nish_panic_index
   pointer ctx: size=336 writesThrough=false captured=false
+  pointer bare: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 members: i32[] (const)
-  callee +1:7 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +3:14 TypeTable.isUnion -> @TypeTable.isUnion
-  local +4:16 tag: i32 (const)
-  callee +4:23 TypeTable.tagsOf -> @TypeTable.tagsOf
+  local +0:9 read: i32 (const)
+  local +1:9 value: i32 (const)
+  local +4:9 known: boolean (const)
+  callee +4:17 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +4:53 TypeTable.memberValue -> @TypeTable.memberValue
+  callee +5:25 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
+  callee +5:48 TypeTable.enumBase -> @TypeTable.enumBase
+function setsDisjoint(ctx: CheckContext, left: Node, right: Node): boolean -> @setsDisjoint
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via memberConstantType
+  calls: CheckedProgram.isEnumMember TypeTable.isMemberOf intAt listIndex memberConstantType memberSetOf membersDisjoint namesMembers nish_panic_index setHas unwrapParens
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=memberConstantType#0 setHas#0 membersDisjoint#0 memberSetOf#0 memberSetOf#0
+  pointer left: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 memberSetOf#1
+  pointer right: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 memberSetOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 a: Node (const)
+  callee +0:13 unwrapParens -> @unwrapParens
+  local +1:9 b: Node (const)
+  callee +1:13 unwrapParens -> @unwrapParens
+  local +2:9 aConstant: boolean (const)
+  callee +2:21 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
+  local +3:9 bConstant: boolean (const)
+  callee +3:21 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
+  local +5:11 set: i32 (const)
+  callee +6:10 namesMembers -> @namesMembers
+  local +9:11 member: i32 (const)
+  callee +9:20 memberConstantType -> @memberConstantType
+  local +10:11 enumType: i32 (const)
+  callee +10:22 intAt -> @intAt
+  callee +10:57 listIndex -> @listIndex
+  callee +11:48 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  callee +12:15 setHas -> @setHas
+  callee +15:10 membersDisjoint -> @membersDisjoint
+  callee +15:31 memberSetOf -> @memberSetOf
+  callee +15:55 memberSetOf -> @memberSetOf
+function membersOfSet(ctx: CheckContext, set: i32): i32[] -> @membersOfSet [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via buildExclusion
+  escaping: set
+  calls: TypeTable.isEnumMemberType TypeTable.isUnion TypeTable.tagsOf buildExclusion intAt listAt listIndex nish_array_grow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=buildExclusion#0
+  stackSites=0 stackLocals=0
+  local +0:11 index: i32 (const)
+  callee +0:19 listIndex -> @listIndex
+  local +1:11 built: i32[] (const)
+  callee +1:19 listAt -> @listAt
+  callee +2:34 intAt -> @intAt
+  callee +3:9 buildExclusion -> @buildExclusion
+  local +6:9 members: i32[] (const)
+  callee +7:7 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +9:14 TypeTable.isUnion -> @TypeTable.isUnion
+  local +10:16 tag: i32 (const)
+  callee +10:23 TypeTable.tagsOf -> @TypeTable.tagsOf
 function joinArmMembers(ctx: CheckContext, expr: Node): void -> @joinArmMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -1017,11 +1144,11 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: left op right
-  calls: CheckContext.errorType CheckContext.textOf TypeTable.isMask TypeTable.isNullable TypeTable.isSecret TypeTable.isVector TypeTable.typeName equalityMessage memberSetName memberSetOf membersDisjoint nish_str_concat nish_str_eq simdCompareMessage
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 memberSetOf#0 memberSetOf#0 membersDisjoint#0 CheckContext.errorType#0 CheckContext.textOf#0 memberSetName#0 CheckContext.textOf#0 memberSetName#0 CheckContext.errorType#0
+  calls: CheckContext.errorType CheckContext.textOf TypeTable.isMask TypeTable.isNullable TypeTable.isSecret TypeTable.isVector TypeTable.typeName equalityMessage memberSetName memberSetOf nish_str_concat nish_str_eq setsDisjoint simdCompareMessage
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 setsDisjoint#0 memberSetOf#0 memberSetOf#0 CheckContext.errorType#0 CheckContext.textOf#0 memberSetName#0 CheckContext.textOf#0 memberSetName#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
-  pointer leftNode: size=40 writesThrough=true captured=true passedTo=memberSetOf#1 CheckContext.textOf#1
-  pointer rightNode: size=40 writesThrough=true captured=true passedTo=memberSetOf#1 CheckContext.textOf#1
+  pointer leftNode: size=40 writesThrough=true captured=true passedTo=setsDisjoint#1 memberSetOf#1 CheckContext.textOf#1
+  pointer rightNode: size=40 writesThrough=true captured=true passedTo=setsDisjoint#2 memberSetOf#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 secretLeft: boolean (const)
   callee +0:22 TypeTable.isSecret -> @TypeTable.isSecret
@@ -1042,11 +1169,11 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   callee +19:12 CheckContext.errorType -> @CheckContext.errorType
   callee +19:32 simdCompareMessage -> @simdCompareMessage
   callee +19:55 TypeTable.typeName -> @TypeTable.typeName
-  local +21:9 leftSet: i32[] (const)
-  callee +21:19 memberSetOf -> @memberSetOf
-  local +22:9 rightSet: i32[] (const)
-  callee +22:20 memberSetOf -> @memberSetOf
-  callee +23:7 membersDisjoint -> @membersDisjoint
+  callee +21:7 setsDisjoint -> @setsDisjoint
+  local +22:11 leftSet: i32[] (const)
+  callee +22:21 memberSetOf -> @memberSetOf
+  local +23:11 rightSet: i32[] (const)
+  callee +23:22 memberSetOf -> @memberSetOf
   callee +24:12 CheckContext.errorType -> @CheckContext.errorType
   callee +26:73 CheckContext.textOf -> @CheckContext.textOf
   callee +26:104 memberSetName -> @memberSetName
@@ -1529,14 +1656,15 @@ function pathVariable(ctx: CheckContext, node: Node, scope: Scope, type: i32, cr
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: type
-  calls: Local.constructor TypeTable.isEnum nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq pathKey pathRoot unwrapParens
+  calls: CheckedProgram.isEnumMember Local.constructor TypeTable.isEnum nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq pathKey pathRoot unwrapParens
   pointer ctx: size=336 writesThrough=true captured=false passedTo=pathKey#0 pathRoot#0
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=pathKey#2 pathRoot#2
   stackSites=0 stackLocals=0
-  local -26:9 read: Node (const)
-  callee -26:16 unwrapParens -> @unwrapParens
+  local -27:9 read: Node (const)
+  callee -27:16 unwrapParens -> @unwrapParens
   callee -22:8 TypeTable.isEnum -> @TypeTable.isEnum
+  callee -22:34 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
   local -19:9 key: string (const)
   callee -19:15 pathKey -> @pathKey
   local -15:9 root: Local | null (const)
@@ -1578,18 +1706,26 @@ function pathsCovered(ctx: CheckContext, target: Node, scope: Scope, into: Local
   callee +19:7 addLocals -> @addLocals
 function enumMembersOf(ctx: CheckContext, enumType: i32): i32[] -> @enumMembersOf [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: enumType
-  calls: EnumInfo.memberNameOf TypeTable.enumMemberOf nish_array_grow nish_panic_index
+  calls: EnumInfo.memberNameOf TypeTable.enumMemberOf TypeTable.internsByValue isMarked markMember nish_array_grow nish_panic_index nish_panic_overflow
   pointer ctx: size=336 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local -17:9 at: i32 (const)
-  local -13:9 members: i32[] (const)
-  local -12:14 info: EnumInfo (const)
-  local -10:13 seen: i32[] (const)
-  local -9:18 value: i32 (const)
-  callee -6:24 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
-  callee -6:65 EnumInfo.memberNameOf -> @EnumInfo.memberNameOf
+  local -11:9 at: i32 (const)
+  local -7:9 members: i32[] (const)
+  local -6:14 info: EnumInfo (const)
+  local -1:13 program: CheckedProgram (const)
+  local +1:13 stamp: i32 (const)
+  local +2:13 seen: i32[] (const)
+  local +3:11 i: i32 (let)
+  local +5:15 value: i32 (const)
+  callee +6:13 TypeTable.internsByValue -> @TypeTable.internsByValue
+  local +7:17 member: i32 (const)
+  callee +7:26 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
+  callee +8:16 isMarked -> @isMarked
+  callee +9:13 markMember -> @markMember
+  callee +14:24 TypeTable.enumMemberOf -> @TypeTable.enumMemberOf
+  callee +14:65 EnumInfo.memberNameOf -> @EnumInfo.memberNameOf
 function stampMembers(ctx: CheckContext, enumType: i32, current: i32[], first: i32[], second: i32[]): i32 -> @stampMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -1667,6 +1803,95 @@ function keptSet(ctx: CheckContext, local: Local, current: i32[], first: i32[], 
   callee -1:22 isMarked -> @isMarked
   callee -1:55 namedBy -> @namedBy
   callee +3:10 keptId -> @keptId
+function keptFrom(ctx: CheckContext, enumType: i32, current: i32, member: i32, keep: boolean): i32 -> @keptFrom
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via setSize
+  escaping: current enumType member
+  calls: dropMember heldList intAt nish_panic_overflow setHas setSize
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=setHas#0 setSize#0 heldList#0 dropMember#0
+  stackSites=0 stackLocals=0
+  local +0:9 has: boolean (const)
+  callee +0:15 setHas -> @setHas
+  local +1:9 size: i32 (const)
+  callee +1:16 setSize -> @setSize
+  local +15:11 both: i32[] (const)
+  callee +15:18 heldList -> @heldList
+  callee +16:12 intAt -> @intAt
+  callee +16:40 intAt -> @intAt
+  callee +16:57 intAt -> @intAt
+  callee +18:10 dropMember -> @dropMember
+function joinOperand(ctx: CheckContext, enumType: i32, set: i32): boolean -> @joinOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: enumType set
+  calls: TypeTable.isEnumMemberType TypeTable.isMemberOf listOfEnum
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=listOfEnum#0
+  stackSites=0 stackLocals=0
+  callee +0:3 listOfEnum -> @listOfEnum
+  callee +1:16 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +1:51 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+function excludedBy(ctx: CheckContext, set: i32): i32[] -> @excludedBy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: set
+  calls: intAt listIndex nish_array_grow
+  pointer ctx: size=336 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 members: i32[] (const)
+  local +1:7 at: i32 (let)
+  local +3:11 index: i32 (const)
+  callee +3:19 listIndex -> @listIndex
+  callee +4:18 intAt -> @intAt
+  callee +5:10 intAt -> @intAt
+function keptJoin(ctx: CheckContext, enumType: i32, current: i32, first: i32, second: i32): i32 -> @keptJoin
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: current enumType first second
+  calls: dropMember enumMembersOf excludedBy intAt keptId membersOfSet nish_array_grow nish_panic_overflow setHas setSize
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=setSize#0 setHas#0 enumMembersOf#0 keptId#0 keptId#0 excludedBy#0 setHas#0 setHas#0 dropMember#0 membersOfSet#0
+  stackSites=2 stackLocals=2
+  local -12:9 size: i32 (const)
+  callee -12:16 setSize -> @setSize
+  local -11:9 named: i32[] (const)
+  local -3:11 kept: i32[] (const)
+  local -2:16 member: i32 (const)
+  callee -1:11 setHas -> @setHas
+  local +7:11 order: i32[] (const)
+  callee +7:19 enumMembersOf -> @enumMembersOf
+  callee +8:44 intAt -> @intAt
+  callee +8:76 intAt -> @intAt
+  local +9:13 swapped: i32[] (const)
+  callee +9:31 intAt -> @intAt
+  callee +9:47 intAt -> @intAt
+  callee +10:14 keptId -> @keptId
+  callee +12:12 keptId -> @keptId
+  local +14:9 exclusion: i32 (const)
+  local +15:9 other: i32 (const)
+  local +16:9 dropped: i32[] (const)
+  local +17:14 member: i32 (const)
+  callee +17:24 excludedBy -> @excludedBy
+  callee +20:33 setHas -> @setHas
+  callee +21:7 setHas -> @setHas
+  local +32:7 set: i32 (let)
+  local +33:7 left: i32 (let)
+  local +34:14 member: i32 (const)
+  callee +36:11 dropMember -> @dropMember
+  callee +38:23 intAt -> @intAt
+  callee +38:29 membersOfSet -> @membersOfSet
+function keptHeld(ctx: CheckContext, local: Local, current: i32, first: i32, second: i32, keep: boolean): i32 -> @keptHeld
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via heldList
+  escaping: current first keep second
+  calls: TypeTable.isMemberOf allMembersOf heldList keptOne keptSet
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldList#0 allMembersOf#0 keptOne#0 keptSet#0 heldList#0 heldList#0
+  pointer local: size=64 writesThrough=false captured=false passedTo=keptSet#1
+  stackSites=0 stackLocals=0
+  local +0:9 held: i32[] (const)
+  callee +0:16 heldList -> @heldList
+  callee +2:5 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  callee +3:24 allMembersOf -> @allMembersOf
+  callee +4:7 keptOne -> @keptOne
+  callee +5:7 keptSet -> @keptSet
+  callee +5:33 heldList -> @heldList
+  callee +5:67 heldList -> @heldList
 function keptOne(ctx: CheckContext, current: i32[], member: i32, keep: boolean): i32 -> @keptOne
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1690,7 +1915,7 @@ function keptId(ctx: CheckContext, kept: i32[]): i32 -> @keptId
   callee +0:45 memberListId -> @memberListId
 function heldList(ctx: CheckContext, enumType: i32, held: i32): i32[] -> @heldList
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via enumMembersOf
+  sharedWrite: via membersOfSet
   escaping: enumType held
   calls: enumMembersOf membersOfSet namesMembers
   pointer ctx: size=336 writesThrough=false captured=false passedTo=membersOfSet#0 enumMembersOf#0
@@ -1702,25 +1927,25 @@ function holdNamed(ctx: CheckContext, scope: Scope, local: Local, current: i32, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: current first keep second
-  calls: TypeTable.isMemberOf allMembersOf heldList holdSet keptOne keptSet memoRead memoSlot nish_panic_index nish_panic_overflow
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldList#0 allMembersOf#0 keptOne#0 keptSet#0 heldList#0 heldList#0
+  calls: TypeTable.isMemberOf holdSet joinOperand keptFrom keptHeld keptJoin listOfEnum memoRead memoSlot nish_panic_index nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=listOfEnum#0 keptFrom#0 joinOperand#0 joinOperand#0 keptJoin#0 keptHeld#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=holdSet#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=keptSet#1 holdSet#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=keptHeld#1 holdSet#1
   stackSites=0 stackLocals=0
-  local -12:9 program: CheckedProgram (const)
-  local -11:9 at: i32 (const)
-  callee -11:14 memoSlot -> @memoSlot
-  local -10:7 set: i32 (let)
-  callee -10:13 memoRead -> @memoRead
-  callee -9:7 memoRead -> @memoRead
-  local -8:11 held: i32[] (const)
-  callee -8:18 heldList -> @heldList
-  callee -5:7 TypeTable.isMemberOf -> @TypeTable.isMemberOf
-  callee -4:26 allMembersOf -> @allMembersOf
-  callee -3:11 keptOne -> @keptOne
-  callee -2:11 keptSet -> @keptSet
-  callee -2:37 heldList -> @heldList
-  callee -2:71 heldList -> @heldList
+  local -13:9 program: CheckedProgram (const)
+  local -12:9 at: i32 (const)
+  callee -12:14 memoSlot -> @memoSlot
+  local -11:7 set: i32 (let)
+  callee -11:13 memoRead -> @memoRead
+  callee -10:7 memoRead -> @memoRead
+  local -9:11 exact: boolean (const)
+  callee -9:19 listOfEnum -> @listOfEnum
+  callee -8:45 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  callee -7:13 keptFrom -> @keptFrom
+  callee -6:33 joinOperand -> @joinOperand
+  callee -6:72 joinOperand -> @joinOperand
+  callee -5:13 keptJoin -> @keptJoin
+  callee -3:13 keptHeld -> @keptHeld
   local -1:11 memo: i32[] (const)
   callee +9:5 holdSet -> @holdSet
 function memoRead(memo: i32[], at: i32): i32 -> @memoRead
@@ -1728,33 +1953,41 @@ function memoRead(memo: i32[], at: i32): i32 -> @memoRead
   escaping: at
   pointer memo: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function memoMix(hash: i32, key: i32): i32 -> @memoMix
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 mixed: i32 (const)
 function memoSlot(program: CheckedProgram, enumType: i32, current: i32, first: i32, second: i32, keep: i32): i32 -> @memoSlot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via growMemo
-  calls: growMemo memoRead nish_panic_overflow
-  pointer program: size=848 writesThrough=true captured=false passedTo=growMemo#0
+  escaping: current enumType first keep second
+  calls: growMemo memoMix memoRead nish_panic_overflow
+  pointer program: size=880 writesThrough=true captured=false passedTo=growMemo#0
   stackSites=0 stackLocals=0
   callee +0:5 growMemo -> @growMemo
   local +2:9 memo: i32[] (const)
   local +3:9 mask: i32 (const)
   local +4:7 slot: i32 (let)
-  local +8:7 at: i32 (let)
-  callee +10:5 memoRead -> @memoRead
+  callee +4:14 memoMix -> @memoMix
+  callee +4:22 memoMix -> @memoMix
+  callee +4:30 memoMix -> @memoMix
+  callee +4:38 memoMix -> @memoMix
+  local +6:7 at: i32 (let)
+  callee +8:5 memoRead -> @memoRead
+  callee +10:7 memoRead -> @memoRead
+  callee +11:7 memoRead -> @memoRead
   callee +12:7 memoRead -> @memoRead
   callee +13:7 memoRead -> @memoRead
   callee +14:7 memoRead -> @memoRead
-  callee +15:7 memoRead -> @memoRead
-  callee +16:7 memoRead -> @memoRead
 function growMemo(program: CheckedProgram): void -> @growMemo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: memoRead memoSlot nish_array_grow nish_panic_index nish_panic_overflow
-  pointer program: size=848 writesThrough=true captured=false passedTo=memoSlot#0
+  calls: memoRead memoSlot nish_panic nish_panic_index nish_panic_overflow
+  pointer program: size=880 writesThrough=true captured=false passedTo=memoSlot#0
   stackSites=0 stackLocals=0
-  local -8:9 old: i32[] (const)
-  local -7:9 slots: i32 (const)
-  local -6:9 memo: i32[] (const)
-  local -5:7 i: i32 (let)
+  local -4:9 old: i32[] (const)
+  local -3:9 slots: i32 (const)
+  local -2:9 memo: i32[] (const)
   local +3:7 from: i32 (let)
   callee +5:9 memoRead -> @memoRead
   local +6:13 enumType: i32 (const)
@@ -1824,7 +2057,7 @@ function exhaustedMessage(name: string): string -> @exhaustedMessage
   stackSites=0 stackLocals=0
 function tagVariable(ctx: CheckContext, node: Node, scope: Scope): Local | null -> @tagVariable [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: Scope.exhausted Scope.lookup Scope.typeOf TypeTable.hasVariant TypeTable.isUnion TypeTable.stripNull TypeTable.tagNameOf isOptionalChain nish_panic_index nish_str_eq testedRead unwrapParens
+  calls: CheckedProgram.isEnumMember Scope.exhausted Scope.lookup Scope.typeOf TypeTable.hasVariant TypeTable.isUnion TypeTable.stripNull TypeTable.tagNameOf isOptionalChain nish_panic_index nish_str_eq testedRead unwrapParens
   pointer ctx: size=336 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.exhausted#0 Scope.typeOf#0
@@ -1832,6 +2065,7 @@ function tagVariable(ctx: CheckContext, node: Node, scope: Scope): Local | null 
   local +0:9 read: Node (const)
   callee +0:16 unwrapParens -> @unwrapParens
   callee +1:33 isOptionalChain -> @isOptionalChain
+  callee +1:58 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
   local +4:9 receiver: Node (const)
   callee +4:20 testedRead -> @testedRead
   local +8:9 local: Local | null (const)

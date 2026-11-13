@@ -493,7 +493,7 @@ function noteStore(program: CheckedProgram, ctx: CheckContext, target: Node, sca
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_str_eq recordStoreType unwrapBoundsParens
-  pointer program: size=848 writesThrough=false captured=false passedTo=recordStoreType#0
+  pointer program: size=880 writesThrough=false captured=false passedTo=recordStoreType#0
   pointer ctx: size=336 writesThrough=false captured=false
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer scan: size=88 writesThrough=true captured=false

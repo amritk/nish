@@ -495,7 +495,7 @@ function libraryReach(emitter: Emitter, library: CheckedProgram): FunctionSig[] 
   sharedWrite: via noteCallees
   calls: FunctionSig.definedIn StringSet.add StringSet.constructor StringSet.has mapIntrinsicOf nish_array_grow noteCallees
   pointer emitter: size=376 writesThrough=false captured=false
-  pointer library: size=848 writesThrough=false captured=false
+  pointer library: size=880 writesThrough=false captured=false
   stackSites=3 stackLocals=3
   local +0:9 facts: FactsTable (const)
   local +1:9 bySymbol: StringSet (const)
@@ -541,7 +541,7 @@ function emitLibraryCopies(emitter: Emitter, library: CheckedProgram, sigs: Func
   escaping: library
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance DebugInfo.fileOf Emitter.emitFunction IRModule.addFunction
   pointer emitter: size=376 writesThrough=true captured=true passedTo=Emitter.emitFunction#0
-  pointer library: size=848 writesThrough=true captured=true passedTo=CheckedProgram.enterInstance#0 CheckedProgram.leaveInstance#0
+  pointer library: size=880 writesThrough=true captured=true passedTo=CheckedProgram.enterInstance#0 CheckedProgram.leaveInstance#0
   pointer sigs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:9 own: CheckedProgram (const)
@@ -1213,7 +1213,7 @@ function routeOwnerOf(table: TypeTable, sig: FunctionSig): StructInfo | null -> 
 function fusedCalleesOf(program: CheckedProgram, table: TypeTable, call: Node): FunctionSig[] | null -> @fusedCalleesOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FusionTable.roleOf TypeTable.isMaybe isMapRoute methodsNamed nish_array_grow nish_panic_index routeCalleesOf valueReaderOf
-  pointer program: size=848 writesThrough=false captured=false
+  pointer program: size=880 writesThrough=false captured=false
   pointer table: size=128 writesThrough=false captured=false passedTo=routeCalleesOf#0 TypeTable.isMaybe#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=3 stackLocals=0

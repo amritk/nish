@@ -508,7 +508,7 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
-  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=880 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
@@ -600,7 +600,7 @@ function markTemplateImplements(program: CheckedProgram, decl: Node): void -> @m
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
-  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
+  pointer program: size=880 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -7:14 iface: Node (const)

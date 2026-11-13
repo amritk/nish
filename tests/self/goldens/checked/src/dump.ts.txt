@@ -138,7 +138,7 @@ function bodyTables(program: CheckedProgram, source: SourceFile, table: TypeTabl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkBody
   calls: nish_panic_index walkBody
-  pointer program: size=848 writesThrough=false captured=false passedTo=walkBody#0
+  pointer program: size=880 writesThrough=false captured=false passedTo=walkBody#0
   pointer source: size=48 writesThrough=false captured=false passedTo=walkBody#1
   pointer table: size=128 writesThrough=false captured=false passedTo=walkBody#2
   pointer sig: size=200 writesThrough=false captured=false
@@ -150,7 +150,7 @@ function walkBody(program: CheckedProgram, source: SourceFile, table: TypeTable,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: TypeTable.typeName nish_array_grow nish_panic_index nish_str_concat position walkBody
-  pointer program: size=848 writesThrough=false captured=false passedTo=walkBody#0
+  pointer program: size=880 writesThrough=false captured=false passedTo=walkBody#0
   pointer source: size=48 writesThrough=false captured=false passedTo=position#0 position#0 position#0 walkBody#1
   pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0 walkBody#2
   pointer node: size=40 writesThrough=false captured=false
