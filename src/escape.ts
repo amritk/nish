@@ -848,13 +848,16 @@ class EscapeAnalysis {
     if (target === null) {
       return new Outcome(FLOW_LEAKS, true, true)
     }
+    // `visiting` keeps every local entered for this site, not just the path,
+    // so one in it without a memo is still being decided: a cycle back into
+    // it (`r = c ? r : Ok(0)`) gets a placeholder, not the local's outcome.
+    const pending = this.memoised(target) === null && holdsLocal(visiting, target)
     const held = this.localOutcome(target, visiting)
     // A `Result` assigned to a `let` of this frame goes where the `let` goes:
     // its flow and whether it is settled are the local's, and it is never
-    // `stable`, so the slot rule for `const` still refuses it. A cycle back
-    // into a local being decided (`r = c ? r : Ok(0)`) keeps the old answer,
-    // because the re-entry's outcome is a placeholder, not the local's.
-    if (!this.listing && this.table.isResult(this.table.stripNull(target.type)) && !holdsLocal(visiting, target)) {
+    // `stable`, so the slot rule for `const` still refuses it. A cycle keeps
+    // the old answer.
+    if (!this.listing && !pending && this.table.isResult(this.table.stripNull(target.type))) {
       const followed = new Outcome(held.flow, false, held.escapes)
       followed.settled = held.settled
       return followed

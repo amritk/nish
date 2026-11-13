@@ -105,6 +105,7 @@ struct Outcome (class) size=8 align=4
   field flow: i32 index=0 offset=0
   field stable: boolean index=1 offset=4
   field escapes: boolean index=2 offset=5
+  field settled: boolean index=3 offset=6
   constructor -> @Outcome.constructor
 struct FlowTarget (class) size=24 align=8
   field local: Local | null index=0 offset=0
@@ -168,6 +169,8 @@ struct EscapeAnalysis (class) size=144 align=8
   method valueOutcome -> @EscapeAnalysis.valueOutcome
   method decideElementParams -> @EscapeAnalysis.decideElementParams
   method elementsStay -> @EscapeAnalysis.elementsStay
+  method isResultSite -> @EscapeAnalysis.isResultSite
+  method inLoop -> @EscapeAnalysis.inLoop
   method decide -> @EscapeAnalysis.decide
   method holdsStackObject -> @EscapeAnalysis.holdsStackObject
   method ownsSite -> @EscapeAnalysis.ownsSite
@@ -500,10 +503,10 @@ function EscapeAnalysis.assignedLocal(this: EscapeAnalysis, expr: Node): Local |
 function EscapeAnalysis.useOutcome(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome -> @EscapeAnalysis.useOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via classifyUse
-  calls: EscapeAnalysis.argumentOutcome EscapeAnalysis.assignedLocal EscapeAnalysis.handsOutElements EscapeAnalysis.localOutcome EscapeAnalysis.passesToFreeElements EscapeAnalysis.pushedIntoJoinedParts EscapeAnalysis.storedIntoReturnedArray Outcome.constructor classifyUse nish_alloc_struct
-  pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.handsOutElements#0 EscapeAnalysis.passesToFreeElements#0 EscapeAnalysis.argumentOutcome#0 EscapeAnalysis.pushedIntoJoinedParts#0 EscapeAnalysis.storedIntoReturnedArray#0 EscapeAnalysis.assignedLocal#0 EscapeAnalysis.localOutcome#0
+  calls: EscapeAnalysis.argumentOutcome EscapeAnalysis.assignedLocal EscapeAnalysis.handsOutElements EscapeAnalysis.localOutcome EscapeAnalysis.memoised EscapeAnalysis.passesToFreeElements EscapeAnalysis.pushedIntoJoinedParts EscapeAnalysis.storedIntoReturnedArray Outcome.constructor TypeTable.isResult TypeTable.stripNull classifyUse holdsLocal nish_alloc_struct
+  pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.handsOutElements#0 EscapeAnalysis.passesToFreeElements#0 EscapeAnalysis.argumentOutcome#0 EscapeAnalysis.pushedIntoJoinedParts#0 EscapeAnalysis.storedIntoReturnedArray#0 EscapeAnalysis.assignedLocal#0 EscapeAnalysis.memoised#0 EscapeAnalysis.localOutcome#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=classifyUse#2 EscapeAnalysis.handsOutElements#1 EscapeAnalysis.pushedIntoJoinedParts#1 EscapeAnalysis.storedIntoReturnedArray#1 EscapeAnalysis.assignedLocal#1
-  pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.storedIntoReturnedArray#2 EscapeAnalysis.localOutcome#2
+  pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.storedIntoReturnedArray#2 holdsLocal#0 EscapeAnalysis.localOutcome#2
   stackSites=0 stackLocals=0
   local +0:11 found: ParamUse (const)
   callee +0:19 classifyUse -> @classifyUse
@@ -519,9 +522,17 @@ function EscapeAnalysis.useOutcome(this: EscapeAnalysis, expr: Node, visiting: L
   callee +17:21 EscapeAnalysis.storedIntoReturnedArray -> @EscapeAnalysis.storedIntoReturnedArray
   local +21:11 target: Local | null (const)
   callee +21:20 EscapeAnalysis.assignedLocal -> @EscapeAnalysis.assignedLocal
-  local +22:11 escapes: boolean (const)
-  callee +22:46 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee +23:12 new Outcome -> @Outcome.constructor
+  callee +23:14 new Outcome -> @Outcome.constructor
+  local +28:11 pending: boolean (const)
+  callee +28:21 EscapeAnalysis.memoised -> @EscapeAnalysis.memoised
+  callee +28:55 holdsLocal -> @holdsLocal
+  local +29:11 held: Outcome (const)
+  callee +29:18 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee +34:38 TypeTable.isResult -> @TypeTable.isResult
+  callee +34:58 TypeTable.stripNull -> @TypeTable.stripNull
+  local +35:13 followed: Outcome (const)
+  callee +35:24 new Outcome -> @Outcome.constructor
+  callee +39:12 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.argumentOutcome(this: EscapeAnalysis, callee: FunctionSig | null, index: i32): Outcome -> @EscapeAnalysis.argumentOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   escaping: index
@@ -547,17 +558,19 @@ function EscapeAnalysis.captureOutcome(this: EscapeAnalysis, v: Local): Outcome 
   stackSites=0 stackLocals=0
   local +0:9 flow: i32 (let)
   local +1:9 stable: boolean (let)
-  local +2:9 escapes: boolean (let)
-  local +3:9 i: i32 (let)
-  local +6:15 target: CaptureTarget | null (const)
-  local +10:13 step: Outcome (let)
-  callee +10:20 EscapeAnalysis.argumentOutcome -> @EscapeAnalysis.argumentOutcome
-  callee +13:11 TypeTable.isArray -> @TypeTable.isArray
-  callee +13:30 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +14:12 EscapeAnalysis.elementsFreeAt -> @EscapeAnalysis.elementsFreeAt
-  callee +16:18 new Outcome -> @Outcome.constructor
-  callee +18:16 worse -> @worse
-  callee +24:12 new Outcome -> @Outcome.constructor
+  local +2:9 settled: boolean (let)
+  local +3:9 escapes: boolean (let)
+  local +4:9 i: i32 (let)
+  local +7:15 target: CaptureTarget | null (const)
+  local +11:13 step: Outcome (let)
+  callee +11:20 EscapeAnalysis.argumentOutcome -> @EscapeAnalysis.argumentOutcome
+  callee +14:11 TypeTable.isArray -> @TypeTable.isArray
+  callee +14:30 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +15:12 EscapeAnalysis.elementsFreeAt -> @EscapeAnalysis.elementsFreeAt
+  callee +17:18 new Outcome -> @Outcome.constructor
+  callee +19:16 worse -> @worse
+  local +26:11 outcome: Outcome (const)
+  callee +26:21 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.pushedIntoJoinedParts(this: EscapeAnalysis, expr: Node): boolean -> @EscapeAnalysis.pushedIntoJoinedParts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via EscapeAnalysis.localOutcome
@@ -804,17 +817,18 @@ function EscapeAnalysis.localOutcome(this: EscapeAnalysis, v: Local, visiting: L
   callee -3:16 new Outcome -> @Outcome.constructor
   local +1:9 flow: i32 (let)
   local +2:9 stable: boolean (let)
-  local +3:9 escapes: boolean (let)
-  local +4:16 ref: Node (const)
-  callee +4:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  local +5:13 parent: Node | null (const)
-  callee +5:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +10:9 isAssignmentOperator -> @isAssignmentOperator
-  local +17:13 step: Outcome (const)
-  callee +17:20 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
-  callee +18:14 worse -> @worse
-  local +22:11 outcome: Outcome (const)
-  callee +22:21 new Outcome -> @Outcome.constructor
+  local +3:9 settled: boolean (let)
+  local +4:9 escapes: boolean (let)
+  local +5:16 ref: Node (const)
+  callee +5:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  local +6:13 parent: Node | null (const)
+  callee +6:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +11:9 isAssignmentOperator -> @isAssignmentOperator
+  local +18:13 step: Outcome (const)
+  callee +18:20 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
+  callee +19:14 worse -> @worse
+  local +24:11 outcome: Outcome (const)
+  callee +24:21 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.valueOutcome(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome -> @EscapeAnalysis.valueOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via EscapeAnalysis.localOutcome
@@ -871,11 +885,31 @@ function EscapeAnalysis.elementsStay(this: EscapeAnalysis, refs: Node[]): boolea
   local +16:15 fresh: Local[] (const)
   local +17:15 step: Outcome (const)
   callee +17:22 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
+function EscapeAnalysis.isResultSite(this: EscapeAnalysis, node: Node): boolean -> @EscapeAnalysis.isResultSite [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.resultByValue isResultConstructorCall nish_panic_index
+  pointer this: size=144 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=isResultConstructorCall#2
+  stackSites=0 stackLocals=0
+  local +0:11 program: CheckedProgram (const)
+  local +1:11 callee: FunctionSig | null (const)
+  callee +3:14 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +5:12 isResultConstructorCall -> @isResultConstructorCall
+function EscapeAnalysis.inLoop(this: EscapeAnalysis, node: Node): boolean -> @EscapeAnalysis.inLoop [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: ParentTable.parentOf isLoopKind
+  pointer this: size=144 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 at: Node | null (let)
+  callee +0:14 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +2:11 isLoopKind -> @isLoopKind
+  callee +5:12 ParentTable.parentOf -> @ParentTable.parentOf
 function EscapeAnalysis.decide(this: EscapeAnalysis): void -> @EscapeAnalysis.decide [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CallSite.constructor EscapeAnalysis.calleeCaptures EscapeAnalysis.decideFills EscapeAnalysis.holdsStackObject EscapeAnalysis.localOutcome EscapeAnalysis.ownsSite EscapeAnalysis.paramLocal EscapeAnalysis.refsOf EscapeAnalysis.valueOutcome EscapeResult.noteEscape StringSet.add TypeTable.isArray TypeTable.resultByValue TypeTable.stripNull constructorOf intrinsicType isListingCall nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
-  pointer this: size=144 writesThrough=true captured=false passedTo=EscapeAnalysis.valueOutcome#0 EscapeAnalysis.calleeCaptures#0 EscapeAnalysis.decideFills#0 EscapeAnalysis.paramLocal#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.holdsStackObject#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.ownsSite#0 EscapeAnalysis.localOutcome#0
+  calls: CallSite.constructor EscapeAnalysis.calleeCaptures EscapeAnalysis.decideFills EscapeAnalysis.holdsStackObject EscapeAnalysis.inLoop EscapeAnalysis.isResultSite EscapeAnalysis.localOutcome EscapeAnalysis.ownsSite EscapeAnalysis.paramLocal EscapeAnalysis.refsOf EscapeAnalysis.valueOutcome EscapeResult.noteEscape StringSet.add TypeTable.isArray TypeTable.resultByValue TypeTable.stripNull constructorOf intrinsicType isListingCall nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
+  pointer this: size=144 writesThrough=true captured=false passedTo=EscapeAnalysis.valueOutcome#0 EscapeAnalysis.calleeCaptures#0 EscapeAnalysis.isResultSite#0 EscapeAnalysis.inLoop#0 EscapeAnalysis.decideFills#0 EscapeAnalysis.paramLocal#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.holdsStackObject#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.ownsSite#0 EscapeAnalysis.localOutcome#0
   stackSites=4 stackLocals=4
   local -6:16 site: Site (const)
   local -5:13 fresh: Local[] (const)
@@ -894,42 +928,44 @@ function EscapeAnalysis.decide(this: EscapeAnalysis): void -> @EscapeAnalysis.de
   callee +25:30 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
   callee +32:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
   callee +35:36 new CallSite -> @CallSite.constructor
-  callee +53:5 EscapeAnalysis.decideFills -> @EscapeAnalysis.decideFills
-  local +59:9 p: i32 (let)
-  callee +61:11 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local +62:15 name: string (const)
-  local +63:15 v: Local | null (const)
-  callee +63:19 EscapeAnalysis.paramLocal -> @EscapeAnalysis.paramLocal
-  local +64:13 flow: i32 (let)
-  local +65:13 stable: boolean (let)
-  local +67:17 fresh: Local[] (const)
-  local +68:17 outcome: Outcome (const)
-  callee +68:27 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee +72:13 EscapeResult.noteEscape -> @EscapeResult.noteEscape
-  callee +72:36 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  callee +76:11 StringSet.add -> @StringSet.add
-  local +89:16 decl: Node (const)
-  local +90:13 v: Local | null (const)
-  local +94:13 init: Node (const)
-  callee +94:20 unwrapParens -> @unwrapParens
-  local +95:11 holds: boolean (let)
-  local +97:15 alias: Local | null (const)
-  callee +98:35 EscapeAnalysis.holdsStackObject -> @EscapeAnalysis.holdsStackObject
-  local +100:13 visiting: Local[] (const)
-  callee +101:20 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  local +109:14 k: i32 (let)
-  local +110:13 push: Node (const)
-  local +111:13 receiver: Node (const)
-  callee +111:24 unwrapParens -> @unwrapParens
-  local +112:11 v: Local | null (let)
-  local +116:11 owned: boolean (let)
-  local +118:11 growth: i32 (let)
-  local +122:11 escapes: boolean (let)
-  callee +123:56 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
-  local +124:15 visiting: Local[] (const)
-  local +125:15 outcome: Outcome (const)
-  callee +125:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee +131:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  callee +48:9 EscapeAnalysis.isResultSite -> @EscapeAnalysis.isResultSite
+  callee +49:10 EscapeAnalysis.inLoop -> @EscapeAnalysis.inLoop
+  callee +65:5 EscapeAnalysis.decideFills -> @EscapeAnalysis.decideFills
+  local +71:9 p: i32 (let)
+  callee +73:11 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local +74:15 name: string (const)
+  local +75:15 v: Local | null (const)
+  callee +75:19 EscapeAnalysis.paramLocal -> @EscapeAnalysis.paramLocal
+  local +76:13 flow: i32 (let)
+  local +77:13 stable: boolean (let)
+  local +79:17 fresh: Local[] (const)
+  local +80:17 outcome: Outcome (const)
+  callee +80:27 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee +84:13 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  callee +84:36 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  callee +88:11 StringSet.add -> @StringSet.add
+  local +101:16 decl: Node (const)
+  local +102:13 v: Local | null (const)
+  local +106:13 init: Node (const)
+  callee +106:20 unwrapParens -> @unwrapParens
+  local +107:11 holds: boolean (let)
+  local +109:15 alias: Local | null (const)
+  callee +110:35 EscapeAnalysis.holdsStackObject -> @EscapeAnalysis.holdsStackObject
+  local +112:13 visiting: Local[] (const)
+  callee +113:20 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  local +121:14 k: i32 (let)
+  local +122:13 push: Node (const)
+  local +123:13 receiver: Node (const)
+  callee +123:24 unwrapParens -> @unwrapParens
+  local +124:11 v: Local | null (let)
+  local +128:11 owned: boolean (let)
+  local +130:11 growth: i32 (let)
+  local +134:11 escapes: boolean (let)
+  callee +135:56 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
+  local +136:15 visiting: Local[] (const)
+  local +137:15 outcome: Outcome (const)
+  callee +137:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee +143:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
 function EscapeAnalysis.holdsStackObject(this: EscapeAnalysis, local: Local): boolean -> @EscapeAnalysis.holdsStackObject [method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=144 writesThrough=false captured=false

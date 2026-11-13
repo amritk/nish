@@ -93,6 +93,16 @@ const lastOfLoop = (n: i32): i32 => {
   return prev.unwrapOr(-9) * 100 + r.unwrapOr(-9);
 };
 
+// The payload, not the `Result`, is what leaves: a string made here and read
+// out of a reassigned `let` is the caller's.
+const label = (n: i32): string => {
+  let r: Result<string, string> = Ok(`v${n}`);
+  if (n > 3 && r.isOk()) {
+    r = Ok(`w${n}`);
+  }
+  return r.unwrapOr("none");
+};
+
 // A self-assignment through a conditional keeps the conservative answer.
 const selfAssign = (n: i32): i32 => {
   let r: Result<i32, string> = Ok(n);
@@ -100,18 +110,23 @@ const selfAssign = (n: i32): i32 => {
   return r.unwrapOr(-1);
 };
 
-const flat = (): boolean => {
-  let warm = 0;
-  for (let i = 0; i < 1000; i++) {
-    warm = warm + pick(i) + parseOrZero("ab") + lastOfLoop(3);
-  }
-  const before = Arena.used();
+// Every shape that keeps nothing past the call, 100k times (`selfAssign` is
+// left out: it keeps the conservative answer). The count is read
+// right after the calls, so a pass scope of this loop cannot hide bytes a
+// call left behind, as it would for a caller that only measures at the end.
+const flat = (): string => {
   let total = 0;
+  const before = Arena.used();
+  let same = true;
   for (let i = 0; i < 100000; i++) {
-    total = total + pick(i) + parseOrZero(i % 2 === 0 ? "" : "abc") + keepsOld(i) + viaClosure(i);
-    total = total + lastOfLoop(i % 4) + selfAssign(i);
+    const n = i % 1000;
+    total = (total + pick(n) + parseOrZero(n % 2 === 0 ? "" : "abc") + keepsOld(n)) % 1000003;
+    total = (total + viaClosure(n) + lastOfLoop(n % 4)) % 1000003;
+    if (Arena.used() !== before) {
+      same = false;
+    }
   }
-  return Arena.used() === before && total !== warm;
+  return `${same} ${total}`;
 };
 
 export const main = (): void => {
@@ -138,5 +153,7 @@ export const main = (): void => {
   console.log(`${oks} ${out.length}`);
   console.log(`${lastOfLoop(0)} ${lastOfLoop(1)} ${lastOfLoop(5)}`);
   console.log(`${selfAssign(9)} ${selfAssign(2)}`);
+  const labels = [label(1), label(5)];
+  console.log(`${labels[0]} ${labels[1]}`);
   console.log(flat());
 };
