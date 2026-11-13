@@ -12461,7 +12461,7 @@ function Sha256.digest(this: Sha256): u8[] -> @nish.Sha256.digest [exported meth
   local +1:11 from: i32 (const)
   callee +2:5 Sha256.digestInto -> @nish.Sha256.digestInto
 function Sha256.digestInto(this: Sha256, out: u8[], at: i32): void -> @nish.Sha256.digestInto [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.sha256Compress nish_panic nish_panic_index nish_panic_overflow
   pointer this: size=40 writesThrough=true captured=false
