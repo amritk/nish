@@ -14556,17 +14556,17 @@ by the caller.
       its kin), and read nothing but locals, fields (`.length` among them)
       and constants. A call to any function of the program or of `std/`
       anywhere in the condition makes the loop unbounded.
-    - It is a `for...of` whose body cannot extend what it walks and that
-      does not re-read a map's entry count. This is the same test that
-      decides a function's `willreturn`.
-    - It is a `for...of` over a local array nothing else can resize. The
-      array is a `const` the function declares with a fresh array (not a
-      parameter or a field). Every other mention of its name in the function
-      is an element read or write (`a[i]`) or a `.length` read that is not
-      assigned. Any other use forfeits the credit: passing it to a call,
-      storing or assigning it, a method call such as `a.push`, `a.indexOf`
-      or `a.slice`, or a second `for...of` over it. Calls the body makes on
-      other values do not matter.
+    - It is a `for...of` whose body cannot extend the collection it walks:
+      an array or a map, named by a local or a field path such as
+      `log.items`. The body extends it only through the same walked
+      expression, by one of these:
+      - adding to it: `push`, `unshift`, `splice`, `set` or `add` on it, or
+        a write through `walked[k]`;
+      - passing it to a call or a `new`;
+      - assigning it, or storing it in a variable, field, array or object.
+
+      Any other use leaves the walk bounded, and so does a call in the body
+      that resizes some other array.
 
     Every other loop is unbounded:
     - `while (true)` and `for (;;)`;
@@ -14575,7 +14575,7 @@ by the caller.
     - a top-level `||` (`while (next >= 0 || next === FULL)`);
     - a call in the condition (`while (more(log))`,
       `while (k < n && poll())`);
-    - a `for...of` that extends what it walks;
+    - a `for...of` whose body extends what it walks, as above;
     - a bounded loop inside an unbounded one that releases nothing.
 
     The rule has a known blind spot: a comparison loop whose body never

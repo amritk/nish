@@ -115,6 +115,24 @@ const owned = (log: Log, other: i32[]): void => {
   }
 };
 
+// The array a field holds, walked while a call resizes some other array:
+// the body never adds to `batch.ids`, so the walk is bounded.
+class Batch {
+  ids: i32[];
+  constructor() {
+    this.ids = [3, 4];
+  }
+}
+
+const fielded = (log: Log, batch: Batch, other: i32[]): void => {
+  for (const id of batch.ids) {
+    const tag = `tag ${id}`;
+    log.total = log.total + tag.length;
+    log.last = new Entry(id);
+    grow(other);
+  }
+};
+
 // Nothing a pass allocates outlives it, so each pass gets a scope.
 const scoped = (log: Log): i32 => {
   let total = 0;
@@ -138,6 +156,7 @@ export const main = (): void => {
   const e = droppedSplit(log);
   scans(log, [1, 2], 2);
   owned(log, [0]);
+  fielded(log, new Batch(), [0]);
   log.left = 5;
   const k = scoped(log);
   console.log(`${log.total} ${log.last.id} ${d} ${e} ${k}`);

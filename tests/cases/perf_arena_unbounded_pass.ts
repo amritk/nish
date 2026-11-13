@@ -127,15 +127,17 @@ const grow = (xs: i32[]): void => {
   xs.push(xs.length);
 };
 
-// A local array the body could not resize, except that it was passed to
-// `grow`, so a call in the body may have it too.
+// The body hands the array it walks to `grow`, a call that resizes it, so
+// each pass may add the pass after it.
 const lent = (log: Log, other: i32[]): void => {
   const ids = [1, 2];
-  grow(ids);
   for (const id of ids) {
     const mark = `mark ${id}`;
     log.total = log.total + mark.length;
     log.last = new Entry(id);
+    if (id < 2) {
+      grow(ids);
+    }
     grow(other);
   }
 };

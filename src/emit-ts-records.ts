@@ -228,8 +228,16 @@ const updateParam = (text: string): string => {
     return "old"
   }
   let n = 1
-  while (text.indexOf(`old${n}`) >= 0) {
-    n = n + 1
+  let taken = true
+  while (taken) {
+    {
+      // Each candidate name is a temporary the pass drops.
+      using a = arena()
+      taken = text.indexOf(`old${n}`) >= 0
+    }
+    if (taken) {
+      n = n + 1
+    }
   }
   return `old${n}`
 }
