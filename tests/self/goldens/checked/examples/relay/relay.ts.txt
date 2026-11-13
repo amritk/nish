@@ -196,7 +196,7 @@ function relayQuicConfig(chain: u8[][], resetKey: u8[], retryKey: u8[]): QuicSer
   pointer retryKey: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function relayH3Config(): Http3Config -> @relayH3Config [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=20
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
   local +0:9 config: Http3Config (const)
