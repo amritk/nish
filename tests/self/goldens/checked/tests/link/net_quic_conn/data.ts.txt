@@ -42,6 +42,7 @@ import QUIC_STATE_WAIT_INITIAL from "nish/net/quic" -> const QUIC_STATE_WAIT_INI
 import QuicConnection from "nish/net/quic" -> struct QuicConnection
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
 import QuicStreamData from "nish/net/quic" -> struct QuicStreamData
+import QUIC_RECOVERY_NEWRENO from "nish/net/quic-recovery" -> const QUIC_RECOVERY_NEWRENO
 import QUIC_STREAM_ERR_FINISHED from "nish/net/quic-stream" -> const QUIC_STREAM_ERR_FINISHED
 import QUIC_STREAM_ERR_FLOW from "nish/net/quic-stream" -> const QUIC_STREAM_ERR_FLOW
 import QUIC_STREAM_ERR_STATE from "nish/net/quic-stream" -> const QUIC_STREAM_ERR_STATE
@@ -809,38 +810,38 @@ function shapeChecks(t: Suite): void -> @shapeChecks
   callee +61:30 n64 -> @n64
   callee +62:24 resetKey -> @resetKey
   callee +63:20 tokenKey -> @tokenKey
-  callee +68:25 n64 -> @n64
-  local +70:9 amp: QuicConnection (const)
-  callee +70:15 new QuicConnection -> @nish.QuicConnection.constructor
-  callee +70:42 fixedEntropy -> @fixedEntropy
-  local +71:9 a: QcClient (const)
-  callee +71:13 new QcClient -> @QcClient.constructor
-  local +72:9 ampFrom: i32 (const)
-  callee +72:24 qcSendHello -> @qcSendHello
-  callee +72:51 n64 -> @n64
-  callee +73:3 Suite.eqI32 -> @nish.Suite.eqI32
-  callee +73:122 n32 -> @n32
-  callee +74:3 Suite.eqI64 -> @nish.Suite.eqI64
-  callee +74:71 n64 -> @n64
-  local +75:9 ackOnly: u8[] (const)
-  callee +76:3 quicPushAck -> @nish.quicPushAck
-  callee +76:25 n64 -> @n64
-  callee +76:33 n64 -> @n64
-  callee +76:42 n32 -> @n32
-  callee +76:50 n64 -> @n64
-  callee +77:3 qcExchange -> @qcExchange
-  callee +77:22 qcInitial -> @qcInitial
-  callee +77:44 n32 -> @n32
-  callee +78:3 Suite.eqStr -> @nish.Suite.eqStr
-  callee +79:3 Suite.ok -> @nish.Suite.ok
-  callee +79:36 qcReadFlight -> @qcReadFlight
-  callee +79:61 n32 -> @n32
-  callee +80:3 qcExchange -> @qcExchange
-  callee +80:22 qcFinishedPacket -> @qcFinishedPacket
-  callee +81:3 Suite.ok -> @nish.Suite.ok
-  callee +82:3 Suite.eqStr -> @nish.Suite.eqStr
-  callee +82:65 qcFrameTypes -> @qcFrameTypes
-  callee +82:78 lastApp -> @lastApp
+  callee +69:25 n64 -> @n64
+  local +71:9 amp: QuicConnection (const)
+  callee +71:15 new QuicConnection -> @nish.QuicConnection.constructor
+  callee +71:42 fixedEntropy -> @fixedEntropy
+  local +72:9 a: QcClient (const)
+  callee +72:13 new QcClient -> @QcClient.constructor
+  local +73:9 ampFrom: i32 (const)
+  callee +73:24 qcSendHello -> @qcSendHello
+  callee +73:51 n64 -> @n64
+  callee +74:3 Suite.eqI32 -> @nish.Suite.eqI32
+  callee +74:122 n32 -> @n32
+  callee +75:3 Suite.eqI64 -> @nish.Suite.eqI64
+  callee +75:71 n64 -> @n64
+  local +76:9 ackOnly: u8[] (const)
+  callee +77:3 quicPushAck -> @nish.quicPushAck
+  callee +77:25 n64 -> @n64
+  callee +77:33 n64 -> @n64
+  callee +77:42 n32 -> @n32
+  callee +77:50 n64 -> @n64
+  callee +78:3 qcExchange -> @qcExchange
+  callee +78:22 qcInitial -> @qcInitial
+  callee +78:44 n32 -> @n32
+  callee +79:3 Suite.eqStr -> @nish.Suite.eqStr
+  callee +80:3 Suite.ok -> @nish.Suite.ok
+  callee +80:36 qcReadFlight -> @qcReadFlight
+  callee +80:61 n32 -> @n32
+  callee +81:3 qcExchange -> @qcExchange
+  callee +81:22 qcFinishedPacket -> @qcFinishedPacket
+  callee +82:3 Suite.ok -> @nish.Suite.ok
+  callee +83:3 Suite.eqStr -> @nish.Suite.eqStr
+  callee +83:65 qcFrameTypes -> @qcFrameTypes
+  callee +83:78 lastApp -> @lastApp
 function constructorChecks(t: Suite): void -> @constructorChecks
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

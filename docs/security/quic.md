@@ -260,8 +260,9 @@ have. Both share slow start, the recovery period, the 2400-byte floor and
 persistent congestion; CUBIC replaces what happens in congestion avoidance
 and on a congestion event. Its properties are pinned in
 `tests/link/net_quic_recovery` (`cubic.ts`, and its `_f64` twin), each window
-recomputed by `cubic_model.py` beside it, an integer model written apart
-from the module (`python3 tests/link/net_quic_recovery/cubic_model.py`).
+recomputed by `cubic_model.py` beside it, an integer port of the module
+that guards the arithmetic (`python3 tests/link/net_quic_recovery/cubic_model.py`);
+the RFC-level checks are the hand-derived K = 5000 ms and W(1000) = 169280.
 
 - **The arithmetic is integer and the same on every machine.** W_cubic(t)
   is W_max + 2 × size × (t − K)³ / (5 × 10⁹) bytes with t in milliseconds

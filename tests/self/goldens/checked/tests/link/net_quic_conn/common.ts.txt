@@ -7,6 +7,7 @@ import quicParseFrame from "nish/net/quic-frame" -> function @nish.quicParseFram
 import quicEncodeTransportParameters from "nish/net/quic-conn-params" -> function @nish.quicEncodeTransportParameters
 import QuicConnection from "nish/net/quic" -> struct QuicConnection
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
+import QUIC_RECOVERY_NEWRENO from "nish/net/quic-recovery" -> const QUIC_RECOVERY_NEWRENO
 import leafCertificate from "../net_tls_common/server" -> function @leafCertificate
 import fromHex from "../crypto_x509/hex" -> function @fromHex
 import n64 from "../net_quic_frame/typed" -> function @n64
@@ -36,7 +37,7 @@ function qcConfig(maxData: i64, maxStreamData: i64, maxStreams: i64, cidLimit: i
   callee +11:21 n64 -> @n64
   callee +13:24 resetKey -> @resetKey
   callee +14:20 tokenKey -> @tokenKey
-  callee +19:25 n64 -> @n64
+  callee +20:25 n64 -> @n64
 function qcDefaultConfig(): QuicServerConfig -> @qcDefaultConfig [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=128
   calls: n64 qcConfig

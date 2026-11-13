@@ -397,7 +397,7 @@ bytes every datagram is at most until path MTU discovery validates more
 
 </scalar-card>
 
-<scalar-card title="QUIC_​RECOVERY_​CUBIC" icon="phosphor/regular/hash">
+<scalar-card title="1" icon="phosphor/regular/hash">
 
 `QUIC_RECOVERY_DEFAULT: i32`
 
@@ -405,6 +405,8 @@ The controller a server runs unless it has a reason to pick: CUBIC. It
 beat NewReno outside the spread across loss draws on transfers of 32 and
 128 bandwidth-delay products and finished level on one
 (`bench/quic-goodput.ts`; the figures are in docs/security/quic.md).
+It holds the same value as `QUIC_RECOVERY_CUBIC`, written out rather than
+aliased so the default reads as a choice of its own.
 
 </scalar-card>
 

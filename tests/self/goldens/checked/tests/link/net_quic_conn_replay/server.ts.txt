@@ -10,6 +10,7 @@ import QUIC_CONN_STATIC_KEY_SIZE from "nish/net/quic" -> const QUIC_CONN_STATIC_
 import QuicConnection from "nish/net/quic" -> struct QuicConnection
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
 import QuicStreamData from "nish/net/quic" -> struct QuicStreamData
+import QUIC_RECOVERY_NEWRENO from "nish/net/quic-recovery" -> const QUIC_RECOVERY_NEWRENO
 import leafCertificate from "../net_tls_common/server" -> function @leafCertificate
 import leafPrivate from "../net_tls_common/server" -> function @leafPrivate
 import textOf from "../crypto_x509/hex" -> function @textOf

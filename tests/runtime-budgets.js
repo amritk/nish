@@ -881,8 +881,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **110,976 bytes** (+64) by path MTU discovery (RFC 9000 §14.3): the
  * connection's path MTU, its limit, the search's bounds, the probe in flight and
  * its counters, and recovery's datagram size.
+ *
+ * Moved to **111,048 bytes** (+72) by CUBIC (RFC 9438): recovery's controller
+ * choice and its eight CUBIC fields (the window before the last reduction, K,
+ * the epoch start, the Reno-friendly estimate and its carry, the step carry,
+ * the prior window and the idle start).
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110976
+export const HTTP3_SERVER_SLOT_BYTES = 111048
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

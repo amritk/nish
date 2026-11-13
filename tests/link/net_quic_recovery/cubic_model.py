@@ -3,10 +3,12 @@
 
     python3 tests/link/net_quic_recovery/cubic_model.py
 
-An integer model of RFC 9438 §4 and §5.8 written apart from
-std/net/quic-recovery.ts, in the same units (bytes, milliseconds, 1200-byte
-datagrams) and with the same truncations. Python's integers do not overflow,
-so a wrong clamp in the module would show here as a different figure.
+An integer port of std/net/quic-recovery.ts's CUBIC (RFC 9438 §4 and §5.8),
+in the same units (bytes, milliseconds, 1200-byte datagrams) and with the
+same truncations. It guards the arithmetic and catches typos; it shares the
+module's reading of the RFC, which the hand-derived K = 5000 ms and
+W(1000) = 169280 in cubic.ts check. Python's integers do not overflow, so a
+wrong clamp in the module would show here as a different figure.
 
     W(t)   = W_max + 2 × 1200 × (t − K)³ / 5 × 10⁹, t − K clamped to ±40000,
              the division truncating toward zero

@@ -51,6 +51,7 @@ import {
   QuicServerConfig,
   QuicStreamData,
 } from "nish/net/quic";
+import { QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery";
 import {
   QUIC_STREAM_ERR_FINISHED,
   QUIC_STREAM_ERR_FLOW,
@@ -485,7 +486,8 @@ const shapeChecks = (t: Suite): void => {
     retryTokenKey: tokenKey(),
     workerIndex: toI32(-1),
     workerCount: toI32(0),
-    congestion: toI32(0),
+    // Pinned to NewReno: the windows and flights these checks expect were worked out under it.
+    congestion: QUIC_RECOVERY_NEWRENO,
     retry: false,
     retryTokenLifetime: n64(10000),
   };

@@ -6,6 +6,7 @@ import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { QuicFrame, quicParseFrame } from "nish/net/quic-frame";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QuicConnection, QuicServerConfig } from "nish/net/quic";
+import { QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery";
 import { leafCertificate } from "../net_tls_common/server";
 import { fromHex } from "../crypto_x509/hex";
 import { n64 } from "../net_quic_frame/typed";
@@ -31,7 +32,8 @@ export const qcConfig = (maxData: i64, maxStreamData: i64, maxStreams: i64, cidL
     retryTokenKey: tokenKey(),
     workerIndex: toI32(-1),
     workerCount: toI32(0),
-    congestion: toI32(0),
+    // Pinned to NewReno: the windows and flights these checks expect were worked out under it.
+    congestion: QUIC_RECOVERY_NEWRENO,
     retry: false,
     retryTokenLifetime: n64(10000),
   };

@@ -5,10 +5,11 @@
 // units is W_max + 2 × 1200 × (t − K)³ / 5 × 10⁹ bytes, and
 // K = ∛((W_max − cwnd) × 5 × 10⁹ / 2400) ms.
 //
-// The windows pinned below come from `cubic_model.py` beside this file, a
-// separate integer model of RFC 9438 §4 (the same units and truncations,
-// written apart from the module); `python3 cubic_model.py` prints each
-// figure again. It drives the same synthetic ACK clock: each round, at one
+// The windows pinned below come from `cubic_model.py` beside this file, an
+// integer port of the Nish implementation (the same units and truncations):
+// it guards the arithmetic and catches typos, not the reading of the RFC,
+// which the hand-derived K = 5000 ms and W(1000) = 169280 check;
+// `python3 cubic_model.py` prints each figure again. It drives the same synthetic ACK clock: each round, at one
 // instant, acknowledges every packet of the round before one ACK at a time
 // and sends one in its place, so 100 full datagrams (120000 bytes) are
 // always in flight and every RTT sample is exactly the round's length.
