@@ -4,12 +4,16 @@
 // the `break-web` section of tests/run.js turns each line into a check and
 // compares the count, so a run cut short is caught.
 
+import { spawnSync } from "node:child_process"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import zlib from "node:zlib"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
+// The compiler whose answers the hero terminal repeats: tests/run.js passes its own.
+const nish = path.resolve(process.argv[2] ?? path.join(root, "build", "nish"))
 const results = []
 const check = (name, ok, detail) => {
   results.push(ok ? `ok ${name}` : `not ok ${name}\t${detail === undefined ? "" : String(detail).replace(/\n/g, " ")}`)
@@ -113,27 +117,31 @@ const type = (node, line) => {
   press(node, "Enter")
 }
 
-// --- site.js: the trigger costs the page one dynamic import ------------------
+// --- site.js: the terminal costs the page two dynamic imports ----------------
 
 const siteFile = path.join(root, "docs", "site", "site.js")
 const site = fs.readFileSync(siteFile, "utf8")
 const imports = [...site.matchAll(/\bimport\b\s*(\(|[^(\s])/g)]
 check(
-  "site.js reaches the game only through one dynamic import of /break/break.mjs",
-  imports.length === 1 && imports[0][1] === "(" && /\bconst url = "\/break\/break\.mjs"\s+opening \?\?= import\(url\)/.test(site),
+  "site.js reaches the shell and the game only through two dynamic imports of /break/",
+  imports.length === 2 &&
+    imports.every((m) => m[1] === "(") &&
+    /\bconst url = "\/break\/break\.mjs"\s+opening \?\?= import\(url\)/.test(site) &&
+    /\bconst shellUrl = "\/break\/shell\.mjs"\s+shell \?\?= import\(shellUrl\)/.test(site),
   imports.map((m) => m[0]).join(", ")
 )
-// Nothing else reaches the game before it is asked for: no preload, no module
+// Nothing else reaches /break/ before it is asked for: no preload, no module
 // worker, no fetch of the bundle, and no word of its .wasm.
 check(
-  "site.js names the game nowhere but that import",
-  !/\.wasm\b|modulepreload|\bpreload\b|\bprefetch\b|\bfetch\(|\bWorker\(/.test(site) && site.split(/["'`]\/break\//).length === 2,
-  "site.js mentions .wasm, a preload, a fetch or a worker, or quotes a /break/ path twice"
+  "site.js names /break/ nowhere but those imports",
+  !/\.wasm\b|modulepreload|\bpreload\b|\bprefetch\b|\bfetch\(|\bWorker\(/.test(site) && site.split(/["'`]\/break\//).length === 3,
+  "site.js mentions .wasm, a preload, a fetch or a worker, or quotes a /break/ path a third time"
 )
 
-// The hero's script ships on every docs page: the trigger may add under 1 KB
-// to it, gzipped. The baseline is site.js as it was before the trigger.
-const SITE_GZIP_BEFORE = 3200
+// The hero's script ships on every docs page: the terminal may add under 1 KB
+// to it, gzipped. The baseline is site.js on main without the terminal's
+// imports (71c41439).
+const SITE_GZIP_BEFORE = 3480
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(
   "site.js grows by under 1 KB gzipped",
@@ -142,8 +150,8 @@ check(
 )
 
 /**
- * Runs site.js in a fresh fake document. Its one `import(...)` goes to
- * `load(specifier)`, so a test decides what the import does.
+ * Runs site.js in a fresh fake document. Its `import(...)`s go to
+ * `load(specifier)`, so a test decides what each import does.
  */
 const runSite = (load) => {
   const { document, host } = makeDocument()
@@ -155,7 +163,7 @@ const runSite = (load) => {
     "requestAnimationFrame",
     "Element",
     "load",
-    site.replace(/\bimport\(/, "load(")
+    site.replace(/\bimport\(/g, "load(")
   )
   run(document, window, class { observe() {} }, () => {}, Node, load)
   return { document, host, terminal: host.find("nish-hero__terminal"), said: host.find("nish-hero__said") }
@@ -168,19 +176,24 @@ const runSite = (load) => {
     return Promise.reject(new Error("Failed to fetch dynamically imported module"))
   })
   check("site.js builds a focusable hero terminal", hero.terminal?.attributes.tabindex === "0", hero.host.textContent)
+  check("site.js imports nothing before the terminal's first key", asked.length === 0, asked.join(", "))
   type(hero.terminal, "ls")
-  check("an unknown command is not found, and imports nothing", /ls: command not found/.test(hero.said.textContent) && asked.length === 0,
-    hero.said.textContent)
+  await settle()
+  check("without its shell the terminal finds no command", /ls: command not found/.test(hero.said.textContent), hero.said.textContent)
+  check("the first key asks for the shell, and nothing else", asked.join(", ") === "/break/shell.mjs", asked.join(", "))
+  type(hero.terminal, "ls")
+  check("a shell that failed to load is not asked for again", asked.length === 1, asked.join(", "))
+  const games = () => asked.filter((s) => s === "/break/break.mjs").length
   type(hero.terminal, "nish break")
   await settle()
   await settle()
   check("a failed import says why in the terminal", /nish break: Failed to fetch/.test(hero.said.textContent), hero.said.textContent)
-  check("the failed import asked for /break/break.mjs once", asked.length === 1 && asked[0] === "/break/break.mjs", asked.join(", "))
+  check("without its shell the terminal still opens the game", games() === 1, asked.join(", "))
   // The hero is still usable: it takes the next command, and retries the import.
   type(hero.terminal, "nish break")
   await settle()
   await settle()
-  check("after a failed import the terminal takes the command again and retries", asked.length === 2, asked.join(", "))
+  check("after a failed import the terminal takes the command again and retries", games() === 2, asked.join(", "))
   const typed = press(hero.terminal, "x")
   check("after a failed import the terminal still takes keys", typed.prevented && /\$ x/.test(hero.terminal.textContent),
     hero.terminal.textContent)
@@ -188,7 +201,11 @@ const runSite = (load) => {
 
 {
   const opened = []
-  const hero = runSite(() => Promise.resolve({ open: (how) => (opened.push(how), Promise.resolve()) }))
+  const hero = runSite((specifier) =>
+    specifier === "/break/break.mjs"
+      ? Promise.resolve({ open: (how) => (opened.push(how), Promise.resolve()) })
+      : Promise.reject(new Error("offline"))
+  )
   type(hero.terminal, "nish break")
   await settle()
   await settle()
@@ -200,6 +217,64 @@ const runSite = (load) => {
   const ctrl = { key: "r", ctrlKey: true, metaKey: false, altKey: false, prevented: false, preventDefault() { this.prevented = true } }
   hero.terminal.dispatch("keydown", ctrl)
   check("the terminal leaves the browser's shortcuts alone", !ctrl.prevented)
+}
+
+// --- shell.mjs: what the terminal answers ------------------------------------
+
+// The served shell, as build.mjs fills it in from the compiler.
+const shellFile = path.join(root, "docs", "site", "break", "shell.mjs")
+const shell = fs.existsSync(shellFile) ? await import(pathToFileURL(shellFile).href) : null
+check("docs/site/break/shell.mjs is built", shell !== null, shellFile)
+const asks = (args, cwd) => spawnSync(nish, args, { cwd, encoding: "utf8" })
+{
+  const help = asks(["--help"])
+  check("the shell's nish --help is the compiler's", shell?.answer("nish --help") === help.stdout.replace(/\n$/, "") && help.status === 0,
+    `${help.status}: ${help.stdout.slice(0, 80)}`)
+  check("the shell's bare nish prints the same help", shell?.answer("nish") === shell?.HELP && shell?.HELP !== "")
+  const version = asks(["--version"])
+  check("the shell's nish --version is the compiler's", shell?.answer("nish --version") === version.stdout.replace(/\n$/, ""),
+    `${shell?.VERSION} vs ${version.stdout}`)
+  // The riddle: the same words, and word for word what the compiler says where
+  // no file of that name is.
+  const compile = fs.readFileSync(path.join(root, "src", "compile.ts"), "utf8")
+  const near = /const nearMiss =[^\n]*\n([^\n]*)/.exec(compile)?.[1] ?? ""
+  const words = [...near.matchAll(/word === "(\w+)"/g)].map((m) => m[1])
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "break-web-"))
+  const differ = []
+  for (const word of words) {
+    const said = asks([word], empty)
+    if (said.status !== 1 || shell?.answer(`nish ${word}`) !== said.stderr.replace(/\n$/, "")) {
+      differ.push(`${word}: ${said.status} ${said.stderr}`)
+    }
+  }
+  fs.rmSync(empty, { recursive: true })
+  check("the shell's riddle is the compiler's, for each of its words", words.length === 5 && differ.length === 0,
+    `${words.join(" ")}; ${differ.join("; ")}`)
+  check("nish break opens the game", shell !== null && shell.answer("nish break") === shell.OPEN)
+  check("nish break with more after it does not", shell !== null && shell.answer("nish break now") !== shell.OPEN)
+  check("another nish command points at nish --help", /nish --help/.test(String(shell?.answer("nish build x.ts"))))
+  check("another program points at nish --help", /^ls: .*nish --help/.test(String(shell?.answer("ls -la"))))
+  check("an empty line answers nothing", shell?.answer("   ") === "")
+}
+
+{
+  // The terminal with its shell: it prints the shell's answers, and opens the game on OPEN.
+  const opened = []
+  const hero = runSite((specifier) =>
+    specifier === "/break/shell.mjs" && shell !== null
+      ? Promise.resolve(shell)
+      : Promise.resolve({ open: (how) => (opened.push(how), Promise.resolve()) })
+  )
+  press(hero.terminal, "n")
+  press(hero.terminal, "Backspace")
+  await settle()
+  type(hero.terminal, "nish game")
+  check("the terminal prints the shell's answer", hero.said.textContent === `$ nish game\n${shell?.answer("nish game")}\n`,
+    hero.said.textContent)
+  type(hero.terminal, "nish break")
+  await settle()
+  await settle()
+  check("the terminal opens the game on the shell's word", opened.length === 1, opened.length)
 }
 
 // --- break.mjs: the overlay ---------------------------------------------------

@@ -9,13 +9,17 @@
 //                      --profile wasm-host with memory fixed at --memory MiB
 // <out>/game.mjs       its generated loader
 // <out>/break.mjs      the page side, which docs/site/site.js imports on demand
+// <out>/shell.mjs      what the hero terminal answers, with the compiler's own
+//                      --help and --version written in; site.js imports it on
+//                      the terminal's first key
 // <out>/nish/          nish/page/game and the two files it imports, as they ship
 // <out>/manifest.json  a hash of every input and the compiler's version
 //
 // The output is committed, so the docs site needs no compiler. `--check`
 // builds nothing: it hashes the inputs again and fails, naming each one that
 // changed since the committed build, so a change to the game's code that
-// forgot to rebuild is caught.
+// forgot to rebuild is caught; and the compiler's `--help` and `--version`
+// are asked again, so a page that answers differently from the CLI is too.
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -86,6 +90,7 @@ const inputs = () => {
     ...sources(),
     path.join(here, "break.mjs"),
     path.join(here, "build.mjs"),
+    path.join(here, "shell.mjs"),
     path.join(root, "runtime", "runtime-wasm.c"),
     path.join(root, "scripts", "build.sh"),
     ...PAGE.map((f) => path.join(root, "runtime", f)),
@@ -99,18 +104,26 @@ const inputs = () => {
   return hashes
 }
 
-/** The compiler's `--version` line. */
-const version = () => {
-  const r = spawnSync(nish, ["--version"], { encoding: "utf8" })
+/** What the compiler prints on stdout for `option`, without its last newline. */
+const ask = (option) => {
+  const r = spawnSync(nish, [option], { encoding: "utf8" })
   if (r.status !== 0) {
     fail(
-      `${nish} --version failed: build the compiler (npm run build) or pass --nish\n${r.error?.message ?? ""}${r.stderr ?? ""}`
+      `${nish} ${option} failed: build the compiler (npm run build) or pass --nish\n${r.error?.message ?? ""}${r.stderr ?? ""}`
     )
   }
-  return r.stdout.trim()
+  return r.stdout.replace(/\n$/, "")
 }
 
-const manifest = () => ({ compiler: version(), memory, inputs: inputs() })
+const sha256 = (text) => createHash("sha256").update(text).digest("hex")
+
+/** The record --check compares: the compiler's answers, the memory, and every input's hash. */
+const manifest = (helpText) => ({
+  compiler: ask("--version"),
+  help: sha256(helpText),
+  memory,
+  inputs: inputs(),
+})
 
 // ---- --check ----------------------------------------------------------------
 
@@ -120,10 +133,13 @@ if (checking) {
     fail(`${path.relative(root, file)} is missing: run node examples/break-web/build.mjs`)
   }
   const was = JSON.parse(fs.readFileSync(file, "utf8"))
-  const now = manifest()
+  const now = manifest(ask("--help"))
   const changed = []
   if (was.compiler !== now.compiler) {
     changed.push(`the compiler (${was.compiler} → ${now.compiler})`)
+  }
+  if (was.help !== now.help) {
+    changed.push("the compiler's --help")
   }
   if (was.memory !== now.memory) {
     changed.push(`--memory (${was.memory} → ${now.memory})`)
@@ -139,7 +155,7 @@ if (checking) {
       changed.push(`${name}${why}`)
     }
   }
-  for (const name of ["game.wasm", "game.mjs", "break.mjs", ...PAGE.map((f) => `nish/${f}`)]) {
+  for (const name of ["game.wasm", "game.mjs", "break.mjs", "shell.mjs", ...PAGE.map((f) => `nish/${f}`)]) {
     if (!fs.existsSync(path.join(out, name))) {
       changed.push(`${path.relative(root, path.join(out, name))} (missing from the build)`)
     }
@@ -171,6 +187,7 @@ const written = new Set([
   "game.mjs",
   "game.d.ts",
   "break.mjs",
+  "shell.mjs",
   "nish",
   "ll",
   MANIFEST,
@@ -195,7 +212,16 @@ if (!page.includes(PAGE_FROM)) {
   fail(`break.mjs no longer imports ${PAGE_FROM}; update build.mjs to match`)
 }
 
-const record = manifest()
+// The shell's two answers the compiler gives, written over its empty ones.
+const SHELL_HELP = 'export const HELP = ""'
+const SHELL_VERSION = 'export const VERSION = ""'
+const shell = fs.readFileSync(path.join(here, "shell.mjs"), "utf8")
+if (!shell.includes(SHELL_HELP) || !shell.includes(SHELL_VERSION)) {
+  fail(`shell.mjs no longer holds ${SHELL_HELP} and ${SHELL_VERSION}; update build.mjs to match`)
+}
+
+const help = ask("--help")
+const record = manifest(help)
 const ll = path.join(out, "ll")
 // Every output goes first, so a failed step cannot leave an older one to be served.
 fs.rmSync(out, { recursive: true, force: true })
@@ -237,5 +263,11 @@ for (const file of PAGE) {
   fs.copyFileSync(path.join(root, "runtime", file), path.join(out, "nish", file))
 }
 fs.writeFileSync(path.join(out, "break.mjs"), page.replace(PAGE_FROM, '"./nish/page-game.mjs"'))
+fs.writeFileSync(
+  path.join(out, "shell.mjs"),
+  shell
+    .replace(SHELL_HELP, () => `export const HELP = ${JSON.stringify(help)}`)
+    .replace(SHELL_VERSION, () => `export const VERSION = ${JSON.stringify(record.compiler)}`)
+)
 fs.writeFileSync(path.join(out, MANIFEST), `${JSON.stringify(record, null, 2)}\n`)
 process.stdout.write(`break-web: ${out}\n`)

@@ -792,6 +792,9 @@ a.nish-hero__cta:hover {
   animation: none;
 }
 .nish-hero__said {
+  display: block;
+  max-height: 16em;
+  overflow: auto;
   color: var(--scalar-color-2);
 }
 .nish-hero__caret {

@@ -11672,12 +11672,12 @@ if (dealtHere("fileServer")) {
 // is committed. tests/break-web/check.mjs runs the trigger and the page side
 // under Node with a fake DOM and prints a line per check.
 if (dealtHere("breakWeb")) {
-  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs")], {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
     cwd: root,
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 21
+  const BREAK_WEB_CHECKS = 36
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))

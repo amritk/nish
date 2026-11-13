@@ -230,9 +230,10 @@
     )
 
   /**
-   * The hero's terminal, which takes a line once focused: Enter runs it, and
-   * every command but one is not found. That one loads its module from
-   * /break/ the first time it runs, and nothing before.
+   * The hero's terminal, which takes a line once focused: Enter runs it. Its
+   * first key loads what it answers from /break/ (shell.mjs); one command loads
+   * a second module from there. Until the first arrives, or if it fails, every
+   * command but that one is not found.
    */
   const terminal = (...children) => {
     const typed = el("span")
@@ -251,6 +252,8 @@
       )
     )
     let opening = null
+    // The shell: a promise while it loads, then the module, or false if it failed.
+    let shell = null
     const say = (text) => (said.textContent = text)
     term.addEventListener("keydown", (event) => {
       const key = event.key
@@ -258,10 +261,18 @@
       if (event.ctrlKey || event.metaKey || event.altKey) {
         return
       }
+      // Built into /break/ beside the game (examples/break-web/build.mjs); a failed load leaves the fallback below.
+      const shellUrl = "/break/shell.mjs"
+      shell ??= import(shellUrl).then(
+        (module) => (shell = module),
+        () => (shell = false)
+      )
       if (key === "Enter") {
         typed.textContent = ""
         const command = line.trim()
-        if (command === "nish break") {
+        const fallback = command === "nish break" ? null : `${command.split(" ")[0]}: command not found`
+        const answer = shell?.answer ? shell.answer(command) : fallback
+        if (answer === null || answer === shell?.OPEN) {
           say(`$ ${command}\nloading…\n`)
           // The game is built into /break/ (examples/break-web/build.mjs), not beside this file.
           const url = "/break/break.mjs"
@@ -274,7 +285,7 @@
               say(`$ ${command}\nnish break: ${error.message}\n`)
             })
         } else {
-          say(command === "" ? "" : `$ ${command}\n${command.split(" ")[0]}: command not found\n`)
+          say(command === "" ? "" : `$ ${command}\n${answer}\n`)
         }
       } else if (key === "Backspace") {
         typed.textContent = line.slice(0, -1)
