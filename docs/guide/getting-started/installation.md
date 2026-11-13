@@ -131,7 +131,15 @@ one the release lists; the attestation shows where that release came from.
 
 When the [GitHub CLI](https://cli.github.com) (`gh`) is installed and signed
 in, the install script checks the attestation too, and refuses to install if
-it does not verify. Without `gh` it skips that check and says so. To check a
+it does not verify. Without `gh` it skips that check and says so, unless you
+set `NISH_REQUIRE_ATTESTATION=1`, which makes it refuse to install anything it
+cannot check:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | NISH_REQUIRE_ATTESTATION=1 sh
+```
+
+To check a
 tarball you downloaded yourself, with its version and platform filled in
 (for example `nish-0.37.0-x86_64-linux.tar.gz` and `refs/tags/v0.37.0`):
 

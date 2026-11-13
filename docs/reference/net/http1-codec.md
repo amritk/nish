@@ -23,6 +23,7 @@ import {
   Http1Parser,
   http1BytesAre,
   http1Chunk,
+  http1ChunkExtValid,
   http1HexValue,
   http1IsFieldText,
   http1IsOws,
@@ -69,6 +70,12 @@ Whether the octets of `bytes` spell `word`, which is lowercase, in any ASCII cas
 <scalar-card title="http1​Chunk" icon="phosphor/regular/function" href="#http1chunk">
 
 `data[off .. off + len)` as one chunk of a chunked body, in an array of its own; `http1WriteChunk` writes the same bytes into a buffer the caller owns.
+
+</scalar-card>
+
+<scalar-card title="http1​Chunk​Ext​Valid" icon="phosphor/regular/function" href="#http1chunkextvalid">
+
+Whether `bytes[from .. to)`, what follows a chunk size on its line, is the chunk-ext of RFC 9112 §7.1.1 and nothing else: `*( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )`, the name a token and the value a token or a quoted-string.
 
 </scalar-card>
 
@@ -191,7 +198,8 @@ cut — `tests/link/net_http1_split` feeds a corpus at every split point.
   (§2.2); whitespace before the first field or an obs-fold (§2.2, §5.2);
   whitespace between a field name and its colon (§5.1); a field value with a
   control character; a 1.1 request without exactly one `Host`, or a 1.0
-  request with more than one (§3.2, RFC 9110 §7.2); `Content-Length` that is
+  request with more than one (§3.2, RFC 9110 §7.2), or a `Host` that is not
+  `uri-host [":" port]` (§3.2, by `urlIsHostPort`); `Content-Length` that is
   not one run of digits, or that appears twice (§6.3); `Transfer-Encoding`
   together with `Content-Length`, in a 1.0 request, or whose last coding is
   not `chunked` (§6.1, §6.3); a malformed chunk size, chunk extension or
@@ -314,6 +322,52 @@ how many bytes of `data` the chunk carries
 <scalar-field name="returns" type="u8[]">
 
 the chunk's bytes, framing included, in a fresh array the caller owns
+
+</scalar-field>
+
+### http1ChunkExtValid
+
+Whether `bytes[from .. to)`, what follows a chunk size on its line, is the
+chunk-ext of RFC 9112 §7.1.1 and nothing else:
+`*( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )`, the name
+a token and the value a token or a quoted-string. An empty window holds no
+extensions and is valid. The extensions are not interpreted, but they are
+parsed whole: a parser that skips to the line's end and one that reads a
+quoted-string across it disagree about where the chunk's data starts (the
+chunk-extension smuggling of Jetty's CVE-2026-2332 and Netty's
+CVE-2026-33870), so an unclosed quote, an empty name or value, a stray `;`
+or `=`, and whitespace that leads nowhere are each refused. The server's
+parser and the client's both read their chunk-size lines through this.
+
+```ts
+function http1ChunkExtValid(
+  bytes: u8[],
+  from: i32,
+  to: i32,
+): boolean
+```
+
+<scalar-field name="bytes" type="u8[]" required>
+
+the buffer holding the chunk-size line
+
+</scalar-field>
+
+<scalar-field name="from" type="i32" required>
+
+the index just past the chunk size's last hex digit
+
+</scalar-field>
+
+<scalar-field name="to" type="i32" required>
+
+the index of the line's CR, exclusive
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+true when the window is zero or more well-formed chunk extensions
 
 </scalar-field>
 

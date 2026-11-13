@@ -255,7 +255,7 @@ freeze), which is why CLI-7 and CLI-9 waited a release after #425 (fixed by #486
 
 ## Changing the runtime
 
-Four pairings CI checks and a local run on one machine does not:
+Five pairings CI checks and a local run on one machine does not:
 
 - **A new runtime unit is paired in `scripts/build.sh` and `src/run-cache.ts`
   in one commit**: `build.sh`'s `halves` and `run-cache.ts`'s `runtimeUnits()`
@@ -283,6 +283,16 @@ Four pairings CI checks and a local run on one machine does not:
   `.github/workflows/ci.yml`, where the instructions are known to exist. #598's
   "calls all four kernels" check was gated that way and required nowhere until
   review.
+- **A new libc call in `runtime/*.c` is reserved in `src/c-symbols.ts`.** A
+  program function that takes a C library name as its symbol is refused
+  (NL3037), and the list it is refused from is held to what the toolchain
+  reaches: `node tests/run.js c-symbols` reads `llvm-nm` over the runtime's
+  objects (natively, with `-DNISH_THREADS` and for wasm32-wasi) and fails on a
+  name they leave undefined that the list does not reserve. Add the name to
+  `isCLibrarySymbol` in the same change, and run the section after any change
+  to `runtime/`. Read its skip line: the wasm32-wasi leg is skipped without
+  `WASI_SYSROOT` and the whole section without clang and `llvm-nm`. A call made
+  only on Darwin or the BSDs is listed by hand, since no Linux run sees it.
 
 ## How `src/` is tested
 
@@ -290,6 +300,11 @@ Before pushing a `src/` change, run locally the sections it touches,
 `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`; read its skip line) and
 `node tests/run.js performance`, and regenerate the goldens; the whole suite
 is CI's `test` shards ([`CLAUDE.md`](../CLAUDE.md#definition-of-done)).
+
+A new index in `src/` the prover cannot discharge is an NL9007 warning, and the
+`src/` ratchet in `node tests/run.js performance` fails on it. Prove it away
+with a guard; never raise `tests/perf-baseline.json`, which only moves down
+(`testing.md` → ["The performance gate"](testing.md#the-performance-gate)).
 
 Every tool below builds its compiler from `src/` with the seed
 (`tests/self/seed.js`: `--seed`, then `NISH_BOOTSTRAP`, then `build/nish`, then

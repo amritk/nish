@@ -5,7 +5,7 @@ where a program's root certificates come from, what the loader does with a
 file it cannot use, and what it bounds (PKI-R1 to PKI-R7). `nish/crypto/pki`:
 whether the chain a TLS server sent leads to one of those roots and names the
 host dialled, and what one call may cost ([Path validation](#path-validation-nishcryptopki),
-PKI-1 to PKI-32). Both are written with the code rather than after an audit,
+PKI-1 to PKI-33). Both are written with the code rather than after an audit,
 so that the audit starts from evidence; the path validator is then run
 against x509-limbo's server-authentication cases, which found PKI-18 and
 PKI-21 to PKI-24.
@@ -14,8 +14,9 @@ Anchors are function names: in `std/crypto/pki-roots.ts` on the head that
 merged its half, whose base is `2cdef4fa`, and in `std/crypto/pki.ts` on the
 head that merges the path validator, whose base is `351a9a8f`, except PKI-18
 and PKI-21 to PKI-32, on the head that merges the x509-limbo run, whose base
-is `50af350c`, and PKI-26 and PKI-27 as they stand since #1028, on the head
-that merges it, whose base is `8dd49b6b`.
+is `50af350c`, PKI-26 and PKI-27 as they stand since #1028, on the head
+that merges it, whose base is `8dd49b6b`, and PKI-33 on the change that
+fixes it, whose base is `187336a6`.
 
 **Result.** The loader reads the roots `SSL_CERT_FILE` and `SSL_CERT_DIR`
 name, or else the first system bundle and `/etc/ssl/certs`, and gives them
@@ -37,7 +38,7 @@ Accepted and not counted:
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiNote`, `pkiLeafCode`, `pkiLeafProfileCode`, `pkiSubscriberKeyCode`, `pkiSerialSound`, `pkiSanDnsSound`, `pkiIssuerCode`, `pkiKeyIdsCode`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiRsaKeyCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiBytesEqual` |
+| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiDistrustSpki`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiIsDistrusted`, `pkiNote`, `pkiLeafCode`, `pkiLeafProfileCode`, `pkiSubscriberKeyCode`, `pkiSerialSound`, `pkiSanDnsSound`, `pkiIssuerCode`, `pkiKeyIdsCode`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiRsaKeyCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiBytesEqual` |
 | `std/crypto/pki-roots.ts` | `pkiLoadSystemRoots`, `pkiLoadRootsFor`, `pkiLoadRoots`, `pkiSystemBundles`, `pkiRootsDirEntry`, `PkiRoots`; `PkiRootsLoad`, `pkiRootsKeep`, `pkiRootsBlock`, `pkiRootsSplit`, `pkiRootsRegular`, `pkiRootsFile`, `pkiRootsDir`, `pkiRootsSplitDirs`, `pkiRootsIsDigit`, `pkiRootsIsHex` |
 
 Out of scope:
@@ -302,7 +303,8 @@ and it misses all of the following:
 - **Trust settings, never-trust among them.** A user or administrator can
   mark a root never-trusted or restrict it to some uses. Those settings live
   in the trust-settings domains and are not reflected in the file. A root the
-  machine's owner distrusted is still trusted here.
+  machine's owner distrusted is still trusted here, unless the program
+  distrusts its key itself (`pkiDistrustSpki`, PKI-17).
 - **Apple's partial distrust and per-root constraints.** Apple distrusts
   certain roots for certificates issued after a date, and constrains others
   to some names or uses. These rules are in the OS's trust evaluation, not in
@@ -333,16 +335,20 @@ leaf to a root of the store with these properties:
 - every issuer carries the key identifiers RFC 5280 asks of it, a root
   its authorityKeyIdentifier only;
 - the leaf names the host in its subjectAltName and keeps the CA/Browser
-  Forum's profile of a server's certificate.
+  Forum's profile of a server's certificate;
+- no certificate on it, leaf, intermediate or root, has a key the store
+  distrusts (`pkiDistrustSpki`; none by default).
 
 Each refusal has a reason code of its own (PKI-14). Each cost an attacker can
 raise has a named bound, and passing a bound is a refusal, never a slow
 answer (PKI-1). Run against x509-limbo, the module accepted chains that
 limbo refuses; PKI-18 (Medium) and PKI-21 to PKI-24 and PKI-27 (Low) fix
-them, and PKI-26 is narrowed to one case. Open,
+them, and PKI-26 is narrowed to one case. PKI-33 (Low, fixed) closes an
+excluded IPv4 subtree to the IPv4-mapped IPv6 form of its addresses. Open,
 and counted:
 
-- PKI-17 (Medium): no revocation;
+- PKI-17 (Medium): no revocation. A caller can distrust a key by the
+  SHA-256 of its subjectPublicKeyInfo, which mitigates it in part;
 - PKI-19 (Low): certificate policies are not processed;
 - PKI-20 (Low): Names are compared byte for byte, not folded as RFC 5280
   §7.1 says. This fails closed.
@@ -412,9 +418,16 @@ module's answer.
 - **`anyExtendedKeyUsage` on an intermediate** stands for serverAuth. On the
   leaf it refuses the chain, even beside serverAuth (PKI-23); a leaf needs
   serverAuth itself, or no EKU at all (PKI-30).
-- **An iPAddress subtree of the other family never holds an address.** An
-  IPv4 address under IPv6-only permitted subtrees is outside them, and an
-  IPv6 subtree never excludes an IPv4 address.
+- **An address and its IPv4-mapped form are one host to an excluded
+  subtree, and two to a permitted one.** An excluded IPv4 subtree holds the
+  mapped form (`::ffff:a.b.c.d`) of each address it holds, and an excluded
+  IPv6 subtree whose mask covers all of `::ffff:0:0/96` holds the IPv4
+  addresses it maps (PKI-33). A wider IPv6 subtree, such as `::/0`, which a
+  CA that issues only IPv4 addresses may exclude, holds no IPv4 address. A
+  permitted subtree holds only addresses of its own family, so an IPv4
+  address under IPv6-only permitted subtrees is outside them, and so is a
+  mapped address under IPv4-only ones. Both answers fail closed. OpenSSL
+  compares the families apart in both lists.
 - **The root is checked as an issuer, as far as the shipped roots allow.**
   RFC 5280 §6.1.1 makes a trust anchor a name and a key, but x509-limbo
   refuses an expired root, a root without basicConstraints, one with an
@@ -781,13 +794,15 @@ Tests:
   `a self-issued leaf outside a permitted subject`
 - `an iPAddress not permitted`, `an excluded iPAddress` and
   `an IPv4 address under IPv6 subtrees`
+- across the families, PKI-33's checks
 
 #### PKI-13: the host is matched as RFC 6125 §6.4 says
 
 DNS names match without case and with one trailing dot. A wildcard is only
 the whole leftmost label, stands for exactly one label, and needs at least
 two labels after it. Addresses are compared as octets, against iPAddress
-SANs only. An IPv4-mapped IPv6 address is not its IPv4 address. Both the
+SANs only. An IPv4-mapped IPv6 address is not its IPv4 address here, though
+an excluded subtree holds both (PKI-33). Both the
 host and the SAN must be valid names: labels of 1 to 63 octets, 253 octets
 in all, and letters, digits, hyphens and underscores. An underscore in a
 leaf's dNSName refuses its chain all the same (PKI-23).
@@ -954,6 +969,36 @@ sound one. `webpki::aki::root-with-aki-authoritycertissuer` and
 `…-authoritycertserialnumber` hold only one of the pair, which the parser
 already refused (X509-10), so they stay `ERR_UNTRUSTED`.
 
+#### PKI-33 (Low, fixed): an excluded IPv4 subtree holds the mapped form of its addresses
+
+`pkiIpAllowed` compared an iPAddress SAN only with subtrees of its own
+family, so a CA excluded from `10.0.0.0/8` could issue a leaf for
+`::ffff:10.0.0.1`, the IPv4-mapped IPv6 form of an address in it, and the
+chain passed. A client that dials the mapped address over a dual-stack
+socket reaches the excluded IPv4 host. Hostname matching was never the
+hole: `pkiMatchHostname` compares the host's octets with each SAN's, so
+the 16-octet form never matches a 4-octet SAN, and that stays strict.
+
+The excluded loop now asks `pkiIpExcludedBy`. An IPv4 subtree holds a
+16-octet address that starts `::ffff:` when its last four octets lie in it;
+an IPv6 subtree whose address starts `::ffff:` and whose mask is all ones
+over those twelve octets holds a 4-octet address that lies under its last
+four. The permitted loop is unchanged, so no address is admitted that was
+refused before. Before: the mapped leaf under the excluded IPv4 subtree and
+the IPv4 leaf under the excluded mapped subtree both verified as `PKI_OK`.
+After: both are `PKI_ERR_NAME_CONSTRAINTS`.
+
+Tests, in the `pki name constraints` suite under a P-256 root of their own,
+`MROOT`: `an IPv4-mapped address in an excluded IPv4 subtree` and
+`an IPv4 address in an excluded mapped subtree` (the two the fix turns);
+`a mapped address under no constraint`,
+`a mapped address outside the excluded IPv4 subtree` and
+`an IPv4 address beside an excluded ::/0`, which still pass;
+`a mapped address is not in a permitted IPv4 subtree` and
+`an IPv4 address in a permitted IPv4 subtree`, which pin the permitted side;
+and `a mapped SAN does not name its IPv4 host` and
+`an IPv4 SAN does not name its mapped host`, which pin hostname matching.
+
 ### Open
 
 #### PKI-17 (Medium): revocation is not checked
@@ -964,6 +1009,37 @@ revoked is accepted until it expires. Closing this needs a stapled-OCSP
 check from the TLS stage, or a CRL set, such as CRLite, shipped with the
 roots. Until then a caller that must honour revocation checks the path it is
 given.
+
+**Mitigated in part** in this change, whose base is `187336a6`: a caller can
+distrust a key. `pkiDistrustSpki(store, hash)` adds the SHA-256 of a
+subjectPublicKeyInfo's DER, 32 bytes, to the store, and `pkiVerifyServer`
+then refuses with `PKI_ERR_DISTRUSTED` (17) a path that holds a certificate
+of that key: the leaf, checked after its own checks, or an issuer, checked
+first in `pkiIssuerCode` so a refused candidate ends its branch and the
+search goes on to any other path. The DER is the new
+`X509Certificate.spki`. Matching the key rather than a certificate or a
+Name covers a CA's cross-signs and reissues with one entry. The list is
+empty by default, and while it is empty no hash is taken, so a program that
+never calls it verifies as before. A hash of any other length is not
+added, and the call answers `false`. `tlsClientDistrustSpki(trust, hash)`
+in `nish/net/tls/verify` adds to a `TlsClientTrust`'s store, so every
+connection on that trust (`tlsConnectWith`, `tlsClientAuthenticate`)
+refuses it with `bad_certificate`. `fetch` takes the list as
+`HttpOptions.distrustSpkiSha256`, added in `httpClientLoadTrust`, and fails
+every https fetch with `HTTP_E_CERTIFICATE` when a hash there is not 32
+bytes, rather than skipping the entry. The postgres carrier builds its
+trust from a roots file alone (`pgCarrierTrust`), so it has no list yet.
+
+This stays open: the caller has to learn of the compromise and name the key,
+and nothing is learnt from CRLs, OCSP or CT. Tests: the `pki distrust`
+suite in `crypto_pki` and `crypto_pki_f64` (an intermediate's, a root's and
+a leaf's key refused; every certificate of a key; a key off the path, in the
+pool only or of a certificate not on the path changes nothing; the bare
+key's hash is not the SPKI's; a 31-byte hash is refused and adds nothing).
+With the check disabled, seven of its sixteen checks fail. In
+`net_http_fetch_tls`, `a chain to a trusted root whose key is distrusted is
+HTTP_E_CERTIFICATE`, `a distrusted key no certificate of the chain holds
+changes nothing` and `a key to distrust that is not 32 bytes fails the fetch`.
 
 #### PKI-19 (Low): certificate policies are not processed
 

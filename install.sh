@@ -19,7 +19,8 @@
 # has neither is refused rather than trusted (docs/security/supply-chain.md).
 # A release after 0.21.0 also carries a build provenance attestation, which
 # is checked too when the GitHub CLI is there to check it, and skipped with a
-# note when it is not.
+# note when it is not -- unless NISH_REQUIRE_ATTESTATION=1, which refuses an
+# install whose attestation was not checked. CI sets it.
 #
 # The other way in is npm -- `npm install -g nish` -- which gets the
 # same binary through per-platform packages. It covers the same platforms and no
@@ -56,12 +57,17 @@ Options:
 
 Environment:
   NISH_INSTALL         same as --dir
+  NISH_REQUIRE_ATTESTATION
+                       1 refuses an install whose build provenance
+                       attestation is not checked: no usable gh, or a
+                       release from before attestations (0.21.0 or older)
 
 Every download is checked against a SHA-256 before it is unpacked or run, and
 one that does not match -- or that has no published digest -- is refused.
 When the GitHub CLI is installed and signed in, a release after 0.21.0 also
 has its build provenance attestation checked with `gh attestation verify`,
-and one that fails is refused. Without gh that check is skipped, with a note.
+and one that fails is refused. Without gh that check is skipped, with a note,
+or refused with NISH_REQUIRE_ATTESTATION=1.
 
 Upgrading is running this again: it installs over an existing install, and
 says nothing needs doing when the version already matches.
@@ -500,9 +506,22 @@ actual="$(nish_sha256 "$tmp/nish.tar.gz")" ||
 # and tar are still all an install takes. So without a usable `gh` the check is
 # skipped with a note saying so, and with one a failed check refuses the
 # install, the same as a digest that does not match.
+#
+# NISH_REQUIRE_ATTESTATION=1 turns both skips into refusals: a release too old
+# to carry an attestation, and a machine whose gh cannot check one. CI sets it,
+# so a seed reaches a build only once GitHub's record of where it was built
+# agrees (SC-32 in docs/security/supply-chain.md).
+require_attestation="${NISH_REQUIRE_ATTESTATION:-}"
+if ! nish_newer_than "$plain" 0.21.0 && [ "$require_attestation" = "1" ]; then
+  die "$version predates build provenance attestations (0.21.0 and older carry
+  none), and NISH_REQUIRE_ATTESTATION=1 refuses an install it cannot check."
+fi
 if nish_newer_than "$plain" 0.21.0; then
   gh_missing="$(nish_gh_cannot_verify)"
-  if [ -n "$gh_missing" ]; then
+  if [ -n "$gh_missing" ] && [ "$require_attestation" = "1" ]; then
+    die "the build provenance attestation of $name.tar.gz cannot be checked:
+  $gh_missing. NISH_REQUIRE_ATTESTATION=1 refuses an install it cannot check."
+  elif [ -n "$gh_missing" ]; then
     say "note: the build provenance attestation was not checked: $gh_missing."
     say "  The SHA-256 was. docs/INSTALL.md says how to check the attestation by hand."
   elif gh attestation verify "$tmp/nish.tar.gz" --repo "$REPO" \

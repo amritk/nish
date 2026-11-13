@@ -6,30 +6,32 @@ aliases and applying merge keys. A program loads a config or an OpenAPI
 document a peer wrote, so the load is attacker-facing: a few kilobytes of
 anchors and aliases can name an exponential tree. It says what the load
 refuses and with which code, what bounds its work, and the test that pins
-each property. The parser it reads from, `std/yaml.ts`, is not in scope; the
-one cost of its that a load inherits is recorded open as YJ-5.
+each property. The parser it reads from, `std/yaml.ts`, is not in scope,
+except for its merge-value check: that is the one cost of the parser's a load
+inherits, recorded as YJ-5.
 
 **Anchors.** Every `file:line` below is at `9efc0ea`, on the branch of #1072;
 the findings name the commit that fixed each. Round 1 of #1072's review, at
 `cee74d4`, found YJ-1 to YJ-3; round 2, at `099862e`, found YJ-4 and YJ-5.
+YJ-5's fix cites `std/yaml.ts` at the change that made it, on `187336a6`.
 
 **Result.** The work the loader does is linear in the stream's nodes plus
 the values it is allowed to build. Expansion is counted before anything is
 built, every map and sequence a merge walks is charged to a budget, and every
-refusal has a code and the range of the node that caused it. That is a claim
-about the loader, not the parse before it: `parseYaml`'s own merge check walks
-a shared merge sequence once per merge key that names it, quadratic in the
-text, and that is open (YJ-5). Five findings: four fixed, one open.
+refusal has a code and the range of the node that caused it. The parse
+before it is linear in the same input: `parseYaml`'s merge check reads a
+shared merge sequence once, however many merge keys name it (YJ-5). Five
+findings, all fixed.
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
 | `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; `yamlJsonErrorName` |
+| `std/yaml.ts` | `YamlParser`: `checkMerge`, `aliasedSeqMerges`, `mergesMap` (the merge-value check only) |
 
-Out of scope: `std/yaml.ts` (the parser, its anchors and its own merge-value
-check) and `std/json-value.ts` (the document, covered by
-[json.md](json.md)).
+Out of scope: the rest of `std/yaml.ts` (the parser and its anchors) and
+`std/json-value.ts` (the document, covered by [json.md](json.md)).
 
 ## Threat model
 
@@ -48,7 +50,7 @@ deeper than the loader's `maxDepth` (`std/yaml-json.ts:216`, set to
 | YJ-2 | Low | `std/yaml-json.ts:389` (`sizeOf`) | A map's size subtracted its merge keys from each part's size after adding it, so a part that had saturated at `maxValues + 1` could be taken back under the cap, and the count could pass a document that expands past `maxValues`. The document's own `maxValues` check still refused the build, after the work. | **Fixed** in `c0145a7`: a saturated part keeps the map saturated. |
 | YJ-3 | Low | `std/yaml-json.ts:614`, `:622` (`mergeInto`) | A merge key whose value is not a mapping (`<<: 5`, `<<: [1, 2]`, `<<: *scalar`) was skipped by the loader. `parseYaml` already refuses each of these (`YAML_ERR_BAD_MERGE`), so a parsed stream never reached the skip; a stream the parser did not check could. | **Fixed** in `c0145a7`: the loader refuses them too, as `YAML_JSON_ERR_MERGE` at the value. The test reaches the loader's own check, not only the parser's: it parses each shape with `merge` off, so the parser's check is skipped, then turns `stream.merge` on before the load. |
 | YJ-4 | Medium | `std/yaml-json.ts:605` (`mergeInto`) | Merging was not linear when a merge value is a shared sequence. `mergeInto` walked a sequence's items once per merge key that names it, and an item already merged into the map was skipped uncharged, so `x: &x {}`, `s: &s [*x, *x, …]` with 100,000 items (about 500 KB) and then about 35,000 maps `{<<: *s}` (about 300 KB) made the loader take about 3.5 × 10^9 steps from about 1 MB of text, all inside the budget YJ-1 added. | **Fixed** in `9efc0ea`: the walk of a merge sequence charges its item count to the same budget before it starts, past which the load is `YAML_JSON_ERR_EXPANSION` at the merge key. Before: the scaled-down test (200 items, 200 maps, `maxValues` 1,000) loaded, and its check read `expected -43, got 8388608`. After: it is refused at `<<: *s`. |
-| YJ-5 | Medium | `std/yaml.ts:3232` (`checkMerge`, called by `makePair`, `:3214`) | The parser's merge check has YJ-4's shape and runs first. For every merge pair whose value is a sequence, or an alias to one, `checkMerge` walks the sequence's items to see that each merges a map, so the input of YJ-4 costs about 3.5 × 10^9 steps in `parseYaml` before the loader is called, and the loader's budget never sees it. A program that parses with `merge` off skips the check, and with it merging. | **Open.** `std/yaml.ts` is out of this record's scope and #1072 does not change it. The fix is the parser's to make: check a sequence's items once, when the sequence is finished or the first time a merge names it, and reuse the verdict. |
+| YJ-5 | Medium | `std/yaml.ts:3232` (`checkMerge`, called by `makePair`, `:3214`) | The parser's merge check has YJ-4's shape and runs first. For every merge pair whose value is a sequence, or an alias to one, `checkMerge` walks the sequence's items to see that each merges a map, so the input of YJ-4 costs about 3.5 × 10^9 steps in `parseYaml` before the loader is called, and the loader's budget never sees it. A program that parses with `merge` off skips the check, and with it merging. | **Fixed** in this change: the first merge that names a sequence through an alias reads its items, up to the first that merges no map, and the parser keeps the verdict per sequence node (`aliasedSeqMerges`, `std/yaml.ts:3595`, against `mergeVerdicts`, `:1824`); every later alias merge of it is answered from the verdict, still reported at its alias when bad. A sequence written out at the merge key is read where it stands, linear in the text. The items read are counted in `YamlStream.mergeItemsChecked` (`:421`). Before: `x: &x {}`, `s: &s [*x × N]` and N maps `{<<: *s}` read N² items, 160,000 at N = 400, and parsed in 13, 85 and 233 ms at N = 2,000, 4,000 and 8,000 (34, 68 and 136 KB). After: N items, and 1, 2 and 5 ms. |
 
 ## Properties verified
 
@@ -76,7 +78,13 @@ check is named by its exact string.
   merge key it ran out on", "merge bomb: the walks of a shared merge sequence
   are charged", "merge bomb: at the merge key that names the sequence", and
   within the default budget "merge bomb: a shared merge sequence loads within
-  the default budget". The parser's side of the same input is YJ-5, open.
+  the default budget".
+- **The parser's merge check is linear** (YJ-5): checks of
+  `tests/link/std_yaml`, run by the check "link/std_yaml: exits with 0 and
+  stdout matches expected.out": "a merge sequence 400 merges share is read
+  once" (400 items read, not 160,000), "a bad shared merge sequence is
+  reported at each alias", "and is read once, to its bad item", and "a merge
+  sequence written out is read where it stands".
 - **A map merging itself is refused by the parser**: "merge bomb: a map
   merging itself is refused by the parser" (`YAML_JSON_ERR_YAML`) and "merge
   bomb: at the alias to the unfinished map" (`*a`, since the anchor binds only

@@ -106,6 +106,8 @@ import {
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
+// What the wasm page tests run a host module with an `enum` under: see tests/ts-transform.js.
+const TS_TRANSFORM = pathToFileURL(path.join(root, "tests", "ts-transform.js")).href
 /**
  * The compiler under test: stage1, `src/` linked by the seed once per run,
  * and every compile in this file is a spawn of it.
@@ -34312,7 +34314,7 @@ if (!only || "host-import-window".includes(only)) {
       )
       if (linked.status === 0) {
         fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\", \"stored\", \"stored\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34391,7 +34393,7 @@ if (!only || "host-import-text".includes(only)) {
         loader.split("\n").filter((line) => line.includes("text(")).join("\n")
       )
       if (linked.status === 0) {
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34514,7 +34516,7 @@ if (!only || "host-import-text".includes(only)) {
     const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", readingDir], { cwd: root, encoding: "utf8" })
     const readingRan =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(readingDir, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(readingDir, "entry.ts")], {
             cwd: readingDir,
             encoding: "utf8",
           })
@@ -34879,7 +34881,7 @@ if (!only || "host-import".includes(only)) {
             "console.log(refused)",
           ].join("\n")
         )
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34957,7 +34959,7 @@ if (!only || "host-import".includes(only)) {
     })
     const ran =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(emitted, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(emitted, "entry.ts")], {
             cwd: emitted,
             encoding: "utf8",
           })
@@ -35229,7 +35231,7 @@ if (!only || "module-storage".includes(only)) {
           ].join("\n")
         )
         const drive = (wasm) =>
-          spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
+          spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
             cwd: dir,
             encoding: "utf8",
           })
@@ -35274,7 +35276,7 @@ if (!only || "module-storage".includes(only)) {
             "",
           ].join("\n")
         )
-        const reading = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+        const reading = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -35478,7 +35480,7 @@ if (!only || "wasm-host-panic".includes(only)) {
         const drive = (wasm, what) => {
           const res = spawnSync(
             process.execPath,
-            ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
+            ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
             { cwd: dir, encoding: "utf8" }
           )
           return { res, lines: res.status === 0 ? res.stdout.trim().split("\n") : [] }
@@ -35720,7 +35722,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at("main.wasm")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at("main.wasm")], {
         cwd: dir,
         encoding: "utf8",
       })
@@ -35789,7 +35791,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
         cwd: dir,
         encoding: "utf8",
       })

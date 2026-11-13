@@ -7,7 +7,7 @@ else that turns `.ll` into machine code) needs an LLVM toolchain.
 
 ## 1. Prerequisites
 
-- **Node.js 22.18 or newer** (22 is what CI uses), for the npm route and for
+- **Node.js 22.18 or newer** (CI runs 26.13.1, the current LTS), for the npm route and for
   building from a checkout — the launcher, the postinstall step and the test
   harness are Node scripts. It is the version where Node strips TypeScript
   types without a flag, which `docs/RUN_UNDER_NODE.md` relies on. The
@@ -180,8 +180,11 @@ The attestation is a Sigstore-signed statement, made by
 `SHA256SUMS` was built by `.github/workflows/release.yml` at the release's tag
 on a GitHub-hosted runner. A failed verification refuses the install; with no
 `gh`, a signed-out one or one too old for those options, the check is skipped
-with a note saying so, and the SHA-256 still applies. The same command by hand,
-on a tarball you downloaded:
+with a note saying so, and the SHA-256 still applies. Set
+`NISH_REQUIRE_ATTESTATION=1` to refuse instead of skipping: the install then
+fails unless `gh` verifies the attestation, and refuses a release of 0.21.0 or
+older, which carries none. Every CI job that fetches a seed sets it. The same
+command by hand, on a tarball you downloaded:
 
 ```bash
 gh attestation verify nish-<version>-<asset>.tar.gz \
