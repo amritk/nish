@@ -570,12 +570,12 @@ const unboundedFinding = (walk: ArenaWalk, isMain: boolean, loop: UnboundedLoop)
   const until = keptUntil(walk.unit, walk.f, isMain, around.pass, around.block)
   const scope = around.loopScope
   // A scoped loop keeps only what its condition or update allocates.
-  const reason =
-    scope === null
-      ? "nothing proves that what a pass allocated is unreachable once it ends"
-      : scope.scoped
-        ? "it is in the loop's condition or update, which run outside the scope each pass takes"
-        : loopKeptReason(walk.unit, walk.facts, scope)
+  let reason = "nothing proves that what a pass allocated is unreachable once it ends"
+  if (scope !== null) {
+    reason = scope.scoped
+      ? "it is in the loop's condition or update, which run outside the scope each pass takes"
+      : loopKeptReason(walk.unit, walk.facts, scope)
+  }
   const what = sitePhrase(walk.program, loop.first)
   const more =
     loop.more === 0 ? " piles" : ` and ${loop.more} more allocation${loop.more === 1 ? "" : "s"} pile`
