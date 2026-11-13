@@ -214,7 +214,7 @@ struct YamlBuffer (class) size=16 align=8
   method codePoint -> @nish.YamlBuffer.codePoint
   method trimBlanks -> @nish.YamlBuffer.trimBlanks
   method text -> @nish.YamlBuffer.text
-struct YamlParser (class) size=192 align=8
+struct YamlParser (class) size=184 align=8
   field stream: YamlStream index=0 offset=0
   field text: string index=1 offset=8
   field anchorStarts: i32[] index=2 offset=16
@@ -232,27 +232,27 @@ struct YamlParser (class) size=192 align=8
   field pos: i32 index=14 offset=108 initialized
   field len: i32 index=15 offset=112 initialized
   field depth: i32 index=16 offset=116 initialized
-  field depthHit: boolean index=17 offset=120 initialized
-  field maxDepth: i32 index=18 offset=124 initialized
-  field doc: i32 index=19 offset=128 initialized
-  field flowIndent: i32 index=20 offset=132 initialized
-  field tabReportedAt: i32 index=21 offset=136 initialized
-  field commentWatermark: i32 index=22 offset=140 initialized
-  field anchorTop: i32 index=23 offset=144 initialized
-  field pendingTop: i32 index=24 offset=148 initialized
-  field scratchTop: i32 index=25 offset=152 initialized
-  field keySetTop: i32 index=26 offset=156 initialized
-  field lastErrStart: i32 index=27 offset=160 initialized
-  field lastErrEnd: i32 index=28 offset=164 initialized
-  field lineIndent: i32 index=29 offset=168 initialized
-  field lineContent: i32 index=30 offset=172 initialized
-  field markerAt: i32 index=31 offset=176 initialized
-  field flowIndentReported: boolean index=32 offset=180 initialized
-  field uniqueKeys: boolean index=33 offset=181 initialized
-  field keepComments: boolean index=34 offset=182 initialized
-  field firstOnly: boolean index=35 offset=183 initialized
-  field yamlDirective: boolean index=36 offset=184 initialized
-  field lineEof: boolean index=37 offset=185 initialized
+  field maxDepth: i32 index=17 offset=120 initialized
+  field doc: i32 index=18 offset=124 initialized
+  field flowIndent: i32 index=19 offset=128 initialized
+  field tabReportedAt: i32 index=20 offset=132 initialized
+  field commentWatermark: i32 index=21 offset=136 initialized
+  field anchorTop: i32 index=22 offset=140 initialized
+  field pendingTop: i32 index=23 offset=144 initialized
+  field scratchTop: i32 index=24 offset=148 initialized
+  field keySetTop: i32 index=25 offset=152 initialized
+  field lastErrStart: i32 index=26 offset=156 initialized
+  field lastErrEnd: i32 index=27 offset=160 initialized
+  field lineIndent: i32 index=28 offset=164 initialized
+  field lineContent: i32 index=29 offset=168 initialized
+  field markerAt: i32 index=30 offset=172 initialized
+  field depthHit: boolean index=31 offset=176 initialized
+  field flowIndentReported: boolean index=32 offset=177 initialized
+  field uniqueKeys: boolean index=33 offset=178 initialized
+  field keepComments: boolean index=34 offset=179 initialized
+  field firstOnly: boolean index=35 offset=180 initialized
+  field yamlDirective: boolean index=36 offset=181 initialized
+  field lineEof: boolean index=37 offset=182 initialized
   constructor -> @nish.YamlParser.constructor
   method loadInto -> @nish.YamlParser.loadInto
   method ended -> @nish.YamlParser.ended
@@ -1260,7 +1260,7 @@ function YamlParser.constructor(this: YamlParser, text: string, options: YamlOpt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: text
   calls: nish.YamlStream.constructor nish_alloc_struct
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   pointer options: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:19 new YamlStream -> @nish.YamlStream.constructor
@@ -1268,15 +1268,15 @@ function YamlParser.loadInto(this: YamlParser, loader: YamlJsonLoader, d: i32): 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: d loader
-  pointer this: size=192 writesThrough=true captured=false
-  pointer loader: size=272 writesThrough=true captured=true
+  pointer this: size=184 writesThrough=true captured=false
+  pointer loader: size=264 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function YamlParser.ended(this: YamlParser, node: i32): void -> @nish.YamlParser.ended [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlJsonLoader.collection
   escaping: node
   calls: nish.YamlJsonLoader.collection
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 sink: YamlJsonLoader | null (const)
   callee +2:7 YamlJsonLoader.collection -> @nish.YamlJsonLoader.collection
@@ -1285,7 +1285,7 @@ function YamlParser.error(this: YamlParser, code: i32, message: string, start: i
   sharedWrite: +0:5
   escaping: code end message start
   calls: nish.YamlStream.report
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:5 YamlStream.report -> @nish.YamlStream.report
 function YamlParser.warn(this: YamlParser, code: i32, message: string, start: i32, end: i32): void -> @nish.YamlParser.warn [method]
@@ -1293,21 +1293,21 @@ function YamlParser.warn(this: YamlParser, code: i32, message: string, start: i3
   sharedWrite: via nish.YamlStream.report
   escaping: code end message start
   calls: nish.YamlStream.report
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 YamlStream.report -> @nish.YamlStream.report
 function YamlParser.at(this: YamlParser, i: i32): i32 -> @nish.YamlParser.at [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: nish.yamlByte
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 yamlByte -> @nish.yamlByte
 function YamlParser.isSeqEntryDash(this: YamlParser, i: i32): boolean -> @nish.YamlParser.isSeqEntryDash [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: nish.YamlParser.at nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   callee +0:12 YamlParser.at -> @nish.YamlParser.at
   callee +0:40 yamlIsWs -> @nish.yamlIsWs
@@ -1316,14 +1316,14 @@ function YamlParser.crossesLine(this: YamlParser, from: i32, to: i32): boolean -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
   calls: nish.yamlLineEnd
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:25 yamlLineEnd -> @nish.yamlLineEnd
 function YamlParser.nextLineStart(this: YamlParser, from: i32): i32 -> @nish.YamlParser.nextLineStart [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.yamlAfterBreak nish.yamlLineEnd
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 e: i32 (const)
   callee +0:20 yamlLineEnd -> @nish.yamlLineEnd
@@ -1332,7 +1332,7 @@ function YamlParser.isDocMarker(this: YamlParser, i: i32): boolean -> @nish.Yaml
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: nish.YamlParser.at nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -1344,7 +1344,7 @@ function YamlParser.plainLineEnd(this: YamlParser, from: i32): i32 -> @nish.Yaml
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   local +1:9 lastNonSpace: i32 (let)
@@ -1358,7 +1358,7 @@ function YamlParser.tokenEnd(this: YamlParser, from: i32): i32 -> @nish.YamlPars
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsWs
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:29 yamlIsWs -> @nish.yamlIsWs
@@ -1367,7 +1367,7 @@ function YamlParser.propTokenEnd(this: YamlParser, from: i32, flow: boolean): i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsFlowIndicator nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:9 YamlParser.at -> @nish.YamlParser.at
@@ -1383,7 +1383,7 @@ function YamlParser.peekLine(this: YamlParser, minIndent: i32): void -> @nish.Ya
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.nextLineStart nish.YamlParser.recordComment nish.YamlParser.setLine nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.error#0 nish.YamlParser.setLine#0 nish.YamlParser.setLine#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.error#0 nish.YamlParser.setLine#0 nish.YamlParser.setLine#0
   stackSites=0 stackLocals=0
   local -32:9 p: i32 (let)
   local -30:11 i: i32 (let)
@@ -1408,13 +1408,13 @@ function YamlParser.setLine(this: YamlParser, start: i32, indent: i32, content: 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: content indent start
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function YamlParser.skipInlineSpaces(this: YamlParser): void -> @nish.YamlParser.skipInlineSpaces [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.YamlParser.at nish.yamlIsBlank nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   callee -1:12 yamlIsBlank -> @nish.yamlIsBlank
   callee -1:24 YamlParser.at -> @nish.YamlParser.at
@@ -1422,7 +1422,7 @@ function YamlParser.skipIndicatorSeparation(this: YamlParser): void -> @nish.Yam
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.findKeyColon nish.YamlParser.isSeqEntryDash nish.YamlParser.skipInlineSpaces nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.at#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.at#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.at#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.at#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee -1:12 YamlParser.at -> @nish.YamlParser.at
   callee +2:9 YamlParser.at -> @nish.YamlParser.at
@@ -1440,7 +1440,7 @@ function YamlParser.recordComment(this: YamlParser, hash: i32): void -> @nish.Ya
   sharedWrite: +0:5
   escaping: hash
   calls: nish.yamlLineEnd nish_array_grow
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 end: i32 (const)
   callee -1:22 yamlLineEnd -> @nish.yamlLineEnd
@@ -1448,7 +1448,7 @@ function YamlParser.recordTrailingComment(this: YamlParser): void -> @nish.YamlP
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.recordComment
   calls: nish.YamlParser.at nish.YamlParser.recordComment nish.yamlIsBlank nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:12 yamlIsBlank -> @nish.yamlIsBlank
@@ -1462,7 +1462,7 @@ function YamlParser.recordLineComment(this: YamlParser, from: i32): void -> @nis
   sharedWrite: via nish.YamlParser.recordComment
   escaping: from
   calls: nish.YamlParser.at nish.YamlParser.recordComment nish.yamlIsBreak nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   local +2:13 c: i32 (const)
@@ -1474,7 +1474,7 @@ function YamlParser.recordLineComment(this: YamlParser, from: i32): void -> @nis
 function YamlParser.atLineEnd(this: YamlParser): boolean -> @nish.YamlParser.atLineEnd [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.YamlParser.at nish.yamlIsBreak
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -1483,7 +1483,7 @@ function YamlParser.finishLine(this: YamlParser): void -> @nish.YamlParser.finis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.nextLineStart nish.YamlParser.recordTrailingComment
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.recordTrailingComment#0 nish.YamlParser.nextLineStart#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.recordTrailingComment#0 nish.YamlParser.nextLineStart#0
   stackSites=0 stackLocals=0
   callee -1:5 YamlParser.recordTrailingComment -> @nish.YamlParser.recordTrailingComment
   callee +0:16 YamlParser.nextLineStart -> @nish.YamlParser.nextLineStart
@@ -1491,7 +1491,7 @@ function YamlParser.finishLineIfMidLine(this: YamlParser): void -> @nish.YamlPar
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.finishLine
   calls: nish.YamlParser.at nish.YamlParser.finishLine nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.finishLine#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.finishLine#0
   stackSites=0 stackLocals=0
   callee +0:49 yamlIsBreak -> @nish.yamlIsBreak
   callee +0:61 YamlParser.at -> @nish.YamlParser.at
@@ -1500,7 +1500,7 @@ function YamlParser.checkTrailingContent(this: YamlParser): void -> @nish.YamlPa
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.skipInlineSpaces
   calls: nish.YamlParser.at nish.YamlParser.atLineEnd nish.YamlParser.error nish.YamlParser.plainLineEnd nish.YamlParser.skipInlineSpaces nish.yamlIsBlank nish.yamlIsBreak
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -1521,7 +1521,7 @@ function YamlParser.resolveTag(this: YamlParser, start: i32, end: i32): string -
   sharedWrite: via nish.YamlParser.error
   escaping: end start
   calls: nish.YamlParser.at nish.YamlParser.error nish.yamlIsFlowIndicator nish.yamlIsHandleChar nish.yamlShortenTag nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local +0:11 written: string (const)
   callee +4:9 YamlParser.at -> @nish.YamlParser.at
@@ -1549,7 +1549,7 @@ function YamlParser.reportBadAnchorName(this: YamlParser, what: string, start: i
   sharedWrite: via nish.YamlParser.error
   escaping: end start
   calls: nish.YamlParser.error nish_panic_overflow nish_str_concat nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:7 YamlParser.error -> @nish.YamlParser.error
   local +3:11 name: string (const)
@@ -1560,7 +1560,7 @@ function YamlParser.checkAmbiguousName(this: YamlParser, what: string, start: i3
   sharedWrite: via nish.YamlParser.warn
   escaping: end start
   calls: nish.YamlParser.at nish.YamlParser.warn nish_panic_overflow nish_str_concat nish_str_new
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.warn#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.warn#0
   stackSites=0 stackLocals=0
   callee +0:29 YamlParser.at -> @nish.YamlParser.at
   local +3:11 name: string (const)
@@ -1569,7 +1569,7 @@ function YamlParser.scanProps(this: YamlParser, flow: boolean): i32 -> @nish.Yam
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
   calls: nish.YamlParser.at nish.YamlParser.checkAmbiguousName nish.YamlParser.error nish.YamlParser.propTokenEnd nish.YamlParser.reportBadAnchorName nish.YamlParser.resolveTag nish.YamlParser.skipInlineSpaces nish.YamlStream.newProps nish.yamlAt nish.yamlIsBlank nish.yamlIsFlowIndicator nish.yamlPut nish.yamlStackPush nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.at#0 nish.YamlParser.propTokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.reportBadAnchorName#0 nish.YamlParser.error#0 nish.YamlParser.checkAmbiguousName#0 nish.YamlParser.error#0 nish.YamlParser.resolveTag#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.at#0 nish.YamlParser.propTokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.reportBadAnchorName#0 nish.YamlParser.error#0 nish.YamlParser.checkAmbiguousName#0 nish.YamlParser.error#0 nish.YamlParser.resolveTag#0
   stackSites=0 stackLocals=0
   local -21:11 first: i32 (const)
   callee -21:24 YamlParser.at -> @nish.YamlParser.at
@@ -1608,7 +1608,7 @@ function YamlParser.skipPropsAhead(this: YamlParser, from: i32): i32 -> @nish.Ya
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.YamlParser.propTokenEnd nish.yamlIsBlank nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.propTokenEnd#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.propTokenEnd#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   local +2:13 c: i32 (const)
@@ -1620,7 +1620,7 @@ function YamlParser.findAnchor(this: YamlParser, from: i32, to: i32): i32 -> @ni
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
   calls: nish.yamlAt nish.yamlSameBytes nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +2:11 yamlSameBytes -> @nish.yamlSameBytes
@@ -1631,7 +1631,7 @@ function YamlParser.defineAnchor(this: YamlParser, from: i32, to: i32, node: i32
   sharedWrite: +0:5
   escaping: from node slot to
   calls: nish.yamlAt nish.yamlPut nish.yamlSameBytes nish.yamlStackPush nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -3:5 yamlStackPush -> @nish.yamlStackPush
   callee -2:5 yamlStackPush -> @nish.yamlStackPush
@@ -1651,7 +1651,7 @@ function YamlParser.attachProps(this: YamlParser, node: i32, slot: i32): i32 -> 
   sharedWrite: +0:11
   escaping: node slot
   calls: nish.YamlParser.checkTaggedNode nish.YamlParser.defineAnchor nish.YamlParser.error nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.start nish.yamlAt nish.yamlPut nish.yamlPutU8
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.defineAnchor#0 nish.YamlParser.error#0 nish.YamlParser.defineAnchor#0 nish.YamlParser.checkTaggedNode#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.defineAnchor#0 nish.YamlParser.error#0 nish.YamlParser.defineAnchor#0 nish.YamlParser.checkTaggedNode#0
   stackSites=0 stackLocals=0
   local -38:11 stream: YamlStream (const)
   local -37:11 anchorFrom: i32 (const)
@@ -1691,7 +1691,7 @@ function YamlParser.reportBadEscape(this: YamlParser, at: i32): void -> @nish.Ya
   sharedWrite: via nish.YamlParser.error
   escaping: at
   calls: nish.YamlParser.at nish.YamlParser.error nish.yamlCharWidth nish.yamlHexValue nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local +0:11 e: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -1716,7 +1716,7 @@ function YamlParser.checkQuotedIndent(this: YamlParser, lineStart: i32, parentIn
   sharedWrite: +0:5
   escaping: lineStart
   calls: nish.YamlParser.at nish.YamlParser.error nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local -8:9 i: i32 (let)
   callee -7:12 YamlParser.at -> @nish.YamlParser.at
@@ -1729,7 +1729,7 @@ function YamlParser.scanQuoted(this: YamlParser, quote: i32, parentIndent: i32):
   sharedWrite: +0:5
   escaping: parentIndent
   calls: nish.YamlParser.at nish.YamlParser.checkQuotedIndent nish.YamlParser.error nish.YamlParser.isDocMarker nish.YamlParser.reportBadEscape nish.YamlStream.newNode nish.indexOfAny nish.yamlAfterBreak nish.yamlEscapeKind nish.yamlIsBreak nish.yamlPut nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.reportBadEscape#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.checkQuotedIndent#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.reportBadEscape#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.checkQuotedIndent#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local -69:11 start: i32 (const)
   local -68:11 single: boolean (const)
@@ -1760,7 +1760,7 @@ function YamlParser.scanAlias(this: YamlParser): i32 -> @nish.YamlParser.scanAli
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.checkAmbiguousName nish.YamlParser.error nish.YamlParser.findAnchor nish.YamlParser.reportBadAnchorName nish.YamlStream.newNode nish.yamlAt nish.yamlIsFlowIndicator nish.yamlIsWs nish.yamlPut nish.yamlSameBytes nish_panic_overflow nish_str_concat nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.checkAmbiguousName#0 nish.YamlParser.reportBadAnchorName#0 nish.YamlParser.findAnchor#0 nish.YamlParser.error#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.checkAmbiguousName#0 nish.YamlParser.reportBadAnchorName#0 nish.YamlParser.findAnchor#0 nish.YamlParser.error#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local -10:11 start: i32 (const)
   local -9:9 i: i32 (let)
@@ -1788,21 +1788,21 @@ function YamlParser.emptyScalar(this: YamlParser, at: i32): i32 -> @nish.YamlPar
   sharedWrite: via nish.YamlStream.newNode
   escaping: at
   calls: nish.YamlStream.newNode
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 YamlStream.newNode -> @nish.YamlStream.newNode
 function YamlParser.plainStartClass(this: YamlParser, code: i32): i32 -> @nish.YamlParser.plainStartClass [method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: code
   calls: nish.yamlIsFlowIndicator
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 yamlIsFlowIndicator -> @nish.yamlIsFlowIndicator
 function YamlParser.flowIndicatorBoundary(this: YamlParser, after: i32): boolean -> @nish.YamlParser.flowIndicatorBoundary [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: after
   calls: nish.YamlParser.at nish.yamlIsWs
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -1812,7 +1812,7 @@ function YamlParser.reportBadPlainStart(this: YamlParser, pos: i32, flow: boolea
   sharedWrite: via nish.YamlParser.error
   escaping: pos
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.flowIndicatorBoundary nish.YamlParser.plainStartClass nish.yamlIsFlowIndicator nish.yamlIsWs nish_panic_overflow nish_str_concat nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.flowIndicatorBoundary#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.flowIndicatorBoundary#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -1830,7 +1830,7 @@ function YamlParser.plainColonAt(this: YamlParser, from: i32, end: i32): i32 -> 
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsBlank
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +2:11 YamlParser.at -> @nish.YamlParser.at
@@ -1841,14 +1841,14 @@ function YamlParser.reportPlainColon(this: YamlParser, at: i32): void -> @nish.Y
   sharedWrite: via nish.YamlParser.error
   escaping: at
   calls: nish.YamlParser.error nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.error -> @nish.YamlParser.error
 function YamlParser.endsAtComment(this: YamlParser, from: i32): boolean -> @nish.YamlParser.endsAtComment [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsBlank nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:12 yamlIsBlank -> @nish.yamlIsBlank
@@ -1858,7 +1858,7 @@ function YamlParser.scanPlainScalar(this: YamlParser, parentIndent: i32): i32 ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.endsAtComment nish.YamlParser.isDocMarker nish.YamlParser.nextLineStart nish.YamlParser.plainColonAt nish.YamlParser.plainLineEnd nish.YamlParser.reportPlainColon nish.YamlStream.newNode nish.yamlIsBlank nish.yamlIsBreak nish.yamlPut nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.plainLineEnd#0 nish.YamlParser.plainColonAt#0 nish.YamlParser.reportPlainColon#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.endsAtComment#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.plainColonAt#0 nish.YamlParser.reportPlainColon#0 nish.YamlParser.nextLineStart#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.plainLineEnd#0 nish.YamlParser.plainColonAt#0 nish.YamlParser.reportPlainColon#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.at#0 nish.YamlParser.endsAtComment#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.plainColonAt#0 nish.YamlParser.reportPlainColon#0 nish.YamlParser.nextLineStart#0
   stackSites=0 stackLocals=0
   local -48:11 start: i32 (const)
   local -47:9 valueEnd: i32 (let)
@@ -1897,7 +1897,7 @@ function YamlParser.checkBlockHeaderEnd(this: YamlParser): void -> @nish.YamlPar
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.error
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.plainLineEnd nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:12 yamlIsBlank -> @nish.yamlIsBlank
@@ -1911,7 +1911,7 @@ function YamlParser.scanBlockScalar(this: YamlParser, parentIndent: i32): i32 ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.checkBlockHeaderEnd nish.YamlParser.error nish.YamlParser.finishLine nish.YamlParser.isDocMarker nish.YamlParser.nextLineStart nish.YamlStream.newNode nish.yamlIsBreak nish.yamlLineEnd nish.yamlPut nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.checkBlockHeaderEnd#0 nish.YamlParser.finishLine#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.error#0 nish.YamlParser.nextLineStart#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.error#0 nish.YamlParser.checkBlockHeaderEnd#0 nish.YamlParser.finishLine#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.error#0 nish.YamlParser.nextLineStart#0
   stackSites=0 stackLocals=0
   local -2:11 start: i32 (const)
   local -1:11 folded: boolean (const)
@@ -1955,7 +1955,7 @@ function YamlParser.readDirective(this: YamlParser, at: i32): void -> @nish.Yaml
   sharedWrite: +0:9
   escaping: at
   calls: nish.YamlParser.at nish.YamlParser.readYamlVersion nish.YamlParser.tokenEnd nish.YamlParser.warn nish.yamlIsBlank nish.yamlIsWord nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.warn#0 nish.YamlParser.warn#0 nish.YamlParser.readYamlVersion#0 nish.YamlParser.warn#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.warn#0 nish.YamlParser.warn#0 nish.YamlParser.readYamlVersion#0 nish.YamlParser.warn#0
   stackSites=0 stackLocals=0
   local -32:11 nameEnd: i32 (const)
   callee -32:26 YamlParser.tokenEnd -> @nish.YamlParser.tokenEnd
@@ -1984,7 +1984,7 @@ function YamlParser.readYamlVersion(this: YamlParser, at: i32, from: i32, to: i3
   sharedWrite: +0:5
   escaping: at from to
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.lineRestIsBlank nish.YamlParser.tokenEnd nish.YamlParser.warn nish.yamlIsBlank nish.yamlIsDigit nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.warn#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.at#0 nish.YamlParser.warn#0
   stackSites=0 stackLocals=0
   callee -2:7 YamlParser.error -> @nish.YamlParser.error
   local +1:11 version: string (const)
@@ -2011,7 +2011,7 @@ function YamlParser.quotedKeyEnd(this: YamlParser, from: i32, stopAtBreak: boole
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:11 quote: i32 (const)
   callee +0:24 YamlParser.at -> @nish.YamlParser.at
@@ -2024,7 +2024,7 @@ function YamlParser.flowKeyEnd(this: YamlParser, from: i32): i32 -> @nish.YamlPa
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.YamlParser.quotedKeyEnd nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.quotedKeyEnd#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.quotedKeyEnd#0
   stackSites=0 stackLocals=0
   local +0:9 depth: i32 (let)
   local +1:9 i: i32 (let)
@@ -2036,7 +2036,7 @@ function YamlParser.findKeyColon(this: YamlParser, from: i32): i32 -> @nish.Yaml
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.YamlParser.flowKeyEnd nish.YamlParser.quotedKeyEnd nish.yamlIsBlank nish.yamlIsBreak nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.flowKeyEnd#0 nish.YamlParser.quotedKeyEnd#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.flowKeyEnd#0 nish.YamlParser.quotedKeyEnd#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   local +1:11 first: i32 (const)
@@ -2054,7 +2054,7 @@ function YamlParser.lineRestIsBlank(this: YamlParser, from: i32): boolean -> @ni
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:12 yamlIsBlank -> @nish.yamlIsBlank
@@ -2066,7 +2066,7 @@ function YamlParser.trimEnd(this: YamlParser, from: i32, to: i32): i32 -> @nish.
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: to
   calls: nish.YamlParser.at nish.yamlIsBlank nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 e: i32 (let)
   callee +1:24 yamlIsBlank -> @nish.yamlIsBlank
@@ -2075,7 +2075,7 @@ function YamlParser.isExplicitKey(this: YamlParser, at: i32): boolean -> @nish.Y
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
   calls: nish.YamlParser.at nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   callee +0:12 YamlParser.at -> @nish.YamlParser.at
   callee +0:45 yamlIsWs -> @nish.yamlIsWs
@@ -2084,14 +2084,14 @@ function YamlParser.enterFlow(this: YamlParser, blockIndent: i32): void -> @nish
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: blockIndent
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function YamlParser.checkFlowIndent(this: YamlParser, lineStart: i32): void -> @nish.YamlParser.checkFlowIndent [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: lineStart
   calls: nish.YamlParser.at nish.YamlParser.error nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local -25:9 i: i32 (let)
   callee -24:12 YamlParser.at -> @nish.YamlParser.at
@@ -2108,7 +2108,7 @@ function YamlParser.skipFlowWs(this: YamlParser): void -> @nish.YamlParser.skipF
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.checkFlowIndent nish.YamlParser.error nish.YamlParser.isDocMarker nish.YamlParser.plainLineEnd nish.YamlParser.recordComment nish.yamlAfterBreak nish.yamlIsBlank nish.yamlIsBreak nish.yamlIsWs nish.yamlLineEnd nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.error#0 nish.YamlParser.checkFlowIndent#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.recordComment#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.error#0 nish.YamlParser.checkFlowIndent#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.recordComment#0
   stackSites=0 stackLocals=0
   local -34:9 p: i32 (let)
   local -32:13 c: i32 (const)
@@ -2131,7 +2131,7 @@ function YamlParser.flowColonEnds(this: YamlParser, after: i32): boolean -> @nis
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: after
   calls: nish.YamlParser.at nish.YamlParser.flowIndicatorBoundary
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.flowIndicatorBoundary#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.flowIndicatorBoundary#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 YamlParser.at -> @nish.YamlParser.at
@@ -2140,7 +2140,7 @@ function YamlParser.flowPlainLineEnd(this: YamlParser, from: i32, lineStart: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.at nish.YamlParser.flowColonEnds nish.indexOfAny nish.yamlIsBlank nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.flowColonEnds#0 nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.flowColonEnds#0 nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   local +2:13 hit: i32 (const)
@@ -2154,7 +2154,7 @@ function YamlParser.scanFlowPlain(this: YamlParser): i32 -> @nish.YamlParser.sca
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.YamlParser.at nish.YamlParser.checkFlowIndent nish.YamlParser.flowColonEnds nish.YamlParser.flowPlainLineEnd nish.YamlParser.isDocMarker nish.YamlParser.plainNode nish.YamlParser.trimEnd nish.yamlAfterBreak nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.flowPlainLineEnd#0 nish.YamlParser.trimEnd#0 nish.YamlParser.at#0 nish.YamlParser.plainNode#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.flowColonEnds#0 nish.YamlParser.checkFlowIndent#0 nish.YamlParser.flowPlainLineEnd#0 nish.YamlParser.trimEnd#0 nish.YamlParser.at#0 nish.YamlParser.plainNode#0 nish.YamlParser.plainNode#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.flowPlainLineEnd#0 nish.YamlParser.trimEnd#0 nish.YamlParser.at#0 nish.YamlParser.plainNode#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.flowColonEnds#0 nish.YamlParser.checkFlowIndent#0 nish.YamlParser.flowPlainLineEnd#0 nish.YamlParser.trimEnd#0 nish.YamlParser.at#0 nish.YamlParser.plainNode#0 nish.YamlParser.plainNode#0
   stackSites=0 stackLocals=0
   local -4:11 start: i32 (const)
   local -3:11 i: i32 (const)
@@ -2189,7 +2189,7 @@ function YamlParser.plainNode(this: YamlParser, start: i32, end: i32): i32 -> @n
   sharedWrite: via nish.YamlStream.newNode
   escaping: end start
   calls: nish.YamlStream.newNode nish.yamlPut
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 node: i32 (const)
@@ -2200,7 +2200,7 @@ function YamlParser.depthLimitNode(this: YamlParser): i32 -> @nish.YamlParser.de
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.emptyScalar nish.YamlParser.error nish_str_concat nish_str_from_i32
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.emptyScalar#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0 nish.YamlParser.emptyScalar#0
   stackSites=0 stackLocals=0
   local -2:11 at: i32 (const)
   callee -1:5 YamlParser.error -> @nish.YamlParser.error
@@ -2209,7 +2209,7 @@ function YamlParser.parseFlowNode(this: YamlParser): i32 -> @nish.YamlParser.par
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.skipFlowWs
   calls: nish.YamlParser.at nish.YamlParser.attachProps nish.YamlParser.parseFlowMap nish.YamlParser.parseFlowSeq nish.YamlParser.plainStartClass nish.YamlParser.reportBadPlainStart nish.YamlParser.scanAlias nish.YamlParser.scanFlowPlain nish.YamlParser.scanProps nish.YamlParser.scanQuoted nish.YamlParser.skipFlowWs
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.scanAlias#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.scanFlowPlain#0 nish.YamlParser.attachProps#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.scanAlias#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.scanFlowPlain#0 nish.YamlParser.attachProps#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.skipFlowWs -> @nish.YamlParser.skipFlowWs
   local +1:11 props: i32 (const)
@@ -2230,7 +2230,7 @@ function YamlParser.skipFlowExplicitKey(this: YamlParser): boolean -> @nish.Yaml
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.isExplicitKey nish.YamlParser.skipFlowWs nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.isExplicitKey#0 nish.YamlParser.skipFlowWs#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.isExplicitKey#0 nish.YamlParser.skipFlowWs#0
   stackSites=0 stackLocals=0
   callee -3:10 YamlParser.isExplicitKey -> @nish.YamlParser.isExplicitKey
   callee +1:5 YamlParser.skipFlowWs -> @nish.YamlParser.skipFlowWs
@@ -2239,7 +2239,7 @@ function YamlParser.checkImplicitKeyLine(this: YamlParser, afterKey: i32): void 
   sharedWrite: via nish.YamlParser.error
   escaping: afterKey
   calls: nish.YamlParser.crossesLine nish.YamlParser.error nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.crossesLine#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.crossesLine#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:9 YamlParser.crossesLine -> @nish.YamlParser.crossesLine
   callee +1:7 YamlParser.error -> @nish.YamlParser.error
@@ -2248,7 +2248,7 @@ function YamlParser.reportLongImplicitKey(this: YamlParser, keyStart: i32, colon
   sharedWrite: via nish.YamlParser.error
   escaping: keyStart
   calls: nish.YamlParser.error nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.error -> @nish.YamlParser.error
 function YamlParser.checkKeyGap(this: YamlParser, colon: i32): void -> @nish.YamlParser.checkKeyGap [method]
@@ -2256,7 +2256,7 @@ function YamlParser.checkKeyGap(this: YamlParser, colon: i32): void -> @nish.Yam
   sharedWrite: via nish.YamlParser.error
   escaping: colon
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.trimEnd nish.yamlIsBlank nish_panic_overflow nish_str_concat nish_str_new
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.trimEnd#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.trimEnd#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local +0:9 from: i32 (let)
   callee +1:12 yamlIsBlank -> @nish.yamlIsBlank
@@ -2269,14 +2269,14 @@ function YamlParser.reportPropsBeforeExplicitKey(this: YamlParser, at: i32): voi
   sharedWrite: via nish.YamlParser.error
   escaping: at
   calls: nish.YamlParser.error nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.error -> @nish.YamlParser.error
 function YamlParser.skipEmptyFlowEntry(this: YamlParser): boolean -> @nish.YamlParser.skipEmptyFlowEntry [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.error nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee -4:9 YamlParser.at -> @nish.YamlParser.at
   callee -1:5 YamlParser.error -> @nish.YamlParser.error
@@ -2284,7 +2284,7 @@ function YamlParser.parseFlowValue(this: YamlParser, close: i32): i32 -> @nish.Y
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.parseFlowNode nish.YamlParser.skipFlowWs nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.parseFlowNode#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.parseFlowNode#0
   stackSites=0 stackLocals=0
   callee +1:5 YamlParser.skipFlowWs -> @nish.YamlParser.skipFlowWs
   local +2:11 c: i32 (const)
@@ -2295,7 +2295,7 @@ function YamlParser.flowSeparator(this: YamlParser, close: i32, start: i32): boo
   sharedWrite: +0:7
   escaping: close start
   calls: nish.YamlParser.at nish.YamlParser.reportUnterminatedFlow nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.reportUnterminatedFlow#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.reportUnterminatedFlow#0
   stackSites=0 stackLocals=0
   local -2:11 c: i32 (const)
   callee -2:20 YamlParser.at -> @nish.YamlParser.at
@@ -2305,14 +2305,14 @@ function YamlParser.reportUnterminatedFlow(this: YamlParser, close: i32, start: 
   sharedWrite: via nish.YamlParser.error
   escaping: start
   calls: nish.YamlParser.error
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.error -> @nish.YamlParser.error
 function YamlParser.parseFlowSeq(this: YamlParser): i32 -> @nish.YamlParser.parseFlowSeq [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.depthLimitNode nish.YamlParser.parseFlowSeqBody nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseFlowSeqBody#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseFlowSeqBody#0
   stackSites=0 stackLocals=0
   callee -2:14 YamlParser.depthLimitNode -> @nish.YamlParser.depthLimitNode
   local +1:11 node: i32 (const)
@@ -2321,7 +2321,7 @@ function YamlParser.parseFlowSeqBody(this: YamlParser): i32 -> @nish.YamlParser.
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.checkImplicitKeyLine nish.YamlParser.finishCollection nish.YamlParser.flowSeparator nish.YamlParser.makePair nish.YamlParser.parseFlowNode nish.YamlParser.parseFlowValue nish.YamlParser.reportUnterminatedFlow nish.YamlParser.singlePairMap nish.YamlParser.skipEmptyFlowEntry nish.YamlParser.skipFlowExplicitKey nish.YamlParser.skipFlowWs nish.YamlStream.newNode nish.yamlStackPush nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.reportUnterminatedFlow#0 nish.YamlParser.skipEmptyFlowEntry#0 nish.YamlParser.skipFlowExplicitKey#0 nish.YamlParser.parseFlowNode#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.checkImplicitKeyLine#0 nish.YamlParser.parseFlowValue#0 nish.YamlParser.singlePairMap#0 nish.YamlParser.makePair#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.singlePairMap#0 nish.YamlParser.makePair#0 nish.YamlParser.flowSeparator#0 nish.YamlParser.finishCollection#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.reportUnterminatedFlow#0 nish.YamlParser.skipEmptyFlowEntry#0 nish.YamlParser.skipFlowExplicitKey#0 nish.YamlParser.parseFlowNode#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.checkImplicitKeyLine#0 nish.YamlParser.parseFlowValue#0 nish.YamlParser.singlePairMap#0 nish.YamlParser.makePair#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.singlePairMap#0 nish.YamlParser.makePair#0 nish.YamlParser.flowSeparator#0 nish.YamlParser.finishCollection#0
   stackSites=0 stackLocals=0
   local -2:11 start: i32 (const)
   local -1:11 base: i32 (const)
@@ -2355,7 +2355,7 @@ function YamlParser.singlePairMap(this: YamlParser, pair: i32): i32 -> @nish.Yam
   sharedWrite: via nish.YamlStream.newNode
   escaping: pair
   calls: nish.YamlParser.ended nish.YamlStream.end nish.YamlStream.newNode nish.YamlStream.pushKid nish.YamlStream.start nish.yamlPut
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.ended#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.ended#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 node: i32 (const)
@@ -2370,7 +2370,7 @@ function YamlParser.parseFlowMap(this: YamlParser): i32 -> @nish.YamlParser.pars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.depthLimitNode nish.YamlParser.parseFlowMapBody nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseFlowMapBody#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseFlowMapBody#0
   stackSites=0 stackLocals=0
   callee -2:14 YamlParser.depthLimitNode -> @nish.YamlParser.depthLimitNode
   local +1:11 node: i32 (const)
@@ -2379,7 +2379,7 @@ function YamlParser.parseFlowMapBody(this: YamlParser): i32 -> @nish.YamlParser.
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.YamlParser.at nish.YamlParser.finishCollection nish.YamlParser.flowSeparator nish.YamlParser.makePair nish.YamlParser.parseFlowNode nish.YamlParser.parseFlowValue nish.YamlParser.releaseKeySet nish.YamlParser.reportUnterminatedFlow nish.YamlParser.skipEmptyFlowEntry nish.YamlParser.skipFlowExplicitKey nish.YamlParser.skipFlowWs nish.YamlParser.trackKey nish.YamlStream.newNode nish.yamlStackPush nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.reportUnterminatedFlow#0 nish.YamlParser.skipEmptyFlowEntry#0 nish.YamlParser.skipFlowExplicitKey#0 nish.YamlParser.parseFlowNode#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.parseFlowValue#0 nish.YamlParser.trackKey#0 nish.YamlParser.makePair#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.flowSeparator#0 nish.YamlParser.releaseKeySet#0 nish.YamlParser.finishCollection#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.reportUnterminatedFlow#0 nish.YamlParser.skipEmptyFlowEntry#0 nish.YamlParser.skipFlowExplicitKey#0 nish.YamlParser.parseFlowNode#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.at#0 nish.YamlParser.parseFlowValue#0 nish.YamlParser.trackKey#0 nish.YamlParser.makePair#0 nish.YamlParser.skipFlowWs#0 nish.YamlParser.flowSeparator#0 nish.YamlParser.releaseKeySet#0 nish.YamlParser.finishCollection#0
   stackSites=0 stackLocals=0
   local -3:11 start: i32 (const)
   local -2:11 base: i32 (const)
@@ -2410,7 +2410,7 @@ function YamlParser.finishCollection(this: YamlParser, node: i32, base: i32): vo
   sharedWrite: +0:5
   escaping: base node
   calls: nish.YamlParser.ended nish.YamlStream.pushKid nish.yamlAt nish.yamlPut nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.ended#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.ended#0
   stackSites=0 stackLocals=0
   local -12:11 stream: YamlStream (const)
   local -11:9 first: i32 (let)
@@ -2426,7 +2426,7 @@ function YamlParser.makePair(this: YamlParser, key: i32, value: i32): i32 -> @ni
   sharedWrite: via nish.YamlStream.newNode
   escaping: key value
   calls: nish.YamlParser.checkMerge nish.YamlParser.isMergeKey nish.YamlStream.end nish.YamlStream.newNode nish.YamlStream.start nish.yamlPut
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.isMergeKey#0 nish.YamlParser.checkMerge#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.isMergeKey#0 nish.YamlParser.checkMerge#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 end: i32 (const)
@@ -2444,7 +2444,7 @@ function YamlParser.checkMerge(this: YamlParser, key: i32, value: i32): void -> 
   sharedWrite: +0:9
   escaping: key value
   calls: nish.YamlParser.aliasedSeqMerges nish.YamlParser.badMerge nish.YamlParser.mergesMap nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.start nish.YamlStream.target nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.badMerge#0 nish.YamlParser.aliasedSeqMerges#0 nish.YamlParser.badMerge#0 nish.YamlParser.mergesMap#0 nish.YamlParser.badMerge#0 nish.YamlParser.mergesMap#0 nish.YamlParser.badMerge#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.badMerge#0 nish.YamlParser.aliasedSeqMerges#0 nish.YamlParser.badMerge#0 nish.YamlParser.mergesMap#0 nish.YamlParser.badMerge#0 nish.YamlParser.mergesMap#0 nish.YamlParser.badMerge#0
   stackSites=0 stackLocals=0
   local -18:11 stream: YamlStream (const)
   callee -16:7 YamlParser.badMerge -> @nish.YamlParser.badMerge
@@ -2477,7 +2477,7 @@ function YamlParser.aliasedSeqMerges(this: YamlParser, seq: i32): boolean -> @ni
   sharedWrite: +0:5
   escaping: seq
   calls: nish.YamlParser.mergesMap nish.YamlStream.child nish.YamlStream.count nish.yamlRoomU8 nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.mergesMap#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.mergesMap#0
   stackSites=0 stackLocals=0
   local -1:11 stream: YamlStream (const)
   callee +0:26 yamlRoomU8 -> @nish.yamlRoomU8
@@ -2493,7 +2493,7 @@ function YamlParser.mergesMap(this: YamlParser, n: i32): boolean -> @nish.YamlPa
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: nish.YamlStream.kind nish.YamlStream.target
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   callee +1:9 YamlStream.kind -> @nish.YamlStream.kind
@@ -2506,21 +2506,21 @@ function YamlParser.badMerge(this: YamlParser, start: i32, end: i32): void -> @n
   sharedWrite: via nish.YamlParser.error
   escaping: end start
   calls: nish.YamlParser.error
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.error -> @nish.YamlParser.error
 function YamlParser.isMergeKey(this: YamlParser, key: i32): boolean -> @nish.YamlParser.isMergeKey [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: nish.yamlIsMergeKey
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 yamlIsMergeKey -> @nish.yamlIsMergeKey
 function YamlParser.sameKeyBytes(this: YamlParser, a: i32, b: i32): boolean -> @nish.YamlParser.sameKeyBytes [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.start nish.YamlStream.style nish.YamlStream.tag nish.yamlSameBytes nish_str_eq
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   callee +2:7 YamlStream.kind -> @nish.YamlStream.kind
@@ -2539,7 +2539,7 @@ function YamlParser.trackKey(this: YamlParser, base: i32, key: i32, set: i32): i
   sharedWrite: +0:9
   escaping: base key set
   calls: nish.YamlKeySet.add nish.YamlKeySet.constructor nish.YamlParser.isMergeKey nish.YamlParser.reportDuplicateKey nish.YamlParser.sameKeyBytes nish.YamlStream.key nish.YamlStream.keyName nish.yamlAt nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.isMergeKey#0 nish.YamlParser.sameKeyBytes#0 nish.YamlParser.isMergeKey#0 nish.YamlParser.reportDuplicateKey#0 nish.YamlParser.isMergeKey#0 nish.YamlParser.reportDuplicateKey#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.isMergeKey#0 nish.YamlParser.sameKeyBytes#0 nish.YamlParser.isMergeKey#0 nish.YamlParser.reportDuplicateKey#0 nish.YamlParser.isMergeKey#0 nish.YamlParser.reportDuplicateKey#0
   stackSites=0 stackLocals=0
   callee -30:29 YamlParser.isMergeKey -> @nish.YamlParser.isMergeKey
   local -27:11 stream: YamlStream (const)
@@ -2572,7 +2572,7 @@ function YamlParser.releaseKeySet(this: YamlParser, set: i32): void -> @nish.Yam
   sharedWrite: +0:7
   escaping: set
   calls: nish.YamlKeySet.clear nish_panic_index
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:7 YamlKeySet.clear -> @nish.YamlKeySet.clear
 function YamlParser.reportDuplicateKey(this: YamlParser, key: i32): void -> @nish.YamlParser.reportDuplicateKey [method]
@@ -2580,7 +2580,7 @@ function YamlParser.reportDuplicateKey(this: YamlParser, key: i32): void -> @nis
   sharedWrite: via nish.YamlParser.error
   escaping: key
   calls: nish.YamlParser.error nish.YamlStream.end nish.YamlStream.start nish.yamlKeyText nish_str_concat
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   callee +1:5 YamlParser.error -> @nish.YamlParser.error
@@ -2591,7 +2591,7 @@ function YamlParser.docMarkerInlineNode(this: YamlParser, marker: i32): i32 -> @
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.YamlParser.at nish.YamlParser.nextLineStart nish.YamlParser.recordComment nish.yamlIsBlank nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0 nish.YamlParser.nextLineStart#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.recordComment#0 nish.YamlParser.nextLineStart#0
   stackSites=0 stackLocals=0
   local -9:9 i: i32 (let)
   callee -8:12 yamlIsBlank -> @nish.yamlIsBlank
@@ -2605,7 +2605,7 @@ function YamlParser.opensBlockMapping(this: YamlParser, from: i32): boolean -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.findKeyColon nish.YamlParser.isExplicitKey nish.YamlParser.skipPropsAhead
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.skipPropsAhead#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.findKeyColon#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.skipPropsAhead#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.findKeyColon#0
   stackSites=0 stackLocals=0
   local +0:11 p: i32 (const)
   callee +0:20 YamlParser.skipPropsAhead -> @nish.YamlParser.skipPropsAhead
@@ -2615,7 +2615,7 @@ function YamlParser.checkDocEndTail(this: YamlParser, marker: i32): void -> @nis
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.error
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.lineRestIsBlank nish.YamlParser.plainLineEnd nish.yamlIsBlank nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
   stackSites=0 stackLocals=0
   callee +0:9 YamlParser.lineRestIsBlank -> @nish.YamlParser.lineRestIsBlank
   local +3:9 after: i32 (let)
@@ -2627,7 +2627,7 @@ function YamlParser.onlyEmptyDocumentsFollow(this: YamlParser, from: i32): boole
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish.YamlParser.isDocMarker nish.YamlParser.lineRestIsBlank nish.YamlParser.nextLineStart nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.nextLineStart#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.nextLineStart#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +2:12 YamlParser.lineRestIsBlank -> @nish.YamlParser.lineRestIsBlank
@@ -2639,7 +2639,7 @@ function YamlParser.parseDocMarkerNode(this: YamlParser, contentPos: i32): i32 -
   sharedWrite: +0:5
   escaping: contentPos
   calls: nish.YamlParser.error nish.YamlParser.isSeqEntryDash nish.YamlParser.opensBlockMapping nish.YamlParser.parseNode nish.YamlParser.plainLineEnd
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.opensBlockMapping#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.parseNode#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.opensBlockMapping#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.parseNode#0
   stackSites=0 stackLocals=0
   local -11:11 seq: boolean (const)
   callee -11:26 YamlParser.isSeqEntryDash -> @nish.YamlParser.isSeqEntryDash
@@ -2652,7 +2652,7 @@ function YamlParser.parseBareRoot(this: YamlParser, contentPos: i32, indent: i32
   sharedWrite: +0:5
   escaping: contentPos indent
   calls: nish.YamlParser.checkRootTabIndent nish.YamlParser.parseNode
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.checkRootTabIndent#0 nish.YamlParser.parseNode#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.checkRootTabIndent#0 nish.YamlParser.parseNode#0
   stackSites=0 stackLocals=0
   callee -2:7 YamlParser.checkRootTabIndent -> @nish.YamlParser.checkRootTabIndent
   callee +1:12 YamlParser.parseNode -> @nish.YamlParser.parseNode
@@ -2661,7 +2661,7 @@ function YamlParser.checkRootTabIndent(this: YamlParser, contentPos: i32): void 
   sharedWrite: +0:7
   escaping: contentPos
   calls: nish.YamlParser.at nish.YamlParser.error nish.YamlParser.isSeqEntryDash nish.YamlParser.opensBlockMapping
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.opensBlockMapping#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.at#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.opensBlockMapping#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local -10:11 lineStart: i32 (const)
   local -9:9 tab: i32 (let)
@@ -2672,7 +2672,7 @@ function YamlParser.checkRootTabIndent(this: YamlParser, contentPos: i32): void 
 function YamlParser.atMarkerLine(this: YamlParser): boolean -> @nish.YamlParser.atMarkerLine [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.YamlParser.isDocMarker
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.isDocMarker#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.isDocMarker#0
   stackSites=0 stackLocals=0
   callee +0:54 YamlParser.isDocMarker -> @nish.YamlParser.isDocMarker
 function YamlParser.checkTaggedNode(this: YamlParser, node: i32, slot: i32): void -> @nish.YamlParser.checkTaggedNode [method]
@@ -2680,7 +2680,7 @@ function YamlParser.checkTaggedNode(this: YamlParser, node: i32, slot: i32): voi
   sharedWrite: via nish.YamlParser.warn
   escaping: node slot
   calls: nish.YamlParser.warn nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.start nish.YamlStream.tag nish.YamlStream.text nish.YamlStream.type nish.yamlAt nish_str_concat nish_str_eq
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.warn#0 nish.YamlParser.warn#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.warn#0 nish.YamlParser.warn#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 tag: string (const)
@@ -2702,7 +2702,7 @@ function YamlParser.checkDocumentEnd(this: YamlParser): i32 -> @nish.YamlParser.
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.finishLineIfMidLine
   calls: nish.YamlParser.atMarkerLine nish.YamlParser.error nish.YamlParser.finishLineIfMidLine nish.YamlParser.peekLine nish.YamlParser.plainLineEnd nish.YamlParser.warnIfMoreDocuments
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.warnIfMoreDocuments#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.warnIfMoreDocuments#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.finishLineIfMidLine -> @nish.YamlParser.finishLineIfMidLine
   callee +1:5 YamlParser.peekLine -> @nish.YamlParser.peekLine
@@ -2715,7 +2715,7 @@ function YamlParser.warnIfMoreDocuments(this: YamlParser, marker: i32): i32 -> @
   sharedWrite: +0:5
   escaping: marker
   calls: nish.YamlParser.at nish.YamlParser.checkDocEndTail nish.YamlParser.lineRestIsBlank nish.YamlParser.nextLineStart nish.YamlParser.onlyEmptyDocumentsFollow nish.YamlParser.peekLine nish.YamlParser.recordLineComment nish.YamlParser.warn nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.recordLineComment#0 nish.YamlParser.at#0 nish.YamlParser.checkDocEndTail#0 nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.peekLine#0 nish.YamlParser.onlyEmptyDocumentsFollow#0 nish.YamlParser.warn#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.recordLineComment#0 nish.YamlParser.at#0 nish.YamlParser.checkDocEndTail#0 nish.YamlParser.lineRestIsBlank#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.peekLine#0 nish.YamlParser.onlyEmptyDocumentsFollow#0 nish.YamlParser.warn#0
   stackSites=0 stackLocals=0
   callee -8:5 YamlParser.recordLineComment -> @nish.YamlParser.recordLineComment
   local -7:11 footer: boolean (const)
@@ -2732,7 +2732,7 @@ function YamlParser.skipStreamHead(this: YamlParser, closed: boolean): i32 -> @n
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.YamlParser.at nish.YamlParser.atMarkerLine nish.YamlParser.checkDocEndTail nish.YamlParser.docMarkerInlineNode nish.YamlParser.error nish.YamlParser.nextLineStart nish.YamlParser.peekLine nish.YamlParser.readDirective nish.YamlParser.recordLineComment nish.YamlParser.tokenEnd nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.peekLine#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.readDirective#0 nish.YamlParser.recordLineComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.checkDocEndTail#0 nish.YamlParser.recordLineComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.docMarkerInlineNode#0 nish.YamlParser.error#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.peekLine#0 nish.YamlParser.at#0 nish.YamlParser.error#0 nish.YamlParser.tokenEnd#0 nish.YamlParser.readDirective#0 nish.YamlParser.recordLineComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.checkDocEndTail#0 nish.YamlParser.recordLineComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.docMarkerInlineNode#0 nish.YamlParser.error#0
   stackSites=0 stackLocals=0
   local -21:9 seen: i32 (let)
   local -20:9 sawDirective: boolean (let)
@@ -2756,7 +2756,7 @@ function YamlParser.skipBom(this: YamlParser): void -> @nish.YamlParser.skipBom 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.yamlByte
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -4:7 yamlByte -> @nish.yamlByte
   callee -3:7 yamlByte -> @nish.yamlByte
@@ -2765,7 +2765,7 @@ function YamlParser.parseFirst(this: YamlParser): void -> @nish.YamlParser.parse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.skipBom
   calls: nish.YamlParser.atMarkerLine nish.YamlParser.checkDocumentEnd nish.YamlParser.parseBareRoot nish.YamlParser.parseDocMarkerNode nish.YamlParser.peekLine nish.YamlParser.pushDocument nish.YamlParser.skipBom nish.YamlParser.skipStreamHead
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipBom#0 nish.YamlParser.skipStreamHead#0 nish.YamlParser.parseDocMarkerNode#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.parseBareRoot#0 nish.YamlParser.checkDocumentEnd#0 nish.YamlParser.pushDocument#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipBom#0 nish.YamlParser.skipStreamHead#0 nish.YamlParser.parseDocMarkerNode#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.parseBareRoot#0 nish.YamlParser.checkDocumentEnd#0 nish.YamlParser.pushDocument#0
   stackSites=0 stackLocals=0
   callee +0:5 YamlParser.skipBom -> @nish.YamlParser.skipBom
   local +1:11 markers: i32 (const)
@@ -2782,7 +2782,7 @@ function YamlParser.parseAll(this: YamlParser): void -> @nish.YamlParser.parseAl
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.YamlParser.at nish.YamlParser.atMarkerLine nish.YamlParser.checkDocEndTail nish.YamlParser.error nish.YamlParser.finishLineIfMidLine nish.YamlParser.nextLineStart nish.YamlParser.parseBareRoot nish.YamlParser.parseDocMarkerNode nish.YamlParser.peekLine nish.YamlParser.plainLineEnd nish.YamlParser.pushDocument nish.YamlParser.recordLineComment nish.YamlParser.skipBom nish.YamlParser.skipStreamHead nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipBom#0 nish.YamlParser.skipStreamHead#0 nish.YamlParser.parseDocMarkerNode#0 nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.parseBareRoot#0 nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.at#0 nish.YamlParser.checkDocEndTail#0 nish.YamlParser.recordLineComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.pushDocument#0 nish.YamlParser.pushDocument#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipBom#0 nish.YamlParser.skipStreamHead#0 nish.YamlParser.parseDocMarkerNode#0 nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.error#0 nish.YamlParser.plainLineEnd#0 nish.YamlParser.parseBareRoot#0 nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.atMarkerLine#0 nish.YamlParser.at#0 nish.YamlParser.checkDocEndTail#0 nish.YamlParser.recordLineComment#0 nish.YamlParser.nextLineStart#0 nish.YamlParser.pushDocument#0 nish.YamlParser.pushDocument#0
   stackSites=0 stackLocals=0
   callee -3:5 YamlParser.skipBom -> @nish.YamlParser.skipBom
   local -2:9 closed: boolean (let)
@@ -2819,7 +2819,7 @@ function YamlParser.pushDocument(this: YamlParser, root: i32, footerEnd: i32): v
   sharedWrite: +0:5
   escaping: footerEnd root
   calls: nish.YamlStream.end nish.YamlStream.start nish_array_grow nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -18:11 stream: YamlStream (const)
   local -17:9 start: i32 (let)
@@ -2831,7 +2831,7 @@ function YamlParser.parsePropsOnlyValue(this: YamlParser, props: i32, parentInde
   sharedWrite: +0:7
   escaping: parentIndent props seqAtParentIndent
   calls: nish.YamlParser.attachProps nish.YamlParser.emptyScalar nish.YamlParser.finishLine nish.YamlParser.isSeqEntryDash nish.YamlParser.parseBlockSeq nish.YamlParser.parseNode nish.YamlParser.peekLine nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.finishLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseNode#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.attachProps#0 nish.YamlParser.emptyScalar#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.finishLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseNode#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.attachProps#0 nish.YamlParser.emptyScalar#0
   stackSites=0 stackLocals=0
   local -4:11 propsEnd: i32 (const)
   callee -3:5 YamlParser.finishLine -> @nish.YamlParser.finishLine
@@ -2848,7 +2848,7 @@ function YamlParser.parseInlineValue(this: YamlParser, parentIndent: i32): i32 -
   sharedWrite: via nish.YamlParser.scanProps
   escaping: parentIndent
   calls: nish.YamlParser.at nish.YamlParser.atLineEnd nish.YamlParser.attachProps nish.YamlParser.checkTrailingContent nish.YamlParser.enterFlow nish.YamlParser.parseFlowMap nish.YamlParser.parseFlowSeq nish.YamlParser.parsePropsOnlyValue nish.YamlParser.plainStartClass nish.YamlParser.reportBadPlainStart nish.YamlParser.scanAlias nish.YamlParser.scanBlockScalar nish.YamlParser.scanPlainScalar nish.YamlParser.scanProps nish.YamlParser.scanQuoted nish.YamlParser.skipInlineSpaces
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.parsePropsOnlyValue#0 nish.YamlParser.at#0 nish.YamlParser.scanAlias#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.scanBlockScalar#0 nish.YamlParser.enterFlow#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.scanPlainScalar#0 nish.YamlParser.attachProps#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.parsePropsOnlyValue#0 nish.YamlParser.at#0 nish.YamlParser.scanAlias#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.scanBlockScalar#0 nish.YamlParser.enterFlow#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.scanPlainScalar#0 nish.YamlParser.attachProps#0
   stackSites=0 stackLocals=0
   local +0:11 props: i32 (const)
   callee +0:24 YamlParser.scanProps -> @nish.YamlParser.scanProps
@@ -2875,7 +2875,7 @@ function YamlParser.columnOf(this: YamlParser, at: i32): i32 -> @nish.YamlParser
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
   calls: nish.YamlParser.at nish.yamlIsBreak nish_panic_overflow
-  pointer this: size=192 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.YamlParser.at#0
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +1:22 yamlIsBreak -> @nish.yamlIsBreak
@@ -2884,7 +2884,7 @@ function YamlParser.parseCompactCollection(this: YamlParser): i32 -> @nish.YamlP
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlParser.parseBlockSeq
   calls: nish.YamlParser.attachProps nish.YamlParser.columnOf nish.YamlParser.findKeyColon nish.YamlParser.isExplicitKey nish.YamlParser.isSeqEntryDash nish.YamlParser.parseBlockMap nish.YamlParser.parseBlockSeq nish.YamlParser.reportPropsBeforeExplicitKey nish.YamlParser.scanProps nish.YamlParser.skipInlineSpaces nish.YamlParser.skipPropsAhead
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.skipPropsAhead#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.columnOf#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.reportPropsBeforeExplicitKey#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.parseBlockMap#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.skipPropsAhead#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.columnOf#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.reportPropsBeforeExplicitKey#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.parseBlockMap#0
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   local +1:11 seq: boolean (const)
@@ -2911,7 +2911,7 @@ function YamlParser.parseValueOrChild(this: YamlParser, indent: i32, compact: bo
   sharedWrite: +0:9
   escaping: indent
   calls: nish.YamlParser.atLineEnd nish.YamlParser.finishLine nish.YamlParser.finishLineIfMidLine nish.YamlParser.isSeqEntryDash nish.YamlParser.parseBlockSeq nish.YamlParser.parseCompactCollection nish.YamlParser.parseInlineValue nish.YamlParser.parseNode nish.YamlParser.peekLine nish.YamlParser.skipIndicatorSeparation nish.YamlParser.skipInlineSpaces nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.skipIndicatorSeparation#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.finishLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.parseNode#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.parseCompactCollection#0 nish.YamlParser.parseInlineValue#0 nish.YamlParser.finishLineIfMidLine#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.skipIndicatorSeparation#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.finishLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.parseNode#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.parseCompactCollection#0 nish.YamlParser.parseInlineValue#0 nish.YamlParser.finishLineIfMidLine#0
   stackSites=0 stackLocals=0
   callee -8:7 YamlParser.skipIndicatorSeparation -> @nish.YamlParser.skipIndicatorSeparation
   callee -6:7 YamlParser.skipInlineSpaces -> @nish.YamlParser.skipInlineSpaces
@@ -2931,7 +2931,7 @@ function YamlParser.parseBlockMap(this: YamlParser, indent: i32, firstColon: i32
   sharedWrite: +0:5
   escaping: firstColon firstKey firstProps indent
   calls: nish.YamlParser.depthLimitNode nish.YamlParser.parseBlockMapBody nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseBlockMapBody#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseBlockMapBody#0
   stackSites=0 stackLocals=0
   callee -2:14 YamlParser.depthLimitNode -> @nish.YamlParser.depthLimitNode
   local +1:11 node: i32 (const)
@@ -2941,7 +2941,7 @@ function YamlParser.parseBlockMapBody(this: YamlParser, indent: i32, firstColon:
   sharedWrite: +0:7
   escaping: firstColon firstKey firstProps indent
   calls: nish.YamlParser.at nish.YamlParser.attachProps nish.YamlParser.emptyScalar nish.YamlParser.findKeyColon nish.YamlParser.finishCollection nish.YamlParser.isDocMarker nish.YamlParser.isExplicitKey nish.YamlParser.isSeqEntryDash nish.YamlParser.makePair nish.YamlParser.parseImplicitKey nish.YamlParser.parseValueOrChild nish.YamlParser.peekLine nish.YamlParser.releaseKeySet nish.YamlParser.reportPropsBeforeExplicitKey nish.YamlParser.scanProps nish.YamlParser.skipInlineSpaces nish.YamlParser.trackKey nish.YamlStream.end nish.YamlStream.newNode nish.YamlStream.start nish.yamlAt nish.yamlIsWs nish.yamlStackPush nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.parseValueOrChild#0 nish.YamlParser.trackKey#0 nish.YamlParser.makePair#0 nish.YamlParser.peekLine#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.at#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.reportPropsBeforeExplicitKey#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.parseValueOrChild#0 nish.YamlParser.emptyScalar#0 nish.YamlParser.attachProps#0 nish.YamlParser.peekLine#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.parseValueOrChild#0 nish.YamlParser.parseImplicitKey#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseValueOrChild#0 nish.YamlParser.trackKey#0 nish.YamlParser.makePair#0 nish.YamlParser.releaseKeySet#0 nish.YamlParser.finishCollection#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.parseValueOrChild#0 nish.YamlParser.trackKey#0 nish.YamlParser.makePair#0 nish.YamlParser.peekLine#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.isDocMarker#0 nish.YamlParser.at#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.reportPropsBeforeExplicitKey#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.parseValueOrChild#0 nish.YamlParser.emptyScalar#0 nish.YamlParser.attachProps#0 nish.YamlParser.peekLine#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.parseValueOrChild#0 nish.YamlParser.parseImplicitKey#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseValueOrChild#0 nish.YamlParser.trackKey#0 nish.YamlParser.makePair#0 nish.YamlParser.releaseKeySet#0 nish.YamlParser.finishCollection#0
   stackSites=0 stackLocals=0
   local -8:11 stream: YamlStream (const)
   local -7:11 base: i32 (const)
@@ -2999,7 +2999,7 @@ function YamlParser.parseImplicitKey(this: YamlParser, indent: i32, from: i32, c
   sharedWrite: +0:5
   escaping: colon from indent
   calls: nish.YamlParser.at nish.YamlParser.checkKeyGap nish.YamlParser.crossesLine nish.YamlParser.enterFlow nish.YamlParser.error nish.YamlParser.parseFlowMap nish.YamlParser.parseFlowSeq nish.YamlParser.plainNode nish.YamlParser.plainStartClass nish.YamlParser.reportBadPlainStart nish.YamlParser.reportLongImplicitKey nish.YamlParser.scanAlias nish.YamlParser.scanQuoted nish.YamlParser.trimEnd nish.YamlStream.end nish.YamlStream.start nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.reportLongImplicitKey#0 nish.YamlParser.at#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.crossesLine#0 nish.YamlParser.error#0 nish.YamlParser.scanAlias#0 nish.YamlParser.enterFlow#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.plainNode#0 nish.YamlParser.trimEnd#0 nish.YamlParser.checkKeyGap#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.reportLongImplicitKey#0 nish.YamlParser.at#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.crossesLine#0 nish.YamlParser.error#0 nish.YamlParser.scanAlias#0 nish.YamlParser.enterFlow#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.plainNode#0 nish.YamlParser.trimEnd#0 nish.YamlParser.checkKeyGap#0
   stackSites=0 stackLocals=0
   callee -2:7 YamlParser.reportLongImplicitKey -> @nish.YamlParser.reportLongImplicitKey
   local +1:11 c: i32 (const)
@@ -3027,7 +3027,7 @@ function YamlParser.parseBlockSeq(this: YamlParser, indent: i32): i32 -> @nish.Y
   sharedWrite: +0:5
   escaping: indent
   calls: nish.YamlParser.depthLimitNode nish.YamlParser.parseBlockSeqBody nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseBlockSeqBody#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.depthLimitNode#0 nish.YamlParser.parseBlockSeqBody#0
   stackSites=0 stackLocals=0
   callee -2:14 YamlParser.depthLimitNode -> @nish.YamlParser.depthLimitNode
   local +1:11 node: i32 (const)
@@ -3037,7 +3037,7 @@ function YamlParser.parseBlockSeqBody(this: YamlParser, indent: i32): i32 -> @ni
   sharedWrite: +0:7
   escaping: indent
   calls: nish.YamlParser.at nish.YamlParser.atLineEnd nish.YamlParser.emptyScalar nish.YamlParser.finishCollection nish.YamlParser.finishLine nish.YamlParser.finishLineIfMidLine nish.YamlParser.isSeqEntryDash nish.YamlParser.parseNode nish.YamlParser.peekLine nish.YamlParser.scanBlockScalar nish.YamlParser.skipIndicatorSeparation nish.YamlStream.end nish.YamlStream.newNode nish.yamlAt nish.yamlStackPush nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.peekLine#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.skipIndicatorSeparation#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.finishLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.parseNode#0 nish.YamlParser.emptyScalar#0 nish.YamlParser.at#0 nish.YamlParser.scanBlockScalar#0 nish.YamlParser.parseNode#0 nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.finishCollection#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.peekLine#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.skipIndicatorSeparation#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.finishLine#0 nish.YamlParser.peekLine#0 nish.YamlParser.parseNode#0 nish.YamlParser.emptyScalar#0 nish.YamlParser.at#0 nish.YamlParser.scanBlockScalar#0 nish.YamlParser.parseNode#0 nish.YamlParser.finishLineIfMidLine#0 nish.YamlParser.finishCollection#0
   stackSites=0 stackLocals=0
   local -21:11 stream: YamlStream (const)
   local -20:11 base: i32 (const)
@@ -3071,7 +3071,7 @@ function YamlParser.parseNode(this: YamlParser, indent: i32, parentIndent: i32, 
   sharedWrite: +0:9
   escaping: indent parentIndent seqAtParentIndent
   calls: nish.YamlParser.at nish.YamlParser.atLineEnd nish.YamlParser.attachProps nish.YamlParser.checkTrailingContent nish.YamlParser.crossesLine nish.YamlParser.enterFlow nish.YamlParser.error nish.YamlParser.findKeyColon nish.YamlParser.isExplicitKey nish.YamlParser.isSeqEntryDash nish.YamlParser.parseBlockMap nish.YamlParser.parseBlockSeq nish.YamlParser.parseFlowMap nish.YamlParser.parseFlowSeq nish.YamlParser.parsePropsOnlyValue nish.YamlParser.plainStartClass nish.YamlParser.reportBadPlainStart nish.YamlParser.reportPropsBeforeExplicitKey nish.YamlParser.scanAlias nish.YamlParser.scanBlockScalar nish.YamlParser.scanPlainScalar nish.YamlParser.scanProps nish.YamlParser.scanQuoted nish.YamlParser.skipInlineSpaces nish.YamlStream.end nish.YamlStream.start nish.yamlIsWs nish_panic_overflow
-  pointer this: size=192 writesThrough=true captured=false passedTo=nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.error#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.parsePropsOnlyValue#0 nish.YamlParser.at#0 nish.YamlParser.scanAlias#0 nish.YamlParser.enterFlow#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.attachProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.crossesLine#0 nish.YamlParser.error#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.attachProps#0 nish.YamlParser.scanBlockScalar#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.reportPropsBeforeExplicitKey#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.attachProps#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.attachProps#0 nish.YamlParser.scanPlainScalar#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.parseBlockSeq#0 nish.YamlParser.scanProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.isSeqEntryDash#0 nish.YamlParser.error#0 nish.YamlParser.atLineEnd#0 nish.YamlParser.parsePropsOnlyValue#0 nish.YamlParser.at#0 nish.YamlParser.scanAlias#0 nish.YamlParser.enterFlow#0 nish.YamlParser.parseFlowSeq#0 nish.YamlParser.parseFlowMap#0 nish.YamlParser.attachProps#0 nish.YamlParser.skipInlineSpaces#0 nish.YamlParser.at#0 nish.YamlParser.at#0 nish.YamlParser.crossesLine#0 nish.YamlParser.error#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.attachProps#0 nish.YamlParser.scanBlockScalar#0 nish.YamlParser.isExplicitKey#0 nish.YamlParser.reportPropsBeforeExplicitKey#0 nish.YamlParser.attachProps#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.findKeyColon#0 nish.YamlParser.parseBlockMap#0 nish.YamlParser.attachProps#0 nish.YamlParser.scanQuoted#0 nish.YamlParser.checkTrailingContent#0 nish.YamlParser.plainStartClass#0 nish.YamlParser.reportBadPlainStart#0 nish.YamlParser.attachProps#0 nish.YamlParser.scanPlainScalar#0
   stackSites=0 stackLocals=0
   callee -39:9 YamlParser.isSeqEntryDash -> @nish.YamlParser.isSeqEntryDash
   callee -38:14 YamlParser.parseBlockSeq -> @nish.YamlParser.parseBlockSeq
@@ -3461,7 +3461,7 @@ function parseYamlInto(text: string, loader: YamlJsonLoader, d: i32): YamlStream
   sharedWrite: via nish.YamlParser.loadInto
   escaping: d text
   calls: nish.YamlParser.constructor nish.YamlParser.loadInto nish.YamlParser.parseAll nish.YamlStream.sortDiagnostics
-  pointer loader: size=272 writesThrough=true captured=true passedTo=nish.YamlParser.loadInto#1
+  pointer loader: size=264 writesThrough=true captured=true passedTo=nish.YamlParser.loadInto#1
   stackSites=2 stackLocals=1
   local +0:9 parser: YamlParser (const)
   callee +0:30 new YamlParser -> @nish.YamlParser.constructor
@@ -3727,7 +3727,7 @@ const YAML_JSON_DASH: i32 = 45
 const YAML_JSON_DOT: i32 = 46
 const YAML_JSON_ZERO: i32 = 48
 const YAML_JSON_LT: i32 = 60
-struct YamlJsonLoader (class) size=272 align=8 exported
+struct YamlJsonLoader (class) size=264 align=8 exported
   field maxDepth: i32 index=0 offset=0 initialized
   field failed: i32 index=1 offset=4 initialized
   field errorStart: i32 index=2 offset=8 initialized
@@ -3737,39 +3737,39 @@ struct YamlJsonLoader (class) size=272 align=8 exported
   field sizes: i32[] index=6 offset=32
   field counted: i32[] index=7 offset=40
   field countedTop: i32 index=8 offset=48 initialized
-  field pending: i32[] index=9 offset=56
-  field cap: i32 index=10 offset=64 initialized
-  field bigAlias: i32 index=11 offset=68 initialized
-  field bigSize: i32 index=12 offset=72 initialized
-  field copying: i32 index=13 offset=76 initialized
-  field byteCap: i32 index=14 offset=80 initialized
-  field entryTop: i32 index=15 offset=84 initialized
-  field entryKeys: string[] index=16 offset=88
-  field entryPairs: i32[] index=17 offset=96
-  field entryValues: i32[] index=18 offset=104
-  field seen: Map<string, i32> index=19 offset=112
-  field mergeMarks: i32[] index=20 offset=120
-  field mergeStamp: i32 index=21 offset=128 initialized
-  field mergeBudget: i32 index=22 offset=132 initialized
-  field entryStarts: i32[] index=23 offset=136
-  field entryEnds: i32[] index=24 offset=144
-  field entryBytes: i32[] index=25 offset=152
-  field pass: i32 index=26 offset=160 initialized
-  field flags: i32[] index=27 offset=168
-  field totals: i32[] index=28 offset=176
-  field heights: i32[] index=29 offset=184
-  field charges: i32[] index=30 offset=192
-  field chains: i32[] index=31 offset=200
-  field stamps: i32[] index=32 offset=208
-  field values: i32[] index=33 offset=216
-  field bytes: i32[] index=34 offset=224
-  field memberBase: i32[] index=35 offset=232
-  field memberKeys: string[] index=36 offset=240
-  field memberBytes: i32[] index=37 offset=248
-  field memberTop: i32 index=38 offset=256 initialized
-  field lastBytes: i32 index=39 offset=260 initialized
-  field directLoaded: boolean index=40 offset=264 initialized
-  field direct: boolean index=41 offset=265 initialized
+  field pass: i32 index=9 offset=52 initialized
+  field pending: i32[] index=10 offset=56
+  field cap: i32 index=11 offset=64 initialized
+  field bigAlias: i32 index=12 offset=68 initialized
+  field bigSize: i32 index=13 offset=72 initialized
+  field copying: i32 index=14 offset=76 initialized
+  field byteCap: i32 index=15 offset=80 initialized
+  field entryTop: i32 index=16 offset=84 initialized
+  field entryKeys: string[] index=17 offset=88
+  field entryPairs: i32[] index=18 offset=96
+  field entryValues: i32[] index=19 offset=104
+  field seen: Map<string, i32> index=20 offset=112
+  field mergeMarks: i32[] index=21 offset=120
+  field mergeStamp: i32 index=22 offset=128 initialized
+  field mergeBudget: i32 index=23 offset=132 initialized
+  field entryStarts: i32[] index=24 offset=136
+  field entryEnds: i32[] index=25 offset=144
+  field entryBytes: i32[] index=26 offset=152
+  field flags: i32[] index=27 offset=160
+  field totals: i32[] index=28 offset=168
+  field heights: i32[] index=29 offset=176
+  field charges: i32[] index=30 offset=184
+  field chains: i32[] index=31 offset=192
+  field stamps: i32[] index=32 offset=200
+  field values: i32[] index=33 offset=208
+  field bytes: i32[] index=34 offset=216
+  field memberBase: i32[] index=35 offset=224
+  field memberKeys: string[] index=36 offset=232
+  field memberBytes: i32[] index=37 offset=240
+  field memberTop: i32 index=38 offset=248 initialized
+  field lastBytes: i32 index=39 offset=252 initialized
+  field directLoaded: boolean index=40 offset=256 initialized
+  field direct: boolean index=41 offset=257 initialized
   constructor -> @nish.YamlJsonLoader.constructor
   method load -> @nish.YamlJsonLoader.load
   method loadText -> @nish.YamlJsonLoader.loadText
@@ -3816,7 +3816,7 @@ function YamlJsonLoader.constructor(this: YamlJsonLoader): void -> @nish.YamlJso
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.parseYaml
   calls: nish.JsonDocument.constructor nish.JsonLimits.constructor nish.Map$str$i32.constructor nish.parseYaml nish_alloc_struct
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=264 writesThrough=true captured=false
   stackSites=1 stackLocals=0
   callee +0:19 parseYaml -> @nish.parseYaml
   callee +1:16 new JsonDocument -> @nish.JsonDocument.constructor
@@ -3827,7 +3827,7 @@ function YamlJsonLoader.load(this: YamlJsonLoader, stream: YamlStream, d: i32, d
   sharedWrite: +0:5
   escaping: d doc stream
   calls: nish.JsonDocument.clear nish.YamlJsonLoader.build nish.YamlJsonLoader.count nish.YamlJsonLoader.fail nish.YamlJsonLoader.nullAt nish.YamlStream.diagnosticCount nish.YamlStream.diagnosticDocument nish.YamlStream.diagnosticEnd nish.YamlStream.diagnosticIsWarning nish.YamlStream.diagnosticStart nish.YamlStream.documentCount nish.YamlStream.documentRoot nish.YamlStream.documentStart nish.YamlStream.end nish.YamlStream.start nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.count#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.build#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.count#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.build#0
   pointer stream: size=296 writesThrough=true captured=true passedTo=nish.YamlStream.documentCount#0 nish.YamlStream.diagnosticCount#0 nish.YamlStream.diagnosticDocument#0 nish.YamlStream.diagnosticIsWarning#0 nish.YamlStream.diagnosticStart#0 nish.YamlStream.diagnosticEnd#0 nish.YamlStream.documentRoot#0 nish.YamlStream.documentStart#0 nish.YamlStream.documentStart#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.YamlStream.start#0 nish.YamlStream.end#0
   pointer doc: size=248 writesThrough=true captured=true passedTo=nish.JsonDocument.clear#0
   stackSites=0 stackLocals=0
@@ -3862,7 +3862,7 @@ function YamlJsonLoader.loadText(this: YamlJsonLoader, text: string, d: i32, doc
   sharedWrite: +0:5
   escaping: d doc text
   calls: nish.JsonDocument.clear nish.YamlJsonLoader.directRoot nish.YamlJsonLoader.load nish.parseYamlInto nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=true passedTo=nish.parseYamlInto#1 nish.YamlJsonLoader.directRoot#0 nish.YamlJsonLoader.load#0
+  pointer this: size=264 writesThrough=true captured=true passedTo=nish.parseYamlInto#1 nish.YamlJsonLoader.directRoot#0 nish.YamlJsonLoader.load#0
   pointer doc: size=248 writesThrough=true captured=true passedTo=nish.JsonDocument.clear#0 nish.YamlJsonLoader.load#3
   stackSites=0 stackLocals=0
   callee +4:5 JsonDocument.clear -> @nish.JsonDocument.clear
@@ -3876,7 +3876,7 @@ function YamlJsonLoader.collection(this: YamlJsonLoader, stream: YamlStream, n: 
   sharedWrite: +0:5
   escaping: n stream
   calls: nish.YamlJsonLoader.mapCounts nish.YamlJsonLoader.seqCounts nish.YamlJsonLoader.sweepMap nish.YamlStream.kind nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.mapCounts#0 nish.YamlJsonLoader.seqCounts#0 nish.YamlJsonLoader.sweepMap#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.mapCounts#0 nish.YamlJsonLoader.seqCounts#0 nish.YamlJsonLoader.sweepMap#0
   pointer stream: size=296 writesThrough=true captured=true passedTo=nish.YamlStream.kind#0
   stackSites=0 stackLocals=0
   local +1:11 flags: i32[] (const)
@@ -3893,7 +3893,7 @@ function YamlJsonLoader.directRoot(this: YamlJsonLoader, d: i32): i32 -> @nish.Y
   sharedWrite: via nish.YamlJsonLoader.valueOf
   escaping: d
   calls: nish.YamlJsonLoader.home nish.YamlJsonLoader.valueOf nish.YamlStream.diagnosticCount nish.YamlStream.diagnosticDocument nish.YamlStream.diagnosticIsWarning nish.YamlStream.documentCount nish.YamlStream.documentRoot
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.valueOf#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.valueOf#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   callee +1:23 YamlStream.documentCount -> @nish.YamlStream.documentCount
@@ -3909,7 +3909,7 @@ function YamlJsonLoader.home(this: YamlJsonLoader, c: i32): i32 -> @nish.YamlJso
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
   calls: nish.YamlStream.kind nish.YamlStream.resolved
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:9 r: i32 (let)
@@ -3921,7 +3921,7 @@ function YamlJsonLoader.counts(this: YamlJsonLoader, h: i32): boolean -> @nish.Y
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: h
   calls: nish.YamlStream.kind
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:22 YamlStream.kind -> @nish.YamlStream.kind
 function YamlJsonLoader.seqCounts(this: YamlJsonLoader, n: i32, budget: i32): boolean -> @nish.YamlJsonLoader.seqCounts [exported method]
@@ -3929,7 +3929,7 @@ function YamlJsonLoader.seqCounts(this: YamlJsonLoader, n: i32, budget: i32): bo
   sharedWrite: +0:5
   escaping: n
   calls: nish.YamlJsonLoader.counts nish.YamlJsonLoader.home nish.YamlStream.child nish.YamlStream.count nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.counts#0
+  pointer this: size=264 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.counts#0
   stackSites=0 stackLocals=0
   local -20:11 stream: YamlStream (const)
   local -19:9 size: i32 (let)
@@ -3946,7 +3946,7 @@ function YamlJsonLoader.mapCounts(this: YamlJsonLoader, n: i32, budget: i32): bo
   sharedWrite: +0:9
   escaping: n
   calls: nish.YamlJsonLoader.counts nish.YamlJsonLoader.home nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeCharge nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.value nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.counts#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.counts#0 nish.YamlJsonLoader.mergeCharge#0 nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.mergeCharge#0
+  pointer this: size=264 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.counts#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.counts#0 nish.YamlJsonLoader.mergeCharge#0 nish.YamlJsonLoader.home#0 nish.YamlJsonLoader.mergeCharge#0
   stackSites=0 stackLocals=0
   local -17:11 stream: YamlStream (const)
   local -16:9 size: i32 (let)
@@ -3983,7 +3983,7 @@ function YamlJsonLoader.mergeCharge(this: YamlJsonLoader, m: i32): i32 -> @nish.
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: m
   calls: nish.YamlStream.count nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 YamlStream.count -> @nish.YamlStream.count
 function YamlJsonLoader.sweepSeq(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJsonLoader.sweepSeq [exported method]
@@ -3991,7 +3991,7 @@ function YamlJsonLoader.sweepSeq(this: YamlJsonLoader, n: i32): i32 -> @nish.Yam
   sharedWrite: +0:5
   escaping: n
   calls: nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.newArray nish.JsonDocument.placeRange nish.JsonDocument.reserve nish.YamlJsonLoader.pushEntry nish.YamlJsonLoader.valueOf nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.start nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.valueOf#0 nish.YamlJsonLoader.pushEntry#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.valueOf#0 nish.YamlJsonLoader.pushEntry#0
   stackSites=0 stackLocals=0
   local -13:11 stream: YamlStream (const)
   local -12:11 doc: JsonDocument (const)
@@ -4021,7 +4021,7 @@ function YamlJsonLoader.sweepMap(this: YamlJsonLoader, n: i32): i32 -> @nish.Yam
   sharedWrite: +0:5
   escaping: n
   calls: nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.memberSlot nish.JsonDocument.newObject nish.JsonDocument.placeKeyRange nish.JsonDocument.placeRange nish.JsonDocument.reserve nish.JsonDocument.storeText nish.Map$str$i32.clear nish.YamlJsonLoader.findEntry nish.YamlJsonLoader.mergeMembers nish.YamlJsonLoader.pushEntry nish.YamlJsonLoader.valueOf nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.keyName nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start nish.YamlStream.value nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.valueOf#0 nish.YamlJsonLoader.pushEntry#0 nish.YamlJsonLoader.mergeMembers#0 nish.YamlJsonLoader.mergeMembers#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.valueOf#0 nish.YamlJsonLoader.pushEntry#0 nish.YamlJsonLoader.mergeMembers#0 nish.YamlJsonLoader.mergeMembers#0
   stackSites=0 stackLocals=0
   local -40:11 stream: YamlStream (const)
   local -39:11 doc: JsonDocument (const)
@@ -4082,7 +4082,7 @@ function YamlJsonLoader.mergeMembers(this: YamlJsonLoader, base: i32, m: i32): b
   sharedWrite: via nish.JsonDocument.copyMember
   escaping: base m
   calls: nish.JsonDocument.copyMember nish.JsonDocument.keyEnd nish.JsonDocument.keyStart nish.JsonDocument.length nish.YamlJsonLoader.findEntry nish.YamlJsonLoader.pushEntry nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.pushEntry#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.pushEntry#0
   stackSites=0 stackLocals=0
   local +0:11 doc: JsonDocument (const)
   local +1:11 o: i32 (const)
@@ -4102,7 +4102,7 @@ function YamlJsonLoader.pushEntry(this: YamlJsonLoader, base: i32, key: string, 
   sharedWrite: +0:7
   escaping: key keyEnd keyStart size v
   calls: nish.Map$str$i32.set nish_array_grow nish_panic_index
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -3:11 e: i32 (const)
   callee +16:7 Map<string, i32>.set -> @nish.Map$str$i32.set
@@ -4111,7 +4111,7 @@ function YamlJsonLoader.valueOf(this: YamlJsonLoader, c: i32, at: i32): i32 -> @
   sharedWrite: +0:5
   escaping: at c
   calls: nish.JsonDocument.copyValue nish.JsonDocument.index nish.JsonDocument.newNull nish.JsonDocument.placeRange nish.YamlJsonLoader.buildScalar nish.YamlJsonLoader.sweepSeq nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.buildScalar#0 nish.YamlJsonLoader.sweepSeq#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.buildScalar#0 nish.YamlJsonLoader.sweepSeq#0
   stackSites=0 stackLocals=0
   local -2:11 stream: YamlStream (const)
   local -1:11 doc: JsonDocument (const)
@@ -4141,7 +4141,7 @@ function YamlJsonLoader.fail(this: YamlJsonLoader, code: i32, start: i32, end: i
   sharedWrite: +0:5
   escaping: code end start
   calls: nish.JsonDocument.clear
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +4:5 JsonDocument.clear -> @nish.JsonDocument.clear
 function YamlJsonLoader.ranged(this: YamlJsonLoader, v: i32, start: i32, end: i32): i32 -> @nish.YamlJsonLoader.ranged [exported method]
@@ -4149,7 +4149,7 @@ function YamlJsonLoader.ranged(this: YamlJsonLoader, v: i32, start: i32, end: i3
   sharedWrite: via nish.YamlJsonLoader.fail
   escaping: end start v
   calls: nish.JsonDocument.setRange nish.YamlJsonLoader.fail
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   callee +0:14 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
   local +2:11 code: i32 (const)
@@ -4160,7 +4160,7 @@ function YamlJsonLoader.nullAt(this: YamlJsonLoader, at: i32): i32 -> @nish.Yaml
   sharedWrite: via nish.YamlJsonLoader.ranged
   escaping: at
   calls: nish.JsonDocument.newNull nish.YamlJsonLoader.ranged
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.ranged#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.ranged#0
   stackSites=0 stackLocals=0
   callee +0:12 YamlJsonLoader.ranged -> @nish.YamlJsonLoader.ranged
   callee +0:24 JsonDocument.newNull -> @nish.JsonDocument.newNull
@@ -4169,7 +4169,7 @@ function YamlJsonLoader.count(this: YamlJsonLoader, root: i32, cap: i32): i32 ->
   sharedWrite: +0:7
   escaping: cap root
   calls: nish.YamlJsonLoader.pushNode nish.YamlJsonLoader.pushParts nish.YamlJsonLoader.sizeOf nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushParts#0 nish.YamlJsonLoader.sizeOf#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushParts#0 nish.YamlJsonLoader.sizeOf#0
   stackSites=0 stackLocals=0
   local -4:11 stream: YamlStream (const)
   local -3:11 nodes: i32 (const)
@@ -4189,14 +4189,14 @@ function YamlJsonLoader.pushNode(this: YamlJsonLoader, top: i32, n: i32): i32 ->
   sharedWrite: +0:7
   escaping: n top
   calls: nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function YamlJsonLoader.pushParts(this: YamlJsonLoader, top: i32, n: i32): i32 -> @nish.YamlJsonLoader.pushParts [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlJsonLoader.pushNode
   escaping: n top
   calls: nish.YamlJsonLoader.pushNode nish.YamlStream.child nish.YamlStream.count nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.value
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0
+  pointer this: size=264 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 kind: i32 (const)
@@ -4218,7 +4218,7 @@ function YamlJsonLoader.sizeOf(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJ
   sharedWrite: +0:9
   escaping: n
   calls: nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.partSize nish.YamlJsonLoader.plus nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.value nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0
   stackSites=0 stackLocals=0
   local -5:11 stream: YamlStream (const)
   local -4:11 kind: i32 (const)
@@ -4253,13 +4253,13 @@ function YamlJsonLoader.partSize(this: YamlJsonLoader, n: i32): i32 -> @nish.Yam
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 size: i32 (const)
 function YamlJsonLoader.plus(this: YamlJsonLoader, a: i32, b: i32): i32 -> @nish.YamlJsonLoader.plus [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 sum: i32 (const)
 function YamlJsonLoader.build(this: YamlJsonLoader, n: i32, depth: i32): i32 -> @nish.YamlJsonLoader.build [exported method]
@@ -4267,7 +4267,7 @@ function YamlJsonLoader.build(this: YamlJsonLoader, n: i32, depth: i32): i32 -> 
   sharedWrite: +0:7
   escaping: n
   calls: nish.YamlJsonLoader.buildMap nish.YamlJsonLoader.buildScalar nish.YamlJsonLoader.buildSeq nish.YamlJsonLoader.fail nish.YamlJsonLoader.ranged nish.YamlJsonLoader.tooMuchText nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.buildMap#0 nish.YamlJsonLoader.buildSeq#0 nish.YamlJsonLoader.buildScalar#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.ranged#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.buildMap#0 nish.YamlJsonLoader.buildSeq#0 nish.YamlJsonLoader.buildScalar#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.ranged#0
   stackSites=0 stackLocals=0
   local -6:11 stream: YamlStream (const)
   local -5:11 at: i32 (const)
@@ -4295,7 +4295,7 @@ function YamlJsonLoader.tooMuchText(this: YamlJsonLoader, n: i32): i32 -> @nish.
   sharedWrite: via nish.YamlJsonLoader.fail
   escaping: n
   calls: nish.YamlJsonLoader.fail nish.YamlStream.end nish.YamlStream.start
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 a: i32 (const)
@@ -4310,7 +4310,7 @@ function YamlJsonLoader.buildScalar(this: YamlJsonLoader, at: i32): i32 -> @nish
   sharedWrite: via nish.YamlStream.type
   escaping: at
   calls: nish.JsonDocument.newBoolean nish.JsonDocument.newNull nish.JsonDocument.newNumber nish.JsonDocument.newString nish.YamlJsonLoader.fail nish.YamlStream.boolValue nish.YamlStream.end nish.YamlStream.start nish.YamlStream.text nish.YamlStream.type nish.yamlJsonNumber nish_str_eq
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 doc: JsonDocument (const)
@@ -4336,7 +4336,7 @@ function YamlJsonLoader.buildSeq(this: YamlJsonLoader, at: i32, depth: i32): i32
   sharedWrite: via nish.JsonDocument.newArray
   escaping: at depth
   calls: nish.JsonDocument.newArray nish.JsonDocument.push nish.YamlJsonLoader.build nish.YamlJsonLoader.fail nish.YamlJsonLoader.nullAt nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.start
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 doc: JsonDocument (const)
@@ -4363,7 +4363,7 @@ function YamlJsonLoader.buildMap(this: YamlJsonLoader, at: i32, depth: i32): i32
   sharedWrite: +0:5
   escaping: at depth
   calls: nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.newObject nish.JsonDocument.setKeyRange nish.JsonDocument.storeText nish.Map$str$i32.clear nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.build nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.markMerged nish.YamlJsonLoader.mergeInto nish.YamlJsonLoader.newMergeStamp nish.YamlJsonLoader.nullAt nish.YamlJsonLoader.tooMuchText nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.newMergeStamp#0 nish.YamlJsonLoader.markMerged#0 nish.YamlJsonLoader.mergeInto#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.newMergeStamp#0 nish.YamlJsonLoader.markMerged#0 nish.YamlJsonLoader.mergeInto#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local -46:11 stream: YamlStream (const)
   local -45:11 doc: JsonDocument (const)
@@ -4416,7 +4416,7 @@ function YamlJsonLoader.mergeInto(this: YamlJsonLoader, base: i32, at: i32, hops
   sharedWrite: +0:11
   escaping: at base
   calls: nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeMap nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start nish.YamlStream.value nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local -15:11 stream: YamlStream (const)
   local -14:14 i: i32 (let)
@@ -4460,7 +4460,7 @@ function YamlJsonLoader.mergeMap(this: YamlJsonLoader, base: i32, pair: i32, m: 
   sharedWrite: +0:5
   escaping: base hops m pair
   calls: nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.markMerged nish.YamlJsonLoader.mergeInto nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.markMerged#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.mergeInto#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.markMerged#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.mergeInto#0
   stackSites=0 stackLocals=0
   local -4:11 stream: YamlStream (const)
   callee -3:10 YamlJsonLoader.markMerged -> @nish.YamlJsonLoader.markMerged
@@ -4480,7 +4480,7 @@ function YamlJsonLoader.newMergeStamp(this: YamlJsonLoader): void -> @nish.YamlJ
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -3:11 nodes: i32 (const)
   local -2:11 marks: i32[] (const)
@@ -4489,7 +4489,7 @@ function YamlJsonLoader.markMerged(this: YamlJsonLoader, n: i32): boolean -> @ni
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: n
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:11 marks: i32[] (const)
 function YamlJsonLoader.addEntry(this: YamlJsonLoader, base: i32, pair: i32, own: boolean): i32 -> @nish.YamlJsonLoader.addEntry [exported method]
@@ -4497,7 +4497,7 @@ function YamlJsonLoader.addEntry(this: YamlJsonLoader, base: i32, pair: i32, own
   sharedWrite: +0:7
   escaping: base pair
   calls: nish.Map$str$i32.set nish.YamlJsonLoader.fail nish.YamlJsonLoader.findEntry nish.YamlStream.end nish.YamlStream.key nish.YamlStream.keyName nish.YamlStream.start nish.YamlStream.value nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local -12:11 stream: YamlStream (const)
   local -11:11 keyNode: i32 (const)
@@ -4520,7 +4520,7 @@ function YamlJsonLoader.findEntry(this: YamlJsonLoader, base: i32, key: string):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: base key
   calls: nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish_panic_index nish_panic_overflow nish_str_eq
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 top: i32 (const)
   local +1:11 scanned: i32 (const)
@@ -4531,7 +4531,7 @@ function YamlJsonLoader.isMergeKey(this: YamlJsonLoader, key: i32): boolean -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.start nish.YamlStream.style nish.YamlStream.tag nish_panic_index nish_panic_overflow nish_str_eq
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   callee +1:37 YamlStream.kind -> @nish.YamlStream.kind
