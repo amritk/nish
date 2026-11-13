@@ -14355,6 +14355,23 @@ if (dealtHere("arrayChecks")) {
       )
     }
 
+    // A vector store cannot write a class field either: `emitVectorAccess` tags it as
+    // the element data a scalar access of its lane type is (src/emit-arrays.ts).
+    // Untagged, `opt -O3` reloads `this.count` after every `store(v, this.out, i)` in
+    // `@Sink.fill`; tagged, it promotes the field to a register for the whole loop.
+    const vectorReloadLl = path.join(buildDir, "simd_store_field_reload.ll")
+    if (has("opt") && fs.existsSync(vectorReloadLl)) {
+      const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", vectorReloadLl])
+      const body = String(o.stdout).match(/define[^\n]*@Sink\.fill\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loop = body.slice(body.indexOf("\nwhile.body:"), body.indexOf("\nwhile.end:"))
+      const reloads = loop.match(/= load i32, ptr %this\b/g) ?? []
+      check(
+        "simd_store_field_reload: opt -O3 keeps the field in a register across the vector store",
+        o.status === 0 && body !== "" && loop.includes("store <16 x i8>") && reloads.length === 0,
+        o.status === 0 ? `field loads in the loop: ${reloads.length}\n${body}` : String(o.stderr)
+      )
+    }
+
     // A class-field store cannot write an array header, and the header's own `!tbaa`
     // subtree is what tells LLVM so (`headerTbaa`, src/tbaa.ts). Without it `opt -O3`
     // reloads `this.piles`'s `data` after `top.next = null` and again after
@@ -29072,13 +29089,13 @@ if (!only || "sandbox dependency grants".includes(only)) {
     const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
     if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
     const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
-    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
-    const build = (fixture, flags) => {
+    /** Builds <from>/<fixture> (tests/link by default) with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags, from = linkDir) => {
       const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
       const exe = path.join(out, "app")
       const r = spawnSync(
         NISH,
-        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        [path.join(from, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
         { cwd: root, encoding: "utf8" }
       )
       if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
@@ -29280,6 +29297,330 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rBothSh.stdout === "sh-ran\n0\n",
         `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
       )
+      // SBX-1's residual, fixed (docs/security/sandbox.md): Landlock grants
+      // EXECUTE on the loader to the whole tree, so a granted program that
+      // executes a path from its arguments reached the loader and, through
+      // it, any binary. Under an exec allowlist a spawn's child now completes
+      // one exec, the granted program's own start, and nothing below it execs
+      // again. The granted program here is one this check builds, so that the
+      // checks run on every machine with clang; `find` and `env`, two tools of
+      // different shape, follow where the machine has them.
+      const once = "sandbox_dep_exec_once"
+      const onceTo = "sandbox_dep_exec_once_to"
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here. */
+      const withHelper = (fixture, grants) => {
+        const copy = `${fixture}_helper`
+        const to = path.join(dir, copy)
+        fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
+        fs.mkdirSync(path.join(to, "bin"), { recursive: true })
+        const src = path.join(to, "exec-args.c")
+        fs.writeFileSync(
+          src,
+          "#include <errno.h>\n#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n" +
+            "#include <sys/prctl.h>\n#include <sys/stat.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n" +
+            "#include <linux/filter.h>\n#include <linux/seccomp.h>\n" +
+            "int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n" +
+            // `--listener <flags>`: the errno of installing an allow-all
+            // seccomp filter with those flags (8 is NEW_LISTENER), 0 for none.
+            '  if (!strcmp(argv[1], "--listener") && argc > 2) {\n' +
+            "    struct sock_filter allow = BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);\n" +
+            "    struct sock_fprog prog = {1, &allow};\n    prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);\n" +
+            "    return syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, atoi(argv[2]), &prog) < 0 ? errno : 0;\n  }\n" +
+            // `--sigblk`: how many signals this program was started with blocked.
+            '  if (!strcmp(argv[1], "--sigblk")) {\n    int n = 0;\n    sigset_t now;\n' +
+            "    sigprocmask(SIG_BLOCK, 0, &now);\n    for (int sig = 1; sig < 65; sig++) n += sigismember(&now, sig) == 1;\n    return n;\n  }\n" +
+            // `--block <program...>`: that program, started with SIGUSR1 blocked.
+            '  if (!strcmp(argv[1], "--block") && argc > 2) {\n    sigset_t usr;\n    sigemptyset(&usr);\n' +
+            "    sigaddset(&usr, SIGUSR1);\n    sigprocmask(SIG_BLOCK, &usr, 0);\n    argv++;\n  }\n" +
+            // `--fds`: how many descriptors from 3 up this program was started
+            // with that are not regular files (a pipe, a seccomp listener).
+            '  if (!strcmp(argv[1], "--fds")) {\n    int n = 0;\n    struct stat st;\n' +
+            "    for (int fd = 3; fd < 1024; fd++) n += !fstat(fd, &st) && !S_ISREG(st.st_mode);\n    return n;\n  }\n" +
+            '  execv(argv[1], argv + 1);\n  perror("exec-args");\n  return 111;\n}\n'
+        )
+        const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
+        const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
+        manifest.nish.capabilities.dependencies.pkg_runner = ["process.spawn=./bin/exec-args", ...grants]
+        fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
+        return cc.status === 0 ? copy : null
+      }
+      const helped = withHelper(once, [])
+      const hAllow = helped === null ? null : build(helped, ["--sandbox"], dir)
+      const hOpen = helped === null ? null : build(helped, [], dir)
+      const helper = helped === null ? "" : fs.realpathSync(path.join(dir, helped, "bin", "exec-args"))
+      const hList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(helped === null ? "" : ir(helped))
+      const hLoaders = hList === null ? [] : hList[1].split("\\00").filter((p) => p.startsWith("//"))
+      if (hAllow === null || hOpen === null || hLoaders.length === 0 || ungrantedCc.status !== 0) {
+        skip(
+          `sandbox dependency grants: clang could not build the granted exec-args helper or the ungranted program, or the helper has no ELF loader on the allowlist (${hLoaders.length}); one exec per spawn is not checked`
+        )
+      } else {
+        const loader = hLoaders[0].slice(1)
+        // One check per spawn builtin: each reaches `nish_spawn_start` with
+        // its own file actions. `sync`, `fds` and `spawn` leave the child's
+        // stdout on the check's pipe; a captured run answers the byte count.
+        // 111 is the helper's status when its exec fails.
+        for (const [how, builtin, held, ran] of [
+          ["sync", "spawnSync", "111\n", "sbx-1\n0\n"],
+          ["piped", "spawnPiped", "111 0\n", "0 6\n"],
+          ["within", "spawnPipedWithin", "111 0\n", "0 6\n"],
+          ["fds", "spawnWithFds", "111\n", "sbx-1\n0\n"],
+          ["spawn", "spawn", "111\n", "sbx-1\n0\n"],
+        ]) {
+          const rHeld = run(hAllow, [how, helper, loader, ungranted])
+          const rRan = run(hOpen, [how, helper, loader, ungranted])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              rHeld.stdout === held &&
+              rRan.status === 0 &&
+              rRan.stdout === ran,
+            `${helper} ${loader} ${ungranted}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        const rSelf = run(hAllow, ["sync", helper, helper])
+        const rSelfPlain = run(hOpen, ["sync", helper, helper])
+        check(
+          "sandbox dependency grants: a granted program cannot exec itself again (SBX-1)",
+          rSelf.status === 0 &&
+            rSelf.stdout === "111\n" &&
+            rSelf.stderr.includes("exec-args: ") &&
+            rSelfPlain.status === 0 &&
+            rSelfPlain.stdout === "0\n",
+          `${said(rSelf)}\n--- without --sandbox\n${said(rSelfPlain)}`
+        )
+        // The granted program still starts, and starts again: no state of one
+        // spawn (the filter, the listener) is left on the program's thread.
+        const rPlainStart = run(hAllow, ["sync", helper])
+        check(
+          "sandbox dependency grants: a granted program that execs nothing runs as before",
+          rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
+          said(rPlainStart)
+        )
+        // The rule the one exec rests on: a second listener anywhere in the
+        // subtree is refused (EBUSY, 16). The kernel lets the newest filter's
+        // "continue" stand for every filter's, so a granted program with a
+        // listener of its own would answer its children's execs itself. 8 is
+        // NEW_LISTENER; 25 adds TSYNC and TSYNC_ESRCH, the one other spelling
+        // the kernel takes it in (Linux 5.7). Without `--sandbox` the same
+        // call succeeds, which is what makes the EBUSY this filter's; where it
+        // does not (an older kernel, a launcher's own listener above the
+        // suite) that spelling is not judged.
+        const listeners = [8, 25].map((flags) => [
+          flags,
+          run(hAllow, ["sync", helper, "--listener", String(flags)]),
+          run(hOpen, ["sync", helper, "--listener", String(flags)]),
+        ])
+        const judged = listeners.filter(([, , plain]) => plain.status === 0 && plain.stdout === "0\n")
+        if (judged.length === 0 || judged[0][0] !== 8) {
+          skip(
+            `sandbox dependency grants: this machine installs no seccomp listener without --sandbox either (${listeners.map(([flags, , plain]) => `${flags}: ${plain.stdout.trim()}`).join(", ")}); the refusal of a second listener is not checked`
+          )
+        } else {
+          check(
+            "sandbox dependency grants: a granted program cannot install a seccomp listener of its own (SBX-1)",
+            judged.every(([, held]) => held.status === 0 && held.signal === null && held.stdout === "16\n"),
+            listeners
+              .map(([flags, held, plain]) => `flags ${flags}\n${said(held)}\n--- without --sandbox\n${said(plain)}`)
+              .join("\n")
+          )
+        }
+        // The two threads a spawn runs on block every signal, so the program's
+        // handlers never run in their private descriptor table; the child is
+        // handed the calling thread's mask, not theirs. Here the program is
+        // started with SIGUSR1 blocked and its child counts what it was
+        // started with blocked: that one signal, with `--sandbox` as without.
+        for (const [how, builtin] of [
+          ["sync", "spawnSync"],
+          ["spawn", "spawn"],
+        ]) {
+          const rMask = run(helper, ["--block", hAllow, how, helper, "--sigblk"])
+          const rMaskPlain = run(helper, ["--block", hOpen, how, helper, "--sigblk"])
+          const rNone = run(hAllow, [how, helper, "--sigblk"])
+          const maskShown = `${said(rMask)}\n--- without --sandbox\n${said(rMaskPlain)}\n--- nothing blocked\n${said(rNone)}`
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} starts with the caller's signal mask (SBX-1)`,
+            rMask.status === 0 && rMask.stdout === "1\n" && rMaskPlain.stdout === "1\n" && rNone.stdout === "0\n",
+            maskShown
+          )
+        }
+        // A kernel that takes the filter and not the "continue" answer (Linux
+        // 5.0 to 5.4), read on this one: the runtime built with
+        // -DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1 has that answer fail, and with
+        // =2 the error answer after it too, which leaves killing the child.
+        // The child holds the listener as well until its exec commits, so a
+        // supervisor that only closed its own copy would leave the child in
+        // its exec and the spawn waiting for good: the run's timeout would end
+        // it with a signal. Each spawn answers its refusal instead, the second
+        // one too, and the program goes on.
+        const refusedLine =
+          "nish: --sandbox: cannot hold a spawned program to one exec, so the spawn is refused (EINVAL)\n"
+        // The two paths answer different numbers through `spawn`: ENOSYS (38)
+        // is the child's own failed exec, as `posix_spawn` reports it, and
+        // ECHILD (10) the child killed and reaped.
+        for (const [sim, how, errno] of [
+          [1, "fails the child's exec", 38],
+          [2, "kills and reaps the child", 10],
+        ]) {
+          const exe = path.join(dir, `no-continue-${sim}`)
+          const rt = runtimeObjects([`-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=${sim}`])
+          const from = path.join(dir, `${helped}-sandbox`)
+          const lls = fs.readdirSync(from).filter((f) => f.endsWith(".ll"))
+          const l =
+            rt.error !== null
+              ? { status: 1, stdout: "", stderr: rt.error }
+              : spawnSync(
+                  "clang",
+                  ["-Wno-override-module", "-O2", ...lls.map((f) => path.join(from, f)), ...rt.objects, "-o", exe],
+                  { cwd: root, encoding: "utf8" }
+                )
+          const rSync = l.status === 0 ? run(exe, ["sync", helper]) : null
+          const rSpawn = l.status === 0 ? run(exe, ["spawn", helper]) : null
+          check(
+            `sandbox dependency grants: a spawn whose exec cannot be answered "continue" is refused and does not hang: the supervisor ${how} (SBX-1)`,
+            rSync !== null &&
+              rSync.status === 0 &&
+              rSync.signal === null &&
+              rSync.stdout === "-1\n" &&
+              rSync.stderr === refusedLine &&
+              rSpawn.status === 0 &&
+              rSpawn.signal === null &&
+              rSpawn.stdout === `-${errno}\n` &&
+              rSpawn.stderr === refusedLine,
+            l.status === 0 ? `${said(rSync)}\n--- spawn\n${said(rSpawn)}` : shown(l)
+          )
+        }
+        // What the granted program is started holding. The sandbox makes a
+        // pipe, a seccomp listener and the checked file's descriptor for each
+        // spawn, in a descriptor table where the lowest free numbers are the
+        // ones the child's redirects name; here 0 and 2 are free as well,
+        // closed by the shell that starts the program. The helper answers how
+        // many descriptors from 3 up it holds that are not regular files: the
+        // one `spawnWithFds` hands it (this check's stdout pipe) and no other,
+        // with `--sandbox` as without. A runner may hand every process it
+        // starts descriptors of its own (CI's does); the helper started by the
+        // shell alone counts those, and each expectation is that count more.
+        const closed = 'exec "$@" <&- 2>&-'
+        const mine = run("/bin/sh", ["-c", closed, "sh", helper, "--fds"]).status
+        for (const [how, builtin, held] of [
+          ["sync", "spawnSync", `${mine}\n`],
+          ["piped", "spawnPiped", `${mine} 0\n`],
+          ["within", "spawnPipedWithin", `${mine} 0\n`],
+          ["fds", "spawnWithFds", `${mine + 1}\n`],
+          ["spawn", "spawn", `${mine}\n`],
+        ]) {
+          const rFds = run("/bin/sh", ["-c", closed, "sh", hAllow, how, helper, "--fds"])
+          const rFdsPlain = run("/bin/sh", ["-c", closed, "sh", hOpen, how, helper, "--fds"])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} is started with no descriptor of the sandbox's, stdin and stderr closed (SBX-1)`,
+            rFds.status === 0 && rFds.signal === null && rFds.stdout === held && rFdsPlain.stdout === held,
+            `inherited from the runner: ${mine}\n${said(rFds)}\n--- without --sandbox\n${said(rFdsPlain)}`
+          )
+        }
+        // The child of `to` dies before its exec: this package has no
+        // `fs.write`, so Landlock refuses the stdout file the child opens.
+        // The spawn answers its error and does not wait for an exec that
+        // never comes (the run's timeout would end it with a signal).
+        const rDied = run(hAllow, ["to", helper])
+        const rMissing = run(hAllow, ["spawn", "sbx-1-no-such-program"])
+        check(
+          "sandbox dependency grants: a spawn whose child dies before its exec answers the error and does not hang (SBX-1)",
+          rDied.status === 0 &&
+            rDied.signal === null &&
+            rDied.stdout === "-1\n" &&
+            rMissing.status === 0 &&
+            rMissing.stdout === "-2\n",
+          `${said(rDied)}\n--- a program that is not there\n${said(rMissing)}`
+        )
+        // `spawnSyncTo` has a file action of its own, the child's open of the
+        // stdout file, which needs a write scope and so ABI 3 under strict
+        // `--sandbox` (as the fs.write=<dir> checks above).
+        const helpedTo = abi < 3 ? null : withHelper(onceTo, ["fs.write=./out"])
+        if (helpedTo === null) {
+          skip(
+            `sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3) or clang could not build the helper; one exec per spawn is not checked through spawnSyncTo`
+          )
+        } else {
+          const tAllow = build(helpedTo, ["--sandbox"], dir)
+          const tOpen = build(helpedTo, [], dir)
+          const tHelper = fs.realpathSync(path.join(dir, helpedTo, "bin", "exec-args"))
+          const heldOut = path.join(dir, helpedTo, "out", "held.txt")
+          const ranOut = path.join(dir, helpedTo, "out", "ran.txt")
+          const rHeld = run(tAllow, [heldOut, tHelper, loader, ungranted])
+          const rRan = run(tOpen, [ranOut, tHelper, loader, ungranted])
+          const text = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+          check(
+            "sandbox dependency grants: a program granted to spawnSyncTo cannot hand the loader an ungranted binary (SBX-1)",
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.stdout === "111\n" &&
+              text(heldOut) === "" &&
+              rRan !== null &&
+              rRan.status === 0 &&
+              rRan.stdout === "0\n" &&
+              text(ranOut) === "sbx-1\n",
+            `${said(rHeld)}\n${heldOut}: ${JSON.stringify(text(heldOut))}\n--- without --sandbox\n${said(rRan)}\n${ranOut}: ${JSON.stringify(text(ranOut))}`
+          )
+        }
+        // The machine's own tools. `find -exec` forks and execs per match and
+        // `env` execs in place; each is checked only where its control run,
+        // without `--sandbox`, does run the ungranted program through the
+        // loader, so a tool that is missing or of another shape is a SKIP.
+        // What says the tool itself started, and that its own exec is what
+        // failed, is no message of the tool's (GNU's and uutils' differ): it is
+        // the line `find -print` writes before its `-exec`, and the status 126
+        // or 127 POSIX gives `env` for a utility it could not invoke. A refused
+        // spawn answers -1 and prints neither.
+        const oAllow = build(once, ["--sandbox"])
+        const oOpen = build(once, [])
+        for (const [tool, argv] of [
+          ["find", ["find", ungranted, "-maxdepth", "0", "-print", "-exec", loader, ungranted, ";"]],
+          ["env", ["env", loader, ungranted]],
+        ]) {
+          const lines = (r) => r.stdout.split("\n")
+          const rRan = realOnPath(tool) === null ? null : run(oOpen, ["sync", ...argv])
+          if (rRan === null || rRan.status !== 0 || !lines(rRan).includes("sbx-1")) {
+            skip(
+              `sandbox dependency grants: \`${tool}\` is not on PATH here or did not run the loader without --sandbox (${said(rRan)}); one exec per spawn is not checked through it`
+            )
+            continue
+          }
+          const rHeld = run(oAllow, ["sync", ...argv])
+          check(
+            `sandbox dependency grants: a granted ${tool} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              !lines(rHeld).includes("sbx-1") &&
+              (tool === "find"
+                ? lines(rHeld).length === 3 && lines(rHeld)[0] === ungranted && /^\d+$/.test(lines(rHeld)[1])
+                : /^12[67]\n$/.test(rHeld.stdout)),
+            `${argv.join(" ")}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        // Another program the same grant names is no more reachable from a
+        // granted one than an ungranted program is.
+        const rOther = realOnPath("env") === null || realOnPath("true") === null ? null : run(oOpen, ["sync", "env", "true"])
+        if (rOther === null || rOther.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOther)}); a granted program's exec of another granted program is not checked`
+          )
+        } else {
+          const rOtherHeld = run(oAllow, ["sync", "env", "true"])
+          const rTrueStill = run(oAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: a granted program cannot exec another granted program (SBX-1)",
+            rOtherHeld !== null &&
+              rOtherHeld.status === 0 &&
+              // `env` started, and its exec of `true` is what failed.
+              /^12[67]\n$/.test(rOtherHeld.stdout) &&
+              rTrueStill.stdout === "0\n",
+            `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+      }
     }
   }
 }
@@ -29396,6 +29737,16 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
     ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
     ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_guard", "a load a too-short loop guard does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_resized", "a load after a call that shrinks the array its guard proved", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_unfloored", "a load under `i <= n - 16` with `i` not known non-negative", "3\n", "index out of range: 18446744073709551615 >= 20"],
+    ["simd_access_oob_loop_pop", "a load after a `pop` in the loop its hoisted guard proved", "1\n", "index out of range: 4 >= 4"],
+    ["simd_access_oob_alias_pop", "a load after its array shrinks through a second handle", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_field_swap", "a load of a field array a method replaced after the guard", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_strict", "a load a strict guard one lane short does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_below", "a load `i <= n - 2` with `n < xs.length` does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_huge_offset", "a load at `i + c` whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
+    ["simd_access_oob_huge_literal", "a load at a literal whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
   ]
   for (const [name, what, stdout, words] of oobCases) {
     const exe = buildCaseIn(simdDir, name)

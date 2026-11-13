@@ -11689,7 +11689,7 @@ copies it, so nothing may free it while the task runs: `start` feeds a task a
 shared argument, and it and every caller release no arena scope over what
 they allocated (no `nish_arena` mark and reset around the call), so `tally`
 lives in `main`'s arena until the program ends. What the task allocates goes
-into its own region, freed by `nish_async_done` when it finishes; the
+into its own region, emptied by `nish_async_done` when it finishes; the
 checker refuses a store of that memory into `tally` (NL2609) and growth of a
 shared array, `Map` or `Set` (NL2615), so `count` writes only numbers
 through the pointer (`tests/cases/async_spawn_shared`,
@@ -31281,7 +31281,7 @@ bounds.ok:
   %11 = bitcast i8* %10 to i8*
   %12 = getelementptr inbounds i8, i8* %11, i64 %0
   %13 = bitcast i8* %12 to <16 x i8>*
-  %14 = load <16 x i8>, <16 x i8>* %13, align 1
+  %14 = load <16 x i8>, <16 x i8>* %13, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   %15 = sext i32 %at to i64
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
   %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -31303,14 +31303,14 @@ bounds.ok.1:
   %26 = bitcast i8* %25 to i8*
   %27 = getelementptr inbounds i8, i8* %26, i64 %15
   %28 = bitcast i8* %27 to <16 x i8>*
-  store <16 x i8> %14, <16 x i8>* %28, align 1
+  store <16 x i8> %14, <16 x i8>* %28, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   ret void
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!12, !13, !14, !15, !16}
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -31323,11 +31323,13 @@ attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !8, i64 16}
-!12 = !{i32 8, !"cf-protection-branch", i32 1}
-!13 = !{i32 8, !"cf-protection-return", i32 1}
-!14 = !{i32 8, !"branch-target-enforcement", i32 1}
-!15 = !{i32 8, !"sign-return-address", i32 1}
-!16 = !{i32 4, !"probe-stack", !"inline-asm"}
+!12 = !{!"element i8", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end simd-load-store -->
 

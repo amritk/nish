@@ -3058,6 +3058,9 @@ that calls it is refused as any shared write is. Also exported by
 `nish:process`.
 Capability: process.spawn.
 
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
+
 ```ts
 function spawn(argv: string[]): i32
 ```
@@ -3072,7 +3075,10 @@ the program and its arguments.
 
 the child's pid, or a negative errno: -22 (EINVAL) for an empty
   vector or an argument holding a NUL, and `posix_spawnp`'s own error
-  otherwise, so a program that is not there is -2 (ENOENT).
+  otherwise, so a program that is not there is -2 (ENOENT). Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 
@@ -3094,6 +3100,9 @@ absorbed. The two output arrays are grown by the runtime, so `readonly` is
 refused for them, as is a typed-array spelling (`Int32Array`, ...), whose
 length is fixed. A `wasm32` build refuses it (NL2404). Capability:
 process.spawn.
+
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
 
 ```ts
 function spawnPiped(
@@ -3154,6 +3163,9 @@ and 16 MiB cap, `readonly` and typed-array spellings refused for the two
 output arrays, refused by a `wasm32` build (NL2404). Capability:
 process.spawn.
 
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
+
 ```ts
 function spawnPipedWithin(
   argv: string[],
@@ -3212,6 +3224,14 @@ working directory. The argument is checked down to its element type: an
 an embedded NUL truncates one. A `wasm32` build and a WASI build have no
 processes, and a WASI build always answers `-1`. Capability: process.spawn.
 
+Under `--sandbox`, a dependency's `process.spawn=<program>` grants can make
+a list of the only programs the build may start. A program this builtin
+starts under such a list cannot start another: an exec by it, or by
+anything it forks, fails, so a granted `#!` script runs its interpreter's
+builtins alone. Where the kernel or a container's seccomp profile refuses
+what that takes (Docker's default profile does), the spawn fails and one
+line on stderr says so.
+
 ```ts
 function spawnSync(argv: string[]): number
 ```
@@ -3239,6 +3259,9 @@ string leaves that stream inherited, so one call can capture stdout and let
 stderr through. The two paths must not name one file: each is opened
 separately, with its own offset, so the streams would overwrite rather than
 interleave; capture them apart and concatenate. Capability: process.spawn.
+
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
 
 ```ts
 function spawnSyncTo(
@@ -3287,6 +3310,9 @@ them, and this process keeps its own. Reap the pid with `waitPid`. No reading
 under Node, which throws. A `wasm32` build refuses it (NL2404).
 Capability: process.spawn.
 
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
+
 ```ts
 function spawnWithFds(
   argv: string[],
@@ -3311,7 +3337,10 @@ the descriptors handed down, at most 64.
 the child's pid, or a negative errno: -22 more than 64 descriptors
   or a negative one (before anything is opened or started), -9 one that is
   not open, -24 (or -22 above the descriptor limit) a scratch descriptor the
-  system cannot give.
+  system cannot give. Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 
