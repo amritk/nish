@@ -720,10 +720,9 @@ const selectedCases = cases.filter((name) => !only || name.includes(only))
  * sections read: `build/test/<name>.ll` (the arrays, crypto, runtime and
  * bench blocks, and shard 1's checks after the link programs, most of them
  * behind an `existsSync` that would skip silently) and `caseResults`. None of
- * them reads what the dealt work writes. The compiles of the whole corpus are
- * about 10 s of four cores; the dealt work was the other 100 s of the 113 s
- * every shard spent on section A (`docs/wp10-ci.md`, "Where the wall clock
- * goes").
+ * them reads what the dealt work writes. Section A took 59 s of shard 2 in run
+ * 43369900293 and 30 s with the deal (`docs/wp10-ci.md`, "Where the wall
+ * clock goes"); what is left is mostly the compiles every shard keeps.
  *
  * The deal is by position, the linked cases and the compiled-only ones apart,
  * so each shard gets an eighth of each kind whatever the corpus's order. The

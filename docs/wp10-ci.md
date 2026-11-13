@@ -441,8 +441,8 @@ On eight shards, in
 [run 43369900293](https://github.com/amritk/nish/actions/runs/43369900293)
 (`ac813b5`), the run took 11 min 31 s and the longest `test` job was shard 2's
 at 11 min 29 s. Each shard's Test step spent 43-75 s linking stage1, 109-249 s
-on the sections before the link programs (113 s of it the golden cases, which
-every shard runs in full) and 185-395 s after them. The stage1 link is the
+on the sections before the link programs (59 s of shard 2's in section A, the
+golden cases, which every shard ran in full) and 185-395 s after them. The stage1 link is the
 seed's front end (2 s) and then the speed profile's full LTO on one core (about
 69 s): a target with landing pads links in one partition. The NEON job, the
 second longest at 10 min 45 s, linked stage1 seven times, once per
@@ -452,8 +452,13 @@ linked binary under a hash of everything the link reads, and the
 a run whose `src/`, `std/`, seed and toolchain match an earlier one copies
 stage1 instead of linking it, and a job that runs the suite more than once
 links it at most once. The golden cases are dealt too: a shard compiles
-all of them, about 10 s of four cores, and does the other work of its eighth
-only.
+all of them and does the other work of its eighth only, which took section A
+from 59 s to 30 s of shard 2 in
+[run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
+where every job restored stage1 from the cache. The longest `test` job there
+took 10 min 49 s and the NEON job 4 min 38 s. What every shard still runs
+before the link programs is now about 90 s of small sections, the largest the
+performance gate (14 s), the diagnostic codes (11 s) and `--fix` (10 s).
 
 ## Running the same steps locally
 
