@@ -84,6 +84,8 @@ stages:
         content: Make the hero terminal in docs/site/site.js accept typed input and open the game in an overlay on `nish break`, the whole game (page code, presenter, loader and wasm) arriving only then through one async dynamic import, with Escape and a close control to leave — see Docs break
       - id: web-tests
         content: Add a break-web section to tests/run.js that runs the page logic under Node for a scripted session and holds its framebuffer hash to the native tests/link/break_core run, both --deterministic — see Docs break
+      - id: web-shell
+        content: Make the hero terminal answer nish, nish --help and nish --version with the real CLI output generated at build time from src/cli-style.ts, the near-miss riddle, and an in-character fallback, from a tiny shell chunk loaded on the first keypress — see Docs break
       - id: web-rule
         content: Update the nish break line in .claude/orientation.md to name the docs-site copy and keep the undocumented rule for it — see Docs break
 ---
@@ -250,7 +252,20 @@ This stage was added after sign-off. docs-break found that a wasm-host module ca
   - It asserts that `site.js` reaches the game only through one dynamic `import()`: no static import, no preload and no reference to the `.wasm`. It also asserts that the gzipped growth of `site.js` stays under 1 KB against a baseline recorded in the test. The PR body gives the before and after sizes of `site.js` and the size of the lazy bundle.
   - Record in the PR body the Playwright run against `docs/site/` served locally: all three tiers, the measured per-frame cost of `draw` plus `present` at 960×540, and a screenshot.
 
+### The hero shell (added after sign-off)
+
+The user asked for the hero terminal to answer a few real commands. They come from a tiny chunk, `docs/site/break/shell.mjs`, which is imported on the first keypress in the hero and is separate from the game bundle, so `site.js` stays under its 1 KB growth budget.
+
+- **`nish` and `nish --help`.** They print the CLI's real help. `build.mjs` generates the text from `src/cli-style.ts` by running the built compiler's `--help`, and records it in the input manifest, so `--check` fails when it drifts. The wall under the title stays.
+- **`nish --version`.** It prints the real version.
+- **Near-miss words** (`game`, `play`, `brick`, `bricks`, `breakout`). They print the same riddle `src/compile.ts` prints.
+- **`nish break`.** It opens the game.
+- **Anything else.** It gets one in-character line pointing at `nish --help`.
+- **Tests.** The `break-web` section asserts that the shell's help equals the CLI's `--help`, that the riddle matches, and that `site.js` still reaches the shell and the game only through dynamic imports.
+
 ## Out of scope
+
+- A full in-browser compiler playground in the hero, such as `nish compile` showing the example's IR through the `web/` wasm build. That is a follow-up run.
 
 - Porting `examples/wasm-arena` onto `nish/page/frame`.
 - Any change to `.github/workflows/`.
