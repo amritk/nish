@@ -1288,7 +1288,7 @@ const DECLARED = [
     files.split(" ").map((file) => ({
       program,
       file,
-      changelog: "fixed-base table for P-256",
+      changelog: "P-256's cached table for G",
       why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
     }))
   ),
@@ -1332,7 +1332,7 @@ const DECLARED = [
     files.split(" ").map((file) => ({
       program,
       file,
-      changelog: "fixed-base table for P-256",
+      changelog: "P-256's cached table for G",
       why: "P256PointScratch gains `comb` (64 to 72 bytes), so every module of a TLS program that declares it or its constructor moves, a C header gains the field and renumbers what follows it, and p256SignSha256Into stores into its P256SignScratch, so that parameter is no longer readonly",
     }))
   ),
