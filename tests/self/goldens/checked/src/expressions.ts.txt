@@ -1667,6 +1667,18 @@ function keptSet(ctx: CheckContext, local: Local, current: i32[], first: i32[], 
   callee -1:22 isMarked -> @isMarked
   callee -1:55 namedBy -> @namedBy
   callee +3:10 keptId -> @keptId
+function keptOne(ctx: CheckContext, current: i32[], member: i32, keep: boolean): i32 -> @keptOne
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: member
+  calls: keptId nish_panic nish_panic_index nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=keptId#0
+  pointer current: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -16:9 at: i32 (const)
+  local -3:9 kept: i32[] (const)
+  local -2:7 i: i32 (let)
+  callee +7:10 keptId -> @keptId
 function keptId(ctx: CheckContext, kept: i32[]): i32 -> @keptId
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via memberListId
@@ -1689,21 +1701,25 @@ function holdNamed(ctx: CheckContext, scope: Scope, local: Local, current: i32, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: current first keep second
-  calls: heldList holdSet keptSet memoRead memoSlot nish_panic_index nish_panic_overflow
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=keptSet#0 heldList#0 heldList#0 heldList#0
+  calls: TypeTable.isMemberOf allMembersOf heldList holdSet keptOne keptSet memoRead memoSlot nish_panic_index nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldList#0 allMembersOf#0 keptOne#0 keptSet#0 heldList#0 heldList#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=holdSet#0
   pointer local: size=64 writesThrough=true captured=true passedTo=keptSet#1 holdSet#1
   stackSites=0 stackLocals=0
-  local -13:9 program: CheckedProgram (const)
-  local -12:9 at: i32 (const)
-  callee -12:14 memoSlot -> @memoSlot
-  local -11:7 set: i32 (let)
-  callee -11:13 memoRead -> @memoRead
-  callee -10:7 memoRead -> @memoRead
-  callee -9:11 keptSet -> @keptSet
-  callee -6:7 heldList -> @heldList
-  callee -5:7 heldList -> @heldList
-  callee -4:7 heldList -> @heldList
+  local -12:9 program: CheckedProgram (const)
+  local -11:9 at: i32 (const)
+  callee -11:14 memoSlot -> @memoSlot
+  local -10:7 set: i32 (let)
+  callee -10:13 memoRead -> @memoRead
+  callee -9:7 memoRead -> @memoRead
+  local -8:11 held: i32[] (const)
+  callee -8:18 heldList -> @heldList
+  callee -5:7 TypeTable.isMemberOf -> @TypeTable.isMemberOf
+  callee -4:26 allMembersOf -> @allMembersOf
+  callee -3:11 keptOne -> @keptOne
+  callee -2:11 keptSet -> @keptSet
+  callee -2:37 heldList -> @heldList
+  callee -2:71 heldList -> @heldList
   local -1:11 memo: i32[] (const)
   callee +9:5 holdSet -> @holdSet
 function memoRead(memo: i32[], at: i32): i32 -> @memoRead

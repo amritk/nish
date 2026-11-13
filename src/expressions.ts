@@ -2642,6 +2642,10 @@ const holdNamed = (
   second: i32,
   keep: boolean
 ): void => {
+  // A join where one arm left the set as it was keeps all of it.
+  if (keep && (first === current || second === current)) {
+    return
+  }
   const program = ctx.program
   const at = memoSlot(program, local.type, current, first, second, keep ? 1 : 0)
   let set = memoRead(program.narrowMemo, at + 5)
