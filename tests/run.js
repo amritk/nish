@@ -34978,6 +34978,104 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
   }
 }
 
+// ---- nish/page/frame: the framebuffer presenter and the fixed-step loop ------------
+// tests/page-frame/check.mjs runs runtime/page-frame.mjs under Node against fake
+// WebGPU, WebGL 2 and Canvas 2D objects and prints a line per check. A real
+// browser is not run here: tests/page-frame/smoke-manual.cjs is the manual
+// Chromium smoke a change to the presenter is tried with.
+if (!only || "page-frame".includes(only)) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "page-frame", "check.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // Each line is `ok <name>` or `not ok <name>\t<detail>`, and the last
+  // `checks: <n>`: a run that stopped early prints fewer lines than it counts,
+  // or no count at all. The count is pinned, so a check that goes missing
+  // (a block skipped, a loop that ran short) is caught too; a check added or
+  // removed moves it.
+  const PAGE_FRAME_CHECKS = 114
+  const out = res.stdout.split("\n")
+  const lines = out.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = out.find((line) => line.startsWith("checks: "))
+  check(
+    "page-frame: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${lines.length}` && lines.length === PAGE_FRAME_CHECKS,
+    shown(res)
+  )
+  for (const line of lines) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`page-frame: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "page-frame")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "nish-page-frame.d.mts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, createPresenter, runFixedStep } from "./nish-page-frame.mjs"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement, pixels: Int32Array): Promise<number> => {",
+      "  const presenter = await createPresenter(canvas, {",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string) => console.warn(from, to, reason),",
+      "  })",
+      "  presenter.resize(canvas.clientWidth, canvas.clientHeight, devicePixelRatio)",
+      "  const loop = runFixedStep({",
+      "    stepsPerSecond: 60,",
+      "    maxStepsPerFrame: 4,",
+      "    step: () => undefined,",
+      "    render: (alpha: number, frameMs: number) => presenter.present(pixels, 4, 2),",
+      "  })",
+      "  const reasons: string[] = presenter.attempts.map((a) => `${a.backend}: ${a.reason}`)",
+      "  const now: HTMLCanvasElement = presenter.canvas",
+      "  loop.stop()",
+      "  presenter.destroy()",
+      "  return loop.refreshHz + loop.fps + reasons.length + now.width",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, noUnusedParameters: false },
+      include: [],
+      files: ["nish-page-frame.d.mts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("page-frame: a page type-checks against runtime/page-frame.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  check(
+    "page-frame: npm pack ships runtime/page-frame.mjs and runtime/page-frame.d.ts",
+    packed.includes("runtime/page-frame.mjs") && packed.includes("runtime/page-frame.d.ts"),
+    shown(pack)
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/frame"]
+  check(
+    "page-frame: package.json exports ./page/frame",
+    exported !== undefined &&
+      exported.types === "./runtime/page-frame.d.ts" &&
+      exported.default === "./runtime/page-frame.mjs",
+    JSON.stringify(exported)
+  )
+}
+
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
 //
 // docs/wp50-wasm-host.md §10. examples/wasm-arena/build.mjs links client.ts for
