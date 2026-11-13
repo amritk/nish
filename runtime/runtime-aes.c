@@ -141,6 +141,62 @@ NISH_AES_INLINE void nish_aes_wipe16(void *p) {
   v[1] = 0;
 }
 
+/* Zeroes, as a kernel's last act, every register a kernel may leave a round
+   key, H, a counter block, keystream or GHASH state in: the vector registers a
+   call may clobber and the general ones (SubWord's key words and a partial
+   block's keystream bytes pass through those). Each kernel ends with it, so
+   what it computed leaves with the call rather than staying until later code
+   overwrites it (docs/security/crypto-aead.md, AEAD-4). The registers are named
+   by number, not by the kernel's own use, so a change of register allocation
+   cannot open a gap; the clobber list tells the compiler each is gone, and the
+   `memory` clobber keeps every store of the kernel before it. The callee-saved
+   ones are left: the epilogue restores the caller's values into them, and a
+   kernel that used them would show it in tests/run.js's reading. On x86-64
+   that is all sixteen XMM registers, or with AVX in the target (`--cpu
+   x86-64-v3`) the whole of every YMM register, which `vzeroall` clears; on
+   AArch64 v0 to v7 and v16 to v31, since AAPCS64 has the callee keep v8 to v15's
+   low halves. Every instruction is a zeroing idiom: no input, so no secret
+   reaches it, and no flag a branch reads after it. */
+NISH_AES_INLINE void nish_aes_clear(void) {
+#if defined(NISH_AES_X86)
+#if defined(__AVX__)
+#define NISH_AES_CLEAR_VEC "vzeroall\n\t"
+#else
+#define NISH_AES_CLEAR_VEC                                                                                       \
+  "pxor %%xmm0, %%xmm0\n\tpxor %%xmm1, %%xmm1\n\tpxor %%xmm2, %%xmm2\n\tpxor %%xmm3, %%xmm3\n\t"                 \
+  "pxor %%xmm4, %%xmm4\n\tpxor %%xmm5, %%xmm5\n\tpxor %%xmm6, %%xmm6\n\tpxor %%xmm7, %%xmm7\n\t"                 \
+  "pxor %%xmm8, %%xmm8\n\tpxor %%xmm9, %%xmm9\n\tpxor %%xmm10, %%xmm10\n\tpxor %%xmm11, %%xmm11\n\t"             \
+  "pxor %%xmm12, %%xmm12\n\tpxor %%xmm13, %%xmm13\n\tpxor %%xmm14, %%xmm14\n\tpxor %%xmm15, %%xmm15\n\t"
+#endif
+  __asm__ volatile(NISH_AES_CLEAR_VEC
+                   "xorl %%eax, %%eax\n\txorl %%ecx, %%ecx\n\txorl %%edx, %%edx\n\txorl %%esi, %%esi\n\t"
+                   "xorl %%edi, %%edi\n\txorl %%r8d, %%r8d\n\txorl %%r9d, %%r9d\n\txorl %%r10d, %%r10d\n\t"
+                   "xorl %%r11d, %%r11d"
+                   :
+                   :
+                   : "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11",
+                     "xmm12", "xmm13", "xmm14", "xmm15", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11",
+                     "cc", "memory");
+#undef NISH_AES_CLEAR_VEC
+#else
+  __asm__ volatile(
+      "movi v0.16b, #0\n\tmovi v1.16b, #0\n\tmovi v2.16b, #0\n\tmovi v3.16b, #0\n\t"
+      "movi v4.16b, #0\n\tmovi v5.16b, #0\n\tmovi v6.16b, #0\n\tmovi v7.16b, #0\n\t"
+      "movi v16.16b, #0\n\tmovi v17.16b, #0\n\tmovi v18.16b, #0\n\tmovi v19.16b, #0\n\t"
+      "movi v20.16b, #0\n\tmovi v21.16b, #0\n\tmovi v22.16b, #0\n\tmovi v23.16b, #0\n\t"
+      "movi v24.16b, #0\n\tmovi v25.16b, #0\n\tmovi v26.16b, #0\n\tmovi v27.16b, #0\n\t"
+      "movi v28.16b, #0\n\tmovi v29.16b, #0\n\tmovi v30.16b, #0\n\tmovi v31.16b, #0\n\t"
+      "mov x0, xzr\n\tmov x1, xzr\n\tmov x2, xzr\n\tmov x3, xzr\n\tmov x4, xzr\n\tmov x5, xzr\n\t"
+      "mov x6, xzr\n\tmov x7, xzr\n\tmov x8, xzr\n\tmov x9, xzr\n\tmov x10, xzr\n\tmov x11, xzr\n\t"
+      "mov x12, xzr\n\tmov x13, xzr\n\tmov x14, xzr\n\tmov x15, xzr\n\tmov x16, xzr\n\tmov x17, xzr"
+      :
+      :
+      : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24",
+        "v25", "v26", "v27", "v28", "v29", "v30", "v31", "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+        "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory");
+#endif
+}
+
 /* The block read as a big-endian 128-bit number, as two lanes low then high:
    the order GHASH's multiply works in. Its own inverse. */
 NISH_AES_INLINE nish_aes_u64x2 nish_aes_reflect(nish_aes_u8x16 b) {
@@ -326,10 +382,12 @@ NISH_AES_TARGET void nish_aes_schedule(const nish_array *key, int32_t rounds, ni
     nish_aes_store(rk->data + NISH_AES_HMID + 16 * i, (nish_aes_u8x16)nish_aes_mid(p));
     p = nish_aes_mul(p, h);
   }
+  nish_aes_clear();
 }
 
 NISH_AES_TARGET void nish_aes_block(const nish_array *rk, int32_t rounds, const nish_array *src, nish_array *dst) {
   nish_aes_store(dst->data, nish_aes_encrypt(rk->data, rounds, nish_aes_load(src->data)));
+  nish_aes_clear();
 }
 
 NISH_AES_TARGET void nish_aes_ctr(const nish_array *rk, int32_t rounds, const nish_array *j0, const nish_array *src,
@@ -364,6 +422,7 @@ NISH_AES_TARGET void nish_aes_ctr(const nish_array *rk, int32_t rounds, const ni
     for (uint32_t i = 0; i < rest; i++) out[at + i] = (char)(in[at + i] ^ ks[i]);
     nish_aes_wipe16(ks);
   }
+  nish_aes_clear();
 }
 
 NISH_AES_TARGET void nish_aes_ghash(nish_array *y, uint64_t hHi, uint64_t hLo, const nish_array *rk,
@@ -381,17 +440,29 @@ NISH_AES_TARGET void nish_aes_ghash(nish_array *y, uint64_t hHi, uint64_t hLo, c
      blocks of the serial recurrence, and its products add before the one
      reduction they share. */
   if (blocks >= 4) {
-    nish_aes_u64x2 hp[4], hm[4];
-    for (int32_t i = 0; i < 4; i++) {
-      hp[i] = (nish_aes_u64x2)nish_aes_load(k + NISH_AES_HPOW + 16 * i);
-      hm[i] = (nish_aes_u64x2)nish_aes_load(k + NISH_AES_HMID + 16 * i);
+    /* The four middle operands packed two to a register, H's and H^2's in
+       `hm[0]`, H^3's and H^4's in `hm[1]`: a middle product reads one lane of
+       each side, and a block's own middle operand holds the same word in both,
+       so the low lane's product or the high lane's picks the power. Six
+       registers rather than eight leave the loop enough to hold every power
+       without a spill, which no wipe could reach, on every target
+       tests/run.js reads ("the AES kernels clear ..."). */
+    nish_aes_u64x2 hp[4], hm[2];
+    for (int32_t i = 0; i < 4; i++) hp[i] = (nish_aes_u64x2)nish_aes_load(k + NISH_AES_HPOW + 16 * i);
+    for (int32_t i = 0; i < 2; i++) {
+      hm[i] = __builtin_shufflevector((nish_aes_u64x2)nish_aes_load(k + NISH_AES_HMID + 32 * i),
+                                      (nish_aes_u64x2)nish_aes_load(k + NISH_AES_HMID + 32 * i + 16), 0, 2);
     }
     for (; n + 4 <= blocks; n += 4) {
       nish_aes_u64x2 sum[3] = {{0, 0}, {0, 0}, {0, 0}};
       for (uint32_t j = 0; j < 4; j++) {
         nish_aes_u64x2 x = nish_aes_reflect(nish_aes_load(in + 16 * (uint64_t)(n + j)));
         if (j == 0) x ^= acc;
-        nish_aes_mul_acc(sum, x, hp[3 - j], hm[3 - j]);
+        const uint32_t power = 3 - j;
+        const nish_aes_u64x2 xm = nish_aes_mid(x);
+        sum[0] ^= nish_aes_clmul_lo(x, hp[power]);
+        sum[1] ^= nish_aes_clmul_hi(x, hp[power]);
+        sum[2] ^= (power & 1) != 0 ? nish_aes_clmul_hi(xm, hm[power >> 1]) : nish_aes_clmul_lo(xm, hm[power >> 1]);
       }
       acc = nish_aes_mul_finish(sum);
     }
@@ -407,6 +478,7 @@ NISH_AES_TARGET void nish_aes_ghash(nish_array *y, uint64_t hHi, uint64_t hLo, c
     nish_aes_wipe16(pad);
   }
   nish_aes_store(y->data, (nish_aes_u8x16)__builtin_shufflevector(acc, acc, 1, 0));
+  nish_aes_clear();
 }
 
 #if defined(NISH_AES_X86)
