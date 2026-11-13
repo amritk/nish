@@ -226,6 +226,18 @@ a pipelined pair and a refusal behind a good request pin it. Pipelined bytes
 wait in the parser's buffer, and once `inputLimit()` of them wait the slot
 stops asking to be read.
 
+**When an exchange ends** (`net_http1_server_implicit_end`): a response with
+a `Content-Length` ends once its last byte is written, through `write` or
+`sendBody`, and one with no body (`Content-Length: 0`, `HEAD`, 204, 304) once
+its head is, whether or not the program calls `end`; the connection checks at
+the boundary, when it would read the next request, so `end` called before then
+answers as it always has (0, and the same bytes on the wire). A chunked body,
+and an unframed one to HTTP/1.0, ends only at `end`, since the connection has
+no length to count: one byte short of the length, or chunked without `end`,
+and the next request is neither read nor answered, and no last chunk goes out.
+A program that forgot `end` on a length-framed response used to leave a
+kept-alive client waiting forever with nothing reported;
+
 **The head stays the request's until it is answered** (`std_http1_end_head`):
 at `HTTP1_END` of a kept-alive request with the next one already fed behind
 it, the parser still reports the first request's method, target, fields,
