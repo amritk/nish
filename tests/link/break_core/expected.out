@@ -1,0 +1,17 @@
+PASS  starts in the intro
+PASS  the intro steps
+intro: scene 2, 480x270, hash 3978158635
+PASS  a frame is 16:9 at the chosen lines
+PASS  a key skips the intro
+PASS  to the menu
+PASS  the menu steps
+menu: scene 0, 480x270, hash 2006089773
+PASS  the menu draws other pixels than the intro
+outro: 119 steps
+PASS  Enter on the menu starts a level
+PASS  the game steps
+level: scene 1, 480x270, hash 713440167
+paddle left: scene 1, 480x270, hash 2653233388
+PASS  holding left changes the frame
+PASS  still playing
+break_core: 11 passed, 0 failed, 0 skipped

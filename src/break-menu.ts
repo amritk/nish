@@ -5,9 +5,9 @@
 //
 // It is pure: `stepBreakMenu` reads one step of input and answers what the
 // director should do next, `drawBreakMenu` paints a framebuffer, and neither
-// touches the terminal. The director owns the terminal, applies settings and
-// switches to the game. The one file this module touches is the settings file
-// (`loadBreakSettings`, `saveBreakSettings`), which the director names.
+// touches the terminal. The director applies settings and switches to the
+// game; where the settings are kept between runs is the host's
+// (`break-settings-file.ts` for the terminal).
 //
 // Like the game it follows two rules. Every array is made in `newBreakMenu`
 // and reused, so a step or a frame allocates nothing. And anything that moves
@@ -63,9 +63,7 @@ import {
   KEY_UP,
   TermEvent,
 } from "nish/term"
-import { TermInput } from "nish/term-io"
-import { CLI } from "./branding"
-import { dirname } from "./paths"
+import { StepInput } from "../std/input"
 
 // ---- The interface the director reads ---------------------------------------
 
@@ -131,11 +129,11 @@ export const resolutionChoice = (index: i32): i32 => {
 
 /** What the Settings screen edits; the director reads it and applies it. */
 export class BreakSettings {
-  /** An index for `fpsChoice`: 0 is adaptive. */
+  /** An index for `fpsChoice`: 0 is adaptive. Only a terminal host applies it, when it opens the terminal. */
   fps: i32
   /** An index for `resolutionChoice`: 0 is auto. */
   resolution: i32
-  /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. */
+  /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. Only a terminal host reads it. */
   graphics: i32
   /** 0 low (no glow, no trails, a third of the sparks), 1 high. */
   effects: i32
@@ -224,49 +222,6 @@ export const parseBreakSettings = (text: string): BreakSettings => {
   }
   applySettingLine(s, text.slice(start))
   return s
-}
-
-/**
- * Where `nish break` keeps its settings: `${xdg}/nish/break` when `xdg` is
- * absolute, else `${home}/.config/nish/break` when `home` is, else "" for
- * nowhere — `runCacheRoot`'s rules, given the two variables' values.
- */
-export const breakSettingsPath = (xdg: string, home: string): string => {
-  if (xdg.startsWith("/")) {
-    return `${xdg}/${CLI}/break`
-  }
-  return home.startsWith("/") ? `${home}/.config/${CLI}/break` : ""
-}
-
-/** The settings kept at `path`; the defaults when `path` is "" or cannot be read as a file. */
-export const loadBreakSettings = (path: string): BreakSettings => {
-  const text: string | null = path === "" ? null : readFileSyncOrNull(path)
-  if (text === null) {
-    return new BreakSettings()
-  }
-  return parseBreakSettings(text)
-}
-
-/**
- * Keep `s` at `path`, making its directory and that directory's parent when
- * they are missing. It is written beside `path` and renamed over it, so a
- * failed write leaves the old file. Answers whether it was kept; a failure
- * anywhere answers false and says nothing.
- */
-export const saveBreakSettings = (path: string, s: BreakSettings): boolean => {
-  if (path === "") {
-    return false
-  }
-  const dir: string = dirname(path)
-  if (!mkdirSync(dirname(dir)) || !mkdirSync(dir)) {
-    return false
-  }
-  const temp: string = `${path}.tmp`
-  if (writeFileSyncMode(temp, formatBreakSettings(s), 0o644) < 0 || renameSync(temp, path) < 0) {
-    unlinkSync(temp)
-    return false
-  }
-  return true
 }
 
 // ---- Screens and layout -----------------------------------------------------
@@ -619,7 +574,7 @@ const serveBall = (menu: BreakMenu): void => {
  * step's key presses act. It answers `MENU_STAY`, `MENU_QUIT`, `MENU_APPLY`,
  * or the level to play on the step the outro ends.
  */
-export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 => {
+export const stepBreakMenu = (menu: BreakMenu, input: StepInput): i32 => {
   // Wrapped long before i32 runs out, so a menu left open for months does not
   // panic on the checked add; the animations jump once a billion steps.
   menu.tick = menu.tick >= TICK_WRAP ? 0 : menu.tick + 1
@@ -961,7 +916,7 @@ const logoSlots = (menu: BreakMenu): i32 => {
  * wait. Any key press skips to the end; the last step answers the level,
  * once: the director may step the menu again before it takes the answer.
  */
-const stepOutro = (menu: BreakMenu, input: TermInput): i32 => {
+const stepOutro = (menu: BreakMenu, input: StepInput): i32 => {
   if (menu.outroAnswered) {
     return MENU_STAY
   }
