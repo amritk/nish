@@ -1236,6 +1236,17 @@ const DECLARED = [
     changelog: "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
     why: "the program reaches getenv from a --target wasm32 build, which the 0.38.0 seed compiles and then fails to link, and the candidate refuses with NL2404 naming the chain, so only the reference compiles it",
   })),
+  // H3-5: the bad-config tests set Http3Config.idleTimeout or headTimeout,
+  // new in std/net.
+  ...[
+    "tests/link/net_http3_server_bad_head_timeout/main.ts",
+    "tests/link/net_http3_server_bad_idle_timeout/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "an HTTP/3 server clock (H3-5)",
+    why: "the program sets Http3Config.idleTimeout or headTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
     file: "deflate.ll",
