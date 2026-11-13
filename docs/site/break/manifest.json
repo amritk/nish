@@ -1,10 +1,10 @@
 {
   "compiler": "nish 0.39.0",
-  "help": "861d7fcd1ff7b4efbf1841faf109634cd3751285493da871a990ecc270534498",
+  "help": "4e376ab12e0c17fc37a6cfdfe582fa6a5d131bedc0e8f808b2a0d0e24acc2858",
   "memory": "32",
   "inputs": {
     "examples/break-web/break.mjs": "20304e422f30a2699b435559ae81974a812b8abbbd19137eac03a7bf246e412c",
-    "examples/break-web/build.mjs": "a03274403d236dca5f5e0829a2b77fd6d5457c9a1bcf0c63f6acf6306dd7dadb",
+    "examples/break-web/build.mjs": "96806f44743f3bd3930cc524998cd924afd3b68242880f11b7ef724ad4183565",
     "examples/break-web/game.ts": "585b66a578dc4dda34586169686226639b613c8fd62d8f57b81aaea561238f1e",
     "examples/break-web/shell.mjs": "4294f9edc87cae69d150485edb8e74ffb7486daa2cbd8926d92d269599f428b8",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",

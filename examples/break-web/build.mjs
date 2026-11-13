@@ -115,6 +115,12 @@ const ask = (option) => {
   return r.stdout.replace(/\n$/, "")
 }
 
+/** Where the compiler found docs/AI.md: this machine's path, which a page must not show or hash. */
+const GUIDE_PATH = /\S*\/docs\/AI\.md$/m
+
+/** The compiler's `--help`, with its guide named as the package names it rather than by this checkout's path. */
+const askHelp = () => ask("--help").replace(GUIDE_PATH, "docs/AI.md in the nish package")
+
 const sha256 = (text) => createHash("sha256").update(text).digest("hex")
 
 /** The record --check compares: the compiler's answers, the memory, and every input's hash. */
@@ -133,7 +139,7 @@ if (checking) {
     fail(`${path.relative(root, file)} is missing: run node examples/break-web/build.mjs`)
   }
   const was = JSON.parse(fs.readFileSync(file, "utf8"))
-  const now = manifest(ask("--help"))
+  const now = manifest(askHelp())
   const changed = []
   if (was.compiler !== now.compiler) {
     changed.push(`the compiler (${was.compiler} → ${now.compiler})`)
@@ -220,7 +226,7 @@ if (!shell.includes(SHELL_HELP) || !shell.includes(SHELL_VERSION)) {
   fail(`shell.mjs no longer holds ${SHELL_HELP} and ${SHELL_VERSION}; update build.mjs to match`)
 }
 
-const help = ask("--help")
+const help = askHelp()
 const record = manifest(help)
 const ll = path.join(out, "ll")
 // Every output goes first, so a failed step cannot leave an older one to be served.

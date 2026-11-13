@@ -222,9 +222,12 @@ const shell = fs.existsSync(shellFile) ? await import(pathToFileURL(shellFile).h
 check("docs/site/break/shell.mjs is built", shell !== null, shellFile)
 const asks = (args, cwd) => spawnSync(nish, args, { cwd, encoding: "utf8" })
 {
+  // build.mjs names the guide as the package does, not by the path this checkout found it at.
   const help = asks(["--help"])
-  check("the shell's nish --help is the compiler's", shell?.answer("nish --help") === help.stdout.replace(/\n$/, "") && help.status === 0,
+  const wanted = help.stdout.replace(/\n$/, "").replace(/\S*\/docs\/AI\.md$/m, "docs/AI.md in the nish package")
+  check("the shell's nish --help is the compiler's", shell?.answer("nish --help") === wanted && help.status === 0,
     `${help.status}: ${help.stdout.slice(0, 80)}`)
+  check("the shell's help names no path on the machine that built it", !String(shell?.HELP).includes(root) && !/\/docs\/AI\.md/.test(String(shell?.HELP)))
   check("the shell's bare nish prints the same help", shell?.answer("nish") === shell?.HELP && shell?.HELP !== "")
   const version = asks(["--version"])
   check("the shell's nish --version is the compiler's", shell?.answer("nish --version") === version.stdout.replace(/\n$/, ""),
