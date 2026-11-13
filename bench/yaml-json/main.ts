@@ -5,9 +5,11 @@
 //
 //   parse  the stream parsed with `parseYaml`
 //   load   the same parse, then document 0 loaded with `YamlJsonLoader`
+//   direct document 0 loaded straight from the text with `loadText`
 //
-// The first line is `<workload> <nodes> <values>`: the stream's nodes, and
-// the values the last load made (`0` for parse). The second is
+// The first line is `<workload> <nodes> <values>`: the stream's nodes (`0`
+// for direct, which keeps none), and the values the last load made (`0` for
+// parse). The second is
 // `ns <elapsed>`.
 import { JsonLimits } from "nish/json-tokenizer"
 import { JSON_VALUE_MAX_VALUES, JsonDocument } from "nish/json-value"
@@ -16,11 +18,11 @@ import { YamlJsonLoader } from "nish/yaml-json"
 
 export const main = (): number => {
   if (process.argv.length < 4) {
-    console.error("usage: main <parse|load> <file> <iterations>")
+    console.error("usage: main <parse|load|direct> <file> <iterations>")
     return 2
   }
   const workload: string = process.argv[1]
-  if (workload !== "parse" && workload !== "load") {
+  if (workload !== "parse" && workload !== "load" && workload !== "direct") {
     console.error(`unknown workload ${workload}`)
     return 2
   }
@@ -32,6 +34,7 @@ export const main = (): number => {
   const text: string = read
   const iterations: i32 = toI32(parseInt(process.argv[3]))
   const loading: boolean = workload === "load"
+  const direct: boolean = workload === "direct"
   const doc = new JsonDocument(new JsonLimits())
   doc.maxValues = JSON_VALUE_MAX_VALUES
   const loader = new YamlJsonLoader()
@@ -39,9 +42,15 @@ export const main = (): number => {
   let failed: i32 = 0
   const t0: i64 = monotonicNanos()
   for (let r: i32 = 0; r < iterations; r += 1) {
-    s = parseYaml(text)
-    if (loading && loader.load(s, 0, doc) < 0) {
-      failed = loader.failed
+    if (direct) {
+      if (loader.loadText(text, 0, doc) < 0) {
+        failed = loader.failed
+      }
+    } else {
+      s = parseYaml(text)
+      if (loading && loader.load(s, 0, doc) < 0) {
+        failed = loader.failed
+      }
     }
   }
   const elapsed: i64 = monotonicNanos() - t0
@@ -49,7 +58,7 @@ export const main = (): number => {
     console.error(`load failed: ${failed} at ${loader.errorStart}`)
     return 1
   }
-  console.log(`${workload} ${s.kinds.length} ${loading ? doc.top : 0}`)
+  console.log(`${workload} ${direct ? 0 : s.kinds.length} ${loading || direct ? doc.top : 0}`)
   console.log(`ns ${elapsed}`)
   return 0
 }

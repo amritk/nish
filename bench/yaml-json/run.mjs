@@ -182,6 +182,8 @@ const main = () => {
     { workload: "parse", bin: bins[1] },
     { workload: "load", bin: bins[0] },
     { workload: "load", bin: bins[1] },
+    { workload: "direct", bin: bins[0] },
+    { workload: "direct", bin: bins[1] },
   ].map((r) => ({ ...r, ns: [], checksums: new Set() }))
   for (let round = 0; round < opts.rounds; round++) {
     process.stderr.write(`round ${round + 1} of ${opts.rounds}\n`)
@@ -198,7 +200,7 @@ const main = () => {
   console.log(
     `${path.relative(root, file)}: ${bytes} bytes, ${iterations} iterations a run, ${opts.rounds} rounds`
   )
-  for (const workload of ["parse", "load"]) {
+  for (const workload of ["parse", "load", "direct"]) {
     const [a, b] = runs.filter((r) => r.workload === workload)
     const ma = msPer(a)
     const mb = msPer(b)
@@ -208,13 +210,17 @@ const main = () => {
       fail(`${workload}: the runs disagree: ${[...seen].join(" | ")}`)
     }
     console.log(
-      `${workload.padEnd(5)}  ${ma.toFixed(3)} ms (copy ${mb.toFixed(3)} ms, band ${band.toFixed(1)}%)  ${mbps(ma).toFixed(1)} MB/s  ${[...seen][0]}`
+      `${workload.padEnd(6)}  ${ma.toFixed(3)} ms (copy ${mb.toFixed(3)} ms, band ${band.toFixed(1)}%)  ${mbps(ma).toFixed(1)} MB/s  ${[...seen][0]}`
     )
   }
   const parse = msPer(runs[0])
   const load = msPer(runs[2])
+  const direct = msPer(runs[4])
   console.log(
     `load costs ${(load / parse).toFixed(2)}x the parse alone (+${(load - parse).toFixed(3)} ms a document)`
+  )
+  console.log(
+    `direct costs ${(direct / parse).toFixed(2)}x the parse alone (+${(direct - parse).toFixed(3)} ms a document), ${(load / direct).toFixed(2)}x faster than parse and load`
   )
 }
 

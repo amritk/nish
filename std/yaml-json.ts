@@ -283,6 +283,20 @@ export class YamlJsonLoader {
     return this.build(root, origin)
   }
 
+  /**
+   * Parses `text` and loads its document `d` into `doc`: the same values,
+   * ranges and refusals as `load(parseYaml(text), d, doc)`.
+   *
+   * @param text The YAML text, parsed with the default options.
+   * @param d The document's 0-based index in the text.
+   * @param doc Where the values go; cleared first, and cleared again when the load fails.
+   * @returns The root value, or a negative code that is also in `failed`, with the range in
+   *   `errorStart` and `errorEnd`.
+   */
+  loadText(text: string, d: i32, doc: JsonDocument): JsonValue {
+    return this.load(parseYaml(text), d, doc)
+  }
+
   /** Records a failed load, clearing the document, and answers `code`. */
   private fail(code: i32, start: i32, end: i32): i32 {
     this.failed = code
