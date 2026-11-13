@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 17 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 18 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -430,4 +430,38 @@ export const main = (): i32 => {
 
 ```text
 this call through `op` can reach 9 functions, more than eight, so it branches on a `switch` of them where a direct call would not; they came in through `ops: ((x: i32) => i32)[] = [f0, f1, f2, f3, f4, f5, f6, f7, f8]` (nl9017_fnref_wide_set.ts:40)
+```
+
+## NL9018
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…keeps an allocation on every call and runs on every pass of a loop that releases nothing…
+```
+
+[`nl9018_kept_memory.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9018_kept_memory.ts):
+
+```ts
+// NL9018: a function a loop runs on every pass keeps an allocation each call
+// (a `let` given a second string), and the loop's passes release nothing.
+const relabel = (n: i32): i32 => {
+  let s = "none";
+  if (n > 2) {
+    s = `b${n}`;
+  }
+  return s.length;
+};
+
+export const labels = (rows: i32): i32 => {
+  const out: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    out.push(`${relabel(i)}`);
+  }
+  return out.length;
+};
+```
+
+```text
+`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line 6, where this analysis does not prove it dead when the function returns (a local assigned more than once, an array of its own, or a callee that keeps its argument). Give each value its own `const`, open a block with `using a = arena()` around the work, or keep what must outlive the call in a region
 ```

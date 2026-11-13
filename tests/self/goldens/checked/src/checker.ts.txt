@@ -92,6 +92,7 @@ import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import checkResultLocalsHandled from "./result" -> function @checkResultLocalsHandled
+import isResultConstructorCall from "./emit-result" -> function @isResultConstructorCall
 import checkHygiene from "./hygiene" -> function @checkHygiene
 import checkSecretFlow from "./secret" -> function @checkSecretFlow
 import checkReturnValue from "./statements" -> function @checkReturnValue
@@ -1455,19 +1456,21 @@ function perfIsReadBuiltin(name: string): boolean -> @perfIsReadBuiltin
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean -> @perfAllocatesVisibly
+function perfAllocatesVisibly(ctx: CheckContext, expr: Node, inLoop: boolean): boolean -> @perfAllocatesVisibly
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: StringMap.has nish_panic_index nish_str_eq perfIsReadBuiltin unwrapPerfParens
+  calls: StringMap.has TypeTable.resultByValue isResultConstructorCall nish_panic_index nish_str_eq perfIsReadBuiltin unwrapPerfParens
   pointer ctx: size=344 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
   local +9:16 part: Node (const)
-  local +17:11 callee: Node (const)
-  callee +17:20 unwrapPerfParens -> @unwrapPerfParens
-  callee +18:46 perfIsReadBuiltin -> @perfIsReadBuiltin
-  callee +18:81 StringMap.has -> @StringMap.has
+  callee +17:9 isResultConstructorCall -> @isResultConstructorCall
+  callee +18:25 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local +20:11 callee: Node (const)
+  callee +20:20 unwrapPerfParens -> @unwrapPerfParens
+  callee +21:46 perfIsReadBuiltin -> @perfIsReadBuiltin
+  callee +21:81 StringMap.has -> @StringMap.has
 function perfIsPointerType(ctx: CheckContext, type: i32): boolean -> @perfIsPointerType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -1508,7 +1511,7 @@ function perfMayYieldLocal(ctx: CheckContext, expr: Node, local: Local): boolean
   callee +4:10 isLocalRef -> @isLocalRef
 function perfReceiverMayBeKept(ctx: CheckContext, callee: Node, local: Local): boolean -> @perfReceiverMayBeKept
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isArray isLocalRef nish_panic_index unwrapPerfParens
+  calls: TypeTable.isArray TypeTable.isResult isLocalRef nish_panic_index unwrapPerfParens
   pointer ctx: size=344 writesThrough=false captured=false passedTo=isLocalRef#0
   pointer callee: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer local: size=64 writesThrough=false captured=false passedTo=isLocalRef#2
@@ -1517,6 +1520,7 @@ function perfReceiverMayBeKept(ctx: CheckContext, callee: Node, local: Local): b
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
   callee +1:38 isLocalRef -> @isLocalRef
   callee +4:38 TypeTable.isArray -> @TypeTable.isArray
+  callee +4:72 TypeTable.isResult -> @TypeTable.isResult
 function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean -> @perfHeldValueMayBeReachable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index perfScanForCapture

@@ -1715,6 +1715,110 @@ function holdsFacts(list: FunctionFacts[], f: FunctionFacts): boolean -> @holdsF
   pointer f: size=432 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 g: FunctionFacts (const)
+function loopReachedFunctions(units: AnalysisUnit[], table: TypeTable, facts: FactsTable): StringSet -> @loopReachedFunctions [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: via CheckedProgram.enterInstance
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn StringSet.add StringSet.at StringSet.constructor StringSet.size collectPassCalls nish_alloc_struct nish_array_grow
+  pointer units: size=0 writesThrough=false captured=false
+  pointer table: size=136 writesThrough=false captured=false passedTo=collectPassCalls#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
+  stackSites=1 stackLocals=1
+  local +0:9 reached: StringSet (const)
+  callee +0:19 new StringSet -> @StringSet.constructor
+  local +1:9 work: string[] (const)
+  local +2:14 unit: AnalysisUnit (const)
+  local +3:11 program: CheckedProgram (const)
+  local +4:16 sig: FunctionSig (const)
+  local +5:13 f: FunctionFacts | null (const)
+  callee +5:17 FactsTable.get -> @FactsTable.get
+  local +6:13 body: Node | null (const)
+  callee +6:20 FunctionSig.body -> @FunctionSig.body
+  callee +7:12 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +10:13 instance: Instantiation | null (const)
+  callee +12:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee +14:7 collectPassCalls -> @collectPassCalls
+  callee +16:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +21:7 i: i32 (let)
+  local +23:11 g: FunctionFacts | null (const)
+  callee +23:15 FactsTable.get -> @FactsTable.get
+  local +25:11 c: i32 (let)
+  callee +26:18 StringSet.size -> @StringSet.size
+  local +27:15 name: string (const)
+  callee +27:22 StringSet.at -> @StringSet.at
+  callee +28:13 StringSet.add -> @StringSet.add
+function collectPassCalls(program: CheckedProgram, table: TypeTable, f: FunctionFacts, node: Node, inLoop: boolean, released: boolean, reached: StringSet, work: string[]): void -> @collectPassCalls
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: inLoop released
+  calls: StringSet.add calleeAt collectPassCalls isArenaUsing isLoopKind loopScopeOf nish_array_grow
+  pointer program: size=888 writesThrough=false captured=false passedTo=calleeAt#0 isArenaUsing#0 collectPassCalls#0 collectPassCalls#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=calleeAt#1 collectPassCalls#1 collectPassCalls#1
+  pointer f: size=432 writesThrough=false captured=false passedTo=loopScopeOf#0 collectPassCalls#2 collectPassCalls#2
+  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2 isLoopKind#0 loopScopeOf#1
+  pointer reached: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 collectPassCalls#6 collectPassCalls#6
+  pointer work: size=0 writesThrough=true captured=false passedTo=collectPassCalls#7 collectPassCalls#7
+  stackSites=0 stackLocals=0
+  local -2:11 callee: FunctionSig | null (const)
+  callee -2:20 calleeAt -> @calleeAt
+  callee -1:28 StringSet.add -> @StringSet.add
+  local +3:9 isLoop: boolean (const)
+  callee +3:18 isLoopKind -> @isLoopKind
+  local +4:9 scope: LoopScope | null (const)
+  callee +4:44 loopScopeOf -> @loopScopeOf
+  local +5:7 free: boolean (let)
+  local +6:7 i: i32 (let)
+  local +8:11 child: Node (const)
+  callee +9:53 isArenaUsing -> @isArenaUsing
+  local +11:11 once: boolean (const)
+  callee +13:7 collectPassCalls -> @collectPassCalls
+  local +16:13 scoped: boolean (const)
+  callee +17:7 collectPassCalls -> @collectPassCalls
+function keptMemoryFindings(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, reached: StringSet): ArenaFinding[] -> @keptMemoryFindings [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckedProgram.enterInstance
+  calls: ArenaFinding.constructor CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn SourceFile.lineOf StringSet.has holdsNode keptOwnAllocation nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
+  pointer unit: size=16 writesThrough=false captured=false passedTo=keptOwnAllocation#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=keptOwnAllocation#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 keptOwnAllocation#2
+  pointer reached: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
+  stackSites=1 stackLocals=1
+  local +0:9 out: ArenaFinding[] (const)
+  local +1:9 program: CheckedProgram (const)
+  local +2:9 said: Node[] (const)
+  local +3:14 sig: FunctionSig (const)
+  local +4:11 f: FunctionFacts | null (const)
+  callee +4:15 FactsTable.get -> @FactsTable.get
+  local +5:11 body: Node | null (const)
+  callee +5:18 FunctionSig.body -> @FunctionSig.body
+  callee +8:8 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +11:8 StringSet.has -> @StringSet.has
+  callee +12:7 holdsNode -> @holdsNode
+  local +16:11 instance: Instantiation | null (const)
+  callee +18:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local +20:11 held: Node | null (const)
+  callee +20:18 keptOwnAllocation -> @keptOwnAllocation
+  callee +22:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  callee +27:9 new ArenaFinding -> @ArenaFinding.constructor
+  callee +31:16 SourceFile.lineOf -> @SourceFile.lineOf
+function keptOwnAllocation(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, body: Node): Node | null -> @keptOwnAllocation
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: keptAllocation noScopeReason ownLeakNode
+  pointer unit: size=16 writesThrough=false captured=false passedTo=noScopeReason#0 keptAllocation#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=keptAllocation#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 keptAllocation#2 ownLeakNode#0
+  pointer sig: size=200 writesThrough=false captured=false
+  pointer f: size=432 writesThrough=false captured=false passedTo=noScopeReason#2 keptAllocation#3 ownLeakNode#1
+  pointer body: size=40 writesThrough=true captured=true passedTo=keptAllocation#4
+  stackSites=0 stackLocals=0
+  callee +0:5 noScopeReason -> @noScopeReason
+  callee +1:5 keptAllocation -> @keptAllocation
+  callee +5:10 ownLeakNode -> @ownLeakNode
+function holdsNode(list: Node[], node: Node): boolean -> @holdsNode
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer list: size=0 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 n: Node (const)
 function MemoryReport.constructor(this: MemoryReport): void -> @MemoryReport.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=24 writesThrough=true captured=false
