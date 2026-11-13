@@ -1376,6 +1376,7 @@
                   "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
                   "/wp52-run-rebuilds": { "type": "page", "title": "WP52: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp52-run-rebuilds.md" },
                   "/wp53-ffi-buffers-handles": { "type": "page", "title": "WP53: Buffers and handles across declare function", "filepath": "docs/roadmap/wp53-ffi-buffers-handles.md" },
+                  "/wp55-flat-memory-generators": { "type": "page", "title": "WP55: Generators whose memory stays flat", "filepath": "docs/roadmap/wp55-flat-memory-generators.md" },
                   "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
                   "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
                 }
