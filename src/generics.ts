@@ -95,51 +95,7 @@ import {
   noteStructNames,
   referencedStructNames,
 } from "./structs"
-import {
-  FLAG_ASYNC,
-  FLAG_FOREIGN,
-  isGatheredRest,
-  N_ARRAY,
-  N_ARROW,
-  N_BIGINT,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CLASS,
-  N_CONDITIONAL,
-  N_CONSTRUCTOR,
-  N_EMPTY,
-  N_FALSE,
-  N_FIELD,
-  N_IDENT,
-  N_INDEX,
-  N_INTERFACE,
-  N_LIST,
-  N_MEMBER,
-  N_METHOD,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_PARAM,
-  N_PAREN,
-  N_STRING,
-  N_SUPER,
-  N_TEMPLATE,
-  N_THIS,
-  N_TRUE,
-  N_TYPE_ARRAY,
-  N_TYPE_FUNCTION,
-  N_TYPE_NULL,
-  N_TYPE_OPERATOR,
-  N_TYPE_PAREN,
-  N_TYPE_READONLY,
-  N_TYPE_REF,
-  N_TYPE_UNION,
-  N_UNARY,
-  Node,
-  FLAG_REFERENCE_ARROW,
-} from "./nodes"
+import { FLAG_ASYNC, FLAG_FOREIGN, FLAG_REFERENCE_ARROW, isGatheredRest, Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   ConstraintList,
@@ -330,33 +286,33 @@ class StructExpansion {
   }
 }
 
-/** The type parameter list of an `N_FUNCTION`: its fifth child (WP18). */
+/** The type parameter list of a `NodeKind.FunctionDecl`: its fifth child (WP18). */
 const typeParameterList = (decl: Node): Node =>
   decl.children.length > 4 ? decl.children[4] : decl.children[0]
 
 /**
- * The type parameter list of an `N_CLASS` (fifth child) or an `N_INTERFACE`
+ * The type parameter list of a `NodeKind.Class` (fifth child) or a `NodeKind.Interface`
  * (third), both appended by WP18 G5 so the children that were there keep their
  * positions. The guard is the same one `typeParameterList` carries: a node
  * built before the list existed answers with something harmless rather than
  * reading past its own children.
  */
 const structTypeParameterList = (decl: Node): Node => {
-  const at = decl.kind === N_CLASS ? 4 : 2
+  const at = decl.kind === NodeKind.Class ? 4 : 2
   return decl.children.length > at ? decl.children[at] : decl.children[0]
 }
 
 /** Whether a class or interface declaration carries `<T, ...>`. */
 export const isGenericStruct = (decl: Node): boolean => {
   const list = structTypeParameterList(decl)
-  return list.kind === N_LIST && list.children.length > 0
+  return list.kind === NodeKind.List && list.children.length > 0
 }
 
 /** A struct template's declared type parameter names, in order. */
 export const collectStructTypeParamNames = (decl: Node): string[] => {
   const names: string[] = []
   for (const node of structTypeParameterList(decl).children) {
-    if (node.kind === N_IDENT) {
+    if (node.kind === NodeKind.Ident) {
       names.push(node.text)
     }
   }
@@ -366,7 +322,7 @@ export const collectStructTypeParamNames = (decl: Node): string[] => {
 /** Whether a function declaration carries `<T, ...>`. */
 export const isGenericFunction = (decl: Node): boolean => {
   const list = typeParameterList(decl)
-  return list.kind === N_LIST && list.children.length > 0
+  return list.kind === NodeKind.List && list.children.length > 0
 }
 
 /**
@@ -467,6 +423,43 @@ const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 =
 }
 
 /**
+ * `growingArgument` with `chainArguments(template, previous)` as the earlier
+ * tuple, read in place rather than built: the receiver's type arguments, then
+ * `previous`. `expandingAncestor` asks it once per link of a chain no count
+ * bounds, so a tuple built per link would pile up until its caller returns.
+ */
+const growingChainArgument = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  previous: i32[],
+  args: i32[]
+): i32 => {
+  let i = 0
+  const receiver = receiverOf(template)
+  if (receiver !== null) {
+    for (const before of receiver.typeArgs) {
+      if (i >= args.length) {
+        return -1
+      }
+      if (before !== args[i] && containsType(ctx, before, args[i])) {
+        return i
+      }
+      i = i + 1
+    }
+  }
+  for (const before of previous) {
+    if (i >= args.length) {
+      return -1
+    }
+    if (before !== args[i] && containsType(ctx, before, args[i])) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+/**
  * The ancestor instantiation of the same template whose type arguments this
  * request grows, or `null` when the request is finite by §4's rule.
  *
@@ -495,7 +488,7 @@ const expandingAncestor = (
     // function template is one object per declaration.
     const owner = at.template
     if (owner !== null && owner.decl === template.decl) {
-      const index = growingArgument(ctx, chainArguments(owner, at.typeArgs), wanted)
+      const index = growingChainArgument(ctx, owner, at.typeArgs, wanted)
       if (index >= 0) {
         return new Expansion(at, index)
       }
@@ -604,29 +597,29 @@ const unifyAnnotation = (
   bindings: StringMap
 ): void => {
   const table = ctx.table
-  if (annotation.kind === N_TYPE_PAREN) {
+  if (annotation.kind === NodeKind.TypeParen) {
     unifyAnnotation(ctx, annotation.children[0], arg, names, bindings)
     return
   }
-  if (annotation.kind === N_TYPE_ARRAY) {
+  if (annotation.kind === NodeKind.TypeArray) {
     if (table.kindOf(arg) === K_ARRAY) {
       unifyAnnotation(ctx, annotation.children[0], table.refOf(arg), names, bindings)
     }
     return
   }
-  if (annotation.kind === N_TYPE_READONLY) {
+  if (annotation.kind === NodeKind.TypeReadonly) {
     // The modifier changes who may write through the array, not its shape.
     unifyAnnotation(ctx, annotation.children[0], arg, names, bindings)
     return
   }
-  if (annotation.kind === N_TYPE_UNION) {
+  if (annotation.kind === NodeKind.TypeUnion) {
     // `T | null` against a nullable argument binds `T` to the inner type, and
     // against a plain pointer binds it to the argument itself, because `T` is
     // assignable into `T | null` and the call would have been legal.
     let member: Node | null = null
     let count = 0
     for (const part of annotation.children) {
-      if (part.kind !== N_TYPE_NULL) {
+      if (part.kind !== NodeKind.TypeNull) {
         member = part
         count = count + 1
       }
@@ -636,12 +629,12 @@ const unifyAnnotation = (
     }
     return
   }
-  if (annotation.kind !== N_TYPE_REF) {
+  if (annotation.kind !== NodeKind.TypeRef) {
     return
   }
   const name = annotation.text
   const list = annotation.children[0]
-  const argc = list.kind === N_LIST ? list.children.length : 0
+  const argc = list.kind === NodeKind.List ? list.children.length : 0
   if (argc === 0) {
     if (names.has(name) && bindings.get(name, -1) < 0) {
       bindings.set(name, canonicalArgument(table, arg))
@@ -681,9 +674,9 @@ const unifyAnnotation = (
 
 /** Whether an annotation mentions one of `names`, i.e. whether it needs an instantiation to resolve. */
 const mentionsTypeParam = (annotation: Node, names: StringSet): boolean => {
-  if (annotation.kind === N_TYPE_REF) {
+  if (annotation.kind === NodeKind.TypeRef) {
     const list = annotation.children[0]
-    const argc = list.kind === N_LIST ? list.children.length : 0
+    const argc = list.kind === NodeKind.List ? list.children.length : 0
     // A bare parameter cannot take type arguments, so the name alone decides.
     if (argc === 0 && names.has(annotation.text)) {
       return true
@@ -770,7 +763,7 @@ const nonTerminatingStructMessage = (
  */
 export const deferInstantiation = (ctx: CheckContext, imp: ImportBinding, written: Node, at: Node): i32 => {
   const args: i32[] = []
-  if (written.kind === N_LIST) {
+  if (written.kind === NodeKind.List) {
     for (const node of written.children) {
       args.push(resolveType(node, ctx))
     }
@@ -800,7 +793,7 @@ export const instantiateWritten = (
   written: Node,
   at: Node
 ): StructInfo | null => {
-  const count = written.kind === N_LIST ? written.children.length : 0
+  const count = written.kind === NodeKind.List ? written.children.length : 0
   if (count !== template.typeParams.length) {
     let example = ""
     let i = 0
@@ -1525,7 +1518,7 @@ export const checkGenericCall = (
   i = 0
   while (i < parameters.children.length && i < later.length && i < argTypes.length) {
     const annotation = parameters.children[i].children[1]
-    if (!later[i] && annotation.kind !== N_EMPTY) {
+    if (!later[i] && annotation.kind !== NodeKind.Empty) {
       unifyAnnotation(ctx, annotation, argTypes[i], names, bindings)
     }
     i = i + 1
@@ -1550,11 +1543,11 @@ export const checkGenericCall = (
     const early = argTypes[i]
     if (later[i] && !(functional && isFunctionParameter(param))) {
       let want = -1
-      if (annotation.kind !== N_EMPTY && functional && !mentionsUnbound(annotation, names, bindings)) {
+      if (annotation.kind !== NodeKind.Empty && functional && !mentionsUnbound(annotation, names, bindings)) {
         want = resolveInTemplate(template, annotation, bindings)
       }
       const type = checkExpression(ctx, arg, scope, want)
-      if (annotation.kind !== N_EMPTY) {
+      if (annotation.kind !== NodeKind.Empty) {
         unifyAnnotation(ctx, annotation, type, names, bindings)
       }
       settled.push(type)
@@ -1587,7 +1580,7 @@ export const checkGenericCall = (
       let k = 0
       while (k < parameters.children.length) {
         const annotation = parameters.children[k].children[1]
-        if (at < 0 && annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+        if (at < 0 && annotation.kind !== NodeKind.Empty && mentionsTypeParam(annotation, names)) {
           at = k
         }
         k = k + 1
@@ -1717,17 +1710,17 @@ export const checkGenericCall = (
 
 /** An annotation with its parentheses taken off, which is where a function type is recognised. */
 const unwrapTypeParens = (node: Node): Node =>
-  node.kind === N_TYPE_PAREN ? unwrapTypeParens(node.children[0]) : node
+  node.kind === NodeKind.TypeParen ? unwrapTypeParens(node.children[0]) : node
 
 /** Whether a declared parameter is annotated with a function type (WP29). */
 export const isFunctionParameter = (param: Node): boolean =>
-  param.kind === N_PARAM &&
+  param.kind === NodeKind.Param &&
   param.children.length > 1 &&
-  unwrapTypeParens(param.children[1]).kind === N_TYPE_FUNCTION
+  unwrapTypeParens(param.children[1]).kind === NodeKind.TypeFunction
 
 /** Whether any parameter of a function declaration is annotated with a function type (WP29). */
 export const hasFunctionParameter = (decl: Node): boolean => {
-  if (decl.children.length < 2 || decl.children[1].kind !== N_LIST) {
+  if (decl.children.length < 2 || decl.children[1].kind !== NodeKind.List) {
     return false
   }
   for (const param of decl.children[1].children) {
@@ -1767,7 +1760,7 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
     }
     const fnType = unwrapTypeParens(param.children[1])
     for (const inner of fnType.children[0].children) {
-      if (inner.children.length > 1 && unwrapTypeParens(inner.children[1]).kind === N_TYPE_FUNCTION) {
+      if (inner.children.length > 1 && unwrapTypeParens(inner.children[1]).kind === NodeKind.TypeFunction) {
         ctx.error(inner.children[1], functionTypeHereMessage(inner.children[0].text, "a function type"))
         return true
       }
@@ -1972,7 +1965,7 @@ const argumentOf = (call: Node, name: string, index: i32): string => argumentWor
 /** The name a call spells its callee with, `spawn` for `s.spawn(...)`; the template's own name otherwise. */
 const calleeSpelling = (call: Node, template: TemplateInfo): string => {
   const callee = call.children[0]
-  return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : template.sourceName
+  return callee.kind === NodeKind.Member || callee.kind === NodeKind.Ident ? callee.text : template.sourceName
 }
 
 /** `argumentOf` at the start of a sentence. */
@@ -1980,7 +1973,7 @@ const argumentLead = (call: Node, name: string, index: i32): string => argumentW
 
 const argumentWords = (call: Node, name: string, index: i32, capital: boolean): string => {
   const callee = call.children[0]
-  const method = callee.kind === N_IDENT ? rewrittenArrayMethod(callee.text) : ""
+  const method = callee.kind === NodeKind.Ident ? rewrittenArrayMethod(callee.text) : ""
   if (method === "") {
     return `${capital ? "A" : "a"}rgument ${index + 1} of \`${name}\``
   }
@@ -2064,11 +2057,11 @@ const resolveFunctionArgument = (
   // every node they visit; `void` is the one that says so.
   let written = arg
   ctx.program.nodeTypes[written.id] = T_VOID
-  while (written.kind === N_PAREN) {
+  while (written.kind === NodeKind.Paren) {
     written = written.children[0]
     ctx.program.nodeTypes[written.id] = T_VOID
   }
-  if (written.kind === N_ARROW) {
+  if (written.kind === NodeKind.Arrow) {
     return liftArrowArgument(ctx, call, template, index, written, names, bindings, scope)
   }
   const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
@@ -2077,12 +2070,12 @@ const resolveFunctionArgument = (
   // reference's place and calls it through a dispatcher. A field or element
   // is refused: it would be read again at each call.
   let inLocal: Local | null = null
-  if (written.kind === N_IDENT) {
+  if (written.kind === NodeKind.Ident) {
     inLocal = scope.lookup(written.text)
   }
   if (
     (inLocal !== null && ctx.table.isFnRef(ctx.table.stripNull(inLocal.type))) ||
-    ((written.kind === N_MEMBER || written.kind === N_INDEX) && rootedInLocal(written, scope))
+    ((written.kind === NodeKind.Member || written.kind === NodeKind.Index) && rootedInLocal(written, scope))
   ) {
     const type = inLocal !== null ? scope.typeOf(inLocal) : checkExpression(ctx, written, scope, -1)
     if (type === T_ERROR) {
@@ -2124,7 +2117,7 @@ const resolveFunctionArgument = (
     )
     return null
   }
-  if (written.kind !== N_IDENT) {
+  if (written.kind !== NodeKind.Ident) {
     refuseOnce(
       ctx,
       arg,
@@ -2221,16 +2214,16 @@ const resolveFunctionArgument = (
  */
 const rootedInLocal = (expr: Node, scope: Scope): boolean => {
   let root = expr
-  while (root.kind === N_MEMBER || root.kind === N_INDEX || root.kind === N_PAREN) {
+  while (root.kind === NodeKind.Member || root.kind === NodeKind.Index || root.kind === NodeKind.Paren) {
     root = root.children[0]
   }
-  return root.kind === N_THIS || (root.kind === N_IDENT && scope.lookup(root.text) !== null)
+  return root.kind === NodeKind.This || (root.kind === NodeKind.Ident && scope.lookup(root.text) !== null)
 }
 
 /** Whether an argument of `call` after `arg` assigns the local `name`. */
 const laterArgumentAssigns = (call: Node, arg: Node, name: string): boolean => {
   for (const child of call.children) {
-    if (child.kind === N_LIST) {
+    if (child.kind === NodeKind.List) {
       let after = false
       for (const each of child.children) {
         if (after && assignsName(each, name)) {
@@ -2280,7 +2273,7 @@ const referenceArgument = (
     )
     return null
   }
-  if (written.kind === N_IDENT && laterArgumentAssigns(call, arg, written.text)) {
+  if (written.kind === NodeKind.Ident && laterArgumentAssigns(call, arg, written.text)) {
     // The arrow's capture of the local is read once every argument has run,
     // where JavaScript reads the argument at its own position.
     refuseOnce(
@@ -2313,25 +2306,25 @@ const referenceArgument = (
   const actuals: Node[] = []
   k = 0
   while (k < wanted.length) {
-    const name = program.newNode(N_IDENT, written.start, written.end, `$a${k}`, none)
-    const blank = program.newNode(N_EMPTY, written.start, written.end, "", none)
-    formals.push(program.newNode(N_PARAM, written.start, written.end, "", [name, blank]))
-    actuals.push(program.newNode(N_IDENT, written.start, written.end, `$a${k}`, none))
+    const name = program.newNode(NodeKind.Ident, written.start, written.end, `$a${k}`, none)
+    const blank = program.newNode(NodeKind.Empty, written.start, written.end, "", none)
+    formals.push(program.newNode(NodeKind.Param, written.start, written.end, "", [name, blank]))
+    actuals.push(program.newNode(NodeKind.Ident, written.start, written.end, `$a${k}`, none))
     k = k + 1
   }
-  const list = program.newNode(N_LIST, written.start, written.end, "", actuals)
-  const body = program.newNode(N_CALL, written.start, written.end, "", [written, list])
-  const arrow = program.newNode(N_ARROW, arg.start, arg.end, "", [
-    program.newNode(N_EMPTY, arg.start, arg.start, "", none),
-    program.newNode(N_LIST, arg.start, arg.end, "", formals),
-    program.newNode(N_EMPTY, arg.end, arg.end, "", none),
+  const list = program.newNode(NodeKind.List, written.start, written.end, "", actuals)
+  const body = program.newNode(NodeKind.Call, written.start, written.end, "", [written, list])
+  const arrow = program.newNode(NodeKind.Arrow, arg.start, arg.end, "", [
+    program.newNode(NodeKind.Empty, arg.start, arg.start, "", none),
+    program.newNode(NodeKind.List, arg.start, arg.end, "", formals),
+    program.newNode(NodeKind.Empty, arg.end, arg.end, "", none),
     body,
-    program.newNode(N_LIST, arg.end, arg.end, "", none),
+    program.newNode(NodeKind.List, arg.end, arg.end, "", none),
   ])
   arrow.flags = FLAG_REFERENCE_ARROW
   program.grewNodes()
   for (const child of call.children) {
-    if (child.kind === N_LIST) {
+    if (child.kind === NodeKind.List) {
       let at = 0
       while (at < child.children.length) {
         if (child.children[at] === arg) {
@@ -2419,9 +2412,9 @@ const liftArrowArgument = (
     const written = params[k]
     const expected = wanted[k].children[1]
     const annotation = written.children[1]
-    if (annotation.kind === N_EMPTY) {
+    if (annotation.kind === NodeKind.Empty) {
       types.push(-1)
-    } else if (unwrapTypeParens(annotation).kind === N_TYPE_FUNCTION) {
+    } else if (unwrapTypeParens(annotation).kind === NodeKind.TypeFunction) {
       refuseOnce(ctx, annotation, functionTypeHereMessage(written.children[0].text, "an arrow"))
       return null
     } else {
@@ -2462,7 +2455,7 @@ const liftArrowArgument = (
   }
   let returnType = -1
   let annotated = arrow.children[2]
-  if (isAsync && annotated.kind !== N_EMPTY) {
+  if (isAsync && annotated.kind !== NodeKind.Empty) {
     const promised = promiseArgument(annotated)
     if (promised === null) {
       refuseOnce(ctx, annotated, ASYNC_RETURN_MESSAGE)
@@ -2470,7 +2463,7 @@ const liftArrowArgument = (
     }
     annotated = promised
   }
-  if (annotated.kind !== N_EMPTY) {
+  if (annotated.kind !== NodeKind.Empty) {
     returnType = resolveType(annotated, ctx)
     if (returnType === T_ERROR) {
       return null
@@ -2480,10 +2473,10 @@ const liftArrowArgument = (
     if (returnType === T_ERROR) {
       return null
     }
-  } else if (arrow.children[3].kind === N_BLOCK && isVoidSpawnTemplate(template)) {
+  } else if (arrow.children[3].kind === NodeKind.Block && isVoidSpawnTemplate(template)) {
     // A task with no destination answers nothing, so a block body is `void`.
     returnType = T_VOID
-  } else if (arrow.children[3].kind === N_BLOCK) {
+  } else if (arrow.children[3].kind === NodeKind.Block) {
     refuseOnce(
       ctx,
       arrow,
@@ -2524,7 +2517,8 @@ const captureMode = (template: TemplateInfo): i32 => {
 
 /** A numeric literal, negated or not, whose type is whatever its context says it is. */
 export const isContextualLiteral = (arg: Node): boolean =>
-  arg.kind === N_NUMBER || (arg.kind === N_UNARY && arg.text === "-" && arg.children[0].kind === N_NUMBER)
+  arg.kind === NodeKind.Number ||
+  (arg.kind === NodeKind.Unary && arg.text === "-" && arg.children[0].kind === NodeKind.Number)
 
 /** `(a, b) => ...`: how a lifted arrow is named in a diagnostic and in an instantiation's display name. */
 const arrowDisplayName = (arrow: Node): string => {
@@ -2937,14 +2931,14 @@ export const rejectDollarInSymbolName = (
  *   - The constraints are resolved, once, into the list every receiver shares.
  */
 export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node): void => {
-  if (classDecl.kind !== N_CLASS) {
+  if (classDecl.kind !== NodeKind.Class) {
     return
   }
   const className = classDecl.children[0].text
   const classParams = collectStructTypeParamNames(classDecl)
   const members = classDecl.children[3].children
   for (const member of members) {
-    if (member.kind !== N_METHOD) {
+    if (member.kind !== NodeKind.Method) {
       continue
     }
     ctx.errored = false
@@ -2968,7 +2962,7 @@ export const declareMethodTypeParameters = (ctx: CheckContext, classDecl: Node):
     const own = collectTypeParamNames(member)
     let refused = false
     for (const param of list.children) {
-      if (param.kind === N_IDENT && indexOfName(classParams, param.text) >= 0) {
+      if (param.kind === NodeKind.Ident && indexOfName(classParams, param.text) >= 0) {
         ctx.error(
           param,
           `Type parameter \`${param.text}\` of \`${className}.${methodName}\` shadows \`${className}\`'s own ` +
@@ -3019,7 +3013,7 @@ export const refuseUninferable = (
     let mentioned = false
     for (const declared of parameters.children) {
       const annotation = declared.children[1]
-      if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+      if (annotation.kind !== NodeKind.Empty && mentionsTypeParam(annotation, names)) {
         mentioned = true
       }
     }
@@ -3042,7 +3036,7 @@ export const refuseUninferable = (
 const spellsGenericInstance = (members: Node[], name: string): boolean => {
   for (const member of members) {
     if (
-      member.kind === N_METHOD &&
+      member.kind === NodeKind.Method &&
       isGenericFunction(member) &&
       name.startsWith(`${member.children[0].text}$`)
     ) {
@@ -3056,7 +3050,7 @@ const spellsGenericInstance = (members: Node[], name: string): boolean => {
 export const collectTypeParamNames = (decl: Node): string[] => {
   const names: string[] = []
   for (const node of typeParameterList(decl).children) {
-    if (node.kind === N_IDENT) {
+    if (node.kind === NodeKind.Ident) {
       names.push(node.text)
     }
   }
@@ -3108,7 +3102,7 @@ const resolveConstraints = (
   }
   const types: i32[] = []
   for (const param of list.children) {
-    if (param.kind === N_IDENT) {
+    if (param.kind === NodeKind.Ident) {
       home.errored = false
       types.push(param.children.length > 0 ? resolveConstraint(home, param, names) : -1)
     }
@@ -3159,9 +3153,9 @@ const resolveConstraint = (ctx: CheckContext, param: Node, names: StringSet): i3
   return type
 }
 
-/** Whether a type annotation holds a type operator anywhere (`keyof T`, N_TYPE_OPERATOR). */
+/** Whether a type annotation holds a type operator anywhere (`keyof T`, NodeKind.TypeOperator). */
 const holdsTypeOperator = (node: Node): boolean => {
-  if (node.kind === N_TYPE_OPERATOR) {
+  if (node.kind === NodeKind.TypeOperator) {
     return true
   }
   for (const child of node.children) {
@@ -3381,7 +3375,7 @@ export const genericCallSpelling = (
   scope: Scope
 ): string => {
   const decl = callee.decl
-  if (callee.instance === null || decl.kind === N_CONSTRUCTOR) {
+  if (callee.instance === null || decl.kind === NodeKind.Constructor) {
     return ""
   }
   const names = collectTypeParamNames(decl)
@@ -3460,12 +3454,12 @@ const constraintInScope = (ctx: CheckContext, name: string): i32 => {
 
 /** `(T)`, `readonly T[]` and `T | null` are `T`, `T[]` and `T` for the question of where a value came from. */
 const unwrapOrigin = (annotation: Node): Node => {
-  if (annotation.kind === N_TYPE_PAREN || annotation.kind === N_TYPE_READONLY) {
+  if (annotation.kind === NodeKind.TypeParen || annotation.kind === NodeKind.TypeReadonly) {
     return unwrapOrigin(annotation.children[0])
   }
-  if (annotation.kind === N_TYPE_UNION) {
+  if (annotation.kind === NodeKind.TypeUnion) {
     for (const part of annotation.children) {
-      if (part.kind !== N_TYPE_NULL) {
+      if (part.kind !== NodeKind.TypeNull) {
         return unwrapOrigin(part)
       }
     }
@@ -3479,8 +3473,8 @@ const unwrapOrigin = (annotation: Node): Node => {
  * class's parameters with.
  */
 const isBareName = (annotation: Node): boolean =>
-  annotation.kind === N_IDENT ||
-  (annotation.kind === N_TYPE_REF && annotation.children[0].children.length === 0)
+  annotation.kind === NodeKind.Ident ||
+  (annotation.kind === NodeKind.TypeRef && annotation.children[0].children.length === 0)
 
 /**
  * Follow an origin through the names it substitutes, to the one whose
@@ -3549,17 +3543,18 @@ const originElement = (origin: TypeOrigin | null): TypeOrigin | null => {
     return at
   }
   const node = unwrapOrigin(at.annotation)
-  if (node.kind === N_TYPE_ARRAY) {
+  if (node.kind === NodeKind.TypeArray) {
     return new TypeOrigin(node.children[0], at.names, at.args)
   }
-  if (node.kind === N_ARRAY) {
+  if (node.kind === NodeKind.Array) {
     return at.args.length > 0 ? at.args[0] : null
   }
-  const isArrayRef = node.kind === N_TYPE_REF && (node.text === "Array" || node.text === "ReadonlyArray")
-  const isArrayNew = node.kind === N_NEW && node.children[0].text === "Array"
+  const isArrayRef =
+    node.kind === NodeKind.TypeRef && (node.text === "Array" || node.text === "ReadonlyArray")
+  const isArrayNew = node.kind === NodeKind.New && node.children[0].text === "Array"
   if (isArrayRef || isArrayNew) {
-    const list = node.kind === N_NEW ? node.children[1] : node.children[0]
-    if (list.kind === N_LIST && list.children.length === 1) {
+    const list = node.kind === NodeKind.New ? node.children[1] : node.children[0]
+    if (list.kind === NodeKind.List && list.children.length === 1) {
       return new TypeOrigin(list.children[0], at.names, at.args)
     }
   }
@@ -3572,15 +3567,15 @@ const originElement = (origin: TypeOrigin | null): TypeOrigin | null => {
  * in an instantiated layout, because the layout has only concrete types.
  */
 const memberAnnotation = (decl: Node, name: string, method: boolean): Node | null => {
-  const members = decl.kind === N_CLASS ? decl.children[3] : decl.children[1]
+  const members = decl.kind === NodeKind.Class ? decl.children[3] : decl.children[1]
   for (const member of members.children) {
     if (member.children.length === 0 || member.children[0].text !== name) {
       continue
     }
-    if (method && member.kind === N_METHOD) {
+    if (method && member.kind === NodeKind.Method) {
       return member.children[2]
     }
-    if (!method && member.kind === N_FIELD) {
+    if (!method && member.kind === NodeKind.Field) {
       return member.children[1]
     }
   }
@@ -3601,7 +3596,7 @@ const structShape = (
   args: (TypeOrigin | null)[]
 ): StructTemplateInfo | null => {
   const node = unwrapOrigin(at.annotation)
-  if (node.kind === N_CLASS || node.kind === N_INTERFACE) {
+  if (node.kind === NodeKind.Class || node.kind === NodeKind.Interface) {
     const owner = ctx.currentStructInstance
     if (owner === null || owner.template.decl !== node) {
       return null
@@ -3613,10 +3608,10 @@ const structShape = (
   }
   let name = ""
   let written: Node | null = null
-  if (node.kind === N_TYPE_REF) {
+  if (node.kind === NodeKind.TypeRef) {
     name = node.text
     written = node.children[0]
-  } else if (node.kind === N_NEW) {
+  } else if (node.kind === NodeKind.New) {
     name = node.children[0].text
     written = node.children[1]
   }
@@ -3659,7 +3654,7 @@ const originOfMember = (
     return originElement(at)
   }
   const node = unwrapOrigin(at.annotation)
-  if (node.kind === N_TYPE_REF && node.text === "Result" && node.children[0].children.length === 2) {
+  if (node.kind === NodeKind.TypeRef && node.text === "Result" && node.children[0].children.length === 2) {
     const list = node.children[0]
     if (unwrapsOk(name, method)) {
       return new TypeOrigin(list.children[0], at.names, at.args)
@@ -3724,7 +3719,7 @@ const originOfGenericCall = (
       const annotation = unwrapOrigin(parameters.children[k].children[1])
       if (isBareName(annotation) && annotation.text === name) {
         found = originOf(ctx, written.children[k], scope)
-      } else if (annotation.kind === N_TYPE_ARRAY && isBareName(unwrapOrigin(annotation.children[0]))) {
+      } else if (annotation.kind === NodeKind.TypeArray && isBareName(unwrapOrigin(annotation.children[0]))) {
         if (unwrapOrigin(annotation.children[0]).text === name) {
           found = originElement(originOf(ctx, written.children[k], scope))
         }
@@ -3789,25 +3784,25 @@ const originOfArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope): Type
  */
 const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
   switch (expr.kind) {
-    case N_IDENT: {
+    case NodeKind.Ident: {
       // A module constant or a builtin import is a scalar, a string or an
       // array of them, declared outside every template.
       const local = scope.lookup(expr.text)
       return local === null ? null : local.origin
     }
-    case N_THIS: {
+    case NodeKind.This: {
       // In an instantiated class's method, `this` is the class at its own
       // parameters; anywhere else it is a declared class.
       const owner = ctx.currentStructInstance
       return owner === null ? null : new TypeOrigin(owner.template.decl, [], [])
     }
-    case N_PAREN:
+    case NodeKind.Paren:
       return originOf(ctx, expr.children[0], scope)
-    case N_CONDITIONAL: {
+    case NodeKind.Conditional: {
       const whenTrue = originOf(ctx, expr.children[1], scope)
       return whenTrue !== null ? whenTrue : originOf(ctx, expr.children[2], scope)
     }
-    case N_BINARY:
+    case NodeKind.Binary:
       // An assignment's value is its right-hand side. Every other operator
       // answers a type of its own — a number, a boolean, a concatenated
       // string — which is the operator's result, not the operand's.
@@ -3817,13 +3812,13 @@ const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | nul
         return unknownOrigin(expr)
       }
       return expr.text === "=" ? originOf(ctx, expr.children[1], scope) : null
-    case N_INDEX:
+    case NodeKind.Index:
       return originElement(originOf(ctx, expr.children[0], scope))
-    case N_MEMBER:
+    case NodeKind.Member:
       return originOfMember(ctx, expr.children[0], expr.text, false, scope)
-    case N_CALL: {
+    case NodeKind.Call: {
       const callee = expr.children[0]
-      if (callee.kind === N_MEMBER) {
+      if (callee.kind === NodeKind.Member) {
         // A generic method's call was resolved to its instantiation when it was
         // checked, which is before anybody asks where its value came from.
         const sig = ctx.program.nodeCallees[expr.id]
@@ -3834,7 +3829,7 @@ const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | nul
         }
         return originOfMember(ctx, callee.children[0], callee.text, true, scope)
       }
-      if (callee.kind === N_IDENT && scope.lookup(callee.text) === null) {
+      if (callee.kind === NodeKind.Ident && scope.lookup(callee.text) === null) {
         // WP29: a call through a function parameter answers what its function
         // type says it does, as the template wrote it: `f(x)` with
         // `f: (a: T) => T` is a `T`, whatever the callee's declared type is.
@@ -3852,29 +3847,29 @@ const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | nul
       // `Math.min` and `Math.max`, whose values are numbers.
       return null
     }
-    case N_NEW:
+    case NodeKind.New:
       // `new Box<U>(u)` is an instantiation written out, exactly as an
       // annotation `Box<U>` is; a class with no type arguments is declared.
       return expr.children[1].children.length > 0 ? new TypeOrigin(expr, [], []) : null
-    case N_ARRAY:
+    case NodeKind.Array:
       return originOfArrayLiteral(ctx, expr, scope)
-    case N_UNARY:
+    case NodeKind.Unary:
       // `-`, `+`, `!`, `~`, `++` and `--` answer a number or a boolean.
       return null
-    case N_OBJECT:
+    case NodeKind.Object:
       // An object literal takes its type from its context, which is an
       // annotation, and the annotation is what a declaration records.
       return null
-    case N_NUMBER:
-    case N_BIGINT:
-    case N_STRING:
-    case N_TEMPLATE:
-    case N_TRUE:
-    case N_FALSE:
-    case N_NULL:
+    case NodeKind.Number:
+    case NodeKind.Bigint:
+    case NodeKind.String:
+    case NodeKind.Template:
+    case NodeKind.True:
+    case NodeKind.False:
+    case NodeKind.Null:
       // A literal has the type it spells.
       return null
-    case N_SUPER:
+    case NodeKind.Super:
       // Refused wherever it is written (WP25).
       return null
     default:
@@ -3896,10 +3891,10 @@ export const declaredOrigin = (
   if (ctx.typeBindings.size() === 0) {
     return null
   }
-  if (annotation.kind !== N_EMPTY) {
+  if (annotation.kind !== NodeKind.Empty) {
     return new TypeOrigin(annotation, [], [])
   }
-  return initializer.kind === N_EMPTY ? null : originOf(ctx, initializer, scope)
+  return initializer.kind === NodeKind.Empty ? null : originOf(ctx, initializer, scope)
 }
 
 /** The origin of parameter `index` of `sig` (after `this`, for a method), or `null` outside an instantiation. */
@@ -3907,7 +3902,7 @@ export const parameterOrigin = (ctx: CheckContext, sig: FunctionSig, index: i32)
   if (ctx.typeBindings.size() === 0) {
     return null
   }
-  const list = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[0] : sig.decl.children[1]
+  const list = sig.decl.kind === NodeKind.Constructor ? sig.decl.children[0] : sig.decl.children[1]
   const at = sig.owner !== null ? index - 1 : index
   if (at < 0 || at >= list.children.length) {
     return null

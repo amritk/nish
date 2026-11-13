@@ -61,6 +61,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
+| [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 5 |
 
 ## Landed
 
@@ -107,6 +108,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP50: A WebAssembly module a TypeScript page drives](wp50-wasm-host.md) | Landed | 6 of 6 |
 | [WP52: Fast rebuilds for `nish run`](wp52-run-rebuilds.md) | Landed | 1 of 2 |
 | [WP53: Buffers and handles across `declare function`](wp53-ffi-buffers-handles.md) | Landed | 1 of 1 |
+| [WP55: An object graph a WebAssembly module keeps between calls](wp55-persistent-root.md) | Landed | 1 of 1 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 | [WP41: A wide multiply](wp41-mul-wide.md) | Declined | 1 of 1 |
 

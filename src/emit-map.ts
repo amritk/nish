@@ -44,19 +44,7 @@ import { FactsTable } from "./attributes"
 import { internalErrorFor } from "./ice"
 import { coalescesMaybe, intrinsicType, isOptionalChain, unwrapParens } from "./emit-util"
 import { StringSet } from "./map"
-import {
-  FLAG_OPTIONAL,
-  N_CALL,
-  N_FALSE,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NULL,
-  N_NUMBER,
-  N_STRING,
-  N_TRUE,
-  Node,
-} from "./nodes"
+import { FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   FUSE_NONE,
@@ -120,7 +108,7 @@ export const emitStoredKey = (emitter: Emitter, sig: FunctionSig, arg: Node): st
   if (instance === null || instance.typeArgs.length !== 1) {
     process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not a key intrinsic`, emitter.opts.json))
   }
-  const local: Local | null = arg.kind === N_IDENT ? emitter.program.nodeLocals[arg.id] : null
+  const local: Local | null = arg.kind === NodeKind.Ident ? emitter.program.nodeLocals[arg.id] : null
   if (local === null || local.storage !== STORAGE_PARAM || emitter.program.nodeCoercions[arg.id] >= 0) {
     process.exit(internalErrorFor(`emitter: \`${sig.name}\` takes a parameter`, emitter.opts.json))
   }
@@ -611,7 +599,7 @@ export const valueReaderOf = (probe: FunctionSig): FunctionSig | null => {
 const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
   const expr = unwrapParens(maybe)
   const local = emitter.program.nodeLocals[expr.id]
-  if (expr.kind === N_IDENT && local !== null) {
+  if (expr.kind === NodeKind.Ident && local !== null) {
     return emitter.maybeParts[maybeLocalIndex(emitter, local)]
   }
   // WP32 S5: the `get` of a fused update reads the update's probe.
@@ -627,7 +615,7 @@ const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
     )
   }
   const probe = emitter.program.nodeCallees[expr.id]
-  if (expr.kind !== N_CALL || probe === null) {
+  if (expr.kind !== NodeKind.Call || probe === null) {
     process.exit(internalErrorFor("emitter: a maybe that is neither `get` nor a `const`", emitter.opts.json))
   }
   const receiver = emitter.emitExpression(expr.children[0].children[0])
@@ -881,8 +869,8 @@ const emitChainCoalesce = (emitter: Emitter, expr: Node): string => {
 const optionalLinks = (chain: Node): i32 => {
   let count = 0
   let node = chain
-  while (node.kind === N_MEMBER || node.kind === N_CALL || node.kind === N_INDEX) {
-    if (node.kind === N_MEMBER && (node.flags & FLAG_OPTIONAL) !== 0) {
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
+    if (node.kind === NodeKind.Member && (node.flags & FLAG_OPTIONAL) !== 0) {
       count = count + 1
     }
     node = node.children[0]
@@ -924,15 +912,15 @@ const isSet = (emitter: Emitter, type: i32, value: string): string => {
 
 /** A literal, a local or a module constant: evaluating it has no effect, so it may be evaluated whether or not it is used. */
 const isPlainOperand = (emitter: Emitter, expr: Node): boolean => {
-  if (expr.kind === N_IDENT) {
+  if (expr.kind === NodeKind.Ident) {
     return emitter.program.nodeLocals[expr.id] !== null || emitter.program.nodeConstants[expr.id] !== null
   }
   return (
-    expr.kind === N_NUMBER ||
-    expr.kind === N_STRING ||
-    expr.kind === N_TRUE ||
-    expr.kind === N_FALSE ||
-    expr.kind === N_NULL
+    expr.kind === NodeKind.Number ||
+    expr.kind === NodeKind.String ||
+    expr.kind === NodeKind.True ||
+    expr.kind === NodeKind.False ||
+    expr.kind === NodeKind.Null
   )
 }
 
@@ -996,7 +984,7 @@ export const emitWalk = (emitter: Emitter, stmt: Node): void => {
   // `m.keys()` was checked as a call of `walkOpen`; any other iterable, a call
   // that answers a `Set` included, is the table itself.
   const recorded = emitter.program.nodeCallees[iterable.id]
-  const isCall = iterable.kind === N_CALL && recorded !== null && recorded === open
+  const isCall = iterable.kind === NodeKind.Call && recorded !== null && recorded === open
   const receiverExpr = isCall ? iterable.children[0].children[0] : iterable
   const receiver = `${emitter.llvm(open.paramTypes[0])} ${emitter.emitExpression(receiverExpr)}`
   fn.emit(`call void @${open.name}(${receiver})`)

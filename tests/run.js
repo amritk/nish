@@ -51,6 +51,7 @@ import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/p
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import {
   budgetLabel,
+  HTTP1_SERVER_IDLE_BYTES,
   HTTP1_SERVER_START_BYTES,
   HTTP1_TLS_SERVER_START_BYTES,
   HTTP2_TLS_SERVER_START_BYTES,
@@ -106,6 +107,8 @@ import {
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
+// What the wasm page tests run a host module with an `enum` under: see tests/ts-transform.js.
+const TS_TRANSFORM = pathToFileURL(path.join(root, "tests", "ts-transform.js")).href
 /**
  * The compiler under test: stage1, `src/` linked by the seed once per run,
  * and every compile in this file is a spawn of it.
@@ -1643,6 +1646,11 @@ const DEALT_SECTIONS = {
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
   fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
+  unboundedPass: {
+    name: "NL9018 on a request loop (--json, the flag, the http1 servers and their RSS)",
+    selected: selects("nl9018", "unbounded_pass"),
+  },
+  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
   differential: { name: "the WP13 differential section", selected: selects("differential") },
   p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
   netStartup: { name: "the net servers' startup links", selected: true, tail: true },
@@ -5601,6 +5609,82 @@ if (dealtHere("performance")) {
     passDrop.stderr
   )
 
+  // NL9018: a loop that nothing bounds -- a poll, `while (true)` -- keeps what
+  // each pass allocates, because each pass stores into a structure older than
+  // the loop and so gets no scope. The warning sits on the innermost loop that
+  // releases nothing (the counted `for` inside `rounds`, which nothing outside
+  // it bounds either), names the first site and counts the rest. A `while` that
+  // compares beside a call (`drain`), a `for...of` that pushes onto what it
+  // walks (`walk`), a condition that allocates (`probe`), a flag (`flag`), a
+  // top-level `||` (`accept`) and a walk whose body passes the array it walks
+  // to a call that pushes (`lent`), are unbounded too, and so is a pass that
+  // builds a temporary and then `continue`s (`skips`), even when the rest of
+  // the body breaks (`flagged`), from an `else` whose `if` breaks (`branches`)
+  // or by label (`labelled`). A `return` inside a `switch` still warns
+  // (`switched`): the leave walk stops at a `switch`. A walk also counts as
+  // unbounded when its array goes through a function reference (`passed`), is
+  // written by index (`stores`) or is given another name (`renames`). An
+  // unlabelled `break` from a loop inside a polled one ends only its own loop,
+  // so the polled loop runs it again: two levels (`nested`) and three, with the
+  // `break` in the middle loop (`deep`), both warn.
+  const unbounded = compile("perf_arena_unbounded_pass", "perf_arena_unbounded_pass_report.ll")
+  const unboundedLines = summaries(unbounded.stderr)
+  check(
+    "performance: a loop nothing bounds that keeps what each pass allocates warns once, naming the site and the arena block",
+    unbounded.status === 0 &&
+      unboundedLines.length === 19 &&
+      positions(unboundedLines) === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5" &&
+      unboundedLines[0].includes(
+        "this loop keeps what each pass allocates until the memory of `serve`'s caller is released, because the " +
+          "allocation on line 36 is stored into memory, where this analysis stops following it, and nothing bounds " +
+          "how many passes it runs, so the string built on line 34 piles up for as long as it runs. Move the " +
+          "per-pass work that builds it into a block inside the loop body that opens with `using a = arena()`, " +
+          "which the compiler refuses if anything allocated there could outlive the block"
+      ) &&
+      unboundedLines[1].includes("so the string built on line 50 piles up") &&
+      unboundedLines[2].includes("so the string built on line 62 and 1 more allocation pile up") &&
+      unboundedLines[3].includes("so the string built on line 75 piles up") &&
+      unboundedLines[4].includes("so the string built on line 85 piles up") &&
+      unboundedLines[5].includes("so the string built on line 97 piles up") &&
+      unboundedLines[6].includes("so the string built on line 106 piles up") &&
+      unboundedLines[7].includes("so the string built on line 118 piles up") &&
+      unboundedLines[8].includes("so the string built on line 135 piles up") &&
+      unboundedLines[9].includes("so the string built on line 153 piles up") &&
+      unboundedLines[10].includes("so the string built on line 169 piles up") &&
+      unboundedLines[11].includes("so the string built on line 187 piles up") &&
+      unboundedLines[12].includes("so the string built on line 199 piles up") &&
+      unboundedLines[13].includes("so the string built on line 212 piles up") &&
+      unboundedLines[14].includes("so the string built on line 229 piles up") &&
+      unboundedLines[15].includes("so the string built on line 243 piles up") &&
+      unboundedLines[16].includes("so the string built on line 255 piles up") &&
+      unboundedLines[17].includes("so the string built on line 273 piles up") &&
+      unboundedLines[18].includes("so the string built on line 287 piles up"),
+    unbounded.stderr
+  )
+  // Silent for the same temporary in a `using a = arena()` block, a counted
+  // `for`, ordering comparisons that call nothing (`while (i < n)`,
+  // `k < toI32(xs.length)`, `while (j >= 0 && j < n)`), walks whose
+  // body calls something that resizes some other array, of a local (`owned`) and
+  // of a field (`fielded`), a scoped pass, temporaries from which every path
+  // leaves the loop (`finds`), a temporary handed to a callee that keeps it
+  // (`posts`), a walk whose array goes to a call that only reads it (`reads`),
+  // temporaries left by an `if` with no `else`, by both arms of an `if` and by
+  // a labelled `break` (`leaves`), a labelled `break` out of a polled loop
+  // from a loop inside it (`exitsLabelled`), a `return` from such a loop
+  // (`exitsReturn`), an inner loop whose own passes are scoped (`innerScoped`),
+  // and a drop NL9016 already names, with its value on the target's line or the next:
+  // two warnings, both NL9016's.
+  const unboundedQuiet = compile("perf_arena_unbounded_quiet", "perf_arena_unbounded_quiet.ll")
+  const unboundedQuietLines = summaries(unboundedQuiet.stderr)
+  check(
+    "performance: NL9018 is silent for an arena block, a counted loop, a comparison that calls nothing, a walk whose body cannot extend what it walks, a scoped pass, a pass that leaves the loop or keeps what it builds, and a line NL9016 reports",
+    unboundedQuiet.status === 0 &&
+      unboundedQuietLines.length === 2 &&
+      positions(unboundedQuietLines) === "57:5,69:5" &&
+      unboundedQuietLines.every((l) => l.includes("`last` is given a new allocation on every pass")),
+    unboundedQuiet.stderr
+  )
+
   // The arithmetic rules. These are not advice about speed: each one is a
   // program that does not compute what it was written to compute, and the
   // message has to name the rewrite all the same.
@@ -7114,6 +7198,9 @@ if (dealtHere("fix")) {
 //                  flag, which must write the same modules byte for byte. It is here for
 //                  a program a case cannot be, one that imports `nish/threads`
 //   args           extra CLI flags (e.g. --strict-exports)
+//   ulimit         arguments to bash's `ulimit` that the program runs under (e.g.
+//                  `-n 1024`, so a program that uses up its descriptors meets the
+//                  limit fast whatever the host's hard limit; Linux and Darwin only)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
 //                  module with a golden is compared, so there is no missing one to write;
 //                  `--update-link-goldens` rewrites each golden that differs from what
@@ -7536,7 +7623,11 @@ const runLinkProgram = async (name) => {
   // The programs in flight share the repository root as their working
   // directory, and nothing in it: each writes only a directory of its own and
   // binds port 0 (see above, with net_prefork's one rebind).
-  const run = await runNative(`link/${name}`, exe, [])
+  const limits = fs.existsSync(side("ulimit")) ? read("ulimit").trim() : ""
+  const run =
+    limits === ""
+      ? await runNative(`link/${name}`, exe, [])
+      : await runNative(`link/${name} (ulimit ${limits})`, "bash", ["-c", `ulimit ${limits} && exec "$0"`, exe])
   if (run.death !== null) {
     expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
     return record
@@ -7912,7 +8003,7 @@ if (dealtHere("selfHosting")) {
   )
 
   // And the half of the parser the oracle cannot see: recovery. A failed
-  // parse is an `N_ERROR` node and a diagnostic, and the declaration after
+  // parse is a `NodeKind.Error` node and a diagnostic, and the declaration after
   // it still parses (docs/wp14-selfhost.md §3a D1).
   const astDumper = path.join(buildDir, "self", "dump_ast")
   const builtAst = spawnSync(NISH, [path.join(selfDir, "dump-ast.ts"), "--link", astDumper], {
@@ -11690,6 +11781,260 @@ if (dealtHere("fileServer")) {
   }
 }
 
+// ---- NL9018: an unbounded loop that keeps what each pass allocates ----------------
+// `perf_arena_unbounded_pass` pins the warning's text and positions in the
+// performance section; this one holds what a golden cannot say. The code a tool
+// reads (`--json`), that the flag silences it without moving a byte of the IR,
+// and the shape it was written for: a request loop on `std/net/http1-server`.
+// `tests/link/nl9018_server/leaky.ts` builds its reply text in the event loop
+// and warns; `flat.ts` builds it in a `using a = arena()` block and compiles
+// clean, refused nothing; `examples/file-server.ts`, which allocates nothing per
+// request in its own code, stays quiet.
+//
+// Then each server answers 2,000 requests on one keep-alive connection, one
+// at a time, and 20,000 more; its VmRSS is read from /proc after each batch.
+// Ten runs of each (Linux x64, `--profile speed`) read flat's at the same kB
+// after both batches and leaky's 1,252 kB higher after the second, every time.
+// The band is 256 kB, a fifth of what leaky gains, so flat must stay within it
+// and leaky must leave it: the second says the measure can see the pile the
+// warning names.
+if (dealtHere("unboundedPass")) {
+  const UNBOUNDED_RSS_BAND = 256
+  const srvDir = path.join(buildDir, "nl9018-server")
+  fs.rmSync(srvDir, { recursive: true, force: true })
+  fs.mkdirSync(srvDir, { recursive: true })
+  const nl9018Lines = (text) =>
+    text
+      .split("\n")
+      .filter(
+        (l) =>
+          /:\d+:\d+: performance: this loop keeps what each pass/.test(l) &&
+          l.includes("nothing bounds how many passes")
+      )
+  const caseCompile = (out, extra) =>
+    spawnSync(
+      NISH,
+      [path.join(casesDir, "perf_arena_unbounded_pass.ts"), "-o", path.join(srvDir, out), ...extra],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+
+  const plain = caseCompile("plain.ll", [])
+  const js = caseCompile("json.ll", ["--json"])
+  const objects = js.stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => {
+      try {
+        return JSON.parse(l)
+      } catch {
+        return null
+      }
+    })
+  check(
+    'nl9018: --json reports each of perf_arena_unbounded_pass\'s nineteen warnings with "code":"NL9018"',
+    js.status === 0 &&
+      objects.length === 19 &&
+      objects.every((o) => o !== null && o.code === "NL9018" && o.severity === "performance") &&
+      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5",
+    shown(js)
+  )
+  const off = caseCompile("off.ll", ["--no-warn-performance"])
+  check(
+    "nl9018: --no-warn-performance silences it and leaves the IR byte-identical",
+    plain.status === 0 &&
+      nl9018Lines(plain.stderr).length === 19 &&
+      off.status === 0 &&
+      !off.stderr.includes("performance:") &&
+      stripHeader(fs.readFileSync(path.join(srvDir, "off.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(srvDir, "plain.ll"), "utf8")),
+    `${plain.stderr}\n---\n${off.stderr}`
+  )
+
+  const serverDir = path.join(root, "tests", "link", "nl9018_server")
+  const build = (name, file, extra) => {
+    const out = path.join(srvDir, name)
+    fs.mkdirSync(out, { recursive: true })
+    return spawnSync(NISH, [file, "-o", out + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+    })
+  }
+  const leaky = build("leaky", path.join(serverDir, "leaky.ts"), [])
+  const leakyHits = nl9018Lines(leaky.stderr)
+  check(
+    "nl9018: a request loop on Http1Server that builds its reply text per request warns, at the event loop",
+    leaky.status === 0 &&
+      leakyHits.length === 1 &&
+      leakyHits[0].includes("leaky.ts:93:9: ") &&
+      leakyHits[0].includes("the string built on line 95 piles up") &&
+      leakyHits[0].includes("`using a = arena()`"),
+    shown(leaky)
+  )
+  const flat = build("flat", path.join(serverDir, "flat.ts"), [])
+  check(
+    "nl9018: the same loop with that work in a `using a = arena()` block compiles with no warning and no refusal",
+    flat.status === 0 && !flat.stderr.includes("performance:") && !flat.stderr.includes("error"),
+    shown(flat)
+  )
+  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
+  check(
+    "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
+    fileServer.status === 0 && nl9018Lines(fileServer.stderr).length === 0,
+    shown(fileServer)
+  )
+
+  if (process.platform !== "linux") {
+    skip("nl9018: VmRSS is read from /proc, which only Linux has")
+  } else if (!HAS_CLANG) {
+    skip("nl9018: clang not on PATH, so the servers cannot be linked")
+  } else {
+    // Answers `counts` batches of requests on one keep-alive connection, one
+    // request in flight at a time, and gives the server's VmRSS in kB after
+    // each batch, or an error. The server is killed whatever happens.
+    const rssAfter = (exe, counts) =>
+      new Promise((resolve) => {
+        const server = spawn(exe, [], { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        let settled = false
+        const finish = (r) => {
+          if (settled) return
+          settled = true
+          clearTimeout(deadline)
+          server.kill("SIGKILL")
+          resolve(r)
+        }
+        const deadline = setTimeout(() => finish({ error: "no answer within 60 s" }), 60_000)
+        const rss = () => {
+          try {
+            return Number(/VmRSS:\s+(\d+) kB/.exec(fs.readFileSync(`/proc/${server.pid}/status`, "utf8"))?.[1] ?? -1)
+          } catch {
+            // The server is gone; -1 makes the batch an error, not an uncaught throw.
+            return -1
+          }
+        }
+        server.on("error", (e) => finish({ error: String(e) }))
+        server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
+        server.stdout.on("data", (d) => {
+          if (out.includes("\n")) return
+          out += d
+          if (!out.includes("\n")) return
+          const socket = net.connect(Number(out.trim()), "127.0.0.1")
+          const request = "GET / HTTP/1.1\r\nHost: x\r\n\r\n"
+          const readings = []
+          let batch = 0
+          let left = counts[0]
+          let pending = Buffer.alloc(0)
+          socket.on("error", (e) => finish({ error: String(e) }))
+          socket.on("connect", () => socket.write(request))
+          socket.on("data", (chunk) => {
+            pending = Buffer.concat([pending, chunk])
+            for (;;) {
+              const end = pending.indexOf("\r\n\r\n")
+              if (end < 0) return
+              const head = pending.subarray(0, end).toString("latin1")
+              const length = Number(/Content-Length: (\d+)/i.exec(head)?.[1] ?? -1)
+              if (!head.startsWith("HTTP/1.1 200 ") || length < 0) {
+                finish({ error: `unexpected response head: ${head}` })
+                return
+              }
+              if (pending.length < end + 4 + length) return
+              pending = pending.subarray(end + 4 + length)
+              left--
+              if (left === 0) {
+                const kb = rss()
+                if (kb < 0) {
+                  finish({ error: "could not read the server's VmRSS from /proc" })
+                  return
+                }
+                readings.push(kb)
+                batch++
+                if (batch === counts.length) {
+                  finish({ readings })
+                  return
+                }
+                left = counts[batch]
+              }
+              socket.write(request)
+            }
+          })
+        })
+      })
+    const peaks = {}
+    for (const name of ["leaky", "flat"]) {
+      const exe = path.join(srvDir, name, "server")
+      const linked = build(`${name}-exe`, path.join(serverDir, `${name}.ts`), [
+        "--link",
+        exe,
+        "--profile",
+        "speed",
+        "--no-warn-performance",
+      ])
+      if (!check(`nl9018: ${name}.ts links`, linked.status === 0, shown(linked))) {
+        continue
+      }
+      const r = await rssAfter(exe, [2000, 20000])
+      if (
+        check(
+          `nl9018: ${name}.ts answers 22,000 requests`,
+          r.error === undefined && r.readings.every((kb) => kb > 0),
+          JSON.stringify(r)
+        )
+      ) {
+        peaks[name] = r.readings
+      }
+    }
+    if (peaks.flat !== undefined && peaks.leaky !== undefined) {
+      const grew = (name) => peaks[name][1] - peaks[name][0]
+      check(
+        `nl9018: the arena-block server's RSS stays within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
+        grew("flat") <= UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks.flat[0]} kB after 2,000 requests, ${peaks.flat[1]} kB after 20,000 more`
+      )
+      check(
+        `nl9018: the warned server's RSS grows past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
+        grew("leaky") > UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks.leaky[0]} kB after 2,000 requests, ${peaks.leaky[1]} kB after 20,000 more`
+      )
+    }
+  }
+}
+
+// ---- break-web: the game behind the docs hero terminal ---------------------------
+// docs/site/site.js imports docs/site/break/shell.mjs on the hero terminal's
+// first key, and the shell imports break.mjs when asked for the game;
+// examples/break-web/build.mjs builds that directory and it is committed.
+// tests/break-web/check.mjs runs the terminal, the shell and the page side
+// under Node with a fake DOM, plays the built module against break_core_wasm's
+// frame hashes, runs --check and its negatives, and prints a line per check.
+if (dealtHere("breakWeb")) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // The count is pinned, as game-page's is: a check that goes missing is caught.
+  const BREAK_WEB_CHECKS = 104
+  const lines = res.stdout.split("\n")
+  const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = lines.find((line) => line.startsWith("checks: "))
+  check(
+    "break-web: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${results.length}` && results.length === BREAK_WEB_CHECKS,
+    shown(res)
+  )
+  for (const line of results) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`break-web: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+}
+
 // ---- WP13: differential -------------------------------------------------------------
 // Every whole program in tests/cases and tests/differential/corpus is compiled by the
 // compiler under test, linked, and run natively, and its JavaScript -- the frozen
@@ -11920,8 +12265,10 @@ if (dealtHere("netStartup")) {
   // pool sized for a busy day costs little before its first connection.
   // `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
   // socket and prints the arena bytes it took, which the ceiling
-  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
-  // they fit in one chunk, without which `Arena.used()` measures nothing.
+  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, then what
+  // one idle keep-alive connection holds after four requests, which
+  // `HTTP1_SERVER_IDLE_BYTES` holds, and whether both fit in one chunk, without
+  // which `Arena.used()` measures nothing.
   if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
     const dir = path.join(buildDir, "link", "net_http1_server.startup")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -11942,11 +12289,16 @@ if (dealtHere("netStartup")) {
     )
     if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
       const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
-      const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+      const [bytes, , chunk, idle] = String(run.stdout).trim().split(" ")
       check(
         "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
         run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
         `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+      )
+      check(
+        "net_http1_server: an idle keep-alive Http1Server connection holds at most HTTP1_SERVER_IDLE_BYTES",
+        run.status === 0 && chunk === "yes" && Number(idle) > 0 && Number(idle) <= HTTP1_SERVER_IDLE_BYTES,
+        `ceiling ${HTTP1_SERVER_IDLE_BYTES}\n${shown(run)}`
       )
     }
   }
@@ -22294,8 +22646,8 @@ if (dealtHere("cliChecks")) {
       ["    checkSoleReferences(ctx, body, flow.sites)\n", ""],
       ["  const ref = results.refOf(need)\n", "  const ref = results.refOf(need).substring(0, 0)\n"],
       [
-        "    if (named.kind === N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
-        "    if (named.kind === N_CONDITIONAL && named.kind !== N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional && named.kind !== NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
       ],
     ]
     let mutated = live
@@ -27943,6 +28295,649 @@ if (dealtHere("runCache")) {
       }
     }
   }
+
+  // `nish upgrade` and the update notice (src/upgrade.ts, std/release.ts,
+  // docs/security/release.md). A local server stands in for GitHub: its
+  // `/<name>/releases/latest` answers as the name says, and every request is
+  // logged so a check can say none was made. The notice is read through a
+  // pseudo-terminal (`script`), the only way stderr is a TTY here.
+  if (selects("upgrade", "nish/release", "update-notice")) {
+    if (!HAS_CLANG) {
+      skip("nish upgrade: clang not on PATH, so the release helper cannot be linked")
+    } else {
+      const upDir = path.join(buildDir, "upgrade")
+      fs.rmSync(upDir, { recursive: true, force: true })
+      fs.mkdirSync(upDir, { recursive: true })
+      const cacheHome = path.join(upDir, "cache")
+      const requests = path.join(upDir, "requests.log")
+      fs.writeFileSync(requests, "")
+      const serverJs = path.join(upDir, "server.cjs")
+      fs.writeFileSync(
+        serverJs,
+        `const http = require("http")
+const fs = require("fs")
+const log = process.argv[2]
+const server = http.createServer((req, res) => {
+  fs.appendFileSync(log, req.url + "\\n")
+  const at = \`http://127.0.0.1:\${server.address().port}\`
+  const [, name, ...rest] = req.url.split("/")
+  const tail = rest.join("/")
+  if (tail === "releases/latest") {
+    if (name === "newer") return res.writeHead(302, { Location: \`\${at}/newer/releases/tag/v99.0.0\` }).end()
+    if (name === "older") return res.writeHead(302, { Location: \`\${at}/older/releases/tag/v0.0.1\` }).end()
+    if (name === "elsewhere") return res.writeHead(302, { Location: \`\${at}/other/releases/tag/v99.0.0\` }).end()
+    if (name === "login") return res.writeHead(302, { Location: "https://example.com/login?v99.0.0" }).end()
+    if (name === "refuse") return res.writeHead(500).end("no")
+    if (name === "garbage") return res.writeHead(200).end("v99.0.0\\n<html>")
+    if (name === "slow") return
+  }
+  if (name === "raw" && tail.endsWith("/install.sh")) {
+    return res.writeHead(200).end('printf "%s\\\\n" "$@" > "$3/installed-with"\\n')
+  }
+  res.writeHead(404).end()
+})
+server.listen(0, "127.0.0.1", () => console.log(server.address().port))
+`,
+      )
+      const server = spawn(process.execPath, [serverJs, requests], { stdio: ["ignore", "pipe", "inherit"] })
+      const port = await new Promise((resolve) => server.stdout.once("data", (d) => resolve(String(d).trim())))
+      const origin = `http://127.0.0.1:${port}`
+      const asked = () => fs.readFileSync(requests, "utf8").split("\n").filter(Boolean)
+      const env = (name, extra = {}) => {
+        const e = {
+          ...process.env,
+          XDG_CACHE_HOME: cacheHome,
+          NISH_RELEASE_URL: `${origin}/${name}`,
+          NISH_RELEASE_RAW_URL: `${origin}/raw`,
+        }
+        delete e.CI
+        delete e.NISH_NO_UPDATE_CHECK
+        return { ...e, ...extra }
+      }
+      const up = (args, name = "newer", extra = {}, exe = NISH) =>
+        spawnSync(exe, ["upgrade", ...args], { encoding: "utf8", env: env(name, extra), timeout: 120000 })
+      try {
+        // The library's pure half, from a program: what a version is, which is newer, and what a redirect names.
+        const probe = path.join(upDir, "release_probe.ts")
+        fs.writeFileSync(
+          probe,
+          `import { releaseBaseAllowed, releaseCacheRead, releaseCompare, releaseIsNewer, releaseParseVersion, releaseTagFromLocation, releaseValidVersion } from "nish/release"
+
+export const main = (): number => {
+  const b = "https://github.com/o/r"
+  console.log(\`\${releaseValidVersion("0.40.0")} \${releaseValidVersion("1.0.0-rc.1+b.2")} \${releaseValidVersion("1.0.0/../x")} \${releaseValidVersion("0.40.0?x")} \${releaseValidVersion("1.0.0%2f")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0")} \${releaseCompare("0.10.0", "0.9.0")} \${releaseCompare("1.0.0+a", "1.0.0+b")}\`)
+  console.log(\`\${releaseIsNewer("0.40.0", "0.39.0")} \${releaseIsNewer("0.39.0", "0.39.0")} \${releaseIsNewer("0.38.0", "0.39.0")}\`)
+  const t = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0\`)
+  const other = releaseTagFromLocation(b, "https://github.com/o/other/releases/tag/v0.40.0")
+  const list = releaseTagFromLocation(b, \`\${b}/releases\`)
+  const escape = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0/../../x\`)
+  console.log(\`\${t === null ? "null" : t} \${other === null} \${list === null} \${escape === null}\`)
+  console.log(\`\${releaseBaseAllowed(b)} \${releaseBaseAllowed("http://127.0.0.1:8/x")} \${releaseBaseAllowed("http://example.com")} \${releaseBaseAllowed("http://127.0.0.1.example.com")}\`)
+  const bare = releaseTagFromLocation(b, b + "/releases/tag/0.40.0")
+  console.log(\`\${releaseParseVersion("1.0.0-01") === null} \${releaseParseVersion("1.0.0+01") !== null} \${bare === null} \${releaseBaseAllowed("http://localhost:@evil.example")} \${releaseBaseAllowed("http://localhost:8080")}\`)
+  console.log(\`\${releaseCacheRead(${JSON.stringify(path.join(upDir, "shared", "notice"))}) === null} \${releaseCacheRead(${JSON.stringify(path.join(upDir, "private", "notice"))}) !== null}\`)
+  console.log(\`\${releaseValidVersion("1.0.0#x")} \${releaseValidVersion("1.0.0 x")} \${releaseValidVersion("1.0.0\\tx")} \${releaseValidVersion("1.0.0\\nx")} \${releaseValidVersion("1.0.0%2e")}\`)
+  const query = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0?x\`)
+  const fragment = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0#x\`)
+  console.log(\`\${query === null} \${fragment === null}\`)
+  console.log(\`\${releaseIsNewer("garbage", "0.39.0")} \${releaseIsNewer("0.40.0", "garbage")} \${releaseIsNewer("x", "y")} \${releaseCompare("garbage", "0.1.0")} \${releaseCompare("0.1.0", "garbage")} \${releaseCompare("x", "y")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0-rc.2")} \${releaseCompare("1.0.0-1", "1.0.0-a")} \${releaseCompare("1.0.0-alpha", "1.0.0-alpha.1")} \${releaseCompare("1.0.0-2", "1.0.0-10")} \${releaseCompare("1.0.0-rc.10", "1.0.0-rc.2")} \${releaseCompare("1.0.0-alpha.beta", "1.0.0-beta")}\`)
+  console.log(\`\${releaseCompare("1.0.0-9999999999999999", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-20000000000000000", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-a", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-10000000000000000", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-99", "1.0.0-100000000000000000")}\`)
+  return 0
+}
+`,
+        )
+        for (const [dir, mode] of [["shared", 0o775], ["private", 0o700]]) {
+          fs.mkdirSync(path.join(upDir, dir), { recursive: true })
+          fs.writeFileSync(path.join(upDir, dir, "notice"), "checked 1\nlatest 99.0.0\n", { mode: 0o600 })
+          fs.chmodSync(path.join(upDir, dir), mode)
+        }
+        const lib = spawnSync(NISH, ["run", probe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }) })
+        check(
+          "nish/release: versions, ordering, redirects and bases",
+          lib.status === 0 &&
+            lib.stdout ===
+              "true true false false false\n-1 1 0\ntrue false false\n0.40.0 true true true\ntrue true false false\ntrue true true false true\ntrue true\n" +
+                "false false false false false\ntrue true\nfalse false false -1 1 0\n-1 -1 -1 -1 1 -1\n-1 1 1 0 -1\n",
+          `${lib.status}: ${lib.stdout}${lib.stderr}`,
+        )
+
+        // The library's cache, from a program: written private and over a planted link, read only when
+        // believed, fresh for less than its age and never when dated ahead, and the cached check asking at most once.
+        const cacheDir = path.join(upDir, "libcache")
+        const cachePaths = {
+          good: path.join(cacheDir, "r", "good"),
+          link: path.join(cacheDir, "r", "link"),
+          groupWritable: path.join(cacheDir, "r", "group-writable"),
+          garbage: path.join(cacheDir, "r", "garbage"),
+          missing: path.join(cacheDir, "r", "missing"),
+          foreignFile: path.join(cacheDir, "foreign-file", "c"),
+          foreignDir: path.join(cacheDir, "foreign-dir", "c"),
+          fifo: path.join(cacheDir, "r", "fifo"),
+        }
+        fs.mkdirSync(path.join(cacheDir, "r"), { recursive: true, mode: 0o700 })
+        fs.mkdirSync(path.join(cacheDir, "s"), { mode: 0o700 })
+        fs.writeFileSync(cachePaths.good, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+        fs.symlinkSync(cachePaths.good, cachePaths.link)
+        fs.writeFileSync(cachePaths.groupWritable, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+        fs.chmodSync(cachePaths.groupWritable, 0o620)
+        fs.writeFileSync(cachePaths.garbage, "latest 1.0.0\nchecked 7\n", { mode: 0o600 })
+        // A private FIFO is this user's and writable by nobody else, so only the file-kind check refuses it.
+        const madeFifo = spawnSync("sh", ["-c", 'mkfifo -m 600 "$1"', "sh", cachePaths.fifo]).status === 0
+        const linkTarget = path.join(cacheDir, "s", "target")
+        fs.writeFileSync(linkTarget, "kept\n", { mode: 0o600 })
+        fs.symlinkSync(linkTarget, path.join(cacheDir, "s", "c"))
+        // Another user's file, or directory, needs root or sudo to make: the test makes them where it can.
+        const modeOf = (p) => fs.lstatSync(p).mode & 0o777
+        const privileged = (args) =>
+          process.getuid() === 0 ? spawnSync(args[0], args.slice(1)) : spawnSync("sudo", ["-n", ...args])
+        const canChown = process.platform === "linux" && privileged(["true"]).status === 0
+        if (canChown) {
+          fs.mkdirSync(path.dirname(cachePaths.foreignFile), { mode: 0o700 })
+          // World-readable, so only the owner check can refuse it: an unprivileged run reads it.
+          fs.writeFileSync(cachePaths.foreignFile, "checked 7\nlatest 1.0.0\n", { mode: 0o644 })
+          fs.mkdirSync(path.dirname(cachePaths.foreignDir), { mode: 0o755 })
+          fs.writeFileSync(cachePaths.foreignDir, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+          privileged(["chown", "65534", cachePaths.foreignFile, path.dirname(cachePaths.foreignDir)])
+        }
+        try {
+          const cacheProbe = path.join(upDir, "release_cache_probe.ts")
+          const q = (p) => JSON.stringify(p)
+          fs.writeFileSync(
+            cacheProbe,
+            `import { ReleaseCache, releaseCacheFresh, releaseCacheParse, releaseCacheRead, releaseCacheWrite, releaseCheckCached, releaseFileTrusted } from "nish/release"
+
+  const show = (c: ReleaseCache | null): string => (c === null ? "null" : \`\${c.checkedMs}/\${c.latest}\`)
+  const orNull = (s: string | null): string => (s === null ? "null" : s)
+
+  export const main = (): number => {
+    const d = ${q(cacheDir)}
+    console.log(\`\${releaseCacheWrite(\`\${d}/w/c\`, "99.0.0", 1000)} \${show(releaseCacheRead(\`\${d}/w/c\`))} \${releaseCacheWrite(\`\${d}/s/c\`, "1.0.0", 3)} \${show(releaseCacheRead(\`\${d}/s/c\`))}\`)
+    const c = releaseCacheParse("checked 1000\\nlatest 99.0.0\\n")
+    if (c === null) {
+      return 1
+    }
+    const day: i64 = 86400000
+    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
+    console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
+    console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
+    const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const again = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const current = releaseCheckCached(${q(`${origin}/newer`)}, "99.0.0", \`\${d}/k/c\`, day, 5000)
+    const refused = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    const kept = releaseCacheRead(\`\${d}/f/c\`)
+    const refusedAgain = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    console.log(\`\${orNull(newer)} \${orNull(again)} \${orNull(current)} \${orNull(refused)} [\${kept === null ? "null" : kept.latest}] \${orNull(refusedAgain)}\`)
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignFile)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignDir)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.fifo)})))
+    return 0
+  }
+  `,
+          )
+          const lookupsOf = (name) => asked().filter((u) => u === `/${name}/releases/latest`).length
+          const [newerBefore, refuseBefore] = [lookupsOf("newer"), lookupsOf("refuse")]
+          // A writer waits on the FIFO, so a read that opened it would get a believable cache, not hang.
+          const fifoWriter = madeFifo
+            ? spawn("sh", ["-c", 'printf "checked 7\\nlatest 1.0.0\\n" > "$1"', "sh", cachePaths.fifo], { stdio: "ignore" })
+            : null
+          const cacheRun = spawnSync(NISH, ["run", cacheProbe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }), timeout: 120000 })
+          if (fifoWriter !== null) fifoWriter.kill()
+          const cacheLines = (cacheRun.stdout || "").split("\n")
+          check(
+            "nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it",
+            cacheRun.status === 0 &&
+              cacheLines[0] === "true 1000/99.0.0 true 3/1.0.0" &&
+              modeOf(path.join(cacheDir, "w", "c")) === 0o600 &&
+              modeOf(path.join(cacheDir, "w")) === 0o700 &&
+              fs.lstatSync(path.join(cacheDir, "s", "c")).isFile() &&
+              fs.readFileSync(linkTarget, "utf8") === "kept\n",
+            `${cacheRun.status}: ${cacheRun.stdout}${cacheRun.stderr}`,
+          )
+          check(
+            "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
+            cacheLines[1] === "true true false false",
+            cacheLines[1],
+          )
+          check(
+            "nish/release: a cache parses only as its two lines, with a valid or empty version and nothing after them",
+            cacheLines[2] === "5/ null null null null null 5/1.0.0",
+            cacheLines[2],
+          )
+          check(
+            "nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed",
+            cacheLines[3] === "7/1.0.0 null null null null true false",
+            cacheLines[3],
+          )
+          check(
+            "nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none",
+            cacheLines[4] === "99.0.0 99.0.0 null null [] null" &&
+              lookupsOf("newer") === newerBefore + 1 &&
+              lookupsOf("refuse") === refuseBefore + 1,
+            `${cacheLines[4]}; ${lookupsOf("newer") - newerBefore} and ${lookupsOf("refuse") - refuseBefore} lookups`,
+          )
+          if (madeFifo) {
+            check("nish/release: a private FIFO at the cache path is not believed", cacheLines[7] === "null", cacheLines[7])
+          } else {
+            skip("nish/release: a FIFO at the cache path: mkfifo failed")
+          }
+          if (canChown) {
+            // Each is readable by this run and otherwise private, so the owner check alone refuses it.
+            const readable = (p) => {
+              try {
+                return fs.readFileSync(p, "utf8") === "checked 7\nlatest 1.0.0\n"
+              } catch {
+                return false
+              }
+            }
+            check(
+              "nish/release: a world-readable cache file owned by another user is not believed",
+              cacheLines[5] === "null" && readable(cachePaths.foreignFile),
+              `${cacheLines[5]}; readable ${readable(cachePaths.foreignFile)}`,
+            )
+            check(
+              "nish/release: a cache in a directory owned by another user is not believed",
+              cacheLines[6] === "null" && readable(cachePaths.foreignDir),
+              `${cacheLines[6]}; readable ${readable(cachePaths.foreignDir)}`,
+            )
+          } else {
+            skip("nish/release: a cache owned by another user: making one needs root or passwordless sudo")
+          }
+        } finally {
+          if (canChown) privileged(["chown", "-R", String(process.getuid()), cacheDir])
+        }
+
+        // Refusals that need no network: a version that is not one, an unknown flag.
+        // The CLI's own `validVersion` (src/upgrade.ts) runs first, so it is held to the library's cases too.
+        for (const bad of [
+          "1.0.0/../x",
+          "0.40.0?x",
+          "v0.40.0",
+          "--yes",
+          "1.2",
+          "01.2.3",
+          "1.2.3.4",
+          "1.2.3-",
+          "1.0.0-01",
+          "1.0.0#x",
+          "1.0.0 x",
+          "1.0.0\tx",
+          "1.0.0\nx",
+          "1.0.0%2e",
+          "1.0.0%2f",
+        ]) {
+          const before = asked().length
+          const r = up([bad])
+          check(
+            `nish upgrade ${/\s/.test(bad) ? JSON.stringify(bad) : bad}: exit 2, before any network access`,
+            r.status === 2 && r.stderr.includes("usage: nish upgrade") && asked().length === before,
+            `${r.status}: ${r.stderr}`,
+          )
+        }
+        for (const flag of ["--help", "-h"]) {
+          const before = asked().length
+          const r = up([flag])
+          check(
+            `nish upgrade ${flag}: the usage on stdout, exit 0, no network access`,
+            r.status === 0 && r.stdout.startsWith("usage: nish upgrade") && r.stderr === "" && asked().length === before,
+            `${r.status}: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // Refused before any request, naming the override; a bad raw URL beside a good release URL too.
+        for (const [what, extra, named] of [
+          ["a release URL that is plain http to another host", { NISH_RELEASE_URL: "http://example.com/x" }, "NISH_RELEASE_URL"],
+          ["a loopback release URL that names another host after the colon", { NISH_RELEASE_URL: "http://localhost:@example.com/x" }, "NISH_RELEASE_URL"],
+          ["a raw URL that is plain http to another host, beside a good release URL", { NISH_RELEASE_RAW_URL: "http://example.com/x" }, "NISH_RELEASE_RAW_URL"],
+        ]) {
+          const before = asked().length
+          const r = up(["--check"], "newer", extra)
+          check(
+            `nish upgrade: ${what} is refused (exit 2), named, before any request`,
+            r.status === 2 && r.stderr.includes(`${named} must be`) && r.stdout === "" && asked().length === before,
+            `${r.status}: ${r.stderr}; ${asked().length - before} requests`,
+          )
+        }
+
+        // --check: current and latest, exit 0; no answer of any kind, exit 3 and nothing on stdout.
+        const checked = up(["--check"])
+        const version = spawnSync(NISH, ["--version"], { encoding: "utf8" }).stdout.trim().split(" ")[1]
+        check(
+          "nish upgrade --check: prints current and latest, exit 0",
+          checked.status === 0 && checked.stdout === `current ${version}\nlatest  99.0.0\n`,
+          `${checked.status}: ${checked.stdout}${checked.stderr}`,
+        )
+        // Each server but `down` (no server at all) is asked once; `slow` is ended by the lookup's 2 s limit.
+        for (const name of ["elsewhere", "login", "refuse", "garbage", "slow", "down"]) {
+          const before = asked().filter((u) => u === `/${name}/releases/latest`).length
+          const started = Date.now()
+          const r = up(["--check"], name, name === "down" ? { NISH_RELEASE_URL: "http://127.0.0.1:9/x" } : {})
+          const took = Date.now() - started
+          const reached = asked().filter((u) => u === `/${name}/releases/latest`).length - before
+          check(
+            `nish upgrade --check: a server that is ${name} gives exit 3 within the lookup's time`,
+            r.status === 3 &&
+              r.stdout === "" &&
+              took < 15000 &&
+              reached === (name === "down" ? 0 : 1) &&
+              (name !== "slow" || took >= 1900),
+            `${r.status} after ${took} ms, ${reached} requests: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // A check that learns nothing leaves the cache as it was: a newer release it names is not forgotten.
+        const kept = path.join(cacheHome, "nish", "release", `notice-${version}`)
+        fs.mkdirSync(path.dirname(kept), { recursive: true, mode: 0o700 })
+        fs.writeFileSync(kept, "checked 1\nnewer 99.0.0\n", { mode: 0o600 })
+        const failed = up(["--check"], "refuse")
+        check(
+          "nish upgrade --check: a failed check keeps the newer release the cache names",
+          failed.status === 3 && fs.readFileSync(kept, "utf8") === "checked 1\nnewer 99.0.0\n",
+          `${failed.status}: ${fs.readFileSync(kept, "utf8")}`,
+        )
+
+        // npm's install and a checkout's: refused with the way to upgrade, exit 2, nothing fetched or changed.
+        const npmExe = path.join(upDir, "npm", "node_modules", "@amritk", "nish-linux-x64", "nish")
+        fs.mkdirSync(path.dirname(npmExe), { recursive: true })
+        fs.copyFileSync(NISH, npmExe)
+        fs.chmodSync(npmExe, 0o755)
+        const before = asked().length
+        const npm = up(["0.40.0"], "newer", {}, npmExe)
+        check(
+          "nish upgrade: an npm install prints the npm line and exits 2",
+          npm.status === 2 && npm.stderr.includes("npm install -g nish@0.40.0") && asked().length === before,
+          `${npm.status}: ${npm.stderr}`,
+        )
+        const source = up([])
+        check(
+          "nish upgrade: a build from a checkout refuses, exit 2",
+          source.status === 2 && source.stderr.includes("not installed by install.sh") && asked().length === before,
+          `${source.status}: ${source.stderr}`,
+        )
+
+        // A curl install: install.sh comes from the tag and is run with the version and the install directory.
+        const inst = path.join(upDir, "curl-install")
+        fs.mkdirSync(path.join(inst, "libexec"), { recursive: true })
+        fs.mkdirSync(path.join(inst, "bin"))
+        fs.mkdirSync(path.join(inst, "scripts"))
+        fs.copyFileSync(NISH, path.join(inst, "libexec", "nish"))
+        fs.chmodSync(path.join(inst, "libexec", "nish"), 0o755)
+        fs.writeFileSync(
+          path.join(inst, "bin", "nish"),
+          `#!/bin/sh\n# Written by install.sh.\nexec '${path.join(inst, "libexec", "nish")}' "$@"\n`,
+          { mode: 0o755 },
+        )
+        fs.cpSync(path.join(root, "std"), path.join(inst, "std"), { recursive: true })
+        fs.cpSync(path.join(root, "runtime"), path.join(inst, "runtime"), { recursive: true })
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(inst, "scripts", "build.sh"))
+        fs.copyFileSync(path.join(root, "package.json"), path.join(inst, "package.json"))
+        const wrapper = path.join(inst, "bin", "nish")
+        const installedWith = path.join(inst, "installed-with")
+        const latest = up([], "newer", {}, wrapper)
+        check(
+          "nish upgrade: a curl install runs the tag's install.sh with the latest version and its directory",
+          latest.status === 0 &&
+            asked().includes("/raw/v99.0.0/install.sh") &&
+            fs.existsSync(installedWith) &&
+            fs.readFileSync(installedWith, "utf8") === `99.0.0\n--dir\n${inst}\n`,
+          `${latest.status}: ${latest.stderr}`,
+        )
+        fs.rmSync(installedWith, { force: true })
+        const older = up([], "older", {}, wrapper)
+        check(
+          "nish upgrade: with no version, an older latest installs nothing",
+          older.status === 0 && older.stderr.includes("up to date") && !fs.existsSync(installedWith),
+          `${older.status}: ${older.stderr}`,
+        )
+        const pinned = up(["0.1.0"], "newer", {}, wrapper)
+        check(
+          "nish upgrade 0.1.0: an explicit older version says it is a downgrade and installs it",
+          pinned.status === 0 &&
+            pinned.stderr.includes("downgrade") &&
+            fs.readFileSync(installedWith, "utf8") === `0.1.0\n--dir\n${inst}\n`,
+          `${pinned.status}: ${pinned.stderr}`,
+        )
+
+        // The notice, read through a terminal.
+        if (process.platform !== "linux" || !has("script")) {
+          skip("update notice: needs util-linux script for a terminal")
+        } else {
+          const cacheFile = path.join(cacheHome, "nish", "release", `notice-${version}`)
+          const notice = `nish 99.0.0 is available (you have ${version}); run \`nish upgrade\``
+          const plant = (checkedMs, newer = "99.0.0") => {
+            fs.rmSync(cacheFile, { force: true })
+            fs.mkdirSync(path.dirname(cacheFile), { recursive: true, mode: 0o700 })
+            fs.writeFileSync(cacheFile, `checked ${checkedMs}\nnewer${newer === "" ? "" : ` ${newer}`}\n`, { mode: 0o600 })
+          }
+          // `runAs` prefixes the command, to run it as another user.
+          const tty = (args, extra = {}, runAs = []) => {
+            const cmd = [...runAs, "script", "-qec", '"$NISH_UP_EXE" $NISH_UP_ARGS', "/dev/null"]
+            const r = spawnSync(cmd[0], cmd.slice(1), {
+              encoding: "utf8",
+              env: env("newer", { NISH_UP_EXE: NISH, NISH_UP_ARGS: args, ...extra }),
+              timeout: 60000,
+            })
+            return { status: r.status, out: (r.stdout || "").replace(/\r/g, "") }
+          }
+          const hello = path.join(upDir, "hello.ts")
+          fs.writeFileSync(hello, 'export const main = (): number => {\n  console.log("hi")\n  return 0\n}\n')
+          const lines = (out) => out.split("\n").filter((l) => l === notice).length
+          plant(Date.now())
+          const quiet = tty("--version", { NISH_NO_UPDATE_CHECK: "1" })
+          const shown = tty("--version")
+          check(
+            "update notice: nish --version on a terminal prints the line once, exit unchanged",
+            shown.status === 0 && lines(shown.out) === 1 && shown.out.replace(`${notice}\n`, "") === quiet.out,
+            JSON.stringify(shown),
+          )
+          const compiled = tty(`${hello} -o ${path.join(upDir, "hello.ll")}`)
+          check("update notice: a compile on a terminal prints the line once", compiled.status === 0 && lines(compiled.out) === 1, JSON.stringify(compiled))
+          for (const [what, args, extra] of [
+            ["NISH_NO_UPDATE_CHECK=1", "--version", { NISH_NO_UPDATE_CHECK: "1" }],
+            ["CI=true", "--version", { CI: "true" }],
+            ["--json", `--json ${hello} -o ${path.join(upDir, "hello.ll")}`, {}],
+            ["nish run", `run ${hello}`, {}],
+            ["a usage error", "--number-mode", {}],
+          ]) {
+            const r = tty(args, extra)
+            check(`update notice: not shown with ${what}`, lines(r.out) === 0, JSON.stringify(r))
+          }
+          const piped = spawnSync(NISH, ["--version"], { encoding: "utf8", env: env("newer") })
+          check("update notice: not shown when stderr is not a terminal", !piped.stderr.includes("available"), piped.stderr)
+
+          // A cache that is not to be believed: no line, whatever it says. Each run starts a check in the
+          // background; it asks the refusing server, so it never writes a cache over the next case's plant.
+          const refusing = { NISH_RELEASE_URL: `${origin}/refuse` }
+          const refuseLookups = () => asked().filter((u) => u === "/refuse/releases/latest").length
+          const refusedBefore = refuseLookups()
+          fs.rmSync(cacheFile, { force: true })
+          const planted = path.join(upDir, "planted")
+          fs.writeFileSync(planted, `checked ${Date.now()}\nnewer 99.0.0\n`, { mode: 0o600 })
+          fs.symlinkSync(planted, cacheFile)
+          const planting = fs.readFileSync(planted, "utf8")
+          check("update notice: a cache that is a symlink is not believed", lines(tty("--version", refusing).out) === 0)
+          check(
+            "update notice: the cache written over a planted link replaces the link and leaves its target alone",
+            !fs.lstatSync(cacheFile).isSymbolicLink() && fs.readFileSync(planted, "utf8") === planting && modeOf(cacheFile) === 0o600,
+            `${fs.lstatSync(cacheFile).isSymbolicLink()} ${modeOf(cacheFile).toString(8)}`,
+          )
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          check("update notice: a group-writable cache is not believed", lines(tty("--version", refusing).out) === 0)
+          plant(Date.now())
+          fs.chmodSync(path.dirname(cacheFile), 0o777)
+          check(
+            "update notice: a cache in a world-writable directory is not believed",
+            lines(tty("--version", refusing).out) === 0,
+          )
+          // That run made the directory 0700 and wrote the cache with no newer: plant again, and the next run believes it.
+          const dirMode = fs.statSync(path.dirname(cacheFile)).mode & 0o777
+          plant(Date.now())
+          const believed = tty("--version", refusing)
+          check(
+            "update notice: a world-writable cache directory is made 0700, so the next run believes it",
+            dirMode === 0o700 && lines(believed.out) === 1,
+            `${dirMode.toString(8)}; ${JSON.stringify(believed)}`,
+          )
+          // A private cache whose newer is not a version, an escape sequence or a path: no line, and no ESC.
+          let refusedRuns = 3
+          for (const [what, newer] of [
+            ["an escape sequence", "\x1b[31m9.9.9"],
+            ["a path", "1.0.0/../x"],
+          ]) {
+            plant(Date.now(), newer)
+            const r = tty("--version", refusing)
+            check(
+              `update notice: a private cache whose newer is ${what} is not believed`,
+              lines(r.out) === 0 && !r.out.includes("available") && !r.out.includes("\x1b"),
+              JSON.stringify(r),
+            )
+            refusedRuns++
+          }
+          // A private cache with a line after its two, or a checked time that is not one: no line.
+          for (const [what, text] of [
+            ["a third line", `checked ${Date.now()}\nnewer 99.0.0\nnewer 99.0.0\n`],
+            ["a checked time that is not a number", "checked x\nnewer 99.0.0\n"],
+          ]) {
+            plant(Date.now())
+            fs.writeFileSync(cacheFile, text, { mode: 0o600 })
+            const r = tty("--version", refusing)
+            check(`update notice: a private cache with ${what} is not believed`, lines(r.out) === 0, JSON.stringify(r))
+            refusedRuns++
+          }
+          // A private FIFO is this user's and writable by nobody else: only the regular-file pattern refuses it.
+          // A writer waits on it, so a run that opened it would read a believable cache, not hang.
+          fs.rmSync(cacheFile, { force: true })
+          if (spawnSync("sh", ["-c", 'mkfifo -m 600 "$1"', "sh", cacheFile]).status === 0) {
+            const writer = spawn("sh", ["-c", 'printf "checked %s\\nnewer 99.0.0\\n" "$2" > "$1"', "sh", cacheFile, String(Date.now())], {
+              stdio: "ignore",
+            })
+            spawnSync("sleep", ["0.5"])
+            const r = tty("--version", refusing)
+            writer.kill()
+            check("update notice: a private FIFO at the cache path is not believed", lines(r.out) === 0, JSON.stringify(r))
+            refusedRuns++
+          } else {
+            skip("update notice: a FIFO at the cache path: mkfifo failed")
+          }
+          // Another user's cache, readable and otherwise private: only the owner check (\`-O\`) refuses it.
+          if (canChown) {
+            plant(Date.now())
+            fs.chmodSync(cacheFile, 0o644)
+            privileged(["chown", "65534", cacheFile])
+            try {
+              const r = tty("--version", refusing)
+              check("update notice: a world-readable cache owned by another user is not believed", lines(r.out) === 0, JSON.stringify(r))
+              refusedRuns++
+            } finally {
+              privileged(["rm", "-f", cacheFile])
+            }
+          } else {
+            skip("update notice: a cache owned by another user: making one needs root or passwordless sudo")
+          }
+
+          // At most one network check a day: a fresh cache asks nothing, a stale or future one is refreshed once.
+          // Polls until `ok`, for at most `ms`. Waiting out a short `ms` for what must not happen ends early when it does.
+          const waitFor = (ok, ms = 20000) => {
+            const until = Date.now() + ms
+            while (!ok() && Date.now() < until) spawnSync("sleep", ["0.2"])
+            return ok()
+          }
+          const lookups = () => asked().filter((u) => u === "/newer/releases/latest").length
+          // The checks the refused caches above started have each asked, and so are done with the cache.
+          check(
+            "update notice: each refused cache started one check",
+            waitFor(() => refuseLookups() === refusedBefore + refusedRuns),
+            `${refuseLookups() - refusedBefore} lookups`,
+          )
+          // The check is detached: a run that starts one against a server that never answers is back before the
+          // lookup's 2 s limit could end it, and the check still asks.
+          const slowLookups = () => asked().filter((u) => u === "/slow/releases/latest").length
+          const slowBefore = slowLookups()
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          const startedAt = Date.now()
+          const detached = tty("--version", { NISH_RELEASE_URL: `${origin}/slow` })
+          const took = Date.now() - startedAt
+          check(
+            "update notice: a run that starts a check is not held by it",
+            detached.status === 0 && took < 2000 && waitFor(() => slowLookups() === slowBefore + 1),
+            `${took} ms; ${slowLookups() - slowBefore} lookups`,
+          )
+          plant(Date.now())
+          let base = lookups()
+          const fresh = fs.readFileSync(cacheFile, "utf8")
+          tty("--version")
+          tty("--version")
+          // A started check rewrites the cache before it asks, so an unchanged cache shows none started.
+          const unchanged = fs.readFileSync(cacheFile, "utf8") === fresh
+          check(
+            "update notice: two runs on a fresh cache make no network check",
+            unchanged && !waitFor(() => lookups() !== base, 3000),
+            `cache unchanged ${unchanged}; ${lookups() - base} lookups`,
+          )
+          for (const [what, when] of [
+            ["older than 24 h", Date.now() - 25 * 3600 * 1000],
+            ["dated in the future", Date.now() + 3600 * 1000],
+          ]) {
+            plant(when, "")
+            base = lookups()
+            tty("--version")
+            tty("--version")
+            const refreshed = waitFor(() => /newer 99\.0\.0/.test(fs.readFileSync(cacheFile, "utf8")))
+            // A second check, if the second run started one, would ask within the wait.
+            const second = waitFor(() => lookups() > base + 1, 3000)
+            check(
+              `update notice: a cache ${what} is refreshed by exactly one check`,
+              refreshed && !second && lookups() === base + 1 && modeOf(cacheFile) === 0o600,
+              `${lookups() - base} lookups, mode ${modeOf(cacheFile).toString(8)}; ${fs.readFileSync(cacheFile, "utf8")}`,
+            )
+          }
+          // This user's private cache in another user's directory. At 0755 only the directory half of the owner
+          // check refuses it; at 0777 the mode check does, and only the failed `chmod 700` keeps the run from
+          // writing its cache there and starting a check (REL-5). A started check rewrites the cache first, and
+          // then asks the server. Root may chmod any directory, so under root the run is made as uid 65534,
+          // which is given the cache's other directories (where the release helper is built) while the cache's
+          // own stays root's; otherwise sudo gives the cache's directory to 65534.
+          const asOther = process.getuid() === 0
+          if (canChown && (!asOther || has("setpriv"))) {
+            const dir = path.dirname(cacheFile)
+            const runAs = asOther ? ["setpriv", "--reuid=65534", "--regid=65534", "--clear-groups"] : []
+            const foreignLookups = () => asked().filter((u) => u === "/foreign/releases/latest").length
+            try {
+              if (asOther) privileged(["chown", "-R", "65534", cacheHome])
+              for (const mode of [0o755, 0o777]) {
+                plant(Date.now())
+                const before = fs.readFileSync(cacheFile, "utf8")
+                fs.chmodSync(dir, mode)
+                privileged(["chown", asOther ? "0" : "65534", dir])
+                if (asOther) privileged(["chown", "65534", cacheFile])
+                try {
+                  const r = tty("--version", { NISH_RELEASE_URL: `${origin}/foreign` }, runAs)
+                  const after = fs.readFileSync(cacheFile, "utf8")
+                  check(
+                    `update notice: a private cache in a ${mode.toString(8)} directory owned by another user is not believed or rewritten`,
+                    r.status === 0 && lines(r.out) === 0 && after === before,
+                    `${JSON.stringify(r)}; cache ${JSON.stringify(after)}`,
+                  )
+                } finally {
+                  privileged(["chown", "-R", asOther ? "65534" : String(process.getuid()), dir])
+                  fs.chmodSync(dir, 0o700)
+                }
+              }
+              const asking = waitFor(() => foreignLookups() > 0, 5000)
+              check("update notice: a cache in another user's directory starts no network check", !asking, `${foreignLookups()} lookups`)
+            } finally {
+              privileged(["chown", "-R", String(process.getuid()), cacheHome])
+            }
+          } else {
+            skip("update notice: a cache in another user's directory: needs root with setpriv, or passwordless sudo")
+          }
+        }
+      } finally {
+        server.kill()
+      }
+    }
+  }
 }
 
 // A filtered run's `tail` groups are shard 1's, and the line below names them.
@@ -28512,6 +29507,42 @@ if (!only || "thread_stack".includes(only)) {
         said(room)
       )
     }
+  }
+}
+
+// The first `nish:net` call that makes a descriptor raises the soft
+// RLIMIT_NOFILE to the hard limit (runtime/runtime-net.c,
+// `nish_net_raise_nofile`; RT-54 in docs/security/runtime.md). The program
+// starts under a soft limit of 64 with the hard limit left as it was, makes a
+// listener, then holds 200 loop descriptors: without the raise its pollCreate
+// answers -24 near 61. A host whose hard limit is under 256 cannot show the
+// raise, so the section skips there. The verdict is the program's exit status
+// and its line, never a message of bash's.
+if (!only || "net_fd_limit".includes(only)) {
+  const hard = process.platform === "win32" ? null : spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" })
+  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  if (!HAS_CLANG || hard === null) {
+    skip("net_fd_limit: the raise is read under bash's ulimit, and this host has no clang or is Windows")
+  } else if (!(room >= 256)) {
+    skip(`net_fd_limit: the hard descriptor limit here is ${hard.stdout.trim()}, under the 256 the check needs`)
+  } else {
+    const dir = path.join(buildDir, "net_fd_limit")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "raise")
+    const c = spawnSync(NISH, [path.join(linkDir, "net_fd_limit", "raise.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r =
+      c.status === 0
+        ? spawnSync("bash", ["-c", 'ulimit -S -n 64 && exec "$0"', exe], { encoding: "utf8", timeout: 60000 })
+        : null
+    check(
+      "net_fd_limit: under a soft limit of 64, a program that has called tcpListen holds 200 more descriptors",
+      r !== null && r.status === 0 && r.stdout === "held 200 descriptors past a soft limit of 64\n",
+      r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+    )
   }
 }
 
@@ -33694,7 +34725,7 @@ if (!only || "host-import-window".includes(only)) {
       )
       if (linked.status === 0) {
         fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\", \"stored\", \"stored\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -33773,7 +34804,7 @@ if (!only || "host-import-text".includes(only)) {
         loader.split("\n").filter((line) => line.includes("text(")).join("\n")
       )
       if (linked.status === 0) {
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -33896,7 +34927,7 @@ if (!only || "host-import-text".includes(only)) {
     const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", readingDir], { cwd: root, encoding: "utf8" })
     const readingRan =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(readingDir, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(readingDir, "entry.ts")], {
             cwd: readingDir,
             encoding: "utf8",
           })
@@ -34261,7 +35292,7 @@ if (!only || "host-import".includes(only)) {
             "console.log(refused)",
           ].join("\n")
         )
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34339,7 +35370,7 @@ if (!only || "host-import".includes(only)) {
     })
     const ran =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(emitted, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(emitted, "entry.ts")], {
             cwd: emitted,
             encoding: "utf8",
           })
@@ -34544,6 +35575,32 @@ if (!only || "host-import".includes(only)) {
         `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
       )
     }
+    // IR that only declares the root keep, as every --runtime-decls module
+    // does, has no root storage: it links main's bytes, with the runtime's own
+    // nish_reset_arena and nish_free_arena (scripts/build.sh keys
+    // NISH_WASM_ROOTS on the IR defining nish_reset_arena).
+    if (wasmBytes) {
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === "examples/arrays.ts")
+      const ll = wasmHostCompile(path.join(dir, "declares-keep"), "arrays")
+      const got = {}
+      if (ll !== null) {
+        fs.appendFileSync(ll, "\ndeclare void @nish_runtime_root_keep(i64, i8*, i32)\n")
+      }
+      for (const [part, profile] of [
+        ["wasm", "wasm"],
+        ["host", "wasm-host"],
+      ]) {
+        const out = path.join(dir, "declares-keep", `arrays.${profile}.wasm`)
+        const linked = ll === null ? { status: 1, stdout: "", stderr: "compile failed" } : wasmHostLink([ll, "runtime/runtime-wasm.c"], ["-o", out, "--profile", profile])
+        got[part] = linked.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(linked)
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        "host-import: examples/arrays.ts whose IR declares nish_runtime_root_keep links main's --profile wasm and wasm-host .wasm",
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+    }
   }
 }
 
@@ -34563,8 +35620,11 @@ if (!only || "module-storage".includes(only)) {
     const dir = path.join(buildDir, "module-storage")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "module-storage"))) {
-      fs.copyFileSync(path.join(root, "tests", "module-storage", name), path.join(dir, name))
+    // Files only: tests/module-storage/persist/ holds the persist section's programs.
+    for (const entry of fs.readdirSync(path.join(root, "tests", "module-storage"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(root, "tests", "module-storage", entry.name), path.join(dir, entry.name))
+      }
     }
     const at = (name) => path.join(dir, name)
     const compiled = spawnSync(
@@ -34611,7 +35671,7 @@ if (!only || "module-storage".includes(only)) {
           ].join("\n")
         )
         const drive = (wasm) =>
-          spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
+          spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
             cwd: dir,
             encoding: "utf8",
           })
@@ -34656,7 +35716,7 @@ if (!only || "module-storage".includes(only)) {
             "",
           ].join("\n")
         )
-        const reading = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+        const reading = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34860,7 +35920,7 @@ if (!only || "wasm-host-panic".includes(only)) {
         const drive = (wasm, what) => {
           const res = spawnSync(
             process.execPath,
-            ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
+            ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
             { cwd: dir, encoding: "utf8" }
           )
           return { res, lines: res.status === 0 ? res.stdout.trim().split("\n") : [] }
@@ -35102,7 +36162,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at("main.wasm")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at("main.wasm")], {
         cwd: dir,
         encoding: "utf8",
       })
@@ -35171,7 +36231,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
         cwd: dir,
         encoding: "utf8",
       })
@@ -35196,6 +36256,164 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       )
       const typed = typeCheckProject(config, root)
       check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
+    }
+  }
+}
+
+// ---- persist: root storage kept across export calls (docs/wp55-persistent-root.md) --
+// Two modules with root storage, built for a page and driven from Node through
+// the loader `--emit-dts` writes (tests/persist/drive.mjs; the programs live in
+// tests/module-storage/persist/): world.ts, whose
+// every step adds, drops and renames objects the root reaches and leaves
+// garbage, and director.ts, whose root is the real break director. Each runs
+// 100,000 steps; the driver checks the answers and that linear memory and the
+// kept heap stay flat after warm-up; the director also runs its first 40,000
+// steps beside an instance whose keep does nothing and must match it frame for
+// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
+// call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// cycles, one object two root storages and two slots share, arrays of arrays
+// and empty arrays and strings through a compaction at least every third call
+// (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
+// layouts a wrong offset or stride would corrupt silently: an array of records
+// kept in place, a union and a nullable-union field, a `(C | null)[]` and
+// `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
+// to pack the list to 8 bytes a node, so a run whose keep never compacts fails.
+// Each also links under plain `--profile wasm`, where runtime-wasm.c is built
+// without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
+// union is fine in a page build's `.d.ts` but refused once a C header is asked
+// for, which has no spelling for it; and root storage whose class is declared
+// after the `const` still gets that class's descriptor.
+if (!only || "persist".includes(only)) {
+  const unionDir = path.join(buildDir, "persist-union")
+  fs.rmSync(unionDir, { recursive: true, force: true })
+  fs.mkdirSync(unionDir, { recursive: true })
+  const unionArgs = ["tests/module-storage/persist/union-field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
+  const dtsOnly = spawnSync(NISH, unionArgs, { cwd: root, encoding: "utf8" })
+  check("persist: a union field in a class compiles with --emit-dts alone", dtsOnly.status === 0, shown(dtsOnly))
+  const withHeader = spawnSync(NISH, [...unionArgs, "--emit-header", path.join(unionDir, "u.h")], { cwd: root, encoding: "utf8" })
+  check(
+    "persist: the same union field is refused once --emit-header asks for a C layout",
+    withHeader.status !== 0 && withHeader.stderr.includes("which holds a union no sidecar can describe"),
+    shown(withHeader)
+  )
+  const late = spawnSync(
+    NISH,
+    ["tests/module-storage/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const lateIr = late.status === 0 ? fs.readFileSync(path.join(unionDir, "late-class.ll"), "utf8") : ""
+  check(
+    "persist: root storage whose class is declared after the const gets the class's trace descriptor and the keep",
+    lateIr.includes("@nish.trace.0 = internal constant %nish.trace { i32 0,") &&
+      lateIr.includes("define void @nish_root_keep(i64 %mark)"),
+    shown(late)
+  )
+  // Root storage with no string, no round_init and no tagged panic still links
+  // runtime-wasm.c (its keep, resets and arena): the IR's own nish_reset_arena
+  // is what asks for it. The panic tags are stripped to leave nothing else.
+  const bumpWhy = wasmHostTools()
+  if (bumpWhy !== null) {
+    skip(`persist: ${bumpWhy}`)
+  } else {
+    const bump = spawnSync(
+      NISH,
+      ["tests/module-storage/persist/bump.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "bump.d.ts"), "-o", `${unionDir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    const bareLl = path.join(unionDir, "bump-bare.ll")
+    if (bump.status === 0) {
+      const ir = fs.readFileSync(path.join(unionDir, "bump.ll"), "utf8")
+      fs.writeFileSync(
+        bareLl,
+        ir
+          .replace(/, !nish\.site !\{i32 \d+\}/g, "")
+          .split("\n")
+          .filter((line) => !/^; nish\.sites? /.test(line))
+          .join("\n")
+      )
+    }
+    for (const profile of ["wasm", "wasm-host"]) {
+      const out = path.join(unionDir, `bump.${profile}.wasm`)
+      const linked = bump.status === 0 ? wasmHostLink([bareLl], ["-o", out, "--profile", profile]) : bump
+      let got = shown(linked)
+      if (linked.status === 0) {
+        try {
+          const { exports: e } = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(out)), {})
+          e.init()
+          const mark = e.nish_arena_mark()
+          e.step()
+          e.nish_root_keep(mark)
+          e.step()
+          e.nish_root_keep(mark)
+          got = e.step()
+        } catch (err) {
+          got = String(err)
+        }
+      }
+      check(
+        `persist: root storage with no string, round_init or panic site links runtime-wasm.c under --profile ${profile} and keeps its root`,
+        got === 3,
+        String(got)
+      )
+    }
+  }
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`persist: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "persist")
+    fs.rmSync(dir, { recursive: true, force: true })
+    for (const [stem, source, steps, says] of [
+      ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
+      ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
+      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
+      ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
+    ]) {
+      const out = path.join(dir, stem)
+      fs.mkdirSync(out, { recursive: true })
+      const compiled = spawnSync(
+        NISH,
+        [source, "--target", "wasm32", "--emit-dts", path.join(out, `${stem}.d.ts`), "-o", `${out}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      check(`persist: ${source} compiles for wasm32 with --emit-dts`, compiled.status === 0, shown(compiled))
+      if (compiled.status !== 0) {
+        continue
+      }
+      const loader = fs.readFileSync(path.join(out, `${stem}.mjs`), "utf8")
+      check(
+        `persist: ${stem}'s loader hands each call's arena to nish_root_keep, not nish_arena_release`,
+        loader.includes("raw.nish_root_keep(mark)") && !loader.includes("raw.nish_arena_release("),
+        loader
+      )
+      check(
+        `persist: ${stem}'s loader keeps the panic kind a failed keep recorded and only marks a bare trap`,
+        /raw\.nish_root_keep\(mark\);\s*\} catch \(e\) \{\s*if \(state\.dead === null\) \{\s*state\.dead = new NishPanic\([^;]*"trap", -1\);\s*\}\s*throw e;/.test(loader),
+        loader
+      )
+      const lls = fs
+        .readdirSync(out)
+        .filter((f) => f.endsWith(".ll"))
+        .map((f) => path.join(out, f))
+      const wasm = path.join(out, `${stem}.wasm`)
+      const plain = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", path.join(out, `${stem}-plain.wasm`), "--profile", "wasm"])
+      check(`persist: ${stem} links under --profile wasm, which defines nish_runtime_root_keep too`, plain.status === 0, shown(plain))
+      const linked = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", wasm, "--profile", "wasm-host"])
+      check(`persist: ${stem} links under --profile wasm-host`, linked.status === 0, shown(linked))
+      if (linked.status !== 0) {
+        continue
+      }
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, steps], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `persist: ${stem} ${says}`,
+        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: ${steps} steps`),
+        shown(ran)
+      )
     }
   }
 }
@@ -35294,6 +36512,199 @@ if (!only || "page-frame".includes(only)) {
     exported !== undefined &&
       exported.types === "./runtime/page-frame.d.ts" &&
       exported.default === "./runtime/page-frame.mjs",
+    JSON.stringify(exported)
+  )
+}
+
+// ---- nish/page/game: a nish/host/game module run on a page ------------------------
+// examples/game-starter/build.mjs links the starter game; tests/game-page/check.mjs
+// runs it under runtime/page-game.mjs in Node, with the fake canvases, clock, audio
+// and listeners of tests/page-frame/fakes.mjs, and prints a line per check.
+// tests/game-page/smoke-manual.cjs is the manual Chromium smoke.
+if (!only || "game-page".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`game-page: ${why}`)
+  } else {
+    const out = path.join(buildDir, "game-starter")
+    // A build of this test's own, so an older one without the build's marker is no obstacle.
+    fs.rmSync(out, { recursive: true, force: true })
+    const built = spawnSync("node", ["examples/game-starter/build.mjs", "--nish", NISH, "--out", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    // The count is pinned, as page-frame's is: a check that goes missing is caught.
+    const GAME_PAGE_CHECKS = 73
+    /** Runs tests/game-page/check.mjs over the build in `dir`: its result lines, and whether all of them ran. */
+    const runChecks = (dir) => {
+      const res = spawnSync(process.execPath, [path.join(root, "tests", "game-page", "check.mjs"), dir], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lines = res.stdout.split("\n")
+      const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+      const counted = lines.find((line) => line.startsWith("checks: "))
+      const complete = res.status === 0 && counted === `checks: ${results.length}` && results.length === GAME_PAGE_CHECKS
+      return { res, results, complete }
+    }
+    if (check("game-page: examples/game-starter/build.mjs links the starter game", built.status === 0, shown(built))) {
+      const { res, results, complete } = runChecks(out)
+      check("game-page: the checks ran to the end", complete, shown(res))
+      for (const line of results) {
+        const ok = line.startsWith("ok ")
+        const rest = ok ? line.slice(3) : line.slice(7)
+        const tab = rest.indexOf("\t")
+        check(`game-page: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+      }
+    }
+
+    // The starter as a user has it: copied out of the repository beside an
+    // installed nish package (node_modules/nish, here a link to this checkout)
+    // and its node_modules/.bin/nish, built with a bare `node build.mjs`.
+    const away = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-starter-"))
+    // A copy with no package anywhere above it.
+    const alone = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-alone-"))
+    try {
+      const copy = path.join(away, "my-game")
+      fs.cpSync(path.join(root, "examples", "game-starter"), copy, {
+        recursive: true,
+        filter: (from) => path.basename(from) !== "dist",
+      })
+      fs.mkdirSync(path.join(away, "node_modules", ".bin"), { recursive: true })
+      fs.symlinkSync(root, path.join(away, "node_modules", "nish"), "dir")
+      // A shim, not a link: the compiler finds std/ and runtime/ from the path it was run by.
+      const bin = path.join(away, "node_modules", ".bin", "nish")
+      fs.writeFileSync(bin, `#!/bin/sh\nexec '${path.resolve(NISH)}' "$@"\n`, { mode: 0o755 })
+      const copied = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+      if (check("game-page: the starter copied out of the repository builds against the installed package", copied.status === 0,
+        shown(copied))) {
+        // What it built runs: every check the in-repo build passes, over dist/.
+        const { res, results, complete } = runChecks(path.join(copy, "dist"))
+        check(
+          "game-page: the copied starter's dist/ passes every check",
+          complete && results.every((line) => line.startsWith("ok ")),
+          [...results.filter((line) => !line.startsWith("ok ")), shown(res)].join("\n")
+        )
+        const again = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+        check("game-page: build.mjs rebuilds into the dist/ it wrote", again.status === 0, shown(again))
+      }
+
+      // --out is emptied, so build.mjs refuses one it does not own, saying why,
+      // and leaves it as it was; and a flag it does not know, or with no value.
+      const foreign = path.join(away, "foreign")
+      fs.mkdirSync(path.join(foreign, "nish"), { recursive: true })
+      fs.writeFileSync(path.join(foreign, "notes.txt"), "mine\n")
+      fs.writeFileSync(path.join(away, "a-file"), "mine\n")
+      const bare = path.join(alone, "my-game")
+      fs.cpSync(copy, bare, { recursive: true, filter: (from) => path.basename(from) !== "dist" })
+      for (const [what, args, cwd, says] of [
+        ["an --out holding the game", ["--out", away], copy, "holds the game, the package or the working directory"],
+        ["an --out at the root", ["--out", path.parse(away).root], copy, "holds the game, the package or the working directory"],
+        ["an --out at the working directory", ["--out", "."], copy, "holds the game, the package or the working directory"],
+        ["an --out holding files it did not write", ["--out", foreign], copy, "holds files this build did not write"],
+        ["an --out that is a file", ["--out", path.join(away, "a-file")], copy, "is a file; name a directory"],
+        ["a flag with no value", ["--out"], copy, "--out needs a value"],
+        ["a flag it does not know", ["--ouput", "elsewhere"], copy, "unknown argument --ouput"],
+        ["a directory without the nish package", [], bare, "the nish package is not installed here"],
+      ]) {
+        const refused = spawnSync(process.execPath, ["build.mjs", ...args], { cwd, encoding: "utf8" })
+        check(
+          `game-page: build.mjs refuses ${what}, saying so`,
+          refused.status === 1 && refused.stderr.includes(says),
+          shown(refused)
+        )
+      }
+      check(
+        "game-page: and the refusals left every directory as it was",
+        fs.existsSync(path.join(copy, "game.ts")) &&
+          fs.existsSync(path.join(foreign, "notes.txt")) &&
+          fs.existsSync(path.join(foreign, "nish")) &&
+          fs.readFileSync(path.join(away, "a-file"), "utf8") === "mine\n" &&
+          !fs.existsSync(path.join(copy, "elsewhere")) &&
+          !fs.existsSync(path.join(bare, "dist"))
+      )
+    } finally {
+      fs.rmSync(away, { recursive: true, force: true })
+      fs.rmSync(alone, { recursive: true, force: true })
+    }
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "game-page")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-game.d.ts"), path.join(dir, "page-game.d.ts"))
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "page-frame.d.ts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, DEFAULT_KEYS, DEFAULT_TOUCH, type Game, startGame } from "./page-game.js"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement): Promise<number> => {",
+      '  const game: Game = await startGame(canvas, new URL("./game.wasm", document.baseURI), {',
+      "    seed: 7,",
+      '    keys: [...DEFAULT_KEYS, "w"],',
+      '    touch: { zones: DEFAULT_TOUCH.zones, tap: " " },',
+      "    stepsPerSecond: 120,",
+      "    maxStepsPerFrame: 4,",
+      "    sound: { muted: true },",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string, fresh: HTMLCanvasElement) => console.warn(from, to, reason, fresh),",
+      "    loader: { load: async (source: WebAssembly.Module) => source },",
+      "    imports: {},",
+      "    onError: (error: unknown) => console.error(error),",
+      "    signal: new AbortController().signal,",
+      '    loaderUrl: new URL("./game.mjs", document.baseURI),',
+      "  })",
+      "  game.muted = false",
+      "  const running: boolean = game.running",
+      "  const now: HTMLCanvasElement = game.presenter.canvas",
+      "  game.stop()",
+      "  await startGame(canvas, \"game.wasm\", { touch: false, sound: false })",
+      "  return game.fps + game.refreshHz + now.width + (game.module === null || !running ? 0 : 1)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: false, noUnusedParameters: false },
+      include: [],
+      files: ["page-game.d.ts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("game-page: a page type-checks against runtime/page-game.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  // ... and what examples/game-starter/build.mjs reads from the installed package.
+  const shipped = [
+    "runtime/page-game.mjs",
+    "runtime/page-game.d.ts",
+    "runtime/page-frame.mjs",
+    "runtime/page.mjs",
+    "runtime/runtime-wasm.c",
+    "scripts/build.sh",
+  ]
+  check(
+    "game-page: npm pack ships nish/page/game, its imports and what build.mjs links with",
+    shipped.every((f) => packed.includes(f)),
+    `missing: ${shipped.filter((f) => !packed.includes(f)).join(", ")}\n${shown(pack)}`
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/game"]
+  check(
+    "game-page: package.json exports ./page/game",
+    exported !== undefined && exported.types === "./runtime/page-game.d.ts" && exported.default === "./runtime/page-game.mjs",
     JSON.stringify(exported)
   )
 }

@@ -25,7 +25,13 @@ to keep its slot, is fixed by a deadline for the whole head. H1-5 (Medium), a
 response written at `H1_END` framed from a head already reset, is fixed by
 holding the head until the next request is asked for. H1-2 (Low), a refusal
 closed at once over plain TCP, is fixed by a lingering close bounded in time
-and bytes. One finding is open: H1-3 (Low), the
+and bytes. H1-8 (Medium), a chunk extension skipped rather than parsed, so
+that a quoted-string run across the line's end framed the body differently
+from a front end that reads it, is fixed by parsing its RFC 9112 §7.1.1
+grammar whole. H1-9 (Low), a `Host` value never read, is fixed by
+refusing one that is not `uri-host [":" port]` with 400. H1-10 (Low), a
+WebSocket handshake whose `Origin` nothing read, is answered by an opt-in
+check, `websocketOriginAllowed`, a program makes before accepting. One finding is open: H1-3 (Low), the
 memory each WebSocket upgrade leaves behind. The client's side of the
 handshake refuses every answer RFC 6455 §4.1 tells a client to fail, each
 with its own `WS_HS_*` code; it adds no finding.
@@ -34,10 +40,10 @@ with its own `WS_HS_*` code; it adds no finding.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`, `http1HeadGrow`, `http1FramingField`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
+| `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead` (with `nish/net/url`'s `urlIsHostPort` for the `Host` value), `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1ChunkExtValid`, `http1QuotedStringEnd`, `http1SkipOws`, `http1BodyWindow`, `http1HeadAppend`, `http1HeadGrow`, `http1FramingField`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
 | `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; the kept response head (`sameHead`, `keepHead`, `http1ServerKept`, `http1ServerSame8`, `http1ServerSame4`, `http1ServerSameByByte`); `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
-| `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`; the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
+| `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`, `websocketOriginAllowed` (with `websocketSpanFolds`); the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
 
 Out of scope: TLS (`docs/security/tls.md`, whose TLS-3 and TLS-4 the TLS
 carrier inherits), `nish:net`, and `nish/crypto/sha1`, which only computes the
@@ -83,6 +89,9 @@ nonce and every mask key from the caller.
 | H1-5 | Medium | `std/net/http1-codec.ts` (`Http1Parser.next`, `resting`, `http1StartRequest`, the field `headHeld`), read through `std/net/http1-server.ts` (`Http1Connection.respond`, `acceptEncoding`, `respondEncoded`) | On a kept-alive request the parser reset its head (method, target, version, fields, keep-alive) as it reported `HTTP1_END`, before the program had answered. A response written at `H1_END` was framed from the reset head: a `HEAD` request was answered with a body, which a client or a proxy sharing the connection reads as the start of the next response, and an HTTP/1.0 keep-alive client was answered with chunked framing it cannot read, since the reset version was 1.1. `acceptEncoding()` and `targetIs` read nothing there either. | **Fixed** (option 1: keep the head, copy nothing). At the keep-alive `HTTP1_END` the parser moves to the request line but holds the head (`headHeld`); the next `next()` resets it before it reads any byte of the next request. The server calls `next()` again only once the response is done (`nextRequest`), so the head stays this request's for its whole response whatever pipelined bytes are fed behind it, and nothing is copied or allocated. `resting()` is false while a head is held, so a slot is not taken for idle with a request still unanswered. Tests: every line of `tests/link/std_http1_end_head` (run as `link/std_http1_end_head: exits with 0 and stdout matches expected.out`); against the base std, 14 of its 49 checks fail, among them `HEAD: no body is owed`, `HEAD: the output is the head alone`, `HTTP/1.0: not chunked`, `pipelined: acceptEncoding at H1_END is the first's gzip`, `fed after: the held head is still the first's` (the next request's bytes fed after `H1_END`, enough to grow the input buffer) and `router: at H1_END the first's route, not a 404`. |
 | H1-6 | Low | `std/net/websocket.ts` (`websocketFrameEvent`, `websocketUnmaskInto`, the field `WsDecoder.frameChecked`) | A text frame's payload was checked as UTF-8 only once the whole frame had arrived, so a peer could send a byte that can never be valid UTF-8 and then keep the connection, and up to `maxMessage` bytes of buffer, for as long as it took to send the rest. RFC 6455 §8.1 asks for the connection to be failed as soon as the bytes so far cannot be a valid prefix. Autobahn's 6.4.3 and 6.4.4 grade the late 1007 NON-STRICT. Nothing invalid was ever handed out; the 1007 was only late. | **Fixed.** A text frame, or a continuation of a text message, is unmasked and checked as its bytes arrive. `frameChecked` records how far the current frame has been checked, so each byte is unmasked and checked once, and the key is rotated to that offset (`websocketUnmaskInto`'s `phase`). A bad byte answers `WS_ERROR` with 1007 while the rest of its frame is still owed. Binary frames are unchanged. Tests: `refused with 1007 inside a frame still arriving`, `refused with 1007 inside a masked frame still arriving` and `refused with 1007 inside a continuation still arriving` in `tests/link/net_websocket` and `_f64` (run as `link/net_websocket: exits with 0 and stdout matches expected.out` and its `_f64` twin) fail on the base, which answered `WS_NEED_MORE`; `a valid prefix of a frame still arriving is not refused`, `masked text fed a byte at a time`, `masked text fragments fed a byte at a time`, `a four-byte character fed a byte at a time` and `a four-byte character across the buffer's growth, fed a byte at a time` pass on both. The message buffer grows with the bytes that have arrived, never to the length a header declares: `a 65536-byte text frame with one byte arrived holds a small buffer` pins it. The interop job's `autobahn` run checks it against an independent client. |
 | H1-7 | Low | `std/net/http1-server.ts` (`Http1Connection.sameHead`, `http1ServerKept`) | The kept-head compare stops at the first byte that differs, so how long `respond` takes can tell whether a response's head equals the one before it on the same connection. Both heads are the same program's answers to the same peer, and nothing is kept across connections or slots (`restart` empties the kept head's record). | **Open, accepted.** Not attacker-relevant: the peer learns at most whether its own two responses share a head, which their bytes already show it. A program that puts a secret in a header and wants no timing signal at all writes it in the body. |
+| H1-8 | Medium | `std/net/http1-codec.ts` (`http1ChunkSize`; the fix in `http1ChunkExtValid`, `http1QuotedStringEnd`, `http1SkipOws`, written against `main` at `187336a`) | A chunk-size line's extension was checked only for control bytes: anything after the `;` up to the CRLF was skipped. RFC 9112 §7.1.1 gives the extension a grammar (`*( BWS ";" BWS name [ BWS "=" BWS value ] )`, the name a token, the value a token or a quoted-string), and a front end that follows it reads a quoted-string to its closing quote, across the line's end, where this parser stopped at the CRLF. The two then frame the body differently, which smuggles a request inside a chunk extension (the class of CVE-2026-2332 and CVE-2026-33870). | **Fixed.** `http1ChunkSize` parses the whole extension with `http1ChunkExtValid` and refuses one that does not match the grammar with 400 ("a malformed chunk extension"): an empty name or value, a second `;`, whitespace not followed by `;` or `=`, a value that is neither a token nor a quoted-string, bytes after a quoted value, a quoted-string that does not close before the CRLF, and a backslash not followed by a value byte. The extensions themselves are still not handed to the program. Tests: `a chunk extension with no name`, `a chunk extension that is a second semicolon`, `a chunk extension name with a space in it`, `a chunk extension with an empty value`, `a chunk extension followed by whitespace alone`, `a chunk extension value that is not a token`, `a chunk extension with bytes after its quoted value`, `an unclosed quoted chunk extension` and `a quoted chunk extension whose closing quote is escaped` (each printed as `refused with 400: …`), and `a quoted chunk extension that runs across lines hides no second request` in `tests/link/net_http1` and `_f64` fail on the base (which read a second head, `GET /hidden`, from inside the first request's chunk extension); `a chunk extension name=value is read`, `a quoted chunk extension with BWS, a semicolon and an escaped quote is read` and `two chunk extensions, the first with no value, are read` pass on both. `tests/link/net_http1_parse_diff`'s frozen reference has the same rule mirrored into it by hand, read through `http1ChunkExtValid`, so the differential test still compares everything else. The client's parser had the same gap: HC-2 in [`http1-client-codec.md`](http1-client-codec.md). |
+| H1-9 | Low | `std/net/http1-codec.ts` (`http1EndOfHead`, the parser's `hostField`; the check in `std/net/url.ts`'s `urlIsHostPort`, `urlHostEnd`, `urlPortOf`, written against `main` at `187336a`) | The `Host` field was counted (exactly one in HTTP/1.1, at most one in HTTP/1.0) but its value was never read: `Host: a b`, `Host: u@h`, `Host: h/p`, `Host: a, b` and `Host: h:99999` were all handed to the program. RFC 9112 §3.2 makes the value `uri-host [ ":" port ]` and has a server answer 400 to anything else. A program that builds a URL, an origin or a virtual-host lookup from it sees a host no URL parser would give it, and a proxy behind it may read another host from the same bytes. | **Fixed.** `http1EndOfHead` reads the one `Host` value with `urlIsHostPort`, the authority rules `urlParse` already applied (a bracketed IPv6 literal, a dotted IPv4 address, or a reg-name of unreserved bytes; a port of digits up to 65535), and refuses anything else with 400 ("a Host that is not a host and port"). An empty `Host` is still read, as RFC 9112 §3.2 allows when the target has no authority. The reg-name is narrower than RFC 3986 (no percent-encoding, no sub-delims): no DNS name needs them. Tests: `a Host with a space in it`, `a Host with userinfo`, `a Host with a path`, `a Host that is a list`, `a Host whose port is not digits`, `a Host whose port is past 65535`, `a Host with an unclosed IPv6 bracket`, `a Host that reads as a number but is no IPv4 address` and `an HTTP/1.0 Host with a space in it` (each printed as `refused with 400: …`) in `tests/link/net_http1` and `_f64` fail on the base; `a Host with a port is read`, `an IPv6 Host with a port is read`, `an IPv4 Host is read` and `an empty Host is read, as before` pass on both. `urlReadAuthority` now reads its host and port through the same two helpers, so the URL parser and the server agree on what a host is (`net_url*` unchanged). `tests/link/net_http1_parse_diff`'s frozen reference has the check mirrored into it by hand; both parsers still agree on every case, and the summary it pins moves by the requests now refused (2,309 more 400s). |
+| H1-10 | Low | `std/net/websocket.ts`, `std/net/http1-server.ts` (`Http1Connection.acceptWebSocket`; the check in `websocketOriginAllowed`, `websocketSpanFolds`, written against `main` at `187336a`) | Neither side of the server's opening handshake read `Origin`, and nothing offered a program a way to. A browser sends the user's cookies with a WebSocket handshake that a page on another site opens, and the page reads what comes back, so a WebSocket that trusts those cookies served any site that asked (cross-site WebSocket hijacking, RFC 6455 §10.2; the class of CVE-2026-22689). | **Fixed, as an opt-in check.** `websocketOriginAllowed(parser, allowed)` answers true only when the request carries exactly one `Origin` and its value is one of `allowed`, compared whole in any ASCII case, allocating nothing; a program calls it before `acceptWebSocket` and answers 403 when it is false. `acceptWebSocket` itself still does not read `Origin`: a client that is not a browser need not send one, so refusing a handshake without it would break those clients, and which origins are the program's own only the program knows. The module doc and the guide's "Checking `Origin`" section show the check. Tests: `origin: an allowed origin is accepted`, `origin: the second allowed origin, with its port, is accepted`, `origin: compared in any ASCII case, on either side`, and `refused origin: another site`, `an allowed origin as a prefix`, `an allowed origin's suffix`, `the other scheme`, `another port`, `none sent`, `two Origin fields, the first allowed`, `an opaque origin not listed`, `an empty allowed list` in `tests/link/net_websocket` and `_f64`; the guide's example compiles under `node tests/run.js guide`. |
 
 ## Fuzzing
 
@@ -121,8 +130,9 @@ every byte, and sent a byte at a time, is echoed whole every time.
 through the server): `Content-Length` with `Transfer-Encoding` (RFC 9112
 §6.1), two `Content-Length` fields, conflicting or not, one that is not a run
 of digits, `Transfer-Encoding` in HTTP/1.0 or not ending in `chunked`, an
-obs-fold, a bare LF, whitespace before a colon, a malformed chunk size or
-chunk terminator — each a 400, never a guess.
+obs-fold, a bare LF, whitespace before a colon, a malformed chunk size,
+chunk extension (H1-8) or chunk terminator, a `Host` that is not a host and
+port (H1-9) — each a 400, never a guess.
 
 Through the server each is answered with its status, `Content-Length: 0` and
 `Connection: close`, and the connection ends: 400 (a chunk size that is not
@@ -215,6 +225,18 @@ the current response has ended and the current body has been read to its end;
 a pipelined pair and a refusal behind a good request pin it. Pipelined bytes
 wait in the parser's buffer, and once `inputLimit()` of them wait the slot
 stops asking to be read.
+
+**When an exchange ends** (`net_http1_server_implicit_end`): a response with
+a `Content-Length` ends once its last byte is written, through `write` or
+`sendBody`, and one with no body (`Content-Length: 0`, `HEAD`, 204, 304) once
+its head is, whether or not the program calls `end`; the connection checks at
+the boundary, when it would read the next request, so `end` called before then
+answers as it always has (0, and the same bytes on the wire). A chunked body,
+and an unframed one to HTTP/1.0, ends only at `end`, since the connection has
+no length to count: one byte short of the length, or chunked without `end`,
+and the next request is neither read nor answered, and no last chunk goes out.
+A program that forgot `end` on a length-framed response used to leave a
+kept-alive client waiting forever with nothing reported.
 
 **The head stays the request's until it is answered** (`std_http1_end_head`):
 at `HTTP1_END` of a kept-alive request with the next one already fed behind
@@ -583,26 +605,34 @@ whose client stops reading holds one until it drains, then gives it back; fifty
 connections in a row leave the pool's buffers all free (`net_http1_server`).
 
 **Lent input, and what a lent buffer holds** (`net_http1_server`). With
-`Http1Config.idleInput` a slot gives its parser's input and head buffers to
-pools its server's slots share (`Http1Connection.park`, from `Http1Server.flush`
-and `Http1TlsServer.flush` and at `restart`) only while it rests: speaking
-HTTP, no request open, and `Http1Parser.resting()` (waiting for a request line,
-nothing fed and unread). A slot still reading a head, owing a response, holding
-pipelined bytes or upgraded keeps both, and `unpark` takes a buffer back in
-`feed` before any byte is copied in.
+`Http1Config.idleInput`, on by default since the idle trims, a slot gives its
+parser's input and head buffers to pools its server's slots share
+(`Http1Connection.park`, from `Http1Server.flush` and `Http1TlsServer.flush` and
+at `restart`) only while it rests: speaking HTTP, no request open, and
+`Http1Parser.resting()` (waiting for a request line, nothing fed and unread). A
+slot still reading a head, owing a response, holding pipelined bytes or upgraded
+keeps both, and `unpark` takes a buffer back in `feed` before any byte is copied
+in.
 
 A lent buffer is not cleared: it holds the bytes of the request it last
 carried, a password in a body included, until the next slot to take it
 overwrites them. Nothing reads them, since a parser reads only the window
 `[start, end)` it was fed and `park` resets that window to empty; the bytes
-stay in the process's memory as they did before the option, when each slot kept
-its own buffer with the same bytes in it.
+stay in the process's memory as they do with the option off, when each slot
+keeps its own buffer with the same bytes in it. Turning it on by default moves
+no byte a parser can read: it changes which slot's buffer the bytes sit in
+until they are overwritten, not whether they are. After `park`, `conn.data`
+and the parser's head, body and input views may point into a pooled buffer
+another client's slot is about to overwrite; the default is safe because those
+windows are valid only until the next `next()` (the doc comments in
+`http1-server.ts`), and a slot parks only once its exchange is done.
 
 Tests: `two slots served one after the other share one input and one head
-buffer`, `a connection with a request open keeps them`, `so do they while a
-byte of the next request is unread`, `and once nothing is open or unread both
-go back`, `a pipelined pair on a slot that lent its buffers is answered in
-order`, and `without idleInput a resting slot keeps its input buffer`.
+buffer`, `a connection with a request open keeps them`, `so do they while a byte
+of the next request is unread`, `and once nothing is open or unread both go
+back`, `a pipelined pair on a slot that lent its buffers is answered in order`,
+`on the default config the slots lent their input and head buffers to the
+pools`, and `without idleInput a resting slot keeps its input buffer`.
 
 **A lent buffer is taken back by identity, and the layout moves only where
 fields sit** (`net_http1_server`, `_f64`, 2026-11-06, written against `main`
@@ -656,9 +686,10 @@ checks, written against `main` at `9e49a177`): `respond` copies its previous
 final head only when every input of it is the same, and otherwise writes it
 fresh through `http1WriteResponseHead` and its checks, so a kept head cannot
 carry one response's fields, or a value the writer would refuse, into another.
-The kept head is the connection's own response buffer (`headBytes`, at most
-`H1_HEAD_KEEP`, 1,024 bytes, and `headLengths`, two i32 for each of at most
-`H1_HEAD_FIELDS`, 16, fields); the compare reads only the program's names and
+The kept head is the connection's own response buffer (`headBytes`, sized to
+the head it keeps rounded up to `H1_HEAD_ROUND`, 64 bytes, and never past
+`H1_HEAD_KEEP`, 1,024, and `headLengths`, two i32 for each of its fields, at
+most `H1_HEAD_FIELDS`, 16); the compare reads only the program's names and
 values and that buffer, never the parser's request head, so the request
 head's layout (each field line kept with its CRLF) does not reach it. The
 checks read every response byte for byte against `http1WriteResponseHead`
@@ -706,8 +737,10 @@ called directly, and `headCopies` says whether it was copied:
   kept head was the last connection's state).
 - Memory is bounded and lazy: the buffer is made at the first head that is
   kept, so a connection whose heads never repeat their shape holds none, and
-  one that keeps heads holds about 1.3 KiB (1,024 bytes of head, 128 of
-  lengths and the arrays' own headers).
+  one that keeps heads holds what its longest kept head needs: its bytes
+  rounded up to 64, two i32 a field and the arrays' own headers, at most
+  about 1.3 KiB (1,024 bytes of head and 128 of lengths). A longer head is
+  remade larger; a shorter one reuses the buffer.
 - Work on a miss is bounded. The compare reads a field with guarded word
   loads (`http1ServerKept`: 16-byte `nish:simd` loads with an overlapping
   tail from 16 bytes, two u64 loads from 8, two u32 loads from 4, bytes

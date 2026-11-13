@@ -13,28 +13,7 @@
 
 import { CheckContext } from "./context"
 import { StringSet } from "./map"
-import {
-  N_BINARY,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CONTINUE,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FOR,
-  N_FOR_OF,
-  N_IF,
-  N_LABELED,
-  N_MEMBER,
-  N_PAREN,
-  N_RETURN,
-  N_THIS,
-  N_THROW,
-  N_VAR,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FieldInfo, STRUCT_CLASS, StructInfo } from "./program"
 
 /**
@@ -73,15 +52,16 @@ const missingField = (cls: StructInfo, assigned: Assigned): FieldInfo | null => 
 }
 
 /** `this.name`, as a member access whose receiver is `this`. */
-const thisAccess = (node: Node): boolean => node.kind === N_MEMBER && node.children[0].kind === N_THIS
+const thisAccess = (node: Node): boolean =>
+  node.kind === NodeKind.Member && node.children[0].kind === NodeKind.This
 
 /** The fields `expr` definitely assigns: `this.a = this.b = v` assigns both. */
 const assignedBy = (expr: Node, out: Assigned): void => {
   let inner = expr
-  while (inner.kind === N_PAREN) {
+  while (inner.kind === NodeKind.Paren) {
     inner = inner.children[0]
   }
-  if (inner.kind === N_BINARY && inner.text === "=") {
+  if (inner.kind === NodeKind.Binary && inner.text === "=") {
     if (thisAccess(inner.children[0])) {
       out.fields.add(inner.children[0].text)
     }
@@ -107,7 +87,7 @@ const checkReads = (
     }
     return // the only children are `this` and the member name
   }
-  if (node.kind === N_CALL && thisAccess(node.children[0])) {
+  if (node.kind === NodeKind.Call && thisAccess(node.children[0])) {
     const missing = missingField(cls, assigned)
     if (missing !== null) {
       ctx.error(
@@ -120,7 +100,7 @@ const checkReads = (
     }
     return
   }
-  if (node.kind === N_THIS) {
+  if (node.kind === NodeKind.This) {
     const missing = missingField(cls, assigned)
     if (missing !== null) {
       ctx.error(
@@ -131,7 +111,7 @@ const checkReads = (
     return
   }
   // A plain `this.x = v` reads nothing on the left; `this.x += v` does.
-  const plainStore = node.kind === N_BINARY && node.text === "="
+  const plainStore = node.kind === NodeKind.Binary && node.text === "="
   let index = 0
   for (const child of node.children) {
     checkReads(ctx, cls, child, assigned, plainStore && index === 0)
@@ -163,50 +143,50 @@ const walkStatements = (ctx: CheckContext, cls: StructInfo, stmts: Node[], assig
 
 const walkStatement = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned => {
   switch (stmt.kind) {
-    case N_BLOCK:
+    case NodeKind.Block:
       return walkStatements(ctx, cls, stmt.children, assigned)
-    case N_EXPR_STMT:
+    case NodeKind.ExprStmt:
       checkReads(ctx, cls, stmt.children[0], assigned, false)
       assignedBy(stmt.children[0], assigned)
       return assigned
-    case N_VAR:
+    case NodeKind.Var:
       for (const decl of stmt.children[0].children) {
-        if (decl.children[2].kind !== N_EMPTY) {
+        if (decl.children[2].kind !== NodeKind.Empty) {
           checkReads(ctx, cls, decl.children[2], assigned, false)
           assignedBy(decl.children[2], assigned)
         }
       }
       return assigned
-    case N_IF:
+    case NodeKind.If:
       return walkIf(ctx, cls, stmt, assigned)
-    case N_RETURN:
-      if (stmt.children[0].kind !== N_EMPTY) {
+    case NodeKind.Return:
+      if (stmt.children[0].kind !== NodeKind.Empty) {
         checkReads(ctx, cls, stmt.children[0], assigned, false)
       }
       requireAll(ctx, cls, assigned, stmt)
       return terminated()
-    case N_THROW:
+    case NodeKind.Throw:
       checkReads(ctx, cls, stmt.children[0], assigned, false)
       return terminated()
-    case N_BREAK:
+    case NodeKind.Break:
       return terminated()
-    case N_CONTINUE:
+    case NodeKind.Continue:
       return terminated()
-    case N_LABELED: {
+    case NodeKind.Labeled: {
       // A `break` that names the label goes on after the statement with only
       // what was assigned before it, as a loop body's assignments do not count.
       const after = walkStatement(ctx, cls, stmt.children[0], assigned.copy())
       return breaksTo(stmt.children[0], stmt.text) ? assigned : after
     }
-    case N_WHILE:
+    case NodeKind.While:
       return walkLoop(ctx, cls, stmt.children[0], stmt.children[1], assigned)
-    case N_DO:
+    case NodeKind.Do:
       return walkLoop(ctx, cls, stmt.children[1], stmt.children[0], assigned)
-    case N_FOR_OF:
+    case NodeKind.ForOf:
       return walkLoop(ctx, cls, stmt.children[1], stmt.children[2], assigned)
-    case N_FOR:
+    case NodeKind.For:
       for (const part of stmt.children) {
-        if (part !== stmt.children[3] && part.kind !== N_EMPTY) {
+        if (part !== stmt.children[3] && part.kind !== NodeKind.Empty) {
           checkReads(ctx, cls, part, assigned, false)
         }
       }
@@ -225,7 +205,7 @@ const terminated = (): Assigned => new Assigned(true)
  * that function's own label, and counting it only keeps the answer safe.
  */
 const breaksTo = (node: Node, label: string): boolean => {
-  if (node.kind === N_BREAK) {
+  if (node.kind === NodeKind.Break) {
     return node.text === label
   }
   for (const child of node.children) {
@@ -240,7 +220,7 @@ const walkIf = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assign
   checkReads(ctx, cls, stmt.children[0], assigned, false)
   const whenTrue = walkStatement(ctx, cls, stmt.children[1], assigned.copy())
   const whenFalse =
-    stmt.children[2].kind === N_EMPTY
+    stmt.children[2].kind === NodeKind.Empty
       ? assigned.copy()
       : walkStatement(ctx, cls, stmt.children[2], assigned.copy())
   if (whenTrue.terminated) {
@@ -274,7 +254,7 @@ const walkLoop = (
   body: Node,
   assigned: Assigned
 ): Assigned => {
-  if (head.kind !== N_EMPTY) {
+  if (head.kind !== NodeKind.Empty) {
     checkReads(ctx, cls, head, assigned, false)
   }
   walkStatement(ctx, cls, body, assigned.copy())

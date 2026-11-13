@@ -179,6 +179,8 @@ const K_RANGED: i32 = 19
  * computed with (`baseOf`).
  */
 const K_ENUM_MEMBER: i32 = 20
+/** The member values `TypeTable.enumMemberOf` keeps a table for, from 0; others are interned by key. */
+const MEMBER_TABLE_LIMIT: i32 = 4096
 /**
  * A discriminated union, `A | B` (docs/LANGUAGE.md, "Discriminated unions"):
  * a pointer to one of its variants, each a class or an interface whose first
@@ -350,6 +352,16 @@ export class TypeTable {
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap
   /**
+   * `enumMemberOf`'s answers without the interning key: `memberEnums[i]` is
+   * an enum and `memberTables[i]` its member ids plus one by value, for the
+   * values from 0 below `MEMBER_TABLE_LIMIT`; 0 is not asked yet.
+   */
+  memberEnums: i32[]
+  memberTables: i32[][]
+  /** The enum `enumMemberOf` last looked up and its `memberTables` index: runs ask for one enum. */
+  lastMemberEnum: i32
+  lastMemberAt: i32
+  /**
    * `nish:secret`: the struct id of every `Secret<T>` instance -> the id of
    * its `T`, recorded when the instance is laid out (`src/generics.ts`). On the
    * table rather than on a module, because a `Secret` crosses modules as any
@@ -389,6 +401,10 @@ export class TypeTable {
     this.readonlys = []
     this.displays = []
     this.index = new StringMap()
+    this.memberEnums = []
+    this.memberTables = []
+    this.lastMemberEnum = -1
+    this.lastMemberAt = -1
     this.secrets = new StringMap()
     let scalar = 0
     while (scalar < T_FIRST_DERIVED) {
@@ -525,12 +541,47 @@ export class TypeTable {
    * decides, so the caller passes the first member declared with it.
    */
   enumMemberOf(enumType: i32, value: i32, name: string): i32 {
-    return this.internAll(K_ENUM_MEMBER, enumType, name, value, R_UNKNOWN, false)
+    if (value < 0 || value >= MEMBER_TABLE_LIMIT) {
+      return this.internAll(K_ENUM_MEMBER, enumType, name, value, R_UNKNOWN, false)
+    }
+    let at = this.lastMemberAt
+    if (enumType !== this.lastMemberEnum) {
+      at = this.memberEnums.indexOf(enumType)
+    }
+    if (at < 0) {
+      at = this.memberEnums.length
+      this.memberEnums.push(enumType)
+      const fresh: i32[] = []
+      this.memberTables.push(fresh)
+    }
+    this.lastMemberEnum = enumType
+    this.lastMemberAt = at
+    const ids = this.memberTables[at]
+    while (ids.length <= value) {
+      ids.push(0)
+    }
+    if (ids[value] === 0) {
+      ids[value] = this.internAll(K_ENUM_MEMBER, enumType, name, value, R_UNKNOWN, false) + 1
+    }
+    return ids[value] - 1
+  }
+
+  /**
+   * Whether `enumMemberOf` gives one id per enum and `value` whatever the
+   * name: values below `MEMBER_TABLE_LIMIT` are looked up by value alone.
+   */
+  internsByValue(value: i32): boolean {
+    return value >= 0 && value < MEMBER_TABLE_LIMIT
   }
 
   /** Whether `type` is an enum member type; -1, a node with no recorded type, is not. */
   isEnumMemberType(type: i32): boolean {
     return type >= 0 && this.kinds[type] === K_ENUM_MEMBER
+  }
+
+  /** Whether `type` is a member type of the enum `enumType`. */
+  isMemberOf(type: i32, enumType: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_ENUM_MEMBER && this.refs[type] === enumType
   }
 
   /**

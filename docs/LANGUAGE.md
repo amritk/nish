@@ -1271,10 +1271,13 @@ gives up on: it keeps the checker's widened state.
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
 union is refused, and so is a union-holding field of any class or interface
-the compilation declares, exported or not, under any sidecar flag
-(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
-lays out every class and interface of the program, a private one too
-(`reject_union_private_field`). The message is
+the compilation declares, exported or not, under a flag that lays the classes
+out as C structs (`--emit-header`, `--emit-napi`, `--emit-napi-async`): a
+header lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). A build with `--emit-dts` alone describes no
+class, so there a union field of a class only the module reads — root
+storage's graph among them — is accepted; a union in an exported function's
+parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions
@@ -1979,7 +1982,8 @@ export const step = (): void => {
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of
-  these. A string, an array, a class, a `Map` or a `| null` is
+  these. A string, an array, a class, a `Map` or a `| null` (but `C | null`
+  for a class `C`, which is [root storage](#root-storage-an-object-graph-kept-between-calls)) is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
   (NL2686, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
@@ -2060,6 +2064,101 @@ export const step = (): void => {
   build's; a page reads them from `layout` and never spells one. A local
   `f32[]` is still a plain JavaScript array there: only module storage is a
   view.
+
+#### Root storage: an object graph kept between calls
+
+**Module storage whose element is `C | null` for a class `C` is root
+storage**: each slot holds one object, and everything that object reaches —
+its fields, their arrays and strings, the objects they hold — outlives the
+call that built it (`tests/cases/root_storage`,
+`docs/wp55-persistent-root.md`). It is how a wasm module keeps a game, a
+document or any class instance across `init`, `step` and `draw`.
+
+```ts
+class World {
+  balls: Ball[]
+  tick: i32 = 0
+  constructor() {
+    this.balls = []
+  }
+}
+
+const world = new Array<World | null>(1)
+
+export const init = (): void => {
+  world[0] = new World()
+}
+
+export const step = (): void => {
+  const w = world[0]
+  if (w !== null) {
+    w.tick = w.tick + 1
+  }
+}
+```
+
+On a page module each root is a record of its data, its length and the
+descriptor of its class, gathered into one table the keep walks
+(`tests/cases/root_storage_page`, whose root is `head`, a list of `Node`):
+
+```llvm
+%nish.root = type { i8*, i32, i8* }
+@nish_storage_0_head.root = constant %nish.root { i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*), i32 1, i8* bitcast (%nish.trace* @nish.trace.0 to i8*) }
+@nish.roots = internal constant [1 x %nish.root*] [%nish.root* @nish_storage_0_head.root]
+
+define void @nish_root_keep(i64 %mark) {
+  call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+```
+
+- **Natively it is module storage and nothing more.** A native program never
+  hands its arena back between calls, so the graph simply stays.
+- **On a page module the loader keeps the graph and releases the rest.**
+  Where the loader of a program without root storage releases each export
+  call's arena, this one calls `nish_root_keep`. The runtime traces what the
+  roots reach from descriptors the compiler writes (`%nish.trace`, one per
+  class, string and array type the roots reach;
+  `tests/cases/root_storage_page`), slides it down over the garbage, rewrites
+  every pointer to it, and frees what is left. It does so only once the kept
+  region passes twice the live bytes and 64 KiB, so a call that changes a
+  little copies nothing, and memory stays bounded however long the page runs
+  (`node tests/run.js persist`: 100,000 steps with memory flat).
+- **What a root reaches is traceable.** A number, a `boolean`, an enum, a
+  string, an array, a class or a discriminated union of classes. Anything
+  else — a `Map`, a `Set`, an interface a class implements, a `Region`, a
+  `Secret`, a `CPtr`, a handle class or a C struct layout — is
+  `` Root storage `X` cannot keep C.f (T): the runtime moves what a root reaches between calls, … ``
+  (NL2766, `tests/wordings/nl2766_root_storage_map`).
+- **It is not exported**: the objects move, so a page has no layout to read.
+  `export const world = new Array<World | null>(1)` is
+  `` Root storage `X` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead ``
+  (NL2767, `tests/wordings/nl2767_root_storage_export`), and `layout` leaves
+  root storage out.
+- **No threads, no regions.** Each allocates from an arena of its own, which
+  a root could be left pointing into, so root storage in a program that
+  loads `nish/threads` or `nish:region` is
+  `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
+  (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
+- **No WASI loader.** A `--profile wasi` build with `--emit-dts` writes a
+  loader that releases the arena after every call, and only a page module
+  emits the `nish_root_keep` a loader calls instead, so root storage there is
+  `` Root storage `X` cannot be kept in a WASI build that writes a loader (`--emit-dts`): … ``
+  (NL2770, `tests/wordings/nl2770_root_storage_wasi_dts`).
+- **A freestanding module without a loader** (`--target wasm32` and no
+  `--emit-dts`) still emits `nish_root_keep(mark)`; the host that calls its
+  exports writes its own loader, and must call `nish_root_keep(mark)` where it
+  would call `nish_arena_release(mark)`, or what a root reaches is freed.
+- **Every function may store through a root**, so a program with root
+  storage does not prove a parameter-only allocation stays in its caller's
+  scope from the signature alone; the compiler's other proofs are unchanged.
 
 ### Type aliases
 
@@ -14142,7 +14241,15 @@ where its memory lives and when it is reused.
    pushed, assigned to another variable (`let q = p` included), held by a
    reassigned `let`, or passed to a callee that captures it
    (`tests/cases/mem_stack_escape`). A site inside a loop gets one slot,
-   reused every iteration (`tests/cases/mem_stack_loop`). Stack arrays are
+   reused every iteration (`tests/cases/mem_stack_loop`). A `Result` is the
+   exception to "held by a reassigned `let`": an `Ok`/`Err`, or a call
+   returning a by-value `Result`, assigned to a `let` of the same function
+   goes where that `let` goes, so a `let r = Ok(n)` assigned again keeps its
+   function's arena scope. Outside a loop each such site is its own alloca;
+   inside one it is arena memory the scope gives back. A `let` assigned from
+   itself (`r = c ? r : Ok(0)`) keeps the arena answer
+   (`tests/cases/res_let_reassign`, whose 100000 calls leave `Arena.used()`
+   unchanged). Stack arrays are
    capped at 4096 bytes of data; a later `push` moves the elements to the
    arena and the header stays valid. The slot's type spells the length out,
    and the length is read from the literal that made the site stackable in the
@@ -14440,7 +14547,7 @@ by the caller.
   checked when one of its instantiations is finished, and the padding rule below
   is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  The thirteen below each name the rewrite; the class also holds NL9012, a
+  The fourteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
   ([Data parallelism](#data-parallelism-nishthreads)), and the retired NL9014
   and NL9015, which noted the removed `--unchecked-indexing` and `--wrapping`:
@@ -14475,7 +14582,9 @@ by the caller.
     nothing and has no rewrite — that function still loses its arena scope and
     still retains its memory, silently, unless it earns the scope through its
     callees ([Memory model](#memory-model), item 2), which is a known gap
-    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
+    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out") —
+    a `let` holding a `Result` is no longer in it ([Memory model](#memory-model),
+    item 1); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; when the value being dropped may already be reachable from
@@ -14534,6 +14643,97 @@ by the caller.
     when the result is returned, stored, pushed or passed on; or in a loop
     whose pass can `return` what it allocated, which no bracket could
     release, so there is no rewrite to name.
+  - **a pass of an unbounded loop that keeps what it allocates** (NL9018) —
+    an allocation that `--emit-arena` marks `"accumulates":true`, where some
+    loop between it and its release has nothing bounding how many passes it
+    runs. `"accumulates"` means the allocation runs on every pass of a loop
+    that releases nothing per pass, and nothing reaches it once the pass ends.
+
+    That is the shape of a request loop on `Http1Server`. Its pass calls
+    `accept` or `respond`, which store into the server's memory, so the pass
+    is refused its scope. A reply string built in the handler then stays
+    allocated for as long as the server runs:
+    `tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests,
+    and the rewrite grew none.
+
+    A loop is bounded, and NL9018 stays silent for it, when one of these
+    holds:
+
+    - It is a `while`, `do` or `for` whose condition has an order comparison
+      (`<`, `<=`, `>`, `>=`) as a conjunct of its top-level `&&` chain. The
+      condition must call nothing but the numeric conversions (`toI32` and
+      its kin), and read nothing but locals, fields (`.length` among them)
+      and constants. A call to any function of the program or of `std/`
+      anywhere in the condition makes the loop unbounded.
+    - It is a `for...of` whose body cannot extend the collection it walks:
+      an array or a map, named by a local or a field path such as
+      `log.items`. The body extends it only through the same walked
+      expression, by one of these:
+      - adding to it: `push`, `unshift`, `splice`, `set` or `add` on it, or
+        a write through `walked[k]`;
+      - `++` or `--` on it, or spreading it;
+      - passing it to a call or a `new` whose callee may resize an array,
+        or that goes through a function reference;
+      - assigning it, or storing it in a variable, field, array or object.
+
+      Any other use leaves the walk bounded, and so does a call in the body
+      that resizes some other array.
+
+    Every other loop is unbounded:
+    - `while (true)` and `for (;;)`;
+    - a flag with no comparison (`while (running)`);
+    - equalities only (`while (a !== X && a !== Y)`);
+    - a top-level `||` (`while (next >= 0 || next === FULL)`);
+    - a call in the condition (`while (more(log))`,
+      `while (k < n && poll())`);
+    - a `for...of` whose body extends what it walks, as above;
+    - a bounded loop inside an unbounded one that releases nothing.
+
+    The rule has known blind spots. A comparison loop whose body never
+    moves toward its bound still counts as bounded. So does a `for...of`
+    whose collection grows by a way the rule does not follow: through an
+    alias (`const a = q; for (const x of q) a.push(x)`), through a method
+    that grows `this.items` while it is walked, or when the walked
+    expression is not a local, `this` or a field path (a call result or an
+    index expression).
+
+    There is at most one warning per loop, at the innermost loop whose pass
+    releases nothing. It names:
+    - the first site and its kind, and how many more there are;
+    - where the memory goes back;
+    - why the pass has no scope;
+    - the rewrite.
+
+    The rewrite moves the per-pass work that builds the temporary into a
+    block inside the loop body that opens with
+    [`using a = arena()`](#using-a--arena). The compiler refuses that block
+    (NL2416 and its family) if anything allocated there could outlive it
+    (`tests/cases/perf_arena_unbounded_pass`).
+
+    Only a temporary the pass drops counts. These do not: an array a `push`
+    grows, a value stored or passed on, and a call to a function that stores
+    what it allocates. A temporary handed to a callee that keeps it is passed
+    on, so it is not counted. A temporary from which every path leaves the
+    loop, by `return`, `throw` or a `break` out of it, is built at most once
+    each time the loop runs, so it is not counted either. Inside nested
+    loops it has to leave every unbounded loop out to where its memory is
+    released, not only the innermost: an unlabelled `break` ends only its
+    own loop, so a temporary that breaks out of a `for...of` inside a
+    `while (poll())` still counts, while a `return` or a `break` to a label
+    on the outer loop leaves both. The walk that proves it gives up at a
+    `switch`, a `try` or a nested loop, so a temporary that a `return`
+    inside a `switch` leaves with still counts.
+
+    Not reported for:
+    - a bounded loop;
+    - the same temporary inside the block;
+    - a loop whose pass takes its scope;
+    - a site NL9002, NL9003, NL9011 or NL9016 already reports, as the value
+      of the assignment or the call that warning sits on
+      (`tests/cases/perf_arena_unbounded_quiet`).
+
+    It reads the `"accumulates"` fact `--emit-arena` prints, then keeps only
+    the temporaries a pass drops, and changes no byte of the IR.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -15312,7 +15512,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Four performance warnings are exactly that finding, and
+killed. Five performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
@@ -15322,19 +15522,20 @@ modules:
 | NL9003, an allocation dropped by an assignment | the value the local held |
 | NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
 | NL9016, an allocation dropped on every pass | the value each pass replaced |
+| NL9018, a pass of an unbounded loop that keeps what it allocates | the temporary each pass built, for as long as the loop runs |
 
 - **The error keeps the warning.** Its text is the warning's, after the code of
   the rule that found it, so it names the same rewrite:
   `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
   (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
-  `reject_deny_retention_loop`, `reject_deny_retention_concat`). The warning it
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`, `reject_deny_retention_unbounded_pass`). The warning it
   restates is not printed as well, and `--no-warn-performance` does not
   silence the error.
 - **The program's own modules only.** A module of the root package is held to
   it; a dependency's warnings stay warnings, as its panic sites stay outside
   the [no-panic scope](#the-no-panic-scope), because the program's author
   cannot change that code (`tests/link/deny_retention_dependency`).
-- **What it does not promise.** The four warnings are conservative in the
+- **What it does not promise.** The five warnings are conservative in the
   direction of silence: each fires only where the compiler can name the memory
   and the rewrite, so a program it accepts can still retain memory in a shape
   no rule recognises ([wp6-memory.md](wp6-memory.md), "Left out"). Nor does it
@@ -15435,6 +15636,9 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   listed on its own line — both, when both do — because it runs outside the
   bracket a pass takes whether or not the body has one; a `do...while`
   condition's line follows the lines of the loops in its body.
+- **A listed loop with no bound** — one that is not bounded, by NL9018's rule — is
+  the loop NL9018 warns about when what its pass keeps is a temporary the
+  pass drops; the report lists it either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not, nor is a constructor,

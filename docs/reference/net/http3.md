@@ -160,6 +160,9 @@ HTTP/2 type HTTP/3 reserves (H3_FRAME_UNEXPECTED, §7.2.8);
 - a GOAWAY whose push ID rose, a MAX_PUSH_ID that fell, a CANCEL_PUSH past
 the push IDs allowed (H3_ID_ERROR, §5.2, §7.2.7, §7.2.3);
 - a control frame past `H3_CONTROL_FRAME_MAX` (H3_EXCESSIVE_LOAD);
+- a request reset past what `resetBudget` allows — by the client, or by
+this side for a stream error or a 431 the client caused, net of the
+requests this side answered (H3_EXCESSIVE_LOAD, §10.5);
 - and QPACK's three.
 
 A stream error resets one request, both ways, and the connection lives: a
@@ -261,6 +264,7 @@ class Http3Config
 | `headTimeout: i32` | The milliseconds a request's head may take to arrive whole, from its first byte or the last head before it, before `clock` closes the connection with H3_EXCESSIVE_LOAD (H3-5), 1 to 2^31 - 1. A body that trickles after its head is the program's to time, as a long response is. |
 | `idleTimeout: i32` | The milliseconds a connection may go without progress while no request is in hand before `clock` closes it (H3-5), 1 to 2^31 - 1. Progress is the connection starting, a request's head arriving whole, and the last request in hand finishing. With no request open the close is H3_NO_ERROR; with one still short of its head it is H3_EXCESSIVE_LOAD. |
 | `maxFieldSectionSize: i32` | SETTINGS_MAX_FIELD_SECTION_SIZE (§4.2.2): past it a request is answered with a 431. |
+| `resetBudget: i32` | How many requests may be reset before the connection is closed with H3_EXCESSIVE_LOAD, net of those this side answered: each request the client resets or stops, and each this side resets for a stream error or answers with a 431, costs one; each response this side ends with a FIN earns one back, up to this. Rapid reset (CVE-2023-44487) and MadeYouReset (CVE-2025-8671) over HTTP/3. |
 | `webtransportSessions: i32` | The WebTransport sessions this side takes at once (`nish/net/webtransport`), 0 for none. Above 0 it turns on extended CONNECT and sends SETTINGS_H3_DATAGRAM, SETTINGS_ENABLE_WEBTRANSPORT and SETTINGS_WEBTRANSPORT_MAX_SESSIONS, and the QUIC connection must take DATAGRAM frames; at 0 it must not (RFC 9297 §2.1.1). |
 | `writeChunk: i32` | The largest DATA frame `writeData` starts. |
 

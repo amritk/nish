@@ -72,13 +72,13 @@ import {
   SECRET_SPECIFIER,
   unsafeModule,
 } from "./nish-modules"
-import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
-import { arenaJson } from "./arena-report"
+import { arenaJson, unboundedPassFindings } from "./arena-report"
 import {
   allCapabilities,
   argumentCapabilities,
@@ -200,6 +200,7 @@ import {
   voidTaskResultMessage,
   destinationEdits,
   threadsModuleName,
+  isThreadsModule,
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
@@ -384,7 +385,7 @@ export class EmittedModule {
 
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
-  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016"
+  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016" || code === "NL9018"
 
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of
@@ -979,7 +980,13 @@ export class Compilation {
         continue
       }
       const target = found.path
-      if (readFileSyncOrNull(target) === null) {
+      let missing = false
+      {
+        // The file's text is read only to see that it is there; the pass drops it.
+        using _a = arena()
+        missing = readFileSyncOrNull(target) === null
+      }
+      if (missing) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
@@ -1283,7 +1290,8 @@ export class Compilation {
     let dir = normalizePath(from)
     let steps = 0
     let searching = true
-    while (searching) {
+    // `steps` never passes the limit: the pass that reaches it stops the walk.
+    while (searching && steps <= PACKAGE_WALK_LIMIT) {
       if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
         const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name])
         if (readFileSyncOrNull(joinPath([candidate, "package.json"])) !== null) {
@@ -1405,6 +1413,9 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.recheckStorage()
     }
+    this.rejectRootWithArenas()
+    this.rejectRootInShim()
+    this.rejectRootInWasiLoader()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -1509,6 +1520,7 @@ export class Compilation {
     }
     this.factsSettled = true
     this.reportArenaLoops()
+    this.reportUnboundedPasses()
     this.denyRetention()
     this.checkParallel()
     this.keyEnumsBySymbol()
@@ -2553,16 +2565,17 @@ export class Compilation {
 
   /**
    * `--deny-retention`: each arena-retention warning in a module of the root
-   * package becomes an error. The four rules are the ones whose finding is
+   * package becomes an error. The five rules are the ones whose finding is
    * memory nothing can reach that stays allocated: quadratic string building
    * (NL9002), an allocation dropped by an assignment (NL9003), a loop over a
-   * call that leaves its memory behind (NL9011) and an allocation dropped on
-   * every pass (NL9016). The error keeps the warning's text, which names the
+   * call that leaves its memory behind (NL9011), an allocation dropped on
+   * every pass (NL9016) and a pass of an unbounded loop that keeps what it
+   * allocates (NL9018). The error keeps the warning's text, which names the
    * rewrite, and its code, so a reader sees which rule refused the build. A
    * dependency's warnings stay warnings, as its panic sites stay outside the
    * no-panic scope: the program's author cannot change that code.
    *
-   * Run after `reportArenaLoops`, the last of the four to be found, and the
+   * Run after `reportUnboundedPasses`, the last of the five to be found, and the
    * warning it restates is dropped so the line is said once.
    */
   denyRetention(): void {
@@ -3052,6 +3065,33 @@ export class Compilation {
   }
 
   /**
+   * NL9018: an unbounded loop in the program's own code whose passes keep
+   * what they allocate (`unboundedPassFindings`, arena-report.ts). Only the
+   * root package's modules, the scope of `--explain-memory`: a dependency's
+   * loop is not the program author's to rewrite. A site another retention
+   * warning already reports, at the expression or statement that holds it, is
+   * left to that warning, so this runs after every one of them is in.
+   */
+  reportUnboundedPasses(): void {
+    const facts = this.analyze()
+    for (const unit of this.analysisUnits) {
+      const source = unit.program.source
+      if (!this.inRootPackage(source)) {
+        continue
+      }
+      const named: i32[] = []
+      for (const warning of this.sink.warnings) {
+        if (warning.source === source && isRetentionCode(codeFor("performance", warning.text))) {
+          named.push(warning.start)
+        }
+      }
+      for (const finding of unboundedPassFindings(unit, this.table, facts, named)) {
+        this.sink.reportPerformance(source, finding.node.start, finding.node.end, finding.message)
+      }
+    }
+  }
+
+  /**
    * The WP33 portability warnings (`src/portability.ts`), under
    * `--warn-portability` only. Last in `check`, after every error is in, so a
    * program that does not compile is never walked; over the analysis units
@@ -3118,6 +3158,86 @@ export class Compilation {
       }
     }
     return this.entry()
+  }
+
+  /**
+   * WP55 §4.2: root storage in a program that also loads `nish/threads` or
+   * `nish:region`, each of which allocates from an arena of its own that a
+   * root could be left pointing into once it is freed.
+   */
+  rejectRootWithArenas(): void {
+    let arenas = false
+    for (const unit of this.modules) {
+      if (unit.checker.program.regionLibrary || isThreadsModule(unit.checker.program)) {
+        arenas = true
+      }
+    }
+    if (!arenas) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a program that loads \`nish/threads\` or \`nish:region\`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a build that writes a native shim
+   * (`--emit-napi`, `--emit-napi-async`, `--emit-header`). The shim releases
+   * the arena after every call that passes a string or an array
+   * (`src/interop-napi.ts`), which frees what a root reaches, and only a page
+   * module's loader keeps it instead.
+   */
+  rejectRootInShim(): void {
+    const opts = this.opts
+    if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0 && opts.emitHeader.length === 0) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a build that writes a native shim (\`--emit-napi\`, \`--emit-napi-async\` or \`--emit-header\`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a WASI build that writes a loader
+   * (`--emit-dts`). The loader releases the arena after every call, and only
+   * a page module (`buildsPageModule`) emits the `nish_root_keep` a loader
+   * calls in its place, so what a root reaches would be freed.
+   */
+  rejectRootInWasiLoader(): void {
+    const opts = this.opts
+    if (opts.emitDts.length === 0 || !isWasmBuild(opts) || buildsPageModule(opts)) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a WASI build that writes a loader (\`--emit-dts\`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (\`--target wasm32\`) or as an \`--emit-dts\` compile for the host`
+          )
+        }
+      }
+    }
   }
 
   /**
@@ -3350,6 +3470,39 @@ export class Compilation {
       }
     }
     return this.hasStorage()
+  }
+
+  /** WP55: whether any module declares root storage, whatever the target. */
+  holdsRoots(): boolean {
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  /**
+   * WP55: every root storage's symbol, in module order, when the build makes
+   * a page module, whose loader keeps what the roots reach between calls; a
+   * native build's arena is never released across calls, so it keeps nothing.
+   */
+  rootSymbols(): string[] {
+    const out: string[] = []
+    if (!buildsPageModule(this.opts)) {
+      return out
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const info of program.constantList) {
+        if (info.root && info.origin === program.source) {
+          out.push(info.storageSymbol)
+        }
+      }
+    }
+    return out
   }
 
   /**
@@ -3771,6 +3924,7 @@ export class Compilation {
         unit.checker.program.capturesErrno = true
       }
     }
+    this.opts.holdsRoots = this.holdsRoots()
     const facts = analyzeFunctions(units, this.table, this.opts, this.runtime)
     this.analysisUnits = units
     this.facts = facts
@@ -4008,6 +4162,7 @@ export class Compilation {
       this.narrowSandbox(facts)
     }
     this.opts.panicSites = this.guardsPanics()
+    this.opts.rootSymbols = this.rootSymbols()
     const units = this.analysisUnits
     const stems = this.outputStems()
     const copies: AnalysisUnit[] = this.libraryUnits(units)
@@ -4262,7 +4417,7 @@ const reservedPrefixText = (name: string): string => {
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 
 /** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
 const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0
@@ -4306,7 +4461,7 @@ const clashMessage = (
   const owner = sig.owner
   if (owner !== null) {
     const member =
-      sig.decl.kind === N_CONSTRUCTOR
+      sig.decl.kind === NodeKind.Constructor
         ? "is declared with a constructor"
         : `declares method \`${sig.decl.children[0].text}\``
     const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`

@@ -13,21 +13,14 @@ import { RATE_FIRST } from "nish/term-rate"
 import { TERM_PROBE_TIMEOUT_MS } from "nish/term-probe"
 import { Rng } from "../../../std/random"
 import {
-  GLYPH_ADVANCE,
-  GLYPH_H,
-  GLYPH_W,
   NO_SHADOW,
-  Particles,
   STEPS_PER_SECOND,
-  GfxTrail,
   View,
   WORLD_H,
   WORLD_W,
-  add,
   bevelBrick,
   blendRect,
   clamp,
-  dim,
   disc,
   discAlpha,
   drawParticles,
@@ -40,21 +33,30 @@ import {
   fontScaleFor,
   glow,
   gradient,
-  hue,
   lerp,
-  gfxMix,
   outBack,
   outBounce,
   outCubic,
   pixelX,
   pixelY,
-  pushTrail,
-  gfxRgb,
-  spawnParticle,
   stepParticles,
-  textWidth,
   viewFor,
 } from "../../../src/break-gfx"
+import {
+  RASTER_GLYPH_ADVANCE,
+  RASTER_GLYPH_H,
+  RASTER_GLYPH_W,
+  RasterParticles,
+  RasterTrail,
+  rasterAdd,
+  rasterDim,
+  rasterHue,
+  rasterMix,
+  rasterPushTrail,
+  rasterRgb,
+  rasterSpawnParticle,
+  rasterTextWidth,
+} from "../../../std/raster"
 
 /** A view of a fresh black `w` × `h` framebuffer, unshaken. */
 const viewOf = (w: i32, h: i32): View => {
@@ -137,20 +139,20 @@ const testView = (t: Suite): void => {
 }
 
 const testColour = (t: Suite): void => {
-  t.eqI32("gfxRgb", gfxRgb(0x12, 0x34, 0x56), 0x123456)
-  t.eqI32("gfxRgb clamps each channel", gfxRgb(300, -5, 16), 0xff0010)
-  t.eqI32("gfxMix at 0", gfxMix(0x102030, 0xffffff, 0.0), 0x102030)
-  t.eqI32("gfxMix at 1", gfxMix(0x102030, 0xffffff, 1.0), 0xffffff)
-  t.eqI32("gfxMix halfway", gfxMix(0x000000, 0xffffff, 0.5), 0x7f7f7f)
-  t.eqI32("gfxMix clamps t", gfxMix(0x000000, 0xffffff, 7.0), 0xffffff)
-  t.eqI32("add", add(0x010203, 0x020304), 0x030507)
-  t.eqI32("add saturates", add(0x808080, 0x90ff01), 0xffff81)
-  t.eqI32("dim", dim(0xff8040, 0.5), 0x7f4020)
-  t.eqI32("hue 0 is red", hue(0.0), 0xff0000)
-  t.eqI32("hue 1/3 is green", hue(toF64(1) / toF64(3)), 0x00ff00)
-  t.eqI32("hue 2/3 is blue", hue(toF64(2) / toF64(3)), 0x0000ff)
-  t.eqI32("hue 1/12 is orange", hue(toF64(1) / toF64(12)), 0xff7f00)
-  t.eqI32("hue wraps", hue(-1.0), 0xff0000)
+  t.eqI32("gfxRgb", rasterRgb(0x12, 0x34, 0x56), 0x123456)
+  t.eqI32("gfxRgb clamps each channel", rasterRgb(300, -5, 16), 0xff0010)
+  t.eqI32("gfxMix at 0", rasterMix(0x102030, 0xffffff, 0.0), 0x102030)
+  t.eqI32("gfxMix at 1", rasterMix(0x102030, 0xffffff, 1.0), 0xffffff)
+  t.eqI32("gfxMix halfway", rasterMix(0x000000, 0xffffff, 0.5), 0x7f7f7f)
+  t.eqI32("gfxMix clamps t", rasterMix(0x000000, 0xffffff, 7.0), 0xffffff)
+  t.eqI32("add", rasterAdd(0x010203, 0x020304), 0x030507)
+  t.eqI32("add saturates", rasterAdd(0x808080, 0x90ff01), 0xffff81)
+  t.eqI32("dim", rasterDim(0xff8040, 0.5), 0x7f4020)
+  t.eqI32("hue 0 is red", rasterHue(0.0), 0xff0000)
+  t.eqI32("hue 1/3 is green", rasterHue(toF64(1) / toF64(3)), 0x00ff00)
+  t.eqI32("hue 2/3 is blue", rasterHue(toF64(2) / toF64(3)), 0x0000ff)
+  t.eqI32("hue 1/12 is orange", rasterHue(toF64(1) / toF64(12)), 0xff7f00)
+  t.eqI32("hue wraps", rasterHue(-1.0), 0xff0000)
   eqF(t, "lerp", lerp(2.0, 6.0, 0.25), 3.0)
   eqF(t, "lerp is not clamped", lerp(0.0, 10.0, 1.5), 15.0)
   eqF(t, "clamp low", clamp(-3.0, 0.0, 1.0), 0.0)
@@ -252,14 +254,14 @@ const testShapes = (t: Suite): void => {
 }
 
 const testText = (t: Suite): void => {
-  t.eqI32("GLYPH_W", GLYPH_W, 5)
-  t.eqI32("GLYPH_H", GLYPH_H, 7)
-  t.eqI32("GLYPH_ADVANCE", GLYPH_ADVANCE, 6)
-  t.eqI32("textWidth of one glyph", textWidth("A", 3), 15)
-  t.eqI32("textWidth drops the last gap", textWidth("AB", 1), 11)
-  t.eqI32("textWidth of nothing", textWidth("", 2), 0)
-  t.eqI32("textWidth at scale 0", textWidth("AB", 0), 0)
-  t.eqI32("textWidth caps the scale", textWidth("A", 2147483647), 5 * 1024)
+  t.eqI32("GLYPH_W", RASTER_GLYPH_W, 5)
+  t.eqI32("GLYPH_H", RASTER_GLYPH_H, 7)
+  t.eqI32("GLYPH_ADVANCE", RASTER_GLYPH_ADVANCE, 6)
+  t.eqI32("textWidth of one glyph", rasterTextWidth("A", 3), 15)
+  t.eqI32("textWidth drops the last gap", rasterTextWidth("AB", 1), 11)
+  t.eqI32("textWidth of nothing", rasterTextWidth("", 2), 0)
+  t.eqI32("textWidth at scale 0", rasterTextWidth("AB", 0), 0)
+  t.eqI32("textWidth caps the scale", rasterTextWidth("A", 2147483647), 5 * 1024)
   t.eqI32("fontScaleFor at 960x540", fontScaleFor(viewOf(960, 540), 10.0), 4)
   t.eqI32("fontScaleFor at 320x180", fontScaleFor(viewOf(320, 180), 10.0), 1)
   t.eqI32("fontScaleFor: nothing fits at 80x45", fontScaleFor(viewOf(80, 45), 10.0), 0)
@@ -309,10 +311,10 @@ const testPools = (t: Suite): void => {
   const v = viewOf(320, 180)
   const fb = v.fb
 
-  const p = new Particles(4)
+  const p = new RasterParticles(4)
   t.eqI32("a new pool is dead", p.live(), 0)
   for (let i: i32 = 0; i < 6; i++) {
-    spawnParticle(p, toF64(i), 0.0, 0.0, 0.0, 1.0, 1.0, 0xffffff)
+    rasterSpawnParticle(p, toF64(i), 0.0, 0.0, 0.0, 1.0, 1.0, 0xffffff)
   }
   t.eqI32("the pool caps at its capacity", p.live(), 4)
   t.eqI32("its capacity", p.capacity(), 4)
@@ -320,16 +322,16 @@ const testPools = (t: Suite): void => {
   eqF(t, "the rest keep the next oldest", p.xs[2] * 10.0 + p.xs[3], 23.0)
   t.ok("an index past the pool is no slot", !p.has(4) && !p.has(-1) && p.has(3))
 
-  const none = new Particles(0)
-  spawnParticle(none, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0xffffff)
-  spawnParticle(none, 2.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0xffffff)
+  const none = new RasterParticles(0)
+  rasterSpawnParticle(none, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0xffffff)
+  rasterSpawnParticle(none, 2.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0xffffff)
   t.eqI32("capacity 0 is clamped to 1", none.capacity() * 10 + none.live(), 11)
-  spawnParticle(none, 1.0, 1.0, 0.0, 0.0, -1.0, 1.0, 0xffffff)
+  rasterSpawnParticle(none, 1.0, 1.0, 0.0, 0.0, -1.0, 1.0, 0xffffff)
   t.eqI32("a particle spawned with no life is dead", none.live(), 0)
 
   // One step moves a particle a 120th of its velocity, gravity first.
-  const q = new Particles(2)
-  spawnParticle(q, 10.0, 10.0, 120.0, 0.0, 1.0, 2.0, 0xff0000)
+  const q = new RasterParticles(2)
+  rasterSpawnParticle(q, 10.0, 10.0, 120.0, 0.0, 1.0, 2.0, 0xff0000)
   stepParticles(q, 120.0, 0.0)
   eqF(t, "step moves by velocity / STEPS_PER_SECOND", q.xs[0], 11.0)
   nearF(t, "step applies gravity", q.vys[0], 1.0, 0.000000001)
@@ -341,7 +343,7 @@ const testPools = (t: Suite): void => {
   drawParticles(v, q, 0.0)
   t.ok("drawn at the previous position", fb.get(10, 9) !== 0)
   fb.clear()
-  spawnParticle(q, 100.0, 100.0, 0.0, 0.0, 1.0, 2.0, 0x00ff00)
+  rasterSpawnParticle(q, 100.0, 100.0, 0.0, 0.0, 1.0, 2.0, 0x00ff00)
   drawParticles(v, q, 1.0)
   t.eqI32("a new particle draws at full colour", fb.get(100, 100), 0x00ff00)
   fb.clear()
@@ -355,9 +357,9 @@ const testPools = (t: Suite): void => {
   p.clear()
   t.eqI32("clear kills them all", p.live(), 0)
 
-  const trail = new GfxTrail(3)
+  const trail = new RasterTrail(3)
   for (let i: i32 = 0; i < 5; i++) {
-    pushTrail(trail, toF64(100 + i * 10), 50.0)
+    rasterPushTrail(trail, toF64(100 + i * 10), 50.0)
   }
   t.eqI32("a trail keeps its capacity", trail.count, 3)
   drawTrail(v, trail, 2.0, 0xffffff, 1.0)
@@ -367,9 +369,9 @@ const testPools = (t: Suite): void => {
   trail.clear()
   drawTrail(v, trail, 2.0, 0xffffff, 1.0)
   t.eqI32("a cleared trail draws nothing", lit(fb) + trail.count, 0)
-  const one = new GfxTrail(0)
-  pushTrail(one, 5.0, 5.0)
-  pushTrail(one, 6.0, 5.0)
+  const one = new RasterTrail(0)
+  rasterPushTrail(one, 5.0, 5.0)
+  rasterPushTrail(one, 6.0, 5.0)
   t.eqI32("a trail of capacity 0 is clamped to 1", one.count, 1)
 }
 

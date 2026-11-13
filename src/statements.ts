@@ -58,12 +58,12 @@ import { optionalParameterMessage, parameterFormHereMessage } from "./declaratio
 import {
   FLAG_ABSTRACT,
   FLAG_ACCESSOR,
-  FLAG_AWAIT,
   FLAG_ASYNC,
+  FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_FOREIGN,
-  FLAG_CONSTRUCT,
   FLAG_OPTIONAL,
   FLAG_PROPERTY,
   FLAG_READONLY,
@@ -71,40 +71,8 @@ import {
   FLAG_SIGNATURE,
   FLAG_STATIC,
   FLAG_VAR,
-  N_ARROW,
-  N_BINDING_PATTERN,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CLASS,
-  N_CONSTRUCTOR,
-  N_CONTINUE,
-  N_DEFAULT,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FIELD,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IMPORT,
-  N_IMPORT_EQUALS,
-  N_IDENT,
-  N_IF,
-  N_INDEX_SIGNATURE,
-  N_INTERFACE,
-  N_LABELED,
-  N_MEMBER,
-  N_METHOD,
-  N_MODULE_CONST,
-  N_PARAM,
-  N_RETURN,
-  N_SWITCH,
-  N_THROW,
-  N_TRUE,
-  N_VAR,
-  N_WHILE,
   Node,
+  NodeKind,
 } from "./nodes"
 import { JSON_OPTIONS, jsonOptionsShapeMessage } from "./json-typed"
 import { caseValue } from "./constants"
@@ -125,32 +93,32 @@ import {
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {
   switch (stmt.kind) {
-    case N_EXPR_STMT:
+    case NodeKind.ExprStmt:
       return "process.exit"
-    case N_RETURN:
+    case NodeKind.Return:
       return "return"
-    case N_BREAK:
+    case NodeKind.Break:
       return "break"
-    case N_CONTINUE:
+    case NodeKind.Continue:
       return "continue"
-    case N_THROW:
+    case NodeKind.Throw:
       return "throw"
-    case N_IF:
+    case NodeKind.If:
       return "an `if` whose branches all return"
-    case N_SWITCH:
+    case NodeKind.Switch:
       // With no `default`, a `switch` ends the path only by covering every
       // variant of a union, which a program written before that rule kept a
       // trailing `return` for: say that the line can go.
       for (const clause of stmt.children[1].children) {
-        if (clause.kind === N_DEFAULT) {
+        if (clause.kind === NodeKind.Default) {
           return "a `switch` whose clauses all return"
         }
       }
       return "a `switch` that covers every variant of its union: every path leaves inside it, so the code after it can be deleted"
-    case N_LABELED:
+    case NodeKind.Labeled:
       // A labelled loop or `switch` ends the path as it would unlabelled; a
       // labelled block ends it only when every path through it returns.
-      if (stmt.children[0].kind === N_BLOCK) {
+      if (stmt.children[0].kind === NodeKind.Block) {
         return "a labelled block whose paths all return"
       }
       return terminatorName(stmt.children[0])
@@ -169,15 +137,15 @@ const checkLabeled = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const target = stmt.children[0]
   const label = stmt.text
   switch (target.kind) {
-    case N_WHILE:
+    case NodeKind.While:
       return checkWhile(ctx, target, scope, label)
-    case N_DO:
+    case NodeKind.Do:
       return checkDo(ctx, target, scope, label)
-    case N_FOR:
+    case NodeKind.For:
       return checkFor(ctx, target, scope, label)
-    case N_FOR_OF:
+    case NodeKind.ForOf:
       return checkForOf(ctx, target, scope, label)
-    case N_SWITCH:
+    case NodeKind.Switch:
       return checkSwitch(ctx, target, scope, label)
     default:
       break
@@ -243,7 +211,7 @@ export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope):
     if (checkStatement(ctx, stmt, scope)) {
       terminator = stmt
     }
-    if (stmt.kind === N_VAR) {
+    if (stmt.kind === NodeKind.Var) {
       keySteadyVariables(ctx, stmt.children[0], stmts)
     }
   }
@@ -285,7 +253,7 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
   // WP49: an `await` stands at the top of an expression statement, a
   // `let`/`const` or a `return`, and nowhere else (`isAwaitSite`).
   const saved = ctx.awaitStatement
-  const site = stmt.kind === N_EXPR_STMT || stmt.kind === N_VAR || stmt.kind === N_RETURN
+  const site = stmt.kind === NodeKind.ExprStmt || stmt.kind === NodeKind.Var || stmt.kind === NodeKind.Return
   ctx.awaitStatement = site ? stmt : null
   const ends = checkStatementKind(ctx, stmt, scope)
   ctx.awaitStatement = saved
@@ -301,39 +269,39 @@ const checkStatementKind = (ctx: CheckContext, stmt: Node, scope: Scope): boolea
     return false
   }
   switch (stmt.kind) {
-    case N_BLOCK:
+    case NodeKind.Block:
       return checkBlock(ctx, stmt, scope)
-    case N_VAR:
+    case NodeKind.Var:
       checkVariableList(ctx, stmt, scope)
       return false
-    case N_EXPR_STMT:
+    case NodeKind.ExprStmt:
       ctx.statementExpression = stmt.children[0]
       // WP16: a failure may not be dropped.
       rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1), scope)
       ctx.statementExpression = null
       // `process.exit(n)` and `panic(m)` end the path exactly as `return` does.
       return terminatesControlFlow(ctx, stmt.children[0])
-    case N_RETURN:
+    case NodeKind.Return:
       return checkReturn(ctx, stmt, scope)
-    case N_IF:
+    case NodeKind.If:
       return checkIf(ctx, stmt, scope)
-    case N_WHILE:
+    case NodeKind.While:
       return checkWhile(ctx, stmt, scope, "")
-    case N_DO:
+    case NodeKind.Do:
       return checkDo(ctx, stmt, scope, "")
-    case N_FOR:
+    case NodeKind.For:
       return checkFor(ctx, stmt, scope, "")
-    case N_FOR_OF:
+    case NodeKind.ForOf:
       return checkForOf(ctx, stmt, scope, "")
-    case N_SWITCH:
+    case NodeKind.Switch:
       return checkSwitch(ctx, stmt, scope, "")
-    case N_LABELED:
+    case NodeKind.Labeled:
       return checkLabeled(ctx, stmt, scope)
-    case N_BREAK:
+    case NodeKind.Break:
       return checkBreak(ctx, stmt, scope)
-    case N_CONTINUE:
+    case NodeKind.Continue:
       return checkContinue(ctx, stmt, scope)
-    case N_THROW:
+    case NodeKind.Throw:
       checkExpression(ctx, stmt.children[0], scope, -1)
       return true
     default:
@@ -350,7 +318,7 @@ const checkReturn = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const current = ctx.current
   const want = current === null ? T_ERROR : current.returnType
   const value = stmt.children[0]
-  if (value.kind === N_EMPTY) {
+  if (value.kind === NodeKind.Empty) {
     if (want !== T_VOID && want !== T_ERROR) {
       ctx.error(stmt, `Expected a return value of type ${ctx.table.typeName(want)}`)
     }
@@ -381,7 +349,7 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
 const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0
   for (const decl of list.children[0].children) {
-    if (decl.children[0].kind === N_BINDING_PATTERN) {
+    if (decl.children[0].kind === NodeKind.BindingPattern) {
       declareAwaitAll(ctx, decl, scope)
       continue
     }
@@ -391,13 +359,13 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     // leaves the variable its declared type (see below).
     // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
     let declared = -1
-    if (annotation.kind !== N_EMPTY) {
+    if (annotation.kind !== NodeKind.Empty) {
       declared = isMaybeAnnotation(annotation)
         ? resolveMaybeAnnotation(ctx, annotation)
         : resolveType(annotation, ctx)
     }
     const initializer = decl.children[2]
-    if (initializer.kind === N_EMPTY) {
+    if (initializer.kind === NodeKind.Empty) {
       ctx.error(decl, `Variable \`${name}\` must be initialized`)
       const origin = declaredOrigin(ctx, annotation, initializer, scope)
       declareLocal(
@@ -451,7 +419,7 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     // binding takes its initialiser's spelling. Read before the name is
     // declared, so that the initialiser's names are the outer ones.
     const typedArray =
-      annotation.kind !== N_EMPTY
+      annotation.kind !== NodeKind.Empty
         ? annotationSpelling(ctx, true, annotation)
         : typedArraySpelling(ctx, initializer, scope)
     declareLocal(
@@ -473,11 +441,9 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       const literal = mutable ? "" : literalIndexName(initializer, scope)
       if (literal !== "") {
         local.pathIndex = literal
-        local.literalKey = annotation.kind === N_EMPTY ? literal : ""
+        local.literalKey = annotation.kind === NodeKind.Empty ? literal : ""
       }
-      if (initializer.kind !== N_EMPTY) {
-        holdMembers(ctx, scope, local, initializer)
-      }
+      holdMembers(ctx, scope, local, initializer)
     }
     if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
       local.fresh = allocatesArray(ctx, initializer)
@@ -518,7 +484,11 @@ const allocatesArray = (ctx: CheckContext, init: Node): boolean => {
     return true
   }
   const e = unwrapParens(init)
-  if (e.kind !== N_CALL || e.children[0].kind !== N_IDENT || ctx.program.nodeCallees[e.id] !== null) {
+  if (
+    e.kind !== NodeKind.Call ||
+    e.children[0].kind !== NodeKind.Ident ||
+    ctx.program.nodeCallees[e.id] !== null
+  ) {
     return false
   }
   return builtinNameOf(ctx.program, e) === "readFileBytesSync"
@@ -567,7 +537,7 @@ const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   captureNarrowings(assigned, before, scope)
   const elseScope = scope.child()
   narrow(ctx, stmt.children[0], elseScope, false)
-  if (otherwise.kind === N_EMPTY) {
+  if (otherwise.kind === NodeKind.Empty) {
     // `if (p === null) return;` leaves `p` narrowed for everything after it.
     if (thenTerminates) {
       narrow(ctx, stmt.children[0], scope, false)
@@ -698,7 +668,7 @@ const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   flowEnd(ctx, flow, scope)
   // `while (true)` that nothing breaks out of never falls through, which is
   // what lets a function end with one and still return on every path.
-  return stmt.children[0].kind === N_TRUE && !broke
+  return stmt.children[0].kind === NodeKind.True && !broke
 }
 
 const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
@@ -717,7 +687,7 @@ const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): bo
   flowDoCondition(ctx, flow, scope)
   checkCondition(ctx, stmt.children[1], scope)
   flowEnd(ctx, flow, scope)
-  return stmt.children[1].kind === N_TRUE && !broke
+  return stmt.children[1].kind === NodeKind.True && !broke
 }
 
 const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
@@ -729,19 +699,19 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): b
   // visible after the loop and two `for` loops may both declare one.
   const outer = scope.child()
   const initializer = stmt.children[0]
-  if (initializer.kind === N_VAR) {
+  if (initializer.kind === NodeKind.Var) {
     checkVariableList(ctx, initializer, outer)
     keySteadyVariables(ctx, initializer.children[0], [stmt.children[1], stmt.children[2], stmt.children[3]])
-  } else if (initializer.kind !== N_EMPTY) {
+  } else if (initializer.kind !== NodeKind.Empty) {
     checkExpression(ctx, initializer, outer, -1)
   }
   flowHead(ctx, flow, scope, outer)
   const condition = stmt.children[1]
-  if (condition.kind !== N_EMPTY) {
+  if (condition.kind !== NodeKind.Empty) {
     checkCondition(ctx, condition, outer)
   }
   const body = outer.child()
-  if (condition.kind !== N_EMPTY) {
+  if (condition.kind !== NodeKind.Empty) {
     narrow(ctx, condition, body, true)
   }
   // A body that is one statement, not a block, leaves `errored` set when it
@@ -756,7 +726,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): b
   // The update runs after the body, on what its end and its continues leave,
   // so a store there reaches the next iteration's head, not this body.
   const update = stmt.children[2]
-  if (update.kind !== N_EMPTY) {
+  if (update.kind !== NodeKind.Empty) {
     const tail = outer.child()
     flowForUpdate(ctx, flow, tail)
     checkExpression(ctx, update, tail, -1)
@@ -764,7 +734,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): b
   }
   scope.adopt(held)
   flowEnd(ctx, flow, scope)
-  return condition.kind === N_EMPTY && !broke
+  return condition.kind === NodeKind.Empty && !broke
 }
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
@@ -788,11 +758,11 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
     return false
   }
   const decl = list.children[0]
-  if (decl.children[1].kind !== N_EMPTY) {
+  if (decl.children[1].kind !== NodeKind.Empty) {
     ctx.error(decl.children[1], "The `for...of` variable takes the element type; remove the annotation")
     return false
   }
-  if (decl.children[2].kind !== N_EMPTY) {
+  if (decl.children[2].kind !== NodeKind.Empty) {
     ctx.error(decl.children[2], "The `for...of` variable cannot have an initializer")
     return false
   }
@@ -881,11 +851,15 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
  * instantiates too.
  */
 const sweepNested = (ctx: CheckContext, node: Node): void => {
-  if (node.kind === N_FUNCTION || node.kind === N_IMPORT || node.kind === N_IMPORT_EQUALS) {
+  if (
+    node.kind === NodeKind.FunctionDecl ||
+    node.kind === NodeKind.Import ||
+    node.kind === NodeKind.ImportEquals
+  ) {
     ctx.error(node, `Unsupported statement in Phase 1: ${syntaxKindName(node.kind)}`)
-  } else if (node.kind !== N_CLASS) {
+  } else if (node.kind !== NodeKind.Class) {
     sweepForms(ctx, node, null)
-  } else if (node.children[0].kind === N_EMPTY) {
+  } else if (node.children[0].kind === NodeKind.Empty) {
     ctx.error(node, "Classes must be named")
   } else {
     ctx.error(node, "Unsupported expression in Phase 1: ClassExpression")
@@ -898,13 +872,13 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
   refuseTypeForm(ctx, node)
   refuseBindingForm(ctx, node)
   refuseStructHeader(ctx, node)
-  if (node.kind === N_FOR_OF) {
+  if (node.kind === NodeKind.ForOf) {
     if ((node.flags & FLAG_AWAIT) !== 0) {
       ctx.error(
         node,
         "`for await` is not supported here: a stream of promises would hold each as a value — `await` each call inside a plain `for` loop"
       )
-    } else if (node.children[0].kind !== N_VAR) {
+    } else if (node.children[0].kind !== NodeKind.Var) {
       ctx.error(
         node.children[0],
         "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`"
@@ -919,7 +893,7 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
   }
   // An interface's `extends`, written after its type parameters (the fourth
   // child, there only when written).
-  const heritage = node.kind === N_INTERFACE && node.children.length > 3
+  const heritage = node.kind === NodeKind.Interface && node.children.length > 3
   if (heritage) {
     ctx.error(node.children[3], "Interface inheritance (`extends`) is not supported; list every field")
   }
@@ -928,7 +902,7 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
       refuseAtChild(ctx, node, i, owner)
       if (isMemberList(node, i)) {
         refuseMembers(ctx, node, node.children[i])
-      } else if ((node.kind === N_MODULE_CONST || node.kind === N_VAR) && i === 0) {
+      } else if ((node.kind === NodeKind.ModuleConst || node.kind === NodeKind.Var) && i === 0) {
         for (const decl of node.children[0].children) {
           refuseDeclarator(ctx, node, decl)
           sweepNested(ctx, decl)
@@ -939,7 +913,7 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
     }
   }
   // After the type, where a default is written.
-  if (node.kind === N_PARAM && (node.flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) === FLAG_DEFAULT) {
+  if (node.kind === NodeKind.Param && (node.flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) === FLAG_DEFAULT) {
     ctx.error(node, parameterFormHereMessage(false))
   }
 }
@@ -954,14 +928,14 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
  * NL2192, NL2233).
  */
 const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
-  if (node.kind === N_FUNCTION && node.children[0].kind === N_EMPTY) {
+  if (node.kind === NodeKind.FunctionDecl && node.children[0].kind === NodeKind.Empty) {
     ctx.error(node, "Functions must be named")
-  } else if (node.kind === N_FUNCTION && (node.flags & FLAG_DEFAULT) !== 0) {
+  } else if (node.kind === NodeKind.FunctionDecl && (node.flags & FLAG_DEFAULT) !== 0) {
     ctx.error(node, "`export default` is not supported; use a named `export function`")
-  } else if (node.kind === N_MODULE_CONST) {
+  } else if (node.kind === NodeKind.ModuleConst) {
     const first = node.children[0].children[0]
     if ((node.flags & (FLAG_CONST | FLAG_VAR)) === 0) {
-      if (first.children[0].kind === N_IDENT && first.children[2].kind === N_ARROW) {
+      if (first.children[0].kind === NodeKind.Ident && first.children[2].kind === NodeKind.Arrow) {
         ctx.error(node, `Function \`${first.children[0].text}\` must be declared \`const\`, not \`let\``)
       } else {
         ctx.error(
@@ -970,7 +944,7 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
         )
       }
     }
-  } else if (node.kind === N_PARAM) {
+  } else if (node.kind === NodeKind.Param) {
     if ((node.flags & FLAG_PROPERTY) !== 0) {
       ctx.error(
         node,
@@ -978,7 +952,7 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
       )
     } else if ((node.flags & (FLAG_REST | FLAG_SIGNATURE)) === FLAG_REST) {
       ctx.error(node, parameterFormHereMessage(true))
-    } else if (node.children[0].kind === N_BINDING_PATTERN) {
+    } else if (node.children[0].kind === NodeKind.BindingPattern) {
       ctx.error(node, "Destructured parameters are not supported")
     } else if ((node.flags & FLAG_OPTIONAL) !== 0) {
       ctx.error(
@@ -1004,21 +978,21 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
  * in a class that is not a template it is left to be the one diagnostic.
  */
 const refuseAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node | null): void => {
-  if (owner !== null && owner.kind === N_CLASS) {
+  if (owner !== null && owner.kind === NodeKind.Class) {
     refuseMemberAtChild(ctx, node, i, owner)
     return
   }
-  if (node.kind !== N_FUNCTION) {
+  if (node.kind !== NodeKind.FunctionDecl) {
     return
   }
-  if (i === 2 && node.children[2].kind === N_EMPTY) {
+  if (i === 2 && node.children[2].kind === NodeKind.Empty) {
     ctx.error(
       node.children[0],
       (node.flags & FLAG_ASYNC) !== 0
         ? ASYNC_RETURN_MESSAGE
         : `Function \`${node.children[0].text}\` needs an explicit return type annotation`
     )
-  } else if (i === 3 && node.children[3].kind === N_EMPTY && (node.flags & FLAG_FOREIGN) === 0) {
+  } else if (i === 3 && node.children[3].kind === NodeKind.Empty && (node.flags & FLAG_FOREIGN) === 0) {
     ctx.error(node, "Functions must have a body")
   } else if (i === 5) {
     ctx.error(node, "A function declaration binds one name")
@@ -1040,16 +1014,16 @@ const refuseMemberAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node)
     return
   }
   const cls = owner.children[0].text
-  if (node.kind === N_METHOD && i === 2 && node.children[2].kind === N_EMPTY) {
+  if (node.kind === NodeKind.Method && i === 2 && node.children[2].kind === NodeKind.Empty) {
     ctx.error(
       node.children[0],
       `Method \`${node.children[0].text}\` of class \`${cls}\` needs an explicit return type annotation`
     )
-  } else if (node.kind === N_METHOD && i === 3 && node.children[3].kind === N_EMPTY) {
+  } else if (node.kind === NodeKind.Method && i === 3 && node.children[3].kind === NodeKind.Empty) {
     ctx.error(node, `Method \`${node.children[0].text}\` of class \`${cls}\` must have a body`)
-  } else if (node.kind === N_CONSTRUCTOR && i === 1 && node.children.length > 2) {
+  } else if (node.kind === NodeKind.Constructor && i === 1 && node.children.length > 2) {
     ctx.error(node.children[2], "Constructors cannot declare a return type")
-  } else if (node.kind === N_CONSTRUCTOR && i === 1 && node.children[1].kind === N_EMPTY) {
+  } else if (node.kind === NodeKind.Constructor && i === 1 && node.children[1].kind === NodeKind.Empty) {
     ctx.error(node, `Constructor of class \`${cls}\` must have a body (no overload signatures)`)
   }
 }
@@ -1072,7 +1046,7 @@ const leftToCollector = (member: Node, owner: Node, flags: i32): boolean =>
  * `declareStruct`).
  */
 const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
-  if (node.kind !== N_CLASS && node.kind !== N_INTERFACE) {
+  if (node.kind !== NodeKind.Class && node.kind !== NodeKind.Interface) {
     return
   }
   // `default` is written first, so it is the refusal. An anonymous class is
@@ -1081,12 +1055,15 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
     ctx.error(node, "`export default` is not supported; use a named `export`")
   } else if (
     (node.flags & FLAG_FOREIGN) !== 0 &&
-    (node.kind !== N_CLASS || (node.flags & FLAG_ABSTRACT) !== 0)
+    (node.kind !== NodeKind.Class || (node.flags & FLAG_ABSTRACT) !== 0)
   ) {
     // WP27 S4.1: a plain `declare class` is a C struct layout, whose
     // members `collectStructMembers` judges; an interface or an abstract
     // class declares no layout.
-    ctx.error(node, `\`declare ${node.kind === N_CLASS ? "abstract class" : "interface"}\` is not supported`)
+    ctx.error(
+      node,
+      `\`declare ${node.kind === NodeKind.Class ? "abstract class" : "interface"}\` is not supported`
+    )
   } else if ((node.flags & FLAG_ABSTRACT) !== 0) {
     ctx.error(node, "Abstract classes are not supported")
   }
@@ -1100,18 +1077,18 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
  */
 const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
   // WP49: `const [a, b] = await awaitAll(...)` is the checker's to decide.
-  const awaitAll = owner.kind === N_VAR && (owner.flags & FLAG_CONST) !== 0 && isAwaitAllShape(decl)
-  if (decl.children[0].kind === N_BINDING_PATTERN && !awaitAll) {
+  const awaitAll = owner.kind === NodeKind.Var && (owner.flags & FLAG_CONST) !== 0 && isAwaitAllShape(decl)
+  if (decl.children[0].kind === NodeKind.BindingPattern && !awaitAll) {
     ctx.error(
       decl,
-      owner.kind === N_MODULE_CONST
+      owner.kind === NodeKind.ModuleConst
         ? "Destructured constants are not supported"
         : "Destructuring is not supported"
     )
   } else if (
-    owner.kind === N_MODULE_CONST &&
-    decl.children[1].kind !== N_EMPTY &&
-    decl.children[2].kind === N_ARROW
+    owner.kind === NodeKind.ModuleConst &&
+    decl.children[1].kind !== NodeKind.Empty &&
+    decl.children[2].kind === NodeKind.Arrow
   ) {
     const name = decl.children[0].text
     ctx.error(
@@ -1123,7 +1100,7 @@ const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
 
 /** Whether child `i` of `node` is a class's or an interface's member LIST. */
 const isMemberList = (node: Node, i: i32): boolean =>
-  (node.kind === N_CLASS && i === 3) || (node.kind === N_INTERFACE && i === 1)
+  (node.kind === NodeKind.Class && i === 3) || (node.kind === NodeKind.Interface && i === 1)
 
 /**
  * A class's or an interface's members, each refused by the rule that names
@@ -1133,17 +1110,17 @@ const isMemberList = (node: Node, i: i32): boolean =>
  */
 const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
   const name = owner.children[0].text
-  const kind = owner.kind === N_CLASS ? "class" : "interface"
+  const kind = owner.kind === NodeKind.Class ? "class" : "interface"
   // A `declare class` is a C struct layout (WP27 S4.1), and its collector
   // refuses any member but a field with the rule that says so.
-  const layout = owner.kind === N_CLASS && (owner.flags & FLAG_FOREIGN) !== 0
+  const layout = owner.kind === NodeKind.Class && (owner.flags & FLAG_FOREIGN) !== 0
   for (const member of members.children) {
-    if (layout && member.kind !== N_FIELD) {
+    if (layout && member.kind !== NodeKind.Field) {
       continue
     }
     if (
-      member.kind === N_FIELD &&
-      owner.kind === N_CLASS &&
+      member.kind === NodeKind.Field &&
+      owner.kind === NodeKind.Class &&
       (member.flags & FLAG_STATIC) !== 0 &&
       member.children[0].text === JSON_OPTIONS &&
       owner.children[typeParameterSlot(owner)].children.length > 0
@@ -1151,25 +1128,29 @@ const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
       // A template's members are collected only once it is instantiated, so
       // typed JSON's options on one are refused here, instantiated or not.
       ctx.error(member, jsonOptionsShapeMessage(name))
-    } else if (member.kind === N_BLOCK) {
+    } else if (member.kind === NodeKind.Block) {
       // Named by TypeScript's `SyntaxKind`, as stage0 named every member it had no rule for.
       ctx.error(member, `Unsupported class member in \`${name}\`: ClassStaticBlockDeclaration`)
-    } else if (member.kind === N_INDEX_SIGNATURE) {
+    } else if (member.kind === NodeKind.IndexSignature) {
       ctx.error(member, `Index signatures are not supported in ${kind} \`${name}\` (object layout is fixed)`)
     } else if ((member.flags & FLAG_ABSTRACT) !== 0) {
       ctx.error(member, "Abstract classes are not supported")
-    } else if (member.kind === N_METHOD && member.children[0].kind === N_EMPTY) {
+    } else if (member.kind === NodeKind.Method && member.children[0].kind === NodeKind.Empty) {
       const signature = (member.flags & FLAG_CONSTRUCT) !== 0 ? "ConstructSignature" : "CallSignature"
       ctx.error(member, `Unsupported interface member in \`${name}\`: ${signature}`)
-    } else if (member.kind === N_METHOD && owner.kind === N_INTERFACE) {
+    } else if (member.kind === NodeKind.Method && owner.kind === NodeKind.Interface) {
       ctx.error(member, `Interface \`${name}\` cannot declare methods (interfaces describe layout only)`)
-    } else if (member.kind === N_METHOD && (member.flags & FLAG_ACCESSOR) !== 0) {
+    } else if (member.kind === NodeKind.Method && (member.flags & FLAG_ACCESSOR) !== 0) {
       ctx.error(member, `Getters and setters are not supported in class \`${name}\` (use a method)`)
     } else if (
-      member.kind !== N_CONSTRUCTOR &&
-      member.children[0].kind !== N_IDENT &&
+      member.kind !== NodeKind.Constructor &&
+      member.children[0].kind !== NodeKind.Ident &&
       !isIteratorMethod(member) &&
-      !leftToCollector(member, owner, member.kind === N_FIELD ? FLAG_STATIC : FLAG_STATIC | FLAG_READONLY)
+      !leftToCollector(
+        member,
+        owner,
+        member.kind === NodeKind.Field ? FLAG_STATIC : FLAG_STATIC | FLAG_READONLY
+      )
     ) {
       // WP29 P3: the validator lets `[Symbol.iterator]` through in `nish/threads` alone.
       ctx.error(member.children[0], `Members of \`${name}\` must have plain identifier names`)
@@ -1205,13 +1186,13 @@ const sweepTypeParameters = (ctx: CheckContext, list: Node): void => {
 
 /** The child that holds a declaration's type parameter LIST (`src/nodes.ts`), or -1. */
 const typeParameterSlot = (node: Node): i32 => {
-  if (node.kind === N_FUNCTION || node.kind === N_ARROW || node.kind === N_CLASS) {
+  if (node.kind === NodeKind.FunctionDecl || node.kind === NodeKind.Arrow || node.kind === NodeKind.Class) {
     return 4
   }
-  if (node.kind === N_METHOD && node.children.length > 4) {
+  if (node.kind === NodeKind.Method && node.children.length > 4) {
     return 4
   }
-  return node.kind === N_INTERFACE ? 2 : -1
+  return node.kind === NodeKind.Interface ? 2 : -1
 }
 
 /**
@@ -1311,7 +1292,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   const held: Local | null = tagged === null ? enumVariable(ctx, stmt.children[0], scope) : null
   if (tagged !== null || held !== null) {
     for (const clause of clauses) {
-      if (clause.kind !== N_DEFAULT) {
+      if (clause.kind !== NodeKind.Default) {
         checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
       }
     }
@@ -1334,8 +1315,8 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   let i = 0
   while (i < clauses.length) {
     const clause = clauses[i]
-    const body = clause.kind === N_DEFAULT ? clause.children[0] : clause.children[1]
-    if (clause.kind === N_DEFAULT) {
+    const body = clause.kind === NodeKind.Default ? clause.children[0] : clause.children[1]
+    if (clause.kind === NodeKind.Default) {
       if (hasDefault) {
         ctx.error(clause, "`switch` has more than one `default` clause")
       }
@@ -1350,7 +1331,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
       }
     }
     for (const statement of body.children) {
-      if (statement.kind === N_VAR) {
+      if (statement.kind === NodeKind.Var) {
         ctx.error(
           statement,
           "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)"
@@ -1453,7 +1434,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
  */
 const unionTagRead = (ctx: CheckContext, node: Node): i32 => {
   const read = unwrapParens(node)
-  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+  if (read.kind !== NodeKind.Member || isOptionalChain(read)) {
     return -1
   }
   const receiver = ctx.program.nodeTypes[unwrapParens(read.children[0]).id]
@@ -1482,7 +1463,7 @@ const switchCovered = (
 const labelledMembers = (ctx: CheckContext, clauses: Node[]): i32[] => {
   const all: i32[] = []
   for (const clause of clauses) {
-    if (clause.kind !== N_DEFAULT) {
+    if (clause.kind !== NodeKind.Default) {
       for (const member of memberSetOf(ctx, clause.children[0])) {
         all.push(member)
       }

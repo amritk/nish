@@ -16,9 +16,6 @@ import { Framebuffer } from "nish/term-pixels"
 import { ACTION_PRESS, EVENT_KEY, KEY_CHAR, KEY_ESCAPE } from "nish/term"
 import { StepInput } from "../std/input"
 import {
-  GLYPH_ADVANCE,
-  GLYPH_H,
-  Particles,
   STEPS_PER_SECOND,
   View,
   WORLD_H,
@@ -27,16 +24,21 @@ import {
   drawParticles,
   drawText,
   fillLetterbox,
-  gfxMix,
   glow,
   gradient,
   lerp,
   outBounce,
   outCubic,
-  spawnParticle,
   stepParticles,
   viewFor,
 } from "./break-gfx"
+import {
+  RASTER_GLYPH_ADVANCE,
+  RASTER_GLYPH_H,
+  RasterParticles,
+  rasterMix,
+  rasterSpawnParticle,
+} from "../std/raster"
 import {
   BG_BOTTOM,
   BG_TOP,
@@ -165,7 +167,7 @@ export class BreakIntro {
 
   /** The sounds this step asks for, as the game's `SOUND_*`; cleared at the top of each step. */
   sounds: i32[]
-  sparks: Particles
+  sparks: RasterParticles
   /** The view `drawBreakIntro` reuses, so a frame allocates none. */
   view: View
 
@@ -211,7 +213,7 @@ export class BreakIntro {
     this.wallReleases = new Array<i32>(bricks)
     this.wallReleases.fill(0)
     this.sounds = []
-    this.sparks = new Particles(SPARK_CAPACITY)
+    this.sparks = new RasterParticles(SPARK_CAPACITY)
     this.view = new View()
     this.tick = 0
     this.gap = -1
@@ -503,7 +505,7 @@ const introStepGap = (intro: BreakIntro, t: i32): void => {
     for (let k: i32 = 0; k < count; k++) {
       const vx: f64 = toF64(introRandom(intro, -60, 60))
       const vy: f64 = toF64(introRandom(intro, -70, -10))
-      spawnParticle(intro.sparks, cx, home, vx, vy, 0.5, 1.2, GAP_BRICK)
+      rasterSpawnParticle(intro.sparks, cx, home, vx, vy, 0.5, 1.2, GAP_BRICK)
     }
   }
 }
@@ -572,7 +574,7 @@ export const drawBreakIntro = (intro: BreakIntro, fb: Framebuffer, alpha: f64): 
   const a: f64 = clamp(alpha, 0.0, 1.0)
   const time: f64 = Math.max(toF64(intro.tick - 1) + a, 0.0)
   const fade: f64 = clamp((time - toF64(COLLAPSE_FROM)) / toF64(FADE_STEPS), 0.0, 1.0)
-  gradient(view, gfxMix(TERMINAL, BG_TOP, fade), gfxMix(TERMINAL, BG_BOTTOM, fade))
+  gradient(view, rasterMix(TERMINAL, BG_TOP, fade), rasterMix(TERMINAL, BG_BOTTOM, fade))
   introDrawWall(intro, view, a, time)
   introDrawPieces(intro, view, a)
   drawParticles(view, intro.sparks, a)
@@ -600,7 +602,7 @@ const introDrawWall = (intro: BreakIntro, view: View, alpha: f64, time: f64): vo
     const side: f64 = course % 2 === 0 ? -1.0 : 1.0
     const settled: f64 = outCubic(laid)
     const x: f64 = lerp(intro.wallPrevXs[i], intro.wallXs[i], alpha) + side * (1.0 - settled) * LAY_SLIDE
-    const colour: i32 = gfxMix(BG_TOP, wallColour(row), settled)
+    const colour: i32 = rasterMix(BG_TOP, wallColour(row), settled)
     bevelBrick(view, x + 0.5, y + 0.5, WALL_BRICK_W - 1.0, WALL_BRICK_H - 1.0, colour)
   }
 }
@@ -611,8 +613,11 @@ const introDrawWall = (intro: BreakIntro, view: View, alpha: f64, time: f64): vo
  * the missing brick with a glow while it drops.
  */
 const introDrawPieces = (intro: BreakIntro, view: View, alpha: f64): void => {
-  const scale: i32 = Math.max(toI32(Math.floor((COL_W * view.scale) / toF64(GLYPH_ADVANCE) + 0.000001)), 1)
-  const lift: f64 = (LINE_H - (toF64(GLYPH_H) * toF64(scale)) / view.scale) / 2.0
+  const scale: i32 = Math.max(
+    toI32(Math.floor((COL_W * view.scale) / toF64(RASTER_GLYPH_ADVANCE) + 0.000001)),
+    1
+  )
+  const lift: f64 = (LINE_H - (toF64(RASTER_GLYPH_H) * toF64(scale)) / view.scale) / 2.0
   const n: i32 = toI32(intro.kinds.length)
   for (let i: i32 = 0; i < n; i++) {
     const y: f64 = lerp(intro.prevYs[i], intro.ys[i], alpha)

@@ -47,6 +47,34 @@ This prints `1290000`. It builds 100,000 strings, but each one dies with its
 call to `describe`, so the program reuses the same few bytes of arena
 throughout.
 
+A `Result` held in a `let` that you assign again does not cost a function its
+bracket. The `Ok` and the `Err` below live on `pick`'s stack frame, so calling
+it in a loop leaves the arena where it was:
+
+```ts nish:ok
+const pick = (n: i32): i32 => {
+  let r: Result<i32, string> = Ok(n);
+  if (n % 3 === 0 && r.isOk()) {
+    r = Err("three");
+  }
+  return r.unwrapOr(-1);
+};
+
+export const main = (): i32 => {
+  const before = Arena.used();
+  let total = 0;
+  for (let i = 0; i < 100000; i++) {
+    total = total + pick(i % 10);
+  }
+  const flat = Arena.used() === before;
+  console.log(`${total} ${flat}`);
+  return 0;
+};
+```
+
+This prints `230000 true`. A `let` assigned from itself, such as
+`r = n > 5 ? r : Ok(0)`, is the exception: its values stay in the arena.
+
 None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 
@@ -76,6 +104,14 @@ do instead: declare the value with `const` inside the loop if only that pass
 needs it, or keep numbers across passes and build the string once after the
 loop. Building a string up with `s = s + t` in a loop is the same problem and
 has its own warning.
+
+A loop with nothing bounding its passes, `while (true)` or a server's poll
+loop, has one more: a temporary its pass builds and drops, when something in
+the pass stores into older memory and so keeps the compiler from releasing
+the pass. The warning (NL9018) asks you to build the temporary inside a block
+that opens with `using a = arena()`, which gives it back when the block ends;
+[Networking](../using-nish/networking.md#keeping-a-request-loops-memory-flat)
+shows it on a request loop.
 
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:
