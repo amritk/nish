@@ -1283,6 +1283,50 @@ const DECLARED = [
       why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
     }))
   ),
+  // The same widening reaches every TLS, HTTP and QUIC program that links
+  // the TLS stack: its tls.ll, tls-tcp.ll and http1-server.ll declare
+  // P256PointScratch and its constructor, a C header lays it out with
+  // `comb`, and p256SignSha256Into now writes its sign scratch.
+  ...[
+    ["examples/file-server.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_head_reuse/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    [
+      "tests/link/net_http2_cleartext/main.ts",
+      "http1-server.ll main.h net_tls_record_tcp_harness.ll tls-tcp.ll tls.ll",
+    ],
+    ["tests/link/net_http2_cleartext_bad_slots/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http2_cleartext_bad_timeout/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_prefork/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_worker/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_serve_burst/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_serve_queued_wait/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_tls_p256/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_size_limit/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_size_limit_f64/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_tcp/main.ts", "checks.ll harness.ll main.ll tls.ll"],
+    ["tests/link/net_tls_record_tcp_f64/main.ts", "harness.ll net_tls_record_tcp_checks.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_idle/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_rate/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/region_sessions_soak/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_async/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_depth_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_pipeline/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_statement_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_ticket_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_tls/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_roots_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_unix_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/tfb_async_db/main.ts", "http1-server.ll tls.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: "fixed-base table for P-256",
+      why: "P256PointScratch gains `comb` (64 to 72 bytes), so every module of a TLS program that declares it or its constructor moves, a C header gains the field and renumbers what follows it, and p256SignSha256Into stores into its P256SignScratch, so that parameter is no longer readonly",
+    }))
+  ),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.
