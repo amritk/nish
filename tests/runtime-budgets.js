@@ -556,8 +556,14 @@ const RUNTIME_SIMD_TEXT_BUDGET = 2560
  * raised one. Apart, a program that searches text carries no AES and one that speaks
  * TLS no byte search. The budget is the next 256-byte boundary above the measurement,
  * as every ceiling here was set.
+ *
+ * Measured **2,709 bytes** on 2026-11-13 with the same clang, after AEAD-4
+ * (docs/security/crypto-aead.md): `nish_aes_clear`, 95 bytes out of line, zeroes the
+ * vector and caller-saved general registers as each kernel tail-calls it, and GHASH
+ * packs its middle operands to end a spill (1,155). Inlined into the four kernels
+ * the clear measured 2,977. The row is in docs/wp7-runtime.md.
  */
-const RUNTIME_AES_TEXT_BUDGET = 2560
+const RUNTIME_AES_TEXT_BUDGET = 2816
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sha256.c`
  * -- the SHA-256 block on the CPU's SHA instructions: `nish_sha256_hw`, its CPU
