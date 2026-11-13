@@ -56,6 +56,19 @@ stages:
         content: Add a Writing a browser game guide page with its scalar.config.json route, linked from the interop page — see Game page
       - id: page-game-tests
         content: Add a game-page section to tests/run.js that builds the starter and drives startGame under Node with a fake presenter and audio — see Game page
+  - id: persist-root
+    title: Let a wasm-host module keep an object root between calls
+    goal: A wasm-host module can hold one object graph (a class instance and everything reachable from it) alive across exported calls, with memory that stays bounded over a long session, so an object-based game like the break director runs behind init, step and draw unchanged.
+    verification: npm run check && npm run lint && node tests/run.js persist && node tests/run.js wasm-host && node tests/run.js module-storage && node tests/run.js self && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node scripts/gen-reference.mjs --check && node tests/nish-cmp.js
+    todos:
+      - id: persist-design
+        content: Write the design note (docs/wp52-persistent-root.md or the next free WP number) choosing the mechanism, the language surface, the memory model across export calls and the refusals, after reading the WP6 arena and WP50 wasm-host notes — see Persist root
+      - id: persist-impl
+        content: Implement it in src/ (checker, emitter, interop loader) and runtime/runtime-wasm.c, with its security-record line — see Persist root
+      - id: persist-tests
+        content: Add the construct's golden .ll, llvm-as pass, a wasm round trip driven from a page harness over many calls showing memory stays flat, and negative tests for every refusal — see Persist root
+      - id: persist-docs
+        content: Add the docs/LANGUAGE.md rule, the cookbook entry and the guide changes (interop In a browser, browser-games), regenerate goldens and docs/reference — see Persist root
   - id: docs-break
     title: Put the brick breaker behind the hero terminal on the docs site
     goal: Typing `nish break` into the landing page's hero terminal opens the game, compiled from the break-core scenes to wasm and presented through nish/page/frame, with sound, touch and persisted settings, and nothing in the guide prose mentions it.
@@ -190,11 +203,23 @@ This is the pattern `nish/host/ring` and its page half `ringOver` in `nish/page`
 - **The starter.** `examples/game-starter/` is a complete small game, under about 150 lines of Nish, plus an `index.html` of a few lines and a build script. A reader copies it to begin. The guide page walks through it.
 - **Not the game.** Neither the page nor the starter mentions `nish break`.
 
+## Persist root
+
+**Owns:** `src/**`, `runtime/runtime-wasm.c`, `runtime/page.mjs`, `runtime/page.d.ts`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/cookbook/**`, `docs/wp52-*.md` (the next free WP number), `docs/roadmap/**`, `docs/security/**` (the record covering runtime-wasm.c), `docs/guide/using-nish/interop.md`, `docs/guide/using-nish/browser-games.md`, `docs/reference/**`, `scalar.config.json`, `tests/cases/**`, `tests/ir/**`, `tests/link/**`, `tests/differential/**`, `tests/self/goldens/checked/**`, `tests/run.js`, `tests/shard-costs.json`, `tests/nish-cmp.js`, `tests/persist/**`, `std/host/game.ts`, `scripts/undocumented.txt`
+
+**Depends on:** game-page (start). It edits files game-page owns (`tests/run.js`, `runtime-wasm.c`, the guide pages).
+
+This stage was added after sign-off. docs-break found that a wasm-host module cannot keep the break director between `step()` calls: module storage holds only flat arrays and structs (LANGUAGE.md, "Module storage"), and the loader releases each call's arena allocations when the call returns. The user chose to fix that in the compiler rather than work around it.
+
+- **Requirement.** One object root survives across export calls, and anything the game links into it during a call survives too. Memory stays bounded over hours at 120 steps per second.
+- **Constraint.** The surface is minimal and refusable at compile time: the native build, the TS reading and `--deterministic` behave as specified.
+- **Design note first.** The worker writes it, then implements.
+
 ## Docs break
 
 **Owns:** `examples/break-web/**`, `docs/site/**`, `.claude/orientation.md`, `tests/run.js`, `tests/shard-costs.json`, `.gitignore`
 
-**Depends on:** game-page (start), and through it every other stage. Break is one more game on the kit: the entry runs the director over `nish/host/game`, and the page is a `startGame` call plus the overlay, the trigger and the `localStorage` settings.
+**Depends on:** persist-root (start), and through it every other stage. Break is one more game on the kit: the entry runs the director over `nish/host/game`, and the page is a `startGame` call plus the overlay, the trigger and the `localStorage` settings.
 
 - **Entry, `game.ts`.**
   - It holds the framebuffer at its largest size (960×540, the kitty ceiling) and an input block in module storage. The input block has held-key bits and a small press-event ring through `nish/host/ring`.
