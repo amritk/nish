@@ -1244,7 +1244,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "an HTTP/3 server clock (H3-5)",
+    changelog: "(H3-5)",
     why: "the program sets Http3Config.idleTimeout or headTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
   })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
