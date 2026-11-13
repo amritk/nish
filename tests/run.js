@@ -29291,8 +29291,8 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const once = "sandbox_dep_exec_once"
       const onceTo = "sandbox_dep_exec_once_to"
       /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here, with `prefix` (`exec:`) before it. */
-      const withHelper = (fixture, grants, prefix = "") => {
-        const copy = `${fixture}_helper${prefix === "" ? "" : "_exec"}${grants.length === 0 ? "" : "_more"}`
+      const withHelper = (fixture, grants, prefix = "", tag = "") => {
+        const copy = `${fixture}_helper${prefix === "" ? "" : "_exec"}${grants.length === 0 ? "" : "_more"}${tag}`
         const to = path.join(dir, copy)
         fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
         fs.mkdirSync(path.join(to, "bin"), { recursive: true })
@@ -29611,11 +29611,28 @@ if (!only || "sandbox dependency grants".includes(only)) {
         // binary, where the same helper granted plainly gets 111 (above). A
         // program granted both ways is granted `exec:`. The loader named
         // directly is refused still, and without `--sandbox` the runs agree.
-        for (const [grants, how] of [
-          [[], "granted exec:"],
-          [["process.spawn=./bin/exec-args"], "granted exec: and plainly"],
+        // Beside the `exec:` grant, a second program granted plainly is held
+        // to its one exec all the same when it is a copy, a file of its own;
+        // a hard link is the `exec:` program under another name, and the
+        // runtime, which decides by file identity, starts it unheld.
+        for (const [grants, how, second] of [
+          [[], "granted exec:", null],
+          [["process.spawn=./bin/exec-args"], "granted exec: and plainly", null],
+          [["process.spawn=./bin/exec-copy"], "granted exec: beside a copy granted plainly", "copy"],
+          [["process.spawn=./bin/exec-link"], "granted exec: beside a hard link granted plainly", "link"],
         ]) {
-          const freed = withHelper(once, grants, "exec:")
+          const freed = withHelper(once, grants, "exec:", second === null ? "" : `_${second}`)
+          if (freed !== null && second !== null) {
+            const from = path.join(dir, freed, "bin", "exec-args")
+            const to = path.join(dir, freed, "bin", `exec-${second}`)
+            fs.rmSync(to, { force: true })
+            if (second === "copy") {
+              fs.copyFileSync(from, to)
+              fs.chmodSync(to, 0o755)
+            } else {
+              fs.linkSync(from, to)
+            }
+          }
           const fAllow = freed === null ? null : build(freed, ["--sandbox"], dir)
           const fOpen = freed === null ? null : build(freed, [], dir)
           if (fAllow === null || fOpen === null) {
@@ -29643,6 +29660,27 @@ if (!only || "sandbox dependency grants".includes(only)) {
               rDirect.stdout === "-1\n",
             `${fEntries.join(" ")}\n${said(rLoaderOnce)}\n--- without --sandbox\n${said(rLoaderOpen)}\n--- itself\n${said(rSelfOnce)}\n--- the loader directly\n${said(rDirect)}`
           )
+          if (second !== null) {
+            const fSecond = fs.realpathSync(path.join(dir, freed, "bin", `exec-${second}`))
+            const rSecondOnce = run(fAllow, ["sync", fSecond, loader, ungranted])
+            const rSecondOpen = run(fOpen, ["sync", fSecond, loader, ungranted])
+            const unheld = second === "link"
+            check(
+              unheld
+                ? "sandbox dependency grants: a hard link of a program granted exec:, granted plainly, is that program and starts unheld (WP40 §2a)"
+                : "sandbox dependency grants: a program granted plainly beside another's exec: grant is held to its one exec (WP40 §2a)",
+              fEntries.includes(fSecond) &&
+                rSecondOnce !== null &&
+                rSecondOnce.status === 0 &&
+                rSecondOnce.signal === null &&
+                (unheld
+                  ? rSecondOnce.stdout === "sbx-1\n0\n"
+                  : rSecondOnce.stdout === "111\n" && rSecondOnce.stderr.includes("exec-args: ")) &&
+                rSecondOpen !== null &&
+                rSecondOpen.stdout === "sbx-1\n0\n",
+              `${fEntries.join(" ")}\n${said(rSecondOnce)}\n--- without --sandbox\n${said(rSecondOpen)}`
+            )
+          }
         }
         check(
           "sandbox dependency grants: an allowlist with no exec: grant marks nothing /// (WP40 §2a)",
@@ -29651,10 +29689,20 @@ if (!only || "sandbox dependency grants".includes(only)) {
         )
         // The grant written in a checked-in manifest, with the machine's own
         // tools: `env`, granted `exec:`, runs `true`, granted plainly, where
-        // the plain `env` of sandbox_dep_exec_once could not (above).
+        // the plain `env` of sandbox_dep_exec_once could not (above). `true`
+        // run on its own only shows the plain grant still starts; it execs
+        // nothing, so the hold on a plain grant beside an `exec:` one is
+        // checked with the built helper's copy (above), not here.
         const optin = "sandbox_dep_exec_optin"
         const rOptinOpen = rOther === null || rOther.stdout !== "0\n" ? null : run(build(optin, []), ["sync", "env", "true"])
-        if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
+        if (realOnPath("env") !== null && realOnPath("env") === realOnPath("true")) {
+          // A multicall coreutils (uutils) is one file for both, which the
+          // grant then names both ways, so `true` is `exec:` too and the
+          // allowlist has no plain entry for it to check.
+          skip(
+            `sandbox dependency grants: \`env\` and \`true\` are one file here (${realOnPath("env")}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
           skip(
             `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOptinOpen)}); a manifest's exec: grant is not checked with the machine's tools`
           )

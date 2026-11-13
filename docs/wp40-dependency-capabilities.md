@@ -93,7 +93,8 @@ lets `make` and its subtree exec anything the allowlist's EXECUTE reaches,
 the loader included, which is close to `process.spawn` whole for that
 program. The prefix is read before the program is resolved (an empty
 program is NL3046), the literal check above treats `exec:make` as it treats
-`make`, a program granted both ways is `exec:`, and the lock file records
+`make`, a program granted both ways is `exec:` (the same file, by device
+and inode, so a hard link of `make` granted plainly is `make`), and the lock file records
 `process.spawn=exec:make` as its own text, so a move to it from
 `process.spawn=make` is a widening (NL2593). Hosts are not enforced at run time: seccomp
 cannot read the address a socket call is given (CAPS-19, open).

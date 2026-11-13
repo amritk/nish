@@ -310,7 +310,12 @@ counted. One finding is counted, and it is fixed:
   both ways is `exec:`; a file marked both as a kept interpreter and as
   `exec:` is refused, the stricter mark winning. The lock file records
   `process.spawn=exec:git` as its own text, so moving a dependency from
-  `process.spawn=git` to it is a widening NL2593 reports.
+  `process.spawn=git` to it is a widening NL2593 reports. "Both ways" is
+  decided by file identity, not by path: the runtime looks a spawn target
+  up by device and inode, so a second name for the `exec:` program, a
+  symlink or a hard link (Debian's `/usr/lib/git-core/git-*` are hard
+  links of `git`), granted plainly, is that program and starts unheld. It
+  opens nothing a computed path to the `exec:` program does not.
 - **What the hold needs, and where it is missing.** A seccomp user
   notification listener (Linux 5.0) and its "continue" answer (5.5). Where
   the filter cannot be installed (`EINVAL` on an older kernel, `EBUSY` where
@@ -600,7 +605,11 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   `sandbox dependency grants: a program granted exec: starts the loader
   with an ungranted binary, and itself (WP40 §2a)` and the same for a
   program `granted exec: and plainly` (each against the build without
-  `--sandbox`, and with the loader named directly still refused), and
+  `--sandbox`, and with the loader named directly still refused),
+  `sandbox dependency grants: a program granted plainly beside another's
+  exec: grant is held to its one exec (WP40 §2a)`, `sandbox dependency
+  grants: a hard link of a program granted exec:, granted plainly, is that
+  program and starts unheld (WP40 §2a)`, and
   `sandbox dependency grants: an allowlist with no exec: grant marks
   nothing /// (WP40 §2a)`; on `sandbox_dep_exec_optin`, `sandbox dependency
   grants: env granted exec: runs another granted program (WP40 §2a)`;

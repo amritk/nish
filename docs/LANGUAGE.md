@@ -13660,8 +13660,10 @@ without one grants the capability whole, as before:
   `caps_dep_spawn_exec_granted`); a program granted both ways is `exec:`; and
   the lockfile records the prefix, so adding it is NL2593
   (`caps_dep_lock_spawn_exec_widened`). The program is
-  listed with three leading slashes, the same file to the kernel
-  (`tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`):
+  listed with three leading slashes, the same file to the kernel. For
+  `tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`, on an
+  x86_64 glibc machine (illustrative: the paths, the loader and the length
+  are the machine's; `tests/run.js` pins only the `///` entry for `env`):
 
   ```llvm
   @.sandbox.exec = private unnamed_addr constant [78 x i8] c"///usr/bin/env\00/usr/bin/true\00//usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"

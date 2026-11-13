@@ -229,7 +229,9 @@ to granting `process.spawn` whole for that program: grant it only to a
 dependency that may run anything. `cc` above is still held to its own
 start, and so is every program granted without `exec:`, which cannot borrow
 `make`'s reach by starting it. A program written both ways counts as
-`exec:`. `process.spawn=exec:` with no program after it stops the build,
+`exec:`, and "the same program" means the same file: another name for
+`make`, a symlink or a hard link, granted plainly, is `make` and starts as
+`make` does. `process.spawn=exec:` with no program after it stops the build,
 as a program that is not on your `PATH` does. The other way to let a
 dependency's programs start others is to grant it `process.spawn` whole,
 which lifts the list of programs with it.
