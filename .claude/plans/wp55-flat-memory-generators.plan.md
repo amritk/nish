@@ -1,6 +1,6 @@
 ---
 name: WP55 — generators whose memory stays flat
-overview: A program that reads a large spec and writes thousands of files keeps every string it built until main returns. Measure it, document the shapes that already stay flat, then add a built-in StringBuilder whose storage lives outside the arena so appends keep a loop's scope, a write handle to flush it, and diagnostics that point at it (docs/wp55-flat-memory-generators.md).
+overview: A program that reads a large spec and writes thousands of files keeps every string it built until main returns. Measure it, document the shapes that already stay flat, then add builder() from nish:string, whose storage lives outside the arena so appends keep a loop's scope, a write handle to flush it, and diagnostics that point at it (docs/wp55-flat-memory-generators.md).
 stages:
   - id: s0-baseline
     title: S0 — the baseline
@@ -34,30 +34,30 @@ stages:
         content: Add docs/cookbook/mem-region-per-target.ts and link memory.md and regions.md to the new page — see S1 the patterns
         status: pending
   - id: s2-builder
-    title: S2 — StringBuilder
-    goal: A built-in StringBuilder whose bytes live outside the arena, owned by the arena position that made it, whose appends keep every enclosing scope.
+    title: S2 — builder() from nish:string
+    goal: A built-in Builder, made by builder() from nish:string, whose bytes live outside the arena, owned by the arena position that made it, whose appends keep every enclosing scope.
     verification: mem_builder_pass_scope holds Arena.mark() over 1,000,000 appends; builder.ts meets G1 and G2; wasi, performance, c-symbols and self sections pass.
     todos:
       - id: builder-runtime
-        content: Add the builder and the external-block list to the runtime, hook nish_arena_release, nish_region_free and nish_reset_arena, with RT rows and runtime-test.c limits — see S2 StringBuilder
+        content: Add the builder and the external-block list to the runtime, hook nish_arena_release, nish_region_free and nish_reset_arena, with RT rows and runtime-test.c limits — see S2 builder
         status: pending
       - id: builder-layout
-        content: Mirror the header layout in src/runtime.ts and runtime/nish.h under the layout test — see S2 StringBuilder
+        content: Mirror the header layout in src/runtime.ts and runtime/nish.h under the layout test — see S2 builder
         status: pending
       - id: builder-module
-        content: Register the nish module and declare StringBuilder in runtime/nish.d.ts with doc comments, then regenerate docs/reference — see S2 StringBuilder
+        content: Register nish:string in src/nish-modules.ts and declare builder and Builder in runtime/nish.d.ts with doc comments, then regenerate docs/reference — see S2 builder
         status: pending
       - id: builder-facts
-        content: Give the methods their escape and attribute facts, and add the thread and interop refusals with new codes in src/codes.ts — see S2 StringBuilder
+        content: Give the methods their escape and attribute facts, and add the new Builder, thread and interop refusals with new codes in src/codes.ts — see S2 builder
         status: pending
       - id: builder-emit
-        content: Lower the methods in the emitter, and in emit-ts as a string[] class held to byte equality by differential tests — see S2 StringBuilder
+        content: Lower the methods in the emitter, and in emit-ts as a string[] class held to byte equality by differential tests — see S2 builder
         status: pending
       - id: builder-tests
-        content: Add golden .ll, llvm-as, native round trip, mem_builder_pass_scope and one negative test per refusal — see S2 StringBuilder
+        content: Add golden .ll, llvm-as, native round trip, mem_builder_pass_scope and one negative test per refusal — see S2 builder
         status: pending
       - id: builder-docs
-        content: Write the LANGUAGE.md section, docs/cookbook/mem-builder.ts, switch the guide page to the builder, add builder.ts to the bench — see S2 StringBuilder
+        content: Write the LANGUAGE.md section, docs/cookbook/mem-builder.ts, switch the guide page to the builder, add builder.ts to the bench — see S2 builder
         status: pending
   - id: s3-files
     title: S3 — files from a builder
@@ -65,7 +65,7 @@ stages:
     verification: flush.ts peaks at spec and model plus 1 MB on a 10 MB file; tests/link covers a short write and EINTR.
     todos:
       - id: fs-overloads
-        content: Add the StringBuilder overloads of writeFileSync and appendFileSync with fs.write capability rows — see S3 files from a builder
+        content: Add the Builder overloads of writeFileSync and appendFileSync with fs.write capability rows — see S3 files from a builder
         status: pending
       - id: write-handle
         content: Add fileCreate, fileWrite and fileWriteBytes beside WP44's fileOpen and fileClose, with LANGUAGE.md and reference — see S3 files from a builder
@@ -82,7 +82,7 @@ stages:
         content: Name the builder in the NL9002, NL9016 and NL9018 hints and the string += refusal, regenerating tests/wordings and goldens — see S4 diagnostics and the gate
         status: pending
       - id: ai-rule
-        content: Add the build-output-with-a-StringBuilder rule to docs/AI.md — see S4 diagnostics and the gate
+        content: Add the build-output-with-builder() rule to docs/AI.md — see S4 diagnostics and the gate
         status: pending
       - id: flat-soak
         content: Add tests/link/gen_flat_memory holding Arena.mark() and anonymous RSS flat over 2,000 files — see S4 diagnostics and the gate
@@ -109,10 +109,10 @@ The arena rewinds a pass only when nothing the pass made outlives it. `s = s + t
 - The region I/O tests pin behaviour that should already work but has no test: a string built inside `enterWith` and written with `writeFileSync` before `free`, and a `readFileSync` inside `enter` whose memory goes with the region.
 - The guide page follows [docs/README.md](../../docs/README.md#writing-a-guide-page). Its examples are `nish:ok` blocks with expected output. The page shows `--explain-memory` output for shape 1.
 
-## S2 StringBuilder
+## S2 builder
 
 - The API is design note §4. The runtime is §5, and the checker is §6.
-- This stage cannot start before the owner answers Q1, Q2, Q3 and Q5. Q4 decides whether `appendInt` and `appendF64` are part of this stage.
+- The owner's decisions are in design note §10: `builder()` from `nish:string`, storage owned by the arena position, thread-confined, `appendInt` and `appendF64` included, wasm32 supported or refused with a code, `s += t` still refused.
 - `src/` may not use the builtin until it is released (the rolling freeze), so `src/strings.ts` stays.
 - Run `nish-cmp`. Add `DECLARED` entries if any corpus program's IR moves, for example through a release-path change in the runtime declarations.
 - Security: either a new row in `docs/security/runtime.md` for `runtime-builder.c`, or the `runtime-text.c` row widened and `RUNTIME_TEXT_UNIT_BUDGET` raised. Add a limit test on both sides, as RT-2 has.

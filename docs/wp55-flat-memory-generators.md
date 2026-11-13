@@ -1,7 +1,9 @@
 # WP55: Generators whose memory stays flat: a string builder, and a region per file
 
-**Status: proposed (2026-11-13), design only.** Nothing here is built. §10
-lists the decisions this note asks the owner for. Its stages are in §9 and on
+**Status: accepted (owner, 2026-11-13), design only.** Nothing here is
+built. §10 records the owner's decisions: the builder is `builder()` from
+`nish:string`, and the other five questions take this note's
+recommendations. Its stages are in §9 and on
 [the roadmap page](roadmap/wp55-flat-memory-generators.md). The plan that
 tracks them is
 [`.claude/plans/wp55-flat-memory-generators.plan.md`](../.claude/plans/wp55-flat-memory-generators.plan.md).
@@ -76,7 +78,8 @@ Where these stop:
 ## 3. The decision this note proposes
 
 **D1. A built-in string builder whose bytes live outside the arena.** It is
-`StringBuilder`, imported from a `nish:` module (Q1). Its storage is one block
+`builder()`, imported from `nish:string`, which answers a `Builder` (Q1). Its
+storage is one block
 the runtime grows by doubling with `realloc`, never in the bump arena. Only the
 builder's small header is an ordinary arena object. Appending copies bytes
 from the argument into that block. It allocates nothing in the arena and
@@ -105,7 +108,7 @@ call-site reclaim of item 3 can apply to it. A builder never answers a pointer
 into its own storage.
 
 **D4. Files are written from the builder without a whole-file string.**
-`writeFileSync` and `appendFileSync` gain a `StringBuilder` overload, and
+`writeFileSync` and `appendFileSync` gain a `Builder` overload, and
 `nish:fs` gains a write handle: `fileCreate`, `fileWrite` and `fileClose`,
 mirroring WP44's read side. A generator can then flush its builder to a file
 every few kilobytes and `clear()` it. That keeps one file's peak at the flush
@@ -117,40 +120,44 @@ gate is that peak resident memory does not grow with the number of files
 (§8).
 
 **D6. The diagnostics point at the builder.** The hints for NL9002, NL9016
-and (once it lands) NL9018 name `StringBuilder` where the dropped or rebuilt
+and (once it lands) NL9018 name `builder()` where the dropped or rebuilt
 value is a string. `docs/AI.md` gets the rule: "build output with a
-`StringBuilder`, never `s = s + t` in a loop".
+`builder()` from `nish:string`, never `s = s + t` in a loop".
 
 ## 4. The API
 
 ```ts
-import { StringBuilder } from "nish:builder";   // Q1: the name of the module
+import { Builder, builder } from "nish:string";
 
-class StringBuilder {
-  constructor();                  // empty, no storage until the first append
-  constructor(capacity: i32);     // reserve bytes up front
+const sb: Builder = builder();      // empty; no storage until the first append
 
-  append(text: string): void;
-  appendChar(code: i32): void;            // one byte, as String.fromCharCode
-  appendInt(n: i64): void;                // decimal, no temporary string (Q4)
-  appendF64(x: f64): void;                // as `${x}` formats it (Q4)
-  appendBytes(bytes: readonly u8[], start: i32, end: i32): void;
-  appendBuilder(other: StringBuilder): void;
-
-  readonly length: i32;                   // bytes so far
-  toString(): string;                     // one arena copy; the builder stays usable
-  clear(): void;                          // length 0, capacity kept
-}
+// The methods of a Builder:
+sb.reserve(bytes: i32): void;                  // grow capacity up front
+sb.append(text: string): void;
+sb.appendChar(code: i32): void;                // one byte, as String.fromCharCode
+sb.appendInt(n: i64): void;                    // decimal, no temporary string
+sb.appendF64(x: f64): void;                    // as `${x}` formats it
+sb.appendBytes(bytes: readonly u8[], start: i32, end: i32): void;
+sb.appendBuilder(other: Builder): void;
+sb.length;                                     // i32, bytes so far, read-only
+sb.toString(): string;                         // one arena copy; the builder stays usable
+sb.clear(): void;                              // length 0, capacity kept
 ```
+
+`builder()` is the only way to make one, as `region()` is for a `Region`:
+`Builder` is a type to annotate with, and `new Builder()` is refused with the
+next free `NL2xxx` code, as NL2618 refuses `new Region<T>()`. A factory rather
+than a constructor keeps the call that allocates visible at one name, and
+needs no constructor overload for a capacity, which `reserve` gives instead.
 
 The `nish:fs` additions (S3), each with `@param`/`@returns` in
 `runtime/nish.d.ts`:
 
 ```ts
-writeFileSync(path: string, text: StringBuilder): void;
-appendFileSync(path: string, text: StringBuilder): void;
+writeFileSync(path: string, text: Builder): void;
+appendFileSync(path: string, text: Builder): void;
 fileCreate(path: string, mode: i32): i32;            // fd, or negative errno; truncates
-fileWrite(fd: i32, text: StringBuilder): i32;        // bytes written or negative errno; all of it
+fileWrite(fd: i32, text: Builder): i32;        // bytes written or negative errno; all of it
 fileWriteBytes(fd: i32, bytes: readonly u8[], start: i32, end: i32): i32;
 // fileClose (WP44) closes either kind
 ```
@@ -171,7 +178,7 @@ differential tests hold the two sides byte-identical. Unlike `nish:region`,
 - **Layout.** The header is `{ char *data; uint32_t len; uint32_t cap; struct nish_ext *rec; }`. It is an arena object that is never placed on the stack, because D2 hangs the storage's lifetime off the header's arena position. A stack header in a function without a scope would still be correct, but it would be harder to reason about. The layout is two-sided, `src/runtime.ts` and `runtime/nish.h` together, and the layout test pins it (orientation rule 4).
 - **Growth.** If `len + n` exceeds `cap`, the new capacity is `max(2 × cap, len + n, 64)`, capped at 2^31 − 1. The block is grown with `realloc`, and the size computation is overflow-checked before the call. `malloc`, `realloc` and `free` are already reserved in `src/c-symbols.ts`. `node tests/run.js c-symbols` confirms nothing new is needed.
 - **Ownership (D2).** Each arena has a newest-first list of *external blocks*: the main arena, each thread's arena, and each region's arena. Constructing a builder bump-allocates a small record `{ prev, header }` in the current arena and pushes it onto the list. `nish_arena_release(mark)` already finds the chunks newer than `mark`. It also pops from the head every record that lies in a chunk being freed, or at or above `mark` in the chunk it keeps, and frees that record's block. Records are bump-allocated in order, so the ones to free are always a prefix of the list. When no builder exists, the extra cost of a release is one load and one compare against null. `nish_region_free` frees its arena's whole list. `nish_reset_arena`, for a C host, frees the main list. When `main` returns, the process exit reclaims the rest.
-- **`nish_arena_keep`** moves a returned string down onto a mark. It never moves a builder, because a builder is not a string. A function that answers a `StringBuilder` answers a pointer, so it takes no function scope, and its caller's position owns the builder. That is already the rule for any object.
+- **`nish_arena_keep`** moves a returned string down onto a mark. It never moves a builder, because a builder is not a string. A function that answers a `Builder` answers a pointer, so it takes no function scope, and its caller's position owns the builder. That is already the rule for any object.
 - **Where it lives.** The builder is new C code, so it either goes in `runtime/runtime-text.c` under `RUNTIME_TEXT_UNIT_BUDGET` (`tests/runtime-budgets.js`, which it would have to raise), or in a new `runtime/runtime-builder.c`. A new file needs a row in [security/runtime.md](security/runtime.md)'s scope table, because `node scripts/security-scope.mjs` refuses an unscoped file. Its findings take the RT-n numbering, and the growth limit gets a test on both sides in `tests/runtime-test.c`, as RT-2 has. The release hook changes `runtime.c` and `runtime-region.c`, so their records move with it.
 - **wasm32.** `runtime-wasm.c` has its own allocator and no `realloc`. The builder there takes its storage from the same allocator, which grows by copying, and the ownership list is the same code. If S2 cannot do that within the wasm size budget, the builtin is refused on that target with a code (Q5). It must not be miscompiled silently.
 
@@ -180,7 +187,7 @@ differential tests hold the two sides byte-identical. Unlike `nish:region`,
 - **Facts for each method (D3).** In the builtin effect table that the escape analysis and `src/attributes.ts` read, the append methods and `clear` *write through* their receiver but store no pointer and allocate nothing in the arena. `toString` allocates one string and stores nothing. `length` is a pure read. These facts are what let `tests/cases/mem_builder_pass_scope` hold `Arena.mark()` unmoved over 1,000,000 appends of a template from a loop whose builder is older than the loop.
 - **Construction is an allocation** and follows every rule an object does: a pass that stores a fresh builder outward has no scope, NL2418 applies inside `using a = arena()`, and NL2609 or NL2610 apply at a region's edge. A builder made inside a region may live in its root, and its storage dies at `free`.
 - **Threads (Q3).** A builder stays on the thread that made it. Passing it to `spawn`, a `scope()` task, a channel, a parallel body or across `nish/sync` is refused with the next free code in the checker's `NL2xxx` band. The reason is that two threads appending through one header could race the `realloc`.
-- **Interop.** A `StringBuilder` in an exported signature (C header, wasm `.d.ts`, N-API) is refused by the checker, with the next free `NL2xxx` code, and by the sidecar generator (`NL4xxx`) for a module it is asked to wrap. A host gets a string from `toString()`.
+- **Interop.** A `Builder` in an exported signature (C header, wasm `.d.ts`, N-API) is refused by the checker, with the next free `NL2xxx` code, and by the sidecar generator (`NL4xxx`) for a module it is asked to wrap. A host gets a string from `toString()`.
 - **The capability report (WP35).** The builder needs no capability. The `nish:fs` additions are `fs.write`, as `writeFileSync` is, and are refused where `writeFileSync` is.
 - **Codes.** Each refusal takes the next free number in its band in `src/codes.ts`, one code for each reason, and gets a negative test. Numbers are assigned when S2 is built, not here.
 
@@ -191,9 +198,9 @@ files", with a route in `scalar.config.json` and links from memory.md and
 regions.md. It uses one running example, a generator over a JSON spec, and
 introduces three shapes in this order:
 
-1. **A function per file that answers a number.** This is the default. The page shows `--explain-memory` reporting the outer loop as clean, and the inner loop appending to a `StringBuilder` with its pass scope intact.
+1. **A function per file that answers a number.** This is the default. The page shows `--explain-memory` reporting the outer loop as clean, and the inner loop appending to a `builder()` with its pass scope intact.
 2. **`using a = arena()` per file**, for a file built inline in a loop body. The builder is declared inside the block.
-3. **A region per target**, for an output that gathers fragments across several passes over the model, such as a barrel file or one module per tag. `regionWith(target, open)` makes a root that holds a `StringBuilder`, `enterWith` appends on each pass, one last `enter` writes the file, and `free` releases it all. The builder's storage goes with it (D2).
+3. **A region per target**, for an output that gathers fragments across several passes over the model, such as a barrel file or one module per tag. `regionWith(target, open)` makes a root that holds a `Builder`, `enterWith` appends on each pass, one last `enter` writes the file, and `free` releases it all. The builder's storage goes with it (D2).
 
 The page also covers flushing a large file through `fileCreate`/`fileWrite`
 every 64 KiB. It explains why `s = s + t` and pushing onto an outer array keep
@@ -236,7 +243,7 @@ Each stage is one pull request.
 | --- | --- | --- |
 | **S0** Baseline | `bench/wp55-generator/` (spec maker, `naive.ts`, `today.ts`, `run.sh`); the table in `docs/BENCHMARKS.md` | the table has both generators at four sizes, with a noise band |
 | **S1** The patterns with today's tools | `tests/cases`/`tests/link` for file I/O inside `enter` (read and write), and `region_per_target`; the guide page with shapes 1 to 3 written over `parts` + `join`; cookbook entries; memory.md and regions.md link to it | `node tests/run.js region` and `node tests/run.js cookbook` pass; the page's examples run under `nish:ok` |
-| **S2** `StringBuilder` | runtime (§5) with its security record rows; the checker facts and refusals (§6); the `nish:` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp `DECLARED` entries if any corpus IR moves |
+| **S2** `builder()` from `nish:string` | runtime (§5) with its security record rows; the checker facts and refusals (§6); the `nish:string` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp `DECLARED` entries if any corpus IR moves |
 | **S3** Files from a builder | `writeFileSync`/`appendFileSync` overloads; `fileCreate`, `fileWrite`, `fileWriteBytes`; capability rows; guide flush section; `flush.ts` | G2's flush bound; `tests/link` covers a short write and `EINTR` as WP44's tests do on the read side |
 | **S4** Diagnostics and the gate | NL9002, NL9016 and NL9018 hints naming the builder, with their wordings and goldens; `docs/AI.md`; `gen_flat_memory` (G3) | G1 to G3 green in CI, and the roadmap page ticked |
 
@@ -246,14 +253,16 @@ Each stage is one pull request.
 - Moving `src/` onto the builtin. The rolling freeze forbids this until the release after S2. `src/strings.ts`'s builder stays until then.
 - Reusing the blocks that `push` outgrows.
 
-## 10. Open questions for the owner
+## 10. Decisions
 
-- **Q1. The name and module.** The recommendation is `StringBuilder` from `nish:builder`. The alternatives are `nish:text`, which is close to `nish/text` in `std` and invites confusion, or a global builtin like `Map`. A global would not exist when the program runs as plain TypeScript without the shim.
-- **Q2. Lifetime.** The recommendation is D2, where the arena position owns the storage. The alternative is to require `using sb = new StringBuilder()` (a WP53-style handle class) and refuse any other binding. That is simpler in the runtime, but it rules out a builder in a region root or a field, and so rules out §7's third shape.
-- **Q3. Threads.** The recommendation is to confine a builder to the thread that made it. A builder that moves to another thread by transfer is possible later.
-- **Q4. Number appends.** Should `appendInt` and `appendF64` be in S2? They save one temporary string for each number, which matters for generators that write numbers, but they add formatting code paths whose bytes must match the template formatting under Node.
-- **Q5. wasm32.** Should S2 support the builder on the wasm profile, or refuse it with a code until WP50's allocator grows a `realloc`?
-- **Q6. `s += t` on strings.** The recommendation is that it stays refused. Its message would gain the builder hint, so that `+=` never looks cheaper than it is.
+The owner decided these on 2026-11-13. S2 builds what they say.
+
+- **Q1. The name and module: `builder()` from `nish:string`.** It answers a `Builder`, as `region()` answers a `Region`. The note had proposed `StringBuilder` from `nish:builder`. `nish:string` names what the module is about and leaves room for other string builtins later. It is a different specifier from `std`'s `nish/text`, so the two do not collide.
+- **Q2. Lifetime: D2.** The arena position that made the builder owns its storage. No `using` is required, so a builder can be held in a field or a region's root, and §7's third shape works.
+- **Q3. Threads: confined.** A builder stays on the thread that made it (§6). Moving one to another thread by transfer can be designed later, if a program needs it.
+- **Q4. Number appends: in S2.** `appendInt` and `appendF64` ship with the builder, each held byte-identical to a template's formatting under Node by the differential tests.
+- **Q5. wasm32: supported.** The builder takes its storage from `runtime-wasm.c`'s allocator, which grows by copying (§5). If that does not fit the wasm size budget, S2 refuses the builder on that target with a code and says so in its PR. It never miscompiles it.
+- **Q6. `s += t` on strings: stays refused.** Its message gains the hint to use `builder()` from `nish:string` (S4).
 
 ## 11. Alternatives considered
 
