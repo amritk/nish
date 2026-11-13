@@ -30,15 +30,41 @@ stages:
         content: Export it as nish/page/frame from package.json and document it in the In a browser section of docs/guide/using-nish/interop.md — see Page frame
       - id: frame-tests
         content: Add a page-frame section to tests/run.js that runs the presenter and loop under Node against fake WebGPU, WebGL 2 and Canvas 2D objects, plus the Playwright smoke recorded in the PR body — see Page frame
+  - id: game-std
+    title: Move the reusable game pieces into std
+    goal: The software raster, the sound synthesis and the host layout a browser game shares with its page are std modules, and nish break draws and sounds through them with byte-identical output.
+    verification: npm run check && npm run lint && node tests/run.js break && node tests/run.js std_raster && node tests/run.js std_synth && node tests/run.js std_host_game && node tests/run.js self && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node scripts/gen-reference.mjs --check
+    todos:
+      - id: std-raster
+        content: Move the generic primitives of src/break-gfx.ts (rects, blends, discs, glow, gradients, the 5x7 font, particles) into std/raster.ts over the term-pixels Framebuffer and draw break through it — see Game std
+      - id: std-synth
+        content: Move the pure voice synthesis of src/break-sound.ts (square, triangle, noise, envelopes, to f64 samples) into std/synth.ts and build break's sounds through it — see Game std
+      - id: std-host-game
+        content: Add std/host/game.ts, the layout a game shares with its page (framebuffer, input ring, sound queue, frame size) and the Nish-side helpers over it — see Game std
+      - id: std-game-tests-docs
+        content: Add link cases for the three modules, regenerate goldens and docs/reference, list them in std/README.md and the standard-library guide page — see Game std
+  - id: game-page
+    title: Add nish/page/game, a one-call browser game harness, a starter and a guide page
+    goal: A Nish file that exports init, step and draw over nish/host/game becomes a running browser game with one startGame call, with fallback rendering, input, sound and a display-rate loop handled.
+    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js game-page && node docs/check-links.mjs && node tests/run.js guide
+    todos:
+      - id: page-game-harness
+        content: Write runtime/page-game.mjs and .d.ts with startGame(canvas, wasmUrl, options) composed from nish/page/frame, the ring page half and WebAudio — see Game page
+      - id: page-game-starter
+        content: Add examples/game-starter, a short complete Nish game and its page that a reader copies to start a new one — see Game page
+      - id: page-game-guide
+        content: Add a Writing a browser game guide page with its scalar.config.json route, linked from the interop page — see Game page
+      - id: page-game-tests
+        content: Add a game-page section to tests/run.js that builds the starter and drives startGame under Node with a fake presenter and audio — see Game page
   - id: docs-break
     title: Put the brick breaker behind the hero terminal on the docs site
     goal: Typing `nish break` into the landing page's hero terminal opens the game, compiled from the break-core scenes to wasm and presented through nish/page/frame, with sound, touch and persisted settings, and nothing in the guide prose mentions it.
     verification: npm run check && npm run lint && node docs/check-links.mjs && node tests/run.js break-web && node examples/break-web/build.mjs --check
     todos:
       - id: web-entry
-        content: Write examples/break-web/game.ts, the wasm entry that owns the director and exposes the framebuffer, the input block and the sound queue as module storage, and examples/break-web/host.ts for the settings and seed imports — see Docs break
+        content: Write examples/break-web/game.ts, the wasm entry that runs the director over nish/host/game, and the host imports for settings and seed — see Docs break
       - id: web-page
-        content: Write examples/break-web/page.ts, which maps keyboard, pointer and touch events to the input block, runs nish/page/frame at display rate, plays the sound queue through WebAudio from soundSamples, and stores settings in localStorage — see Docs break
+        content: Write examples/break-web/page.ts as a startGame call from nish/page/game plus the overlay and localStorage settings — see Docs break
       - id: web-build
         content: Write examples/break-web/build.mjs to build into docs/site/break/ with an inputs manifest, and a --check mode that fails when a source the bundle was built from has changed since — see Docs break
       - id: web-trigger
@@ -121,11 +147,54 @@ function runFixedStep(options: { stepsPerSecond: number; maxStepsPerFrame?: numb
 - **Plain ESM.** The file has no imports, like `runtime/page.mjs`, so a page can serve it as-is.
 - **Tests.** Node-side fakes check tier order, every refusal path, a lost device moving to the next tier, the Canvas 2D swizzle, and the loop's step count and alpha over a scripted clock. Run a Playwright smoke in the pre-installed Chromium for each tier: WebGPU, `navigator.gpu` hidden, and both GPU contexts refused. Paste its output into the PR body; CI has no browser, so it is not a `tests/run.js` gate.
 
+## Where the library pieces live
+
+The standard library has two halves:
+
+- **The Nish side, in `std/`.** It compiles into the game's wasm: `nish/input`, `nish/raster`, `nish/synth` and `nish/host/game`.
+- **The page side, in `runtime/`.** It is shipped as `nish/page/*` and is plain JavaScript, because WebGPU, WebGL, Canvas, WebAudio and DOM events only exist in the page. `nish/page/frame` holds the presenter with its fallback and the loop. `nish/page/game` holds `startGame`.
+
+This is the pattern `nish/host/ring` and its page half `ringOver` in `nish/page` already follow. JavaScript does not go under `std/`, which is Nish source end to end (the `./*` export, gen-reference, the checker).
+
+## Game std
+
+**Owns:** `std/raster.ts`, `std/synth.ts`, `std/host/game.ts`, `src/break*.ts`, `std/README.md`, `docs/reference/**`, `scalar.config.json`, `docs/guide/using-nish/standard-library.md`, `scripts/gen-reference.mjs` (AREAS), `tests/link/std_raster/**`, `tests/link/std_synth/**`, `tests/link/std_host_game/**`, `tests/link/break_*/**`, `tests/self/goldens/checked/**`, `tests/nish-cmp.js`, `scripts/undocumented.txt`
+
+**Depends on:** break-core (start), because it owns `src/break*.ts` until it merges.
+
+- **Library pieces.** Everything moved is general: names and doc comments say nothing about bricks. Game-specific drawing, such as `bevelBrick`, stays in `src/break-gfx.ts`, built on `nish/raster`.
+- **Behaviour.** `tests/link/break_*` expected outputs and the `break` pty test stay byte-identical.
+- **`nish/host/game`.**
+  - It documents the module-storage names and shapes a game declares:
+    - a framebuffer of at most 960×540 `i32` words;
+    - the current width and height;
+    - an input ring of key events and held-key bits;
+    - a sound queue ring of sound ids.
+  - It provides the helpers that read input into a `StepInput` and push sounds.
+  - `nish/page/game` reads the same names through `views().storage`.
+  - If module storage cannot be declared inside an imported module, the program declares the arrays and passes them in, as `nish/host/ring` does.
+
+## Game page
+
+**Owns:** `runtime/page-game.mjs`, `runtime/page-game.d.ts`, `package.json`, `examples/game-starter/**`, `docs/guide/using-nish/browser-games.md`, `scalar.config.json`, `docs/guide/using-nish/interop.md`, `tests/game-page/**`, `tests/run.js`, `tests/shard-costs.json`
+
+**Depends on:** game-std and page-frame (start).
+
+- **`startGame(canvas, wasmUrl, { seed, prefer, keys, touch, sound, onFallback })`.** It returns `{ stop, presenter, module, fps, refreshHz }`.
+  - **Loading.** It loads the module asynchronously with streaming instantiation.
+  - **Presenting.** It builds the presenter through `nish/page/frame`.
+  - **Input.** It maps keyboard events, and pointer and touch zones, onto the input ring, releasing held keys on blur and when the page is hidden.
+  - **Sound.** It plays the sound queue through WebAudio once the user has interacted.
+  - **Loop.** It runs `step` and `draw` through `runFixedStep` at the display's rate.
+  - **Framebuffer.** It presents the framebuffer view without copying.
+- **The starter.** `examples/game-starter/` is a complete small game, under about 150 lines of Nish, plus an `index.html` of a few lines and a build script. A reader copies it to begin. The guide page walks through it.
+- **Not the game.** Neither the page nor the starter mentions `nish break`.
+
 ## Docs break
 
 **Owns:** `examples/break-web/**`, `docs/site/**`, `.claude/orientation.md`, `tests/run.js`, `tests/shard-costs.json`, `.gitignore`
 
-**Depends on:** break-core and page-frame. It consumes the director, the settings hook, the input module and `nish/page/frame`, so it starts when both have merged.
+**Depends on:** game-page (start), and through it every other stage. Break is one more game on the kit: the entry runs the director over `nish/host/game`, and the page is a `startGame` call plus the overlay, the trigger and the `localStorage` settings.
 
 - **Entry, `game.ts`.**
   - It holds the framebuffer at its largest size (960×540, the kitty ceiling) and an input block in module storage. The input block has held-key bits and a small press-event ring through `nish/host/ring`.
@@ -158,7 +227,6 @@ function runFixedStep(options: { stepsPerSecond: number; maxStepsPerFrame?: numb
 
 ## Out of scope
 
-- Moving the generic raster primitives in `src/break-gfx.ts` (rects, discs, glow, the 5×7 font) into a std module. That is a natural follow-up once a second game wants them.
 - Porting `examples/wasm-arena` onto `nish/page/frame`.
 - Any change to `.github/workflows/`.
 - A docs page, `llms.txt` or `docs/AI.md` entry for the game.
