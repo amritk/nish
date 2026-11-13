@@ -256,10 +256,17 @@ const H1_R_DONE: i32 = 2
 
 /**
  * The longest final head `respond` keeps to write again (`Http1Connection`'s
- * `headBytes`): one buffer of this size per connection, made at its first
- * kept head. A longer head is written fresh every time.
+ * `headBytes`, one buffer per connection made at its first kept head). A
+ * longer head is written fresh every time.
  */
 const H1_HEAD_KEEP: i32 = 1024
+
+/**
+ * What a kept head's buffer is rounded up to: a cache line, so that a head a
+ * few bytes longer than the last (a `Content-Length` with one more digit)
+ * fits the buffer it has rather than making another.
+ */
+const H1_HEAD_ROUND: i32 = 64
 
 /** The most program fields a kept head carries: a head with more is written fresh every time. */
 const H1_HEAD_FIELDS: i32 = 16
@@ -597,9 +604,10 @@ export class Http1Config {
    * come, the slot gives both to pools the server's slots share, and takes
    * them again with the next byte. The memory they hold then follows the
    * connections mid-request rather than every keep-alive connection open,
-   * for two pool operations a request. Off by default.
+   * for two pool operations a request. On by default; false keeps each
+   * slot's buffers across the rest, about 1.9 KB more an idle connection.
    */
-  idleInput: boolean = false
+  idleInput: boolean = true
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */
@@ -678,6 +686,8 @@ export class Http1OutputPool {
   private size: i32 = 0
   /** How many buffers the pool has made. */
   made: i32 = 0
+  /** How many buffers `free` has room for without growing. */
+  private room: i32 = 0
 
   /**
    * An empty pool: no buffer is made until the first `take`.
@@ -701,11 +711,25 @@ export class Http1OutputPool {
       return buf
     }
     this.made = this.made + 1
-    return new Array<u8>(this.size)
+    const buf: u8[] = new Array<u8>(this.size)
+    // `free` gets room for every buffer made here, while this allocates
+    // anyway, so `give` never grows it: a slot's first park can come long
+    // after its take, when the arena is meant to be flat.
+    if (this.made > this.room) {
+      const want: i32 = this.made * 2
+      for (let i: i32 = 0; i < want; i++) {
+        this.free.push(buf)
+      }
+      while (this.free.length > 0) {
+        this.free.pop()
+      }
+      this.room = want
+    }
+    return buf
   }
 
   /**
-   * Takes back a buffer `take` gave.
+   * Takes back a buffer `take` gave, into the room `take` made: it allocates nothing.
    *
    * @internal Called by `Http1Connection` in this module, from `release` and `park`, once a borrowed buffer holds nothing it still needs.
    */
@@ -748,10 +772,11 @@ export class Http1Connection {
   /** Where the parser's head buffer goes while the slot rests, beside `inputs`; null otherwise. */
   heads: Http1OutputPool | null
   /**
-   * The `Date` every final response carries. The connection makes its own;
-   * `Http1Server` and `Http1TlsServer` put theirs here, so that every slot of a
-   * pool shares one and the pool formats at most once a second. A program may
-   * put another, to share it or to pin its clock.
+   * The `Date` every final response carries: the constructor's, or one the
+   * connection makes when given none. `Http1Server` and `Http1TlsServer` give
+   * theirs, so that every slot of a pool shares one, formats at most once a
+   * second and makes no `Date` of its own. A program may put another, to
+   * share it or to pin its clock.
    */
   date: HttpDate
   /** When the carrier last moved a byte for the connection, in `monotonicNanos`. */
@@ -852,9 +877,10 @@ export class Http1Connection {
    * status, the same field names and values byte for byte, the same framing
    * and `Connection`, and the same `date` not reformatted since (`formats`).
    * Empty until the first head that is kept (one of at most `H1_HEAD_KEEP`
-   * bytes, after a head of the same shape); then made once and kept for the
-   * slot's later peers, since what it holds is a function of those inputs
-   * alone.
+   * bytes, after a head of the same shape); then made at that head's length
+   * rounded up to `H1_HEAD_ROUND`, remade only for a longer one, and kept for
+   * the slot's later peers, since what it holds is a function of those inputs
+   * alone. An idle slot holds what its heads need, not `H1_HEAD_KEEP`.
    */
   private headBytes: u8[]
   /** How many bytes of `headBytes` the kept head is; 0 while none is kept. */
@@ -871,7 +897,8 @@ export class Http1Connection {
   private headFields: i32 = 0
   /**
    * The length of each of the kept head's field names and values, in order,
-   * name then value: `2 * H1_HEAD_FIELDS` of them, made with `headBytes`.
+   * name then value: two per field, made at the first head kept with that
+   * many fields and remade only for one with more.
    */
   private headLengths: i32[]
   /** The `HttpDate` the kept head's `Date` came from. */
@@ -896,8 +923,9 @@ export class Http1Connection {
    * A connection under `config`. A cap outside what the connection can work with panics.
    *
    * @param config the caps the connection is held to, read now and kept
+   * @param date the `Date` its responses carry, shared with other connections; null makes it one of its own
    */
-  constructor(config: Http1Config) {
+  constructor(config: Http1Config, date: HttpDate | null = null) {
     const big: i32 = 1073741824
     const one: i32 = 1
     const smallest: i32 = 64
@@ -928,7 +956,7 @@ export class Http1Connection {
     // The parser is made first: the arena places each block after the last,
     // so its front fields sit on the lines just behind the connection's own.
     this.parser = new Http1Parser(config.maxTarget, config.maxHeaderBytes, config.maxHeaders, config.maxBody)
-    this.date = new HttpDate()
+    this.date = date === null ? new HttpDate() : date
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
     this.ws = null
@@ -1677,9 +1705,11 @@ export class Http1Connection {
     if (!again) {
       return
     }
-    if (toI32(this.headBytes.length) < H1_HEAD_KEEP) {
-      this.headBytes = new Array<u8>(H1_HEAD_KEEP)
-      this.headLengths = new Array<i32>(2 * H1_HEAD_FIELDS)
+    if (toI32(this.headBytes.length) < n) {
+      this.headBytes = new Array<u8>(((n + H1_HEAD_ROUND - 1) / H1_HEAD_ROUND) * H1_HEAD_ROUND)
+    }
+    if (toI32(this.headLengths.length) < 2 * fields) {
+      this.headLengths = new Array<i32>(2 * fields)
     }
     for (let i: i32 = 0; i < fields && i < toI32(values.length); i += 1) {
       this.headLengths[2 * i] = toI32(names[i].length)
@@ -2375,9 +2405,8 @@ export class Http1Server {
 
   /** A new connection on this pool's outputs and `Date`, for the next slot built. */
   private build(): Http1Connection {
-    const conn: Http1Connection = new Http1Connection(this.config)
+    const conn: Http1Connection = new Http1Connection(this.config, this.date)
     conn.pool = this.outputs
-    conn.date = this.date
     if (this.config.idleInput) {
       conn.inputs = this.inputs
       conn.heads = this.heads
@@ -2830,9 +2859,8 @@ export class Http1TlsServer {
 
   /** A connection on this pool's outputs and `Date` that no slot holds yet. */
   private make(): Http1Connection {
-    const conn: Http1Connection = new Http1Connection(this.config)
+    const conn: Http1Connection = new Http1Connection(this.config, this.date)
     conn.pool = this.outputs
-    conn.date = this.date
     if (this.config.idleInput) {
       conn.inputs = this.inputs
       conn.heads = this.heads

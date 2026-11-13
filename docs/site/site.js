@@ -178,19 +178,19 @@
         copyButton()
       ),
       // The stage is a picture of what the text beside it already says, so it
-      // is hidden from assistive technology rather than read out line by line.
+      // is hidden from assistive technology, all but the terminal's input.
       el(
         "div.nish-hero__stage",
-        { "aria-hidden": "true" },
+        {},
         el(
           "div.nish-hero__window.nish-hero__editor",
-          {},
+          { "aria-hidden": "true" },
           el("div.nish-hero__bar", {}, el("i"), el("i"), el("i"), el("span", {}, "squares.ts")),
           el("pre.nish-hero__code", {}, ...SOURCE.map(codeLine))
         ),
         el(
           "div.nish-hero__flow",
-          {},
+          { "aria-hidden": "true" },
           beams(),
           el(
             "div.nish-hero__core",
@@ -204,13 +204,18 @@
             ...TARGETS.map((name, index) => el("span.nish-hero__target", { style: `--i:${index}` }, name))
           )
         ),
-        el(
-          "div.nish-hero__window.nish-hero__terminal",
-          {},
-          el("div.nish-hero__bar", {}, el("i"), el("i"), el("i"), el("span", {}, "terminal")),
+        terminal(
+          el(
+            "div.nish-hero__bar",
+            { "aria-hidden": "true" },
+            el("i"),
+            el("i"),
+            el("i"),
+            el("span", {}, "terminal")
+          ),
           el(
             "pre.nish-hero__code",
-            {},
+            { "aria-hidden": "true" },
             el(
               "span.nish-hero__cmd",
               {},
@@ -222,6 +227,39 @@
         )
       )
     )
+
+  /** The hero's terminal: a hidden input whose first use imports the shell (examples/break-web). */
+  const terminal = (...children) => {
+    const input = el("input.nish-hero__input", {
+      "aria-label": "Terminal",
+      autocapitalize: "off",
+      autocorrect: "off",
+      spellcheck: "false",
+      enterkeyhint: "go",
+    })
+    const term = el("div.nish-hero__window.nish-hero__terminal", {}, ...children, input)
+    term.addEventListener("click", () => getSelection().isCollapsed && input.focus())
+    const lines = [] // entered while the shell loads
+    let shell = null
+    const first = (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        lines.push(input.value)
+        input.value = ""
+      } else if (event.type !== "input" && event.keyCode !== 229) {
+        return
+      }
+      const shellUrl = "/break/shell.mjs"
+      shell ??= import(shellUrl)
+        .then((m) => m.attach(term, input, lines, first))
+        .catch(() => {
+          lines.length = 0
+          shell = null
+        })
+    }
+    input.addEventListener("input", first)
+    input.addEventListener("keydown", first)
+    return term
+  }
 
   /**
    * The site is a single-page app: the landing page's Markdown is mounted,

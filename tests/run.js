@@ -51,6 +51,7 @@ import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/p
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import {
   budgetLabel,
+  HTTP1_SERVER_IDLE_BYTES,
   HTTP1_SERVER_START_BYTES,
   HTTP1_TLS_SERVER_START_BYTES,
   HTTP2_TLS_SERVER_START_BYTES,
@@ -1885,6 +1886,7 @@ const DEALT_SECTIONS = {
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
   fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
+  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
   differential: { name: "the WP13 differential section", selected: selects("differential") },
   p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
   netStartup: { name: "the net servers' startup links", selected: true, tail: true },
@@ -11674,6 +11676,36 @@ if (dealtHere("fileServer")) {
   }
 }
 
+// ---- break-web: the game behind the docs hero terminal ---------------------------
+// docs/site/site.js imports docs/site/break/shell.mjs on the hero terminal's
+// first key, and the shell imports break.mjs when asked for the game;
+// examples/break-web/build.mjs builds that directory and it is committed.
+// tests/break-web/check.mjs runs the terminal, the shell and the page side
+// under Node with a fake DOM, plays the built module against break_core_wasm's
+// frame hashes, runs --check and its negatives, and prints a line per check.
+if (dealtHere("breakWeb")) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // The count is pinned, as game-page's is: a check that goes missing is caught.
+  const BREAK_WEB_CHECKS = 104
+  const lines = res.stdout.split("\n")
+  const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = lines.find((line) => line.startsWith("checks: "))
+  check(
+    "break-web: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${results.length}` && results.length === BREAK_WEB_CHECKS,
+    shown(res)
+  )
+  for (const line of results) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`break-web: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+}
+
 // ---- WP13: differential -------------------------------------------------------------
 // Every whole program in tests/cases and tests/differential/corpus is compiled by the
 // compiler under test, linked, and run natively, and its JavaScript -- the frozen
@@ -11904,8 +11936,10 @@ if (dealtHere("netStartup")) {
   // pool sized for a busy day costs little before its first connection.
   // `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
   // socket and prints the arena bytes it took, which the ceiling
-  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
-  // they fit in one chunk, without which `Arena.used()` measures nothing.
+  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, then what
+  // one idle keep-alive connection holds after four requests, which
+  // `HTTP1_SERVER_IDLE_BYTES` holds, and whether both fit in one chunk, without
+  // which `Arena.used()` measures nothing.
   if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
     const dir = path.join(buildDir, "link", "net_http1_server.startup")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -11926,11 +11960,16 @@ if (dealtHere("netStartup")) {
     )
     if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
       const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
-      const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+      const [bytes, , chunk, idle] = String(run.stdout).trim().split(" ")
       check(
         "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
         run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
         `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+      )
+      check(
+        "net_http1_server: an idle keep-alive Http1Server connection holds at most HTTP1_SERVER_IDLE_BYTES",
+        run.status === 0 && chunk === "yes" && Number(idle) > 0 && Number(idle) <= HTTP1_SERVER_IDLE_BYTES,
+        `ceiling ${HTTP1_SERVER_IDLE_BYTES}\n${shown(run)}`
       )
     }
   }
@@ -35207,6 +35246,32 @@ if (!only || "host-import".includes(only)) {
         `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
       )
     }
+    // IR that only declares the root keep, as every --runtime-decls module
+    // does, has no root storage: it links main's bytes, with the runtime's own
+    // nish_reset_arena and nish_free_arena (scripts/build.sh keys
+    // NISH_WASM_ROOTS on the IR defining nish_reset_arena).
+    if (wasmBytes) {
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === "examples/arrays.ts")
+      const ll = wasmHostCompile(path.join(dir, "declares-keep"), "arrays")
+      const got = {}
+      if (ll !== null) {
+        fs.appendFileSync(ll, "\ndeclare void @nish_runtime_root_keep(i64, i8*, i32)\n")
+      }
+      for (const [part, profile] of [
+        ["wasm", "wasm"],
+        ["host", "wasm-host"],
+      ]) {
+        const out = path.join(dir, "declares-keep", `arrays.${profile}.wasm`)
+        const linked = ll === null ? { status: 1, stdout: "", stderr: "compile failed" } : wasmHostLink([ll, "runtime/runtime-wasm.c"], ["-o", out, "--profile", profile])
+        got[part] = linked.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(linked)
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        "host-import: examples/arrays.ts whose IR declares nish_runtime_root_keep links main's --profile wasm and wasm-host .wasm",
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+    }
   }
 }
 
@@ -35226,8 +35291,11 @@ if (!only || "module-storage".includes(only)) {
     const dir = path.join(buildDir, "module-storage")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "module-storage"))) {
-      fs.copyFileSync(path.join(root, "tests", "module-storage", name), path.join(dir, name))
+    // Files only: tests/module-storage/persist/ holds the persist section's programs.
+    for (const entry of fs.readdirSync(path.join(root, "tests", "module-storage"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(root, "tests", "module-storage", entry.name), path.join(dir, entry.name))
+      }
     }
     const at = (name) => path.join(dir, name)
     const compiled = spawnSync(
@@ -35859,6 +35927,164 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       )
       const typed = typeCheckProject(config, root)
       check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
+    }
+  }
+}
+
+// ---- persist: root storage kept across export calls (docs/wp55-persistent-root.md) --
+// Two modules with root storage, built for a page and driven from Node through
+// the loader `--emit-dts` writes (tests/persist/drive.mjs; the programs live in
+// tests/module-storage/persist/): world.ts, whose
+// every step adds, drops and renames objects the root reaches and leaves
+// garbage, and director.ts, whose root is the real break director. Each runs
+// 100,000 steps; the driver checks the answers and that linear memory and the
+// kept heap stay flat after warm-up; the director also runs its first 40,000
+// steps beside an instance whose keep does nothing and must match it frame for
+// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
+// call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// cycles, one object two root storages and two slots share, arrays of arrays
+// and empty arrays and strings through a compaction at least every third call
+// (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
+// layouts a wrong offset or stride would corrupt silently: an array of records
+// kept in place, a union and a nullable-union field, a `(C | null)[]` and
+// `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
+// to pack the list to 8 bytes a node, so a run whose keep never compacts fails.
+// Each also links under plain `--profile wasm`, where runtime-wasm.c is built
+// without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
+// union is fine in a page build's `.d.ts` but refused once a C header is asked
+// for, which has no spelling for it; and root storage whose class is declared
+// after the `const` still gets that class's descriptor.
+if (!only || "persist".includes(only)) {
+  const unionDir = path.join(buildDir, "persist-union")
+  fs.rmSync(unionDir, { recursive: true, force: true })
+  fs.mkdirSync(unionDir, { recursive: true })
+  const unionArgs = ["tests/module-storage/persist/union-field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
+  const dtsOnly = spawnSync(NISH, unionArgs, { cwd: root, encoding: "utf8" })
+  check("persist: a union field in a class compiles with --emit-dts alone", dtsOnly.status === 0, shown(dtsOnly))
+  const withHeader = spawnSync(NISH, [...unionArgs, "--emit-header", path.join(unionDir, "u.h")], { cwd: root, encoding: "utf8" })
+  check(
+    "persist: the same union field is refused once --emit-header asks for a C layout",
+    withHeader.status !== 0 && withHeader.stderr.includes("which holds a union no sidecar can describe"),
+    shown(withHeader)
+  )
+  const late = spawnSync(
+    NISH,
+    ["tests/module-storage/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const lateIr = late.status === 0 ? fs.readFileSync(path.join(unionDir, "late-class.ll"), "utf8") : ""
+  check(
+    "persist: root storage whose class is declared after the const gets the class's trace descriptor and the keep",
+    lateIr.includes("@nish.trace.0 = internal constant %nish.trace { i32 0,") &&
+      lateIr.includes("define void @nish_root_keep(i64 %mark)"),
+    shown(late)
+  )
+  // Root storage with no string, no round_init and no tagged panic still links
+  // runtime-wasm.c (its keep, resets and arena): the IR's own nish_reset_arena
+  // is what asks for it. The panic tags are stripped to leave nothing else.
+  const bumpWhy = wasmHostTools()
+  if (bumpWhy !== null) {
+    skip(`persist: ${bumpWhy}`)
+  } else {
+    const bump = spawnSync(
+      NISH,
+      ["tests/module-storage/persist/bump.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "bump.d.ts"), "-o", `${unionDir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    const bareLl = path.join(unionDir, "bump-bare.ll")
+    if (bump.status === 0) {
+      const ir = fs.readFileSync(path.join(unionDir, "bump.ll"), "utf8")
+      fs.writeFileSync(
+        bareLl,
+        ir
+          .replace(/, !nish\.site !\{i32 \d+\}/g, "")
+          .split("\n")
+          .filter((line) => !/^; nish\.sites? /.test(line))
+          .join("\n")
+      )
+    }
+    for (const profile of ["wasm", "wasm-host"]) {
+      const out = path.join(unionDir, `bump.${profile}.wasm`)
+      const linked = bump.status === 0 ? wasmHostLink([bareLl], ["-o", out, "--profile", profile]) : bump
+      let got = shown(linked)
+      if (linked.status === 0) {
+        try {
+          const { exports: e } = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(out)), {})
+          e.init()
+          const mark = e.nish_arena_mark()
+          e.step()
+          e.nish_root_keep(mark)
+          e.step()
+          e.nish_root_keep(mark)
+          got = e.step()
+        } catch (err) {
+          got = String(err)
+        }
+      }
+      check(
+        `persist: root storage with no string, round_init or panic site links runtime-wasm.c under --profile ${profile} and keeps its root`,
+        got === 3,
+        String(got)
+      )
+    }
+  }
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`persist: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "persist")
+    fs.rmSync(dir, { recursive: true, force: true })
+    for (const [stem, source, steps, says] of [
+      ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
+      ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
+      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
+      ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
+    ]) {
+      const out = path.join(dir, stem)
+      fs.mkdirSync(out, { recursive: true })
+      const compiled = spawnSync(
+        NISH,
+        [source, "--target", "wasm32", "--emit-dts", path.join(out, `${stem}.d.ts`), "-o", `${out}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      check(`persist: ${source} compiles for wasm32 with --emit-dts`, compiled.status === 0, shown(compiled))
+      if (compiled.status !== 0) {
+        continue
+      }
+      const loader = fs.readFileSync(path.join(out, `${stem}.mjs`), "utf8")
+      check(
+        `persist: ${stem}'s loader hands each call's arena to nish_root_keep, not nish_arena_release`,
+        loader.includes("raw.nish_root_keep(mark)") && !loader.includes("raw.nish_arena_release("),
+        loader
+      )
+      check(
+        `persist: ${stem}'s loader keeps the panic kind a failed keep recorded and only marks a bare trap`,
+        /raw\.nish_root_keep\(mark\);\s*\} catch \(e\) \{\s*if \(state\.dead === null\) \{\s*state\.dead = new NishPanic\([^;]*"trap", -1\);\s*\}\s*throw e;/.test(loader),
+        loader
+      )
+      const lls = fs
+        .readdirSync(out)
+        .filter((f) => f.endsWith(".ll"))
+        .map((f) => path.join(out, f))
+      const wasm = path.join(out, `${stem}.wasm`)
+      const plain = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", path.join(out, `${stem}-plain.wasm`), "--profile", "wasm"])
+      check(`persist: ${stem} links under --profile wasm, which defines nish_runtime_root_keep too`, plain.status === 0, shown(plain))
+      const linked = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", wasm, "--profile", "wasm-host"])
+      check(`persist: ${stem} links under --profile wasm-host`, linked.status === 0, shown(linked))
+      if (linked.status !== 0) {
+        continue
+      }
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, steps], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `persist: ${stem} ${says}`,
+        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: ${steps} steps`),
+        shown(ran)
+      )
     }
   }
 }

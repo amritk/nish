@@ -652,7 +652,9 @@ a.nish-hero__cta:hover {
   gap: 14px 0;
 }
 .nish-hero__terminal {
+  position: relative;
   grid-column: 1 / -1;
+  cursor: text;
 }
 
 .nish-hero__window {
@@ -774,6 +776,30 @@ a.nish-hero__cta:hover {
 }
 .nish-hero__out {
   animation: nish-hero-out var(--nish-cycle) var(--nish-ease) infinite;
+}
+
+/* The terminal takes a line, through a hidden input: off-screen text would
+   scroll the page to it, so it sits inside the terminal, unseen, at 16px so
+   iOS does not zoom in on focus. While the terminal has focus the hero's
+   animation holds on its last frame; the shell (/break/shell.mjs) styles the
+   rest once it loads. */
+.nish-hero__input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+}
+.nish-hero__terminal:has(.nish-hero__input:focus-visible) {
+  outline: 2px solid var(--scalar-color-accent);
+  outline-offset: 2px;
+}
+.nish-hero__terminal:focus-within * {
+  animation: none;
 }
 
 /* The middle of the stage: beams, the compiler, the targets. */

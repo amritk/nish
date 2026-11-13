@@ -429,15 +429,18 @@ export class Http1Parser {
     // head kept, at HTTP1_FIRST_INPUT and HTTP1_FIRST_HEAD bytes: a parser
     // that is built and never fed (a pool's spare slot) costs neither, and a
     // caller that lends them out between requests puts empty ones here.
-    // The spans are made first: the arena places each block after the last,
-    // so their header and first entries sit just behind the parser's fields
-    // rather than behind four empty arrays.
-    this.spans = new Array<i32>(64)
+    // The spans likewise wait for the first field line (`http1SpanSet`). An
+    // empty array cannot be written, only replaced, so one serves for both
+    // buffers. The lists share one only until the `restart` below, which
+    // replaces both while `keepText` is on, as it is here even for a parser
+    // `Http1Connection` turns it off on: the sharing saves one empty array,
+    // not both.
+    this.spans = []
     this.buf = []
     this.body = this.buf
-    this.head = []
+    this.head = this.buf
     this.names = []
-    this.values = []
+    this.values = this.names
     this.tally = new Http1ListTally()
     this.restart()
   }
@@ -650,6 +653,8 @@ export class Http1Parser {
 export const HTTP1_FIRST_INPUT: i32 = 1024
 /** The head buffer a parser makes for its first head. */
 export const HTTP1_FIRST_HEAD: i32 = 256
+/** The spans a parser makes at its first field line: four per field, room for sixteen. */
+const HTTP1_FIRST_SPANS: i32 = 64
 
 /** Makes room for `len` more bytes at `p.end`, moving the live bytes down first. */
 const http1Reserve = (p: Http1Parser, len: i32): void => {
@@ -1051,11 +1056,11 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   return at
 }
 
-/** Sets `spans[at]`, growing the array when it must. */
+/** Sets `spans[at]`, growing the array when it must: first to `HTTP1_FIRST_SPANS`, then by doubling. */
 const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
   if (at >= toI32(p.spans.length)) {
     const old: i32[] = p.spans
-    const grown: i32[] = new Array<i32>(2 * at + 4)
+    const grown: i32[] = new Array<i32>(at < HTTP1_FIRST_SPANS ? HTTP1_FIRST_SPANS : 2 * at + 4)
     for (let k: i32 = 0; k < toI32(old.length) && k < toI32(grown.length); k += 1) {
       grown[k] = old[k]
     }

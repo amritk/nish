@@ -52,11 +52,15 @@ Options:
                        refuse, before downloading anything, unless the release
                        asset this machine resolves is <name>, e.g.
                        nish-0.15.0-x86_64-linux.tar.gz
-  --uninstall          remove the install directory and stop
+  --no-modify-path     leave shell startup files alone; print the PATH line
+                       to add instead
+  --uninstall          remove the install directory, and the PATH line this
+                       script added, and stop
   -h, --help           this text
 
 Environment:
   NISH_INSTALL         same as --dir
+  NISH_NO_MODIFY_PATH  1 is the same as --no-modify-path
   NISH_REQUIRE_ATTESTATION
                        1 refuses an install whose build provenance
                        attestation is not checked: no usable gh, or a
@@ -68,6 +72,12 @@ When the GitHub CLI is installed and signed in, a release after 0.21.0 also
 has its build provenance attestation checked with `gh attestation verify`,
 and one that fails is refused. Without gh that check is skipped, with a note,
 or refused with NISH_REQUIRE_ATTESTATION=1.
+
+Unless told not to, it puts the install's bin/ on your PATH in the startup
+file of the shell $SHELL names: ~/.zshrc for zsh, ~/.bashrc for bash
+(~/.bash_profile on macOS), conf.d/nish.fish for fish, and ~/.profile for any
+other. The line sits between `# >>> nish >>>` markers, is added once, and
+--uninstall takes it out.
 
 Upgrading is running this again: it installs over an existing install, and
 says nothing needs doing when the version already matches.
@@ -319,6 +329,192 @@ nish_gh_cannot_verify() {
   done
 }
 
+# ---- PATH --------------------------------------------------------------------
+#
+# Printing an `export PATH=` line for the user to paste left nearly everyone
+# who ran the one-liner at `command not found: nish`. So the line goes into
+# the startup file of the shell `$SHELL` names, between two marker lines that
+# make a second install a no-op and let --uninstall take it out again.
+# --no-modify-path or NISH_NO_MODIFY_PATH=1 leaves every file alone; CI and
+# scripts/fetch-seed.sh pass it, since a seed in build/ is no one's command.
+#
+# None of this reaches the shell the user typed `curl | sh` into: the script
+# runs in a child of it, and a child cannot change its parent's environment.
+# That is why the closing message names the file to source.
+
+NISH_PATH_BEGIN="# >>> nish >>>"
+NISH_PATH_END="# <<< nish <<<"
+
+# The file a new terminal running shell $1 (a path or a name) reads, for a
+# system $2 (`uname -s`) and a home directory $3.
+#
+# bash differs by system because terminals do: Linux ones start interactive
+# non-login shells, which read ~/.bashrc, and macOS's Terminal starts login
+# shells, which read the first of ~/.bash_profile, ~/.bash_login and
+# ~/.profile that exists and nothing else. Creating ~/.bash_profile beside an
+# existing ~/.profile would make bash stop reading ~/.profile, so on macOS the
+# one bash already reads is the one written. fish gets a file of its own in
+# conf.d/, which it reads by itself. Every other shell gets ~/.profile, which
+# a POSIX login shell reads.
+nish_profile_for() {
+  case "${1##*/}" in
+    zsh) printf '%s/.zshrc\n' "${ZDOTDIR:-$3}" ;;
+    bash)
+      if [ "$2" = Darwin ]; then
+        for _f in .bash_profile .bash_login .profile; do
+          [ -e "$3/$_f" ] && { printf '%s/%s\n' "$3" "$_f"; return 0; }
+        done
+        printf '%s/.bash_profile\n' "$3"
+      else
+        printf '%s/.bashrc\n' "$3"
+      fi
+      ;;
+    fish) printf '%s/fish/conf.d/nish.fish\n' "${XDG_CONFIG_HOME:-$3/.config}" ;;
+    *) printf '%s/.profile\n' "$3" ;;
+  esac
+}
+
+# Why a directory cannot go into a startup file, or nothing when it can. The
+# line holds it in single quotes, which every one of these shells reads as
+# literal text except for a quote itself and, in fish, a backslash; a newline
+# would split the marked block and a colon would split PATH.
+nish_path_unsafe() {
+  case "$1" in
+    *"'"* | *"\\"* | *:*) echo "its path holds a quote, a backslash or a colon" ;;
+    *"
+"*) echo "its path holds a newline" ;;
+  esac
+}
+
+# The marked block that puts directory $2 on PATH, for the shell $1 names.
+nish_path_block() {
+  _q="$(nish_shell_quote "$2")"
+  printf '%s\n' "$NISH_PATH_BEGIN"
+  printf '%s\n' "# Added by nish's install.sh; \`sh install.sh --uninstall\` removes it."
+  case "${1##*/}" in
+    fish)
+      printf 'if not contains -- %s $PATH\n' "$_q"
+      printf '    set -gx PATH %s $PATH\n' "$_q"
+      printf 'end\n'
+      ;;
+    *) printf 'export PATH=%s:"$PATH"\n' "$_q" ;;
+  esac
+  printf '%s\n' "$NISH_PATH_END"
+}
+
+# Whether file $1 holds a marked block for directory $2.
+nish_path_has_block() {
+  [ -f "$1" ] || return 1
+  NISH_NEEDLE="$(nish_shell_quote "$2")" awk -v b="$NISH_PATH_BEGIN" -v e="$NISH_PATH_END" '
+    $0 == b { inb = 1; next }
+    $0 == e { inb = 0; next }
+    inb && index($0, ENVIRON["NISH_NEEDLE"]) { found = 1 }
+    END { exit !found }' "$1"
+}
+
+# Append the block for directory $3 to file $2, for shell $1; the caller has
+# checked it is not there already. Appending, rather than writing the file
+# anew, keeps a startup file that is a symlink into a dotfiles checkout a
+# symlink.
+nish_path_add() {
+  mkdir -p "$(dirname "$2")" || return 1
+  # A last line with no newline would run into the marker.
+  if [ -s "$2" ] && [ -n "$(tail -c 1 "$2")" ]; then
+    printf '\n' >>"$2" || return 1
+  fi
+  nish_path_block "$1" "$3" >>"$2"
+}
+
+# Take the block for directory $2 out of file $1, leaving every other line,
+# and blocks for other directories, as they were. Written back through `cat`
+# rather than moved, for the symlink's sake; a fish file that held nothing
+# but the block goes.
+nish_path_remove() {
+  nish_path_has_block "$1" "$2" || return 1
+  _out="$(mktemp)" || return 1
+  NISH_NEEDLE="$(nish_shell_quote "$2")" awk -v b="$NISH_PATH_BEGIN" -v e="$NISH_PATH_END" '
+    $0 == b { inb = 1; buf = $0 "\n"; mine = 0; next }
+    inb {
+      buf = buf $0 "\n"
+      if (index($0, ENVIRON["NISH_NEEDLE"])) mine = 1
+      if ($0 == e) { inb = 0; if (!mine) printf "%s", buf; buf = "" }
+      next
+    }
+    { print }
+    END { if (inb) printf "%s", buf }' "$1" >"$_out" && cat "$_out" >"$1"
+  _st=$?
+  rm -f "$_out"
+  [ "$_st" -eq 0 ] || return 1
+  case "$1" in
+    */fish/conf.d/nish.fish) [ -s "$1" ] || rm -f "$1" ;;
+  esac
+  return 0
+}
+
+# Every startup file an install of this script's may have written, for
+# --uninstall: the user may have changed shells since.
+nish_path_candidates() {
+  printf '%s/.zshrc\n' "${ZDOTDIR:-$1}"
+  [ -z "${ZDOTDIR:-}" ] || [ "$ZDOTDIR" = "$1" ] || printf '%s/.zshrc\n' "$1"
+  for _f in .bashrc .bash_profile .bash_login .profile; do
+    printf '%s/%s\n' "$1" "$_f"
+  done
+  printf '%s/fish/conf.d/nish.fish\n' "${XDG_CONFIG_HOME:-$1/.config}"
+}
+
+# The command that reads file $2 into a running shell $1. `source` is not
+# POSIX, and ~/.profile may be read by a shell without it.
+nish_source_cmd() {
+  case "${1##*/}" in
+    zsh | bash | fish) printf 'source %s\n' "$(nish_shell_quote "$2")" ;;
+    *) printf '. %s\n' "$(nish_shell_quote "$2")" ;;
+  esac
+}
+
+# Put directory $1 on PATH for new terminals, or say how to, and say which.
+# Sets nish_path_manual when the user is left to do it themselves.
+nish_setup_path() {
+  _bin="$1"
+  nish_path_manual=""
+  case ":$PATH:" in
+    *":$_bin:"*)
+      say "That directory is already on your PATH."
+      return 0
+      ;;
+  esac
+  _why=""
+  if [ -n "$no_modify_path" ]; then
+    _why="skip"
+  elif [ -z "${HOME:-}" ]; then
+    _why="HOME is not set"
+  else
+    _why="$(nish_path_unsafe "$_bin")"
+  fi
+  if [ -z "$_why" ]; then
+    _shell="${SHELL:-sh}"
+    _file="$(nish_profile_for "$_shell" "$(uname -s)" "$HOME")"
+    if nish_path_has_block "$_file" "$_bin"; then
+      say "Your PATH gets it from $_file already."
+      say "That takes effect in a new terminal; to use nish in this one, run:"
+      say ""
+      say "    $(nish_source_cmd "$_shell" "$_file")"
+      return 0
+    elif nish_path_add "$_shell" "$_file" "$_bin"; then
+      say "Added it to your PATH in $_file."
+      say "That takes effect in a new terminal; to use nish in this one, run:"
+      say ""
+      say "    $(nish_source_cmd "$_shell" "$_file")"
+      return 0
+    fi
+    _why="$_file could not be written"
+  fi
+  nish_path_manual=1
+  [ "$_why" = skip ] || say "Your shell profile was not changed: $_why."
+  say "Put it on your PATH by adding this to your shell profile:"
+  say ""
+  say "    export PATH=\"$_bin:\$PATH\""
+}
+
 # Sourced for the functions alone, by the tests that check them against
 # seed-targets.json and against the defect above. Everything below is the
 # install.
@@ -328,6 +524,8 @@ version=""
 install_dir="${NISH_INSTALL:-$HOME/.nish}"
 force=""
 uninstall=""
+no_modify_path=""
+[ "${NISH_NO_MODIFY_PATH:-}" = "1" ] && no_modify_path=1
 expect_tarball=""
 
 while [ $# -gt 0 ]; do
@@ -342,6 +540,7 @@ while [ $# -gt 0 ]; do
       { [ $# -ge 2 ] && [ -n "$2" ]; } || die "--expect-tarball needs a file name"
       expect_tarball="$2"; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
+    --no-modify-path) no_modify_path=1; shift ;;
     -*) die "unknown option $1 (try --help)" ;;
     *) [ -z "$version" ] || die "two versions given: $version and $1"; version="$1"; shift ;;
   esac
@@ -355,7 +554,16 @@ if [ -n "$uninstall" ]; then
     die "$install_dir has no bin/nish, so it is not an install of this script's; not removing it"
   rm -rf "$install_dir"
   say "removed $install_dir"
-  say "If you added it to your PATH, take that line out of your shell profile."
+  # Every file, not only the current shell's: the block names this directory,
+  # so one written for another install is left where it is.
+  if [ -n "${HOME:-}" ]; then
+    nish_path_candidates "$HOME" | while IFS= read -r nish_rc; do
+      if nish_path_remove "$nish_rc" "$install_dir/bin"; then
+        say "removed the PATH line from $nish_rc"
+      fi
+    done
+  fi
+  say "If you added it to your PATH yourself, take that line out of your shell profile."
   exit 0
 fi
 
@@ -444,6 +652,10 @@ have="$(nish_installed_version "$install_dir")"
 if [ "$have" = "$plain" ] && [ -z "$force" ]; then
   say "nish $plain is already installed in $install_dir"
   say "Nothing to do. --force reinstalls it."
+  # A user who installed before this script set PATH up, and runs it again
+  # to get that, lands here.
+  say ""
+  nish_setup_path "$install_dir/bin"
   exit 0
 fi
 
@@ -616,29 +828,21 @@ installed="nish $final"
 
 say ""
 say "$installed is in $install_dir/bin"
-case ":$PATH:" in
-  *":$install_dir/bin:"*)
-    say ""
-    say "That directory is already on your PATH."
-    ;;
-  *)
-    say ""
-    say "Put it on your PATH by adding this to your shell profile:"
-    say ""
-    say "    export PATH=\"$install_dir/bin:\$PATH\""
-    ;;
-esac
+say ""
+nish_setup_path "$install_dir/bin"
 say ""
 say "  nish --version          what you just installed"
 say "  nish upgrade            upgrade to the latest release"
 say "  sh install.sh --help    versions, --dir, --uninstall"
-say ""
 # Not a symlink into /usr/local/bin. A symlink leaves argv[0] pointing at the
 # link, and the compiler does not resolve one before looking for its runtime
 # next door -- the same defect the exec above works around, reached a different
 # way. Copy the wrapper if you want it somewhere else; it holds an absolute
 # path and works from anywhere.
-say "To put it somewhere already on your PATH, copy the wrapper rather than"
-say "linking it -- it holds an absolute path, and a symlink would not resolve:"
-say ""
-say "    cp $install_dir/bin/nish ~/.local/bin/nish"
+if [ -n "$nish_path_manual" ]; then
+  say ""
+  say "To put it somewhere already on your PATH, copy the wrapper rather than"
+  say "linking it -- it holds an absolute path, and a symlink would not resolve:"
+  say ""
+  say "    cp $install_dir/bin/nish ~/.local/bin/nish"
+fi

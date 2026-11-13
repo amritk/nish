@@ -1,0 +1,1 @@
+Root storage `world` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead

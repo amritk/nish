@@ -242,6 +242,22 @@ export class RuntimeTable {
     )
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE))
+    // WP55: keeps what the root tables reach and releases the rest of the call (runtime/runtime-wasm.c).
+    this.add(
+      plain(
+        "nish_runtime_root_keep",
+        "declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    // WP55: empties every root, then the arena; root storage's nish_reset_arena and nish_free_arena.
+    this.add(
+      plain(
+        "nish_runtime_root_reset",
+        "declare void @nish_runtime_root_reset(i8* noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
     // WP46: `nish:region`'s calls (runtime/runtime-region.c), each written
     // by the body of one of `std/region.ts`'s intrinsics (`src/emit-region.ts`).
     // `enter` and `leave` swap the thread's arena, so every one is a write.

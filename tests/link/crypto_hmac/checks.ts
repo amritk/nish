@@ -129,6 +129,51 @@ const sha512InChunks = (key: u8[], data: u8[], chunk: i32): string => {
   return hexOf(mac.digest());
 };
 
+/** The tag `HmacSha256.digestInto` writes at offset 0, as hex. */
+const sha256IntoHex = (key: u8[], data: u8[]): string => {
+  const from: i32 = 0;
+  const mac = new HmacSha256(key);
+  mac.update(data, from, toI32(data.length));
+  const into: u8[] = new Array<u8>(32);
+  mac.digestInto(into, from);
+  return hexOf(into);
+};
+
+/** A fresh 32-byte array that escapes, so it is allocated as a tag is. */
+const freshTag = (): u8[] => new Array<u8>(32);
+
+/** Arena bytes one escaping 32-byte array takes, the cost of a tag. */
+const tagCost = (): i64 => {
+  const before: i64 = Arena.used();
+  const tag: u8[] = freshTag();
+  const cost: i64 = Arena.used() - before;
+  tag[0] = toU8(1);
+  return cost;
+};
+
+/** Arena bytes `HmacSha256.digest` takes, keyed and fed before the count starts. */
+const digestCost = (key: u8[], data: u8[]): i64 => {
+  const from: i32 = 0;
+  const mac = new HmacSha256(key);
+  mac.update(data, from, toI32(data.length));
+  const before: i64 = Arena.used();
+  const tag: u8[] = mac.digest();
+  const cost: i64 = Arena.used() - before;
+  tag[0] = toU8(1);
+  return cost;
+};
+
+/** Arena bytes `HmacSha256.digestInto` takes, its tag array made before the count starts. */
+const digestIntoCost = (key: u8[], data: u8[]): i64 => {
+  const from: i32 = 0;
+  const mac = new HmacSha256(key);
+  mac.update(data, from, toI32(data.length));
+  const tag: u8[] = new Array<u8>(32);
+  const before: i64 = Arena.used();
+  mac.digestInto(tag, from);
+  return Arena.used() - before;
+};
+
 /** Whether every byte of `xs` is zero. */
 const zeroBytes = (xs: u8[]): boolean => {
   let acc: i32 = 0;
@@ -431,6 +476,43 @@ export const hmacChecks = (): i32 => {
   wiped512.update(data2, start, toI32(data2.length));
   t.eqStr("HmacSha512.digest answers the tag", hexOf(wiped512.digest()), hexOf(tag512));
   t.ok("and leaves both of HmacSha512's hashers zeroed", sha512Wiped(wiped512));
+  // `digestInto` writes the same tag into the caller's window, leaves the bytes
+  // around it alone, and wipes the hashers and the inner-digest buffer too.
+  const into256 = new HmacSha256(key6);
+  into256.update(data7, start, toI32(data7.length));
+  const window256: u8[] = repeated(0xaa, 34);
+  const at: i32 = 1;
+  into256.digestInto(window256, at);
+  t.eqStr("HmacSha256.digestInto writes RFC 4231 test case 7's tag", hexOf(prefix(window256, 33)), "aa" + tag7Sha256);
+  t.ok("and leaves the byte after the window alone", window256[33] === toU8(0xaa));
+  t.ok("and leaves both of HmacSha256's hashers zeroed", sha256Wiped(into256));
+  t.ok("and leaves HmacSha256's inner-digest buffer zeroed", zeroBytes(into256.innerDigest));
+  const noBytes: i64 = 0;
+  t.eqI64("HmacSha256.digestInto allocates nothing, with a 131-byte key", digestIntoCost(key6, data7), noBytes);
+  t.eqI64("HmacSha256.digest allocates only its tag, with a 131-byte key", digestCost(key6, data7), tagCost());
+  t.eqI64("and so does it with a key shorter than the block", digestCost(key2, data2), tagCost());
+  t.eqI64("and digestInto allocates nothing with one either", digestIntoCost(key2, data2), noBytes);
+  t.ok(
+    "HmacSha256.digestInto writes RFC 4231 test cases 1-7's tags",
+    sha256IntoHex(key1, data1) === "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7" &&
+      sha256IntoHex(key2, data2) === "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843" &&
+      sha256IntoHex(key3, data3) === "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe" &&
+      sha256IntoHex(key4, data4) === "82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b" &&
+      sha256IntoHex(key5, data5).substring(0, 32) === "a3b6167473100ee06e0c796c2955552b" &&
+      sha256IntoHex(key6, data6) === "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54" &&
+      sha256IntoHex(key6, data7) === tag7Sha256
+  );
+  // The tag window may end exactly at the array's end: at = size - 32, with at > 0.
+  const edgeMac = new HmacSha256(key1);
+  edgeMac.update(data1, start, toI32(data1.length));
+  const tight: u8[] = new Array<u8>(33);
+  const one: i32 = 1;
+  edgeMac.digestInto(tight, one);
+  t.eqStr(
+    "HmacSha256.digestInto writes a window that ends at the array's last byte",
+    hexOf(tight),
+    "00b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+  );
   // A scratch keyed with a key longer than its block hashes the key in its
   // inner hasher first; starting that hasher again must not leave the key's
   // last partial block behind in it.
