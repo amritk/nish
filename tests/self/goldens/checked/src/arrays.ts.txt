@@ -30,36 +30,6 @@ import indexOfName from "./generics" -> function @indexOfName
 import checkIndexArgument from "./members" -> function @checkIndexArgument
 import isGlobalMapType from "./members" -> function @isGlobalMapType
 import mapReadSpelling from "./members" -> function @mapReadSpelling
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CASE from "./nodes" -> const N_CASE
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_DEFAULT from "./nodes" -> const N_DEFAULT
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_THIS from "./nodes" -> const N_THIS
-import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_READONLY from "./nodes" -> const N_TYPE_READONLY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
-import N_VAR from "./nodes" -> const N_VAR
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
 import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_USING from "./nodes" -> const FLAG_USING
 import Node from "./nodes" -> struct Node
@@ -390,7 +360,7 @@ function annotationName(node: Node, levels: string[]): Node | null -> @annotatio
   stackSites=0 stackLocals=0
   local -5:7 at: Node (let)
   local +3:13 members: Node[] (const)
-  local +11:13 args: Node[] (const)
+  local +14:13 args: Node[] (const)
 function levelled(name: string, levels: string[]): string -> @levelled
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -439,7 +409,7 @@ function callbackArity(ctx: CheckContext, arg: Node, scope: Scope): i32 -> @call
   stackSites=0 stackLocals=0
   local +0:9 written: Node (const)
   callee +0:19 unwrapParens -> @unwrapParens
-  callee +4:35 Scope.lookup -> @Scope.lookup
+  callee +4:42 Scope.lookup -> @Scope.lookup
   local +7:9 bound: FunctionSig | null (const)
   callee +7:17 FunctionBindings.get -> @FunctionBindings.get
   local +8:9 fn: FunctionSig | null (const)
@@ -513,7 +483,7 @@ function checkArrayMethod(ctx: CheckContext, call: Node, access: Node, args: Nod
   local +37:9 spelled: string (const)
   callee +37:19 TypeTable.typeName -> @TypeTable.typeName
   local +47:9 elemContext: i32 (const)
-  callee +47:62 TypeTable.isEntered -> @TypeTable.isEntered
+  callee +47:69 TypeTable.isEntered -> @TypeTable.isEntered
   callee +49:10 checkBuiltinArity -> @checkBuiltinArity
   callee +50:14 CheckContext.numberType -> @CheckContext.numberType
   local +52:11 got: i32 (const)
@@ -762,9 +732,9 @@ function elementSource(program: CheckedProgram, table: TypeTable, expr: Node): N
   stackSites=0 stackLocals=0
   local +0:9 inner: Node (const)
   callee +0:17 unwrapParens -> @unwrapParens
-  callee +1:33 inlineArrayElement -> @inlineArrayElement
-  local +5:11 receiver: Node (const)
-  callee +6:9 inlineArrayElement -> @inlineArrayElement
+  callee +1:40 inlineArrayElement -> @inlineArrayElement
+  local +9:11 receiver: Node (const)
+  callee +10:9 inlineArrayElement -> @inlineArrayElement
 function collectMutations(program: CheckedProgram, table: TypeTable, call: Node, out: Mutation[]): void -> @collectMutations
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -802,7 +772,7 @@ function slotStoreArray(program: CheckedProgram, table: TypeTable, node: Node): 
   stackSites=0 stackLocals=0
   local +0:9 target: Node (const)
   callee +0:18 unwrapParens -> @unwrapParens
-  callee +1:35 storesInlineElements -> @storesInlineElements
+  callee +1:42 storesInlineElements -> @storesInlineElements
 function RefWalk.constructor(this: RefWalk, program: CheckedProgram, table: TypeTable, ctx: CheckContext | null, overwrites: SlotOverwrite[] | null, aliased: StringSet): void -> @RefWalk.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: aliased ctx overwrites program table
@@ -826,7 +796,7 @@ function RefWalk.holdTaskInputs(this: RefWalk, node: Node): void -> @RefWalk.hol
   local -19:11 receiver: Node (const)
   callee -19:22 unwrapParens -> @unwrapParens
   local -18:11 scope: Local | null (const)
-  callee -17:35 sourceLocal -> @sourceLocal
+  callee -17:42 sourceLocal -> @sourceLocal
   local -13:11 args: Node[] (const)
   local -12:11 names: Node[] (const)
   local -11:9 k: i32 (let)
@@ -936,16 +906,16 @@ function RefWalk.visit(this: RefWalk, node: Node): void -> @RefWalk.visit [metho
   local -3:13 declaredDepth: i32 (const)
   local -2:18 child: Node (const)
   local -1:15 expression: Node (const)
-  callee -1:57 unwrapParens -> @unwrapParens
+  callee -1:63 unwrapParens -> @unwrapParens
   callee +2:9 RefWalk.visit -> @RefWalk.visit
   callee +6:9 RefWalk.readHeld -> @RefWalk.readHeld
   callee +8:7 RefWalk.dropTo -> @RefWalk.dropTo
-  callee +12:7 RefWalk.visitLoop -> @RefWalk.visitLoop
-  callee +16:7 RefWalk.visitCall -> @RefWalk.visitCall
-  callee +20:7 RefWalk.visitDeclaration -> @RefWalk.visitDeclaration
-  callee +23:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  callee +26:5 RefWalk.overwrite -> @RefWalk.overwrite
-  callee +28:7 RefWalk.visitAssignment -> @RefWalk.visitAssignment
+  callee +17:7 RefWalk.visitLoop -> @RefWalk.visitLoop
+  callee +21:7 RefWalk.visitCall -> @RefWalk.visitCall
+  callee +25:7 RefWalk.visitDeclaration -> @RefWalk.visitDeclaration
+  callee +28:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  callee +31:5 RefWalk.overwrite -> @RefWalk.overwrite
+  callee +33:7 RefWalk.visitAssignment -> @RefWalk.visitAssignment
 function RefWalk.visitChildren(this: RefWalk, node: Node): void -> @RefWalk.visitChildren [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visit
@@ -1167,7 +1137,7 @@ function collectAliased(program: CheckedProgram, table: TypeTable, node: Node, p
   callee +9:7 StringSet.add -> @StringSet.add
   local +13:11 local: Local | null (const)
   local +14:11 initializer: Node (const)
-  callee +15:60 isNewArrayValue -> @isNewArrayValue
+  callee +15:67 isNewArrayValue -> @isNewArrayValue
   local +16:13 elem: string (const)
   callee +16:20 inlineArrayElement -> @inlineArrayElement
   callee +18:9 StringSet.add -> @StringSet.add

@@ -22,21 +22,7 @@ import {
   loopScopeOf,
   reclaimsReturnedString,
 } from "./escape"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_FOR,
-  N_FOR_OF,
-  N_IDENT,
-  N_MEMBER,
-  N_NEW,
-  N_OBJECT,
-  N_TEMPLATE,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { StringBuilder, addJsonQuoted } from "./strings"
 
@@ -158,25 +144,25 @@ const placementAt = (walk: ArenaWalk, scope: i32, flow: i32, escapes: boolean): 
 
 /** What a site allocates, as the report names it, and the callee a call names. */
 const siteKind = (node: Node): string => {
-  if (node.kind === N_NEW) {
+  if (node.kind === NodeKind.New) {
     const callee = node.children[0]
     return callee.text === "Array" ? "array" : "new"
   }
-  if (node.kind === N_OBJECT) {
+  if (node.kind === NodeKind.Object) {
     return "object"
   }
-  if (node.kind === N_ARRAY) {
+  if (node.kind === NodeKind.Array) {
     return "array"
   }
-  if (node.kind === N_TEMPLATE || node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Template || node.kind === NodeKind.Binary) {
     return "string"
   }
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     if (dottedName(node.children[0]) === "console.log") {
       return "print"
     }
     const callee = node.children[0]
-    if (callee.kind === N_MEMBER && callee.text === "push") {
+    if (callee.kind === NodeKind.Member && callee.text === "push") {
       return "push"
     }
     return "builtin"
@@ -190,14 +176,14 @@ const siteKind = (node: Node): string => {
  * `nish:` import renamed on the way in still reads as what it allocates.
  */
 const builtinName = (program: CheckedProgram, node: Node): string => {
-  if (node.kind !== N_CALL) {
+  if (node.kind !== NodeKind.Call) {
     return ""
   }
   const callee = node.children[0]
-  if (callee.kind === N_MEMBER) {
+  if (callee.kind === NodeKind.Member) {
     return callee.text
   }
-  return callee.kind === N_IDENT ? builtinNameOf(program, node) : dottedName(callee)
+  return callee.kind === NodeKind.Ident ? builtinNameOf(program, node) : dottedName(callee)
 }
 
 /**
@@ -262,7 +248,7 @@ const walkNode = (
   scope: i32,
   growing: boolean
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   visitSite(walk, node, scope, growing)
@@ -273,19 +259,19 @@ const walkNode = (
   let i = 0
   while (i < node.children.length) {
     const child = node.children[i]
-    if (node.kind === N_BLOCK && isArenaUsing(program, child)) {
+    if (node.kind === NodeKind.Block && isArenaUsing(program, child)) {
       inner = SCOPE_BLOCK
       innerGrowing = false
     }
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
-    const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1)
+    const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
     if (!isLoop || once) {
       walkNode(
         walk,
         program,
         child,
-        node.kind === N_BLOCK ? inner : scope,
-        node.kind === N_BLOCK ? innerGrowing : growing
+        node.kind === NodeKind.Block ? inner : scope,
+        node.kind === NodeKind.Block ? innerGrowing : growing
       )
     } else if (loop !== null && child === loop.body && loop.scoped) {
       walkNode(walk, program, child, SCOPE_PASS, false)

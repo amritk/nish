@@ -41,25 +41,7 @@ import {
   storesInlineElements,
   unwrapParens,
 } from "./emit-util"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_CALL,
-  N_DO,
-  N_FOR,
-  N_FOR_OF,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_PARAM,
-  N_PAREN,
-  N_UNARY,
-  N_VAR_DECL,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { StringMap, StringSet } from "./map"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
 import { CheckedProgram, capturedReads, FunctionSig, inlineElementStruct, ROLE_FUNCTION } from "./program"
@@ -138,11 +120,11 @@ class Side {
     }
     if (this.elem !== "") {
       return (
-        (node.kind === N_IDENT || node.kind === N_MEMBER) &&
+        (node.kind === NodeKind.Ident || node.kind === NodeKind.Member) &&
         inlineArrayElement(walk.program, walk.table, node) === this.elem
       )
     }
-    return node.kind === N_MEMBER && referenceRoot(node) === this.root
+    return node.kind === NodeKind.Member && referenceRoot(node) === this.root
   }
 
   same(other: Side): boolean {
@@ -158,7 +140,7 @@ class Side {
 /** Whether `node` is a use of the binding `local`, under its own name or a `const` alias's. */
 const namesLocal = (index: RecordIndex, node: Node, local: Local): boolean => {
   const bound = index.bindingOf(node)
-  return node.kind === N_IDENT && bound !== null && bound === local
+  return node.kind === NodeKind.Ident && bound !== null && bound === local
 }
 
 /** `p` copied into `into`: the argument of a `push`, an element of a literal, the value of `ps[i] = p`. */
@@ -243,7 +225,7 @@ class RecordIndex {
     const init = unwrapParens(decl.children[2])
     if (
       local.mutable ||
-      init.kind !== N_IDENT ||
+      init.kind !== NodeKind.Ident ||
       inlineElementStruct(walk.program, walk.table, local.type) === null
     ) {
       return
@@ -277,11 +259,11 @@ class RecordIndex {
     if (this.aliased.has(elem)) {
       return new Side(null, "", elem, inner)
     }
-    if (inner.kind === N_IDENT) {
+    if (inner.kind === NodeKind.Ident) {
       const local = sourceLocal(this.walk.program.nodeLocals[inner.id])
       return local === null ? null : new Side(local, "", "", inner)
     }
-    if (inner.kind !== N_MEMBER) {
+    if (inner.kind !== NodeKind.Member) {
       return null
     }
     const root = referenceRoot(inner)
@@ -301,18 +283,18 @@ class RecordIndex {
     }
     let child = literal
     let parent = walk.parents.parentOf(literal)
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       child = parent
       parent = walk.parents.parentOf(parent)
     }
     if (parent === null) {
       return null
     }
-    if (parent.kind === N_VAR_DECL && parent.children[2] === child) {
+    if (parent.kind === NodeKind.VarDecl && parent.children[2] === child) {
       const local = walk.program.nodeLocals[parent.id]
       return local === null ? null : new Side(local, "", "", parent.children[0])
     }
-    if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === child) {
+    if (parent.kind === NodeKind.Binary && parent.text === "=" && parent.children[1] === child) {
       return this.sideOf(parent.children[0])
     }
     return null
@@ -321,7 +303,7 @@ class RecordIndex {
   /** Record `value` as a copy into `into` when it is a binding. */
   addCopy(value: Node, into: Side | null): void {
     const source = unwrapParens(value)
-    if (into === null || source.kind !== N_IDENT) {
+    if (into === null || source.kind !== NodeKind.Ident) {
       return
     }
     const local = this.canonical(this.walk.program.nodeLocals[source.id])
@@ -346,7 +328,7 @@ class RecordIndex {
         this.addCopy(arg, into)
       }
     }
-    if (node.kind === N_ARRAY && storesInlineElements(walk.program, walk.table, node)) {
+    if (node.kind === NodeKind.Array && storesInlineElements(walk.program, walk.table, node)) {
       const into = this.literalSide(node)
       for (const element of node.children) {
         this.addCopy(element, into)
@@ -364,13 +346,13 @@ class RecordIndex {
    */
   indexUse(node: Node): void {
     const walk = this.walk
-    if (node.kind === N_IDENT) {
+    if (node.kind === NodeKind.Ident) {
       const local = this.bindingOf(node)
       if (local !== null) {
         this.add(`ul:${local.name}`, node)
       }
     }
-    if (node.kind !== N_IDENT && node.kind !== N_MEMBER) {
+    if (node.kind !== NodeKind.Ident && node.kind !== NodeKind.Member) {
       return
     }
     const elem = inlineArrayElement(walk.program, walk.table, node)
@@ -378,7 +360,7 @@ class RecordIndex {
       return
     }
     this.add(`ue:${elem}`, node)
-    if (node.kind === N_MEMBER) {
+    if (node.kind === NodeKind.Member) {
       const root = referenceRoot(node)
       if (root !== "") {
         this.add(`ur:${root}`, node)
@@ -394,20 +376,20 @@ class RecordIndex {
    */
   indexWrite(node: Node): void {
     const writes =
-      (node.kind === N_BINARY && isAssignmentOperator(node.text)) ||
-      (node.kind === N_UNARY && (node.text === "++" || node.text === "--"))
-    if (!writes || unwrapParens(node.children[0]).kind !== N_MEMBER) {
+      (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) ||
+      (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--"))
+    if (!writes || unwrapParens(node.children[0]).kind !== NodeKind.Member) {
       return
     }
     const record = writtenRecord(node)
-    if (record.kind === N_IDENT) {
+    if (record.kind === NodeKind.Ident) {
       const local = this.canonical(this.walk.program.nodeLocals[record.id])
       if (local !== null) {
         this.add(`wl:${local.name}`, node)
       }
       return
     }
-    if (record.kind === N_INDEX) {
+    if (record.kind === NodeKind.Index) {
       this.addArrayWrite(node, unwrapParens(record.children[0]))
     }
   }
@@ -443,7 +425,7 @@ class RecordIndex {
     while (j < args.length) {
       const arg = unwrapParens(args[j])
       const effect = this.argumentEffectOf(node, arg, j)
-      if ((effect & EFFECT_WRITE) !== 0 && arg.kind === N_IDENT) {
+      if ((effect & EFFECT_WRITE) !== 0 && arg.kind === NodeKind.Ident) {
         const local = this.bindingOf(arg)
         if (local !== null) {
           this.add(`wl:${local.name}`, node)
@@ -452,7 +434,7 @@ class RecordIndex {
       if (writesThroughArgument(walk, arg, effect)) {
         this.addArrayWrite(node, arrayOfArgument(walk, arg))
       }
-      if ((effect & EFFECT_COPY) !== 0 && arg.kind === N_IDENT) {
+      if ((effect & EFFECT_COPY) !== 0 && arg.kind === NodeKind.Ident) {
         let k = 0
         while (k < args.length) {
           const into = unwrapParens(args[k])
@@ -496,7 +478,7 @@ class RecordIndex {
    * where the call runs them, and nothing else of it is.
    */
   index(node: Node): void {
-    if (node.kind === N_ARROW) {
+    if (node.kind === NodeKind.Arrow) {
       const reads: Node[] = []
       capturedReads(this.walk.program, node, reads)
       if (reads.length > 0) {
@@ -507,10 +489,10 @@ class RecordIndex {
     this.indexCopy(node)
     this.indexUse(node)
     this.indexWrite(node)
-    if (node.kind === N_CALL || node.kind === N_NEW) {
+    if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
       this.indexCall(node)
     }
-    if (node.kind === N_VAR_DECL) {
+    if (node.kind === NodeKind.VarDecl) {
       const local = this.walk.program.nodeLocals[node.id]
       if (local !== null) {
         this.add(`d:${local.name}`, node)
@@ -623,7 +605,10 @@ const writtenRecord = (write: Node): Node => unwrapParens(unwrapParens(write.chi
 const isInside = (inner: Node, outer: Node): boolean => inner.start >= outer.start && inner.end <= outer.end
 
 const isLoop = (node: Node): boolean =>
-  node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
+  node.kind === NodeKind.For ||
+  node.kind === NodeKind.ForOf ||
+  node.kind === NodeKind.While ||
+  node.kind === NodeKind.Do
 
 /**
  * The outermost loop around `node` that runs it again with the same record —
@@ -705,7 +690,7 @@ const unseenBy = (
 
 /** Whether `write`, a field write or a call `RecordIndex` filed as one, writes the record `local` names. */
 const writesRecordLocal = (index: RecordIndex, write: Node, local: Local): boolean => {
-  if (write.kind !== N_CALL && write.kind !== N_NEW) {
+  if (write.kind !== NodeKind.Call && write.kind !== NodeKind.New) {
     return namesLocal(index, writtenRecord(write), local)
   }
   const args = callArguments(write)
@@ -722,9 +707,9 @@ const writesRecordLocal = (index: RecordIndex, write: Node, local: Local): boole
 
 /** Whether `write`, a field write or a call `RecordIndex` filed as one, writes through the array `side`. */
 const writesThrough = (index: RecordIndex, write: Node, side: Side): boolean => {
-  if (write.kind !== N_CALL && write.kind !== N_NEW) {
+  if (write.kind !== NodeKind.Call && write.kind !== NodeKind.New) {
     const record = writtenRecord(write)
-    return record.kind === N_INDEX && side.names(index, unwrapParens(record.children[0]))
+    return record.kind === NodeKind.Index && side.names(index, unwrapParens(record.children[0]))
   }
   const walk = index.walk
   const args = callArguments(write)
@@ -830,11 +815,11 @@ const EFFECT_DEPTH: i32 = 8
 
 /** The arguments of a call or a `new`. */
 const callArguments = (call: Node): Node[] =>
-  call.kind === N_NEW ? call.children[2].children : call.children[1].children
+  call.kind === NodeKind.New ? call.children[2].children : call.children[1].children
 
 /** Whether `expr` is a record this row follows: a binding of one, or an element `ps[i]`. */
 const isRecordValue = (walk: PortabilityWalk, expr: Node): boolean =>
-  (expr.kind === N_IDENT || expr.kind === N_INDEX) &&
+  (expr.kind === NodeKind.Ident || expr.kind === NodeKind.Index) &&
   inlineElementStruct(walk.program, walk.table, walk.program.nodeTypes[expr.id]) !== null
 
 /** Whether handing `arg` over with `effect` writes through an array: the array itself, or an element `ps[i]` written. */
@@ -842,7 +827,7 @@ const writesThroughArgument = (walk: PortabilityWalk, arg: Node, effect: i32): b
   if ((effect & (EFFECT_WRITE | EFFECT_COPY)) === 0) {
     return false
   }
-  if (arg.kind === N_INDEX) {
+  if (arg.kind === NodeKind.Index) {
     return (effect & EFFECT_WRITE) !== 0 && storesInlineElements(walk.program, walk.table, arg.children[0])
   }
   return storesInlineElements(walk.program, walk.table, arg)
@@ -850,14 +835,14 @@ const writesThroughArgument = (walk: PortabilityWalk, arg: Node, effect: i32): b
 
 /** The array an argument `writesThroughArgument` reaches: `ps` of `ps[i]`, or the argument itself. */
 const arrayOfArgument = (walk: PortabilityWalk, arg: Node): Node =>
-  arg.kind === N_INDEX && storesInlineElements(walk.program, walk.table, arg.children[0])
+  arg.kind === NodeKind.Index && storesInlineElements(walk.program, walk.table, arg.children[0])
     ? unwrapParens(arg.children[0])
     : arg
 
 /** Whether the record binding `record` can be copied into the array `array`: its elements are that record. */
 const copiesInto = (walk: PortabilityWalk, record: Node, array: Node): boolean => {
   const program = walk.program
-  if (record.kind !== N_IDENT || !storesInlineElements(program, walk.table, array)) {
+  if (record.kind !== NodeKind.Ident || !storesInlineElements(program, walk.table, array)) {
     return false
   }
   return walk.table.refOf(program.nodeTypes[array.id]) === program.nodeTypes[record.id]
@@ -866,12 +851,12 @@ const copiesInto = (walk: PortabilityWalk, record: Node, array: Node): boolean =
 /** Whether `node` is the identifier `name`, under any parentheses. */
 const namesParameter = (node: Node, name: string): boolean => {
   const inner = unwrapParens(node)
-  return inner.kind === N_IDENT && inner.text === name
+  return inner.kind === NodeKind.Ident && inner.text === name
 }
 
 /** Whether `n` declares `name` again: a variable, or a parameter of an arrow inside it. */
 const redeclares = (n: Node, name: string): boolean => {
-  if ((n.kind === N_VAR_DECL || n.kind === N_PARAM) && namesParameter(n.children[0], name)) {
+  if ((n.kind === NodeKind.VarDecl || n.kind === NodeKind.Param) && namesParameter(n.children[0], name)) {
     return true
   }
   for (const child of n.children) {
@@ -884,7 +869,7 @@ const redeclares = (n: Node, name: string): boolean => {
 
 /** Whether `name` appears anywhere in `n`. */
 const mentionsIdent = (n: Node, name: string): boolean => {
-  if (n.kind === N_IDENT && n.text === name) {
+  if (n.kind === NodeKind.Ident && n.text === name) {
     return true
   }
   for (const child of n.children) {
@@ -930,7 +915,7 @@ class CalleeEffects {
    */
   argument(callees: (FunctionSig | null)[], types: i32[], coercions: i32[], call: Node, j: i32): i32 {
     let sig: FunctionSig | null = null
-    if (call.kind === N_CALL) {
+    if (call.kind === NodeKind.Call) {
       sig = callees[call.id]
       if (sig === null) {
         return builtinEffect(call)
@@ -1002,49 +987,49 @@ class CalleeEffects {
    * captured by an arrow, a method of it called — may be anything.
    */
   uses(n: Node, name: string): i32 {
-    if (n.kind === N_IDENT) {
+    if (n.kind === NodeKind.Ident) {
       return n.text === name ? EFFECT_ANY : 0
     }
-    if (n.kind === N_ARROW) {
+    if (n.kind === NodeKind.Arrow) {
       return mentionsIdent(n, name) ? EFFECT_ANY : 0
     }
     const writes =
-      (n.kind === N_BINARY && isAssignmentOperator(n.text)) ||
-      (n.kind === N_UNARY && (n.text === "++" || n.text === "--"))
+      (n.kind === NodeKind.Binary && isAssignmentOperator(n.text)) ||
+      (n.kind === NodeKind.Unary && (n.text === "++" || n.text === "--"))
     if (writes) {
       const target = unwrapParens(n.children[0])
-      const value = n.kind === N_BINARY ? this.uses(n.children[1], name) : 0
-      if (target.kind === N_MEMBER) {
+      const value = n.kind === NodeKind.Binary ? this.uses(n.children[1], name) : 0
+      if (target.kind === NodeKind.Member) {
         const record = unwrapParens(target.children[0])
         if (namesParameter(record, name)) {
           return EFFECT_WRITE | value
         }
-        if (record.kind === N_INDEX && namesParameter(record.children[0], name)) {
+        if (record.kind === NodeKind.Index && namesParameter(record.children[0], name)) {
           return EFFECT_WRITE | this.uses(record.children[1], name) | value
         }
       }
-      if (target.kind === N_INDEX && namesParameter(target.children[0], name)) {
+      if (target.kind === NodeKind.Index && namesParameter(target.children[0], name)) {
         return EFFECT_STORE | this.uses(target.children[1], name) | value
       }
     }
-    if (n.kind === N_MEMBER && namesParameter(n.children[0], name)) {
+    if (n.kind === NodeKind.Member && namesParameter(n.children[0], name)) {
       return 0
     }
     if (
-      n.kind === N_MEMBER &&
-      n.children[0].kind === N_INDEX &&
+      n.kind === NodeKind.Member &&
+      n.children[0].kind === NodeKind.Index &&
       namesParameter(n.children[0].children[0], name)
     ) {
       return this.uses(n.children[0].children[1], name)
     }
-    if (n.kind === N_ARRAY) {
+    if (n.kind === NodeKind.Array) {
       let effect = 0
       for (const element of n.children) {
         effect = effect | (namesParameter(element, name) ? EFFECT_COPY : this.uses(element, name))
       }
       return effect
     }
-    if (n.kind === N_CALL || n.kind === N_NEW) {
+    if (n.kind === NodeKind.Call || n.kind === NodeKind.New) {
       return this.callUses(n, name)
     }
     let effect = 0
@@ -1058,7 +1043,7 @@ class CalleeEffects {
   callUses(call: Node, name: string): i32 {
     const callee = call.children[0]
     let effect = 0
-    if (call.kind === N_CALL && callee.kind === N_MEMBER) {
+    if (call.kind === NodeKind.Call && callee.kind === NodeKind.Member) {
       const receiver = unwrapParens(callee.children[0])
       if (namesParameter(receiver, name) && callee.text === "push") {
         effect = EFFECT_STORE
@@ -1094,7 +1079,7 @@ class CalleeEffects {
  */
 const builtinEffect = (call: Node): i32 => {
   const callee = call.children[0]
-  if (callee.kind !== N_MEMBER) {
+  if (callee.kind !== NodeKind.Member) {
     return EFFECT_ANY
   }
   const method = callee.text

@@ -12,11 +12,6 @@ import EFFECT_WRITE from "./runtime" -> const EFFECT_WRITE
 import StringSet from "./map" -> struct StringSet
 import compareStrings from "./strings" -> function @compareStrings
 import jsonQuote from "./strings" -> function @jsonQuote
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_NEW from "./nodes" -> const N_NEW
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import ConstInfo from "./program" -> struct ConstInfo

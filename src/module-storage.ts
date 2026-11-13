@@ -31,22 +31,7 @@
 import { parameterSpelling } from "./checker"
 import { CheckContext } from "./context"
 import { dottedName, isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
-import {
-  N_BINARY,
-  N_CALL,
-  N_EXPR_STMT,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_PAREN,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   ConstInfo,
@@ -75,7 +60,7 @@ const STORAGE_MAX_BYTES: i32 = 268435456
  */
 export const isStorageNew = (init: Node, typedElement: i32): boolean => {
   const expr = unwrapParens(init)
-  if (expr.kind !== N_NEW || expr.children[0].kind !== N_IDENT) {
+  if (expr.kind !== NodeKind.New || expr.children[0].kind !== NodeKind.Ident) {
     return false
   }
   return expr.children[0].text === "Array" || typedElement >= 0
@@ -165,23 +150,23 @@ const storageReport = (ctx: CheckContext, info: ConstInfo, node: Node, message: 
  */
 const storageLengthShaped = (info: ConstInfo, expr: Node): boolean => {
   switch (expr.kind) {
-    case N_NUMBER:
+    case NodeKind.Number:
       return true
-    case N_PAREN:
-    case N_UNARY:
+    case NodeKind.Paren:
+    case NodeKind.Unary:
       return expr.children.length === 1 && storageLengthShaped(info, expr.children[0])
-    case N_BINARY:
+    case NodeKind.Binary:
       return storageLengthShaped(info, expr.children[0]) && storageLengthShaped(info, expr.children[1])
-    case N_IDENT: {
+    case NodeKind.Ident: {
       const scope = info.scope
       const target: ConstInfo | null = scope === null ? null : scope.constant(expr.text)
       return target !== null && !target.storage
     }
-    case N_CALL: {
+    case NodeKind.Call: {
       // `wrappingMul(A, B)` under `nish:unsafe` is the one call a constant
       // folds; whether it is that import is the folder's to judge.
       const callee = expr.children[0]
-      return callee.kind === N_IDENT && callee.text.startsWith("wrapping")
+      return callee.kind === NodeKind.Ident && callee.text.startsWith("wrapping")
     }
     default:
       return false
@@ -354,7 +339,7 @@ const storageZeroIsMember = (ctx: CheckContext, info: ConstInfo, elem: i32): boo
 /** The storage `expr` names, or null: a bare identifier bound to module storage. */
 const storageNamed = (ctx: CheckContext, expr: Node): ConstInfo | null => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return null
   }
   const constant = ctx.program.nodeConstants[e.id]
@@ -364,7 +349,7 @@ const storageNamed = (ctx: CheckContext, expr: Node): ConstInfo | null => {
 /** The storage `expr` is an element of (`sim[i]`), or null. */
 const storageElementOf = (ctx: CheckContext, expr: Node): ConstInfo | null => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_INDEX) {
+  if (e.kind !== NodeKind.Index) {
     return null
   }
   return storageNamed(ctx, e.children[0])
@@ -381,7 +366,7 @@ const storageHoldsRecords = (ctx: CheckContext, info: ConstInfo): boolean =>
  */
 export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
   switch (node.kind) {
-    case N_IDENT: {
+    case NodeKind.Ident: {
       const info = storageNamed(ctx, node)
       if (info !== null) {
         ctx.error(
@@ -391,7 +376,7 @@ export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
       }
       return
     }
-    case N_INDEX: {
+    case NodeKind.Index: {
       const info = storageNamed(ctx, node.children[0])
       if (info === null) {
         break
@@ -402,7 +387,7 @@ export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
       }
       return
     }
-    case N_MEMBER: {
+    case NodeKind.Member: {
       const info = storageNamed(ctx, node.children[0])
       if (info !== null) {
         if (node.text !== "length") {
@@ -417,18 +402,18 @@ export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
       }
       break
     }
-    case N_CALL: {
+    case NodeKind.Call: {
       checkStorageCall(ctx, node)
       return
     }
-    case N_BINARY: {
+    case NodeKind.Binary: {
       if (isAssignmentOperator(node.text)) {
         checkStorageAssignment(ctx, node)
         return
       }
       break
     }
-    case N_FOR_OF: {
+    case NodeKind.ForOf: {
       const info = storageNamed(ctx, node.children[1])
       if (info !== null && storageHoldsRecords(ctx, info)) {
         ctx.error(
@@ -486,7 +471,8 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
   const callee = call.children[0]
   const args = call.children[1]
   let pushesCopy = false
-  const method = callee.kind === N_IDENT && args.children.length > 0 ? rewrittenArrayMethod(callee.text) : ""
+  const method =
+    callee.kind === NodeKind.Ident && args.children.length > 0 ? rewrittenArrayMethod(callee.text) : ""
   if (method !== "") {
     // `xs.sort(cmp)`, `xs.map(f)` and the rest were rewritten to a std
     // template called on `xs` (`arrays.ts`).
@@ -496,7 +482,7 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
       return
     }
   }
-  if (callee.kind === N_MEMBER) {
+  if (callee.kind === NodeKind.Member) {
     const info = storageNamed(ctx, callee.children[0])
     if (info !== null) {
       refuseMethod(ctx, info, callee, callee.text)
@@ -542,7 +528,7 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
 const lendsStorage = (ctx: CheckContext, call: Node, i: i32, arg: Node): boolean => {
   const callee = call.children[0]
   const info = storageNamed(ctx, unwrapParens(arg))
-  if (info === null || storageHoldsRecords(ctx, info) || callee.kind !== N_IDENT) {
+  if (info === null || storageHoldsRecords(ctx, info) || callee.kind !== NodeKind.Ident) {
     return false
   }
   // The function the checker bound this call to, never a lookup by name: a
@@ -656,7 +642,7 @@ const lentParamStays = (ctx: CheckContext, sig: FunctionSig, name: string): bool
   let k = 0
   while (k < queue.sigs.length && k < queue.names.length) {
     const next = queue.sigs[k]
-    if (k >= LEND_DEPTH || next.decl.kind !== N_FUNCTION || next.decl.children.length < 4) {
+    if (k >= LEND_DEPTH || next.decl.kind !== NodeKind.FunctionDecl || next.decl.children.length < 4) {
       return false
     }
     if (!lentUsesStay(ctx, next, queue.names[k], next.decl.children[3], null, null, null, queue)) {
@@ -681,7 +667,7 @@ const lentUsesStay = (
   great: Node | null,
   queue: LendQueue
 ): boolean => {
-  if (node.kind === N_IDENT && node.text === name) {
+  if (node.kind === NodeKind.Ident && node.text === name) {
     return lentUseStays(ctx, sig, node, parent, grand, great, queue)
   }
   for (const child of node.children) {
@@ -705,13 +691,13 @@ const lentUseStays = (
   if (parent === null) {
     return false
   }
-  if (parent.kind === N_INDEX) {
+  if (parent.kind === NodeKind.Index) {
     return parent.children[0] === use
   }
-  if (parent.kind === N_FOR_OF) {
+  if (parent.kind === NodeKind.ForOf) {
     return parent.children[1] === use
   }
-  if (parent.kind === N_MEMBER) {
+  if (parent.kind === NodeKind.Member) {
     if (parent.children[0] !== use) {
       return false
     }
@@ -727,22 +713,28 @@ const lentUseStays = (
     return (
       lendInPlaceMethod(parent.text) &&
       grand !== null &&
-      grand.kind === N_CALL &&
+      grand.kind === NodeKind.Call &&
       grand.children[0] === parent &&
       great !== null &&
-      great.kind === N_EXPR_STMT
+      great.kind === NodeKind.ExprStmt
     )
   }
-  if (parent.kind === N_LIST && grand !== null && grand.kind === N_CALL && grand.children[1] === parent) {
+  if (
+    parent.kind === NodeKind.List &&
+    grand !== null &&
+    grand.kind === NodeKind.Call &&
+    grand.children[1] === parent
+  ) {
     // `xs.slice(0, 2)` or `xs.sort(cmp)` in a body checked before this lend
     // was rewritten in place to a std template called on `xs` (`arrays.ts`):
     // judged as the method it was written as, so declaration order is moot.
     const callee = grand.children[0]
     const method =
-      callee.kind === N_IDENT && parent.children[0] === use ? rewrittenArrayMethod(callee.text) : ""
+      callee.kind === NodeKind.Ident && parent.children[0] === use ? rewrittenArrayMethod(callee.text) : ""
     if (method !== "") {
       return (
-        lendSafeMethod(method) || (lendInPlaceMethod(method) && great !== null && great.kind === N_EXPR_STMT)
+        lendSafeMethod(method) ||
+        (lendInPlaceMethod(method) && great !== null && great.kind === NodeKind.ExprStmt)
       )
     }
     // `String.fromBytes(xs, start, end)` copies the bytes into a new string.
@@ -756,10 +748,10 @@ const lengthWritten = (member: Node, grand: Node | null): boolean => {
   if (grand === null) {
     return false
   }
-  if (grand.kind === N_BINARY) {
+  if (grand.kind === NodeKind.Binary) {
     return isAssignmentOperator(grand.text) && grand.children[0] === member
   }
-  return grand.kind === N_UNARY && (grand.text === "++" || grand.text === "--")
+  return grand.kind === NodeKind.Unary && (grand.text === "++" || grand.text === "--")
 }
 
 /** Whether `use` is the bytes argument, in `args`, of `call`, a `String.fromBytes`. */
@@ -784,10 +776,10 @@ const lendCalleeShadowed = (decl: Node, name: string): boolean => {
 
 /** `lendCalleeShadowed` below `decl`'s name: `node`, whose parent is `parent`. */
 const lendNameMentioned = (node: Node, name: string, parent: Node | null): boolean => {
-  if (node.kind === N_IDENT && node.text === name) {
-    return parent === null || parent.kind !== N_CALL || parent.children[0] !== node
+  if (node.kind === NodeKind.Ident && node.text === name) {
+    return parent === null || parent.kind !== NodeKind.Call || parent.children[0] !== node
   }
-  if (node.text === name && node.kind !== N_CALL && node.kind !== N_MEMBER) {
+  if (node.text === name && node.kind !== NodeKind.Call && node.kind !== NodeKind.Member) {
     return true
   }
   for (const child of node.children) {
@@ -827,7 +819,7 @@ const lentOnStays = (
 ): boolean => {
   const callee = call.children[0]
   const home = homeContext(ctx, sig)
-  if (callee.kind !== N_IDENT || home === null || lendCalleeShadowed(sig.decl, callee.text)) {
+  if (callee.kind !== NodeKind.Ident || home === null || lendCalleeShadowed(sig.decl, callee.text)) {
     return false
   }
   // Resolved by name in `sig`'s module, whose body may not be checked yet; a
@@ -855,7 +847,7 @@ const lentOnStays = (
 const checkStorageAssignment = (ctx: CheckContext, node: Node): void => {
   const lhs = unwrapParens(node.children[0])
   const rhs = node.children[1]
-  if (lhs.kind === N_MEMBER && lhs.text === "length") {
+  if (lhs.kind === NodeKind.Member && lhs.text === "length") {
     const info = storageNamed(ctx, lhs.children[0])
     if (info !== null) {
       // `refuseStorageLength` reported it while the assignment was checked.
@@ -864,7 +856,8 @@ const checkStorageAssignment = (ctx: CheckContext, node: Node): void => {
     }
   }
   const target = storageElementOf(ctx, lhs)
-  const inlineTarget = lhs.kind === N_INDEX && storesInlineElements(ctx.program, ctx.table, lhs.children[0])
+  const inlineTarget =
+    lhs.kind === NodeKind.Index && storesInlineElements(ctx.program, ctx.table, lhs.children[0])
   if (target !== null) {
     // `sim[i] = v`, `sim[i] = sim[j]` or `sim[i] += 1`: the target is a place.
     checkStorageUses(ctx, lhs.children[1])

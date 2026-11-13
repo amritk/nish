@@ -68,42 +68,6 @@ import StringSet from "./map" -> struct StringSet
 import compareStrings from "./strings" -> function @compareStrings
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_CALL from "./nodes" -> const N_CALL
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_IF from "./nodes" -> const N_IF
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_PROPERTY from "./nodes" -> const N_PROPERTY
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_TRY from "./nodes" -> const N_TRY
-import N_SPREAD from "./nodes" -> const N_SPREAD
-import N_STRING from "./nodes" -> const N_STRING
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_THIS from "./nodes" -> const N_THIS
-import N_THROW from "./nodes" -> const N_THROW
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR from "./nodes" -> const N_VAR
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
@@ -760,11 +724,11 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   callee +63:18 use -> @use
   local +67:15 target: Node (const)
   callee +67:24 unwrapParens -> @unwrapParens
-  callee +68:40 storesInlineElements -> @storesInlineElements
+  callee +68:47 storesInlineElements -> @storesInlineElements
   callee +69:18 use -> @use
   callee +71:16 use -> @use
   callee +73:14 use -> @use
-  callee +77:36 storesInlineElements -> @storesInlineElements
+  callee +77:43 storesInlineElements -> @storesInlineElements
   callee +78:14 use -> @use
   local +84:13 read: FunctionSig | null (const)
   local +86:15 owner: StructInfo | null (const)
@@ -922,7 +886,7 @@ function yieldsInteriorPointer(unit: AnalysisUnit, table: TypeTable, access: Nod
   local +4:7 parent: Node | null (let)
   callee +4:16 ParentTable.parentOf -> @ParentTable.parentOf
   callee +7:14 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +9:58 isAssignmentTarget -> @isAssignmentTarget
+  callee +9:65 isAssignmentTarget -> @isAssignmentTarget
 function classifyElementHolder(unit: AnalysisUnit, table: TypeTable, holder: Local | null, within: Node | null): ParamUse -> @classifyElementHolder
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via collectRefs
@@ -1062,7 +1026,7 @@ function returnedParameter(callee: FunctionSig): i32 -> @returnedParameter
   local +13:11 e: Node (const)
   callee +13:15 unwrapParens -> @unwrapParens
   local +17:11 index: i32 (const)
-  callee +18:31 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee +19:31 FunctionSig.writtenArity -> @FunctionSig.writtenArity
 function returnsAndBindings(node: Node, returned: Node[], bound: string[]): void -> @returnsAndBindings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1545,7 +1509,7 @@ function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, ini
   pointer init: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 program: CheckedProgram (const)
-  callee +1:33 secretRoleOf -> @secretRoleOf
+  callee +1:40 secretRoleOf -> @secretRoleOf
   local +4:11 args: Node[] (const)
   local +8:11 value: Node (const)
   callee +8:19 unwrapParens -> @unwrapParens
@@ -1655,8 +1619,8 @@ function FactCollector.describe(this: FactCollector, value: Node, desc: ValueDes
   callee -14:15 unwrapParens -> @unwrapParens
   local -13:11 type: i32 (const)
   callee -12:22 FactCollector.isPlainValue -> @FactCollector.isPlainValue
-  callee -6:42 TypeTable.isArray -> @TypeTable.isArray
-  callee -3:42 TypeTable.isStruct -> @TypeTable.isStruct
+  callee -6:49 TypeTable.isArray -> @TypeTable.isArray
+  callee -3:49 TypeTable.isStruct -> @TypeTable.isStruct
   local -2:13 ctor: FunctionSig | null (const)
   callee -2:20 constructorOf -> @constructorOf
   callee -2:50 intrinsicType -> @intrinsicType
@@ -1680,7 +1644,7 @@ function FactCollector.noteOwnStore(this: FactCollector, node: Node): void -> @F
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteSlotStore#0 FactCollector.pathOf#0 FactCollector.pathOf#0 FactCollector.noteSlotStore#0
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2 methodReceiver#0
   stackSites=1 stackLocals=1
-  callee +0:35 isAssignmentOperator -> @isAssignmentOperator
+  callee +0:42 isAssignmentOperator -> @isAssignmentOperator
   local +1:13 target: Node (const)
   callee +1:22 unwrapParens -> @unwrapParens
   callee +3:9 FactCollector.noteSlotStore -> @FactCollector.noteSlotStore
@@ -1723,17 +1687,17 @@ function FactCollector.followsUse(this: FactCollector, parent: Node, at: Node): 
   stackSites=0 stackLocals=0
   local +0:11 program: CheckedProgram (const)
   callee +2:11 isAssignmentOperator -> @isAssignmentOperator
-  local +18:13 bound: Local | null (const)
-  local +22:13 call: Node | null (const)
-  callee +22:20 ParentTable.parentOf -> @ParentTable.parentOf
-  local +32:13 callee: FunctionSig | null (const)
-  local +33:13 owner: StructInfo | null (const)
-  local +34:13 collection: boolean (const)
-  callee +34:44 isCollectionStruct -> @isCollectionStruct
-  callee +35:26 fusedCalleesOf -> @fusedCalleesOf
-  local +38:13 receiver: Node | null (const)
-  callee +38:24 tableReceiver -> @tableReceiver
-  callee +39:57 keepsArguments -> @keepsArguments
+  local +22:13 bound: Local | null (const)
+  local +26:13 call: Node | null (const)
+  callee +26:20 ParentTable.parentOf -> @ParentTable.parentOf
+  local +36:13 callee: FunctionSig | null (const)
+  local +37:13 owner: StructInfo | null (const)
+  local +38:13 collection: boolean (const)
+  callee +38:44 isCollectionStruct -> @isCollectionStruct
+  callee +39:26 fusedCalleesOf -> @fusedCalleesOf
+  local +42:13 receiver: Node | null (const)
+  callee +42:24 tableReceiver -> @tableReceiver
+  callee +43:57 keepsArguments -> @keepsArguments
 function FactCollector.privateArrayOf(this: FactCollector, e: Node): PrivateArray | null -> @FactCollector.privateArrayOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -1908,13 +1872,13 @@ function FactCollector.visit(this: FactCollector, node: Node): void -> @FactColl
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteCaptures#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.noteTableStores#0 FactCollector.addCallee#0 FactCollector.noteCall#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.addUserCallee#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.paramRef#0 FactCollector.noteUse#0 FactCollector.collectStringFacts#0 FactCollector.noteOwnStore#0 FactCollector.noteEscape#0 FactCollector.collectClassFacts#0 FactCollector.collectResultFacts#0 FactCollector.collectArrayFacts#0 FactCollector.collectDivisionFacts#0 FactCollector.collectOverflowFacts#0 FactCollector.collectRangeFacts#0 FactCollector.collectNamespacePropertyFacts#0 FactCollector.collectIdentifierBuiltinFacts#0 FactCollector.orderSites#0 FactCollector.visit#0 FactCollector.orderSites#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteCaptures#1 isCountedLoop#2 fusedCalleesOf#2 tableReceiver#1 FactCollector.addUserCallee#2 FactCollector.noteCall#1 FactCollector.noteTableStores#1 FactCollector.addCallee#2 FactCollector.noteCall#1 FactCollector.addUserCallee#2 FactCollector.noteCall#1 methodReceiver#0 CheckedProgram.floatRemainderOf#1 FactCollector.addUserCallee#2 FactCollector.addUserCallee#2 FactCollector.noteCall#1 FactCollector.paramRef#1 FactCollector.noteUse#2 FactCollector.collectStringFacts#1 FactCollector.noteOwnStore#1 FactCollector.noteEscape#1 FactCollector.collectClassFacts#1 FactCollector.collectResultFacts#1 FactCollector.collectArrayFacts#1 FactCollector.collectDivisionFacts#1 FactCollector.collectOverflowFacts#1 FactCollector.collectRangeFacts#1 FactCollector.collectNamespacePropertyFacts#1 FactCollector.collectIdentifierBuiltinFacts#1
   stackSites=0 stackLocals=0
-  local -14:11 program: CheckedProgram (const)
-  local -7:13 lifted: FunctionSig | null (const)
-  callee -5:9 FactCollector.noteCaptures -> @FactCollector.noteCaptures
+  local -19:11 program: CheckedProgram (const)
+  local -12:13 lifted: FunctionSig | null (const)
+  callee -10:9 FactCollector.noteCaptures -> @FactCollector.noteCaptures
   callee +1:12 isCountedLoop -> @isCountedLoop
   local +8:11 ownSites: i32 (const)
   local +11:11 fused: FunctionSig[] | null (const)
-  callee +12:30 fusedCalleesOf -> @fusedCalleesOf
+  callee +12:37 fusedCalleesOf -> @fusedCalleesOf
   local +14:13 receiver: Node | null (const)
   callee +14:24 tableReceiver -> @tableReceiver
   local +15:18 sig: FunctionSig (const)
@@ -2120,7 +2084,7 @@ function FactCollector.noteWorld(this: FactCollector, node: Node, symbols: strin
   stackSites=0 stackLocals=0
   local -7:11 args: Node[] (const)
   local -6:11 constant: boolean (const)
-  callee -6:73 isNumericLiteral -> @isNumericLiteral
+  callee -6:80 isNumericLiteral -> @isNumericLiteral
   local -2:16 symbol: string (const)
   callee -1:12 isPureRuntime -> @isPureRuntime
 function FactCollector.collectStringFacts(this: FactCollector, node: Node): void -> @FactCollector.collectStringFacts [method]
@@ -2145,7 +2109,7 @@ function FactCollector.collectStringFacts(this: FactCollector, node: Node): void
   local -11:13 op: string (const)
   callee -9:9 StringSet.add -> @StringSet.add
   callee -7:9 StringSet.add -> @StringSet.add
-  callee -3:33 isStringMethodCall -> @isStringMethodCall
+  callee -3:40 isStringMethodCall -> @isStringMethodCall
   local +1:13 name: string (const)
   callee +2:7 FactCollector.addCallees -> @FactCollector.addCallees
   callee +2:23 stringConstructCallees -> @stringConstructCallees
@@ -2194,7 +2158,7 @@ function FactCollector.collectClassFacts(this: FactCollector, node: Node): void 
   callee +51:9 FactCollector.noteArguments -> @FactCollector.noteArguments
   callee +52:9 FactCollector.noteCall -> @FactCollector.noteCall
   callee +54:7 FactCollector.noteHandleClose -> @FactCollector.noteHandleClose
-  callee +57:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee +57:43 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
   callee +59:7 StringSet.add -> @StringSet.add
 function FactCollector.collectResultFacts(this: FactCollector, node: Node): void -> @FactCollector.collectResultFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -2235,11 +2199,11 @@ function FactCollector.collectArrayFacts(this: FactCollector, node: Node): void 
   stackSites=1 stackLocals=1
   local -3:11 program: CheckedProgram (const)
   local -2:11 table: TypeTable (const)
-  callee -1:34 FactCollector.isArrayValued -> @FactCollector.isArrayValued
+  callee -1:41 FactCollector.isArrayValued -> @FactCollector.isArrayValued
   callee +6:9 StringSet.add -> @StringSet.add
   callee +8:7 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +11:35 FactCollector.isArrayValued -> @FactCollector.isArrayValued
-  callee +19:58 FactCollector.isArrayValued -> @FactCollector.isArrayValued
+  callee +11:42 FactCollector.isArrayValued -> @FactCollector.isArrayValued
+  callee +19:72 FactCollector.isArrayValued -> @FactCollector.isArrayValued
   callee +20:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
   local +26:15 length: Node (const)
   callee +27:13 newArrayLengthChecked -> @newArrayLengthChecked
@@ -2251,12 +2215,12 @@ function FactCollector.collectArrayFacts(this: FactCollector, node: Node): void 
   local +39:11 method: string (const)
   callee +39:20 arrayMethodName -> @arrayMethodName
   callee +41:7 FactCollector.collectMethodFacts -> @FactCollector.collectMethodFacts
-  callee +44:35 isAssignmentOperator -> @isAssignmentOperator
-  callee +46:12 isGuardedAccess -> @isGuardedAccess
-  callee +47:9 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
-  callee +58:9 callsAnything -> @callsAnything
-  callee +60:9 StringSet.add -> @StringSet.add
-  callee +63:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +46:7 isAssignmentOperator -> @isAssignmentOperator
+  callee +50:12 isGuardedAccess -> @isGuardedAccess
+  callee +51:9 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
+  callee +62:9 callsAnything -> @callsAnything
+  callee +64:9 StringSet.add -> @StringSet.add
+  callee +67:9 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.isArrayValued(this: FactCollector, expr: Node): boolean -> @FactCollector.isArrayValued [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index
@@ -3573,7 +3537,7 @@ function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node, known: 
   local +22:9 iv: Local | null (const)
   local +27:9 cond: Node (const)
   callee +27:16 unwrapParens -> @unwrapParens
-  callee +28:34 isName -> @isName
+  callee +28:41 isName -> @isName
   local +31:9 cmp: string (const)
   local +32:9 upward: boolean (const)
   local +33:9 downward: boolean (const)
@@ -3607,8 +3571,8 @@ function stepOf(expr: Node, name: string): i32 -> @stepOf [exported]
   calls: isName llvm.fptosi.sat.i32.f64 nish_panic_index nish_panic_overflow nish_str_eq numericLiteralValue unwrapParens
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:32 isName -> @isName
-  callee +9:33 isName -> @isName
+  callee +0:39 isName -> @isName
+  callee +9:40 isName -> @isName
   local +10:11 rhs: Node (const)
   callee +10:17 unwrapParens -> @unwrapParens
   callee +15:20 numericLiteralValue -> @numericLiteralValue
@@ -3621,7 +3585,7 @@ function bodyMayExtend(program: CheckedProgram, table: TypeTable, body: Node, kn
   pointer body: size=40 writesThrough=false captured=false passedTo=isResizeCall#2
   pointer known: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 bodyMayExtend#3
   stackSites=0 stackLocals=0
-  callee +0:32 isResizeCall -> @isResizeCall
+  callee +0:39 isResizeCall -> @isResizeCall
   local +6:11 callee: FunctionSig | null (const)
   local +13:13 calleeFacts: FunctionFacts | null (const)
   callee +13:27 FactsTable.get -> @FactsTable.get
@@ -3687,9 +3651,9 @@ function foreignBufferCountProven(program: CheckedProgram, table: TypeTable, cal
   local +2:9 local: Local | null (const)
   callee +7:6 isBuiltinConversion -> @isBuiltinConversion
   local +11:9 access: Node (const)
-  local +15:9 counted: Local | null (const)
-  local +19:7 at: i32 (let)
-  callee +21:9 bodyMayExtend -> @bodyMayExtend
+  local +19:9 counted: Local | null (const)
+  local +23:7 at: i32 (let)
+  callee +25:9 bodyMayExtend -> @bodyMayExtend
 function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @isResizeCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: arrayMethodName builtinNameOf nish_panic_index nish_str_eq
@@ -3699,8 +3663,8 @@ function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): bo
   stackSites=0 stackLocals=0
   local +0:9 method: string (const)
   callee +0:18 arrayMethodName -> @arrayMethodName
-  local +7:9 name: string (const)
-  callee +7:16 builtinNameOf -> @builtinNameOf
+  local +11:9 name: string (const)
+  callee +11:16 builtinNameOf -> @builtinNameOf
 function bodyDisturbs(body: Node, names: string[]): boolean -> @bodyDisturbs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: bodyDisturbs isAssignmentOperator nish_panic_index nish_str_eq

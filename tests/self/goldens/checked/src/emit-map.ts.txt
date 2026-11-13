@@ -11,15 +11,6 @@ import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import StringSet from "./map" -> struct StringSet
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
-import N_CALL from "./nodes" -> const N_CALL
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_STRING from "./nodes" -> const N_STRING
-import N_TRUE from "./nodes" -> const N_TRUE
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FUSE_NONE from "./program" -> const FUSE_NONE

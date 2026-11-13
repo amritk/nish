@@ -7,19 +7,6 @@ import dottedName from "./emit-util" -> function @dottedName
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import storesInlineElements from "./emit-util" -> function @storesInlineElements
 import unwrapParens from "./emit-util" -> function @unwrapParens
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import ConstInfo from "./program" -> struct ConstInfo
@@ -306,27 +293,27 @@ function checkStorageCall(ctx: CheckContext, call: Node): void -> @checkStorageC
   local +1:9 args: Node (const)
   local +2:7 pushesCopy: boolean (let)
   local +3:9 method: string (const)
-  callee +3:72 rewrittenArrayMethod -> @rewrittenArrayMethod
-  local +7:11 sorted: ConstInfo | null (const)
-  callee +7:20 storageNamed -> @storageNamed
-  callee +9:7 refuseMethod -> @refuseMethod
-  local +14:11 info: ConstInfo | null (const)
-  callee +14:18 storageNamed -> @storageNamed
-  callee +16:7 refuseMethod -> @refuseMethod
-  local +17:18 arg: Node (const)
-  callee +18:9 checkStorageUses -> @checkStorageUses
-  callee +23:44 storesInlineElements -> @storesInlineElements
-  callee +25:3 checkStorageUses -> @checkStorageUses
-  local +26:12 i: i32 (let)
-  local +27:11 arg: Node (const)
-  callee +28:9 lendsStorage -> @lendsStorage
-  local +31:11 info: ConstInfo | null (const)
-  callee +31:18 storageElementOf -> @storageElementOf
-  callee +32:26 storageHoldsRecords -> @storageHoldsRecords
-  callee +33:7 checkStorageUses -> @checkStorageUses
-  callee +33:29 unwrapParens -> @unwrapParens
-  callee +35:9 CheckContext.error -> @CheckContext.error
-  callee +42:5 checkStorageUses -> @checkStorageUses
+  callee +4:66 rewrittenArrayMethod -> @rewrittenArrayMethod
+  local +8:11 sorted: ConstInfo | null (const)
+  callee +8:20 storageNamed -> @storageNamed
+  callee +10:7 refuseMethod -> @refuseMethod
+  local +15:11 info: ConstInfo | null (const)
+  callee +15:18 storageNamed -> @storageNamed
+  callee +17:7 refuseMethod -> @refuseMethod
+  local +18:18 arg: Node (const)
+  callee +19:9 checkStorageUses -> @checkStorageUses
+  callee +24:44 storesInlineElements -> @storesInlineElements
+  callee +26:3 checkStorageUses -> @checkStorageUses
+  local +27:12 i: i32 (let)
+  local +28:11 arg: Node (const)
+  callee +29:9 lendsStorage -> @lendsStorage
+  local +32:11 info: ConstInfo | null (const)
+  callee +32:18 storageElementOf -> @storageElementOf
+  callee +33:26 storageHoldsRecords -> @storageHoldsRecords
+  callee +34:7 checkStorageUses -> @checkStorageUses
+  callee +34:29 unwrapParens -> @unwrapParens
+  callee +36:9 CheckContext.error -> @CheckContext.error
+  callee +43:5 checkStorageUses -> @checkStorageUses
 function lendsStorage(ctx: CheckContext, call: Node, i: i32, arg: Node): boolean -> @lendsStorage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lendableParameter
@@ -426,13 +413,13 @@ function lentUseStays(ctx: CheckContext, sig: FunctionSig, use: Node, parent: No
   callee +0:15 lengthWritten -> @lengthWritten
   callee +2:9 lendSafeMethod -> @lendSafeMethod
   callee +7:7 lendInPlaceMethod -> @lendInPlaceMethod
-  local +19:11 callee: Node (const)
-  local +20:11 method: string (const)
-  callee +21:63 rewrittenArrayMethod -> @rewrittenArrayMethod
-  callee +24:9 lendSafeMethod -> @lendSafeMethod
-  callee +24:36 lendInPlaceMethod -> @lendInPlaceMethod
-  callee +28:12 copiesBytes -> @copiesBytes
-  callee +28:47 lentOnStays -> @lentOnStays
+  local +24:11 callee: Node (const)
+  local +25:11 method: string (const)
+  callee +26:70 rewrittenArrayMethod -> @rewrittenArrayMethod
+  callee +29:9 lendSafeMethod -> @lendSafeMethod
+  callee +30:10 lendInPlaceMethod -> @lendInPlaceMethod
+  callee +34:12 copiesBytes -> @copiesBytes
+  callee +34:47 lentOnStays -> @lentOnStays
 function lengthWritten(member: Node, grand: Node | null): boolean -> @lengthWritten
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAssignmentOperator nish_panic_index nish_str_eq
@@ -488,7 +475,7 @@ function lentOnStays(ctx: CheckContext, sig: FunctionSig, call: Node, use: Node,
   local +0:9 callee: Node (const)
   local +1:9 home: CheckContext | null (const)
   callee +1:16 homeContext -> @homeContext
-  callee +2:51 lendCalleeShadowed -> @lendCalleeShadowed
+  callee +2:58 lendCalleeShadowed -> @lendCalleeShadowed
   local +8:9 next: FunctionSig | null (const)
   callee +8:16 CheckContext.signature -> @CheckContext.signature
   local +12:9 at: i32 (const)
@@ -512,12 +499,12 @@ function checkStorageAssignment(ctx: CheckContext, node: Node): void -> @checkSt
   local +10:9 target: ConstInfo | null (const)
   callee +10:18 storageElementOf -> @storageElementOf
   local +11:9 inlineTarget: boolean (const)
-  callee +11:48 storesInlineElements -> @storesInlineElements
-  callee +14:5 checkStorageUses -> @checkStorageUses
-  callee +16:5 checkStorageUses -> @checkStorageUses
-  local +18:9 source: ConstInfo | null (const)
-  callee +18:18 storageElementOf -> @storageElementOf
-  callee +21:5 storageHoldsRecords -> @storageHoldsRecords
-  callee +26:5 checkStorageUses -> @checkStorageUses
-  callee +26:27 unwrapParens -> @unwrapParens
-  callee +29:3 checkStorageUses -> @checkStorageUses
+  callee +12:36 storesInlineElements -> @storesInlineElements
+  callee +15:5 checkStorageUses -> @checkStorageUses
+  callee +17:5 checkStorageUses -> @checkStorageUses
+  local +19:9 source: ConstInfo | null (const)
+  callee +19:18 storageElementOf -> @storageElementOf
+  callee +22:5 storageHoldsRecords -> @storageHoldsRecords
+  callee +27:5 checkStorageUses -> @checkStorageUses
+  callee +27:27 unwrapParens -> @unwrapParens
+  callee +30:3 checkStorageUses -> @checkStorageUses

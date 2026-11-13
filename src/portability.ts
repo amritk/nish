@@ -41,7 +41,7 @@ import { CLI } from "./branding"
 import { Edit } from "./diagnostics"
 import { numericLiteralValue } from "./constants"
 import { StringSet } from "./map"
-import { FLAG_PREFIX, N_ARROW, N_IDENT, N_NEW, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
+import { FLAG_PREFIX, Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { ParentTable } from "./parents"
 import { boundConversionNames, numberFindings } from "./portability-numbers"
@@ -185,7 +185,7 @@ export const portabilityFindings = (
  * captured read as a read of the local, where the call runs the arrow.
  */
 const walkPortability = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   zeroFillFinding(walk, node, out)
@@ -212,13 +212,17 @@ const walkPortability = (walk: PortabilityWalk, node: Node, out: PortabilityFind
  * makes). Anything else is a length that may not be zero.
  */
 const isZeroLength = (walk: PortabilityWalk, expr: Node): boolean => {
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return numericLiteralValue(expr.text) === 0
   }
-  if (expr.kind === N_PAREN) {
+  if (expr.kind === NodeKind.Paren) {
     return isZeroLength(walk, expr.children[0])
   }
-  if (expr.kind === N_UNARY && expr.flags === FLAG_PREFIX && (expr.text === "-" || expr.text === "+")) {
+  if (
+    expr.kind === NodeKind.Unary &&
+    expr.flags === FLAG_PREFIX &&
+    (expr.text === "-" || expr.text === "+")
+  ) {
     return isZeroLength(walk, expr.children[0])
   }
   const constant = walk.program.nodeConstants[expr.id]
@@ -229,7 +233,11 @@ const isZeroLength = (walk: PortabilityWalk, expr: Node): boolean => {
 }
 
 const zeroFillFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
-  if (node.kind !== N_NEW || node.children[0].kind !== N_IDENT || node.children[0].text !== "Array") {
+  if (
+    node.kind !== NodeKind.New ||
+    node.children[0].kind !== NodeKind.Ident ||
+    node.children[0].text !== "Array"
+  ) {
     return
   }
   const args = node.children[2].children

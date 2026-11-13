@@ -302,7 +302,7 @@ const printTypeScriptTree = (source, sf) => {
     }
   }
 
-  /** `x as T`, `<T>x` and `x satisfies T`: one N_AS, the expression and then the type. */
+  /** `x as T`, `<T>x` and `x satisfies T`: one NodeKind.As, the expression and then the type. */
   const assertion = (node, depth, kind) => {
     const [s, e] = span(node)
     emit(depth, kind, s, e)
@@ -531,7 +531,7 @@ const printTypeScriptTree = (source, sf) => {
         expression(node.expression, depth + 1)
         return
       // WP29: an arrow written as an argument. stage1 shapes it like its
-      // `N_FUNCTION` — an absent name first, the type parameters last — and a
+      // `NodeKind.FunctionDecl` — an absent name first, the type parameters last — and a
       // parameter's type and the return type may both be left out.
       case ts.SyntaxKind.ArrowFunction:
         if (
@@ -566,7 +566,7 @@ const printTypeScriptTree = (source, sf) => {
 
   /**
    * WP18: the `<T, U>` of a generic function, as the fifth child of stage1's
-   * `N_FUNCTION` — a `LIST` of plain identifiers, empty when there are none.
+   * `NodeKind.FunctionDecl` — a `LIST` of plain identifiers, empty when there are none.
    * A constrained parameter is an unsupported construct for this oracle. A
    * default is read and dropped, and the identifier flagged, for the checker
    * to refuse (NL2292).
@@ -1028,7 +1028,7 @@ const printTypeScriptTree = (source, sf) => {
         }
         // A module-level `const` bound to an arrow declares a *function*
         // (docs/wp22-arrow-functions.md), and stage1's parser builds the same
-        // `N_FUNCTION` it builds for the `function` spelling -- so this side
+        // `NodeKind.FunctionDecl` it builds for the `function` spelling -- so this side
         // normalises the same way. It is the one place the oracle reshapes a
         // `typescript` tree rather than transcribing it, and it does so
         // because the language says the two spellings declare one thing.

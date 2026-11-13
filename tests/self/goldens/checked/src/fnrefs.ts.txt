@@ -13,14 +13,6 @@ import TypeTable from "./types" -> struct TypeTable
 import BuildMode from "./visibility" -> struct BuildMode
 import hostVisible from "./visibility" -> function @hostVisible
 import isGuardType from "./parallel" -> function @isGuardType
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_FIELD from "./nodes" -> const N_FIELD
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_THIS from "./nodes" -> const N_THIS
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
@@ -82,8 +74,8 @@ function firstCapture(node: Node, own: StringSet, scope: Scope): string -> @firs
   pointer own: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 firstCapture#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0 firstCapture#2
   stackSites=0 stackLocals=0
-  callee +0:33 StringSet.has -> @StringSet.has
-  callee +0:55 Scope.lookup -> @Scope.lookup
+  callee +0:40 StringSet.has -> @StringSet.has
+  callee +0:62 Scope.lookup -> @Scope.lookup
   local +3:14 child: Node (const)
   local +4:11 found: string (const)
   callee +4:19 firstCapture -> @firstCapture
@@ -279,23 +271,23 @@ function refuseHostReferences(contexts: CheckContext[], mode: BuildMode): void -
   callee +29:11 classesOf -> @classesOf
   callee +33:11 holdsFnRef -> @holdsFnRef
   local +34:15 at: Node (const)
-  callee +36:9 CheckContext.error -> @CheckContext.error
-  callee +36:23 hostReferenceMessage -> @hostReferenceMessage
-  callee +38:7 classesOf -> @classesOf
-  local +42:7 k: i32 (let)
-  local +44:11 cls: i32 (const)
-  local +45:16 ctx: CheckContext (const)
-  local +46:18 info: StructInfo (const)
-  local +48:22 field: FieldInfo (const)
-  callee +49:13 classesOf -> @classesOf
-  local +56:14 ctx: CheckContext (const)
-  local +57:16 info: StructInfo (const)
-  local +60:13 everyLayout: boolean (const)
-  local +64:18 field: FieldInfo (const)
-  callee +65:13 holdsFnRef -> @holdsFnRef
-  callee +66:11 CheckContext.error -> @CheckContext.error
-  callee +67:13 fieldNode -> @fieldNode
-  callee +68:13 hostReferenceMessage -> @hostReferenceMessage
+  callee +38:9 CheckContext.error -> @CheckContext.error
+  callee +38:23 hostReferenceMessage -> @hostReferenceMessage
+  callee +40:7 classesOf -> @classesOf
+  local +44:7 k: i32 (let)
+  local +46:11 cls: i32 (const)
+  local +47:16 ctx: CheckContext (const)
+  local +48:18 info: StructInfo (const)
+  local +50:22 field: FieldInfo (const)
+  callee +51:13 classesOf -> @classesOf
+  local +58:14 ctx: CheckContext (const)
+  local +59:16 info: StructInfo (const)
+  local +62:13 everyLayout: boolean (const)
+  local +66:18 field: FieldInfo (const)
+  callee +67:13 holdsFnRef -> @holdsFnRef
+  callee +68:11 CheckContext.error -> @CheckContext.error
+  callee +69:13 fieldNode -> @fieldNode
+  callee +70:13 hostReferenceMessage -> @hostReferenceMessage
 function fieldNode(info: StructInfo, name: string): Node -> @fieldNode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index nish_str_eq

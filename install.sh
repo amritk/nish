@@ -630,7 +630,7 @@ case ":$PATH:" in
 esac
 say ""
 say "  nish --version          what you just installed"
-say "  sh install.sh           upgrade to the latest release"
+say "  nish upgrade            upgrade to the latest release"
 say "  sh install.sh --help    versions, --dir, --uninstall"
 say ""
 # Not a symlink into /usr/local/bin. A symlink leaves argv[0] pointing at the

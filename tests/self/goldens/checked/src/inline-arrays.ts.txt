@@ -6,24 +6,6 @@ import CheckContext from "./context" -> struct CheckContext
 import intrinsicType from "./emit-util" -> function @intrinsicType
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import StringMap from "./map" -> struct StringMap
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CALL from "./nodes" -> const N_CALL
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SPREAD from "./nodes" -> const N_SPREAD
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FieldInfo from "./program" -> struct FieldInfo
@@ -191,7 +173,7 @@ function allocationOf(program: CheckedProgram, table: TypeTable, sig: FunctionSi
   local +0:9 e: Node (const)
   callee +0:13 unwrap -> @unwrap
   callee +2:12 new FreshReturn -> @FreshReturn.constructor
-  callee +4:28 TypeTable.isArray -> @TypeTable.isArray
+  callee +4:35 TypeTable.isArray -> @TypeTable.isArray
   local +7:9 args: Node[] (const)
   local +11:9 param: i32 (const)
   callee +11:17 paramIndex -> @paramIndex
@@ -230,7 +212,7 @@ function isWrite(parent: Node | null, node: Node): boolean -> @isWrite
   pointer parent: size=40 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:69 isAssignmentOperator -> @isAssignmentOperator
+  callee +0:76 isAssignmentOperator -> @isAssignmentOperator
 function collectReturns(node: Node, out: Node[]): void -> @collectReturns
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -430,7 +412,7 @@ function visitInline(walk: InlineWalk, program: CheckedProgram, node: Node, pare
   callee +1:18 calleeOf -> @calleeOf
   callee +3:5 InlineWalk.call -> @InlineWalk.call
   callee +6:5 spoilLiteral -> @spoilLiteral
-  callee +8:33 StringMap.has -> @StringMap.has
+  callee +8:40 StringMap.has -> @StringMap.has
   local +9:11 receiver: i32 (const)
   callee +11:7 InlineWalk.spoilName -> @InlineWalk.spoilName
   local +13:13 t: i32 (const)

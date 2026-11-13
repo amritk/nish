@@ -796,6 +796,11 @@
                         "title": "quic-stream",
                         "filepath": "docs/reference/net/quic-stream.md"
                       },
+                      "/release": {
+                        "type": "page",
+                        "title": "release",
+                        "filepath": "docs/reference/release.md"
+                      },
                       "/router": {
                         "type": "page",
                         "title": "router",
@@ -1069,6 +1074,11 @@
                     "type": "page",
                     "title": "CLI and cache",
                     "filepath": "docs/security/cli.md"
+                  },
+                  "/release": {
+                    "type": "page",
+                    "title": "Update notice and upgrade",
+                    "filepath": "docs/security/release.md"
                   },
                   "/sandbox": {
                     "type": "page",

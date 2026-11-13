@@ -33,19 +33,6 @@ import internalErrorFor from "./ice" -> function @internalErrorFor
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
 import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BINDING_PATTERN from "./nodes" -> const N_BINDING_PATTERN
-import N_CALL from "./nodes" -> const N_CALL
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_THIS from "./nodes" -> const N_THIS
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import simdSuffix from "./nish-modules" -> function @simdSuffix
 import simdTypeLane from "./nish-modules" -> function @simdTypeLane
@@ -542,7 +529,7 @@ function storedFields(emitter: Emitter, node: Node, names: string[], records: i3
   pointer records: size=0 writesThrough=true captured=false passedTo=storedFields#3
   stackSites=0 stackLocals=0
   local -4:7 opaque: boolean (let)
-  callee -3:33 isAssignmentOperator -> @isAssignmentOperator
+  callee -3:40 isAssignmentOperator -> @isAssignmentOperator
   local -2:11 target: Node (const)
   callee -2:20 unwrapParens -> @unwrapParens
   local +4:13 stored: i32 (const)
@@ -789,7 +776,7 @@ function emitIndex(emitter: Emitter, expr: Node): string -> @emitIndex [exported
   callee +0:16 Emitter.typeOf -> @Emitter.typeOf
   local +1:9 literal: Node (const)
   callee +1:19 unwrapParens -> @unwrapParens
-  callee +4:37 isFloat -> @isFloat
+  callee +4:44 isFloat -> @isFloat
   local +5:11 value: i64 (const)
   callee +5:19 parseIntegerLiteral -> @parseIntegerLiteral
   local +8:9 value: string (const)
@@ -935,7 +922,7 @@ function newArrayLengthChecked(length: Node, type: i32, numberMode: i32, table: 
   stackSites=0 stackLocals=0
   local +0:9 literal: Node (const)
   callee +0:19 unwrapParens -> @unwrapParens
-  callee +1:36 numericLiteralValue -> @numericLiteralValue
+  callee +1:43 numericLiteralValue -> @numericLiteralValue
   callee +4:7 TypeTable.isRanged -> @TypeTable.isRanged
   callee +5:12 TypeTable.rangeLo -> @TypeTable.rangeLo
   callee +8:5 isFloat -> @isFloat
@@ -1614,8 +1601,8 @@ function isIntegerLiteral(emitter: Emitter, expr: Node): boolean -> @isIntegerLi
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 Emitter.typeOf#1
   stackSites=0 stackLocals=0
   callee +0:3 unwrapParens -> @unwrapParens
-  callee +0:44 isFloat -> @isFloat
-  callee +0:52 Emitter.typeOf -> @Emitter.typeOf
+  callee +0:51 isFloat -> @isFloat
+  callee +0:59 Emitter.typeOf -> @Emitter.typeOf
 function relativeIndex(emitter: Emitter, end: Node, k: string, len: string): string -> @relativeIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

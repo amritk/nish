@@ -21,11 +21,6 @@ import NET_WORDS from "./nish-modules" -> const NET_WORDS
 import netOption from "./nish-modules" -> function @netOption
 import netSignature from "./nish-modules" -> function @netSignature
 import unsafeModule from "./nish-modules" -> function @unsafeModule
-import N_CALL from "./nodes" -> const N_CALL
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_PAREN from "./nodes" -> const N_PAREN
 import Node from "./nodes" -> struct Node
 import checkSimdCall from "./simd" -> function @checkSimdCall
 import opaqueReferenceMessage from "./fnrefs" -> function @opaqueReferenceMessage

@@ -85,7 +85,8 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 
 The script installs into `~/.nish`. It ends by printing the `export PATH=…`
 line to add to your shell profile; run that line in your shell too, or open a
-new terminal. To upgrade later, run the same command again.
+new terminal. To upgrade later, run `nish upgrade`
+([Staying up to date](../using-nish/cli.md#staying-up-to-date-nish-upgrade)).
 
 Ending the command with `| sh -s -- --help` instead of `| sh` lists the
 script's other options: another directory, and uninstalling.
@@ -106,6 +107,9 @@ version per project in `package.json`, and run it as `npx nish`.
 
 Releases up to 0.18.0 were published as `@amritk/nish`; if you installed that,
 uninstall it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
+
+`nish upgrade` does not replace a compiler npm installed: it prints the
+`npm install -g nish@<version>` line to run instead.
 
 </scalar-tab>
 

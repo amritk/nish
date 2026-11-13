@@ -10,6 +10,7 @@ Every flag `nish --help` lists, in the order and the groups it lists them. [The 
 nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
 nish run [flags] <file.ts> [args ...]  build, cache and run it
 nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
+nish upgrade [<version>] [--check]     install a newer release
 nish -v, --version | -h, --help
 ```
 

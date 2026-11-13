@@ -61,12 +61,12 @@ import optionalParameterMessage from "./declarations" -> function @optionalParam
 import parameterFormHereMessage from "./declarations" -> function @parameterFormHereMessage
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
-import FLAG_AWAIT from "./nodes" -> const FLAG_AWAIT
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
+import FLAG_AWAIT from "./nodes" -> const FLAG_AWAIT
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
+import FLAG_CONSTRUCT from "./nodes" -> const FLAG_CONSTRUCT
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
-import FLAG_CONSTRUCT from "./nodes" -> const FLAG_CONSTRUCT
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_PROPERTY from "./nodes" -> const FLAG_PROPERTY
 import FLAG_READONLY from "./nodes" -> const FLAG_READONLY
@@ -74,39 +74,6 @@ import FLAG_REST from "./nodes" -> const FLAG_REST
 import FLAG_SIGNATURE from "./nodes" -> const FLAG_SIGNATURE
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINDING_PATTERN from "./nodes" -> const N_BINDING_PATTERN
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_BREAK from "./nodes" -> const N_BREAK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_CONTINUE from "./nodes" -> const N_CONTINUE
-import N_DEFAULT from "./nodes" -> const N_DEFAULT
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FIELD from "./nodes" -> const N_FIELD
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IMPORT from "./nodes" -> const N_IMPORT
-import N_IMPORT_EQUALS from "./nodes" -> const N_IMPORT_EQUALS
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_INDEX_SIGNATURE from "./nodes" -> const N_INDEX_SIGNATURE
-import N_INTERFACE from "./nodes" -> const N_INTERFACE
-import N_LABELED from "./nodes" -> const N_LABELED
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SWITCH from "./nodes" -> const N_SWITCH
-import N_THROW from "./nodes" -> const N_THROW
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_VAR from "./nodes" -> const N_VAR
-import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import JSON_OPTIONS from "./json-typed" -> const JSON_OPTIONS
 import jsonOptionsShapeMessage from "./json-typed" -> function @jsonOptionsShapeMessage
@@ -319,10 +286,10 @@ function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): void ->
   local -2:11 local: Local | null (const)
   local +4:13 literal: string (const)
   callee +4:38 literalIndexName -> @literalIndexName
-  callee +10:9 holdMembers -> @holdMembers
-  callee +13:39 TypeTable.isArray -> @TypeTable.isArray
-  callee +13:57 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +14:21 allocatesArray -> @allocatesArray
+  callee +9:7 holdMembers -> @holdMembers
+  callee +11:39 TypeTable.isArray -> @TypeTable.isArray
+  callee +11:57 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +12:21 allocatesArray -> @allocatesArray
 function declareAwaitAll(ctx: CheckContext, decl: Node, scope: Scope): void -> @declareAwaitAll
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkAwaitAllDeclaration
@@ -349,7 +316,7 @@ function allocatesArray(ctx: CheckContext, init: Node): boolean -> @allocatesArr
   callee +0:7 isFreshArrayExpression -> @isFreshArrayExpression
   local +3:9 e: Node (const)
   callee +3:13 unwrapParens -> @unwrapParens
-  callee +7:10 builtinNameOf -> @builtinNameOf
+  callee +11:10 builtinNameOf -> @builtinNameOf
 function declareLocal(ctx: CheckContext, scope: Scope, decl: Node, site: Node, name: string, type: i32, mutable: boolean, origin: TypeOrigin | null): void -> @declareLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -733,7 +700,7 @@ function refuseStructHeader(ctx: CheckContext, node: Node): void -> @refuseStruc
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.error -> @CheckContext.error
   callee +8:5 CheckContext.error -> @CheckContext.error
-  callee +10:5 CheckContext.error -> @CheckContext.error
+  callee +13:5 CheckContext.error -> @CheckContext.error
 function refuseDeclarator(ctx: CheckContext, owner: Node, decl: Node): void -> @refuseDeclarator
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -743,7 +710,7 @@ function refuseDeclarator(ctx: CheckContext, owner: Node, decl: Node): void -> @
   pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllShape#0 CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 awaitAll: boolean (const)
-  callee +0:80 isAwaitAllShape -> @isAwaitAllShape
+  callee +0:87 isAwaitAllShape -> @isAwaitAllShape
   callee +2:5 CheckContext.error -> @CheckContext.error
   local +13:11 name: string (const)
   callee +14:5 CheckContext.error -> @CheckContext.error
@@ -775,8 +742,8 @@ function refuseMembers(ctx: CheckContext, owner: Node, members: Node): void -> @
   callee +32:7 CheckContext.error -> @CheckContext.error
   callee +36:8 isIteratorMethod -> @isIteratorMethod
   callee +37:8 leftToCollector -> @leftToCollector
-  callee +40:7 CheckContext.error -> @CheckContext.error
-  callee +42:5 sweepForms -> @sweepForms
+  callee +44:7 CheckContext.error -> @CheckContext.error
+  callee +46:5 sweepForms -> @sweepForms
 function sweepTypeParameters(ctx: CheckContext, list: Node): void -> @sweepTypeParameters
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -920,7 +887,7 @@ function unionTagRead(ctx: CheckContext, node: Node): i32 -> @unionTagRead
   stackSites=0 stackLocals=0
   local +0:9 read: Node (const)
   callee +0:16 unwrapParens -> @unwrapParens
-  callee +1:33 isOptionalChain -> @isOptionalChain
+  callee +1:40 isOptionalChain -> @isOptionalChain
   local +4:9 receiver: i32 (const)
   callee +4:42 unwrapParens -> @unwrapParens
   callee +5:10 TypeTable.isUnion -> @TypeTable.isUnion

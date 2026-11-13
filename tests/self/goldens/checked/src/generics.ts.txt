@@ -80,47 +80,9 @@ import noteStructNames from "./structs" -> function @noteStructNames
 import referencedStructNames from "./structs" -> function @referencedStructNames
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
-import isGatheredRest from "./nodes" -> function @isGatheredRest
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BIGINT from "./nodes" -> const N_BIGINT
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FIELD from "./nodes" -> const N_FIELD
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_INTERFACE from "./nodes" -> const N_INTERFACE
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_STRING from "./nodes" -> const N_STRING
-import N_SUPER from "./nodes" -> const N_SUPER
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_THIS from "./nodes" -> const N_THIS
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
-import N_TYPE_FUNCTION from "./nodes" -> const N_TYPE_FUNCTION
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_OPERATOR from "./nodes" -> const N_TYPE_OPERATOR
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_READONLY from "./nodes" -> const N_TYPE_READONLY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
-import N_UNARY from "./nodes" -> const N_UNARY
-import Node from "./nodes" -> struct Node
 import FLAG_REFERENCE_ARROW from "./nodes" -> const FLAG_REFERENCE_ARROW
+import isGatheredRest from "./nodes" -> function @isGatheredRest
+import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import ConstraintList from "./program" -> struct ConstraintList
 import DeferredConstraint from "./program" -> struct DeferredConstraint
@@ -876,7 +838,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   local +28:11 early: i32 (const)
   callee +29:37 isFunctionParameter -> @isFunctionParameter
   local +30:11 want: i32 (let)
-  callee +31:57 mentionsUnbound -> @mentionsUnbound
+  callee +31:64 mentionsUnbound -> @mentionsUnbound
   callee +32:16 resolveInTemplate -> @resolveInTemplate
   local +34:13 type: i32 (const)
   callee +34:20 checkExpression -> @checkExpression
@@ -892,7 +854,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   local +64:11 at: i32 (let)
   local +65:11 k: i32 (let)
   local +67:15 annotation: Node (const)
-  callee +68:54 mentionsTypeParam -> @mentionsTypeParam
+  callee +68:61 mentionsTypeParam -> @mentionsTypeParam
   local +73:13 named: i32 (const)
   local +75:13 shown: string (const)
   callee +75:36 CheckContext.textOf -> @CheckContext.textOf
@@ -951,7 +913,7 @@ function unwrapTypeParens(node: Node): Node -> @unwrapTypeParens
   calls: nish_panic_index unwrapTypeParens
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee +0:32 unwrapTypeParens -> @unwrapTypeParens
+  callee +0:38 unwrapTypeParens -> @unwrapTypeParens
 function isFunctionParameter(param: Node): boolean -> @isFunctionParameter [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: unwrapTypeParens
@@ -1131,7 +1093,7 @@ function argumentWords(call: Node, name: string, index: i32, capital: boolean): 
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
   local +1:9 method: string (const)
-  callee +1:44 rewrittenArrayMethod -> @rewrittenArrayMethod
+  callee +1:51 rewrittenArrayMethod -> @rewrittenArrayMethod
 function mismatchMessage(table: TypeTable, lead: string, fn: FunctionSig, param: Node, wanted: string): string -> @mismatchMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: functionTypeText nish_panic_index nish_str_concat writtenNames
@@ -1205,7 +1167,7 @@ function resolveFunctionArgument(ctx: CheckContext, call: Node, template: Templa
   callee +15:15 Scope.lookup -> @Scope.lookup
   callee +18:26 TypeTable.isFnRef -> @TypeTable.isFnRef
   callee +18:44 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +19:65 rootedInLocal -> @rootedInLocal
+  callee +19:79 rootedInLocal -> @rootedInLocal
   local +21:11 type: i32 (const)
   callee +21:37 Scope.typeOf -> @Scope.typeOf
   callee +21:61 checkExpression -> @checkExpression
@@ -1279,7 +1241,7 @@ function rootedInLocal(expr: Node, scope: Scope): boolean -> @rootedInLocal
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0
   stackSites=0 stackLocals=0
   local +0:7 root: Node (let)
-  callee +4:60 Scope.lookup -> @Scope.lookup
+  callee +4:74 Scope.lookup -> @Scope.lookup
 function laterArgumentAssigns(call: Node, arg: Node, name: string): boolean -> @laterArgumentAssigns
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -1313,7 +1275,7 @@ function referenceArgument(ctx: CheckContext, call: Node, template: TemplateInfo
   callee -56:49 promisesAnswer -> @promisesAnswer
   callee -55:5 refuseOnce -> @refuseOnce
   callee -52:50 calleeSpelling -> @calleeSpelling
-  callee -48:35 laterArgumentAssigns -> @laterArgumentAssigns
+  callee -48:42 laterArgumentAssigns -> @laterArgumentAssigns
   callee -45:5 refuseOnce -> @refuseOnce
   callee -42:60 calleeSpelling -> @calleeSpelling
   local -38:9 wanted: Node[] (const)
@@ -1427,7 +1389,7 @@ function liftArrowArgument(ctx: CheckContext, call: Node, template: TemplateInfo
   callee +84:18 resolveType -> @resolveType
   callee +88:15 mentionsUnbound -> @mentionsUnbound
   callee +89:18 resolveInTemplate -> @resolveInTemplate
-  callee +93:52 isVoidSpawnTemplate -> @isVoidSpawnTemplate
+  callee +93:59 isVoidSpawnTemplate -> @isVoidSpawnTemplate
   callee +97:5 refuseOnce -> @refuseOnce
   callee +101:14 CheckContext.textOf -> @CheckContext.textOf
   local +105:9 fn: FunctionSig | null (const)
@@ -1684,7 +1646,7 @@ function declareMethodTypeParameters(ctx: CheckContext, classDecl: Node): void -
   callee +18:17 collectTypeParamNames -> @collectTypeParamNames
   local +19:9 refused: boolean (let)
   local +20:16 param: Node (const)
-  callee +21:37 indexOfName -> @indexOfName
+  callee +21:44 indexOfName -> @indexOfName
   callee +22:9 CheckContext.error -> @CheckContext.error
   callee +34:9 refuseUninferable -> @refuseUninferable
   local +40:11 all: string[] (const)
@@ -1708,7 +1670,7 @@ function refuseUninferable(ctx: CheckContext, decl: Node, typeParams: string[], 
   local +4:9 mentioned: boolean (let)
   local +5:16 declared: Node (const)
   local +6:13 annotation: Node (const)
-  callee +7:42 mentionsTypeParam -> @mentionsTypeParam
+  callee +7:49 mentionsTypeParam -> @mentionsTypeParam
   callee +12:7 CheckContext.error -> @CheckContext.error
 function spellsGenericInstance(members: Node[], name: string): boolean -> @spellsGenericInstance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
@@ -1987,9 +1949,9 @@ function originElement(origin: TypeOrigin | null): TypeOrigin | null -> @originE
   callee +4:16 unwrapOrigin -> @unwrapOrigin
   callee +6:12 new TypeOrigin -> @TypeOrigin.constructor
   local +11:9 isArrayRef: boolean (const)
-  local +12:9 isArrayNew: boolean (const)
-  local +14:11 list: Node (const)
-  callee +16:14 new TypeOrigin -> @TypeOrigin.constructor
+  local +13:9 isArrayNew: boolean (const)
+  local +15:11 list: Node (const)
+  callee +17:14 new TypeOrigin -> @TypeOrigin.constructor
 function memberAnnotation(decl: Node, name: string, method: boolean): Node | null -> @memberAnnotation
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -2074,8 +2036,8 @@ function originOfGenericCall(ctx: CheckContext, call: Node, template: TemplateIn
   callee +15:26 unwrapOrigin -> @unwrapOrigin
   callee +16:11 isBareName -> @isBareName
   callee +17:17 originOf -> @originOf
-  callee +18:54 isBareName -> @isBareName
-  callee +18:65 unwrapOrigin -> @unwrapOrigin
+  callee +18:60 isBareName -> @isBareName
+  callee +18:71 unwrapOrigin -> @unwrapOrigin
   callee +19:13 unwrapOrigin -> @unwrapOrigin
   callee +20:19 originElement -> @originElement
   callee +20:33 originOf -> @originOf
@@ -2133,7 +2095,7 @@ function originOf(ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | nul
   local +36:15 template: TemplateInfo | null (const)
   callee +38:18 originOfGenericCall -> @originOfGenericCall
   callee +40:16 originOfMember -> @originOfMember
-  callee +42:38 Scope.lookup -> @Scope.lookup
+  callee +42:45 Scope.lookup -> @Scope.lookup
   local +46:15 returns: Node | null (const)
   callee +46:25 functionParameterReturn -> @functionParameterReturn
   callee +48:18 new TypeOrigin -> @TypeOrigin.constructor
@@ -2154,7 +2116,7 @@ function declaredOrigin(ctx: CheckContext, annotation: Node, initializer: Node, 
   stackSites=0 stackLocals=0
   callee +0:7 StringMap.size -> @StringMap.size
   callee +4:12 new TypeOrigin -> @TypeOrigin.constructor
-  callee +6:48 originOf -> @originOf
+  callee +6:55 originOf -> @originOf
 function parameterOrigin(ctx: CheckContext, sig: FunctionSig, index: i32): TypeOrigin | null -> @parameterOrigin [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: index
