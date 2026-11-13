@@ -107,12 +107,16 @@
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
- * `deadline()` says when `handleTimer` is next due. Five things run on it. The
+ * `deadline()` says when `handleTimer` is next due. Six things run on it. The
  * idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
  * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR` or three probe
  * timeouts; once it passes with nothing received, the connection closes
  * silently (`QUIC_STATE_TIMED_OUT`) and wipes its keys. Loss recovery's timer
  * declares packets lost by the time threshold or fires the probe timeout.
+ * While a stream's send buffer is full behind bytes in flight, an early
+ * ACK-eliciting probe goes half a round trip after the last ACK-eliciting
+ * packet, so a client whose NAT rebinds while nothing else is sent still
+ * answers from its new port (QUIC-12).
  *
  *  After a key update the previous read keys are kept for a probe timeout
  *  (`recovery.probeTimeout()`), for packets the network reordered, before the
@@ -610,7 +614,11 @@ export interface QuicServerConfig {
   /**
    * `initial_max_stream_data_bidi_remote` (and `_uni`, and `_bidi_local`
    * when the server opens streams): each stream's receive window and the
-   * size of its buffer each way, 1 to 1 MiB.
+   * size of its buffer each way, 1 to 1 MiB. The send buffer holds what the
+   * client has not acknowledged, so it bounds a stream's send-side memory
+   * and its bytes in flight: behind one lost packet a stream sends nothing
+   * new until the resend is acknowledged, and the connection sends an early
+   * ACK-eliciting probe meanwhile so a client's NAT rebinding is still seen.
    */
   maxStreamData: i64
   /** `initial_max_streams_bidi`: how many bidirectional streams the client may have open at once, 0 to 1024. */
@@ -3795,7 +3803,8 @@ export class QuicConnection {
   /**
    * When `handleTimer` is next due, in the caller's milliseconds: the idle
    * timeout, loss recovery's timer (a time-threshold loss or the probe
-   * timeout), the end of a key update's probe timeout, or, while a path is
+   * timeout), an early probe while a stream's send buffer is full behind
+   * bytes in flight, the end of a key update's probe timeout, or, while a path is
    * validated, its PATH_CHALLENGE's resend or the end of its validation,
    * whichever comes first; once the connection has closed, the end of its closing or
    * draining period, when its keys are wiped. -1 when nothing is timed:
@@ -3870,7 +3879,10 @@ export class QuicConnection {
    * Past loss recovery's timer, packets lost by the time threshold have their
    * frames queued again, or a probe timeout queues every space's packets in
    * flight and asks for a probe (RFC 9002 §6.1.2, §6.2.4): `takeDatagram` then
-   * sends it. `receive` and `takeDatagram` run it themselves. Time never runs
+   * sends it. Past the early probe's time, while a stream's send buffer is
+   * full behind bytes in flight, a probe is asked for the same way, so the
+   * client answers from wherever its NAT now sends it.
+   * `receive` and `takeDatagram` run it themselves. Time never runs
    * backwards here: an earlier `now` than one already given counts as that one.
    *
    * @param now The caller's monotonic time in milliseconds.
