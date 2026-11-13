@@ -1292,6 +1292,18 @@ const DECLARED = [
       why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
     })
   ),
+  // nish/raster, nish/synth and nish/host/game are new std modules, so the
+  // seed refuses the programs that import them.
+  ...[
+    ["tests/link/std_raster/main.ts", "nish/raster"],
+    ["tests/link/std_synth/main.ts", "nish/synth"],
+    ["tests/link/std_host_game/main.ts", "nish/host/game"],
+  ].map(([program, module]) => ({
+    program,
+    file: "exit",
+    changelog: module,
+    why: `the program imports ${module}, which the seed's standard library does not have, so only the candidate compiles it`,
+  })),
   // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
   // refused by reachability, after every module is checked.
   ...["tests/link/package_wasm_hostless/main.ts", "tests/link/wasm_hostless_own/main.ts"].map((program) => ({

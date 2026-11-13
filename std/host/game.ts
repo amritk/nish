@@ -238,7 +238,7 @@ export const gamePlaySound = (id: i32): boolean => ringPush(GAME_SOUNDS, id)
  */
 export const gameWriteSamples = (samples: f64[], sampleRate: i32): i32 => {
   const n: i32 = Math.min(toI32(samples.length), GAME_SAMPLE_LIMIT)
-  for (let i: i32 = 0; i < n && i < samples.length; i++) {
+  for (let i: i32 = 0; i < n && i < toI32(samples.length); i++) {
     const s: f64 = samples[i]
     let x: f64 = 0.0
     if (s > 1.0) {
