@@ -4324,6 +4324,51 @@ const DECLARED = [
       "tests/link/net_router_negative_too_many_params/main.ts": ["main.h", "main.ll"],
     }
   ),
+  // The same Router struct, reached through HttpHandler and serve: the
+  // programs below hold a Router in a module other than the router, so that
+  // module moves with it.
+  ...staticRoutes(
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
+    {
+      "tests/link/net_serve_burst/main.ts": ["handler.ll", "main.ll", "router.ll", "serve.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll", "router.ll"],
+      "tests/link/std_postgres_async/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
+        "handler.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
+        "handler.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/tfb_async_db/main.ts": ["router.ll"],
+    }
+  ),
   // #1416: Http1Connection keeps its last response head, and the head-reuse
   // test reads the internal `headCopies` counter that counts its copies.
   {
