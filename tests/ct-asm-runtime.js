@@ -108,13 +108,14 @@ const listed = (found, separator = "\n") => found.map((v) => `${v.kind}: ${v.lin
  * names them, `branch` meaning a conditional branch on a secret. Also counts
  * the back edges it reached, so a caller can say that the
  * loops were read rather than absent. `secretArgs` are the argument positions
- * that are secret beside every array's elements.
+ * that are secret beside every array's elements. `listing` is the whole listing
+ * the body came from, so a call or tail call into it is followed rather than
+ * refused: runtime-aes.c's kernels end with a jump to `nish_aes_clear`.
  */
-const runtimeViolations = (body, secretArgs, target) => {
-  const { found, backEdges } = settle(
-    new Taint({ contents: true, secretArgs, preciseFlags: true }, target),
-    body
-  )
+const runtimeViolations = (body, secretArgs, target, listing = null) => {
+  const entry = new Taint({ contents: true, secretArgs, preciseFlags: true }, target)
+  entry.listing = listing
+  const { found, backEdges } = settle(entry, body)
   return { found, backEdges }
 }
 
@@ -193,7 +194,7 @@ export const runtimeChecks = (root, march = "") => {
         backEdges: 0,
       }
     }
-    return { why: null, ...runtimeViolations(body, secretArgs, target) }
+    return { why: null, ...runtimeViolations(body, secretArgs, target, asm.lines) }
   }
   for (const target of march === "" ? CT_TARGETS : [ctAtLevel(march)]) {
     for (const unit of RUNTIME_UNITS) {

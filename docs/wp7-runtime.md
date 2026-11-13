@@ -190,7 +190,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, `SO_REUSEPORT` listeners and their CPU steering, UDP, the readiness loop, Unix-domain sockets and descriptor passing | 5,120 (`NET_TEXT_BUDGET`) | 4,879 (2026-11-12) |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s and `nish_regex_scan`'s scalar, base and AVX2 paths and their resolvers ([wp38](wp38-simd.md) S1) | 2,560 (`RUNTIME_SIMD_TEXT_BUDGET`) | 2,337 (2026-10-23) |
-| `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
+| `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,816 (`RUNTIME_AES_TEXT_BUDGET`) | 2,709 (2026-11-13) |
 | `runtime/runtime-sha256.c` | The SHA-256 block on SHA-NI or the ARMv8 SHA-256 instructions: `nish_sha256_compress` and `nish_sha256_hw` | 512 (`RUNTIME_SHA256_TEXT_BUDGET`) | 495 (2026-10-30) |
 | `runtime/runtime-chacha20.c` | ChaCha20's keystream, eight blocks at once on AVX2 or four on NEON: `nish_chacha20_xor` and `nish_chacha20_hw` | 3,840 (`RUNTIME_CHACHA20_TEXT_BUDGET`) | 3,771 (2026-11-03) |
 | `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 1,536 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,303 (2026-10-23) |
@@ -260,6 +260,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-11-11 | the Adler-32 kernels, wp38 S8: `runtime-checksum.c` 718 → 1,153. The SSSE3 kernel with its tail inlined 297, `nish_adler32_hw` and its resolver 113, the entry point 22; the other 3 bytes are CRC-32's folding kernel, 514 → 517 in this build. The AArch64 build is 752, not gated (the shards run on x86-64). Raised in place rather than split out: the same seam reads the same `nish_array` window, and section GC keeps only the half a program reaches | checksum 1,280 |
 | 2026-11-12 | SBX-1 (wp37, [security/sandbox.md](security/sandbox.md)): `runtime-sandbox.c` 2,558 → 3,143 on 2026-11-11 for the identities of the marked interpreters and the spawn-target check (ceiling 3,328), then 3,143 → 4,067 for the one exec a spawn is held to: `nish_sb_spawn_once`, its supervisor and spawner threads, the seccomp filter with a user-notification listener, the loop that answers it, and `nish_sb_lift` with the source check that keep its descriptors off the numbers the child's file actions name. `runtime-os.c` 5,705 → 5,791 on 2026-11-11 for the first part's `nish_spawn_sandboxed` hook (86 bytes this table did not record then), and 5,791 → 5,761 here, its spawn handed over whole. Then 4,067 → 4,199 for the spawn whose exec cannot be answered "continue": the supervisor fails the child's exec, or kills and reaps the child, and the spawn answers its refusal. Then 4,199 → 4,409: both threads of a spawn run with every signal blocked, the child is given the calling thread's mask through spawn attributes, and a thread that cannot be started prints the refusal line. Only a `--sandbox` build with an exec allowlist reaches any of it | sandbox 4,608 |
 | 2026-11-12 | `udpBind` flag 4, QUIC steering by connection ID across a prefork group (WP39 G6, docs/h3-multicore.md): `runtime-net.c` 4,731 → 4,879. A seven-instruction classic BPF program (a DCID byte 0 from offset 1 or 6 by the header form, modulo the group count) copied from static data with the count patched in, attached in `nish_net_bound` beside flag 4 of `tcpListenFlags`, and the flag word's checks in `nish_udp_bind`; built on the stack the program measured 4,893 | net 5,120 |
+| 2026-11-13 | AEAD-4 ([crypto-aead.md](security/crypto-aead.md)): `runtime-aes.c` 2,532 → 2,709. `nish_aes_clear`, which zeroes the vector registers and the caller-saved general ones as each kernel leaves, is one out-of-line function of 95 bytes the four kernels tail-call (4 or 5 bytes each); GHASH 1,082 → 1,155 is that jump and its middle operands packed two to a register, which ended a spill at `x86-64-v3`. Inlined into each kernel, the clear measured 2,977 | aes 2,816 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -320,9 +321,9 @@ AES-128 and AES-256 in counter mode and GHASH on AES-NI and PCLMULQDQ, or on
 the ARMv8 AES and PMULL instructions: four kernels the compiler calls in
 place of four private functions of `std/crypto/aes.ts`, behind `nish_aes_hw`.
 It has no portable path of its own; a machine without the instructions, and
-`NISH_AES=soft`, run the bitsliced Nish code. Its 2,532 bytes are the key
-schedule with H and its powers 594, one block 84, GCTR 654, GHASH 1,082 and
-`nish_aes_hw` 118.
+`NISH_AES=soft`, run the bitsliced Nish code. Its 2,709 bytes are the key
+schedule with H and its powers 595, one block 88, GCTR 658, GHASH 1,155,
+`nish_aes_clear` 95 and `nish_aes_hw` 118.
 
 It is a seventh unit rather than more of `runtime-simd.c`, because the rule
 above decides it: folded in, the two measured 3,207 bytes against
