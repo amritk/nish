@@ -95,9 +95,15 @@ has gone on too long. `Http1Server` closes an idle slot, a head past
 (it shuts its write side and reads what the client still sends, up to
 `lingerBytes`, so the error response is not lost to a reset).
 `Http2TlsServer` closes a client that has not acknowledged its SETTINGS
-within `settingsTimeout`, or is quiet past `idleTimeout`. A WebTransport
-layer ends a session quiet past its `idleTimeout` and drops datagrams past
-`maxDatagramsPerSecond`. Each limit has a default and is checked at start-up;
+within `settingsTimeout`, or is quiet past `idleTimeout`. `Http3Server`
+needs no `expire`: its timer wheel already runs on the clock your loop hands
+`tick`, so it closes a slot with no request open past
+`Http3Config.idleTimeout` (60 s), and one whose client trickles a request's
+head past `headTimeout` (30 s), by itself. A QUIC PING keeps the connection,
+not the slot. A WebTransport layer ends a session quiet past its
+`idleTimeout` and drops datagrams past `maxDatagramsPerSecond`; dropping is
+the whole defence, as datagrams may be lost anyway, so a burst never closes
+the session. Each limit has a default and is checked at start-up;
 [the standard library's `nish/net` section](standard-library.md#nishnet) has
 the details.
 

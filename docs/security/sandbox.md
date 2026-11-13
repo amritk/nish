@@ -13,7 +13,7 @@ functions rather than lines, so it has no `file:line` anchors to move.
 
 | File | What |
 | --- | --- |
-| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_interpreters` and `nish_sb_spawn_open`, the spawn-target check, and `nish_sb_spawn_once`, `nish_sb_supervisor`, `nish_sb_spawner`, `nish_sb_answer`, `nish_sb_lift` and `nish_sb_refuse_spawn`, the one exec a spawn's subtree is held to (SBX-1); the non-Linux stubs |
+| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_marks` and `nish_sb_spawn_open`, the spawn-target check, and `nish_sb_spawn_once`, `nish_sb_supervisor`, `nish_sb_spawner`, `nish_sb_start`, `nish_sb_answer`, `nish_sb_lift` and `nish_sb_refuse_spawn`, the one exec a spawn's subtree is held to (SBX-1); the non-Linux stubs |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read`, `@.sandbox.write` and `@.sandbox.exec` (`sandboxDirs`) |
 | `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
 | `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments, and the `//` mark on an interpreter the grant does not name (WP37 §2a, WP40 §2a) |
@@ -280,9 +280,42 @@ counted. One finding is counted, and it is fixed:
   program the Nish binary spawns, the root's own as well as a dependency's,
   whenever the build carries an exec allowlist; a build without one (no
   `process.spawn=<program>` grant, or `process.spawn` granted whole) takes no
-  filter and is not held. Granting `process.spawn` whole is the only way to
-  let a spawned program start others today; a per-grant opt-in is the next
-  stage of the work and is not built.
+  filter and is not held, and neither is a program granted
+  `process.spawn=exec:<program>` (the next limit). Granting that, or
+  `process.spawn` whole, are the two ways to let a spawned program start
+  others.
+- **`process.spawn=exec:<program>` lifts the hold for that program, and
+  that is an escape by design.** `narrowSandbox` writes the program with
+  three leading slashes (`///usr/bin/git`, the same file to Landlock), and
+  `nish_sb_keep_marks` records its identity as unheld; a spawn whose target
+  is that file is started by `nish_sb_start` straight from the supervisor,
+  with no filter and no listener, though still from the private descriptor
+  table, after the identity check, and through `/proc/self/fd/N`. Its
+  subtree may exec anything Landlock's EXECUTE allows, which includes the
+  ELF loader and `#!` interpreters of every granted program, and the loader
+  runs any binary `process.spawn`'s READ_FILE reaches: `exec:git` lets git
+  start `ld.so /any/binary`, and lets the Nish program do the same through
+  git (`git -c alias.x='!ld.so /any/binary' x`). **Grant it only to a
+  dependency that may run anything.** What it does not open: a program
+  granted plainly is still held to its one exec, so it cannot start the
+  `exec:` program and borrow its reach (the kernel answers its second exec
+  `ENOSYS`); the loader named directly is still refused (SBX-1); and a build
+  with no `exec:` grant carries no `///` entry, so its IR and its runtime
+  behaviour are what they were. The exec allowlist is the program's, not a
+  package's, so another dependency granted `process.spawn=<anything>`
+  cannot reach the `exec:` program through its own subtree (held), but the
+  Nish code of any package with a `process.spawn` grant may spawn it by a
+  computed path, since the Nish program's own spawns are checked against
+  the allowlist, not against which package made them. A program granted
+  both ways is `exec:`; a file marked both as a kept interpreter and as
+  `exec:` is refused, the stricter mark winning. The lock file records
+  `process.spawn=exec:git` as its own text, so moving a dependency from
+  `process.spawn=git` to it is a widening NL2593 reports. "Both ways" is
+  decided by file identity, not by path: the runtime looks a spawn target
+  up by device and inode, so a second name for the `exec:` program, a
+  symlink or a hard link (Debian's `/usr/lib/git-core/git-*` are hard
+  links of `git`), granted plainly, is that program and starts unheld. It
+  opens nothing a computed path to the `exec:` program does not.
 - **What the hold needs, and where it is missing.** A seccomp user
   notification listener (Linux 5.0) and its "continue" answer (5.5). Where
   the filter cannot be installed (`EINVAL` on an older kernel, `EBUSY` where
@@ -446,6 +479,13 @@ Each is a kernel answer the test machines do not give; each fails closed:
   notifying child's, a child of this process no other thread has been told
   of); a short or interrupted read of the spawner's pipe (`-EIO`, and the
   `EINTR` retries of `read`);
+- for a `process.spawn=exec:<program>` target: `nish_sb_start` failing on
+  the supervisor's own path (its `posix_spawn` error, as the spawner's
+  would be); a file marked both as a kept interpreter and as `exec:`, which
+  is refused (the compiler writes one mark per program, so only two names
+  for one file reach it); and more than 16 marked entries with `exec:`
+  ones among them, which refuses every spawn the same as more than 16
+  interpreters;
 - the non-Linux stubs.
 
 ## Tests
@@ -561,7 +601,18 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   starts with the caller's signal mask (SBX-1)` and the same for `spawn`,
   `sandbox dependency grants: a granted find cannot hand the loader an
   ungranted binary (SBX-1)` and the same for `env`, `sandbox dependency
-  grants: a granted program cannot exec another granted program (SBX-1)`;
+  grants: a granted program cannot exec another granted program (SBX-1)`,
+  `sandbox dependency grants: a program granted exec: starts the loader
+  with an ungranted binary, and itself (WP40 §2a)` and the same for a
+  program `granted exec: and plainly` (each against the build without
+  `--sandbox`, and with the loader named directly still refused),
+  `sandbox dependency grants: a program granted plainly beside another's
+  exec: grant is held to its one exec (WP40 §2a)`, `sandbox dependency
+  grants: a hard link of a program granted exec:, granted plainly, is that
+  program and starts unheld (WP40 §2a)`, and
+  `sandbox dependency grants: an allowlist with no exec: grant marks
+  nothing /// (WP40 §2a)`; on `sandbox_dep_exec_optin`, `sandbox dependency
+  grants: env granted exec: runs another granted program (WP40 §2a)`;
   and on `sandbox_dep_exec_once_to`, whose grant adds the write scope the
   child's redirect needs: `sandbox dependency grants: a program granted to
   spawnSyncTo cannot hand the loader an ungranted binary (SBX-1)` (skipped
