@@ -3877,11 +3877,7 @@ class FactCollector {
   collectNamespacePropertyFacts(node: Node): void {
     let name = ""
     if (node.kind === N_MEMBER) {
-      // A member constant, `Kind.A`, names no namespace property.
-      if (
-        receiverIsValue(this.unit.program, node.children[0]) ||
-        this.unit.program.isEnumMember(this.table, node)
-      ) {
+      if (receiverIsValue(this.unit.program, node.children[0])) {
         return
       }
       name = dottedName(node)
