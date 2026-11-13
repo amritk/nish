@@ -107,6 +107,36 @@ the session. Each limit has a default and is checked at start-up;
 [the standard library's `nish/net` section](standard-library.md#nishnet) has
 the details.
 
+### Keeping a request loop's memory flat
+
+A server's loop runs until it is stopped, so whatever a pass allocates and
+does not give back grows for as long as it serves. A pass that calls
+`accept` or `respond` stores into the server's memory, and the compiler then
+keeps everything the pass allocated until the loop ends: a reply text built
+with a template on every request piles up. The compiler warns (NL9018) and
+names the line. Build the temporary inside a block that opens with
+`using a = arena()`, copying what must outlive it into a buffer you made
+before the loop, and answer after the block:
+
+```ts
+while (event !== H1_NEED_MORE && event !== H1_ERROR) {
+  if (event === H1_END) {
+    {
+      using a = arena();
+      fill(heads, `request ${heads.served}\n`); // copies into heads.reply
+    }
+    answer(server.connection(slot), heads); // calls respond, outside the block
+  }
+  event = server.next(slot);
+}
+```
+
+Over 20,000 requests the first version grew 1,252 kB and this one none. The
+compiler refuses the block if anything allocated in it could outlive it, so
+the rewrite cannot lose a value you still need. `--deny-retention` turns the
+warning into an error, as it does for the
+[other retention warnings](../language/memory.md#what-you-do-have-to-think-about).
+
 ## How many connections: the descriptor limit
 
 Every connection a server holds is a file descriptor, and the operating
