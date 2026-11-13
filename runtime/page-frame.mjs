@@ -387,6 +387,8 @@ export const createPresenter = async (canvas, options) => {
   }
   const attempts = [];
   let current = null;
+  // The tier presenting now, or the last one tried once every tier is gone.
+  let shown = prefer;
   let destroyed = false;
   let cssSize = null;
 
@@ -431,19 +433,23 @@ export const createPresenter = async (canvas, options) => {
     if (at >= TIERS.length) {
       return null;
     }
-    if (from !== null) {
-      fellBack(from, TIERS[at], reason);
-    }
+    // The fresh canvas goes in first, so `onFallback` can reach it through
+    // `presenter.canvas` to add its listeners again.
     if (state.touched) {
       freshCanvas();
+    }
+    if (from !== null) {
+      fellBack(from, TIERS[at], reason);
     }
     const backend = TIERS[at];
     const accept = (tier) => {
       current = tier;
+      shown = backend;
       return tier;
     };
     const decline = (error) => {
       const why = messageOf(error);
+      shown = backend;
       attempts.push({ backend, reason: why });
       return buildFrom(at + 1, backend, why);
     };
@@ -464,7 +470,7 @@ export const createPresenter = async (canvas, options) => {
 
   return {
     get backend() {
-      return current === null ? attempts[attempts.length - 1].backend : current.backend;
+      return shown;
     },
     get attempts() {
       return attempts;
