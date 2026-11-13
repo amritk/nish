@@ -5217,9 +5217,9 @@ function JsonDocument.copyAt(this: JsonDocument, x: i32): i32 -> @nish.JsonDocum
   local +31:15 r: JsonValueRanges (const)
   callee +31:36 JsonDocument.rangeArrays -> @nish.JsonDocument.rangeArrays
   callee +32:9 JsonDocument.placeKeyRange -> @nish.JsonDocument.placeKeyRange
-  callee +32:28 JsonDocument.memberSlot -> @nish.JsonDocument.memberSlot
-  callee +32:51 jsonValueGet -> @nish.jsonValueGet
-  callee +32:84 jsonValueGet -> @nish.jsonValueGet
+  callee +33:11 JsonDocument.memberSlot -> @nish.JsonDocument.memberSlot
+  callee +34:11 jsonValueGet -> @nish.jsonValueGet
+  callee +35:11 jsonValueGet -> @nish.jsonValueGet
 function JsonDocument.copyBytes(this: JsonDocument, from: i32, n: i32): void -> @nish.JsonDocument.copyBytes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

@@ -394,8 +394,8 @@ export class YamlJsonLoader {
         return -1
       }
     }
-    const v: JsonValue = this.valueOf(root, 0)
-    return doc.byteTop > this.byteCap ? -1 : v
+    // `valueOf` refuses a document past the byte cap.
+    return this.valueOf(root, 0)
   }
 
   /**
@@ -712,28 +712,20 @@ export class YamlJsonLoader {
    */
   private pushEntry(base: i32, key: string, v: JsonValue, keyStart: i32, keyEnd: i32): void {
     const e: i32 = this.entryTop
-    if (e < toI32(this.entryStarts.length)) {
-      this.entryKeys[e] = key
-      this.entryValues[e] = v
-      this.entryStarts[e] = keyStart
-      this.entryEnds[e] = keyEnd
-    } else {
-      while (toI32(this.entryKeys.length) < e) {
-        this.entryKeys.push("")
-        this.entryPairs.push(-1)
-        this.entryValues.push(-1)
-      }
-      if (e < toI32(this.entryKeys.length)) {
-        this.entryKeys[e] = key
-        this.entryValues[e] = v
-      } else {
-        this.entryKeys.push(key)
-        this.entryPairs.push(-1)
-        this.entryValues.push(v)
-      }
-      this.entryStarts.push(keyStart)
-      this.entryEnds.push(keyEnd)
+    // `load` grows the first three arrays alone, so each pads on its own.
+    while (toI32(this.entryKeys.length) <= e) {
+      this.entryKeys.push("")
+      this.entryPairs.push(-1)
+      this.entryValues.push(-1)
     }
+    while (toI32(this.entryStarts.length) <= e) {
+      this.entryStarts.push(0)
+      this.entryEnds.push(0)
+    }
+    this.entryKeys[e] = key
+    this.entryValues[e] = v
+    this.entryStarts[e] = keyStart
+    this.entryEnds[e] = keyEnd
     this.entryTop = e + 1
     if (base >= 0 && e - base >= YAML_JSON_SCAN_KEYS) {
       this.seen.set(key, e)
