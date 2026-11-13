@@ -48,7 +48,16 @@ import {
   rowValue,
   stepBreakMenu,
 } from "../../../src/break-menu"
-import { STEPS_PER_SECOND, View, pixelX, pixelY, textWidth, viewFor } from "../../../src/break-gfx"
+import {
+  STEPS_PER_SECOND,
+  View,
+  pixelX,
+  pixelY,
+  viewFor,
+} from "../../../src/break-gfx"
+import {
+  rasterTextWidth,
+} from "../../../std/raster"
 
 /** The arrow and letter codes the menu reads. */
 const CH_J: i32 = 106
@@ -605,7 +614,7 @@ const testSettings = (t: Suite): void => {
   // Every hint fits the panel at the smallest text scale.
   let widest: i32 = 0
   for (let r: i32 = 0; r < 8; r++) {
-    widest = Math.max(widest, textWidth(rowHint(m.settings, r), 1))
+    widest = Math.max(widest, rasterTextWidth(rowHint(m.settings, r), 1))
   }
   t.ok("every hint fits inside the panel", widest <= 280)
 
