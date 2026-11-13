@@ -1974,6 +1974,25 @@ const DECLARED = [
     changelog: "straight into a JsonDocument",
     why: "the program calls YamlJsonLoader.loadText, which the 0.39.0 seed's std does not have, so only the candidate compiles it",
   })),
+  ...byFinding("straight into a JsonDocument")(
+    "std/yaml.ts now imports nish/yaml-json for the parser's sink (`parseYamlInto`), so every program reaching nish/yaml also writes yaml-json.ll and the JSON modules it imports",
+    Object.fromEntries(
+      [
+        "bench/yaml-compare/main.ts",
+        "tests/link/std_yaml_bad_depth_high/main.ts",
+        "tests/link/std_yaml_bad_depth_low/main.ts",
+      ].map((program) => [
+        program,
+        ["bytes.ll", "json-tokenizer.ll", "json-value.ll", "json.ll", "yaml-json.ll"],
+      ])
+    )
+  ),
+  {
+    program: "tests/link/std_yaml/main.ts",
+    file: "exit",
+    changelog: "straight into a JsonDocument",
+    why: "std/yaml.ts now imports nish/yaml-json, which imports nish/yaml, so the 0.39.0 seed reaches YamlOptions both from the program's own std/yaml.ts and from its `nish` package and refuses it; the candidate compiles it",
+  },
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
   // program that reaches them. These come first: dns.ll also carries this
