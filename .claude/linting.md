@@ -61,7 +61,8 @@ Biome's `recommended` preset is on in full. On top of it:
 **Mirrors of the language** (`docs/wp0-validator.md` gives the reasoning): `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`, `noVoid`,
 `noParameterAssign`, `useExplicitLengthCheck`, `useConsistentArrayType`
 (`T[]`). `noEnum` holds for the JavaScript tooling only: Nish has numeric
-enums, so it is off for Nish sources (`src/`, `std/`, examples).
+enums, so it is off for the Nish programs listed under "Off for Nish programs"
+below.
 `useOptionalChain` and `useExponentiationOperator` are off because they push
 code towards `?.` and `**`, which Nish refuses.
 

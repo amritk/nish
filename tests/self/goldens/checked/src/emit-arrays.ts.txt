@@ -1051,11 +1051,43 @@ function emitUncheckedElement(emitter: Emitter, expr: Node, store: boolean): str
   callee +8:17 Emitter.emitExpression -> @Emitter.emitExpression
   callee +9:3 storeElement -> @storeElement
   callee +9:25 elementPointer -> @elementPointer
+function emitVectorCheck(emitter: Emitter, base: ArrayBase, idx: string, count: i32): void -> @emitVectorCheck
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via baseLength
+  calls: Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock baseLength nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=baseLength#0 Emitter.useRuntime#0
+  pointer base: size=48 writesThrough=false captured=false passedTo=baseLength#1
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 len: string (const)
+  callee +1:15 baseLength -> @baseLength
+  local +2:9 end: string (const)
+  callee +2:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +3:9 first: string (const)
+  callee +3:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +4:9 last: string (const)
+  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 inRange: string (const)
+  callee +5:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:9 failBlock: IRBlock (const)
+  callee +6:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local +7:9 okBlock: IRBlock (const)
+  callee +7:19 IRFunction.newBlock -> @IRFunction.newBlock
+  callee +8:3 IRFunction.emit -> @IRFunction.emit
+  callee +9:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +11:9 lastLane: string (const)
+  callee +11:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local +12:9 shown: string (const)
+  callee +12:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:3 IRFunction.emit -> @IRFunction.emit
+  callee +13:24 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +14:3 IRFunction.emit -> @IRFunction.emit
+  callee +15:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string -> @emitVectorAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
-  calls: Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.typeOf Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.alignOf TypeTable.laneCount TypeTable.refOf baseLength elementPointer emitArrayBase emitIndex nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 baseLength#0 Emitter.useRuntime#0 elementPointer#0 Emitter.llvm#0 slotType#0
+  calls: Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.alignOf TypeTable.laneCount TypeTable.refOf elementPointer emitArrayBase emitIndex emitVectorCheck nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType valueSlotAccess
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 emitVectorCheck#0 elementPointer#0 Emitter.llvm#0 slotType#0 valueSlotAccess#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -1075,41 +1107,19 @@ function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string 
   local +8:9 idx: string (const)
   callee +8:15 emitIndex -> @emitIndex
   local +9:9 fn: IRFunction (const)
-  local +10:9 len: string (const)
-  callee +10:15 baseLength -> @baseLength
-  local +11:9 end: string (const)
-  callee +11:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local +12:9 first: string (const)
-  callee +12:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +13:9 last: string (const)
-  callee +13:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local +14:9 inRange: string (const)
-  callee +14:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +15:9 failBlock: IRBlock (const)
-  callee +15:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local +16:9 okBlock: IRBlock (const)
-  callee +16:19 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +17:3 IRFunction.emit -> @IRFunction.emit
-  callee +18:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +20:9 lastLane: string (const)
-  callee +20:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local +21:9 shown: string (const)
-  callee +21:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +22:3 IRFunction.emit -> @IRFunction.emit
-  callee +22:24 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +23:3 IRFunction.emit -> @IRFunction.emit
-  callee +24:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +25:9 slot: string (const)
-  callee +25:16 elementPointer -> @elementPointer
-  local +26:9 ty: string (const)
-  callee +26:14 Emitter.llvm -> @Emitter.llvm
-  local +27:9 ptr: string (const)
-  callee +27:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +27:39 slotType -> @slotType
-  local +29:9 align: string (const)
-  callee +29:28 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +31:5 IRFunction.emit -> @IRFunction.emit
-  callee +34:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:5 emitVectorCheck -> @emitVectorCheck
+  local +13:9 slot: string (const)
+  callee +13:16 elementPointer -> @elementPointer
+  local +14:9 ty: string (const)
+  callee +14:14 Emitter.llvm -> @Emitter.llvm
+  local +15:9 ptr: string (const)
+  callee +15:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +15:39 slotType -> @slotType
+  local +17:9 attrs: string (const)
+  callee +17:28 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +17:58 valueSlotAccess -> @valueSlotAccess
+  callee +19:5 IRFunction.emit -> @IRFunction.emit
+  callee +22:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitElementAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
