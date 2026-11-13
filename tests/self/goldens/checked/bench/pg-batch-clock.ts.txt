@@ -810,7 +810,7 @@ function PgBinary.iso(this: PgBinary, micros: i64, out: u8[], at: i32): i32 -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: at
-  calls: nish.pgDigits nish_panic_div nish_panic_index nish_panic_overflow
+  calls: nish.pgDigits nish_panic_div nish_panic_overflow
   pointer this: size=1 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0 nish.pgDigits#0
   stackSites=0 stackLocals=0
