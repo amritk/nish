@@ -2,7 +2,7 @@
 // every bare `number` and every unannotated literal is an `f64`. The module
 // spells its widths, so its answers must not move: `crypto_pki`'s suites,
 // whole.
-import { accepts, bounds, constraints, hostnames, reasons, refusals } from "../crypto_pki/suites"
+import { accepts, bounds, constraints, distrust, hostnames, reasons, refusals } from "../crypto_pki/suites"
 
 export const main = (): i32 =>
   accepts(" (f64 mode)") +
@@ -10,4 +10,5 @@ export const main = (): i32 =>
   constraints(" (f64 mode)") +
   bounds(" (f64 mode)") +
   hostnames(" (f64 mode)") +
-  reasons(" (f64 mode)")
+  reasons(" (f64 mode)") +
+  distrust(" (f64 mode)")

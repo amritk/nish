@@ -1,6 +1,9 @@
 # Node
 
-This repo's tooling runs on **Node.js 22.18+ and npm**, not Bun. The sibling
+This repo's tooling runs on **Node.js 22.18+ and npm**, not Bun. CI pins
+Node 26.13.1, the current LTS, in every workflow but one: rebuild.yml's
+`ddc` job pins 22.23.4, because npm 11 refuses the lockfiles of the old tags
+it installs. The sibling
 repos (`mjst`, `mini`, `agent-ummo`) carry a `bun.md` that says "default to
 Bun"; that rule is deliberately not carried here. The compiler itself is not a
 Node program — it is `src/`, a native binary built by the last release — but
@@ -40,7 +43,7 @@ commands a user would.
 ## Commands
 
 ```bash
-npm install              # install (npm ci in CI)
+npm ci                   # install (npm ci --ignore-scripts in CI)
 bash scripts/fetch-seed.sh   # the last release into build/seed/ (NISH_BOOTSTRAP names another)
 npm run build            # build/nish to keep (scripts/bootstrap.sh); npm test builds its own
 npm run check            # ambient tsc --noEmit over src/, std/, tests/nish against runtime/nish.d.ts
@@ -50,7 +53,7 @@ node tests/run.js <sub>  # only cases whose name contains <sub>
 npm run test:update      # write missing .ll goldens
 npm run sync-main        # merge origin/main, regenerate the goldens, stage them
 npm run test:diff        # the full differential set, against the frozen rewrites under Node
-npm run lint             # file names + biome check, formatter disabled (.claude/linting.md)
+npm run lint             # file names, install scripts, biome check (.claude/linting.md)
 npm run format           # biome format --write
 npm run smoke            # build and run every example with a main
 npm run size-report      # binary size table for examples/add.ts

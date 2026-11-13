@@ -929,8 +929,12 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * `docs/security/http3.md`): the two times an `Http3Connection` measures its
  * idle and head timeouts from, and the counts and mode that say whether a
  * client made progress, filling padding the object already had.
+ *
+ * Moved to **111,016 bytes** (+8) by the reset budget (H3-9,
+ * `docs/security/http3.md`): the `resetCredit` an `Http3Connection` charges each
+ * request reset against, which the clock's fields had left no padding for.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111008
+export const HTTP3_SERVER_SLOT_BYTES = 111016
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

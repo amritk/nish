@@ -419,6 +419,24 @@ const ytMergeUnits = (t: Suite): void => {
   t.eqI32("20000 aliases to one map search it once", pathMatch(repeated, repeated.documentRoot(0), ["m", "x"]), 2);
   const scalar = parseYaml("m: {<<: 1}\n");
   t.eqI32("a scalar merges nothing", pathMatch(scalar, scalar.documentRoot(0), ["m", "x"]), 1);
+  // YJ-5: a sequence of N items shared by N merges is read once by the
+  // merge check, not N times; the work is linear in the text.
+  const reused: string[] = ["x: &x {}\ns: &s ["];
+  const reusedMerges: string[] = ["m:\n"];
+  let r: i32 = 0;
+  while (r < 400) {
+    reused.push(r === 0 ? "*x" : ", *x");
+    reusedMerges.push("  - {<<: *s}\n");
+    r += 1;
+  }
+  const shared400 = parseYaml(`${reused.join("")}]\n${reusedMerges.join("")}`);
+  t.eqI32("a shared merge sequence parses clean", shared400.diagnosticCount(), 0);
+  t.eqI32("a merge sequence 400 merges share is read once", shared400.mergeItemsChecked, 400);
+  const badShared = parseYaml("x: &x {}\ns: &s [*x, *x, 1]\nm:\n  - {<<: *s}\n  - {<<: *s}\n  - {<<: *s}\n");
+  t.eqStr("a bad shared merge sequence is reported at each alias", ytRangesOf("x: &x {}\ns: &s [*x, *x, 1]\nm:\n  - {<<: *s}\n  - {<<: *s}\n"), "BAD_MERGE@39..41 BAD_MERGE@52..54");
+  t.eqI32("and is read once, to its bad item", badShared.mergeItemsChecked, 3);
+  const literalSeqs = parseYaml("x: &x {}\nm:\n  - {<<: [*x, *x]}\n  - {<<: [*x, *x]}\n");
+  t.eqI32("a merge sequence written out is read where it stands", literalSeqs.mergeItemsChecked, 4);
   const off = new YamlOptions();
   off.merge = false;
   const plain = parseYamlWith("m:\n  <<: {x: 1}\n", off);

@@ -55,7 +55,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
 
       # Did this push land the release commit? The release PR is the only
       # thing that writes changelog/<version>.json for the version in

@@ -3,8 +3,8 @@
 A rule a tool can check is checked by a tool, not by a reviewer. This file says
 which rules those are and where each is enforced.
 
-`npm run lint` runs the file-name check and `biome check .`, with the
-formatter on. `npm run lint:dead` runs knip. CI's `lint` job runs both, plus
+`npm run lint` runs the file-name check, the install-script check and
+`biome check .`, with the formatter on. `npm run lint:dead` runs knip. CI's `lint` job runs both, plus
 shellcheck, and every rule is an `error`: a finding fails the pull request.
 `npm run lint:fix` applies every safe fix and formats, and
 `npm run format` only formats.
@@ -15,6 +15,7 @@ shellcheck, and every rule is an `error`: a finding fails the pull request.
 | --- | --- | --- |
 | Biome (lint and format) | `src/`, `std/`, `bin/`, `tests/**/*.js`, `tests/self/**/*.ts`, `examples/`, `docs/cookbook/`, `docs/*.mjs`, `bench/`, `web/`, `scripts/`, `.claude/hooks/` | `biome.json` |
 | `scripts/check-filenames.mjs` | every path `git ls-files` prints | the constants at its top |
+| `scripts/check-install-scripts.mjs` | `package-lock.json`: no dependency has an install script (SC-30, `docs/security/supply-chain.md`) | none |
 | tsc (`npm run check`) | `src/`, `std/`, `tests/nish/` | `tsconfig.json` |
 | knip (`npm run lint:dead`) | the same files as Biome, from the entry points in its config | `knip.json` |
 | shellcheck (`-S warning`) | `scripts/*.sh`, `docs/cookbook/regen.sh`, `install.sh`, `.github/*.sh`, `.claude/hooks/*.sh` | the CI step |
