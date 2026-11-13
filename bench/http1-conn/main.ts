@@ -247,9 +247,8 @@ class IdlePool {
       }
     }
     for (let i: i32 = 0; i < count; i += 1) {
-      const conn: Http1Connection = new Http1Connection(config)
+      const conn: Http1Connection = new Http1Connection(config, this.date) // shared date
       conn.pool = this.outputs
-      conn.date = this.date
       if (idleInput) {
         conn.inputs = this.inputs
         conn.heads = this.heads

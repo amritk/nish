@@ -127,11 +127,24 @@ const withSendBody = (std) =>
   fs
     .readFileSync(path.join(std, "std", "net", "http1-server.ts"), "utf8")
     .includes("  sendBody(");
+// A base whose `Http1Connection` constructor takes no `Date` (before the
+// idle trims) gets the shared one put on each built connection instead.
+const withSharedDate = (std) =>
+  fs
+    .readFileSync(path.join(std, "std", "net", "http1-server.ts"), "utf8")
+    .includes("date: HttpDate | null = null");
+const dated = (std, text) =>
+  withSharedDate(std)
+    ? text
+    : text.replace(
+        "new Http1Connection(config, this.date) // shared date",
+        "new Http1Connection(config)\n      conn.date = this.date",
+      );
 const source = fs.readFileSync(path.join(here, "main.ts"), "utf8");
 const sourceFor = (std) =>
   withSendBody(std)
-    ? source
-    : source
+    ? dated(std, source)
+    : dated(std, source)
         .split("\n")
         .filter((line) => !line.includes("// sendBody only"))
         .join("\n")
