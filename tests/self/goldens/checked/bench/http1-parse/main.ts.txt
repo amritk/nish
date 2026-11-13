@@ -779,7 +779,7 @@ function http1LanesAreFieldText(v: u8x16): boolean -> @nish.http1LanesAreFieldTe
   local +0:9 control: mask8x16 (const)
 function http1BytesAreFieldText(bytes: u8[]): boolean -> @nish.http1BytesAreFieldText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.http1IsValueByte nish.http1LanesAreFieldText nish_panic_index nish_panic_overflow
+  calls: nish.http1IsValueByte nish.http1LanesAreFieldText nish_panic_index
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -814,14 +814,14 @@ function http1PutCrlf(out: u8[], at: i32): i32 -> @nish.http1PutCrlf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function http1PutColonSpace(out: u8[], at: i32): i32 -> @nish.http1PutColonSpace
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function http1PutBytes(out: u8[], at: i32, bytes: u8[]): i32 -> @nish.http1PutBytes

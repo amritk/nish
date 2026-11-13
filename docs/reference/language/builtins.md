@@ -509,8 +509,8 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
-| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](declarations.md#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
-| `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `readCString(p: CPtr): string` | a NULL test that panics `ffi-null`, then a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](declarations.md#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates; may panic | `ffi_owned_string`, `panics_ffi_read_cstring_null`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
+| `readStruct(p: CPtr): T` | a NULL test that panics `ffi-null`, then `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates; may panic | `ffi_struct_read`, `panics_ffi_read_struct_null`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
 | `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](declarations.md#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
@@ -564,10 +564,11 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](semantics-decisions.md#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
-  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
-  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
-  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
+  its pointer for `NULL`, an `ffi-null` site no proof removes
+  (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
+  refuses a call to either in its scope. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -629,9 +630,15 @@ check for the whole vector, `i < len` and `i + N <= len`.
 
 - *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
   the element's address bitcast to `<N x T>*` and one `load` aligned to the
-  lane.
-- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
-  `simd_access_oob_negative`; `reject_simd_lane_type`.
+  lane, with the `!alias.scope`, `!noalias` and `!tbaa` of a scalar element
+  access of the lane type. The check is left out where the bounds proof
+  (`src/bounds.ts`, `judgeVectorAccess`) already knows every lane is in range:
+  `i` non-negative under a guard such as `i <= n - N` or `i + N - 1 < n` on the
+  array's length, or a literal index into an array of known length. A guard one
+  lane short proves nothing, and the access keeps its check.
+- *Tests:* `simd_access`, `simd_access_proven`, `simd_access_alias`,
+  `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`,
+  `simd_access_oob_guard`; `reject_simd_lane_type`.
 
 **`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
 It is a statement.

@@ -441,9 +441,8 @@ arena. It belongs in [`nish:unsafe`](LANGUAGE.md#nishunsafe-unchecked-access-and
 and not in the global namespace, because it is exactly the kind of thing that
 module exists to make visible: an address with no proof behind it that a NUL
 ends it is read until one is found, and a `CPtr` that does not point at a C
-string is undefined behaviour. It panics on nothing, so like `uncheckedGet` it
-is an `unchecked` site with `"allowed": true`, and `--emit-checked` records
-the import and every call, as it does for the other five.
+string is undefined behaviour. `--emit-checked` records the import and every
+call, as it does for the other five.
 
 It is the one place S3 dereferences a `CPtr`, and it does so in the runtime,
 not in the IR: §7a's "no dereference" stays true of the language, and the
@@ -456,18 +455,22 @@ byte-loop-and-`nish_str_new` helper of §8d, which a module now defines when it
 declares a C function with a `string` result *or* calls `readCString`. The
 dereference is therefore in the IR after all, but only inside that helper,
 which the program cannot spell; §7a's "no dereference" stays true of the
-language, and the `CPtr` still gets no pointer attributes. There is no `NULL`
-test at the call: the parameter is a non-null `CPtr`, so a `CPtr | null` must
-be narrowed first (`reject_unsafe_read_cstring`). What the compiler trusts is
-a `declare function` that declares a `CPtr` result: it gets no `ffi-null`
-check, as a `string` result does, so a declaration that says `CPtr` for a C
-function that may answer `NULL` hands `readCString` a `NULL` it reads through.
-The runtime's security record states the trust (RT-16). The copy is a fresh
-allocation of the calling function (`isAllocatingBuiltin` in
-`src/escape.ts`), and the call is an allowed `unchecked` site with the copy's
-`oom` beside it, under `--deny-panics` as for `uncheckedGet`
+language, and the `CPtr` still gets no pointer attributes. The parameter is a
+non-null `CPtr`, so a `CPtr | null` must be narrowed first
+(`reject_unsafe_read_cstring`), but that proves nothing about a result C
+answered: a `declare function` whose result is declared `CPtr` may still
+answer `NULL`. So the call tests its pointer before the copy and panics with
+the `ffi-null` kind (``` `readCString` read a NULL pointer ```,
+`panics_ffi_read_cstring_null`), the test `readStruct` makes (§9h) and a
+`string` result makes (§8d), emitted by one helper (`emitFfiNullTest` in
+`src/emit-builtins.ts`); `@nish.ffi.str` itself tests nothing, so no path
+tests twice. `--emit-panics` lists the call as an `ffi-null` site with the
+copy's `oom` beside it, and no proof removes the test, so `--deny-panics`
+refuses a call in its scope (RT-16). The copy is a fresh allocation of the
+calling function (`isAllocatingBuiltin` in `src/escape.ts`)
 (`tests/cases/ffi_owned_string`, `reject_ffi_owned_string_arena`). On wasm32
-the helper is the same IR, and needs only `nish_str_new`.
+the helper and the test are the same IR, and need only `nish_str_new` and
+`nish_panic`.
 
 **As built (S3.3), the literal-`null` rule is a call-site rule.** The nullable
 branch of `checkForeignSignature` is gone, so the declaration accepts
@@ -526,7 +529,7 @@ Still refused, each by name, each with a `reject_*` case:
 | --- | --- | --- |
 | **S3.1** (built) | `string` and `string \| null` parameters; the borrow rule in `src/escape.ts`; the NUL check (lowered in the IR rather than `nish_ffi_cstr`, §8c) and the `ffi-nul` panic kind; the literal proof | `ffi_string_param` (golden `.ll` + native round trip against libc: `strlen`, `puts`, `atoi`, `setenv` then the runtime's `getenv`); `ffi_string_param_arena` (a concatenated string passed from a function whose arena scope releases after the call, linked against a C sidecar that copies what it read, so the output shows the bytes were live during the call); `panics_ffi_nul`; `reject_ffi_string_array_param` |
 | **S3.2** (built) | `string` and `string \| null` returns; the copy (lowered in the IR rather than `nish_ffi_str`, §8d) and the `ffi-null` panic kind | `ffi_string_return` (`getenv`, `strerror`, `setlocale` query, and `strchr` answering into its own argument, each copy kept across a churned arena); `panics_ffi_null`; `reject_ffi_string_array_return`; a timing of `strerror` in a loop whose argument changes on every iteration, folded into a printed checksum, to state the copy's cost in the commit's `Measured:` trailer |
-| **S3.3** (built) | `readCString` in `nish:unsafe` (lowered to S3.2's IR helper rather than a runtime function, §8e); the literal-`null` `CPtr \| null` parameter | `ffi_owned_string` (`strdup`/`free` and `realpath(p, null)`/`free` round trips, each copy kept across a churned arena); `reject_ffi_pointer_nullable_variable` and `reject_ffi_pointer_nullable_specialised` (the narrowed-local rule kept); `reject_unsafe_read_cstring`; `reject_ffi_owned_string_arena`; `reject_unsafe_no_import` extended |
+| **S3.3** (built) | `readCString` in `nish:unsafe` (lowered to S3.2's IR helper rather than a runtime function, §8e); the literal-`null` `CPtr \| null` parameter | `ffi_owned_string` (`strdup`/`free` and `realpath(p, null)`/`free` round trips, each copy kept across a churned arena); `reject_ffi_pointer_nullable_variable` and `reject_ffi_pointer_nullable_specialised` (the narrowed-local rule kept); `reject_unsafe_read_cstring`; `reject_ffi_owned_string_arena`; `reject_unsafe_no_import` extended; later, `panics_ffi_read_cstring_null` (the NULL test, RT-16) |
 
 Each step is a feature in the language, so each ships the full set the
 definition of done names: the golden `.ll`, `llvm-as`, the native round trip,
@@ -796,8 +799,7 @@ panics with the `ffi-null` kind, naming the layout (``` `readStruct` read a NULL
 pointer into a `Pair` ```, `panics_ffi_read_struct_null`). `--emit-panics`
 lists the call as an `ffi-null` site with the copy's `oom` beside it, and no
 proof removes the check, so `--deny-panics` refuses a call in its scope.
-`readCString` is the one reader left unchecked: it still trusts a `CPtr`
-result not to be `NULL` (RT-16) and stays an allowed `unchecked` site. The
+`readCString` makes the same test (§8e). The
 size is not checked: the compiler cannot know how many bytes C's pointer
 covers, so the layout must be the struct or a prefix of it. That, and the
 liveness of the pointer, are why the function is in `nish:unsafe`, and

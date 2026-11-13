@@ -14825,9 +14825,13 @@ with no one to free it. It is declared `CPtr | null`, narrowed, and copied with
 pointer back to `free` itself. The copy is the same `@nish.ffi.str` helper a
 `string` result calls — a byte loop to the NUL, then `nish_str_new` — so
 `readCString` adds no runtime function: `runtime.c` has no room under its
-ceiling, and the helper was already in the module's reach. Here it is
-`%7 = call i8* @nish.ffi.str(i8* %6)`, with no `NULL` test, because the
-parameter is a `CPtr` and the `if (p === null)` above it is what proved it.
+ceiling, and the helper was already in the module's reach. The parameter is a
+`CPtr`, so the `if (p === null)` above it is required, but a `declare
+function` declared to answer `CPtr` may still answer `NULL`, so the call tests
+its pointer again: `icmp eq i8* %6, null` branches to `ffi.null`, which panics
+with the `ffi-null` kind (`` `readCString` read a NULL pointer ``), the test
+`readStruct` and a `string` result make, and `ffi.copy` calls
+`@nish.ffi.str(i8* %6)`, which tests nothing itself.
 
 `readCString` is a fresh allocation of the calling function, so the escape
 analysis keeps `out` past `free(p)` and returns it. The literal `null` handed
@@ -14860,7 +14864,8 @@ export const main = (): i32 => (resolve("/").length === 1 ? 0 : 1)
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [92 x i8] } { i64 91, [92 x i8] c"`realpath`: argument 1 (path) holds a NUL byte, which C would read as the end of the string\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"/\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"`readCString` read a NULL pointer\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"/\00" }, align 8
 
 declare i8* @realpath(i8*, i8*)
 declare void @free(i8*)
@@ -14914,19 +14919,27 @@ if.then:
 
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %out.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
-  %9 = load i8*, i8** %out.addr, align 8
-  ret i8* %9
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %out.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
+  %10 = load i8*, i8** %out.addr, align 8
+  ret i8* %10
 }
 
 define noundef i32 @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @resolve(i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %1 = call i8* @resolve(i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   %3 = bitcast i8* %2 to i64*
   %4 = load i64, i64* %3, align 8
@@ -31268,7 +31281,7 @@ bounds.ok:
   %11 = bitcast i8* %10 to i8*
   %12 = getelementptr inbounds i8, i8* %11, i64 %0
   %13 = bitcast i8* %12 to <16 x i8>*
-  %14 = load <16 x i8>, <16 x i8>* %13, align 1
+  %14 = load <16 x i8>, <16 x i8>* %13, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   %15 = sext i32 %at to i64
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
   %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -31290,14 +31303,14 @@ bounds.ok.1:
   %26 = bitcast i8* %25 to i8*
   %27 = getelementptr inbounds i8, i8* %26, i64 %15
   %28 = bitcast i8* %27 to <16 x i8>*
-  store <16 x i8> %14, <16 x i8>* %28, align 1
+  store <16 x i8> %14, <16 x i8>* %28, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   ret void
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!12, !13, !14, !15, !16}
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -31310,11 +31323,13 @@ attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !8, i64 16}
-!12 = !{i32 8, !"cf-protection-branch", i32 1}
-!13 = !{i32 8, !"cf-protection-return", i32 1}
-!14 = !{i32 8, !"branch-target-enforcement", i32 1}
-!15 = !{i32 8, !"sign-return-address", i32 1}
-!16 = !{i32 4, !"probe-stack", !"inline-asm"}
+!12 = !{!"element i8", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end simd-load-store -->
 
