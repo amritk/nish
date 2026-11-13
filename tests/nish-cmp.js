@@ -538,6 +538,11 @@ const asyncTrim = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_TRIM, why }))
   )
+const STATIC_ROUTES = "static routes from an exact-path table ahead of the trie walk"
+const staticRoutes = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: STATIC_ROUTES, why }))
+  )
 const PIPELINED_WRITE = "answers pipelined requests in one write"
 const pipelinedWrite = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1279,7 +1284,7 @@ const DECLARED = [
     files.split(" ").map((file) => ({
       program,
       file,
-      changelog: "fixed-base table for P-256",
+      changelog: "P-256's cached table for G",
       why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
     }))
   ),
@@ -1323,7 +1328,7 @@ const DECLARED = [
     files.split(" ").map((file) => ({
       program,
       file,
-      changelog: "fixed-base table for P-256",
+      changelog: "P-256's cached table for G",
       why: "P256PointScratch gains `comb` (64 to 72 bytes), so every module of a TLS program that declares it or its constructor moves, a C header gains the field and renumbers what follows it, and p256SignSha256Into stores into its P256SignScratch, so that parameter is no longer readonly",
     }))
   ),
@@ -4362,6 +4367,72 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/tfb_db/main.ts": ["websocket.ll"],
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
+    }
+  ),
+  // WP49 stage 6: `Router` files a route with no parameter in an exact-path
+  // table, so the class gains the table's fields, `matchTree` and
+  // `staticCount`. A module that names Router's struct lays it out again (the
+  // negative programs' main.ll) and so does the header that declares it; the
+  // programs that call the new methods (the two equivalence tests and
+  // bench/router.ts) are refused by a release that has neither. router.ll
+  // itself is declared below, but for the range program, which is new here.
+  ...staticRoutes(
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
+    {
+      "bench/router.ts": ["exit"],
+      "tests/link/net_router/main.ts": ["exit"],
+      "tests/link/net_router_f64/main.ts": ["exit"],
+      "tests/link/net_router_negative_ambiguous/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_duplicate/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_limits/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_range/main.ts": ["main.h", "main.ll", "router.ll"],
+      "tests/link/net_router_negative_too_long/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_too_many_params/main.ts": ["main.h", "main.ll"],
+    }
+  ),
+  // The same Router struct, reached through HttpHandler and serve: the
+  // programs below hold a Router in a module other than the router, so that
+  // module moves with it.
+  ...staticRoutes(
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
+    {
+      "tests/link/net_serve_burst/main.ts": ["handler.ll", "main.ll", "router.ll", "serve.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll", "router.ll"],
+      "tests/link/std_postgres_async/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
+        "handler.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
+        "handler.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/tfb_async_db/main.ts": ["router.ll"],
     }
   ),
   // #1416: Http1Connection keeps its last response head, and the head-reuse
