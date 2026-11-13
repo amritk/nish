@@ -278,8 +278,8 @@ A check in `tests/run.js` that spawns a process, or runs one under
 `--sandbox`, passes here and then runs on CI's ubuntu runners, which are not
 this container in two ways a check can trip on:
 
-- **Their coreutils are uutils**: one multicall binary whose messages, and
-  sometimes exit codes, differ from GNU's. A check that matches `cat`'s or
+- **Their coreutils are uutils**: one multicall binary whose messages differ
+  from GNU's. A check that matches `cat`'s or
   `ls`'s error text, or tells two tools apart by their files, holds here and
   fails there.
 - **Node inherits descriptors from the runner.** `/proc/self/fd` of the test

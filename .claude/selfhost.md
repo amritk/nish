@@ -290,8 +290,9 @@ Five pairings CI checks and a local run on one machine does not:
   objects (natively, with `-DNISH_THREADS` and for wasm32-wasi) and fails on a
   name they leave undefined that the list does not reserve. Add the name to
   `isCLibrarySymbol` in the same change, and run the section after any change
-  to `runtime/`. A call made only on Darwin or the BSDs is listed by hand, since
-  no Linux run sees it.
+  to `runtime/`. Read its skip line: the wasm32-wasi leg is skipped without
+  `WASI_SYSROOT` and the whole section without clang and `llvm-nm`. A call made
+  only on Darwin or the BSDs is listed by hand, since no Linux run sees it.
 
 ## How `src/` is tested
 
