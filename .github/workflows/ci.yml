@@ -345,6 +345,16 @@ jobs:
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version
 
+      # The seed's link of src/compile.ts is a minute on one core, the same in
+      # every shard, and the same binary as the last run whose src/, std/, seed
+      # and toolchain were these: tests/self/compiler-cache.js keys it on all
+      # of them, and the Test step below copies it rather than linking again.
+      # Shard 1 alone saves a miss, since the eight build the same bytes.
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+        with:
+          save: ${{ matrix.shard == 1 }}
+
       # A server `nish run --watch` swaps closes its SO_REUSEPORT listener
       # while the new one is up, and Linux resets the connections still queued
       # on a closing listener unless this setting moves them to another
@@ -1181,8 +1191,8 @@ jobs:
         run: npm ci --ignore-scripts
 
       # The same seed, and the same compiler `npm test` builds in the `test`
-      # job; see there. This job has no suite to borrow it from, so it links
-      # its own.
+      # job; see there. It comes through the same cache, so on a hit this job
+      # reuses the binary the `test` job's shard 1 saved.
       - name: Fetch the seed
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1190,7 +1200,10 @@ jobs:
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler with the seed
-        run: build/seed/bin/nish src/compile.ts --link build/nish
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: ${{ matrix.shard == 1 }}
 
       # The runner answers 1 when any check failed, so the step's own exit status
       # is the gate. Its last line is the summary, which is what a reader wants
@@ -1280,6 +1293,13 @@ jobs:
           NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
+      # Each `node tests/run.js` below needs that stage1; this step links it, or
+      # restores the one an earlier run linked from the same inputs, and the
+      # seven runs copy it from build/cache rather than each spending 40 s on
+      # the link (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+
       # `set -o pipefail` so that a failed check in the section fails the step
       # before the grep is asked anything; the grep is then the guard against a
       # green section that ran no NEON code.
@@ -1344,14 +1364,6 @@ jobs:
           node tests/run.js "chacha20 kernel" | tee "$RUNNER_TEMP/chacha20-kernel.log"
           grep -E '^PASS  chacha20 kernel: chacha20_hw_agree with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has' "$RUNNER_TEMP/chacha20-kernel.log"
 
-      # The figures, not a gate: S10's AArch64 verdict (`NISH_CHACHA20_ARM_ON`
-      # in runtime/runtime-chacha20.c) is read from this table, built with the
-      # stage1 the sections above linked into build/nish-test.
-      - name: ChaCha20-Poly1305 throughput on AArch64
-        run: |
-          node bench/chacha20.mjs --check --compiler build/nish-test
-          node bench/chacha20.mjs --runs 9 --compiler build/nish-test
-
       # WP38's CRC-32 on AArch64: the compiler's branch to the ARMv8 CRC32
       # kernel, run end to end against the Nish walk.
       - name: The lowered CRC-32 programs, natively on AArch64
@@ -1398,7 +1410,11 @@ jobs:
       # and NEON) held to the scalar reference and RFC 8439's vector, then
       # ChaCha20-Poly1305 seal and open timed on each against the Nish AEAD
       # with a copy column for the noise band, and the verdict against both
-      # routes' bars (docs/wp38-simd.md §3.1).
+      # routes' bars (docs/wp38-simd.md §3.1). S10's AArch64 verdict
+      # (`NISH_CHACHA20_ARM_ON` in runtime/runtime-chacha20.c) is read from
+      # this table. It is run once: an earlier step ran the same two commands
+      # with one run fewer, which cost the job a minute and a half for a
+      # second copy of the same table.
       - name: ChaCha20 throughput on AArch64
         run: |
           node bench/chacha20.mjs --check --compiler build/nish-test
@@ -1468,6 +1484,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
+
+      # Both `node tests/run.js` runs below copy this stage1 from build/cache
+      # rather than linking it each (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+        with:
+          save: ${{ matrix.shard == 1 }}
 
       # Linux routes all of 127.0.0.0/8 to lo; Darwin's lo0 carries 127.0.0.1
       # alone, and net_relay's loopback.ts opens sessions from 127.0.0.2 and
@@ -1578,6 +1601,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
+
+      # One stage1 for the run under each pin below, copied from build/cache
+      # rather than linked once per pin (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
 
       # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
       # than getauxval: the agreement driver must name the ARMv8 path, and the

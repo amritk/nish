@@ -23,7 +23,9 @@ commands a user would.
   the first. Adding a runtime dependency is a design decision to raise in the
   PR, not a convenience.
 - `tests/run.js` spawns the compiler the way a user's shell would —
-  `build/nish-test`, which it builds from the seed at the start of the run — so
+  `build/nish-test`, which it builds from the seed at the start of the run, or
+  copies from `build/cache/compiler-under-test/` when a run before linked the
+  same inputs (`tests/self/compiler-cache.js`) — so
   a change to the CLI surface is tested end to end.
 - Node built-ins are imported as `node:fs`, `node:path`, `node:child_process`.
   There is no `.env` loading. The compiler reads `PATH` (to find the tools
