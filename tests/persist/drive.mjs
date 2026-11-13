@@ -6,6 +6,7 @@
 //   node tests/persist/drive.mjs director <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs chain    <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs graph    <loader.mjs> <module.wasm> <steps>
+//   node tests/persist/drive.mjs shapes   <loader.mjs> <module.wasm> <steps>
 //
 // The kept heap is the arena's offset after a call, which only the runtime's
 // `nish_arena_mark` answers; the loader keeps the instance to itself, so the
@@ -16,8 +17,8 @@ import { pathToFileURL } from "node:url";
 
 const [mode, loaderPath, wasmPath, stepsArg] = process.argv.slice(2);
 const steps = Number(stepsArg);
-if (!["world", "director", "chain", "graph"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
-  console.error("usage: drive.mjs world|director|chain|graph <loader.mjs> <module.wasm> <steps>");
+if (!["world", "director", "chain", "graph", "shapes"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
+  console.error("usage: drive.mjs world|director|chain|graph|shapes <loader.mjs> <module.wasm> <steps>");
   process.exit(2);
 }
 
@@ -257,12 +258,38 @@ const runDirector = () => {
  * tests/cases/root_storage_page.ts, one node pushed a call: a list as long as
  * the run, which every compaction traces end to end. A trace that recursed
  * would run out of stack long before the end; this one keeps a work list.
+ *
+ * A `Node` is 8 bytes on wasm32 (an i32 and a pointer), but `push` allocates
+ * 16 for it: `nish_alloc_struct` takes the size the host IR writes. A
+ * compaction packs each node to the 8 its descriptor says, so right after one
+ * the kept heap is exactly the fixed part below the list plus 8 bytes a node.
+ * A run whose keep never compacts has no such reading: its heap only grows,
+ * 16 bytes a node, and it fails on the count of compactions.
  */
 const runChain = () => {
   let sum = 0;
+  let compactions = 0;
+  let base = -1;
+  let lastLive = 0;
+  let memMax = 0;
   for (let t = 1; t <= steps; t++) {
+    const before = kept();
     mod.push(t % 100);
     sum += t % 100;
+    const k = kept();
+    memMax = Math.max(memMax, mod.memory.buffer.byteLength);
+    if (k < before) {
+      compactions++;
+      // Everything below the list is the same at every compaction; the list
+      // itself is 8 bytes a node, so a node left behind or kept twice moves
+      // this by 8.
+      if (base < 0) {
+        base = k - 8 * t;
+      } else if (k - 8 * t !== base) {
+        fail(`kept heap ${k} after compaction ${compactions} at ${t} nodes: ${k - 8 * t - base} bytes off 8 a node`);
+      }
+      lastLive = 8 * t;
+    }
     if (t % 9973 === 0 || t === steps) {
       const got = mod.total();
       if (got !== sum) {
@@ -270,14 +297,33 @@ const runChain = () => {
       }
     }
   }
-  // A node is 8 bytes on wasm32 (an i32 and a pointer), so the list is
-  // 8 * steps; between compactions the kept region grows to twice that and a
-  // page.
-  const live = 8 * steps;
-  if (kept() > 2 * live + 2 * PAGE) {
-    fail(`kept heap ${kept()} for a ${live}-byte list`);
+  // The list grows by at least half again between compactions (the kept
+  // region may reach twice the last live bytes and 64 KiB, at 16 bytes a new
+  // node), so 200,000 nodes take seven; fewer than one a doubling past the
+  // first 4,096 nodes means the keep is not compacting.
+  if (compactions < Math.floor(Math.log2(steps / 4096))) {
+    fail(`only ${compactions} compactions in ${steps} pushes`);
   }
-  console.log(`persist chain: ${steps} steps, total() ${sum}; memory ${mod.memory.buffer.byteLength} bytes, kept heap ${kept()}`);
+  // Between compactions the region past the list's last packing stays under
+  // twice those live bytes, 64 KiB and the one push that crossed it.
+  if (kept() - base > 2 * lastLive + PAGE + 16) {
+    fail(`kept heap ${kept()} with ${lastLive} live bytes at the last compaction`);
+  }
+  // The figure docs/wp55-persistent-root.md and the guides publish: 200,000
+  // nodes, 1.6 MB of live data, peak at 14,090,240 bytes of memory. The
+  // worst-case rule they give (3 * live + 64 KiB + 220 bytes an object + 32 a
+  // pointer slot, here one each a node) must cover the peak, with a page for
+  // the static data and a page for memory growing a page at a time, and the
+  // peak may not pass 10x live.
+  const live = 8 * steps;
+  const rule = 3 * live + PAGE + 220 * steps + 32 * steps + 2 * PAGE;
+  if (memMax > rule || memMax > 10 * live) {
+    fail(`memory peaked at ${memMax} bytes for ${live} live bytes (sizing rule ${rule}, 10x live ${10 * live})`);
+  }
+  console.log(
+    `persist chain: ${steps} steps, total() ${sum}, ${compactions} compactions, each packing the list to 8 bytes a node; ` +
+      `memory peak ${memMax} bytes for ${live} live, kept heap ${kept()}`
+  );
 };
 
 /** What graph.ts's `draw` answers after `t` steps, worked out on its own. */
@@ -329,12 +375,57 @@ const runGraph = () => {
   console.log(`persist graph: ${steps} steps, ${compactions} compactions, every check and draw() right; ${w.report()}`);
 };
 
+/**
+ * tests/persist/shapes.ts: in-place record arrays, union and nullable-union
+ * fields, an array of nullable objects and 1- and 8-byte element arrays, each
+ * of which a wrong offset or stride in a descriptor would corrupt without a
+ * crash. Every step `check` must answer 0; for the first SHAPES_SAME steps
+ * `draw` must match an instance that never compacts, and the run must compact
+ * on at least a third of its keeps with memory and the kept heap flat.
+ */
+const SHAPES_SAME = 4000;
+const runShapes = () => {
+  mod.init();
+  const ref = load(false).mod;
+  ref.init();
+  const w = watch();
+  let compactions = 0;
+  for (let t = 1; t <= steps; t++) {
+    const before = kept();
+    mod.step();
+    w.note(t);
+    if (kept() < before) {
+      compactions++;
+    }
+    const bad = mod.check();
+    if (bad !== 0) {
+      fail(`check() answered ${bad} after ${t} steps (${compactions} compactions)`);
+    }
+    if (t <= SHAPES_SAME) {
+      ref.step();
+      const want = ref.draw();
+      const got = mod.draw();
+      if (got !== want || ref.check() !== 0) {
+        fail(`draw() after ${t} steps is ${got}, the run that never compacts says ${want}`);
+      }
+    }
+  }
+  if (compactions < steps / 3) {
+    fail(`only ${compactions} compactions in ${steps} steps`);
+  }
+  console.log(
+    `persist shapes: ${steps} steps, ${compactions} compactions, every check() right and the first ${SHAPES_SAME} draw()s as a run that never compacts; ${w.report()}`
+  );
+};
+
 if (mode === "world") {
   runWorld();
 } else if (mode === "director") {
   runDirector();
 } else if (mode === "graph") {
   runGraph();
+} else if (mode === "shapes") {
+  runShapes();
 } else {
   runChain();
 }

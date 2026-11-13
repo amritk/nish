@@ -34991,9 +34991,28 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // that recursed would run out of stack. A fourth, tests/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
 // and empty arrays and strings through a compaction every other call, checking
-// each identity after each. Each also links under plain `--profile wasm`,
-// where runtime-wasm.c is built without NISH_WASM_HOST.
+// each identity after each. A fifth, tests/persist/shapes.ts, keeps the
+// layouts a wrong offset or stride would corrupt silently: an array of records
+// kept in place, a union and a nullable-union field, a `(C | null)[]` and
+// `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
+// to pack the list to 8 bytes a node, so a run whose keep never compacts fails.
+// Each also links under plain `--profile wasm`, where runtime-wasm.c is built
+// without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
+// union is fine in a page build's `.d.ts` but refused once a C header is asked
+// for, which has no spelling for it.
 if (!only || "persist".includes(only)) {
+  const unionDir = path.join(buildDir, "persist-union")
+  fs.rmSync(unionDir, { recursive: true, force: true })
+  fs.mkdirSync(unionDir, { recursive: true })
+  const unionArgs = ["tests/persist/union_field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
+  const dtsOnly = spawnSync(NISH, unionArgs, { cwd: root, encoding: "utf8" })
+  check("persist: a union field in a class compiles with --emit-dts alone", dtsOnly.status === 0, shown(dtsOnly))
+  const withHeader = spawnSync(NISH, [...unionArgs, "--emit-header", path.join(unionDir, "u.h")], { cwd: root, encoding: "utf8" })
+  check(
+    "persist: the same union field is refused once --emit-header asks for a C layout",
+    withHeader.status !== 0 && withHeader.stderr.includes("which holds a union no sidecar can describe"),
+    shown(withHeader)
+  )
   const why = wasmHostTools()
   if (why !== null) {
     skip(`persist: ${why}`)
@@ -35003,8 +35022,9 @@ if (!only || "persist".includes(only)) {
     for (const [stem, source, steps, says] of [
       ["world", "tests/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
-      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction"],
+      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through 10,000 compactions"],
+      ["shapes", "tests/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
     ]) {
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })
@@ -35021,6 +35041,11 @@ if (!only || "persist".includes(only)) {
       check(
         `persist: ${stem}'s loader hands each call's arena to nish_root_keep, not nish_arena_release`,
         loader.includes("raw.nish_root_keep(mark)") && !loader.includes("raw.nish_arena_release("),
+        loader
+      )
+      check(
+        `persist: ${stem}'s loader keeps the panic kind a failed keep recorded and only marks a bare trap`,
+        /raw\.nish_root_keep\(mark\);\s*\} catch \(e\) \{\s*if \(state\.dead === null\) \{\s*state\.dead = new NishPanic\([^;]*"trap", -1\);\s*\}\s*throw e;/.test(loader),
         loader
       )
       const lls = fs
