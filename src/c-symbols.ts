@@ -447,6 +447,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getpriority" ||
   name === "getpwnam" ||
   name === "getrandom" ||
+  name === "getrlimit" ||
   name === "gets" ||
   name === "getsockname" ||
   name === "getsockopt" ||
@@ -690,6 +691,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "setpayloadsigf" ||
   name === "setpayloadsigl" ||
   name === "setpriority" ||
+  name === "setrlimit" ||
   name === "setsockopt" ||
   name === "setvbuf" ||
   name === "shutdown" ||

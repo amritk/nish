@@ -8570,22 +8570,23 @@ function Http1Connection.next(this: Http1Connection): i32 -> @nish.Http1Connecti
   callee +9:12 Http1Connection.nextRequest -> @nish.Http1Connection.nextRequest
 function Http1Connection.nextRequest(this: Http1Connection): i32 -> @nish.Http1Connection.nextRequest [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  sharedWrite: +0:11
   calls: nish.Http1Connection.decoder nish.Http1Connection.fail nish.Http1Connection.headArrived nish.Http1Connection.nextFrame nish.Http1Parser.buffered nish.Http1Parser.declineUpgrade nish.Http1Parser.next nish.WsDecoder.feed nish.WsDecoder.reset
   pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http1Connection.decoder#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.headArrived#0 nish.Http1Connection.fail#0
   stackSites=0 stackLocals=0
-  local +4:17 p: Http1Parser (const)
-  local +5:17 ws: WsDecoder (const)
-  callee +5:33 Http1Connection.decoder -> @nish.Http1Connection.decoder
-  callee +6:11 WsDecoder.reset -> @nish.WsDecoder.reset
-  callee +7:11 WsDecoder.feed -> @nish.WsDecoder.feed
-  callee +7:35 Http1Parser.buffered -> @nish.Http1Parser.buffered
-  callee +9:18 Http1Connection.nextFrame -> @nish.Http1Connection.nextFrame
-  callee +18:9 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
-  local +20:13 event: i32 (const)
-  callee +20:26 Http1Parser.next -> @nish.Http1Parser.next
-  callee +43:9 Http1Parser.declineUpgrade -> @nish.Http1Parser.declineUpgrade
-  callee +45:16 Http1Connection.fail -> @nish.Http1Connection.fail
+  local -2:15 counted: boolean (const)
+  local +10:17 p: Http1Parser (const)
+  local +11:17 ws: WsDecoder (const)
+  callee +11:33 Http1Connection.decoder -> @nish.Http1Connection.decoder
+  callee +12:11 WsDecoder.reset -> @nish.WsDecoder.reset
+  callee +13:11 WsDecoder.feed -> @nish.WsDecoder.feed
+  callee +13:35 Http1Parser.buffered -> @nish.Http1Parser.buffered
+  callee +15:18 Http1Connection.nextFrame -> @nish.Http1Connection.nextFrame
+  callee +24:9 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
+  local +26:13 event: i32 (const)
+  callee +26:26 Http1Parser.next -> @nish.Http1Parser.next
+  callee +49:9 Http1Parser.declineUpgrade -> @nish.Http1Parser.declineUpgrade
+  callee +51:16 Http1Connection.fail -> @nish.Http1Connection.fail
 function Http1Connection.fail(this: Http1Connection, status: i32): i32 -> @nish.Http1Connection.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
