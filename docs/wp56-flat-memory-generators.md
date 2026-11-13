@@ -2,8 +2,8 @@
 
 **Status: accepted (owner, 2026-11-13), design only.** Nothing here is
 built. §10 records the owner's decisions: the builder is `builder()` from
-`nish:string`, and the other five questions take this note's
-recommendations. Its stages are in §9 and on
+`nish:string`, the other five questions take this note's
+recommendations, and Q7 adds S5, object graphs in an arena block. Its stages are in §9 and on
 [the roadmap page](roadmap/wp56-flat-memory-generators.md). The plan that
 tracks them is
 [`.claude/plans/wp56-flat-memory-generators.plan.md`](../.claude/plans/wp56-flat-memory-generators.plan.md).
@@ -58,6 +58,7 @@ peaks at 11 MB (`tests/cases/perf_arena_pass_drop`).
 - **Build a large string in linear memory with an API made for it.** The compiler has a `StringBuilder` (`src/strings.ts:21`), a `string[]` and one `join`, but it is the compiler's own, and `std/` has none. `std/yaml-write.ts`'s `YamlWriter` is a private `u8[]` serializer.
 - **Append to a builder from a loop and keep the loop's pass scope.** Any builder written in Nish over `string[]` or `u8[]` grows an array that is older than the pass. That refuses the pass its scope, so the temporaries of every pass stay (§2). `mem_join_parts_scope` keeps the scope only for a `parts` array that the function itself declared and that nothing else touches.
 - **Write a file incrementally.** `appendFileSync` opens and closes the file on every call. `writeFileSync` and `writeFileBytesSync` take the whole file at once. There is no write handle to match WP44's `fileOpen`/`fileReadAt`.
+- **Build an object graph inside a `using a = arena()` block.** A call inside the block to a function that stores an allocation into memory is refused, always (NL2424, `reject_using_arena_callee_stores`). So a constructor that does `this.parts = []` cannot run inside the block, and neither can a method that pushes onto a field. A generator that wants one formatter or model per file keeps it outside the block and clears it between files with hand-written `reset` methods. One user reports that this holds about 28 MB per worker.
 - **Find out from the documentation how to structure such a program.** [memory.md](guide/language/memory.md) explains the warnings, and [regions.md](guide/language/regions.md) explains sessions. No page shows a batch program that produces many outputs, and no test runs file I/O inside a region's `enter`.
 
 ## 2. What already works, and where it stops
@@ -66,7 +67,7 @@ Some programs can already be written with flat memory. S1 documents how, and
 S0 measures it:
 
 1. **One function per file that answers a number.** `const emit = (schema: Schema): i32 => { ...; writeFileSync(path, text); return 0; }`. This function returns no pointer and stores nothing outward, so it takes a function scope. The outer loop's pass then has nothing left behind and keeps its scope too. Within a file, `parts.push` + `join` on a local `parts` is linear. The pass temporaries are still kept until the function returns, which costs about one file's worth of garbage.
-2. **`using a = arena()` around one file's work** (memory.md, "Freeing a batch yourself"). This applies when the work cannot move into a function. The block refuses stores outward (NL2418 to NL2421) and growth of an older array (NL2422), so the builder has to be declared inside the block.
+2. **`using a = arena()` around one file's work** (memory.md, "Freeing a batch yourself"). This applies when the work cannot move into a function. The block refuses stores outward (NL2418 to NL2421) and growth of an older array (NL2422), so the builder has to be declared inside the block. It also refuses any call to a function that stores an allocation (NL2424), so the block cannot hold a class whose constructor or methods store into its fields. D7 lifts that.
 3. **A region per target** (`nish:region`). This is for state that has to outlive one pass but not the program, such as one output that gathers fragments from several passes over the model. `enter` cannot answer a string (NL2611), so the file has to be written inside `enter`. Region memory is live until `free`, so this ought to work, but no test covers it.
 
 Where these stop:
@@ -126,6 +127,26 @@ gate is that peak resident memory does not grow with the number of files
 and (once it lands) NL9018 name `builder()` where the dropped or rebuilt
 value is a string. `docs/AI.md` gets the rule: "build output with a
 `builder()` from `nish:string`, never `s = s + t` in a loop".
+
+**D7. An object graph made inside a `using a = arena()` block belongs to the
+block.** A call that stores an allocation is admitted inside the block when
+the memory it stores into was itself allocated inside the block, through any
+chain of fields. The stored value and its holder are then released together.
+The call is still refused when any member of that graph reaches memory older
+than the block: a field or element of an outer object, a `push` onto an outer
+array, a capture, or a `return` past the block. Each refusal names its route,
+as NL2418 to NL2423 do today. This gives a generator a per-file object graph
+without `reset` methods, and it needs no builder.
+
+Parallel bodies already go part of the way. With nish 0.34.1, a body that
+makes an object whose constructor stores an array, and calls a method that
+pushes onto that array or sets a `Map` field, is accepted. A method that
+writes through a field into a second object, such as
+`this.root.kids.push(n)`, is refused as "writes memory its caller can see".
+The `using arena()` rule is stricter than both: it refuses the constructor
+alone. D7 uses one analysis, a graph confined to the block, and S5 builds
+it for the arena block. Applying the same analysis to parallel bodies and
+`scope()` tasks is deferred (§9).
 
 ## 4. The API
 
@@ -200,6 +221,7 @@ differential tests hold the two sides byte-identical. Unlike `nish:region`,
 - **The new fact.** *Makes builders* is a per-function fact in the fixpoint (§5). It is what the emitter reads to bracket a scope's builder stack. The `--emit-arena` report prints it beside each scope, so a test can pin which scopes take the bracket.
 - **Interop.** A `Builder` in an exported signature (C header, wasm `.d.ts`, N-API) is refused by the checker, with the next free `NL2xxx` code, and by the sidecar generator (`NL4xxx`) for a module it is asked to wrap. A host gets a string from `toString()`.
 - **The capability report (WP35).** The builder needs no capability. The `nish:fs` additions are `fs.write`, as `writeFileSync` is, and are refused where `writeFileSync` is.
+- **Object graphs in an arena block (D7).** NL2424 is decided per call today, from the callee's summary "stores an allocation into memory" (`src/escape.ts`, the NL2424 path). S5 splits that summary into *stores into memory the caller passed in* and *stores into memory reachable only from what the call allocated*. The block then follows each fresh object it makes, and each object stored into a fresh object's field, as members of the block's graph. A call is admitted when every store it makes lands in a graph member. Every route by which a member could leave (NL2418 to NL2423, NL2427) is checked against the whole graph, not only the value named at the call. Calls on `this` inside a method are followed through the method's summary, so `f.add(x)` behaves like the stores it makes. Where the analysis cannot place a store, NL2424 stays, with its current wording.
 - **Codes.** Each refusal takes the next free number in its band in `src/codes.ts`, one code for each reason, and gets a negative test. Numbers are assigned when S2 is built, not here.
 
 ## 7. The patterns (the guide page)
@@ -210,7 +232,7 @@ regions.md. It uses one running example, a generator over a JSON spec, and
 introduces three shapes in this order:
 
 1. **A function per file that answers a number.** This is the default. The page shows `--explain-memory` reporting the outer loop as clean, and the inner loop appending to a `builder()` with its pass scope intact.
-2. **`using a = arena()` per file**, for a file built inline in a loop body. The builder is declared inside the block. The block refuses the outward stores of NL2418 to NL2421.
+2. **`using a = arena()` per file**, for a file built inline in a loop body. The builder is declared inside the block. The block refuses the outward stores of NL2418 to NL2421. After S5 the per-file model or formatter is also made inside the block, so no `reset` method is needed.
 3. **A region per target**, for an output that gathers fragments across several passes over the model, such as a barrel file or one module per tag. `regionWith(target, open)` makes a root that holds a `Builder`, `enterWith` appends on each pass, one last `enter` writes the file, and `free` releases it all. The builder's storage goes with it (D2).
 
 The page also covers flushing a large file through `fileCreate`/`fileWrite`
@@ -249,7 +271,8 @@ In either case the order of the stages is the same.
 
 ## 9. Stages
 
-Each stage is one pull request.
+Each stage is one pull request. S5 depends on nothing after S0 and can land
+before or after S2 to S4.
 
 | Stage | Lands | Done when |
 | --- | --- | --- |
@@ -257,6 +280,7 @@ Each stage is one pull request.
 | **S1** The patterns with today's tools | `tests/cases`/`tests/link` for file I/O inside `enter` (read and write), and `region_per_target`; the guide page with shapes 1 to 3 written over `parts` + `join`; `mem-file-per-function.ts` and `mem-region-per-target.ts` in the cookbook; memory.md and regions.md link to it | `node tests/run.js region` and `node tests/run.js cookbook` pass; the page's examples run under `nish:ok` |
 | **S2** `builder()` from `nish:string` | runtime (§5) with its security record rows; the *makes builders* fact, the builder-stack brackets and the refusals (§6), the wasm32 refusal among them; the `nish:string` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; `--emit-arena` pins which scopes take the bracket; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp reports no difference, because no existing program makes a builder (§5) |
 | **S3** Files from a builder | `writeFileSync`/`appendFileSync` overloads; `fileCreate`, `fileWrite`, `fileWriteBytes`; capability rows; guide flush section; `flush.ts` | G2's flush bound; `tests/link` covers a short write and `EINTR` as WP44's tests do on the read side |
+| **S5** Object graphs in an arena block (D7) | the confined-graph analysis in `src/escape.ts` and the split callee summary (§6); `mem_using_arena_graph` (a constructor storing an array, a method pushing onto a nested object's array, a `Map` field, the file written inside the block); one negative test per route a graph member can leave by; the NL2424 row of LANGUAGE.md's `using arena()` table rewritten; memory.md's "Freeing a batch yourself" and the guide page's shape 2 using a graph; `docs/reference/` regenerated | `mem_using_arena_graph` holds `Arena.mark()` unmoved over 2,000 iterations; every existing `reject_using_arena_*` case still refuses; nish-cmp reports no difference; the `wasi` and `performance` sections pass with no new NL9007 |
 | **S4** Diagnostics and the gate | NL9002, NL9016 and NL9018 hints naming the builder, with their wordings and goldens; `docs/AI.md`; `gen_flat_memory` (G3) | G1 to G3 green in CI, and the roadmap page ticked |
 
 **Deferred.** These are wanted, but no stage is scheduled for them:
@@ -264,6 +288,7 @@ Each stage is one pull request.
 - Lowering `sb.append(\`a${x}b\`)` to three appends, with no intermediate strings.
 - Moving `src/` onto the builtin. The rolling freeze forbids this until the release after S2. `src/strings.ts`'s builder stays until then.
 - Reusing the blocks that `push` outgrows.
+- D7's analysis applied to parallel bodies and `scope()` tasks, so a body can own a graph more than one field deep (§3). This runs on S5's analysis, but it changes the thread rules (LANGUAGE.md, WP29). It gets its own design note once S5 lands.
 
 ## 10. Decisions
 
@@ -275,6 +300,7 @@ The owner decided these on 2026-11-13. S2 builds what they say.
 - **Q4. Number appends: in S2.** `appendInt` and `appendF64` ship with the builder, each held byte-identical to a template's formatting under Node by the differential tests.
 - **Q5. wasm32: refused in S2.** The decision was to support it, or to refuse it with a code where support does not fit. `runtime-wasm.c` has no allocator other than the arena, so S2 refuses it (§5). Supporting it waits for a free-list allocator there.
 - **Q6. `s += t` on strings: stays refused.** Its message gains the hint to use `builder()` from `nish:string` (S4).
+- **Q7. Object graphs in an arena block: in this work package, as S5 (D7).** This was a user request. Per-file arenas are the generator problem this note is about, so the work goes here instead of a work package of its own. The parallel-body half is deferred (§9).
 
 ## 11. Alternatives considered
 

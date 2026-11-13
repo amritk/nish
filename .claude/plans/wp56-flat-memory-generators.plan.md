@@ -87,6 +87,23 @@ stages:
       - id: flat-soak
         content: Add tests/link/gen_flat_memory holding Arena.mark() and anonymous RSS flat over 2,000 files — see S4 diagnostics and the gate
         status: pending
+  - id: s5-arena-graph
+    title: S5 — object graphs in an arena block
+    goal: A class whose constructor and methods store into its own fields can be made and used inside a using arena() block, and is released with it.
+    verification: mem_using_arena_graph holds Arena.mark() over 2,000 iterations; every reject_using_arena_* case still refuses; nish-cmp shows no difference; wasi and performance sections pass.
+    todos:
+      - id: graph-summary
+        content: Split the stores-an-allocation callee summary into stores into caller memory and stores into memory only the call allocated — see S5 object graphs
+        status: pending
+      - id: graph-confine
+        content: Track the block's graph of fresh objects and check NL2418 to NL2423 and NL2427 against every member; keep NL2424 where a store cannot be placed — see S5 object graphs
+        status: pending
+      - id: graph-tests
+        content: Add mem_using_arena_graph and one negative test per route a graph member can leave by — see S5 object graphs
+        status: pending
+      - id: graph-docs
+        content: Rewrite the NL2424 row in LANGUAGE.md, show a graph in memory.md and the guide page's shape 2, regenerate docs/reference — see S5 object graphs
+        status: pending
 ---
 
 # WP56 — generators whose memory stays flat
@@ -127,12 +144,20 @@ The arena rewinds a pass only when nothing the pass made outlives it. `s = s + t
 - The hint wording is changed in one place, `src/codes.ts`, and in the compilation messages. Then regenerate `tests/wordings`.
 - `gen_flat_memory` follows `tests/link/region_sessions_soak`: it reads `Arena.mark()` and anonymous RSS after warm-up and fails on growth past 512 KiB.
 
+## S5 object graphs
+
+- Design note D7 and §6. A user asked for it: per-file arenas would replace their hand-written `reset` methods, which hold about 28 MB per worker.
+- Reproduction with nish 0.34.1: a `Formatter` whose constructor does `this.parts = []`, made inside `using a = arena()`, is refused with NL2424. The same class in a parallel body is accepted. A method writing `this.root.kids.push(n)` is refused in a parallel body.
+- Only programs refused today change, so nish-cmp must show no difference. A difference means the split summary changed a fact some other consumer reads. That is a bug, not a `DECLARED` entry.
+- This changes `src/`, so run the `wasi` and `performance` sections and regenerate the checked goldens.
+
 ## Out of scope
 
 - Lowering a template appended to a builder without intermediate strings.
 - Moving `src/` onto the builtin.
 - `push` reusing the blocks it outgrows.
 - A rope `string`, and a collector.
+- S5's analysis for parallel bodies and `scope()` tasks (deferred, design note §9).
 
 ## Verification
 
@@ -140,6 +165,7 @@ The arena rewinds a pass only when nothing the pass made outlives it. `s = s + t
 npm run check
 npm run lint
 node tests/run.js region
+node tests/run.js using_arena
 node tests/run.js mem_builder
 node tests/run.js cookbook
 node tests/run.js c-symbols
