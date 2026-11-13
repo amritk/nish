@@ -26619,6 +26619,7 @@ const H3_FLAG_WT: i32 = 256
 const H3_FLAG_LATE: i32 = 512
 const H3_STATE_OPEN: i32 = 0
 const H3_STATE_FAILED: i32 = 1
+const H3_CLOCK_OFF: i32 = -1
 const H3_CLOCK_IDLE: i32 = 0
 const H3_CLOCK_HEAD: i32 = 1
 const H3_CLOCK_BUSY: i32 = 2
@@ -26882,7 +26883,7 @@ function Http3Connection.clock(this: Http3Connection, now: i64): i64 -> @nish.Ht
   calls: nish.Http3Connection.awaitsHead nish.QuicConnection.close nish.QuicConnection.closed nish.http3Min nish_panic_overflow
   pointer this: size=536 writesThrough=true captured=false passedTo=nish.Http3Connection.awaitsHead#0
   stackSites=0 stackLocals=0
-  callee -11:32 QuicConnection.closed -> @nish.QuicConnection.closed
+  callee -11:44 QuicConnection.closed -> @nish.QuicConnection.closed
   local -8:9 mode: i32 (let)
   callee -5:16 Http3Connection.awaitsHead -> @nish.Http3Connection.awaitsHead
   local -2:11 finished: boolean (const)
@@ -27015,11 +27016,11 @@ function Http3Connection.nextEvent(this: Http3Connection): i32 -> @nish.Http3Con
   callee -1:9 QuicConnection.closed -> @nish.QuicConnection.closed
   callee +10:9 QuicConnection.fail -> @nish.QuicConnection.fail
   callee +11:16 Http3Connection.fail -> @nish.Http3Connection.fail
-  callee +13:7 Http3Connection.start -> @nish.Http3Connection.start
-  callee +17:45 Http3Connection.takeAgain -> @nish.Http3Connection.takeAgain
-  callee +17:64 QuicConnection.nextStreamEvent -> @nish.QuicConnection.nextStreamEvent
-  local +22:13 event: i32 (const)
-  callee +22:26 Http3Connection.step -> @nish.Http3Connection.step
+  callee +19:7 Http3Connection.start -> @nish.Http3Connection.start
+  callee +23:45 Http3Connection.takeAgain -> @nish.Http3Connection.takeAgain
+  callee +23:64 QuicConnection.nextStreamEvent -> @nish.QuicConnection.nextStreamEvent
+  local +28:13 event: i32 (const)
+  callee +28:26 Http3Connection.step -> @nish.Http3Connection.step
 function Http3Connection.takeAgain(this: Http3Connection): i64 -> @nish.Http3Connection.takeAgain [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
