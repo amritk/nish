@@ -601,7 +601,7 @@ const VIA_SEND_BODY: boolean = true
  * total over `requests`.
  */
 const stages = (requests: i32, count: i32, batches: i32, calibrate: boolean): i32 => {
-  const b: IdlePool = new IdlePool(count, false, 0)
+  const b: IdlePool = new IdlePool(count, false, 0, true)
   const req: u8[] = articles()
   const body: u8[] = articleList()
   const n: i32 = toI32(body.length)
