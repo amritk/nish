@@ -139,9 +139,10 @@ block with `using a = arena()` around the work. A loop whose passes are
 released already, because nothing a pass makes outlives it, takes back what
 the call kept, so that one does not warn; nor does a function run only behind
 a once-guard or a cache on the same object every pass (`if (this.ready) { return }`
-followed later by `this.ready = true`, and no store that clears it), since only
-its first call does the work. A re-entrancy guard that resets its flag, a
-counter, or a guard on a fresh object each pass still warns. The warning counts
+as its first statement, `this.ready = true` right after it, and no store
+anywhere in the program that clears it), since only its first call does the
+work. A re-entrancy guard that resets its flag, work before the guard, a
+counter, or a guard on an object the loop replaces still warns. The warning counts
 passes, not how many there are, so a short fixed loop warns like an unbounded
 one.
 

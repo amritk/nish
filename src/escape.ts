@@ -3248,7 +3248,7 @@ export const loopReachedFunctions = (
     for (const sig of unit.program.functions) {
       const body = sig.body()
       if (sig.definedIn(unit.program.source) && body !== null && sig.instance === null) {
-        const at = latchParameter(unit.program, table, sig, body)
+        const at = latchParameter(units, table, sig, body)
         if (at >= 0) {
           reach.latches.names.push(sig.name)
           reach.latches.params.push(at)
@@ -3384,58 +3384,82 @@ class Latches {
 /**
  * The parameter, by its index in `sig.paramNames` (`this` is a member's
  * first), whose field latches `body`, or -1 when nothing does. Latched is
- * this shape among the top-level statements: an `if` with no `else` whose
- * branch ends in a `return`, on the field alone (`if (s.prepared)`, or
- * `if (known !== null)` for `const known = this.style`), then an assignment
- * of the field that keeps that condition true (`true`, or for `!== null` a
- * value that cannot be `null`), and no other store into the field anywhere.
- * The first call on an object sets the latch, as a once-guard or a cache
- * does, and every later call on the same object returns at the guard. A
- * re-entrancy guard is not one: it stores `false` back.
+ * exactly this shape: optional leading `const`s that only read a field
+ * (`const known = this.style`), then an `if` with no `else` whose branch is a
+ * lone `return`, on the field alone (`if (s.prepared)`, or
+ * `if (known !== null)`), then at once an assignment of the field that keeps
+ * that condition true (`true`, or for `!== null` a value that cannot be
+ * `null`), with at most one `const` before it naming the value it stores. No
+ * statement before the guard allocates, and nothing between the guard and
+ * the store can leave the function, so the first call on an object sets the
+ * latch, and every later call on the same object returns at the guard. Every
+ * store into a field of that name anywhere in the program (`noResets`) must
+ * keep the latch set, so a re-entrancy guard, an `invalidate` elsewhere or a
+ * store through an alias leaves the function unlatched. The guard's `return`
+ * value runs on every call and is not followed.
  */
-const latchParameter = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, body: Node): i32 => {
+const latchParameter = (units: AnalysisUnit[], table: TypeTable, sig: FunctionSig, body: Node): i32 => {
   if (body.kind !== NodeKind.Block) {
     return -1
   }
+  const stmts = body.children
   // Pairs of a `const`'s name and the field path it was initialised from.
   const aliases: string[] = []
-  // The guard's field path, and whether the guard is `!== null` rather than truthiness.
-  let guard = ""
-  let nonNull = false
-  let set = false
-  for (const stmt of body.children) {
-    if (stmt.kind === NodeKind.Var && (stmt.flags & FLAG_CONST) !== 0) {
-      for (const decl of stmt.children[0].children) {
-        const path = fieldPath(decl.children[2])
-        if (path !== "") {
-          aliases.push(decl.children[0].text)
-          aliases.push(path)
-        }
-      }
-    } else if (
-      guard === "" &&
-      stmt.kind === NodeKind.If &&
-      stmt.children[2].kind === NodeKind.Empty &&
-      endsInReturn(stmt.children[1])
-    ) {
-      const cond = unwrapParens(stmt.children[0])
-      let read = cond
-      if (cond.kind === NodeKind.Binary && cond.text === "!==" && isNullLiteral(cond.children[1])) {
-        read = cond.children[0]
-        nonNull = true
-      } else if (cond.kind === NodeKind.Binary && cond.text === "!==" && isNullLiteral(cond.children[0])) {
-        read = cond.children[1]
-        nonNull = true
-      }
-      guard = guardPath(read, aliases)
-    } else if (guard !== "" && stmt.kind === NodeKind.ExprStmt) {
-      const e = unwrapParens(stmt.children[0])
-      if (e.kind === NodeKind.Binary && e.text === "=" && fieldPath(e.children[0]) === guard) {
-        set = true
-      }
-    }
+  let at = 0
+  while (at < stmts.length && isAliasRead(stmts[at], aliases)) {
+    at = at + 1
   }
-  if (!set || !onlyLatchingStores(program, table, body, guard, nonNull)) {
+  if (at + 1 >= stmts.length) {
+    return -1
+  }
+  const test = stmts[at]
+  if (
+    test.kind !== NodeKind.If ||
+    test.children[2].kind !== NodeKind.Empty ||
+    !isLoneReturn(test.children[1])
+  ) {
+    return -1
+  }
+  const cond = unwrapParens(test.children[0])
+  let read = cond
+  let nonNull = false
+  if (cond.kind === NodeKind.Binary && cond.text === "!==" && isNullLiteral(cond.children[1])) {
+    read = cond.children[0]
+    nonNull = true
+  } else if (cond.kind === NodeKind.Binary && cond.text === "!==" && isNullLiteral(cond.children[0])) {
+    read = cond.children[1]
+    nonNull = true
+  }
+  const guard = guardPath(read, aliases)
+  if (guard === "") {
+    return -1
+  }
+  let next = stmts[at + 1]
+  let held = ""
+  if (
+    next.kind === NodeKind.Var &&
+    (next.flags & FLAG_CONST) !== 0 &&
+    next.children[0].children.length === 1
+  ) {
+    const decl = next.children[0].children[0]
+    if (at + 2 >= stmts.length || leavesEarly(decl.children[2])) {
+      return -1
+    }
+    held = decl.children[0].text
+    next = stmts[at + 2]
+  }
+  if (next.kind !== NodeKind.ExprStmt) {
+    return -1
+  }
+  const store = unwrapParens(next.children[0])
+  if (store.kind !== NodeKind.Binary || store.text !== "=" || fieldPath(store.children[0]) !== guard) {
+    return -1
+  }
+  const value = unwrapParens(store.children[1])
+  if (held !== "" && (value.kind !== NodeKind.Ident || value.text !== held)) {
+    return -1
+  }
+  if (!noResets(units, table, unwrapParens(store.children[0]).text, nonNull)) {
     return -1
   }
   const root = guard.substring(0, guard.indexOf("."))
@@ -3447,6 +3471,41 @@ const latchParameter = (program: CheckedProgram, table: TypeTable, sig: Function
     i = i + 1
   }
   return -1
+}
+
+/** Whether `stmt` is a `const` that only reads fields, each name paired in `aliases` with the path it reads. */
+const isAliasRead = (stmt: Node, aliases: string[]): boolean => {
+  if (stmt.kind !== NodeKind.Var || (stmt.flags & FLAG_CONST) === 0) {
+    return false
+  }
+  for (const decl of stmt.children[0].children) {
+    if (fieldPath(decl.children[2]) === "") {
+      return false
+    }
+  }
+  for (const decl of stmt.children[0].children) {
+    aliases.push(decl.children[0].text)
+    aliases.push(fieldPath(decl.children[2]))
+  }
+  return true
+}
+
+/** Whether `stmt` is a `return`, alone or as the only statement of a block. */
+const isLoneReturn = (stmt: Node): boolean =>
+  stmt.kind === NodeKind.Return ||
+  (stmt.kind === NodeKind.Block && stmt.children.length === 1 && stmt.children[0].kind === NodeKind.Return)
+
+/** Whether `node` holds an `orReturn`, which leaves the function before the latch is set. */
+const leavesEarly = (node: Node): boolean => {
+  if (node.kind === NodeKind.Member && node.text === "orReturn") {
+    return true
+  }
+  for (const child of node.children) {
+    if (leavesEarly(child)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The field path `node` reads, as `s.prepared` or `this.style`; `""` for anything else. */
@@ -3464,6 +3523,18 @@ const fieldPath = (node: Node): string => {
   }
   const base = fieldPath(receiver)
   return base === "" ? "" : `${base}.${read.text}`
+}
+
+/** The path `node` names: `this`, a name, or a field path off one; `""` for anything else. */
+const latchPathOf = (node: Node): string => {
+  const n = unwrapParens(node)
+  if (n.kind === NodeKind.This) {
+    return "this"
+  }
+  if (n.kind === NodeKind.Ident) {
+    return n.text
+  }
+  return fieldPath(n)
 }
 
 /** The field path `read` is, itself or as a name `aliases` pairs with one; `""` for anything else. */
@@ -3486,37 +3557,52 @@ const guardPath = (read: Node, aliases: string[]): string => {
 const isNullLiteral = (node: Node): boolean => unwrapParens(node).kind === NodeKind.Null
 
 /**
- * Whether every store under `node` into the field path `guard` keeps the
- * guard true: a plain `=` of `true`, of a fresh object or array, or for a
- * `!== null` guard of anything whose type cannot be `null`.
+ * Whether every store in the program into a field named `field`, on any
+ * object and through any name, keeps a latch on it set: a plain `=` of `true`,
+ * of a fresh object or array, or for a `!== null` latch of anything whose type
+ * cannot be `null`. A constructor's own `this.<field> =` is the object's first
+ * value, not a reset.
  */
-const onlyLatchingStores = (
+const noResets = (units: AnalysisUnit[], table: TypeTable, field: string, nonNull: boolean): boolean => {
+  for (const unit of units) {
+    if (!latchingStoresIn(unit.program, table, unit.program.file, field, nonNull, false)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** `noResets` for the stores under `node`; `ctor` says a constructor encloses it. */
+const latchingStoresIn = (
   program: CheckedProgram,
   table: TypeTable,
   node: Node,
-  guard: string,
-  nonNull: boolean
+  field: string,
+  nonNull: boolean,
+  ctor: boolean
 ): boolean => {
-  if (
-    node.kind === NodeKind.Binary &&
-    isAssignmentOperator(node.text) &&
-    fieldPath(node.children[0]) === guard
-  ) {
-    if (node.text !== "=") {
-      return false
+  const inCtor = ctor || node.kind === NodeKind.Constructor
+  const stores =
+    (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) ||
+    (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--"))
+  const target = stores ? unwrapParens(node.children[0]) : node
+  if (stores && target.kind === NodeKind.Member && target.text === field) {
+    const own = inCtor && unwrapParens(target.children[0]).kind === NodeKind.This
+    if (!own) {
+      if (node.kind !== NodeKind.Binary || node.text !== "=") {
+        return false
+      }
+      const value = unwrapParens(node.children[1])
+      const fresh =
+        value.kind === NodeKind.True || value.kind === NodeKind.New || value.kind === NodeKind.Array
+      const type = program.nodeTypes[value.id]
+      if (!fresh && !(nonNull && value.kind !== NodeKind.Null && type >= 0 && !table.isNullable(type))) {
+        return false
+      }
     }
-    const value = unwrapParens(node.children[1])
-    const fresh = value.kind === NodeKind.True || value.kind === NodeKind.New || value.kind === NodeKind.Array
-    const type = program.nodeTypes[value.id]
-    if (!fresh && !(nonNull && value.kind !== NodeKind.Null && type >= 0 && !table.isNullable(type))) {
-      return false
-    }
-  }
-  if (node.kind === NodeKind.Unary && fieldPath(node.children[0]) === guard) {
-    return false
   }
   for (const child of node.children) {
-    if (!onlyLatchingStores(program, table, child, guard, nonNull)) {
+    if (!latchingStoresIn(program, table, child, field, nonNull, inCtor)) {
       return false
     }
   }
@@ -3524,38 +3610,97 @@ const onlyLatchingStores = (
 }
 
 /**
- * What a call `call` passes as parameter `at` of `callee` (the receiver for a
- * member's `this`), followed through fields to its root: `this`, a name, or
- * null for anything else.
+ * The path a call `call` passes as parameter `at` of `callee` (the receiver
+ * for a member's `this`): `this`, a name, or a field path off one; `""` for
+ * anything else.
  */
-const passedRoot = (call: Node, callee: FunctionSig, at: i32): Node | null => {
-  let arg: Node | null = null
+const passedPath = (call: Node, callee: FunctionSig, at: i32): string => {
   if (callee.owner !== null && at === 0) {
     const target = unwrapParens(call.children[0])
-    arg = target.kind === NodeKind.Member ? target.children[0] : null
-  } else if (call.kind === NodeKind.Call) {
-    const index = at - (callee.owner !== null ? 1 : 0)
-    const args = call.children[1]
-    arg = index < args.children.length ? args.children[index] : null
+    return target.kind === NodeKind.Member ? latchPathOf(target.children[0]) : ""
   }
-  let root: Node | null = arg === null ? null : unwrapParens(arg)
-  while (root !== null && root.kind === NodeKind.Member) {
-    root = unwrapParens(root.children[0])
+  if (call.kind !== NodeKind.Call) {
+    return ""
   }
-  return root !== null && (root.kind === NodeKind.This || root.kind === NodeKind.Ident) ? root : null
+  const index = at - (callee.owner !== null ? 1 : 0)
+  const args = call.children[1]
+  return index < args.children.length ? latchPathOf(args.children[index]) : ""
+}
+
+/** The name or `this` a path from `latchPathOf` starts at. */
+const rootOf = (path: string): string => {
+  const dot = path.indexOf(".")
+  return dot < 0 ? path : path.substring(0, dot)
+}
+
+/**
+ * Whether the path `path` names the same object everywhere in `scope`: its
+ * root is `this` or a name `scope` neither declares nor assigns, nothing in
+ * `scope` stores into its root or any field under it (`st.cur = make()`), and
+ * no shorter path it runs through is used there as a value, handed to a call
+ * or a method's receiver (`st.reset()`), which could store a new object on
+ * the way.
+ */
+const sameObjectIn = (scope: Node, path: string): boolean => {
+  const root = rootOf(path)
+  if (root !== "this" && loopBindsName(scope, root)) {
+    return false
+  }
+  return !touchesPath(scope, null, null, root, path)
+}
+
+/** Whether something under `node` (whose parent is `parent`, and its parent `outer`) breaks `sameObjectIn`. */
+const touchesPath = (
+  node: Node,
+  parent: Node | null,
+  outer: Node | null,
+  root: string,
+  path: string
+): boolean => {
+  const stores =
+    (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) ||
+    (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--"))
+  if (stores) {
+    let target = unwrapParens(node.children[0])
+    while (target.kind === NodeKind.Member || target.kind === NodeKind.Index) {
+      target = unwrapParens(target.children[0])
+    }
+    if (latchPathOf(target) === root) {
+      return true
+    }
+  }
+  const p = latchPathOf(node)
+  if (p !== "" && p !== path && path.startsWith(`${p}.`)) {
+    // A shorter path is only safe as the receiver of a further field read.
+    const read =
+      parent !== null &&
+      parent.kind === NodeKind.Member &&
+      parent.children[0].id === node.id &&
+      !(outer !== null && outer.kind === NodeKind.Call && outer.children[0].id === parent.id)
+    if (!read) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (touchesPath(child, node, parent, root, path)) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
  * The parameters of `callee` a call `call` on a pass of `loop` passes the same
- * object on every pass: `this`, or a path off a name the loop neither declares
- * nor assigns (`run.sound`, but not the `item` of `for (const item of items)`).
+ * object on every pass (`sameObjectIn` the loop): `this`, or a path off a name
+ * the loop leaves alone (`run.sound`, but not the `item` of
+ * `for (const item of items)`).
  */
 const passMask = (call: Node, callee: FunctionSig, loop: Node): i32 => {
   let mask = 0
   let at = 0
   while (at < callee.paramNames.length && at < 31) {
-    const root = passedRoot(call, callee, at)
-    if (root !== null && (root.kind === NodeKind.This || !loopBindsName(loop, root.text))) {
+    const path = passedPath(call, callee, at)
+    if (path !== "" && sameObjectIn(loop, path)) {
       mask = mask | (1 << at)
     }
     at = at + 1
@@ -3565,19 +3710,18 @@ const passMask = (call: Node, callee: FunctionSig, loop: Node): i32 => {
 
 /**
  * The parameters of `callee` a call `call` inside reached function `sig`
- * passes the same object on every pass: one rooted at a parameter of `sig`
- * that `mask` holds fixed and `body` never assigns.
+ * passes the same object on every pass: a path rooted at a parameter of `sig`
+ * that `mask` holds fixed, and the same object throughout `body`.
  */
 const reachedMask = (call: Node, callee: FunctionSig, sig: FunctionSig, body: Node, mask: i32): i32 => {
   let out = 0
   let at = 0
   while (at < callee.paramNames.length && at < 31) {
-    const root = passedRoot(call, callee, at)
+    const path = passedPath(call, callee, at)
+    const root = rootOf(path)
     let p = 0
-    while (root !== null && p < sig.paramNames.length && p < 31) {
-      const name = sig.paramNames[p]
-      const same = root.kind === NodeKind.This ? name === "this" : name === root.text
-      if (same && (mask & (1 << p)) !== 0 && (name === "this" || !loopBindsName(body, name))) {
+    while (path !== "" && p < sig.paramNames.length && p < 31) {
+      if (sig.paramNames[p] === root && (mask & (1 << p)) !== 0 && sameObjectIn(body, path)) {
         out = out | (1 << at)
       }
       p = p + 1
@@ -3631,18 +3775,6 @@ const loopBindsName = (node: Node, name: string): boolean => {
     }
   }
   return false
-}
-
-/** Whether `stmt` always ends in a `return`: one, or a block whose last statement is one. */
-const endsInReturn = (stmt: Node): boolean => {
-  if (stmt.kind === NodeKind.Return) {
-    return true
-  }
-  return (
-    stmt.kind === NodeKind.Block &&
-    stmt.children.length > 0 &&
-    endsInReturn(stmt.children[stmt.children.length - 1])
-  )
 }
 
 /**

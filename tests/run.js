@@ -5612,17 +5612,34 @@ if (!only || "performance".includes(only)) {
   // pass, is quiet; a re-entrancy guard that clears its flag, a negated or
   // compound condition, a counter, a per-item flag and a fresh receiver each
   // pass, directly or through a helper that hands it on, all still keep
-  // memory every pass and warn. This is also the control
+  // memory every pass and warn. So do the bypasses of a latch on the same
+  // object: one cleared elsewhere, directly or through another name, work
+  // before the guard, a second way out before the store, and a field the
+  // loop stores a new object into, itself or through a method. This is also the control
   // that fails if the reach walk stops finding loop calls at all.
   const latch = compile("perf_kept_memory_latch", "perf_kept_memory_latch_report.ll")
   const latchLines = summaries(latch.stderr)
-  const latchNames = ["guarded", "whenReady", "untilDone", "capped", "mark", "stamp", "primed"]
-  const latchFirst = [21, 33, 44, 54, 66, 77, 90]
+  const latchNames = [
+    "guarded",
+    "whenReady",
+    "untilDone",
+    "capped",
+    "mark",
+    "stamp",
+    "primed",
+    "armedWork",
+    "loadedWork",
+    "early",
+    "gated",
+    "prep",
+    "prepNext",
+  ]
+  const latchFirst = [25, 37, 48, 58, 70, 81, 94, 106, 120, 131, 149, 169, 180]
   check(
     "performance: a guard that is not a once-latch on a fixed receiver does not exempt a function from NL9019",
     latch.status === 0 &&
-      latchLines.length === 7 &&
-      positions(latchLines) === "15:1,27:1,38:1,49:1,60:1,71:1,84:1" &&
+      latchLines.length === 13 &&
+      positions(latchLines) === "19:1,31:1,42:1,53:1,64:1,75:1,88:1,100:1,114:1,129:1,140:1,163:1,174:1" &&
       latchLines.every(
         (l, i) =>
           l.includes(`\`${latchNames[i]}\` keeps an allocation on every call`) &&
@@ -5634,10 +5651,24 @@ if (!only || "performance".includes(only)) {
   // A `let` result handed back after reassignment is the arena stage's own
   // shape: it must stay clear of every retention rule, not only NL9019.
   const reassign = compile("res_let_reassign", "res_let_reassign_report.ll", ["--json"])
+  // --json writes one object per warning to stdout; a line that is not one
+  // counts as a failure rather than as no warning.
+  const reassignCodes = reassign.stdout
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => {
+      try {
+        const o = JSON.parse(l)
+        return typeof o.code === "string" ? o.code : null
+      } catch {
+        return null
+      }
+    })
   check(
     "performance: res_let_reassign raises no NL9003, NL9016, NL9018 or NL9019",
-    reassign.status === 0 && !/"code":"NL90(03|16|18|19)"/.test(reassign.stderr),
-    reassign.stderr
+    reassign.status === 0 &&
+      reassignCodes.every((c) => c !== null && !["NL9003", "NL9016", "NL9018", "NL9019"].includes(c)),
+    reassign.stdout + reassign.stderr
   )
 
   // NL9018: a loop that nothing bounds -- a poll, `while (true)` -- keeps what

@@ -14761,20 +14761,33 @@ by the caller.
     inside a `using a = arena()` block, or a caller between the loop and the
     function whose own scope releases it on return; or when the loop calls it
     through a once-latch on the same object every pass. A once-latch is a
-    function whose top-level statements hold an `if (<field>) { … return }`
-    guard with no `else`, its condition the field of a parameter alone or
-    `<field> !== null`, read directly or through a `const`; a later top-level
-    assignment to that field; and no other store to it anywhere in the body
-    than one that keeps the guard true (`true`, a `new` object or an array
-    literal, or for the `!== null` form a value whose type is not nullable),
-    so only the first call does the work: a once-guard or a cache
-    (`tests/cases/perf_kept_memory_quiet`). The same object is `this` or a
-    name the loop neither declares nor assigns, or, for a call inside a
-    function the loop reaches, a parameter that function never assigns and
-    every call reaching it passes the same object. A negated or compound
-    condition, a counter, a guard that is cleared again, or a fresh object
-    each pass is not a latch and still warns
-    (`tests/cases/perf_kept_memory_latch`).
+    function whose body is exactly: optional leading `const`s that only read
+    a field; an `if (<field>) return …` guard with no `else` and nothing in
+    its branch but the `return`, its condition the field of a parameter alone
+    or `<field> !== null`, read directly or through such a `const`; and at
+    once an assignment to that field that keeps the guard true (`true`, a
+    `new` object or an array literal, or for the `!== null` form a value
+    whose type is not nullable), with at most one `const` between them
+    naming the value stored and holding no `orReturn`. Every store anywhere
+    in the program into a field of that name, on any object and through any
+    name, must keep the guard true as well; only a constructor's own
+    `this.<field> =` is exempt. So only the first call does the work: a
+    once-guard or a cache (`tests/cases/perf_kept_memory_quiet`). The value
+    the guard returns is computed on every call and is not followed. The
+    same object is `this`, a name, or a field path off one, where the loop
+    neither declares nor assigns the name, stores into nothing at or under
+    it, and uses no shorter path it runs through as a value (handed to a
+    call, or a method's receiver); for a call inside a function the loop
+    reaches, the same holds of a parameter every call reaching it passes the
+    same object, within that function's body. A negated or compound
+    condition, a counter, a guard that is cleared again here or elsewhere,
+    work before the guard, another statement between the guard and the
+    store, or an object the loop replaces, whether a fresh object each pass
+    or a field it stores a new one into, is not a latch and still warns.
+    (`tests/cases/perf_kept_memory_latch`). A value handed to a callee's
+    parameter is not counted as kept even when the callee stores it into
+    something older (`add(list, makeItem())`): this rule does not report
+    that retention.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -15553,7 +15566,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Five performance warnings are exactly that finding, and
+killed. Six performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
