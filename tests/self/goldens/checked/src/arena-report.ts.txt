@@ -351,8 +351,8 @@ function unboundedFinding(walk: ArenaWalk, isMain: boolean, loop: UnboundedLoop)
   local +5:9 until: string (const)
   callee +5:17 keptUntil -> @keptUntil
   local +6:9 scope: LoopScope | null (const)
-  local +8:9 reason: string (const)
-  callee +13:11 loopKeptReason -> @loopKeptReason
+  local +8:7 reason: string (let)
+  callee +12:9 loopKeptReason -> @loopKeptReason
   local +14:9 what: string (const)
   callee +14:16 sitePhrase -> @sitePhrase
   local +15:9 more: string (const)
