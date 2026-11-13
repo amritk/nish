@@ -800,11 +800,15 @@ const standIn = JSON.parse(
   check("the built module synthesizes each of its 18 sounds and no more",
     [...Array(18).keys()].every((id) => game.sound(id) > 0) && game.sound(18) === 0)
 
-  // A second run: Settings, resolution one step right, out again, then Escape on the title.
+  // A second run: Escape skips the intro to the title, as Space did; then
+  // Settings, resolution one step right, out again, Escape on the title, and Quit.
   game.init(11)
   idle(40)
-  tap(SPACE)
+  tap(F4)
+  tap(ESCAPE)
   idle(30)
+  check("Escape in the intro opens the title, as any other key does", quits === 0 && frame() === seen.menu,
+    `${quits} quits, ${frame()} vs ${seen.menu}`)
   for (const kind of [DOWN, DOWN, DOWN, ENTER, RIGHT, ESCAPE]) {
     tap(kind)
   }
@@ -813,7 +817,12 @@ const standIn = JSON.parse(
   check("the game has not quit while the player is still on the title", quits === 0, quits)
   tap(ESCAPE)
   idle(5)
-  check("Escape on the title quits, and the page is told once", quits === 1, quits)
+  check("Escape on the title stays on the title", quits === 0, quits)
+  // Leaving Settings left it selected; Quit is the next item down.
+  tap(DOWN)
+  tap(ENTER)
+  idle(5)
+  check("Quit on the title quits, and the page is told once", quits === 1, quits)
 }
 
 {

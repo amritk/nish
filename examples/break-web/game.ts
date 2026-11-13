@@ -18,18 +18,20 @@ import {
   gameWriteSamples,
 } from "nish/host/game"
 import { StepInput } from "nish/input"
-import { KeyState } from "nish/term"
+import { EVENT_KEY, KEY_ESCAPE, KEY_SPACE, KeyState, TermEvent } from "nish/term"
 import { Framebuffer } from "nish/term-pixels"
 import { TermStats } from "nish/term-rate"
 import {
   BreakDirector,
+  SCENE_INTRO,
+  SCENE_MENU,
   adaptBreakResolution,
   drawBreakDirector,
   sizeBreakFramebuffer,
   stepBreakDirector,
 } from "../../src/break-director"
 import { SOUND_COUNT } from "../../src/break-game"
-import { BreakSettings } from "../../src/break-menu"
+import { BreakSettings, SCREEN_TITLE } from "../../src/break-menu"
 import { SAMPLE_RATE, SOUND_HELLO, voiceSamples } from "../../src/break-voices"
 import { BREAK_HELP } from "./help"
 
@@ -143,6 +145,30 @@ export const sound = (id: i32): i32 => {
   return gameWriteSamples(voiceSamples(id), SAMPLE_RATE)
 }
 
+/**
+ * Escape on a page leads to the title and never past it: it skips the intro
+ * to the title, and on the title it does nothing, so only the title's Quit (or
+ * q) closes the game. A terminal's Escape quits from both. Elsewhere, in
+ * Settings, How to play and a game, Escape is the director's as it is.
+ */
+const escapeToTitle = (d: BreakDirector, input: StepInput): void => {
+  const intro: boolean = d.scene === SCENE_INTRO
+  if (!intro && !(d.scene === SCENE_MENU && d.menu.screen === SCREEN_TITLE)) {
+    return
+  }
+  const kept: TermEvent[] = []
+  for (const e of input.events) {
+    if (e.type !== EVENT_KEY || e.key !== KEY_ESCAPE) {
+      kept.push(e)
+    } else if (intro) {
+      // A Space instead, which the intro takes as any key: skip to the title.
+      e.key = KEY_SPACE
+      kept.push(e)
+    }
+  }
+  input.events = kept
+}
+
 /** One fixed step of 1/120 s on the page's input; `nowMs` is its step clock. */
 export const step = (nowMs: f64): void => {
   const run: BreakPage | null = ROOT[0]
@@ -151,6 +177,7 @@ export const step = (nowMs: f64): void => {
   }
   const d: BreakDirector = run.director
   gameReadInput(run.input, nowMs)
+  escapeToTitle(d, run.input)
   if (!stepBreakDirector(d, run.input)) {
     BREAK_LINK[LINK_QUIT] = 1
   }

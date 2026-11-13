@@ -147,7 +147,9 @@ function exportsOf(instance, state) {
         try {
           raw.nish_root_keep(mark);
         } catch (e) {
-          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);
+          if (state.dead === null) {
+            state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);
+          }
           throw e;
         }
       }

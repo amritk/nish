@@ -10,7 +10,7 @@
 //
 // The module and the page share one word array, BREAK_LINK (see game.ts):
 //
-//   [0]     QUIT    the module sets it when the game asks to end (Escape on the title)
+//   [0]     QUIT    the module sets it when the game asks to end (Quit on the title)
 //   [1]     SAVES   the module counts each time the player changes a setting
 //   [2..8]  the settings, in BreakSettings' field order: fps, resolution,
 //           graphics, effects, smoothing, stats, sound
@@ -172,7 +172,7 @@ let current = null
 
 /**
  * Opens the game over the page. Resolves once it runs; rejects, with the page
- * as it was, when it cannot start. While it runs, Escape on its title, the
+ * as it was, when it cannot start. While it runs, Quit on its title, the
  * close control or an error closes it and hands focus back to `focus`; an
  * error is told to `say` in one line first.
  *
