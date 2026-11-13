@@ -2562,7 +2562,7 @@ class FactCollector {
       return
     }
     if (init.kind === NodeKind.Object) {
-      // An NodeKind.Property keeps its key in `text` and its value, a name for the
+      // A NodeKind.Property keeps its key in `text` and its value, a name for the
       // shorthand `{ k }` included, in its one child.
       for (const property of init.children) {
         if (property.kind === NodeKind.Property && property.children.length > 0) {

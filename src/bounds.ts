@@ -5656,7 +5656,7 @@ const inertOperands = (program: CheckedProgram, args: Node[]): boolean => {
 }
 
 /**
- * What `call` (an `NodeKind.Call` or an `NodeKind.New`) may do, or `null` for "anything a
+ * What `call` (a `NodeKind.Call` or a `NodeKind.New`) may do, or `null` for "anything a
  * call can". A user function answers with its summary. A builtin, or a `new`
  * with no constructor, can reach memory only through what it is handed —
  * there is no function value to call back through, and the one mutable

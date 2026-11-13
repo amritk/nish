@@ -126,7 +126,7 @@ const forbiddenType = (name: string): string => {
   return ""
 }
 
-/** The message for an operator the language forbids, by its text on an NodeKind.Binary or NodeKind.Unary, or "". */
+/** The message for an operator the language forbids, by its text on a NodeKind.Binary or NodeKind.Unary, or "". */
 const forbiddenOperator = (operator: string): string => {
   if (operator === "==" || operator === "!=") {
     return "Loose equality is forbidden; use === / !=="

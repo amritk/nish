@@ -4,7 +4,7 @@
 //
 // **No exceptions.** A `throw` traps and discards its value, so error
 // recovery is the error-value threading of §3a D1, in its first real use: a
-// failed parse returns an `NodeKind.Error` node, the message goes on
+// failed parse returns a `NodeKind.Error` node, the message goes on
 // `Parser.diagnostics`, and the caller decides whether to skip to a
 // synchronising token or hand the sentinel upward. This is the classic
 // recursive-descent recovery tax, and it is worse than `try`/`catch`; the
@@ -19,7 +19,7 @@
 //
 // **What it accepts is wider than the language.** `??` it builds as an
 // operator (WP32), and the checker refuses it wherever its left operand is not
-// a `Map.get` result. Anything it cannot make a node of is an `NodeKind.Error` with
+// a `Map.get` result. Anything it cannot make a node of is a `NodeKind.Error` with
 // the reason.
 //
 // **A forbidden construct is parsed, not refused** (WP33 R1): `var`, `try`,
@@ -479,7 +479,7 @@ export class Parser {
     return list
   }
 
-  /** An `NodeKind.Error` node carrying the reason, reported at the current token. */
+  /** A `NodeKind.Error` node carrying the reason, reported at the current token. */
   fail(message: string): Node {
     this.report(message, this.start, this.end)
     const node = this.node(NodeKind.Error, this.start, this.end)
@@ -886,7 +886,7 @@ export class Parser {
   }
 
   /**
-   * `@expr`, the head of a decorator (NL1006): an NodeKind.Decorator holding the
+   * `@expr`, the head of a decorator (NL1006): a NodeKind.Decorator holding the
    * expression, to which the caller adds what it decorates. The expression is
    * a name, a member access or a call, as TypeScript reads one.
    */
@@ -1388,7 +1388,7 @@ export class Parser {
    * describes, for the phase that owns its rule to refuse: a default or a
    * namespace import, a side-effect import, `import type`, `import defer`, a
    * specifier that is not a string literal and attributes after it. `import
-   * x = require("./m")` is an NodeKind.ImportEquals.
+   * x = require("./m")` is a NodeKind.ImportEquals.
    *
    * `type` and `defer` are modifiers where TypeScript reads them as one, and
    * names everywhere else: `import type from "./m"` imports a default called
@@ -2237,7 +2237,7 @@ export class Parser {
     const node = this.node(NodeKind.Class, start, this.end)
     node.children.push(this.at(TOK_IDENT) ? this.parseIdentifier() : this.empty())
     // Read where they are written and pushed last, where `nodes.ts` puts them:
-    // the first four children of an `NodeKind.Class` mean what they have always meant,
+    // the first four children of a `NodeKind.Class` mean what they have always meant,
     // so nothing downstream that indexes them moves (WP18 G5).
     const typeParams = this.parseTypeParameters()
     node.children.push(this.at(TOK_EXTENDS) ? this.parseHeritageName() : this.empty())
@@ -2637,7 +2637,7 @@ export class Parser {
       if (method.children[3].kind === NodeKind.Empty) {
         this.bodiless(method.children[1])
       }
-      // The fifth child, where an `NodeKind.FunctionDecl` keeps its list, and only when
+      // The fifth child, where a `NodeKind.FunctionDecl` keeps its list, and only when
       // there is one: a method without type parameters keeps exactly the tree
       // it always had, so `--emit-ast` and the parser oracle move for none.
       if (typeParams.children.length > 0) {
@@ -3955,7 +3955,7 @@ export class Parser {
   /**
    * Precedence climbing. Every operator here is left-associative but `**`,
    * whose right operand is read at its own level, as TypeScript reads it. `as`
-   * and `satisfies` take a type rather than an operand, and are an `NodeKind.As`.
+   * and `satisfies` take a type rather than an operand, and are a `NodeKind.As`.
    */
   parseBinary(minimum: i32): Node {
     const start = this.start
@@ -4171,7 +4171,7 @@ export class Parser {
     return member
   }
 
-  /** `[i]` after `receiver`, as an `NodeKind.Index`. */
+  /** `[i]` after `receiver`, as a `NodeKind.Index`. */
   parseElement(receiver: Node, start: i32): Node {
     this.advance()
     const index = this.node(NodeKind.Index, start, this.end)
@@ -4428,7 +4428,7 @@ export class Parser {
   /**
    * An arrow in expression position, `(x) => x * 2`, `(x: i32): i32 => { ... }`
    * or `x => x * 2` (WP29, wp23 §6), as the `NodeKind.Arrow` that `nodes.ts` shapes
-   * like an `NodeKind.FunctionDecl`. A parameter's annotation and the return type may be
+   * like a `NodeKind.FunctionDecl`. A parameter's annotation and the return type may be
    * omitted: the checker takes both from the function type of the parameter
    * the arrow is the argument for, which is the only place an arrow is legal.
    */
@@ -4675,7 +4675,7 @@ export class Parser {
 
   /**
    * `m(): T { }` in an object literal, with `async`, `*`, `get` or `set` in
-   * front of it: an NodeKind.Method shaped as a class's is. It is refused whole, so a
+   * front of it: a NodeKind.Method shaped as a class's is. It is refused whole, so a
    * parameter needs no annotation to get there. A computed name, `computed`
    * when the caller has read it already, carries FLAG_COMPUTED (NL1041).
    */

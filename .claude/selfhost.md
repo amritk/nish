@@ -136,13 +136,16 @@ its siblings in the same round.
 
 No generics, closures (capturing arrow arguments are allowed: they
 shipped in 0.29.0, which the seed is past), nested functions or function values (in `src/`, until the release after WP51); no `type` aliases,
-`enum`, `namespace`, `static` members, getters or setters; no `try`/`catch`; no
+`namespace`, `static` members, getters or setters; no `try`/`catch`; no
 inheritance and no downcasts. **Arrow functions came off that list in WP22**:
 a top-level `const` bound to an arrow is a *declaration*, not a value, and the
 prohibition that matters — a function is never a value — is untouched by it.
-What the rest forces:
+**Numeric `enum` came on**: a closed family of kinds is an enum whose members
+are compared with `===` / `!==` and switched on (`NodeKind` in `src/nodes.ts`);
+bit flags stay `i32` module constants, as `docs/LANGUAGE.md` → "Enums" rules
+for every program. What the rest forces:
 
-- **One `Node` class** with a `kind: i32` discriminant and the union of the
+- **One `Node` class** with a `kind: NodeKind` discriminant and the union of the
   fields any node needs (`src/nodes.ts`). No hierarchy, no downcast; the child
   layout per kind is the contract and is written beside each kind there.
 - **One `TypeInfo`**: a type is an `i32` interned in a `TypeTable`
@@ -425,10 +428,10 @@ commit, or `differential: the frozen rewrites` fails (#548).
   comes off `tests/self/parser-refusals.txt` follows it; the full statement is
   beside the flags in `src/nodes.ts`:
   - it **resembles a node that exists** → that node with a flag: `var` is an
-    `N_VAR` with `FLAG_VAR`, `for...in` and `for await` an `N_FOR_OF` with
-    `FLAG_FOR_IN` / `FLAG_AWAIT`, a top-level `let` an `N_MODULE_CONST`
+    `NodeKind.Var` with `FLAG_VAR`, `for...in` and `for await` a `NodeKind.ForOf` with
+    `FLAG_FOR_IN` / `FLAG_AWAIT`, a top-level `let` a `NodeKind.ModuleConst`
     without `FLAG_CONST`, `x?: T` and `static` a field or method with a flag,
-    `a?.b` an `N_MEMBER` (or `N_INDEX`, `N_CALL`) with `FLAG_OPTIONAL`,
+    `a?.b` a `NodeKind.Member` (or `NodeKind.Index`, `NodeKind.Call`) with `FLAG_OPTIONAL`,
     `async` and `function*` a function, method or arrow with `FLAG_ASYNC` /
     `FLAG_GENERATOR`, a default type argument the type parameter with
     `FLAG_DEFAULT`, a default, optional or rest parameter the parameter with
@@ -440,60 +443,60 @@ commit, or `differential: the frozen rewrites` fails (#548).
     theirs with `FLAG_FOREIGN`, a parameter property the parameter with
     `FLAG_PROPERTY`, a computed name `[k]` — in an object literal, a class or
     an interface — the property, field or method with `FLAG_COMPUTED` and the
-    key's expression where its name would be (an `N_PROPERTY`'s second child,
+    key's expression where its name would be (a `NodeKind.Property`'s second child,
     as a string key is), `export default function f`, `class C` and
     `interface I` theirs with `FLAG_DEFAULT`, and `import type` (or `type`
     in front of one name), `import defer`, attributes after the specifier, a
     specifier that is not a string literal and `export import` the
-    `N_IMPORT` (or `N_IMPORT_SPEC`) with `FLAG_TYPE_ONLY`, `FLAG_DEFER`,
+    `NodeKind.Import` (or `NodeKind.ImportSpec`) with `FLAG_TYPE_ONLY`, `FLAG_DEFER`,
     `FLAG_ATTRIBUTES`, `FLAG_COMPUTED` and `FLAG_EXPORTED`. An operator is
     the operator node whose text it is: `==`,
-    `in`, `**` and the comma an `N_BINARY`, `typeof`, `void`, `delete`,
-    `await` and `yield` an `N_UNARY`;
+    `in`, `**` and the comma a `NodeKind.Binary`, `typeof`, `void`, `delete`,
+    `await` and `yield` a `NodeKind.Unary`;
   - it **resembles nothing** → a kind of its own with its child layout written
-    beside it: `N_TRY`, `N_WITH`, `N_LABELED`, `N_REGEX`, `N_AS` (with
-    `FLAG_ANGLE` / `FLAG_SATISFIES` for `<T>x` and `satisfies`), `N_SPREAD`,
-    `N_DECORATOR` (around what it decorates), `N_NAMESPACE` (`namespace`,
+    beside it: `NodeKind.Try`, `NodeKind.With`, `NodeKind.Labeled`, `NodeKind.Regex`, `NodeKind.As` (with
+    `FLAG_ANGLE` / `FLAG_SATISFIES` for `<T>x` and `satisfies`), `NodeKind.Spread`,
+    `NodeKind.Decorator` (around what it decorates), `NodeKind.Namespace` (`namespace`,
     `module` and `declare global`, its body passed over unread) and
-    `N_TYPE_OPERATOR` (`keyof T`), `N_BINDING_PATTERN` (a destructuring
+    `NodeKind.TypeOperator` (`keyof T`), `NodeKind.BindingPattern` (a destructuring
     pattern where a name is bound, passed over unread),
-    `N_INDEX_SIGNATURE` (`[k: string]: T`, in a class or an interface),
-    `N_EXPORT_ASSIGNMENT` (`export default <value>`, `export =`),
-    `N_EXPORT_DECLARATION` (`export { a }`, `export * from`),
-    `N_IMPORT_EQUALS` (`import x = require("./m")`) and
-    `N_NAMESPACE_EXPORT` (`export as namespace X`);
+    `NodeKind.IndexSignature` (`[k: string]: T`, in a class or an interface),
+    `NodeKind.ExportAssignment` (`export default <value>`, `export =`),
+    `NodeKind.ExportDeclaration` (`export { a }`, `export * from`),
+    `NodeKind.ImportEquals` (`import x = require("./m")`) and
+    `NodeKind.NamespaceExport` (`export as namespace X`);
   - it **differs in what one child is** → the same node with that child, when
-    the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
+    the child's kind is the tell: `for (x of a)` is a `NodeKind.ForOf` whose head
     is an expression, a top-level statement is the statement itself in the
-    `N_SOURCE_FILE`, a hole is an `N_EMPTY` element of an `N_ARRAY`, and
-    `new a.B()` an `N_NEW` whose callee is the member access, `import.meta`
-    an `N_MEMBER` whose receiver is the IDENT `import`, as `import(...)` is
-    an `N_CALL` whose callee is, type
-    parameters on an alias a third child of the `N_TYPE_ALIAS`, there only
+    `NodeKind.SourceFile`, a hole is a `NodeKind.Empty` element of a `NodeKind.Array`, and
+    `new a.B()` a `NodeKind.New` whose callee is the member access, `import.meta`
+    a `NodeKind.Member` whose receiver is the IDENT `import`, as `import(...)` is
+    a `NodeKind.Call` whose callee is, type
+    parameters on an alias a third child of the `NodeKind.TypeAlias`, there only
     when written, a missing name, return type or body an EMPTY child of the
-    `N_FUNCTION` or `N_METHOD`, a method signature an `N_METHOD` among an
+    `NodeKind.FunctionDecl` or `NodeKind.Method`, a method signature a `NodeKind.Method` among an
     interface's fields, a top-level `let` bound to an arrow the module
-    constant whose initialiser is the `N_ARROW`, the names after the
+    constant whose initialiser is the `NodeKind.Arrow`, the names after the
     first in `const f = (): i32 => 1, g = 2` a sixth child of the
-    `N_FUNCTION`, an anonymous class (`export default class { }` with
-    `FLAG_DEFAULT`, or a class expression, an `N_CLASS` where an operand
+    `NodeKind.FunctionDecl`, an anonymous class (`export default class { }` with
+    `FLAG_DEFAULT`, or a class expression, a `NodeKind.Class` where an operand
     stands) an EMPTY name, a method or constructor without a body an EMPTY
-    body, a constructor's return type a third child of the `N_CONSTRUCTOR`,
-    a member named `"a b"` or `0` the `N_STRING` or `N_NUMBER` where its
-    name would be, `static { }` the `N_BLOCK` among a class's members, an
-    interface's call signature an `N_METHOD` with an EMPTY name (a construct
+    body, a constructor's return type a third child of the `NodeKind.Constructor`,
+    a member named `"a b"` or `0` the `NodeKind.String` or `NodeKind.Number` where its
+    name would be, `static { }` the `NodeKind.Block` among a class's members, an
+    interface's call signature a `NodeKind.Method` with an EMPTY name (a construct
     signature with `FLAG_CONSTRUCT`), `interface I extends A` a fourth child
-    of the `N_INTERFACE`, a key written as a string or a number a second
-    child of the `N_PROPERTY`, a method in an object literal the
-    `N_METHOD` that is the property's value, object spread `{ ...a }` the
-    `N_SPREAD` an array's `...a` is, among the `N_OBJECT`'s properties, a
+    of the `NodeKind.Interface`, a key written as a string or a number a second
+    child of the `NodeKind.Property`, a method in an object literal the
+    `NodeKind.Method` that is the property's value, object spread `{ ...a }` the
+    `NodeKind.Spread` an array's `...a` is, among the `NodeKind.Object`'s properties, a
     namespace import an
-    `N_IMPORT` whose bindings child is the IDENT after `* as`, a side-effect
+    `NodeKind.Import` whose bindings child is the IDENT after `* as`, a side-effect
     import one whose bindings child is EMPTY, a default import a second
-    child, a module export name written as a string the `N_STRING` where
+    child, a module export name written as a string the `NodeKind.String` where
     the specifier's IDENT would be, and a function or an import declared
-    where a statement stands the `N_FUNCTION`, `N_IMPORT` or
-    `N_IMPORT_EQUALS` it would be at the top level.
+    where a statement stands the `NodeKind.FunctionDecl`, `NodeKind.Import` or
+    `NodeKind.ImportEquals` it would be at the top level.
 
   The refusal runs before anything else reads the node, so no later rule has
   to know the shape exists. An NL2xxx rule that needs no type is a sweep over

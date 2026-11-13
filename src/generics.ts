@@ -286,12 +286,12 @@ class StructExpansion {
   }
 }
 
-/** The type parameter list of an `NodeKind.FunctionDecl`: its fifth child (WP18). */
+/** The type parameter list of a `NodeKind.FunctionDecl`: its fifth child (WP18). */
 const typeParameterList = (decl: Node): Node =>
   decl.children.length > 4 ? decl.children[4] : decl.children[0]
 
 /**
- * The type parameter list of an `NodeKind.Class` (fifth child) or an `NodeKind.Interface`
+ * The type parameter list of a `NodeKind.Class` (fifth child) or a `NodeKind.Interface`
  * (third), both appended by WP18 G5 so the children that were there keep their
  * positions. The guard is the same one `typeParameterList` carries: a node
  * built before the list existed answers with something harmless rather than

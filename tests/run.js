@@ -7812,7 +7812,7 @@ if (dealtHere("selfHosting")) {
   )
 
   // And the half of the parser the oracle cannot see: recovery. A failed
-  // parse is an `N_ERROR` node and a diagnostic, and the declaration after
+  // parse is a `NodeKind.Error` node and a diagnostic, and the declaration after
   // it still parses (docs/wp14-selfhost.md §3a D1).
   const astDumper = path.join(buildDir, "self", "dump_ast")
   const builtAst = spawnSync(NISH, [path.join(selfDir, "dump-ast.ts"), "--link", astDumper], {
@@ -22013,8 +22013,8 @@ if (dealtHere("cliChecks")) {
       ["    checkSoleReferences(ctx, body, flow.sites)\n", ""],
       ["  const ref = results.refOf(need)\n", "  const ref = results.refOf(need).substring(0, 0)\n"],
       [
-        "    if (named.kind === N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
-        "    if (named.kind === N_CONDITIONAL && named.kind !== N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional && named.kind !== NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
       ],
     ]
     let mutated = live

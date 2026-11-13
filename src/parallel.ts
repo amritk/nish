@@ -1741,7 +1741,7 @@ const dstUnsharedAt = (program: CheckedProgram, call: Node, dst: Local): boolean
   const body = dstHostDecl(program, call)
   // No test reaches these: every statement is in a function (field
   // initialisers are literals), and `recordParallelCall` records a `dst` only
-  // for an `NodeKind.Call` with one.
+  // for a `NodeKind.Call` with one.
   if (body === null || call.kind !== NodeKind.Call || call.children[1].children.length < 2) {
     return false
   }
@@ -2462,7 +2462,7 @@ const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
 }
 
 /** Whether `node` assigns `name`, `name = v`, `name += v` or `name++`: the fix's `const` could not take the write. */
-/** Whether an `NodeKind.Ident` spelled `name` is anywhere under `node`. */
+/** Whether a `NodeKind.Ident` spelled `name` is anywhere under `node`. */
 const mentionsName = (node: Node, name: string): boolean => {
   for (const child of node.children) {
     if ((child.kind === NodeKind.Ident && child.text === name) || mentionsName(child, name)) {

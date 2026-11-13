@@ -143,7 +143,7 @@ const copied = (walk: Walk, slot: i32, value: Node, written: string): string => 
 }
 
 /**
- * Whether the index at `node` (an NodeKind.Index, or the call of a `pop`) is written
+ * Whether the index at `node` (a NodeKind.Index, or the call of a `pop`) is written
  * checked. A generic body is written once for all its instances, and one
  * instance can prove an index another cannot, so there it is always checked.
  */

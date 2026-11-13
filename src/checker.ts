@@ -3668,7 +3668,7 @@ const exportableDeclaration = (ctx: CheckContext, name: string): Node | null => 
 
 /**
  * The name a top-level declaration binds, or "" for one `exportableDeclaration`
- * does not move `export` onto. A `const` bound to an arrow is an NodeKind.FunctionDecl,
+ * does not move `export` onto. A `const` bound to an arrow is a NodeKind.FunctionDecl,
  * and one that goes on to bind a second name has it as a sixth child (NL2274).
  */
 const declaredName = (stmt: Node): string => {

@@ -1875,7 +1875,7 @@ export class CheckedProgram {
   /**
    * `NodeKind.Member` node id -> the integer an enum member stands for (WP23). There
    * is no presence flag beside it and none is needed: a member's value may be
-   * 0 or negative, but the node that carries one is exactly an `NodeKind.Member` of
+   * 0 or negative, but the node that carries one is exactly a `NodeKind.Member` of
    * enum type whose receiver is not a value, and both of those are already
    * recorded (`isEnumMember`). stage0's `src/` uses a `WeakMap`, where presence is the
    * key's own answer.
@@ -2495,7 +2495,7 @@ export class CheckedProgram {
 
   /**
    * Whether `node` is an enum member reference — `Kind.If` — whose folded
-   * integer is in `nodeEnumValues` (WP23). It is an `NodeKind.Member` of enum type
+   * integer is in `nodeEnumValues` (WP23). It is a `NodeKind.Member` of enum type
    * whose receiver is a *name* rather than a value, and nothing else in the
    * language has that shape, so the two tables the checker already writes
    * answer the question and no presence flag has to be stored beside them.

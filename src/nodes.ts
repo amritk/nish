@@ -88,7 +88,7 @@ export enum NodeKind {
   Template = 38, // children: TEMPLATE_TEXT and expressions, alternating
   TemplateText = 39, // text: the decoded bytes of one span
   Array = 40, // children: the elements
-  Object = 41, // children: the PROPERTYs, and an NodeKind.Spread for each `...a`
+  Object = 41, // children: the PROPERTYs, and a NodeKind.Spread for each `...a`
   Property = 42, // text: the key; children: the value
   Binary = 43, // text: the operator; children: left, right
   Unary = 44, // text: the operator; flags: PREFIX or POSTFIX; children: operand
@@ -157,14 +157,14 @@ export enum NodeKind {
   //
   // The expressions that resemble nothing above. Every other forbidden
   // expression is a node that exists: `==`, `!=`, `in`, `instanceof`, `**`,
-  // `**=` and the comma operator are an NodeKind.Binary whose text is the operator,
-  // `typeof`, `void`, `delete`, `await` and `yield` an NodeKind.Unary whose text is
-  // the word, `?.` an NodeKind.Member, NodeKind.Index or NodeKind.Call with FLAG_OPTIONAL, a dynamic
-  // `import(...)` an NodeKind.Call whose callee is the IDENT `import` (a keyword, so
-  // no program can declare it), `import.meta` an NodeKind.Member whose text is `meta`
+  // `**=` and the comma operator are a NodeKind.Binary whose text is the operator,
+  // `typeof`, `void`, `delete`, `await` and `yield` a NodeKind.Unary whose text is
+  // the word, `?.` a NodeKind.Member, NodeKind.Index or NodeKind.Call with FLAG_OPTIONAL, a dynamic
+  // `import(...)` a NodeKind.Call whose callee is the IDENT `import` (a keyword, so
+  // no program can declare it), `import.meta` a NodeKind.Member whose text is `meta`
   // and whose receiver is that IDENT (NL1060; any other name after the dot
   // stays a syntax error), a hole in an array literal an EMPTY element,
-  // and `new` of something other than a name an NodeKind.New whose callee is that
+  // and `new` of something other than a name a NodeKind.New whose callee is that
   // expression.
 
   // `/x/g` (NL1050): text: the literal as written, flags and all.
@@ -205,10 +205,10 @@ export enum NodeKind {
   // ---- Refused bindings (WP33 R1) ------------------------------------------------------
   //
   // The function and binding forms. Most are a node that exists: a default,
-  // optional or rest parameter is an NodeKind.Param with FLAG_DEFAULT, FLAG_OPTIONAL
-  // or FLAG_REST, a getter or setter an NodeKind.Method with FLAG_ACCESSOR, a method
-  // in an interface an NodeKind.Method among its fields, and `export default function
-  // ()` an NodeKind.FunctionDecl with FLAG_DEFAULT whose name is EMPTY. A missing return
+  // optional or rest parameter is a NodeKind.Param with FLAG_DEFAULT, FLAG_OPTIONAL
+  // or FLAG_REST, a getter or setter a NodeKind.Method with FLAG_ACCESSOR, a method
+  // in an interface a NodeKind.Method among its fields, and `export default function
+  // ()` a NodeKind.FunctionDecl with FLAG_DEFAULT whose name is EMPTY. A missing return
   // type is an EMPTY return type and a missing body an EMPTY body, as a
   // `declare function`'s is. A top-level `let` bound to an arrow is the module
   // constant whose initialiser is the NodeKind.Arrow, and the names after the first in
@@ -228,7 +228,7 @@ export enum NodeKind {
   // `declare interface` and `declare enum` FLAG_FOREIGN on theirs, and a
   // parameter property (`constructor(public x: i32)`) FLAG_PROPERTY on its
   // PARAM. An anonymous class — `export default class { }` (FLAG_DEFAULT), or a
-  // class expression, which is an NodeKind.Class where an operand stands — has an
+  // class expression, which is a NodeKind.Class where an operand stands — has an
   // EMPTY name. A method or constructor without a body has an EMPTY body, a
   // constructor's return type is a third child of the NodeKind.Constructor, there only
   // when written, and a member named by a string or a number has that NodeKind.String
@@ -241,8 +241,8 @@ export enum NodeKind {
   // of the NodeKind.Property, there only when written, and a method `{ m() { } }`
   // (an accessor, FLAG_ACCESSOR) is the NodeKind.Method that is the property's value.
   // A computed name, `[k]` (NL1041), is the expression between the brackets
-  // where the name would be — an NodeKind.Field's or NodeKind.Method's first child, in a
-  // class, an interface or an object literal, and an NodeKind.Property's second — and
+  // where the name would be — a NodeKind.Field's or NodeKind.Method's first child, in a
+  // class, an interface or an object literal, and a NodeKind.Property's second — and
   // the member carries FLAG_COMPUTED, because the expression's own kind is no
   // tell: `[k]` is an IDENT and `["a"]` a STRING. `[Symbol.dispose]()` is not
   // one: it is the method name WP29 reads (`Parser.parseDisposeMethod`).
@@ -253,9 +253,9 @@ export enum NodeKind {
 
   // ---- Refused import and export forms (WP33 R1) ----------------------------------------
   //
-  // The module forms. Most are an NodeKind.Import (see beside it) or a declaration
-  // with a flag: `export default function f` an NodeKind.FunctionDecl and `export default
-  // class C` / `export default interface I` an NodeKind.Class or NodeKind.Interface with
+  // The module forms. Most are a NodeKind.Import (see beside it) or a declaration
+  // with a flag: `export default function f` a NodeKind.FunctionDecl and `export default
+  // class C` / `export default interface I` a NodeKind.Class or NodeKind.Interface with
   // FLAG_DEFAULT (NL2130, NL2131). A `function` or an `import` written where a
   // statement stands is the NodeKind.FunctionDecl, NodeKind.Import or NodeKind.ImportEquals it would be
   // at the top level (NL2260). The rest resemble nothing, and each is refused by
@@ -357,9 +357,9 @@ export const FLAG_USING: i32 = 256
 //     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
 //     than a VAR, a top-level statement is the statement itself, sitting
 //     in the SOURCE_FILE where a declaration would, type parameters on an
-//     alias are an NodeKind.TypeAlias's third child, there only when written, a
+//     alias are a NodeKind.TypeAlias's third child, there only when written, a
 //     missing name, return type or body is an EMPTY child, a method in an
-//     interface an NodeKind.Method among its fields, a `let` bound to an arrow
+//     interface a NodeKind.Method among its fields, a `let` bound to an arrow
 //     a module constant whose initialiser is the NodeKind.Arrow, the class,
 //     interface and enum forms listed beside NodeKind.IndexSignature, and the
 //     import forms listed beside NodeKind.Import.
