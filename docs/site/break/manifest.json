@@ -3,11 +3,11 @@
   "help": "de7fb8b58f70d49fe7e5312c12df02de1bd58ceaa54db1c60b48182307ab25ff",
   "memory": "32",
   "inputs": {
-    "examples/break-web/break.mjs": "f7f1b01f4f842998a2ed5ed3a2eeb8348aa60765ff68bb83e55831a51ec617a5",
-    "examples/break-web/build.mjs": "dd8f7d40179c867ce80b3449a0818a135fb5cc1a83f2e093d2fbbd3bc0b3c992",
+    "examples/break-web/break.mjs": "e533f8643331351687015b686aa71d12fcc9de578d9c36e50217654a3f883cd0",
+    "examples/break-web/build.mjs": "b5d82f646ea13d94fc5f595553b07a103966f9448b7957d7beda804526caa218",
     "examples/break-web/game.ts": "47df4a06ede9d1db142855f5aa4945303b2cd6469022eb6a9f26cbabecd62642",
     "examples/break-web/help.ts": "f73d9d9521862fbe6a1c9593c31dd96d8ec8694c44be264adea25e9cda47d63b",
-    "examples/break-web/shell.mjs": "f9ea6afb2c2f88d4f38724b19786d09b4aef8bcf264420073ee2f8fad2379c46",
+    "examples/break-web/shell.mjs": "823d9e6cb4a7f3696249390029a500f9f588b62a951da596464050746309ef48",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
     "runtime/page-game.mjs": "e04a2f9298c97b0876de51794d6d912331e07b5e3d1d3e075d457c1ff987c87b",
     "runtime/page.mjs": "30a94f7965d6d44ad58053e4b3d42028c797c1afab5f914a20c63e433ff31d7c",
@@ -34,8 +34,8 @@
   "outputs": {
     "game.wasm": "a9a73a6d65694e1aeae9ea4241158fe79145b6e8ca691a2aeae24e2bf660a0bb",
     "game.mjs": "c78bc2d2e49a4f20b80f6134b024a7793ed86a873f26bbb3d05699bb063ace78",
-    "break.mjs": "e0d5a4d2a82e6bfb11e0116d895b7cde1739921432d320653ca004520fd9d424",
-    "shell.mjs": "67c8850aadc50302b29209f7cc174a79134a2d920a401a258425bd1ecc4eaf8d",
+    "break.mjs": "2d8094344eccb9adbd19f499d38cc2b5c7070e0fac4a9e94b9abbca3a7fd68f7",
+    "shell.mjs": "384750cc2cfa6e80588cf7e1df958c518527a09e801396028ea7f4d989b21087",
     "nish/page-game.mjs": "e04a2f9298c97b0876de51794d6d912331e07b5e3d1d3e075d457c1ff987c87b",
     "nish/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
     "nish/page.mjs": "30a94f7965d6d44ad58053e4b3d42028c797c1afab5f914a20c63e433ff31d7c"

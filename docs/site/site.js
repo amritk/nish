@@ -249,7 +249,12 @@
         return
       }
       const shellUrl = "/break/shell.mjs"
-      shell ??= import(shellUrl).then((m) => m.attach(term, input, lines, first)).catch(() => (shell = null))
+      shell ??= import(shellUrl)
+        .then((m) => m.attach(term, input, lines, first))
+        .catch(() => {
+          lines.length = 0
+          shell = null
+        })
     }
     input.addEventListener("input", first)
     input.addEventListener("keydown", first)

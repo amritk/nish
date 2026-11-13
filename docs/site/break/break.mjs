@@ -212,6 +212,9 @@ export const open = ({
   close.textContent = "×"
   overlay.append(style, canvas, close)
   document.body.append(overlay)
+  // Focus into the overlay at once, to the close control until the game runs:
+  // keys while it loads reach the overlay (Escape closes), not the page beneath.
+  close.focus({ preventScroll: true })
 
   const me = { started: null }
   current = me
@@ -265,6 +268,11 @@ export const open = ({
           shut()
         },
       })
+      // Running: the game's screen takes the keys (startGame focuses it too).
+      const screen = overlay.querySelector("canvas") ?? canvas
+      if (current === me) {
+        screen.focus({ preventScroll: true })
+      }
     } catch (error) {
       // Closed before it started: nothing went wrong.
       if (controller.signal.aborted) {

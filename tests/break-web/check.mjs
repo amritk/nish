@@ -37,6 +37,8 @@ class Node {
     this.text = ""
     this.value = ""
     this.maxLength = -1
+    // The fake document that made it, whose activeElement focus and removal move.
+    this.doc = null
     const node = this
     this.classList = { add: (c) => (node.className = `${node.className} ${c}`.trim()) }
     this.style = { setProperty: () => {} }
@@ -60,7 +62,15 @@ class Node {
       this.children.push(child)
     }
   }
+  /** Whether `other` is this element or one below it. */
+  contains(other) {
+    return other === this || [...this.all()].includes(other)
+  }
+  /** Removed or moved, as a browser does, a focused element (or one holding it) loses focus to the body. */
   remove() {
+    if (this.doc !== null && this.contains(this.doc.activeElement)) {
+      this.doc.activeElement = this.doc.body
+    }
     if (this.parent !== null) {
       this.parent.children = this.parent.children.filter((c) => c !== this)
       this.parent = null
@@ -79,6 +89,9 @@ class Node {
   }
   focus() {
     this.focused++
+    if (this.doc !== null) {
+      this.doc.activeElement = this
+    }
   }
   /** Every element below this one, depth first. */
   *all() {
@@ -102,11 +115,17 @@ const makeDocument = () => {
   const body = new Node("body")
   const host = new Node("div")
   body.append(host)
+  const made = (tag) => {
+    const node = new Node(tag)
+    node.doc = document
+    return node
+  }
   const document = {
     body,
+    activeElement: body,
     readyState: "complete",
-    createElement: (tag) => new Node(tag),
-    createElementNS: (_ns, tag) => new Node(tag),
+    createElement: made,
+    createElementNS: (_ns, tag) => made(tag),
     querySelectorAll: () => (host.children.length === 0 ? [host] : []),
     addEventListener: () => {},
   }
@@ -129,6 +148,13 @@ const press = (node, key, fields = {}) => {
 const typeIn = (node, text) => {
   node.value += text
   node.dispatch("input", event("input"))
+}
+/** Types `text` as a keyboard does: into whatever has focus, so nothing when the input has lost it. */
+const typeFocused = (document, text) => {
+  const node = document.activeElement
+  if (node?.tag === "input") {
+    typeIn(node, text)
+  }
 }
 /** Types `line` into `node`, then Enter. */
 const enter = (node, line) => {
@@ -248,6 +274,25 @@ const runSite = (load) => {
 }
 
 {
+  // A failed import forgets the lines entered while it was tried: a later one does not answer them, long after.
+  const attached = []
+  let fail = true
+  const hero = runSite(() =>
+    fail ? Promise.reject(new Error("offline")) : Promise.resolve({ attach: (term, input, lines) => attached.push([...lines]) })
+  )
+  const input = hero.terminal.find("nish-hero__input")
+  enter(input, "ls")
+  await settle()
+  await settle()
+  fail = false
+  typeIn(input, "n")
+  await settle()
+  await settle()
+  check("a failed import drops the lines entered while it was tried", attached.length === 1 && attached[0].length === 0,
+    JSON.stringify(attached))
+}
+
+{
   // A shell that loads but whose attach throws: no unhandled rejection, and the next use asks again.
   const asked = []
   const unhandled = []
@@ -363,16 +408,25 @@ const asks = (args, cwd, env = person(false)) => spawnSync(nish, args, { cwd, en
     })
   )
   const input = hero.terminal.find("nish-hero__input")
+  hero.terminal.dispatch("click", event("click"))
   enter(input, "nish game")
   typeIn(input, "l")
   await settle()
+  // A browser blurs a focused element it moves: the input must stay where it is, focused, as keys keep coming.
+  const focusKept = hero.document.activeElement === input
+  typeFocused(hero.document, "s")
+  check("the input keeps focus as the shell attaches, so the next key reaches the line",
+    focusKept && input.value === "ls", `${hero.document.activeElement?.tag} ${input.value}`)
+  input.value = "l"
+  input.dispatch("input", event("input"))
   const said = () => hero.host.find("nish-hero__said")?.textContent
   check("a line entered while the shell loads is answered once it has", said() === `$ nish game\n${source.answer("nish game")}\n`, said())
   const typed = () => hero.host.find("nish-hero__caret")?.parent?.children.find((c) => c instanceof Node && c.tag === "span")?.textContent
   check("what was typed while it loaded stays on the line", typed() === "l" && input.value === "l", `${typed()} ${input.value}`)
-  const form = input.parent
-  check("the shell puts the input in a form that autocompletes nothing", form?.tag === "form" && form.parent === hero.terminal &&
-    form.attributes.autocomplete === "off", `${form?.tag} ${JSON.stringify(form?.attributes)}`)
+  const form = hero.terminal.querySelector("form")
+  check("the shell gives the input a form, by its form attribute, that autocompletes nothing",
+    form?.parent === hero.terminal && form.id !== undefined && input.attributes.form === form.id && input.parent === hero.terminal &&
+      form.attributes.autocomplete === "off", `${form?.id} ${input.attributes.form} ${JSON.stringify(form?.attributes)}`)
   check("the shell takes the input's events in place of site.js",
     input.listeners.get("input")?.length === 1 && input.listeners.get("keydown")?.length === 1, input.listeners.get("input")?.length)
   check("the terminal stays still for good once the shell has it", hero.terminal.className.includes("nish-hero__terminal--live"),
@@ -431,6 +485,21 @@ const asks = (args, cwd, env = person(false)) => spawnSync(nish, args, { cwd, en
   await settle()
   check("the game opened from a tap returns focus nowhere; from a mouse or keys, to the input",
     opened.length === 4 && opened[2].focus === null && opened[3].focus === input, `${opened.length} ${opened[2]?.focus} ${opened[3]?.focus?.tag}`)
+  // The last way in counts: a tap, then a hardware key, hands focus back; a soft keyboard's composing key (229) does not.
+  // (A key typed in the input bubbles to the terminal; the fake DOM does not bubble, so the test sends both.)
+  const keyed = (fields) => hero.terminal.dispatch("keydown", event("keydown", { target: input, ...fields }))
+  hero.terminal.dispatch("pointerdown", event("pointerdown", { pointerType: "touch" }))
+  keyed({ key: "n" })
+  enter(input, "nish break")
+  await settle()
+  await settle()
+  hero.terminal.dispatch("pointerdown", event("pointerdown", { pointerType: "touch" }))
+  keyed({ key: "Unidentified", keyCode: 229 })
+  enter(input, "nish break")
+  await settle()
+  await settle()
+  check("after a tap, a hardware key makes closing return focus to the input, and a soft keyboard's key does not",
+    opened.length === 6 && opened[4].focus === input && opened[5].focus === null, `${opened.length} ${opened[4]?.focus?.tag} ${opened[5]?.focus}`)
 }
 
 // --- break.mjs: the overlay ---------------------------------------------------
@@ -552,17 +621,19 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
     JSON.stringify(overlay?.attributes))
   const canvas = overlay.children.find((c) => c instanceof Node && c.tag === "canvas")
   const close = overlay.children.find((c) => c instanceof Node && c.tag === "button")
+  check("once the game runs, its screen has focus", document.activeElement === canvas && close.focused === 1 && canvas.focused === 1,
+    `${document.activeElement?.tag} ${close.focused} ${canvas.focused}`)
   const fromCanvas = press(overlay, "Tab", { target: canvas })
   const fromClose = press(overlay, "Tab", { target: close, shiftKey: true })
   check("Tab and Shift+Tab stay between the game and its close control",
-    fromCanvas.prevented && fromClose.prevented && close.focused === 1 && canvas.focused === 1, `${close.focused} ${canvas.focused}`)
+    fromCanvas.prevented && fromClose.prevented && close.focused === 2 && canvas.focused === 2, `${close.focused} ${canvas.focused}`)
   // A renderer that falls back may put a fresh canvas in the first one's place.
   const swapped = new Node("canvas")
   canvas.remove()
   overlay.children.unshift(swapped)
   swapped.parent = overlay
   press(overlay, "Tab", { target: close })
-  check("Tab from the close control reaches the canvas the game draws on now", swapped.focused === 1 && canvas.focused === 1,
+  check("Tab from the close control reaches the canvas the game draws on now", swapped.focused === 1 && canvas.focused === 2,
     `${swapped.focused} ${canvas.focused}`)
   const escOnCanvas = press(overlay, "Escape", { target: swapped })
   check("Escape on the game's screen is the game's", !escOnCanvas.prevented && overlays(document).length === 1)
@@ -593,6 +664,23 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
   check("the close control removes the overlay, stops the game and hands focus back",
     overlays(document).length === 0 && again.runs[0].options.signal.aborted && again.focus.focused === 1,
     `${overlays(document).length} ${again.focus.focused}`)
+}
+
+{
+  // While the game loads, focus is in the overlay already: on its close control, where Escape closes.
+  const { document } = makeDocument()
+  let begin = null
+  const loading = openFake(document, { start: () => new Promise((resolve) => (begin = resolve)) })
+  const [overlay] = overlays(document)
+  const close = overlay.children.find((c) => c instanceof Node && c.tag === "button")
+  check("the overlay takes focus as it opens, on its close control until the game runs", document.activeElement === close,
+    document.activeElement?.tag)
+  const esc = press(overlay, "Escape", { target: document.activeElement })
+  begin?.()
+  await loading.started
+  check("Escape while the game loads closes it and hands focus back",
+    esc.prevented && overlays(document).length === 0 && loading.focus.focused === 1 && document.activeElement !== close,
+    `${overlays(document).length} ${loading.focus.focused}`)
 }
 
 {
@@ -857,6 +945,19 @@ const standIn = JSON.parse(
   check("--check fails on a served module that names a path of the machine that built it, even with its hash recorded",
     leak.status === 1 && /game\.mjs \(names /.test(leak.stderr), leak.stderr)
   fs.writeFileSync(loaderFile, loader)
+  // Another machine's paths, which --check here cannot know: a macOS home in the loader, a Windows drive in the shell.
+  fs.appendFileSync(loaderFile, "\n// /Users/builder/nish/src\n")
+  fs.appendFileSync(shellCopy, "\n// D:\\builder\\nish\n")
+  edited((m) => {
+    m.outputs["game.mjs"] = createHash("sha256").update(fs.readFileSync(loaderFile)).digest("hex")
+    m.outputs["shell.mjs"] = createHash("sha256").update(fs.readFileSync(shellCopy)).digest("hex")
+  })
+  const elsewhere = verify()
+  check("--check fails on a served file that names a path of any machine, a builder's home or a Windows drive",
+    elsewhere.status === 1 && /game\.mjs \(names \/Users\/\)/.test(elsewhere.stderr) &&
+      /shell\.mjs \(names D:\\\)/.test(elsewhere.stderr), elsewhere.stderr)
+  fs.writeFileSync(loaderFile, loader)
+  fs.writeFileSync(shellCopy, shellText)
   fs.writeFileSync(manifestFile, committed)
   fs.rmSync(path.join(copy, "shell.mjs"))
   const missing = verify()

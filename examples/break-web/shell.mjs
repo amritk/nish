@@ -99,16 +99,24 @@ export const attach = (
   }
   term.append(node("style", "", css))
   // A form, so a keyboard's go key that sends no Enter keydown (an IME's 229)
-  // still enters the line, as a submit.
+  // still enters the line, as a submit. The input joins it by its `form`
+  // attribute, not by moving into it: moving a focused element blurs it, and
+  // the keys typed while this module loaded would go nowhere after the first.
   const form = node("form", "nish-hero__form")
+  form.id = "nish-hero-form"
   form.setAttribute("autocomplete", "off")
   term.append(form)
-  form.append(input)
-  // Whether the game was asked for from a tap: then closing it hands focus to
-  // nothing, so no soft keyboard springs up over the page.
+  input.setAttribute("form", form.id)
+  // Whether the last input was a touch rather than a key or a mouse: then
+  // closing the game hands focus to nothing, so no soft keyboard springs up
+  // over the page. Until the first event, a coarse pointer counts as a touch.
   let touched = document.defaultView?.matchMedia?.("(pointer: coarse)")?.matches ?? false
   term.addEventListener("pointerdown", (event) => {
     touched = event.pointerType === "touch"
+  })
+  // A soft keyboard's composing key (229) says nothing of a hardware one.
+  term.addEventListener("keydown", (event) => {
+    touched &&= event.keyCode === 229
   })
   // A screen reader hears the input itself as it is typed, and each answer
   // through `said`; the drawn copy of the line is for the eye only.

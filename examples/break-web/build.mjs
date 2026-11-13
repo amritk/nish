@@ -169,8 +169,16 @@ const ask = (option, colour = false) => {
  */
 const LOCAL = [root, process.cwd(), os.homedir()].filter((p) => p.length > 1 && path.parse(p).root !== p)
 
-/** The first of LOCAL, or docs/AI.md, that `text` names; null when none. */
-const localPath = (text) => [...LOCAL, "docs/AI.md"].find((p) => text.includes(p)) ?? null
+/**
+ * The start of a path on any machine, whoever built it: a home or temporary
+ * directory on Linux or macOS, a Windows drive, or a file URL. --check runs on
+ * another machine than the build, so LOCAL alone would miss the builder's.
+ */
+const ANY_PATH = /\/home\/|\/Users\/|\/root\/|\/tmp\/|\b[A-Za-z]:\\|file:\/\//
+
+/** The first of LOCAL, docs/AI.md or ANY_PATH that `text` names; null when none. */
+const localPath = (text) =>
+  [...LOCAL, "docs/AI.md"].find((p) => text.includes(p)) ?? ANY_PATH.exec(text)?.[0] ?? null
 
 /** The compiler's `--help`; a page must not show or hash a path on the machine that built it. */
 const askHelp = (colour) => {
@@ -181,9 +189,9 @@ const askHelp = (colour) => {
   return text
 }
 
-/** The served module and loader that name a path of this machine, each with the path. */
+/** The served module, loader and shell that name a path, each with the path. */
 const leaks = () =>
-  ["game.wasm", "game.mjs"]
+  ["game.wasm", "game.mjs", "shell.mjs"]
     .map((name) => path.join(out, name))
     .filter((file) => fs.existsSync(file))
     .map((file) => [file, localPath(fs.readFileSync(file, "latin1"))])
