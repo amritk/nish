@@ -2577,6 +2577,38 @@ const keptSet = (
   return keptId(ctx, kept)
 }
 
+/**
+ * `keptSet` where the test names the one member `member` and `current` holds
+ * only members of its enum, where the same id is the same value: one pass,
+ * and the list it builds is sized before it is filled.
+ */
+const keptOne = (ctx: CheckContext, current: i32[], member: i32, keep: boolean): i32 => {
+  const at = current.indexOf(member)
+  if (keep) {
+    if (at < 0) {
+      return current.length === 0 ? -1 : MEMBERS_NONE
+    }
+    return current.length === 1 ? -1 : member
+  }
+  if (at < 0) {
+    return -1
+  }
+  if (current.length === 2) {
+    return current[1 - at]
+  }
+  const kept = new Array<i32>(current.length - 1)
+  let i = 0
+  while (i < at) {
+    kept[i] = current[i]
+    i = i + 1
+  }
+  while (i + 1 < current.length) {
+    kept[i] = current[i + 1]
+    i = i + 1
+  }
+  return keptId(ctx, kept)
+}
+
 /** `kept`, the members an enum variable is left, as the set `Scope.hold` records. */
 const keptId = (ctx: CheckContext, kept: i32[]): i32 => {
   if (kept.length === 1) {
@@ -2614,14 +2646,13 @@ const holdNamed = (
   const at = memoSlot(program, local.type, current, first, second, keep ? 1 : 0)
   let set = memoRead(program.narrowMemo, at + 5)
   if (memoRead(program.narrowMemo, at) === 0) {
-    set = keptSet(
-      ctx,
-      local,
-      heldList(ctx, local.type, current),
-      heldList(ctx, local.type, first),
-      heldList(ctx, local.type, second),
-      keep
-    )
+    const held = heldList(ctx, local.type, current)
+    set =
+      second === MEMBERS_NONE &&
+      ctx.table.isMemberOf(first, local.type) &&
+      (current === -1 || allMembersOf(ctx, held, local.type))
+        ? keptOne(ctx, held, first, keep)
+        : keptSet(ctx, local, held, heldList(ctx, local.type, first), heldList(ctx, local.type, second), keep)
     const memo = program.narrowMemo
     memo[at] = local.type + 1
     memo[at + 1] = current
