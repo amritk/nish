@@ -187,3 +187,8 @@ little differently.
 The handler speaks HTTP/1.1 only. For HTTP/2 and HTTP/3, drive
 `nish/net/http2-tls` and `nish/net/http3-server` directly, routing with the
 same table ([HTTP routing](http-router.md#from-http11-http2-and-http3)).
+`Http3Server` times its own clients: a connection with no request open past
+`Http3Config.idleTimeout` (60 s by default) is closed with H3_NO_ERROR, and
+one still sending a request's head past `headTimeout` (30 s) with
+H3_EXCESSIVE_LOAD. A body that trickles after its head is the handler's to
+time, as `bodyTimeout` does for HTTP/1.1.

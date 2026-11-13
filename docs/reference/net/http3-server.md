@@ -140,13 +140,22 @@ and `tick` runs the buckets that are due. `timeout` finds the next filled
 bucket from a bitmap. A deadline past the wheel's horizon is filed at the
 horizon and filed again when it comes round. So no call scans the slots.
 
+The HTTP/3 side's clock (`Http3Connection.clock`, H3-5) runs on every
+flush and files its deadline with the rest: a slot that goes
+`idleTimeout` without progress while no request is in hand is closed with
+H3_NO_ERROR, and one whose request head has waited `headTimeout` (a
+client trickling its HEADERS, the slowloris of HTTP/3) with
+H3_EXCESSIVE_LOAD, as the program writes no timer of its own. A client
+that only acknowledges or sends PING keeps its QUIC connection alive but
+not its slot.
+
 </scalar-detail>
 
 <scalar-callout type="warning">
 
 **Caps, fixed at start-up**: the slots, and inside each the QUIC
 configuration's streams and buffers and the `Http3Config`'s field section,
-body chunk and DATA frame.
+body chunk, DATA frame and two timeouts.
 
 A slot's connections and address are built on the first Initial accepted into
 it and kept, so a pool sized for its peak costs at start-up only its per-slot
