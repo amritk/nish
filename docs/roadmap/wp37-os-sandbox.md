@@ -1,6 +1,6 @@
 # WP37: The OS sandbox
 
-**State:** In progress · **Done:** 4 of 8 · **Design note:** [`docs/wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md)
+**State:** In progress · **Done:** 5 of 9 · **Design note:** [`docs/wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md)
 
 ## Stages
 
@@ -8,6 +8,7 @@
 - [x] Stage 2: the `fs.read=<dir>` and `fs.write=<dir>` scopes
 - [x] Dependency-grant scopes and the exec allowlist under `--sandbox`
 - [x] Close SBX-1: the loader a granted program reaches can run any program, as a spawn target and from the granted program's own exec (one exec per spawn)
+- [x] `process.spawn=exec:<program>`: a grant that lets one program start helpers, outside the one-exec hold
 - [ ] Scopes in the `package.json` manifest *(deferred)*
 - [ ] Refuse IFUNC resolvers at link time *(deferred)*
 - [ ] `nish run` sandboxed by default *(deferred)*

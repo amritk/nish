@@ -1261,6 +1261,72 @@ const DECLARED = [
     changelog: "safegcd",
     why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
   })),
+  // WP39 G4: P256PointScratch gains `comb`, the recoded scalar m, so
+  // every module laying it out (a C header, or a test that makes its own
+  // scratch) has a wider struct and renumbered fields.
+  ...[
+    ["bench/jwt-verify/main.ts", "main.h"],
+    ["bench/p256.ts", "p256.h"],
+    ["bench/sha256-block/main.ts", "main.h"],
+    ["tests/link/crypto_jwt/main.ts", "main.h"],
+    ["tests/link/crypto_jwt_f64/main.ts", "main.h"],
+    ["tests/link/crypto_p256/main.ts", "scratch.ll"],
+    ["tests/link/crypto_p256_ecdh/main.ts", "main.h"],
+    ["tests/link/crypto_p256_f64/main.ts", "scratch.ll"],
+    ["tests/link/crypto_p256_sign_into_message_window/main.ts", "main.h main.ll"],
+    ["tests/link/crypto_p256_sign_into_signature_window/main.ts", "main.h main.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: "fixed-base table for P-256",
+      why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
+    }))
+  ),
+  // The same widening reaches every TLS, HTTP and QUIC program that links
+  // the TLS stack: its tls.ll, tls-tcp.ll and http1-server.ll declare
+  // P256PointScratch and its constructor, a C header lays it out with
+  // `comb`, and p256SignSha256Into now writes its sign scratch.
+  ...[
+    ["examples/file-server.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_head_reuse/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    [
+      "tests/link/net_http2_cleartext/main.ts",
+      "http1-server.ll main.h net_tls_record_tcp_harness.ll tls-tcp.ll tls.ll",
+    ],
+    ["tests/link/net_http2_cleartext_bad_slots/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http2_cleartext_bad_timeout/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_prefork/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_worker/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_serve_burst/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_serve_queued_wait/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_tls_p256/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_size_limit/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_size_limit_f64/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_tcp/main.ts", "checks.ll harness.ll main.ll tls.ll"],
+    ["tests/link/net_tls_record_tcp_f64/main.ts", "harness.ll net_tls_record_tcp_checks.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_idle/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_rate/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/region_sessions_soak/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_async/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_depth_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_pipeline/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_statement_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_ticket_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_tls/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_roots_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_unix_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/tfb_async_db/main.ts", "http1-server.ll tls.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: "fixed-base table for P-256",
+      why: "P256PointScratch gains `comb` (64 to 72 bytes), so every module of a TLS program that declares it or its constructor moves, a C header gains the field and renumbers what follows it, and p256SignSha256Into stores into its P256SignScratch, so that parameter is no longer readonly",
+    }))
+  ),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.
@@ -1299,6 +1365,30 @@ const DECLARED = [
     file: "exit",
     changelog: "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
     why: "the program reaches getenv from a --target wasm32 build, which the 0.38.0 seed compiles and then fails to link, and the candidate refuses with NL2404 naming the chain, so only the reference compiles it",
+  })),
+  // H3-5: the bad-config tests set Http3Config.idleTimeout or headTimeout,
+  // new in std/net.
+  ...[
+    "tests/link/net_http3_server_bad_head_timeout/main.ts",
+    "tests/link/net_http3_server_bad_idle_timeout/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "(H3-5)",
+    why: "the program sets Http3Config.idleTimeout or headTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  })),
+  // H3-5: Http3Config gains idleTimeout and headTimeout, so the C header of
+  // every program that exports a type reaching it gains the two fields.
+  ...[
+    "tests/link/net_quic_prefork/main.ts",
+    "tests/link/net_quic_worker/main.ts",
+    "tests/link/net_webtransport_bad_idle/main.ts",
+    "tests/link/net_webtransport_bad_rate/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "(H3-5)",
+    why: "Http3Config gains the int32_t fields idleTimeout and headTimeout, which the seed's std/net does not have, so the program's header declares two more fields",
   })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
@@ -5564,6 +5654,18 @@ const DECLARED = [
     file: "exit",
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
+  },
+  {
+    program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:sh` as a program named `exec:sh`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
+  {
+    program: "tests/link/sandbox_dep_exec_optin/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:env` as a program named `exec:env`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
   },
   // #1511: QuicConnection gains a field (752 to 760 bytes) and QuicStreams
   // gains `bufferBlocked`, so every module laying either out moves.

@@ -38,7 +38,7 @@ Strings, regular expressions, JSON and YAML: 14 modules.
 
 <scalar-card title="Terminal and CLI" icon="phosphor/regular/terminal-window" href="#terminal-and-cli">
 
-Terminal output and input, and command-line parsing: 8 modules.
+Terminal output and input, a step's input with no terminal, and command-line parsing: 9 modules.
 
 </scalar-card>
 
@@ -144,6 +144,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/cli-args`](cli-args.md) | A command tree for a large command-line tool: declared once with a builder, parsed in one walk over the arguments, and answered as the matched command's id and every value with where it came from. |
 | [`nish/cli-flags`](cli-flags.md) | A command line's flags, declared once as data and read back by name, with the same declaration writing the `--help` rows. |
 | [`nish/cli`](cli.md) | A command-line tool's help menu: whether a stream gets colour, the escapes that paint it, and the rows a `--help` is made of. |
+| [`nish/input`](input.md) | What one fixed step of a program reads from its player: the key and mouse events since the last step, and which keys are held down. |
 | [`nish/term-io`](term-io.md) | Opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O. |
 | [`nish/term-pixels`](term-pixels.md) | A framebuffer of pixels, and the encoders that draw it to a terminal with the best backend the terminal has: kitty graphics, Sixel, half-block cells or ASCII. |
 | [`nish/term-probe`](term-probe.md) | What the terminal a program runs in can do (its colours, keyboard protocol, graphics and size), asked of it once at start and read from its answer. |

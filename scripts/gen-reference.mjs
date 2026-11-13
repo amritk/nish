@@ -1308,10 +1308,10 @@ const AREAS = [
   },
   {
     title: "Terminal and CLI",
-    about: "Terminal output and input, and command-line parsing",
+    about: "Terminal output and input, a step's input with no terminal, and command-line parsing",
     key: "/terminal/..",
     icon: "terminal-window",
-    names: ["term*", "cli*"],
+    names: ["term*", "input", "cli*"],
   },
   {
     title: "Concurrency",

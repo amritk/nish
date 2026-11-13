@@ -28,7 +28,9 @@
  * identity is recorded before step 2, and `nish_spawn_sandboxed`, which
  * runtime-os.c's spawn calls once it is set, refuses a target that is that
  * file, has the child execute a descriptor of any other, and holds that
- * child's whole subtree to the one exec ("One exec per spawn" below).
+ * child's whole subtree to the one exec ("One exec per spawn" below). A
+ * program granted `process.spawn=exec:<program>` is written `///<path>`, and
+ * its identity is recorded too: its child is spared the one exec.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -475,14 +477,21 @@ static void nish_sb_seccomp(int32_t caps) {
  * which names the same file. Each such file's identity is kept here when the
  * sandbox is applied, and `nish_sb_spawn_open` refuses a spawn target that is
  * one of them, by identity, so a symlink, a hardlink or any second name is
- * refused as well. More marked entries than the table holds refuse every
- * spawn rather than some. */
-#define NISH_SB_REFUSED 16
+ * refused as well.
+ *
+ * A program granted `process.spawn=exec:<program>` is written with a third
+ * leading `/` (`///usr/bin/git`), which names the same file too, and its
+ * identity is kept in the same table: such a target is started without the
+ * one-exec filter ("One exec per spawn" below), so its subtree may execute
+ * whatever the allowlist holds. A file kept both ways is refused. More marked
+ * entries than the table holds refuse every spawn rather than some. */
+#define NISH_SB_MARKED 16
 static struct {
   dev_t dev;
   ino_t ino;
-} nish_sb_refused[NISH_SB_REFUSED];
-static int nish_sb_nrefused;
+  int exec; /* 1 for an `exec:` grant, 0 for a kept interpreter */
+} nish_sb_marked[NISH_SB_MARKED];
+static int nish_sb_nmarked;
 
 /* The file `posix_spawnp` would execute for `file`: `file` itself when it
  * holds a `/`, else the first executable regular file of that name in a PATH
@@ -491,8 +500,9 @@ static int nish_sb_nrefused;
  * gets its /proc/self/fd name, so the child executes the very file checked: a
  * name swapped between this check and the exec reaches nothing, and a script's
  * interpreter can open the script by that name. Returns the descriptor, or
- * -EACCES for a kept interpreter, or -ENOENT when there is no such file. */
-static int nish_sb_spawn_open(const char *file, int low, char *proc) {
+ * -EACCES for a kept interpreter, or -ENOENT when there is no such file;
+ * `*unheld` is set when the file is an `exec:` grant's program. */
+static int nish_sb_spawn_open(const char *file, int low, char *proc, int *unheld) {
   const char *dir = strchr(file, '/') ? "" : getenv("PATH");
   char buf[PATH_MAX];
   struct stat st;
@@ -510,9 +520,13 @@ static int nish_sb_spawn_open(const char *file, int low, char *proc) {
     }
     if (!len || path == buf) fd = open(path, O_PATH | O_CLOEXEC);
     if (fd >= 0 && !fstat(fd, &st) && S_ISREG(st.st_mode) && (st.st_mode & 0111)) {
-      int k = nish_sb_nrefused > NISH_SB_REFUSED ? -1 : nish_sb_nrefused;
-      while (k > 0 && (nish_sb_refused[k - 1].dev != st.st_dev || nish_sb_refused[k - 1].ino != st.st_ino)) k--;
-      int moved = k ? -EACCES : fcntl(fd, F_DUPFD, low);
+      int k = nish_sb_nmarked > NISH_SB_MARKED ? -1 : nish_sb_nmarked, held = k < 0;
+      while (k-- > 0)
+        if (nish_sb_marked[k].dev == st.st_dev && nish_sb_marked[k].ino == st.st_ino) {
+          if (nish_sb_marked[k].exec) *unheld = 1;
+          else held = 1;
+        }
+      int moved = held ? -EACCES : fcntl(fd, F_DUPFD, low);
       if (moved == -1) moved = -errno;
       close(fd);
       if (moved >= 0) snprintf(proc, 32, "/proc/self/fd/%d", moved);
@@ -585,6 +599,7 @@ struct nish_sb_job {
   const posix_spawn_file_actions_t *actions;
   char **argv;
   char proc[32];
+  int unheld; /* the target is an `exec:` grant's program: no filter */
   int pipe[2]; /* the spawner's two answers: its listener, then its child */
   sigset_t mask; /* the calling thread's, which the child starts with */
   int32_t result;
@@ -598,6 +613,22 @@ static int nish_sb_lift(int fd, int low) {
   close(fd);
   errno = e;
   return moved;
+}
+
+/* `posix_spawn` of the checked target, its child started with the caller's
+ * mask: the pid, or a negative errno. This thread blocks every signal, and a
+ * child starts with its parent's mask unless it is given one. */
+static int32_t nish_sb_start(struct nish_sb_job *job) {
+  pid_t pid;
+  posix_spawnattr_t attr;
+  int failed = posix_spawnattr_init(&attr);
+  if (!failed) {
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
+    posix_spawnattr_setsigmask(&attr, &job->mask);
+    failed = posix_spawn(&pid, job->proc, job->actions, &attr, job->argv, environ);
+    posix_spawnattr_destroy(&attr);
+  }
+  return failed ? -failed : (int32_t)pid;
 }
 
 static void nish_sb_refuse_spawn(int e) {
@@ -630,18 +661,7 @@ static void *nish_sb_spawner(void *arg) {
   if (said < 0) said = -errno;
   (void)!write(job->pipe[1], &said, sizeof said);
   if (said < 0) return 0;
-  pid_t pid;
-  /* This thread blocks every signal, and a child starts with its parent's
-   * mask unless it is given one: the caller's. */
-  posix_spawnattr_t attr;
-  int failed = posix_spawnattr_init(&attr);
-  if (!failed) {
-    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
-    posix_spawnattr_setsigmask(&attr, &job->mask);
-    failed = posix_spawn(&pid, job->proc, job->actions, &attr, job->argv, environ);
-    posix_spawnattr_destroy(&attr);
-  }
-  said = failed ? -failed : (int32_t)pid;
+  said = nish_sb_start(job);
   (void)!write(job->pipe[1], &said, sizeof said);
   return 0;
 }
@@ -699,9 +719,15 @@ static void *nish_sb_supervisor(void *arg) {
     nish_sb_refuse_spawn(EMFILE);
     return 0;
   }
-  int fd = nish_sb_spawn_open(job->file, job->low, job->proc);
+  int fd = nish_sb_spawn_open(job->file, job->low, job->proc, &job->unheld);
   if (fd < 0) {
     job->result = fd;
+    return 0;
+  }
+  /* An `exec:` grant's program keeps its subtree's reach of the allowlist:
+   * it starts from this private table like any other, without the filter. */
+  if (job->unheld) {
+    job->result = nish_sb_start(job);
     return 0;
   }
   int failed = pthread_create(&spawner, 0, nish_sb_spawner, job);
@@ -783,21 +809,22 @@ static int32_t nish_sb_spawn_once(const char *file, const int *dup, int base, in
   return job.result;
 }
 
-static void nish_sb_keep_interpreters(const char *paths) {
+static void nish_sb_keep_marks(const char *paths) {
   struct stat st;
   if (paths) nish_spawn_sandboxed = nish_sb_spawn_once;
   for (; paths && *paths; paths += strlen(paths) + 1) {
     /* An entry gone since the build has no identity to keep, and Landlock
      * grants it nothing to execute either. */
     if (paths[1] != '/' || stat(paths, &st)) continue;
-    int n = nish_sb_nrefused++;
-    if (n < NISH_SB_REFUSED) nish_sb_refused[n].dev = st.st_dev, nish_sb_refused[n].ino = st.st_ino;
+    int n = nish_sb_nmarked++;
+    if (n < NISH_SB_MARKED)
+      nish_sb_marked[n].dev = st.st_dev, nish_sb_marked[n].ino = st.st_ino, nish_sb_marked[n].exec = paths[2] == '/';
   }
 }
 
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
   nish_cpu_prime();
-  nish_sb_keep_interpreters(exec_paths);
+  nish_sb_keep_marks(exec_paths);
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
   nish_sb_drop_capabilities();
   nish_sb_landlock(caps, mode, read_dirs, write_dirs, exec_paths);
