@@ -4,7 +4,7 @@
 //
 // **No exceptions.** A `throw` traps and discards its value, so error
 // recovery is the error-value threading of §3a D1, in its first real use: a
-// failed parse returns an `N_ERROR` node, the message goes on
+// failed parse returns an `NodeKind.Error` node, the message goes on
 // `Parser.diagnostics`, and the caller decides whether to skip to a
 // synchronising token or hand the sentinel upward. This is the classic
 // recursive-descent recovery tax, and it is worse than `try`/`catch`; the
@@ -19,7 +19,7 @@
 //
 // **What it accepts is wider than the language.** `??` it builds as an
 // operator (WP32), and the checker refuses it wherever its left operand is not
-// a `Map.get` result. Anything it cannot make a node of is an `N_ERROR` with
+// a `Map.get` result. Anything it cannot make a node of is an `NodeKind.Error` with
 // the reason.
 //
 // **A forbidden construct is parsed, not refused** (WP33 R1): `var`, `try`,
@@ -42,8 +42,6 @@ import { Lexer, withoutSeparators } from "./lexer"
 import { StringMap } from "./map"
 import {
   FLAG_ABSTRACT,
-  FLAG_OBJECT_SPREAD,
-  FLAG_SPREAD_ARGUMENT,
   FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
@@ -54,14 +52,12 @@ import {
   FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_DEFER,
-  FLAG_SIGNATURE,
-  FLAG_FOR_IN,
-  FLAG_USING,
-  FLAG_VAR,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
+  FLAG_FOR_IN,
   FLAG_FOREIGN,
   FLAG_GENERATOR,
+  FLAG_OBJECT_SPREAD,
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_PREFIX,
@@ -69,89 +65,15 @@ import {
   FLAG_READONLY,
   FLAG_REST,
   FLAG_SATISFIES,
+  FLAG_SIGNATURE,
+  FLAG_SPREAD_ARGUMENT,
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
   FLAG_TYPE_ONLY,
-  N_ARRAY,
-  N_AS,
-  N_ARROW,
-  N_BIGINT,
-  N_BINARY,
-  N_BINDING_PATTERN,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CASE,
-  N_CLASS,
-  N_CONDITIONAL,
-  N_CONSTRUCTOR,
-  N_CONTINUE,
-  N_DECORATOR,
-  N_DEFAULT,
-  N_DO,
-  N_EMPTY,
-  N_ERROR,
-  N_EXPR_STMT,
-  N_FALSE,
-  N_FIELD,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_IMPORT,
-  N_IMPORT_EQUALS,
-  N_IMPORT_SPEC,
-  N_INDEX,
-  N_INDEX_SIGNATURE,
-  N_INTERFACE,
-  N_LABELED,
-  N_LIST,
-  N_MEMBER,
-  N_METHOD,
-  N_MODULE_CONST,
-  N_NAMESPACE,
-  N_NAMESPACE_EXPORT,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_PARAM,
-  N_PAREN,
-  N_PROPERTY,
-  N_REGEX,
-  N_RETURN,
-  N_SOURCE_FILE,
-  N_SPREAD,
-  N_SUPER,
-  N_STRING,
-  N_SWITCH,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_THIS,
-  N_THROW,
-  N_TRUE,
-  N_TRY,
-  N_UNARY,
-  N_ENUM,
-  N_EXPORT_ASSIGNMENT,
-  N_EXPORT_DECLARATION,
-  N_ENUM_MEMBER,
-  N_TYPE_ALIAS,
-  N_TYPE_ARRAY,
-  N_TYPE_FUNCTION,
-  N_TYPE_LITERAL,
-  N_TYPE_NULL,
-  N_TYPE_OPERATOR,
-  N_TYPE_PAREN,
-  N_TYPE_READONLY,
-  N_TYPE_REF,
-  N_TYPE_UNION,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  N_WITH,
+  FLAG_USING,
+  FLAG_VAR,
   Node,
+  NodeKind,
 } from "./nodes"
 import {
   TOK_AMP,
@@ -522,7 +444,7 @@ export class Parser {
    * Every node of this tree comes from here, which is what lets the ids be
    * dense: `nodeCount` is the size the checker's side tables need.
    */
-  node(kind: i32, start: i32, end: i32): Node {
+  node(kind: NodeKind, start: i32, end: i32): Node {
     const made = new Node(kind, start, end)
     made.id = this.nodeCount
     this.nodeCount = this.nodeCount + 1
@@ -535,12 +457,12 @@ export class Parser {
    * depend on where the parser happened to be looking.
    */
   empty(): Node {
-    return this.node(N_EMPTY, 0, 0)
+    return this.node(NodeKind.Empty, 0, 0)
   }
 
-  /** A fresh, still-empty `N_LIST`; `closeList` gives it its span. */
+  /** A fresh, still-empty `NodeKind.List`; `closeList` gives it its span. */
   list(): Node {
-    return this.node(N_LIST, 0, 0)
+    return this.node(NodeKind.List, 0, 0)
   }
 
   /**
@@ -557,10 +479,10 @@ export class Parser {
     return list
   }
 
-  /** An `N_ERROR` node carrying the reason, reported at the current token. */
+  /** An `NodeKind.Error` node carrying the reason, reported at the current token. */
   fail(message: string): Node {
     this.report(message, this.start, this.end)
-    const node = this.node(N_ERROR, this.start, this.end)
+    const node = this.node(NodeKind.Error, this.start, this.end)
     node.text = message
     return node
   }
@@ -626,7 +548,7 @@ export class Parser {
   // ---- Declarations ------------------------------------------------------------------
 
   parseSourceFile(): Node {
-    const file = this.node(N_SOURCE_FILE, 0, this.file.text.length)
+    const file = this.node(NodeKind.SourceFile, 0, this.file.text.length)
     while (!this.at(TOK_END)) {
       const before = this.start
       file.children.push(this.parseDeclaration())
@@ -923,13 +845,13 @@ export class Parser {
 
   /**
    * `namespace A.B { ... }`, `module "m" { ... }` and `declare global { ... }`
-   * as one N_NAMESPACE whose text is the keyword, for Phase 0 to refuse. The
+   * as one NodeKind.Namespace whose text is the keyword, for Phase 0 to refuse. The
    * body is a BLOCK passed over unread (`src/nodes.ts`); a body-less
    * `declare module "m";` has an EMPTY one, and anything else without a body
    * is the syntax error it is in TypeScript.
    */
   parseNamespace(start: i32, flags: i32): Node {
-    const node = this.node(N_NAMESPACE, start, this.end)
+    const node = this.node(NodeKind.Namespace, start, this.end)
     node.text = this.value
     node.flags = flags
     if (node.text === "global") {
@@ -937,7 +859,7 @@ export class Parser {
     } else {
       this.advance() // `namespace` or `module`
       if (this.at(TOK_STRING)) {
-        const name = this.node(N_STRING, this.start, this.end)
+        const name = this.node(NodeKind.String, this.start, this.end)
         name.text = this.value
         this.advance()
         node.children.push(name)
@@ -946,7 +868,7 @@ export class Parser {
       }
     }
     // Only a module named by a string may go without a body, as in TypeScript.
-    if (!this.at(TOK_LBRACE) && node.children[0].kind === N_STRING) {
+    if (!this.at(TOK_LBRACE) && node.children[0].kind === NodeKind.String) {
       node.children.push(this.empty())
       this.expectSemicolon()
       node.end = this.previousEnd
@@ -955,7 +877,7 @@ export class Parser {
     // The body is passed over rather than read: Phase 0 refuses the block
     // whatever it holds, and a declared one holds ambient declarations —
     // functions without bodies, `export =` — that this grammar does not have.
-    const body = this.node(N_BLOCK, this.start, this.end)
+    const body = this.node(NodeKind.Block, this.start, this.end)
     this.skipBraces()
     body.end = this.previousEnd
     node.children.push(body)
@@ -964,12 +886,12 @@ export class Parser {
   }
 
   /**
-   * `@expr`, the head of a decorator (NL1006): an N_DECORATOR holding the
+   * `@expr`, the head of a decorator (NL1006): an NodeKind.Decorator holding the
    * expression, to which the caller adds what it decorates. The expression is
    * a name, a member access or a call, as TypeScript reads one.
    */
   parseDecoratorHead(start: i32): Node {
-    const node = this.node(N_DECORATOR, start, this.end)
+    const node = this.node(NodeKind.Decorator, start, this.end)
     this.advance() // `@`
     const expressionStart = this.start
     node.children.push(this.parseCallOrMember(this.parsePrimary(), expressionStart))
@@ -1280,7 +1202,7 @@ export class Parser {
     const decorator = this.parseDecoratorHead(start)
     const decorated = this.parseDeclaration()
     let declaration = decorated
-    while (declaration.kind === N_DECORATOR && declaration.children.length > 1) {
+    while (declaration.kind === NodeKind.Decorator && declaration.children.length > 1) {
       declaration = declaration.children[1]
     }
     declaration.flags = declaration.flags | flags
@@ -1355,7 +1277,7 @@ export class Parser {
 
   /** The value after `export default` or `export =` (NL2129), whose word, `default` or `=`, is consumed. */
   finishExportAssignment(start: i32, word: string): Node {
-    const node = this.node(N_EXPORT_ASSIGNMENT, start, this.previousEnd)
+    const node = this.node(NodeKind.ExportAssignment, start, this.previousEnd)
     node.text = word
     node.children.push(this.parseExpression())
     this.expectSemicolon()
@@ -1383,7 +1305,7 @@ export class Parser {
    * holds.
    */
   parseExportDeclaration(start: i32): Node {
-    const node = this.node(N_EXPORT_DECLARATION, start, this.end)
+    const node = this.node(NodeKind.ExportDeclaration, start, this.end)
     if (this.at(TOK_IDENT)) {
       this.advance() // `type`
       node.flags = FLAG_TYPE_ONLY
@@ -1418,7 +1340,7 @@ export class Parser {
 
   /** `export as namespace X;` (NL2230), after `export`, on `as`. */
   parseNamespaceExport(start: i32): Node {
-    const node = this.node(N_NAMESPACE_EXPORT, start, this.end)
+    const node = this.node(NodeKind.NamespaceExport, start, this.end)
     this.advance() // `as`
     if (this.at(TOK_IDENT) && this.value === "namespace") {
       this.advance()
@@ -1462,11 +1384,11 @@ export class Parser {
 
   /**
    * `import { a, b as c } from "./m";` — the only import form there is — and
-   * every other form TypeScript reads, each the N_IMPORT `src/nodes.ts`
+   * every other form TypeScript reads, each the NodeKind.Import `src/nodes.ts`
    * describes, for the phase that owns its rule to refuse: a default or a
    * namespace import, a side-effect import, `import type`, `import defer`, a
    * specifier that is not a string literal and attributes after it. `import
-   * x = require("./m")` is an N_IMPORT_EQUALS.
+   * x = require("./m")` is an NodeKind.ImportEquals.
    *
    * `type` and `defer` are modifiers where TypeScript reads them as one, and
    * names everywhere else: `import type from "./m"` imports a default called
@@ -1474,7 +1396,7 @@ export class Parser {
    */
   parseImport(start: i32): Node {
     this.advance() // `import`
-    const node = this.node(N_IMPORT, start, this.end)
+    const node = this.node(NodeKind.Import, start, this.end)
     const list = this.list()
     if (this.typeModifierAhead()) {
       this.advance()
@@ -1516,7 +1438,7 @@ export class Parser {
     if (defaultName !== null) {
       node.children.push(defaultName)
     }
-    if (bindings.kind !== N_EMPTY || defaultName !== null) {
+    if (bindings.kind !== NodeKind.Empty || defaultName !== null) {
       this.expectFrom()
     }
     this.parseModuleSpecifier(node)
@@ -1576,18 +1498,18 @@ export class Parser {
 
   /**
    * `import x = require("./m");` or `import x = A.B;`, on `=` after the name
-   * (NL2230, or NL2226 when exported). `node` is the N_IMPORT already made,
-   * which becomes the N_IMPORT_EQUALS, keeping `import type`'s flag.
+   * (NL2230, or NL2226 when exported). `node` is the NodeKind.Import already made,
+   * which becomes the NodeKind.ImportEquals, keeping `import type`'s flag.
    */
   parseImportEquals(node: Node, name: Node): Node {
-    node.kind = N_IMPORT_EQUALS
+    node.kind = NodeKind.ImportEquals
     node.children.push(name)
     this.expect(TOK_ASSIGN)
     if (this.at(TOK_IDENT) && this.value === "require" && this.peek() === TOK_LPAREN) {
       this.advance() // `require`
       this.advance() // `(`
       if (this.at(TOK_STRING)) {
-        const specifier = this.node(N_STRING, this.start, this.end)
+        const specifier = this.node(NodeKind.String, this.start, this.end)
         specifier.text = this.value
         this.advance()
         node.children.push(specifier)
@@ -1664,7 +1586,7 @@ export class Parser {
    */
   parseMalformedImport(start: i32): Node {
     this.advance() // `import`
-    const node = this.node(N_IMPORT, start, this.end)
+    const node = this.node(NodeKind.Import, start, this.end)
     const list = this.list()
     this.expect(TOK_LBRACE)
     return this.finish(node, this.closeList(list))
@@ -1789,10 +1711,10 @@ export class Parser {
     let name = this.parseModuleExportName()
     // Made here, after the first name, so a specifier that compiles numbers
     // its nodes as it always did.
-    const spec = this.node(N_IMPORT_SPEC, specStart, name.end)
+    const spec = this.node(NodeKind.ImportSpec, specStart, name.end)
     let property = name
     let alias = true
-    if (name.kind === N_IDENT && name.text === "type" && !reserved) {
+    if (name.kind === NodeKind.Ident && name.text === "type" && !reserved) {
       if (this.at(TOK_IDENT) && this.value === "as") {
         const firstAs = this.parseModuleExportName()
         if (this.at(TOK_IDENT) && this.value === "as") {
@@ -1832,7 +1754,7 @@ export class Parser {
       reserved = this.keywordHere()
       name = this.parseModuleExportName()
     }
-    if (isImport && (reserved || name.kind !== N_IDENT)) {
+    if (isImport && (reserved || name.kind !== NodeKind.Ident)) {
       this.report("expected a name, found a keyword or a string", name.start, name.end)
     }
     spec.text = name.text
@@ -1858,13 +1780,13 @@ export class Parser {
    */
   parseModuleExportName(): Node {
     if (this.at(TOK_STRING)) {
-      const name = this.node(N_STRING, this.start, this.end)
+      const name = this.node(NodeKind.String, this.start, this.end)
       name.text = this.value
       this.advance()
       return name
     }
     if (this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER) {
-      const name = this.node(N_IDENT, this.start, this.end)
+      const name = this.node(NodeKind.Ident, this.start, this.end)
       name.text = tokenName(this.kind)
       this.advance()
       return name
@@ -1887,7 +1809,7 @@ export class Parser {
     const isAsync = this.asyncNext
     this.asyncNext = false
     this.advance() // `function`
-    const node = this.node(N_FUNCTION, start, this.end)
+    const node = this.node(NodeKind.FunctionDecl, start, this.end)
     // `function*`, for Phase 0 to refuse (NL1044): `*` cannot follow
     // `function` in anything else.
     if (this.eat(TOK_STAR)) {
@@ -1898,7 +1820,7 @@ export class Parser {
     node.children.push(anonymous ? this.empty() : this.parseIdentifier())
     // The type parameters are read here, where they are written, and pushed
     // last, where `nodes.ts` puts them: the first four children of an
-    // `N_FUNCTION` mean what they have always meant, so nothing downstream
+    // `NodeKind.FunctionDecl` mean what they have always meant, so nothing downstream
     // that indexes them moves (WP18).
     const typeParams = this.parseTypeParameters()
     node.children.push(this.parseParameters(true, true))
@@ -1934,7 +1856,7 @@ export class Parser {
    */
   parseForeignFunction(start: i32): Node {
     this.advance() // `function`
-    const node = this.node(N_FUNCTION, start, this.end)
+    const node = this.node(NodeKind.FunctionDecl, start, this.end)
     node.children.push(this.parseIdentifier())
     const typeParams = this.parseTypeParameters()
     node.children.push(this.parseParameters(true, false))
@@ -2087,14 +2009,14 @@ export class Parser {
   }
 
   /**
-   * `const double = (n: i32): i32 => n * 2;` -- the same `N_FUNCTION` the
+   * `const double = (n: i32): i32 => n * 2;` -- the same `NodeKind.FunctionDecl` the
    * `function` spelling builds, so every pass after this one is unchanged. The
    * body child is the `BLOCK` when there is one and the returned expression
    * when the body is concise.
    */
   parseArrowFunction(start: i32): Node {
     this.advance() // `const`
-    const node = this.node(N_FUNCTION, start, this.end)
+    const node = this.node(NodeKind.FunctionDecl, start, this.end)
     node.children.push(this.parseIdentifier())
     this.expect(TOK_ASSIGN)
     // `startsArrowDeclaration` has already told the modifier from a name.
@@ -2138,7 +2060,7 @@ export class Parser {
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
       const param = this.parseParameter(typed)
-      if (signature && param.kind === N_PARAM) {
+      if (signature && param.kind === NodeKind.Param) {
         param.flags = param.flags | FLAG_SIGNATURE
       }
       list.children.push(param)
@@ -2177,7 +2099,7 @@ export class Parser {
       decorator.end = this.previousEnd
       return decorator
     }
-    const param = this.node(N_PARAM, start, this.end)
+    const param = this.node(NodeKind.Param, start, this.end)
     // `public x: i32`, a parameter property, for the checker to refuse
     // (NL2234): the word is a modifier only before a name, a pattern or `...`
     // on its line, which is TypeScript's rule, so `public: i32` is a
@@ -2193,7 +2115,8 @@ export class Parser {
     if (this.eat(TOK_QUESTION)) {
       param.flags = param.flags | FLAG_OPTIONAL
     }
-    const refused = param.flags !== 0 || param.children[0].kind === N_BINDING_PATTERN || this.at(TOK_ASSIGN)
+    const refused =
+      param.flags !== 0 || param.children[0].kind === NodeKind.BindingPattern || this.at(TOK_ASSIGN)
     if (this.at(TOK_COLON) || (typed && !refused)) {
       param.children.push(this.parseTypeAnnotation())
     } else {
@@ -2231,13 +2154,13 @@ export class Parser {
 
   /**
    * The name a parameter or a declaration binds, or the destructuring
-   * pattern in its place (`src/nodes.ts`, N_BINDING_PATTERN).
+   * pattern in its place (`src/nodes.ts`, NodeKind.BindingPattern).
    */
   parseBindingName(): Node {
     if (!this.at(TOK_LBRACE) && !this.at(TOK_LBRACKET)) {
       return this.parseIdentifier()
     }
-    const pattern = this.node(N_BINDING_PATTERN, this.start, this.end)
+    const pattern = this.node(NodeKind.BindingPattern, this.start, this.end)
     if (this.at(TOK_LBRACKET)) {
       this.parseNamePattern(pattern)
     } else {
@@ -2258,7 +2181,7 @@ export class Parser {
     this.advance() // `[`
     let flat = true
     while (flat && this.at(TOK_IDENT)) {
-      const name = this.node(N_IDENT, this.start, this.end)
+      const name = this.node(NodeKind.Ident, this.start, this.end)
       name.text = this.value
       pattern.children.push(name)
       this.advance()
@@ -2311,10 +2234,10 @@ export class Parser {
    */
   parseClass(start: i32): Node {
     this.advance() // `class`
-    const node = this.node(N_CLASS, start, this.end)
+    const node = this.node(NodeKind.Class, start, this.end)
     node.children.push(this.at(TOK_IDENT) ? this.parseIdentifier() : this.empty())
     // Read where they are written and pushed last, where `nodes.ts` puts them:
-    // the first four children of an `N_CLASS` mean what they have always meant,
+    // the first four children of an `NodeKind.Class` mean what they have always meant,
     // so nothing downstream that indexes them moves (WP18 G5).
     const typeParams = this.parseTypeParameters()
     node.children.push(this.at(TOK_EXTENDS) ? this.parseHeritageName() : this.empty())
@@ -2563,8 +2486,8 @@ export class Parser {
    * members.
    */
   parseDisposeMethod(start: i32, modifiers: i32): Node {
-    const method = this.node(N_METHOD, start, this.end)
-    const name = this.node(N_IDENT, start, this.end)
+    const method = this.node(NodeKind.Method, start, this.end)
+    const name = this.node(NodeKind.Ident, start, this.end)
     name.text = "[Symbol.dispose]"
     while (!this.at(TOK_RBRACKET)) {
       this.advance()
@@ -2620,7 +2543,7 @@ export class Parser {
       (this.peek() === TOK_LPAREN || this.peek() === TOK_LT)
     ) {
       this.advance()
-      const ctor = this.node(N_CONSTRUCTOR, start, this.end)
+      const ctor = this.node(NodeKind.Constructor, start, this.end)
       // WP18 G8: a constructor takes its class's type arguments, written after
       // `new`, and has none of its own — TypeScript says the same. The list is
       // read and refused here rather than carried to the checker because the
@@ -2648,7 +2571,7 @@ export class Parser {
       // a missing body (NL2091) an EMPTY one: the checker refuses both.
       const returnType: Node | null = this.eat(TOK_COLON) ? this.parseType() : null
       ctor.children.push(this.parseBody())
-      if (ctor.children[1].kind === N_EMPTY) {
+      if (ctor.children[1].kind === NodeKind.Empty) {
         this.bodiless(ctor.children[0])
       }
       if (returnType !== null) {
@@ -2700,7 +2623,7 @@ export class Parser {
         ? this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()
         : this.methodAfterComputedName())
     ) {
-      const method = this.node(N_METHOD, start, this.end)
+      const method = this.node(NodeKind.Method, start, this.end)
       method.children.push(computed === null ? this.parseMemberNameNode() : computed)
       // `m?<T>()`: the marker is written before the type parameters. An
       // accessor is refused whole, so its parameter needs no annotation to
@@ -2711,10 +2634,10 @@ export class Parser {
       method.children.push(this.parseParameters(plain, plain))
       method.children.push(this.parseReturnType())
       method.children.push(this.parseBody())
-      if (method.children[3].kind === N_EMPTY) {
+      if (method.children[3].kind === NodeKind.Empty) {
         this.bodiless(method.children[1])
       }
-      // The fifth child, where an `N_FUNCTION` keeps its list, and only when
+      // The fifth child, where an `NodeKind.FunctionDecl` keeps its list, and only when
       // there is one: a method without type parameters keeps exactly the tree
       // it always had, so `--emit-ast` and the parser oracle move for none.
       if (typeParams.children.length > 0) {
@@ -2723,7 +2646,7 @@ export class Parser {
       method.end = this.previousEnd
       return method
     }
-    const field = this.node(N_FIELD, start, this.end)
+    const field = this.node(NodeKind.Field, start, this.end)
     field.children.push(computed === null ? this.parseMemberNameNode() : computed)
     field.flags = modifiers | this.parseMemberMarker()
     // Typed JSON's `static readonly json = { ... }` leaves its type to its
@@ -2820,9 +2743,9 @@ export class Parser {
     return false
   }
 
-  /** The `N_ERROR` a member becomes when its computed name already reported its syntax error. */
+  /** The `NodeKind.Error` a member becomes when its computed name already reported its syntax error. */
   abandonedMember(start: i32): Node {
-    const node = this.node(N_ERROR, start, this.previousEnd)
+    const node = this.node(NodeKind.Error, start, this.previousEnd)
     node.text = this.diagnostics[this.diagnostics.length - 1].text
     return node
   }
@@ -2849,13 +2772,13 @@ export class Parser {
    */
   parseMemberNameNode(): Node {
     if (this.at(TOK_STRING)) {
-      const name = this.node(N_STRING, this.start, this.end)
+      const name = this.node(NodeKind.String, this.start, this.end)
       name.text = this.value
       this.advance()
       return name
     }
     if (this.at(TOK_NUMBER)) {
-      const name = this.node(N_NUMBER, this.start, this.end)
+      const name = this.node(NodeKind.Number, this.start, this.end)
       name.text = withoutSeparators(this.value)
       this.advance()
       return name
@@ -2896,10 +2819,10 @@ export class Parser {
    * (NL2213, NL2214), with whatever modifiers were in front of it.
    */
   parseIndexSignature(start: i32, modifiers: i32): Node {
-    const node = this.node(N_INDEX_SIGNATURE, start, this.end)
+    const node = this.node(NodeKind.IndexSignature, start, this.end)
     node.flags = modifiers
     this.advance() // `[`
-    const key = this.node(N_PARAM, this.start, this.end)
+    const key = this.node(NodeKind.Param, this.start, this.end)
     key.children.push(this.parseIdentifier())
     key.children.push(this.parseTypeAnnotation())
     key.end = this.previousEnd
@@ -2913,7 +2836,7 @@ export class Parser {
 
   parseInterface(start: i32): Node {
     this.advance() // `interface`
-    const node = this.node(N_INTERFACE, start, this.end)
+    const node = this.node(NodeKind.Interface, start, this.end)
     node.children.push(this.parseIdentifier())
     // Pushed last, like a class's and a function's, so the field list keeps
     // being child 1 for everything that already reads it (WP18 G5).
@@ -3018,7 +2941,7 @@ export class Parser {
     ) {
       return this.parseMethodSignature(start, modifiers, true, computed)
     }
-    const field = this.node(N_FIELD, start, this.end)
+    const field = this.node(NodeKind.Field, start, this.end)
     field.children.push(computed === null ? this.parseMemberNameNode() : computed)
     // `?` only, and not `!`: a definite-assignment assertion is not a
     // spelling TypeScript allows on a property signature at all, so
@@ -3044,7 +2967,7 @@ export class Parser {
    * computed name the caller has read already is `computed`.
    */
   parseMethodSignature(start: i32, modifiers: i32, named: boolean, computed: Node | null): Node {
-    const method = this.node(N_METHOD, start, this.end)
+    const method = this.node(NodeKind.Method, start, this.end)
     if (computed !== null) {
       method.children.push(computed)
     } else {
@@ -3071,7 +2994,7 @@ export class Parser {
    */
   parseTypeAlias(start: i32): Node {
     this.advance() // `type`
-    const node = this.node(N_TYPE_ALIAS, start, this.end)
+    const node = this.node(NodeKind.TypeAlias, start, this.end)
     node.children.push(this.parseIdentifier())
     const typeParams = this.parseTypeParameters()
     this.expect(TOK_ASSIGN)
@@ -3105,7 +3028,7 @@ export class Parser {
    */
   parseEnum(start: i32): Node {
     this.advance() // `enum`
-    const node = this.node(N_ENUM, start, this.end)
+    const node = this.node(NodeKind.Enum, start, this.end)
     node.children.push(this.parseIdentifier())
     const members = this.list()
     if (this.expect(TOK_LBRACE)) {
@@ -3126,10 +3049,10 @@ export class Parser {
     return node
   }
 
-  /** `A` or `A = 1`; an absent initialiser is `N_EMPTY` and means "one more than the last". */
+  /** `A` or `A = 1`; an absent initialiser is `NodeKind.Empty` and means "one more than the last". */
   parseEnumMember(): Node {
     const start = this.start
-    const member = this.node(N_ENUM_MEMBER, start, this.end)
+    const member = this.node(NodeKind.EnumMember, start, this.end)
     member.children.push(this.parseIdentifier())
     member.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
     member.end = this.previousEnd
@@ -3137,7 +3060,7 @@ export class Parser {
   }
 
   parseModuleConst(start: i32): Node {
-    const node = this.node(N_MODULE_CONST, start, this.end)
+    const node = this.node(NodeKind.ModuleConst, start, this.end)
     if (this.at(TOK_CONST)) {
       node.flags = node.flags | FLAG_CONST
     } else if (this.at(TOK_IDENT)) {
@@ -3157,7 +3080,7 @@ export class Parser {
     const list = this.list()
     while (true) {
       const start = this.start
-      const declaration = this.node(N_VAR_DECL, start, this.end)
+      const declaration = this.node(NodeKind.VarDecl, start, this.end)
       declaration.children.push(this.parseBindingName())
       declaration.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty())
       declaration.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
@@ -3179,7 +3102,7 @@ export class Parser {
     if (!this.at(TOK_PIPE)) {
       return type
     }
-    const union = this.node(N_TYPE_UNION, start, type.end)
+    const union = this.node(NodeKind.TypeUnion, start, type.end)
     union.children.push(type)
     while (this.eat(TOK_PIPE)) {
       union.children.push(this.parsePostfixType())
@@ -3198,7 +3121,7 @@ export class Parser {
     // a message that names the rule.
     if (this.at(TOK_IDENT) && this.value === "readonly") {
       this.advance()
-      const node = this.node(N_TYPE_READONLY, start, this.end)
+      const node = this.node(NodeKind.TypeReadonly, start, this.end)
       node.children.push(this.parsePostfixType())
       node.end = this.previousEnd
       return node
@@ -3206,7 +3129,7 @@ export class Parser {
     // `keyof T`, for the checker to refuse (NL2038). It binds as `readonly`
     // does, and is the operator only where the name could not be (`keyofAhead`).
     if (this.keyofAhead()) {
-      const operator = this.node(N_TYPE_OPERATOR, start, this.end)
+      const operator = this.node(NodeKind.TypeOperator, start, this.end)
       operator.text = this.value
       this.advance()
       operator.children.push(this.parsePostfixType())
@@ -3217,7 +3140,7 @@ export class Parser {
     while (this.at(TOK_LBRACKET) && this.peek() === TOK_RBRACKET) {
       this.advance()
       this.advance()
-      const array = this.node(N_TYPE_ARRAY, start, this.previousEnd)
+      const array = this.node(NodeKind.TypeArray, start, this.previousEnd)
       array.children.push(type)
       type = array
     }
@@ -3261,7 +3184,7 @@ export class Parser {
       // is the `typescript` parser's, span for span; `resolveType` reads
       // through it exactly as stage0's `ParenthesizedType` case does.
       this.advance()
-      const node = this.node(N_TYPE_PAREN, start, this.end)
+      const node = this.node(NodeKind.TypeParen, start, this.end)
       node.children.push(this.parseType())
       this.expect(TOK_RPAREN)
       node.end = this.previousEnd
@@ -3269,7 +3192,7 @@ export class Parser {
     }
     if (this.at(TOK_NULL)) {
       this.advance()
-      return this.node(N_TYPE_NULL, start, this.previousEnd)
+      return this.node(NodeKind.TypeNull, start, this.previousEnd)
     }
     // WP31 §4: a numeric literal type, `255` or `-128`. It is read wherever a
     // type is, because a number cannot start a type otherwise, and the checker
@@ -3279,7 +3202,7 @@ export class Parser {
       if (negative) {
         this.advance()
       }
-      const literal = this.node(N_TYPE_LITERAL, start, this.end)
+      const literal = this.node(NodeKind.TypeLiteral, start, this.end)
       literal.text = negative ? `-${this.value}` : this.value
       this.advance()
       literal.end = this.previousEnd
@@ -3289,7 +3212,7 @@ export class Parser {
     // text is the literal as written, quotes included, which no numeric
     // literal begins with, and the checker refuses it everywhere else.
     if (this.at(TOK_STRING)) {
-      const literal = this.node(N_TYPE_LITERAL, start, this.end)
+      const literal = this.node(NodeKind.TypeLiteral, start, this.end)
       literal.text = this.file.text.substring(start, this.end)
       this.advance()
       return literal
@@ -3297,7 +3220,7 @@ export class Parser {
     if (!this.at(TOK_IDENT)) {
       return this.fail(`expected a type name, found \`${tokenName(this.kind)}\``)
     }
-    const node = this.node(N_TYPE_REF, start, this.end)
+    const node = this.node(NodeKind.TypeRef, start, this.end)
     node.text = this.value
     this.advance()
     // An enum member type, `Kind.Array`: one qualifier and one name, kept as
@@ -3393,7 +3316,7 @@ export class Parser {
    * to know the callee's signature.
    */
   parseFunctionType(start: i32): Node {
-    const node = this.node(N_TYPE_FUNCTION, start, this.end)
+    const node = this.node(NodeKind.TypeFunction, start, this.end)
     node.children.push(this.parseParameters(true, false))
     this.expect(TOK_ARROW)
     node.children.push(this.parseType())
@@ -3429,7 +3352,7 @@ export class Parser {
 
   parseBlock(): Node {
     const start = this.start
-    const block = this.node(N_BLOCK, start, this.end)
+    const block = this.node(NodeKind.Block, start, this.end)
     if (!this.expect(TOK_LBRACE)) {
       block.end = this.previousEnd
       return block
@@ -3492,12 +3415,12 @@ export class Parser {
       case TOK_THROW:
         return this.parseThrow(start)
       case TOK_BREAK:
-        return this.parseJump(start, N_BREAK)
+        return this.parseJump(start, NodeKind.Break)
       case TOK_CONTINUE:
-        return this.parseJump(start, N_CONTINUE)
+        return this.parseJump(start, NodeKind.Continue)
       case TOK_SEMICOLON:
         this.advance()
-        return this.node(N_EMPTY, start, this.previousEnd)
+        return this.node(NodeKind.Empty, start, this.previousEnd)
       // A function or an import declaration inside a body is the node it is
       // at the top level, for the pass 1 sweep to refuse as a statement
       // (NL2260): a nested function would be a closure, and a module's
@@ -3514,7 +3437,7 @@ export class Parser {
         // A class declaration inside a body is not an expression statement,
         // and TypeScript does not read one as a class expression either: it
         // stays the syntax error it was.
-        const node = this.node(N_EXPR_STMT, start, this.end)
+        const node = this.node(NodeKind.ExprStmt, start, this.end)
         node.children.push(this.fail(`expected an expression, found \`${tokenName(this.kind)}\``))
         this.expectSemicolon()
         node.end = this.previousEnd
@@ -3536,7 +3459,7 @@ export class Parser {
   }
 
   parseVariableStatement(start: i32): Node {
-    const node = this.node(N_VAR, start, this.end)
+    const node = this.node(NodeKind.Var, start, this.end)
     // A `using` binding is a `const` the scope rules then hold to more
     // (`src/parallel.ts`): it cannot be reassigned either.
     if (this.varAhead()) {
@@ -3563,7 +3486,7 @@ export class Parser {
    */
   parseTry(start: i32): Node {
     this.advance() // `try`
-    const node = this.node(N_TRY, start, this.end)
+    const node = this.node(NodeKind.Try, start, this.end)
     node.children.push(this.parseBlock())
     let binding = this.empty()
     let handler = this.empty()
@@ -3587,7 +3510,7 @@ export class Parser {
       this.advance()
       finalizer = this.parseBlock()
     }
-    if (handler.kind === N_EMPTY && finalizer.kind === N_EMPTY) {
+    if (handler.kind === NodeKind.Empty && finalizer.kind === NodeKind.Empty) {
       this.report(
         `expected \`catch\` or \`finally\`, found \`${tokenName(this.kind)}\``,
         this.start,
@@ -3625,7 +3548,7 @@ export class Parser {
   /** `with (o) body`, for Phase 0 to refuse (NL1038). */
   parseWith(start: i32): Node {
     this.advance() // `with`
-    const node = this.node(N_WITH, start, this.end)
+    const node = this.node(NodeKind.With, start, this.end)
     this.expect(TOK_LPAREN)
     node.children.push(this.parseExpression())
     this.expect(TOK_RPAREN)
@@ -3640,7 +3563,7 @@ export class Parser {
    * here, as TypeScript refuses it.
    */
   parseLabeled(start: i32): Node {
-    const node = this.node(N_LABELED, start, this.end)
+    const node = this.node(NodeKind.Labeled, start, this.end)
     node.text = this.value
     if (this.labels.indexOf(node.text) >= 0) {
       this.report("Duplicate label '" + node.text + "'", this.start, this.end)
@@ -3687,7 +3610,7 @@ export class Parser {
 
   parseIf(start: i32): Node {
     this.advance()
-    const node = this.node(N_IF, start, this.end)
+    const node = this.node(NodeKind.If, start, this.end)
     this.expect(TOK_LPAREN)
     node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
@@ -3699,7 +3622,7 @@ export class Parser {
 
   parseWhile(start: i32): Node {
     this.advance()
-    const node = this.node(N_WHILE, start, this.end)
+    const node = this.node(NodeKind.While, start, this.end)
     this.expect(TOK_LPAREN)
     node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
@@ -3710,7 +3633,7 @@ export class Parser {
 
   parseDo(start: i32): Node {
     this.advance()
-    const node = this.node(N_DO, start, this.end)
+    const node = this.node(NodeKind.Do, start, this.end)
     node.children.push(this.parseStatement())
     this.expect(TOK_WHILE)
     this.expect(TOK_LPAREN)
@@ -3739,7 +3662,7 @@ export class Parser {
     this.noIn = true
     if (((this.at(TOK_CONST) || this.at(TOK_LET)) && this.bindingAhead()) || this.varAhead()) {
       const declStart = this.start
-      const declaration = this.node(N_VAR, declStart, this.end)
+      const declaration = this.node(NodeKind.Var, declStart, this.end)
       if (this.at(TOK_CONST)) {
         declaration.flags = declaration.flags | FLAG_CONST
       } else if (this.at(TOK_IDENT)) {
@@ -3756,7 +3679,7 @@ export class Parser {
     }
     const initializer = this.at(TOK_SEMICOLON) ? this.empty() : this.parseSequence()
     this.noIn = outerNoIn
-    if (initializer.kind !== N_EMPTY && this.atForOfKeyword()) {
+    if (initializer.kind !== NodeKind.Empty && this.atForOfKeyword()) {
       return this.parseForOfRest(start, initializer, flags)
     }
     return this.parseForRest(start, initializer, flags)
@@ -3779,7 +3702,7 @@ export class Parser {
 
   /** The `of a) body` of a `for...of`, or `in a) body`, with the head already parsed. */
   parseForOfRest(start: i32, head: Node, flags: i32): Node {
-    const forOf = this.node(N_FOR_OF, start, this.end)
+    const forOf = this.node(NodeKind.ForOf, start, this.end)
     forOf.flags = this.value === "in" ? flags | FLAG_FOR_IN : flags
     this.advance()
     forOf.children.push(head)
@@ -3799,7 +3722,7 @@ export class Parser {
     if ((flags & FLAG_AWAIT) !== 0) {
       this.report(`expected \`of\`, found \`${tokenName(this.kind)}\``, this.start, this.end)
     }
-    const node = this.node(N_FOR, start, this.end)
+    const node = this.node(NodeKind.For, start, this.end)
     node.children.push(initializer)
     this.expect(TOK_SEMICOLON)
     node.children.push(this.at(TOK_SEMICOLON) ? this.empty() : this.parseSequence())
@@ -3813,7 +3736,7 @@ export class Parser {
 
   parseSwitch(start: i32): Node {
     this.advance()
-    const node = this.node(N_SWITCH, start, this.end)
+    const node = this.node(NodeKind.Switch, start, this.end)
     this.expect(TOK_LPAREN)
     node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
@@ -3840,7 +3763,7 @@ export class Parser {
       return this.fail("a `switch` body holds only `case` and `default` clauses")
     }
     this.advance()
-    const clause = this.node(isCase ? N_CASE : N_DEFAULT, start, this.end)
+    const clause = this.node(isCase ? NodeKind.Case : NodeKind.Default, start, this.end)
     if (isCase) {
       clause.children.push(this.parseExpression())
     }
@@ -3860,7 +3783,7 @@ export class Parser {
 
   parseReturn(start: i32): Node {
     this.advance()
-    const node = this.node(N_RETURN, start, this.end)
+    const node = this.node(NodeKind.Return, start, this.end)
     // `return` then a line break returns nothing, as it does in TypeScript; the
     // value on the next line is then unreachable code, which the checker refuses.
     const bare = this.at(TOK_SEMICOLON) || this.at(TOK_RBRACE) || this.at(TOK_END) || this.newlineBefore()
@@ -3872,7 +3795,7 @@ export class Parser {
 
   parseThrow(start: i32): Node {
     this.advance()
-    const node = this.node(N_THROW, start, this.end)
+    const node = this.node(NodeKind.Throw, start, this.end)
     node.children.push(this.parseSequence())
     this.expectSemicolon()
     node.end = this.previousEnd
@@ -3884,7 +3807,7 @@ export class Parser {
    * The label has to be declared around the jump in the same function, and a
    * `continue` has to name a loop: TypeScript's rules, refused as it refuses them.
    */
-  parseJump(start: i32, kind: i32): Node {
+  parseJump(start: i32, kind: NodeKind): Node {
     this.advance()
     let label = ""
     if (this.at(TOK_IDENT) && !this.newlineBefore()) {
@@ -3892,7 +3815,7 @@ export class Parser {
       const at = this.labels.indexOf(label)
       if (at < 0 && this.outerLabels.indexOf(label) >= 0) {
         this.report("Jump target cannot cross function boundary", this.start, this.end)
-      } else if (kind === N_CONTINUE && (at < 0 || !this.labelLoops[at])) {
+      } else if (kind === NodeKind.Continue && (at < 0 || !this.labelLoops[at])) {
         this.report("A `continue` can only jump to a label of an enclosing loop", this.start, this.end)
       } else if (at < 0) {
         this.report("A `break` can only jump to a label of an enclosing statement", this.start, this.end)
@@ -3906,7 +3829,7 @@ export class Parser {
   }
 
   parseExpressionStatement(start: i32): Node {
-    const node = this.node(N_EXPR_STMT, start, this.end)
+    const node = this.node(NodeKind.ExprStmt, start, this.end)
     node.children.push(this.parseSequence())
     this.expectSemicolon()
     node.end = this.previousEnd
@@ -3928,7 +3851,7 @@ export class Parser {
     while (this.at(TOK_COMMA)) {
       this.advance()
       const right = this.parseExpression()
-      const node = this.node(N_BINARY, start, right.end)
+      const node = this.node(NodeKind.Binary, start, right.end)
       node.text = ","
       node.children.push(left)
       node.children.push(right)
@@ -3956,7 +3879,7 @@ export class Parser {
     }
     const operator = tokenName(this.kind)
     this.advance()
-    const node = this.node(N_BINARY, start, this.end)
+    const node = this.node(NodeKind.Binary, start, this.end)
     node.text = operator
     node.children.push(left)
     node.children.push(this.parseExpression())
@@ -3971,7 +3894,7 @@ export class Parser {
       return condition
     }
     this.advance()
-    const node = this.node(N_CONDITIONAL, start, this.end)
+    const node = this.node(NodeKind.Conditional, start, this.end)
     node.children.push(condition)
     // The branch between `?` and `:` reads `in` again, as the grammar's
     // `[+In]` does; the one after `:` keeps the context's (`noIn`).
@@ -4000,7 +3923,7 @@ export class Parser {
     }
     // One report per expression, however many times it mixes, and every
     // operand read on, whichever of the three operators joins it.
-    let mixed = left.kind === N_BINARY && (left.text === "||" || left.text === "&&")
+    let mixed = left.kind === NodeKind.Binary && (left.text === "||" || left.text === "&&")
     if (mixed) {
       this.reportMixedCoalesce(left.text)
     }
@@ -4012,7 +3935,7 @@ export class Parser {
       }
       this.advance()
       const right = this.parseBinary(binaryPrecedence(TOK_PIPE))
-      const node = this.node(N_BINARY, start, right.end)
+      const node = this.node(NodeKind.Binary, start, right.end)
       node.text = operator
       node.children.push(left)
       node.children.push(right)
@@ -4032,7 +3955,7 @@ export class Parser {
   /**
    * Precedence climbing. Every operator here is left-associative but `**`,
    * whose right operand is read at its own level, as TypeScript reads it. `as`
-   * and `satisfies` take a type rather than an operand, and are an `N_AS`.
+   * and `satisfies` take a type rather than an operand, and are an `NodeKind.As`.
    */
   parseBinary(minimum: i32): Node {
     const start = this.start
@@ -4046,7 +3969,7 @@ export class Parser {
       const operator = word ? this.value : tokenName(this.kind)
       this.advance()
       if (operator === "as" || operator === "satisfies") {
-        const assertion = this.node(N_AS, start, this.end)
+        const assertion = this.node(NodeKind.As, start, this.end)
         if (operator === "satisfies") {
           assertion.flags = FLAG_SATISFIES
         }
@@ -4057,7 +3980,7 @@ export class Parser {
         continue
       }
       const right = this.parseBinary(operator === "**" ? precedence : precedence + 1)
-      const node = this.node(N_BINARY, start, right.end)
+      const node = this.node(NodeKind.Binary, start, right.end)
       node.text = operator
       node.children.push(left)
       node.children.push(right)
@@ -4141,7 +4064,7 @@ export class Parser {
     ) {
       const operator = this.value
       this.advance()
-      const node = this.node(N_UNARY, start, this.end)
+      const node = this.node(NodeKind.Unary, start, this.end)
       node.text = operator
       node.flags = FLAG_PREFIX
       node.children.push(this.parseUnary())
@@ -4151,7 +4074,7 @@ export class Parser {
     // `<T>x`, the older spelling of `x as T`, which binds as a prefix operator.
     if (this.at(TOK_LT)) {
       this.advance()
-      const assertion = this.node(N_AS, start, this.end)
+      const assertion = this.node(NodeKind.As, start, this.end)
       assertion.flags = FLAG_ANGLE
       const type = this.parseType()
       this.expectTypeArgumentEnd()
@@ -4163,7 +4086,7 @@ export class Parser {
     if (this.at(TOK_BANG) || this.at(TOK_MINUS) || this.at(TOK_PLUS) || this.at(TOK_TILDE)) {
       const operator = tokenName(this.kind)
       this.advance()
-      const node = this.node(N_UNARY, start, this.end)
+      const node = this.node(NodeKind.Unary, start, this.end)
       node.text = operator
       node.flags = FLAG_PREFIX
       node.children.push(this.parseUnary())
@@ -4173,7 +4096,7 @@ export class Parser {
     if (this.at(TOK_PLUS_PLUS) || this.at(TOK_MINUS_MINUS)) {
       const operator = tokenName(this.kind)
       this.advance()
-      const node = this.node(N_UNARY, start, this.end)
+      const node = this.node(NodeKind.Unary, start, this.end)
       node.text = operator
       node.flags = FLAG_PREFIX
       node.children.push(this.parseUnary())
@@ -4190,7 +4113,7 @@ export class Parser {
     if ((this.at(TOK_PLUS_PLUS) || this.at(TOK_MINUS_MINUS)) && !this.newlineBefore()) {
       const operator = tokenName(this.kind)
       this.advance()
-      const node = this.node(N_UNARY, start, this.previousEnd)
+      const node = this.node(NodeKind.Unary, start, this.previousEnd)
       node.text = operator
       node.flags = FLAG_POSTFIX
       node.children.push(operand)
@@ -4224,7 +4147,7 @@ export class Parser {
         node = this.parseElement(node, start)
         node.flags = flags
       } else if (this.at(TOK_LPAREN)) {
-        const call = this.node(N_CALL, start, this.end)
+        const call = this.node(NodeKind.Call, start, this.end)
         call.flags = flags
         call.children.push(node)
         call.children.push(this.parseArguments())
@@ -4236,9 +4159,9 @@ export class Parser {
     }
   }
 
-  /** The name after a `.` or a `?.`, and the `N_MEMBER` it makes of `receiver`. */
+  /** The name after a `.` or a `?.`, and the `NodeKind.Member` it makes of `receiver`. */
   parseMemberName(receiver: Node, start: i32): Node {
-    const member = this.node(N_MEMBER, start, this.end)
+    const member = this.node(NodeKind.Member, start, this.end)
     if (this.at(TOK_IDENT) || this.kind >= 0) {
       member.text = this.at(TOK_IDENT) ? this.value : tokenName(this.kind)
       this.advance()
@@ -4248,10 +4171,10 @@ export class Parser {
     return member
   }
 
-  /** `[i]` after `receiver`, as an `N_INDEX`. */
+  /** `[i]` after `receiver`, as an `NodeKind.Index`. */
   parseElement(receiver: Node, start: i32): Node {
     this.advance()
-    const index = this.node(N_INDEX, start, this.end)
+    const index = this.node(NodeKind.Index, start, this.end)
     index.children.push(receiver)
     const outerNoIn = this.allowIn()
     index.children.push(this.parseExpression())
@@ -4274,7 +4197,7 @@ export class Parser {
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
       if (this.at(TOK_DOT_DOT_DOT)) {
-        const spread = this.node(N_SPREAD, this.start, this.end)
+        const spread = this.node(NodeKind.Spread, this.start, this.end)
         spread.flags = FLAG_SPREAD_ARGUMENT
         this.advance()
         spread.children.push(this.parseExpression())
@@ -4308,44 +4231,44 @@ export class Parser {
           arrow.flags = FLAG_ASYNC
           return arrow
         }
-        const node = this.node(N_IDENT, start, this.end)
+        const node = this.node(NodeKind.Ident, start, this.end)
         node.text = this.value
         this.advance()
         return node
       }
       case TOK_NUMBER: {
-        const node = this.node(N_NUMBER, start, this.end)
+        const node = this.node(NodeKind.Number, start, this.end)
         node.text = withoutSeparators(this.value)
         this.advance()
         return node
       }
       case TOK_BIGINT: {
-        const node = this.node(N_BIGINT, start, this.end)
+        const node = this.node(NodeKind.Bigint, start, this.end)
         node.text = this.value
         this.advance()
         return node
       }
       case TOK_STRING: {
-        const node = this.node(N_STRING, start, this.end)
+        const node = this.node(NodeKind.String, start, this.end)
         node.text = this.value
         this.advance()
         return node
       }
       case TOK_TRUE:
         this.advance()
-        return this.node(N_TRUE, start, this.previousEnd)
+        return this.node(NodeKind.True, start, this.previousEnd)
       case TOK_FALSE:
         this.advance()
-        return this.node(N_FALSE, start, this.previousEnd)
+        return this.node(NodeKind.False, start, this.previousEnd)
       case TOK_NULL:
         this.advance()
-        return this.node(N_NULL, start, this.previousEnd)
+        return this.node(NodeKind.Null, start, this.previousEnd)
       case TOK_THIS:
         this.advance()
-        return this.node(N_THIS, start, this.previousEnd)
+        return this.node(NodeKind.This, start, this.previousEnd)
       case TOK_SUPER:
         this.advance()
-        return this.node(N_SUPER, start, this.previousEnd)
+        return this.node(NodeKind.Super, start, this.previousEnd)
       case TOK_TEMPLATE:
       case TOK_TEMPLATE_HEAD:
         return this.parseTemplate(start)
@@ -4358,7 +4281,7 @@ export class Parser {
           return this.parseArrowExpression(start)
         }
         this.advance()
-        const node = this.node(N_PAREN, start, this.end)
+        const node = this.node(NodeKind.Paren, start, this.end)
         const outerNoIn = this.allowIn()
         node.children.push(this.parseSequence())
         this.noIn = outerNoIn
@@ -4382,7 +4305,7 @@ export class Parser {
         if (this.peek() !== TOK_LPAREN && !this.importMetaAhead()) {
           return this.fail(`expected an expression, found \`${tokenName(this.kind)}\``)
         }
-        const node = this.node(N_IDENT, start, this.end)
+        const node = this.node(NodeKind.Ident, start, this.end)
         node.text = "import"
         this.advance()
         return node
@@ -4504,19 +4427,19 @@ export class Parser {
 
   /**
    * An arrow in expression position, `(x) => x * 2`, `(x: i32): i32 => { ... }`
-   * or `x => x * 2` (WP29, wp23 §6), as the `N_ARROW` that `nodes.ts` shapes
-   * like an `N_FUNCTION`. A parameter's annotation and the return type may be
+   * or `x => x * 2` (WP29, wp23 §6), as the `NodeKind.Arrow` that `nodes.ts` shapes
+   * like an `NodeKind.FunctionDecl`. A parameter's annotation and the return type may be
    * omitted: the checker takes both from the function type of the parameter
    * the arrow is the argument for, which is the only place an arrow is legal.
    */
   parseArrowExpression(start: i32): Node {
     const isAsync = this.asyncNext
     this.asyncNext = false
-    const node = this.node(N_ARROW, start, this.end)
+    const node = this.node(NodeKind.Arrow, start, this.end)
     node.children.push(this.empty())
     const params = this.list()
     if (this.at(TOK_IDENT)) {
-      const param = this.node(N_PARAM, this.start, this.end)
+      const param = this.node(NodeKind.Param, this.start, this.end)
       param.children.push(this.parseIdentifier())
       param.children.push(this.empty())
       param.end = this.previousEnd
@@ -4542,8 +4465,8 @@ export class Parser {
    * does not depend on how the programmer wrote it.
    */
   parseTemplate(start: i32): Node {
-    const node = this.node(N_TEMPLATE, start, this.end)
-    const head = this.node(N_TEMPLATE_TEXT, this.start, this.end)
+    const node = this.node(NodeKind.Template, start, this.end)
+    const head = this.node(NodeKind.TemplateText, this.start, this.end)
     head.text = this.value
     node.children.push(head)
     const whole = this.at(TOK_TEMPLATE)
@@ -4556,7 +4479,7 @@ export class Parser {
     while (true) {
       node.children.push(this.parseExpression())
       if (this.at(TOK_TEMPLATE_MIDDLE) || this.at(TOK_TEMPLATE_TAIL)) {
-        const part = this.node(N_TEMPLATE_TEXT, this.start, this.end)
+        const part = this.node(NodeKind.TemplateText, this.start, this.end)
         part.text = this.value
         node.children.push(part)
         const last = this.at(TOK_TEMPLATE_TAIL)
@@ -4586,12 +4509,12 @@ export class Parser {
     this.end = this.lexer.pos
     if (end < 0) {
       this.report("unterminated regular expression literal", start, this.end)
-      const unterminated = this.node(N_ERROR, start, this.end)
+      const unterminated = this.node(NodeKind.Error, start, this.end)
       unterminated.text = "unterminated regular expression literal"
       this.advance()
       return unterminated
     }
-    const node = this.node(N_REGEX, start, end)
+    const node = this.node(NodeKind.Regex, start, end)
     node.text = this.file.text.substring(start, end)
     this.advance()
     return node
@@ -4599,11 +4522,11 @@ export class Parser {
 
   /**
    * `[a, b]`. A hole, `[a, , b]`, is an EMPTY element, and `...a` an
-   * N_SPREAD, for the checker to refuse (NL2210, NL2237).
+   * NodeKind.Spread, for the checker to refuse (NL2210, NL2237).
    */
   parseArrayLiteral(start: i32): Node {
     this.advance()
-    const node = this.node(N_ARRAY, start, this.end)
+    const node = this.node(NodeKind.Array, start, this.end)
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACKET) && !this.at(TOK_END)) {
       if (this.eat(TOK_COMMA)) {
@@ -4611,7 +4534,7 @@ export class Parser {
         continue
       }
       if (this.at(TOK_DOT_DOT_DOT)) {
-        const spread = this.node(N_SPREAD, this.start, this.end)
+        const spread = this.node(NodeKind.Spread, this.start, this.end)
         this.advance()
         spread.children.push(this.parseExpression())
         spread.end = this.previousEnd
@@ -4631,14 +4554,14 @@ export class Parser {
 
   parseObjectLiteral(start: i32): Node {
     this.advance()
-    const node = this.node(N_OBJECT, start, this.end)
+    const node = this.node(NodeKind.Object, start, this.end)
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
-      // `{ ...a }`, object spread: the N_SPREAD an array literal's `...a`
+      // `{ ...a }`, object spread: the NodeKind.Spread an array literal's `...a`
       // is, among the properties, for the checker (`checkObjectLiteral`).
       if (this.at(TOK_DOT_DOT_DOT)) {
-        const spread = this.node(N_SPREAD, propertyStart, this.end)
+        const spread = this.node(NodeKind.Spread, propertyStart, this.end)
         spread.flags = FLAG_OBJECT_SPREAD
         this.advance()
         spread.children.push(this.parseExpression())
@@ -4649,7 +4572,7 @@ export class Parser {
         }
         continue
       }
-      const property = this.node(N_PROPERTY, propertyStart, this.end)
+      const property = this.node(NodeKind.Property, propertyStart, this.end)
       // `[k]`, a computed key, for Phase 0 to refuse (NL1041): read first,
       // because whether a method follows is a question about the token
       // after its `]`.
@@ -4665,10 +4588,10 @@ export class Parser {
         break
       }
       // `{ m() { } }`, a method (or an accessor), for the checker to refuse
-      // (NL2258): the property's value is the N_METHOD.
+      // (NL2258): the property's value is the NodeKind.Method.
       if (computed === null ? this.objectMethodAhead() : this.methodAfterComputedName()) {
         const method = this.parseObjectMethod(propertyStart, computed)
-        if (method.kind === N_ERROR) {
+        if (method.kind === NodeKind.Error) {
           if (this.skipBrokenProperty()) {
             continue
           }
@@ -4708,7 +4631,7 @@ export class Parser {
         property.children.push(this.parseExpression())
       } else {
         // Shorthand `{ x }`: the value is the identifier the key names.
-        const shorthand = this.node(N_IDENT, propertyStart, this.previousEnd)
+        const shorthand = this.node(NodeKind.Ident, propertyStart, this.previousEnd)
         shorthand.text = property.text
         property.children.push(shorthand)
       }
@@ -4752,12 +4675,12 @@ export class Parser {
 
   /**
    * `m(): T { }` in an object literal, with `async`, `*`, `get` or `set` in
-   * front of it: an N_METHOD shaped as a class's is. It is refused whole, so a
+   * front of it: an NodeKind.Method shaped as a class's is. It is refused whole, so a
    * parameter needs no annotation to get there. A computed name, `computed`
    * when the caller has read it already, carries FLAG_COMPUTED (NL1041).
    */
   parseObjectMethod(start: i32, computed: Node | null): Node {
-    const method = this.node(N_METHOD, start, this.end)
+    const method = this.node(NodeKind.Method, start, this.end)
     let name: Node | null = computed
     if (name === null) {
       if (this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead()) {
@@ -4801,7 +4724,7 @@ export class Parser {
    */
   parseNew(start: i32): Node {
     this.advance()
-    const node = this.node(N_NEW, start, this.end)
+    const node = this.node(NodeKind.New, start, this.end)
     const calleeStart = this.start
     let callee = this.at(TOK_IDENT) ? this.parseIdentifier() : this.parsePrimary()
     while (this.at(TOK_DOT) || this.at(TOK_LBRACKET)) {
@@ -4834,7 +4757,7 @@ export class Parser {
     if (!this.at(TOK_IDENT)) {
       return this.fail(`expected a name, found \`${tokenName(this.kind)}\``)
     }
-    const node = this.node(N_IDENT, start, this.end)
+    const node = this.node(NodeKind.Ident, start, this.end)
     node.text = this.value
     this.advance()
     return node

@@ -24,41 +24,7 @@ import {
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
 import { checkGenericCall, genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CASE,
-  N_CONDITIONAL,
-  N_DEFAULT,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FOR,
-  N_FOR_OF,
-  N_IDENT,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_OBJECT,
-  N_PAREN,
-  N_THIS,
-  N_TYPE_ARRAY,
-  N_TYPE_NULL,
-  N_TYPE_PAREN,
-  N_TYPE_READONLY,
-  N_TYPE_REF,
-  N_TYPE_UNION,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  FLAG_GATHERED,
-  FLAG_USING,
-  Node,
-} from "./nodes"
+import { FLAG_GATHERED, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringSet } from "./map"
 import { crossesByCopy, parallelRole } from "./parallel"
 import {
@@ -170,7 +136,7 @@ const refuseGatheredRecord = (ctx: CheckContext, expr: Node, elem: i32): boolean
     return false
   }
   for (const element of expr.children) {
-    if (unwrapParens(element).kind !== N_OBJECT) {
+    if (unwrapParens(element).kind !== NodeKind.Object) {
       ctx.error(
         element,
         `A rest parameter copies each \`${record.name}\` record it gathers, so a write through the copy would not reach this one as it does in TypeScript; take a \`${record.name}[]\` parameter and pass \`[...]\`, which copies the same way and says so`
@@ -297,9 +263,9 @@ export const checkArrayProperty = (ctx: CheckContext, expr: Node, receiver: i32)
  */
 export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope): string => {
   const e = unwrapParens(expr)
-  if (e.kind === N_NEW) {
+  if (e.kind === NodeKind.New) {
     const callee = e.children[0]
-    if (callee.kind !== N_IDENT) {
+    if (callee.kind !== NodeKind.Ident) {
       return ""
     }
     if (typedArrayElement(callee.text) >= 0) {
@@ -307,11 +273,11 @@ export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope):
     }
     return newMapSpelling(ctx, e)
   }
-  if (e.kind === N_IDENT) {
+  if (e.kind === NodeKind.Ident) {
     const local = scope.lookup(e.text)
     return local === null ? "" : local.typedArray
   }
-  if (e.kind === N_MEMBER) {
+  if (e.kind === NodeKind.Member) {
     // A receiver with no recorded type (`Kind.A`, an enum) is not a struct.
     const holder = ctx.program.nodeTypes[e.children[0].id]
     if (holder < 0) {
@@ -324,7 +290,7 @@ export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope):
     const field = owner.field(e.text)
     return field === null ? "" : field.spelling
   }
-  if (e.kind === N_CALL) {
+  if (e.kind === NodeKind.Call) {
     const read = mapReadSpelling(ctx, e, scope)
     if (read.length > 0) {
       return read
@@ -337,20 +303,20 @@ export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope):
       ? callee.returnSpelling
       : genericCallSpelling(ctx, e, callee, scope)
   }
-  if (e.kind === N_INDEX) {
+  if (e.kind === NodeKind.Index) {
     return elementSpelling(typedArraySpelling(ctx, e.children[0], scope))
   }
   // `c ? t : xs` is `Float64Array | number[]` to TypeScript, which has no
   // `push` either, so one spelled branch is enough; `v ?? xs` is the same union.
-  if (e.kind === N_CONDITIONAL || (e.kind === N_BINARY && e.text === "??")) {
-    const first = e.kind === N_CONDITIONAL ? 1 : 0
+  if (e.kind === NodeKind.Conditional || (e.kind === NodeKind.Binary && e.text === "??")) {
+    const first = e.kind === NodeKind.Conditional ? 1 : 0
     return eitherSpelling(
       typedArraySpelling(ctx, e.children[first], scope),
       typedArraySpelling(ctx, e.children[first + 1], scope)
     )
   }
   // `[new Float64Array(n)]` is a `Float64Array[]` to TypeScript.
-  if (e.kind === N_ARRAY) {
+  if (e.kind === NodeKind.Array) {
     for (const item of e.children) {
       const spelled = typedArraySpelling(ctx, item, scope)
       if (spelled.length > 0) {
@@ -454,18 +420,21 @@ export const spellAnnotation = (
 export const annotationName = (node: Node, levels: string[]): Node | null => {
   let at = node
   while (true) {
-    if (at.kind === N_TYPE_PAREN || at.kind === N_TYPE_READONLY) {
+    if (at.kind === NodeKind.TypeParen || at.kind === NodeKind.TypeReadonly) {
       at = at.children[0]
-    } else if (at.kind === N_TYPE_ARRAY) {
+    } else if (at.kind === NodeKind.TypeArray) {
       levels.push(ARRAY_LEVEL)
       at = at.children[0]
-    } else if (at.kind === N_TYPE_UNION) {
+    } else if (at.kind === NodeKind.TypeUnion) {
       const members = at.children
-      if (members.length !== 2 || (members[0].kind === N_TYPE_NULL) === (members[1].kind === N_TYPE_NULL)) {
+      if (
+        members.length !== 2 ||
+        (members[0].kind === NodeKind.TypeNull) === (members[1].kind === NodeKind.TypeNull)
+      ) {
         return null
       }
-      at = members[0].kind === N_TYPE_NULL ? members[1] : members[0]
-    } else if (at.kind !== N_TYPE_REF) {
+      at = members[0].kind === NodeKind.TypeNull ? members[1] : members[0]
+    } else if (at.kind !== NodeKind.TypeRef) {
       return null
     } else {
       const args = at.children[0].children
@@ -543,7 +512,7 @@ const checkAsTemplateCall = (
       `internal: the template \`${local}\` was not loaded for this \`${access.text}\` call`
     )
   }
-  const name = new Node(N_IDENT, access.start, access.end)
+  const name = new Node(NodeKind.Ident, access.start, access.end)
   name.id = access.id
   name.text = local
   const moved: Node[] = [access.children[0]]
@@ -566,10 +535,10 @@ const checkAsTemplateCall = (
  */
 const callbackArity = (ctx: CheckContext, arg: Node, scope: Scope): i32 => {
   const written = unwrapParens(arg)
-  if (written.kind === N_ARROW) {
+  if (written.kind === NodeKind.Arrow) {
     return written.children[1].children.length
   }
-  if (written.kind !== N_IDENT || scope.lookup(written.text) !== null) {
+  if (written.kind !== NodeKind.Ident || scope.lookup(written.text) !== null) {
     return -1
   }
   const bound = ctx.functionBindings.get(written.text)
@@ -687,7 +656,7 @@ export const checkArrayMethod = (
   // A ranged element is the exception (WP31 §6): the range is a sink the
   // pushed value enters, not a width, so it reaches the argument whatever the
   // receiver is spelled like. An enum member type is one too (`isEntered`).
-  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isEntered(elem) ? elem : -1
+  const elemContext = access.children[0].kind === NodeKind.Ident || ctx.table.isEntered(elem) ? elem : -1
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType()
@@ -715,7 +684,7 @@ export const checkArrayMethod = (
       ctx,
       args.children[0],
       scope,
-      access.children[0].kind === N_IDENT ? probe : -1
+      access.children[0].kind === NodeKind.Ident ? probe : -1
     )
     if (got !== T_ERROR && !ctx.table.assignable(got, probe)) {
       const want = ctx.table.typeName(elem)
@@ -857,13 +826,13 @@ const disjointCopy = (ctx: CheckContext, receiver: Node, source: Node): boolean 
 /** An array literal or a `new`, whose buffer is allocated where it is written. */
 export const isFreshArrayExpression = (expr: Node): boolean => {
   const e = unwrapParens(expr)
-  return e.kind === N_ARRAY || e.kind === N_NEW
+  return e.kind === NodeKind.Array || e.kind === NodeKind.New
 }
 
 /** The `const` local `expr` names when that local holds a fresh allocation, else `null`. */
 const freshLocal = (ctx: CheckContext, expr: Node): Local | null => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return null
   }
   const local = ctx.program.nodeLocals[e.id]
@@ -1081,13 +1050,13 @@ export class SlotOverwrite {
 /** `xs`, `this.bodies`, `a.b.c` — how two references are told apart. */
 export const referenceRoot = (expr: Node): string => {
   const inner = unwrapParens(expr)
-  if (inner.kind === N_IDENT) {
+  if (inner.kind === NodeKind.Ident) {
     return inner.text
   }
-  if (inner.kind === N_THIS) {
+  if (inner.kind === NodeKind.This) {
     return "this"
   }
-  if (inner.kind === N_MEMBER) {
+  if (inner.kind === NodeKind.Member) {
     const base = referenceRoot(inner.children[0])
     return base === UNNAMED ? UNNAMED : `${base}.${inner.text}`
   }
@@ -1122,10 +1091,14 @@ const rootText = (program: CheckedProgram, table: TypeTable, expr: Node): string
 /** The array `expr` reads an element of (`a[i]`, `a.pop()`), or `null`. */
 const elementSource = (program: CheckedProgram, table: TypeTable, expr: Node): Node | null => {
   const inner = unwrapParens(expr)
-  if (inner.kind === N_INDEX && inlineArrayElement(program, table, inner.children[0]) !== "") {
+  if (inner.kind === NodeKind.Index && inlineArrayElement(program, table, inner.children[0]) !== "") {
     return inner.children[0]
   }
-  if (inner.kind === N_CALL && inner.children[0].kind === N_MEMBER && inner.children[0].text === "pop") {
+  if (
+    inner.kind === NodeKind.Call &&
+    inner.children[0].kind === NodeKind.Member &&
+    inner.children[0].text === "pop"
+  ) {
     const receiver = inner.children[0].children[0]
     if (inlineArrayElement(program, table, receiver) !== "") {
       return receiver
@@ -1141,7 +1114,7 @@ const elementSource = (program: CheckedProgram, table: TypeTable, expr: Node): N
  * promise that it does not, and is skipped.
  */
 const collectMutations = (program: CheckedProgram, table: TypeTable, call: Node, out: Mutation[]): void => {
-  if (call.children[0].kind === N_MEMBER) {
+  if (call.children[0].kind === NodeKind.Member) {
     const method = call.children[0].text
     const receiver = call.children[0].children[0]
     const elem = inlineArrayElement(program, table, receiver)
@@ -1180,11 +1153,11 @@ const collectMutations = (program: CheckedProgram, table: TypeTable, call: Node,
  * one: it writes into the element a reference points at, in both readings.
  */
 export const slotStoreArray = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
-  if (node.kind !== N_BINARY || node.text !== "=") {
+  if (node.kind !== NodeKind.Binary || node.text !== "=") {
     return null
   }
   const target = unwrapParens(node.children[0])
-  if (target.kind !== N_INDEX || !storesInlineElements(program, table, target.children[0])) {
+  if (target.kind !== NodeKind.Index || !storesInlineElements(program, table, target.children[0])) {
     return null
   }
   return target.children[0]
@@ -1265,12 +1238,12 @@ class RefWalk {
     const callee = this.program.nodeCallees[node.id]
     const instance: Instantiation | null = callee === null ? null : callee.instance
     const member = node.children[0]
-    if (instance === null || instance.parallel !== PAR_SPAWN || member.kind !== N_MEMBER) {
+    if (instance === null || instance.parallel !== PAR_SPAWN || member.kind !== NodeKind.Member) {
       return
     }
     const receiver = unwrapParens(member.children[0])
     const scope: Local | null =
-      receiver.kind === N_IDENT ? sourceLocal(this.program.nodeLocals[receiver.id]) : null
+      receiver.kind === NodeKind.Ident ? sourceLocal(this.program.nodeLocals[receiver.id]) : null
     if (scope === null) {
       return
     }
@@ -1279,7 +1252,7 @@ class RefWalk {
     let k = 0
     while (k < args.length) {
       const arg = args[k]
-      if (arg.kind === N_ARROW) {
+      if (arg.kind === NodeKind.Arrow) {
         capturedReads(this.program, arg, names)
       } else if (k === 1) {
         namesUnder(arg, names)
@@ -1405,7 +1378,7 @@ class RefWalk {
    * and every whole-slot store marked as it is found.
    */
   mutationsWithin(node: Node, out: Mutation[]): void {
-    if (node.kind === N_CALL) {
+    if (node.kind === NodeKind.Call) {
       collectMutations(this.program, this.table, node, out)
     }
     this.overwrite(node)
@@ -1415,16 +1388,16 @@ class RefWalk {
   }
 
   visit(node: Node): void {
-    if (node.kind === N_IDENT) {
+    if (node.kind === NodeKind.Ident) {
       this.visitIdentifier(node)
       return
     }
-    if (node.kind === N_BLOCK || node.kind === N_CASE || node.kind === N_DEFAULT) {
+    if (node.kind === NodeKind.Block || node.kind === NodeKind.Case || node.kind === NodeKind.Default) {
       const depth = this.live.length
       const declaredDepth = this.declared.length
       for (const child of node.children) {
-        const expression = child.kind === N_EXPR_STMT ? unwrapParens(child.children[0]) : child
-        this.statement = expression.kind === N_BINARY && expression.text === "=" ? expression : null
+        const expression = child.kind === NodeKind.ExprStmt ? unwrapParens(child.children[0]) : child
+        this.statement = expression.kind === NodeKind.Binary && expression.text === "=" ? expression : null
         this.statementBlock = depth
         this.visit(child)
       }
@@ -1435,15 +1408,20 @@ class RefWalk {
       this.dropTo(depth, declaredDepth)
       return
     }
-    if (node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO) {
+    if (
+      node.kind === NodeKind.For ||
+      node.kind === NodeKind.ForOf ||
+      node.kind === NodeKind.While ||
+      node.kind === NodeKind.Do
+    ) {
       this.visitLoop(node)
       return
     }
-    if (node.kind === N_CALL) {
+    if (node.kind === NodeKind.Call) {
       this.visitCall(node)
       return
     }
-    if (node.kind === N_VAR_DECL) {
+    if (node.kind === NodeKind.VarDecl) {
       this.visitDeclaration(node)
       return
     }
@@ -1451,7 +1429,7 @@ class RefWalk {
     // The store happens after both sides are evaluated, so a reference read
     // on its right-hand side is read before it is overwritten.
     this.overwrite(node)
-    if (node.kind === N_BINARY && node.text === "=") {
+    if (node.kind === NodeKind.Binary && node.text === "=") {
       this.visitAssignment(node)
     }
   }
@@ -1506,7 +1484,7 @@ class RefWalk {
     // `for (const p of ps)` binds an element reference too. It is re-derived
     // from the header at the top of every pass, so it starts each iteration
     // valid and is only invalidated by a mutation inside the body.
-    if (node.kind === N_FOR_OF) {
+    if (node.kind === NodeKind.ForOf) {
       const iterable = node.children[1]
       const elem = inlineArrayElement(this.program, this.table, iterable)
       const decl = node.children[0].children[0].children[0]
@@ -1555,7 +1533,7 @@ class RefWalk {
     }
     this.declared.push(local)
     const initializer = node.children[2]
-    if (initializer.kind !== N_EMPTY) {
+    if (initializer.kind !== NodeKind.Empty) {
       this.bind(local, initializer, this.live.length)
     }
   }
@@ -1568,7 +1546,7 @@ class RefWalk {
    */
   visitAssignment(node: Node): void {
     const target = unwrapParens(node.children[0])
-    const local: Local | null = target.kind === N_IDENT ? this.program.nodeLocals[target.id] : null
+    const local: Local | null = target.kind === NodeKind.Ident ? this.program.nodeLocals[target.id] : null
     if (local !== null) {
       const statement = this.statement
       const replaceFrom = statement !== null && statement === node ? this.statementBlock : this.live.length
@@ -1616,21 +1594,21 @@ class RefWalk {
           elem,
           rootText(this.program, this.table, source)
         )
-        ref.inBounds = inner.kind === N_INDEX
+        ref.inBounds = inner.kind === NodeKind.Index
         out.push(ref)
       }
       return
     }
-    if (inner.kind === N_IDENT) {
+    if (inner.kind === NodeKind.Ident) {
       this.aliasesOf(local, sourceLocal(this.program.nodeLocals[inner.id]), out)
       return
     }
-    if (inner.kind === N_CONDITIONAL) {
+    if (inner.kind === NodeKind.Conditional) {
       this.referencesOf(local, inner.children[1], out)
       this.referencesOf(local, inner.children[2], out)
       return
     }
-    if (inner.kind === N_BINARY && inner.text === "??") {
+    if (inner.kind === NodeKind.Binary && inner.text === "??") {
       this.referencesOf(local, inner.children[0], out)
       this.referencesOf(local, inner.children[1], out)
     }
@@ -1654,10 +1632,10 @@ class RefWalk {
 
 /** Every identifier under `node`, outside an arrow, in source order. */
 const namesUnder = (node: Node, out: Node[]): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     out.push(node)
   }
   for (const child of node.children) {
@@ -1668,7 +1646,7 @@ const namesUnder = (node: Node, out: Node[]): void => {
 /** Whether `block` has a `using` statement that declares `scope`. */
 const declaresUsing = (program: CheckedProgram, block: Node, scope: Local): boolean => {
   for (const stmt of block.children) {
-    if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+    if (stmt.kind === NodeKind.Var && (stmt.flags & FLAG_USING) !== 0) {
       for (const decl of stmt.children[0].children) {
         const local = program.nodeLocals[decl.id]
         if (local !== null && local === scope) {
@@ -1711,7 +1689,7 @@ export const slotOverwrites = (
 /** Whether `value` makes an array no other name can hold yet: a literal or a `new`. */
 const isNewArrayValue = (value: Node): boolean => {
   const inner = unwrapParens(value)
-  return inner.kind === N_ARRAY || inner.kind === N_NEW
+  return inner.kind === NodeKind.Array || inner.kind === NodeKind.New
 }
 
 /**
@@ -1723,16 +1701,16 @@ const isNewArrayValue = (value: Node): boolean => {
  */
 const keepsItsName = (parent: Node, node: Node): boolean => {
   const first = unwrapParens(parent.children[0]) === node
-  if (parent.kind === N_INDEX || parent.kind === N_MEMBER) {
+  if (parent.kind === NodeKind.Index || parent.kind === NodeKind.Member) {
     return first
   }
-  if (parent.kind === N_FOR_OF) {
+  if (parent.kind === NodeKind.ForOf) {
     return unwrapParens(parent.children[1]) === node
   }
-  if (parent.kind === N_BINARY && parent.text === "=" && first) {
+  if (parent.kind === NodeKind.Binary && parent.text === "=" && first) {
     return isNewArrayValue(parent.children[1])
   }
-  return parent.kind === N_LIST
+  return parent.kind === NodeKind.List
 }
 
 const collectAliased = (
@@ -1746,23 +1724,23 @@ const collectAliased = (
   // tables; what it aliases is its business, not the enclosing body's —
   // unless it captures this body's locals (WP29), when a second name it puts
   // a captured array under is read where the call runs it.
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     const reads: Node[] = []
     capturedReads(program, node, reads)
     if (reads.length === 0) {
       return
     }
   }
-  if (node.kind === N_IDENT || node.kind === N_MEMBER) {
+  if (node.kind === NodeKind.Ident || node.kind === NodeKind.Member) {
     const elem = inlineArrayElement(program, table, node)
     if (elem !== "" && !keepsItsName(parent, node)) {
       out.add(elem)
     }
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const local = program.nodeLocals[node.id]
     const initializer = node.children[2]
-    if (local !== null && initializer.kind !== N_EMPTY && !isNewArrayValue(initializer)) {
+    if (local !== null && initializer.kind !== NodeKind.Empty && !isNewArrayValue(initializer)) {
       const elem = inlineArrayElement(program, table, initializer)
       if (elem !== "") {
         out.add(elem)
@@ -1770,7 +1748,7 @@ const collectAliased = (
     }
   }
   // A parenthesised use is judged by what is around the parentheses.
-  const next = node.kind === N_PAREN ? parent : node
+  const next = node.kind === NodeKind.Paren ? parent : node
   for (const child of node.children) {
     collectAliased(program, table, child, next, out)
   }

@@ -42,30 +42,7 @@ import {
 } from "./generics"
 import { assignInto, checkExpression, linkedParent, templateFix } from "./expressions"
 import { recordUpdateFusion } from "./fusion"
-import {
-  FLAG_OPTIONAL,
-  isGatheredRest,
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_CALL,
-  N_CONDITIONAL,
-  N_FUNCTION,
-  N_IDENT,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_SPREAD,
-  N_THIS,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { FLAG_OPTIONAL, isGatheredRest, Node, NodeKind } from "./nodes"
 import { fitArguments } from "./declarations"
 import {
   checkReferenceCall,
@@ -105,7 +82,7 @@ import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
  * builtin.
  */
 export const isValueReceiver = (ctx: CheckContext, receiver: Node, scope: Scope): boolean => {
-  if (receiver.kind !== N_IDENT) {
+  if (receiver.kind !== NodeKind.Ident) {
     return true
   }
   // A name a `nish:` import bound is a value too, and for the reason a module
@@ -135,9 +112,9 @@ const nullableHint = (ctx: CheckContext, receiver: i32, receiverExpr: Node, name
   }
   const spelled = ctx.table.typeName(receiver)
   const narrows = `\`${spelled}\` to \`${ctx.table.typeName(ctx.table.stripNull(receiver))}\``
-  if (receiverExpr.kind === N_MEMBER || receiverExpr.kind === N_INDEX) {
+  if (receiverExpr.kind === NodeKind.Member || receiverExpr.kind === NodeKind.Index) {
     const text = ctx.textOf(receiverExpr)
-    const local = receiverExpr.kind === N_MEMBER ? receiverExpr.text : "value"
+    const local = receiverExpr.kind === NodeKind.Member ? receiverExpr.text : "value"
     return `only a local is narrowed, not a field or element, so bind it first: \`const ${local} = ${text}; if (${local} !== null) { ... }\` narrows ${narrows}`
   }
   return `check for null first: \`if (p !== null) { ... }\` narrows ${narrows}`
@@ -259,7 +236,7 @@ const checkUnionTag = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
  */
 const unionMemberMessage = (ctx: CheckContext, receiverExpr: Node, union: i32, name: string): string => {
   const receiver = unwrapParens(receiverExpr)
-  if (receiver.kind === N_MEMBER || receiver.kind === N_INDEX) {
+  if (receiver.kind === NodeKind.Member || receiver.kind === NodeKind.Index) {
     return `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that`
   }
   return `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: a union has only its tag \`${ctx.table.tagNameOf(union)}\` until a test of the tag narrows it to one variant`
@@ -417,7 +394,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (!ctx.table.isStruct(receiver)) {
     // Against the method name, as `errorAtProperty` reports it, so that the
     // fix can carry the whole call.
-    const name = new Node(N_IDENT, access.end - access.text.length, access.end)
+    const name = new Node(NodeKind.Ident, access.end - access.text.length, access.end)
     const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`
     ctx.errorFix(name, message, toStringFix(ctx, expr, receiver))
     return T_ERROR
@@ -522,7 +499,7 @@ const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node
  */
 export const mapReadSpelling = (ctx: CheckContext, call: Node, scope: Scope): string => {
   const access = unwrapParens(call.children[0])
-  if (access.kind !== N_MEMBER || (access.text !== "get" && access.text !== "values")) {
+  if (access.kind !== NodeKind.Member || (access.text !== "get" && access.text !== "values")) {
     return ""
   }
   if (!isGlobalMapType(ctx, ctx.program.nodeTypes[access.children[0].id])) {
@@ -632,7 +609,7 @@ const checkMethodArguments = (
 /** `new C(...)`, `new Array<T>(n)`, `new Int32Array(n)`. */
 export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const callee = expr.children[0]
-  if (callee.kind !== N_IDENT) {
+  if (callee.kind !== NodeKind.Ident) {
     return ctx.errorType(callee, "`new` requires a class name")
   }
   const name = callee.text
@@ -746,16 +723,16 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * no more context than `{ code: 1 }` does.
  */
 const takesDeclaredContext = (value: Node): boolean => {
-  if (value.kind === N_PAREN) {
+  if (value.kind === NodeKind.Paren) {
     return takesDeclaredContext(value.children[0])
   }
-  if (value.kind === N_CONDITIONAL) {
+  if (value.kind === NodeKind.Conditional) {
     return takesDeclaredContext(value.children[1]) && takesDeclaredContext(value.children[2])
   }
-  if (value.kind === N_UNARY) {
+  if (value.kind === NodeKind.Unary) {
     return takesDeclaredContext(value.children[0])
   }
-  return value.kind !== N_NUMBER && value.kind !== N_ARRAY
+  return value.kind !== NodeKind.Number && value.kind !== NodeKind.Array
 }
 
 /** Whether `info` declares a method, generic or not: a constructor is not one. */
@@ -770,7 +747,7 @@ const classLiteralMessage = (name: string): string =>
 /** Whether an object literal has a `...s` among its properties. */
 const hasSpread = (expr: Node): boolean => {
   for (const prop of expr.children) {
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       return true
     }
   }
@@ -791,7 +768,7 @@ const namedIn = (names: string[], name: string): boolean => {
 const setByNameAfter = (expr: Node, entry: Node, name: string): boolean => {
   let after = false
   for (const prop of expr.children) {
-    if (after && prop.kind === N_PROPERTY && prop.text === name) {
+    if (after && prop.kind === NodeKind.Property && prop.text === name) {
       return true
     }
     if (prop.id === entry.id) {
@@ -954,9 +931,9 @@ const recordSpreadCopies = (ctx: CheckContext, expr: Node, into: i32, sources: S
   let i = expr.children.length - 1
   while (i >= 0) {
     const prop = expr.children[i]
-    if (prop.kind === N_PROPERTY) {
+    if (prop.kind === NodeKind.Property) {
       later.push(prop.text)
-    } else if (prop.kind === N_SPREAD && next >= 0 && next < sources.length) {
+    } else if (prop.kind === NodeKind.Spread && next >= 0 && next < sources.length) {
       const source = sources[next]
       next = next - 1
       const fields: string[] = []
@@ -1034,7 +1011,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   const sources: StructInfo[] = []
   let spreadFailed = false
   for (const prop of expr.children) {
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       const source = checkSpreadSource(ctx, prop, info, expr, scope)
       if (source === null) {
         spreadFailed = true
@@ -1055,7 +1032,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       sources.push(source)
       continue
     }
-    if (prop.kind !== N_PROPERTY) {
+    if (prop.kind !== NodeKind.Property) {
       continue
     }
     const field = info.field(prop.text)
@@ -1261,31 +1238,31 @@ const iteratorPlaceReason = (ctx: CheckContext, access: Node, call: boolean): st
   }
   let node: Node = callNode
   let parent = linkedParent(parents, node)
-  while (parent !== null && parent.kind === N_PAREN) {
+  while (parent !== null && parent.kind === NodeKind.Paren) {
     node = parent
     parent = linkedParent(parents, node)
   }
   if (parent === null) {
     return ITERATOR_ELSEWHERE
   }
-  if (parent.kind === N_VAR_DECL && parent.children[2] === node) {
+  if (parent.kind === NodeKind.VarDecl && parent.children[2] === node) {
     return ITERATOR_STORED
   }
-  if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === node) {
+  if (parent.kind === NodeKind.Binary && parent.text === "=" && parent.children[1] === node) {
     return ITERATOR_STORED
   }
-  if (parent.kind === N_LIST) {
+  if (parent.kind === NodeKind.List) {
     const owner = linkedParent(parents, parent)
     const isArguments =
       owner !== null &&
-      ((owner.kind === N_CALL && owner.children[1] === parent) ||
-        (owner.kind === N_NEW && owner.children[2] === parent))
+      ((owner.kind === NodeKind.Call && owner.children[1] === parent) ||
+        (owner.kind === NodeKind.New && owner.children[2] === parent))
     return isArguments ? ITERATOR_ARGUMENT : ITERATOR_ELSEWHERE
   }
-  if (parent.kind === N_RETURN) {
+  if (parent.kind === NodeKind.Return) {
     return ITERATOR_RETURNED
   }
-  if ((parent.kind === N_ARROW || parent.kind === N_FUNCTION) && parent.children[3] === node) {
+  if ((parent.kind === NodeKind.Arrow || parent.kind === NodeKind.FunctionDecl) && parent.children[3] === node) {
     return ITERATOR_RETURNED // a concise body is its `return`
   }
   return ITERATOR_ELSEWHERE
@@ -1316,7 +1293,7 @@ const assignableReadonly = (
   if (current === null || current.role !== ROLE_CONSTRUCTOR || op !== "=") {
     return false
   }
-  if (receiverExpr.kind !== N_THIS) {
+  if (receiverExpr.kind !== NodeKind.This) {
     return false
   }
   if (info.field(target.text) === null) {

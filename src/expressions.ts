@@ -76,53 +76,15 @@ import {
 } from "./members"
 import {
   FLAG_ACCESSOR,
-  FLAG_OBJECT_SPREAD,
-  FLAG_SPREAD_ARGUMENT,
   FLAG_ANGLE,
   FLAG_CONST,
+  FLAG_OBJECT_SPREAD,
   FLAG_OPTIONAL,
   FLAG_SATISFIES,
   FLAG_SCRIPT,
-  N_ARRAY,
-  N_ARROW,
-  N_AS,
-  N_BIGINT,
-  N_BINARY,
-  N_CALL,
-  N_CONDITIONAL,
-  N_DO,
-  N_EMPTY,
-  N_FALSE,
-  N_FOR,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_METHOD,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_PARAM,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_SPREAD,
-  N_STRING,
-  N_SUPER,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_THIS,
-  N_TRUE,
-  N_TYPE_NULL,
-  N_TYPE_REF,
-  N_UNARY,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
+  FLAG_SPREAD_ARGUMENT,
   Node,
+  NodeKind,
 } from "./nodes"
 import { fitArguments } from "./declarations"
 import {
@@ -179,22 +141,22 @@ const unknownIdentifier = (ctx: CheckContext, name: string): string => {
  */
 export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
   switch (node.kind) {
-    case N_BINARY:
+    case NodeKind.Binary:
       if (node.text === "**") {
         ctx.error(node, "Unsupported binary operator `**`")
       } else if (node.text === "**=") {
         ctx.error(node, "Unsupported assignment operator `**=`")
       }
       break
-    case N_ARRAY:
+    case NodeKind.Array:
       for (const element of node.children) {
-        if (element.kind === N_EMPTY) {
+        if (element.kind === NodeKind.Empty) {
           ctx.error(node, "Holes in array literals are not supported")
           return
         }
       }
       break
-    case N_SPREAD:
+    case NodeKind.Spread:
       if ((node.flags & FLAG_OBJECT_SPREAD) !== 0) {
         // An object literal's entry: `checkObjectLiteral` says what it may spread.
         break
@@ -208,15 +170,15 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
         ctx.error(node, "Spread in array literals is not supported")
       }
       break
-    case N_NEW:
-      if (node.children[0].kind !== N_IDENT) {
+    case NodeKind.New:
+      if (node.children[0].kind !== NodeKind.Ident) {
         ctx.error(node.children[0], "`new` requires a class name")
       }
       break
-    case N_PROPERTY:
+    case NodeKind.Property:
       refusePropertyForm(ctx, node)
       break
-    case N_AS:
+    case NodeKind.As:
       // Named by TypeScript's `SyntaxKind`, as every Phase 1 gap is.
       if ((node.flags & FLAG_SATISFIES) !== 0) {
         ctx.error(node, "Unsupported expression in Phase 1: SatisfiesExpression")
@@ -239,7 +201,7 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
  */
 const refusePropertyForm = (ctx: CheckContext, node: Node): void => {
   const value = node.children[0]
-  if (value.kind === N_METHOD) {
+  if (value.kind === NodeKind.Method) {
     let kind = "MethodDeclaration"
     if ((value.flags & FLAG_ACCESSOR) !== 0) {
       kind = ctx.textOf(value).startsWith("get") ? "GetAccessor" : "SetAccessor"
@@ -281,17 +243,20 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   // a sink of another type reads it as its base, `i32`.
   const entry = ctx.table.isRanged(want) ? want : -1
   const keepsRange = welcome || want === WANT_RANGE || entry >= 0
-  let inner = welcome && expr.kind !== N_PAREN ? -1 : want
-  if (expr.kind === N_CONDITIONAL && (want === WANT_MAYBE || want === WANT_RANGE || want === WANT_INFERRED)) {
+  let inner = welcome && expr.kind !== NodeKind.Paren ? -1 : want
+  if (
+    expr.kind === NodeKind.Conditional &&
+    (want === WANT_MAYBE || want === WANT_RANGE || want === WANT_INFERRED)
+  ) {
     inner = WANT_INFERRED
-  } else if ((want === WANT_RANGE || want === WANT_INFERRED) && expr.kind !== N_PAREN) {
+  } else if ((want === WANT_RANGE || want === WANT_INFERRED) && expr.kind !== NodeKind.Paren) {
     inner = -1
   } else if (entry >= 0 && !takesRangeContext(expr)) {
     inner = -1
   }
   ctx.program.memberSets[expr.id] = -1
   const computed = computeType(ctx, expr, scope, inner)
-  if (expr.kind === N_MEMBER || expr.kind === N_INDEX) {
+  if (expr.kind === NodeKind.Member || expr.kind === NodeKind.Index) {
     const path = pathVariable(ctx, expr, scope, computed, false)
     const held = path === null ? -1 : scope.heldBy(path)
     if (namesMembers(held)) {
@@ -301,10 +266,10 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (refuseInferredTag(ctx, expr, want)) {
     return T_ERROR
   }
-  if (expr.kind === N_CONDITIONAL && ctx.program.memberSets[expr.id] === -1) {
+  if (expr.kind === NodeKind.Conditional && ctx.program.memberSets[expr.id] === -1) {
     joinArmMembers(ctx, expr)
   }
-  if (ctx.table.isMaybe(computed) && !welcome && expr.kind !== N_PAREN) {
+  if (ctx.table.isMaybe(computed) && !welcome && expr.kind !== NodeKind.Paren) {
     ctx.program.nodeTypes[expr.id] = T_ERROR
     return refuseMaybe(ctx, expr, computed)
   }
@@ -360,10 +325,10 @@ export const WANT_INFERRED: i32 = -4
  * checked with no context, and its value enters the range with a check.
  */
 const takesRangeContext = (expr: Node): boolean =>
-  expr.kind === N_NUMBER ||
-  expr.kind === N_PAREN ||
-  expr.kind === N_CONDITIONAL ||
-  (expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER)
+  expr.kind === NodeKind.Number ||
+  expr.kind === NodeKind.Paren ||
+  expr.kind === NodeKind.Conditional ||
+  (expr.kind === NodeKind.Unary && expr.text === "-" && expr.children[0].kind === NodeKind.Number)
 
 /**
  * An entry recorded after the value was checked, for a sink whose type was not
@@ -620,16 +585,16 @@ export const memberSetName = (ctx: CheckContext, members: i32[]): string => {
  * `union` itself. Read after `node` was checked.
  */
 const variantsGiven = (ctx: CheckContext, node: Node, union: i32, out: i32[]): void => {
-  if (node.kind === N_PAREN) {
+  if (node.kind === NodeKind.Paren) {
     variantsGiven(ctx, node.children[0], union, out)
     return
   }
-  if (node.kind === N_CONDITIONAL) {
+  if (node.kind === NodeKind.Conditional) {
     variantsGiven(ctx, node.children[1], union, out)
     variantsGiven(ctx, node.children[2], union, out)
     return
   }
-  if (node.kind === N_BINARY && node.text === "??") {
+  if (node.kind === NodeKind.Binary && node.text === "??") {
     variantsGiven(ctx, node.children[0], union, out)
     variantsGiven(ctx, node.children[1], union, out)
     return
@@ -734,61 +699,61 @@ const readAsBase = (ctx: CheckContext, type: i32, keepsRange: boolean): i32 =>
 
 const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   switch (expr.kind) {
-    case N_PAREN:
+    case NodeKind.Paren:
       return checkExpression(ctx, expr.children[0], scope, want)
-    case N_NUMBER:
+    case NodeKind.Number:
       return checkNumericLiteral(ctx, expr, want, false, expr)
-    case N_BIGINT:
+    case NodeKind.Bigint:
       return ctx.errorType(
         expr,
         "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)"
       )
-    case N_STRING:
+    case NodeKind.String:
       return T_STRING
-    case N_TEMPLATE:
+    case NodeKind.Template:
       return checkTemplate(ctx, expr, scope)
-    case N_TRUE:
+    case NodeKind.True:
       return T_BOOL
-    case N_FALSE:
+    case NodeKind.False:
       return T_BOOL
-    case N_NULL:
+    case NodeKind.Null:
       return checkNull(ctx, expr, want)
-    case N_IDENT:
+    case NodeKind.Ident:
       return checkIdentifier(ctx, expr, scope)
-    case N_THIS:
+    case NodeKind.This:
       return checkThis(ctx, expr, scope)
-    case N_UNARY:
+    case NodeKind.Unary:
       return checkUnary(ctx, expr, scope, want)
-    case N_BINARY:
+    case NodeKind.Binary:
       return checkBinary(ctx, expr, scope)
-    case N_CONDITIONAL:
+    case NodeKind.Conditional:
       return checkConditional(ctx, expr, scope, want)
-    case N_CALL:
+    case NodeKind.Call:
       return checkCall(ctx, expr, scope, want)
-    case N_NEW:
+    case NodeKind.New:
       return checkNew(ctx, expr, scope)
-    case N_MEMBER:
+    case NodeKind.Member:
       return checkMember(ctx, expr, scope)
-    case N_INDEX:
+    case NodeKind.Index:
       return checkIndex(ctx, expr, scope)
-    case N_ARRAY:
+    case NodeKind.Array:
       // `[]` and `{ ... }` are typed by their context alone, so a context that
       // was refused (`y = []` after `let y = <refused>`) repeats the refusal.
       if (want === T_ERROR && expr.children.length === 0) {
         return T_ERROR
       }
       return checkArrayLiteral(ctx, expr, scope, want)
-    case N_OBJECT:
+    case NodeKind.Object:
       if (want === T_ERROR) {
         return T_ERROR
       }
       return checkObjectLiteral(ctx, expr, scope, want)
-    case N_ARROW:
+    case NodeKind.Arrow:
       // WP29: an arrow is legal as the argument for a function-typed
       // parameter, which `checkGenericCall` resolves without coming here.
       refuseValueArrow(ctx, expr, scope)
       return T_ERROR
-    case N_SUPER:
+    case NodeKind.Super:
       // WP25. Every spelling of `super` lands here -- `super(...)` and
       // `super.m()` are routed through the callee and the receiver -- so the
       // rule is stated once, on the `super` token, as stage0 states it.
@@ -912,7 +877,7 @@ const refuseReferenceHole = (ctx: CheckContext, part: Node): void => {
 
 const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   for (const part of expr.children) {
-    if (part.kind === N_TEMPLATE_TEXT) {
+    if (part.kind === NodeKind.TemplateText) {
       continue
     }
     const hole = checkExpression(ctx, part, scope, -1)
@@ -1111,7 +1076,7 @@ const checkUnary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   if (op === "await") {
     return checkAwait(ctx, expr, scope) // WP49
   }
-  if (op === "-" && operand.kind === N_NUMBER) {
+  if (op === "-" && operand.kind === NodeKind.Number) {
     // The negation is part of the literal, which is what makes `-2147483648`
     // spell `INT_MIN` rather than overflowing the positive half.
     // `at` is the whole `-1`: stage0 hands the literal's *parent* to the
@@ -1166,7 +1131,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   // The target is resolved before the operand is checked, as stage0's
   // `resolveMutableTarget` does, so `p.f++` is refused for being a field
   // rather than for whatever type the field turns out to have.
-  if (target.kind !== N_IDENT) {
+  if (target.kind !== NodeKind.Ident) {
     return ctx.errorType(target, "Only simple variables can be assigned")
   }
   // WP31: the target keeps its range on its node, which is how the emitter
@@ -1182,7 +1147,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       `Operator \`${expr.text}\` requires a numeric variable, got ${ctx.table.typeName(type)}`
     )
   }
-  if (target.kind === N_IDENT) {
+  if (target.kind === NodeKind.Ident) {
     const local = scope.lookup(target.text)
     if ((local === null && ctx.capturesOuter(target.text)) || isCapture(ctx, local)) {
       return refuseOuterWrite(ctx, target)
@@ -1206,7 +1171,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
 /**
  * Whether an operator writes to its left operand. The parser has its own
  * `isAssignment` over *token kinds*; this one reads the operator text a
- * `N_BINARY` node carries, which is what the checker has.
+ * `NodeKind.Binary` node carries, which is what the checker has.
  */
 export const writesLeft = (op: string): boolean =>
   op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op))
@@ -1296,7 +1261,7 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     // WP27 S4.2: `readStruct<Stat>(p)` is the same shape, and its type
     // argument comes from the context, as `Ok(v)`'s does.
     const left = expr.children[0]
-    if (left.kind === N_IDENT && scope.lookup(left.text) === null) {
+    if (left.kind === NodeKind.Ident && scope.lookup(left.text) === null) {
       const imported = ctx.program.builtinImport(left.text)
       if (imported !== null && imported.canonical === "readStruct") {
         ctx.error(
@@ -1325,11 +1290,11 @@ const typeArgumentFix = (ctx: CheckContext, less: Node, template: TemplateInfo, 
   const call = linkedParent(new ParentTable(ctx.program.file, ctx.program.nodeTypes.length), less)
   if (
     call === null ||
-    call.kind !== N_BINARY ||
+    call.kind !== NodeKind.Binary ||
     call.text !== ">" ||
     call.children[0] !== less ||
-    call.children[1].kind !== N_PAREN ||
-    written.kind !== N_IDENT ||
+    call.children[1].kind !== NodeKind.Paren ||
+    written.kind !== NodeKind.Ident ||
     !takesTypeParamOnce(template) ||
     !inferredAs(ctx, call.children[1].children[0], written.text, scope)
   ) {
@@ -1351,7 +1316,7 @@ const takesTypeParamOnce = (template: TemplateInfo): boolean => {
   }
   const annotation = params[0].children[1]
   return (
-    annotation.kind === N_TYPE_REF &&
+    annotation.kind === NodeKind.TypeRef &&
     annotation.text === template.typeParams[0] &&
     annotation.children[0].children.length === 0
   )
@@ -1376,17 +1341,17 @@ const inferredAs = (ctx: CheckContext, arg: Node, name: string, scope: Scope): b
  * now could report a second diagnostic on a statement that already has one.
  */
 const typeUnchecked = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
-  if (expr.kind === N_IDENT) {
+  if (expr.kind === NodeKind.Ident) {
     const local = scope.lookup(expr.text)
     return local === null ? -1 : scope.typeOf(local)
   }
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return isFractional(expr.text) ? -1 : ctx.numberType()
   }
-  if (expr.kind === N_STRING) {
+  if (expr.kind === NodeKind.String) {
     return T_STRING
   }
-  return expr.kind === N_TRUE || expr.kind === N_FALSE ? T_BOOL : -1
+  return expr.kind === NodeKind.True || expr.kind === NodeKind.False ? T_BOOL : -1
 }
 
 /**
@@ -1398,10 +1363,10 @@ const typeUnchecked = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * `<` whose left side is a member, most of which are `this.count < n`.
  */
 const callSiteTemplate = (ctx: CheckContext, left: Node, scope: Scope): TemplateInfo | null => {
-  if (left.kind === N_IDENT) {
+  if (left.kind === NodeKind.Ident) {
     return ctx.template(left.text)
   }
-  if (left.kind !== N_MEMBER) {
+  if (left.kind !== NodeKind.Member) {
     return null
   }
   const info = pathStruct(ctx, left.children[0], scope)
@@ -1415,18 +1380,18 @@ const callSiteTemplate = (ctx: CheckContext, left: Node, scope: Scope): Template
  */
 const pathStruct = (ctx: CheckContext, path: Node, scope: Scope): StructInfo | null => {
   let type = -1
-  if (path.kind === N_IDENT) {
+  if (path.kind === NodeKind.Ident) {
     const local = scope.lookup(path.text)
     if (local !== null) {
       type = local.type
     }
-  } else if (path.kind === N_THIS) {
+  } else if (path.kind === NodeKind.This) {
     const current = ctx.current
     const owner: StructInfo | null = current === null ? null : current.owner
     if (owner !== null) {
       type = owner.type
     }
-  } else if (path.kind === N_MEMBER) {
+  } else if (path.kind === NodeKind.Member) {
     const holder = pathStruct(ctx, path.children[0], scope)
     const field: FieldInfo | null = holder === null ? null : holder.field(path.text)
     if (field !== null) {
@@ -1456,7 +1421,7 @@ const literalHint = (other: i32, fallback: i32): i32 => (isNumeric(other) ? othe
  * `docs/LANGUAGE.md` says it in four words — "`-5` and `(5)` count as the
  * literal" — so `-1 / z` and `(1) / z` with `z: f64` are the same shape as
  * `1 / z` and the literal takes `f64` from the sibling. Testing
- * `kind === N_NUMBER` instead read the sign and the parentheses as
+ * `kind === NodeKind.Number` instead read the sign and the parentheses as
  * expressions in their own right, which sent the pair down the branch below
  * and refused every program that wrote a signed literal on the *left* of an
  * operator whose other side was wider than the mode's default: `-1 / z`,
@@ -1468,13 +1433,13 @@ const literalHint = (other: i32, fallback: i32): i32 => (isNumeric(other) ? othe
  * rather than spellings of one.
  */
 export const literalOperand = (node: Node): boolean => {
-  if (node.kind === N_PAREN) {
+  if (node.kind === NodeKind.Paren) {
     return literalOperand(node.children[0])
   }
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     return node.text === "-" && literalOperand(node.children[0])
   }
-  return node.kind === N_NUMBER
+  return node.kind === NodeKind.Number
 }
 
 /**
@@ -1491,18 +1456,18 @@ export const literalOperand = (node: Node): boolean => {
  * instead is more useful and is not what the language says.
  */
 const peekable = (node: Node): boolean => {
-  if (node.kind === N_PAREN) {
+  if (node.kind === NodeKind.Paren) {
     return peekable(node.children[0])
   }
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     return node.text === "-" && peekable(node.children[0])
   }
   // A call is peekable only when the callee is a plain name, which is how
   // stage0 reaches a signature or a conversion builtin (`peekType`).
-  if (node.kind === N_CALL) {
-    return node.children[0].kind === N_IDENT
+  if (node.kind === NodeKind.Call) {
+    return node.children[0].kind === NodeKind.Ident
   }
-  return node.kind === N_IDENT || node.kind === N_MEMBER || node.kind === N_INDEX
+  return node.kind === NodeKind.Ident || node.kind === NodeKind.Member || node.kind === NodeKind.Index
 }
 
 /** `a op b` for every operator that reads both sides and writes neither. */
@@ -1541,7 +1506,7 @@ const checkOperator = (
       ctx,
       rightNode,
       scope,
-      rightNode.kind === N_NUMBER ? literalHint(left, left) : left
+      rightNode.kind === NodeKind.Number ? literalHint(left, left) : left
     )
   }
   if (left === T_ERROR || right === T_ERROR) {
@@ -1647,7 +1612,7 @@ const checkEquality = (
   // `nish:secret`: a `Secret` against a value answers a question about the key.
   const secretLeft = ctx.table.isSecret(left)
   const secretRight = ctx.table.isSecret(right)
-  if (secretLeft !== secretRight && leftNode.kind !== N_NULL && rightNode.kind !== N_NULL) {
+  if (secretLeft !== secretRight && leftNode.kind !== NodeKind.Null && rightNode.kind !== NodeKind.Null) {
     return ctx.errorType(expr, secretEqualityMessage())
   }
   // Names are built only for a refusal: a union's name is as long as its
@@ -1676,7 +1641,7 @@ const checkEquality = (
   }
   // Two `T | null` values: neither is narrowed, so a pointer compare would
   // answer a question about identity that the reader did not ask.
-  if (ctx.table.isNullable(left) && leftNode.kind !== N_NULL && rightNode.kind !== N_NULL) {
+  if (ctx.table.isNullable(left) && leftNode.kind !== NodeKind.Null && rightNode.kind !== NodeKind.Null) {
     return ctx.errorType(
       expr,
       `Cannot compare two \`${ctx.table.typeName(left)}\` values; compare each with \`null\` and then compare the narrowed values`
@@ -1754,25 +1719,25 @@ const pushOperandFix = (ctx: CheckContext, edits: Edit[], operand: Node, type: i
 const readForTruthiness = (parents: ParentTable, expr: Node): boolean => {
   let node = expr
   let parent = linkedParent(parents, node)
-  while (parent !== null && (parent.kind === N_PAREN || isLogical(parent))) {
+  while (parent !== null && (parent.kind === NodeKind.Paren || isLogical(parent))) {
     node = parent
     parent = linkedParent(parents, node)
   }
   if (parent === null) {
     return false
   }
-  if (parent.kind === N_UNARY) {
+  if (parent.kind === NodeKind.Unary) {
     return parent.text === "!"
   }
-  if (parent.kind === N_IF || parent.kind === N_WHILE || parent.kind === N_CONDITIONAL) {
+  if (parent.kind === NodeKind.If || parent.kind === NodeKind.While || parent.kind === NodeKind.Conditional) {
     return parent.children[0] === node
   }
-  return (parent.kind === N_DO || parent.kind === N_FOR) && parent.children[1] === node
+  return (parent.kind === NodeKind.Do || parent.kind === NodeKind.For) && parent.children[1] === node
 }
 
 /** Whether `node` is `&&` or `||`. */
 const isLogical = (node: Node): boolean =>
-  node.kind === N_BINARY && (node.text === "&&" || node.text === "||")
+  node.kind === NodeKind.Binary && (node.text === "&&" || node.text === "||")
 
 /**
  * `!x` rewritten as the comparison `truthinessFix` would test `x` with, turned
@@ -1808,17 +1773,17 @@ const equalityStandsBare = (parents: ParentTable, expr: Node): boolean => {
   if (parent === null) {
     return false
   }
-  if (parent.kind === N_BINARY) {
+  if (parent.kind === NodeKind.Binary) {
     return isLogical(parent) || parent.text === "??" || writesLeft(parent.text)
   }
   return (
-    parent.kind !== N_UNARY &&
-    parent.kind !== N_MEMBER &&
-    parent.kind !== N_INDEX &&
-    parent.kind !== N_CALL &&
-    parent.kind !== N_NEW &&
-    parent.kind !== N_AS &&
-    parent.kind !== N_SPREAD
+    parent.kind !== NodeKind.Unary &&
+    parent.kind !== NodeKind.Member &&
+    parent.kind !== NodeKind.Index &&
+    parent.kind !== NodeKind.Call &&
+    parent.kind !== NodeKind.New &&
+    parent.kind !== NodeKind.As &&
+    parent.kind !== NodeKind.Spread
   )
 }
 
@@ -1983,10 +1948,15 @@ const appendFix = (ctx: CheckContext, expr: Node, bare: boolean, suffix: string)
  * `a & b`, `a ?? b`, an assignment, a conditional — is parenthesised.
  */
 const bindsTighterThanEquality = (expr: Node): boolean => {
-  if (expr.kind === N_UNARY || expr.kind === N_NUMBER || expr.kind === N_NEW || expr.kind === N_ARRAY) {
+  if (
+    expr.kind === NodeKind.Unary ||
+    expr.kind === NodeKind.Number ||
+    expr.kind === NodeKind.New ||
+    expr.kind === NodeKind.Array
+  ) {
     return true
   }
-  if (expr.kind !== N_BINARY) {
+  if (expr.kind !== NodeKind.Binary) {
     return isMemberReceiver(expr)
   }
   const op = expr.text
@@ -2009,14 +1979,14 @@ const bindsTighterThanEquality = (expr: Node): boolean => {
 
 /** Whether `.name` written after `expr` reads a member of the whole of it. */
 const isMemberReceiver = (expr: Node): boolean =>
-  expr.kind === N_IDENT ||
-  expr.kind === N_THIS ||
-  expr.kind === N_CALL ||
-  expr.kind === N_MEMBER ||
-  expr.kind === N_INDEX ||
-  expr.kind === N_PAREN ||
-  expr.kind === N_STRING ||
-  expr.kind === N_TEMPLATE
+  expr.kind === NodeKind.Ident ||
+  expr.kind === NodeKind.This ||
+  expr.kind === NodeKind.Call ||
+  expr.kind === NodeKind.Member ||
+  expr.kind === NodeKind.Index ||
+  expr.kind === NodeKind.Paren ||
+  expr.kind === NodeKind.String ||
+  expr.kind === NodeKind.Template
 
 // ---- Narrowing ---------------------------------------------------------------------
 
@@ -2031,15 +2001,15 @@ const isMemberReceiver = (expr: Node): boolean =>
  */
 export const narrow = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
   switch (cond.kind) {
-    case N_PAREN:
+    case NodeKind.Paren:
       narrow(ctx, cond.children[0], scope, whenTrue)
       return
-    case N_UNARY:
+    case NodeKind.Unary:
       if (cond.text === "!") {
         narrow(ctx, cond.children[0], scope, !whenTrue)
       }
       return
-    case N_BINARY:
+    case NodeKind.Binary:
       narrowBinary(ctx, cond, scope, whenTrue)
       return
     default:
@@ -2073,14 +2043,14 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   // with `undefined` in place of `null` (docs/wp32-map.md §3.2).
   const left = cond.children[0]
   const right = cond.children[1]
-  const rightAbsent = right.kind === N_NULL || isUndefinedValue(right, scope)
-  const leftAbsent = left.kind === N_NULL || isUndefinedValue(left, scope)
+  const rightAbsent = right.kind === NodeKind.Null || isUndefinedValue(right, scope)
+  const leftAbsent = left.kind === NodeKind.Null || isUndefinedValue(left, scope)
   if (!rightAbsent && !leftAbsent) {
     narrowTag(ctx, cond, scope, whenTrue)
     return
   }
   const variable = rightAbsent ? left : right
-  if (variable.kind !== N_IDENT) {
+  if (variable.kind !== NodeKind.Ident) {
     return
   }
   const local = scope.lookup(variable.text)
@@ -2088,7 +2058,7 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
     return
   }
   const declared = scope.typeOf(local)
-  const byUndefined = (rightAbsent ? right : left).kind !== N_NULL
+  const byUndefined = (rightAbsent ? right : left).kind !== NodeKind.Null
   let present = -1
   if (byUndefined && ctx.table.isMaybe(declared)) {
     present = ctx.table.refOf(declared)
@@ -2157,7 +2127,7 @@ const narrowEnumTest = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: b
  */
 const testedRead = (node: Node): Node => {
   let read = unwrapParens(node)
-  while (read.kind === N_BINARY && read.text === "=") {
+  while (read.kind === NodeKind.Binary && read.text === "=") {
     read = unwrapParens(read.children[0])
   }
   return read
@@ -2166,7 +2136,7 @@ const testedRead = (node: Node): Node => {
 /** The local or parameter `node` names when it is declared as an enum, or `null`. */
 export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
   const read = testedRead(node)
-  if (read.kind !== N_IDENT) {
+  if (read.kind !== NodeKind.Ident) {
     // A path stands for a variable of its own, which starts out holding what
     // the read does: a union's tag, the tags of the union's variants.
     const path = pathVariable(ctx, read, scope, ctx.program.nodeTypes[read.id], true)
@@ -2188,18 +2158,18 @@ export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local
  */
 const pathKey = (ctx: CheckContext, node: Node, scope: Scope): string => {
   const read = unwrapParens(node)
-  if (read.kind === N_IDENT || read.kind === N_THIS) {
+  if (read.kind === NodeKind.Ident || read.kind === NodeKind.This) {
     return "@"
   }
   if ((read.flags & FLAG_OPTIONAL) !== 0) {
     return ""
   }
   let base = ""
-  if (read.kind === N_MEMBER) {
+  if (read.kind === NodeKind.Member) {
     base = pathKey(ctx, read.children[0], scope)
     return base === "" ? "" : `${base}.${read.text}`
   }
-  if (read.kind !== N_INDEX) {
+  if (read.kind !== NodeKind.Index) {
     return ""
   }
   const index = indexKey(ctx, read.children[1], scope)
@@ -2223,10 +2193,10 @@ const pathKey = (ctx: CheckContext, node: Node, scope: Scope): string => {
  * is assigned, a name in parentheses, any other expression.
  */
 const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
-  if (index.kind === N_NUMBER) {
+  if (index.kind === NodeKind.Number) {
     return numberKey(index.text)
   }
-  if (index.kind !== N_IDENT) {
+  if (index.kind !== NodeKind.Ident) {
     return ""
   }
   const local = sourceLocal(scope.lookup(index.text))
@@ -2253,7 +2223,7 @@ const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
  */
 export const literalIndexName = (node: Node, scope: Scope): string => {
   const read = unwrapParens(node)
-  if (read.kind !== N_IDENT) {
+  if (read.kind !== NodeKind.Ident) {
     return numberLiteralName(read)
   }
   const local = sourceLocal(scope.lookup(read.text))
@@ -2263,13 +2233,13 @@ export const literalIndexName = (node: Node, scope: Scope): string => {
 /** `literalIndexName` for a number literal, alone or under a unary `-` or `+`; `""` for anything else. */
 const numberLiteralName = (node: Node): string => {
   const read = unwrapParens(node)
-  if (read.kind === N_NUMBER) {
+  if (read.kind === NodeKind.Number) {
     return numberKey(read.text)
   }
   if (
-    read.kind !== N_UNARY ||
+    read.kind !== NodeKind.Unary ||
     (read.text !== "-" && read.text !== "+") ||
-    read.children[0].kind !== N_NUMBER
+    read.children[0].kind !== NodeKind.Number
   ) {
     return ""
   }
@@ -2294,12 +2264,12 @@ export const giveIndexKey = (ctx: CheckContext, local: Local): void => {
  */
 export const assignsVariable = (node: Node, name: string): boolean => {
   let target: Node | null = null
-  if (node.kind === N_BINARY && writesLeft(node.text)) {
+  if (node.kind === NodeKind.Binary && writesLeft(node.text)) {
     target = unwrapParens(node.children[0])
-  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  } else if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     target = unwrapParens(node.children[0])
   }
-  if (target !== null && target.kind === N_IDENT && target.text === name) {
+  if (target !== null && target.kind === NodeKind.Ident && target.text === name) {
     return true
   }
   for (const child of node.children) {
@@ -2317,17 +2287,17 @@ export const assignsVariable = (node: Node, name: string): boolean => {
 
 /** Whether `node` declares `name`: a parameter, a declarator, or a `let`, `const` or parameter list holding one. */
 const bindsName = (node: Node, name: string): boolean => {
-  if (node.kind === N_PARAM || node.kind === N_VAR_DECL) {
-    return node.children[0].kind === N_IDENT && node.children[0].text === name
+  if (node.kind === NodeKind.Param || node.kind === NodeKind.VarDecl) {
+    return node.children[0].kind === NodeKind.Ident && node.children[0].text === name
   }
-  if (node.kind === N_VAR) {
+  if (node.kind === NodeKind.Var) {
     return bindsName(node.children[0], name)
   }
-  if (node.kind !== N_LIST) {
+  if (node.kind !== NodeKind.List) {
     return false
   }
   for (const child of node.children) {
-    if ((child.kind === N_PARAM || child.kind === N_VAR_DECL) && bindsName(child, name)) {
+    if ((child.kind === NodeKind.Param || child.kind === NodeKind.VarDecl) && bindsName(child, name)) {
       return true
     }
   }
@@ -2337,13 +2307,13 @@ const bindsName = (node: Node, name: string): boolean => {
 /** The variable a property path starts at: a local, a parameter, `this` as `ctx.thisRoot`, or `null`. */
 const pathRoot = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
   let read = unwrapParens(node)
-  while (read.kind === N_MEMBER || read.kind === N_INDEX) {
+  while (read.kind === NodeKind.Member || read.kind === NodeKind.Index) {
     read = unwrapParens(read.children[0])
   }
-  if (read.kind === N_THIS) {
+  if (read.kind === NodeKind.This) {
     return ctx.thisRoot
   }
-  return read.kind === N_IDENT ? scope.lookup(read.text) : null
+  return read.kind === NodeKind.Ident ? scope.lookup(read.text) : null
 }
 
 /**
@@ -2363,7 +2333,7 @@ const pathVariable = (
   create: boolean
 ): Local | null => {
   const read = unwrapParens(node)
-  if (read.kind !== N_MEMBER && read.kind !== N_INDEX) {
+  if (read.kind !== NodeKind.Member && read.kind !== NodeKind.Index) {
     return null
   }
   if (!ctx.table.isEnum(type)) {
@@ -2426,7 +2396,7 @@ const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local
   }
   let through = ""
   const named = unwrapParens(target)
-  if (named.kind === N_IDENT && root.pathIndex.startsWith("$")) {
+  if (named.kind === NodeKind.Ident && root.pathIndex.startsWith("$")) {
     through = `[${root.pathIndex}]`
   }
   let i = 0
@@ -2521,11 +2491,11 @@ const exhaustedMessage = (name: string): string =>
  */
 export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
   const read = unwrapParens(node)
-  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+  if (read.kind !== NodeKind.Member || isOptionalChain(read)) {
     return null
   }
   const receiver = testedRead(read.children[0])
-  if (receiver.kind !== N_IDENT) {
+  if (receiver.kind !== NodeKind.Ident) {
     return null
   }
   const local = scope.lookup(receiver.text)
@@ -2800,7 +2770,7 @@ const checkUndefinedTest = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
 const maybeOperand = (ctx: CheckContext, operand: Node, scope: Scope): i32 => {
   const type = checkExpression(ctx, operand, scope, WANT_MAYBE)
   const bare = unwrapParens(operand)
-  const local: Local | null = bare.kind === N_IDENT ? scope.lookup(bare.text) : null
+  const local: Local | null = bare.kind === NodeKind.Ident ? scope.lookup(bare.text) : null
   if (type !== T_ERROR && local !== null && ctx.table.isMaybe(local.type)) {
     return local.type
   }
@@ -2886,7 +2856,7 @@ const checkChainCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
  * the end, would mean two different things.
  */
 const checkNullableCoalesce = (ctx: CheckContext, expr: Node, scope: Scope, left: i32): i32 => {
-  if (unwrapParens(expr.children[0]).kind === N_INDEX) {
+  if (unwrapParens(expr.children[0]).kind === NodeKind.Index) {
     return ctx.errorType(
       expr.children[0],
       "`??` cannot default an element read: past the end of the array, JavaScript answers the default and " +
@@ -2899,7 +2869,7 @@ const checkNullableCoalesce = (ctx: CheckContext, expr: Node, scope: Scope, left
   // their type from it. A bare `null`, or a ternary that may answer one, needs
   // the `T | null` to have a type at all.
   const fallbackKind = unwrapParens(expr.children[1]).kind
-  const mayBeNull = fallbackKind === N_NULL || fallbackKind === N_CONDITIONAL
+  const mayBeNull = fallbackKind === NodeKind.Null || fallbackKind === NodeKind.Conditional
   const fallback = checkExpression(ctx, expr.children[1], scope, mayBeNull ? left : value)
   if (fallback === T_ERROR) {
     return T_ERROR
@@ -2927,7 +2897,7 @@ const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 => {
   const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length)
   let node = expr
   let parent = linkedParent(parents, node)
-  while (parent !== null && parent.kind === N_PAREN) {
+  while (parent !== null && parent.kind === NodeKind.Paren) {
     node = parent
     parent = linkedParent(parents, node)
   }
@@ -2960,7 +2930,10 @@ const maybeDefaultFix = (
   const value = ctx.table.refOf(type)
   const zero = zeroLiteralOf(value)
   const call = unwrapParens(expr)
-  const isGet = call.kind === N_CALL && call.children[0].kind === N_MEMBER && call.children[0].text === "get"
+  const isGet =
+    call.kind === NodeKind.Call &&
+    call.children[0].kind === NodeKind.Member &&
+    call.children[0].text === "get"
   if (zero === "" || !isGet) {
     return edits
   }
@@ -2975,7 +2948,7 @@ const maybeDefaultFix = (
 
 /** Whether a `V` read under `parent` is an operand of binary arithmetic on numbers. */
 const isArithmeticOperand = (parent: Node | null, value: i32): boolean => {
-  if (parent === null || parent.kind !== N_BINARY || !isNumeric(value)) {
+  if (parent === null || parent.kind !== NodeKind.Binary || !isNumeric(value)) {
     return false
   }
   const op = parent.text
@@ -2999,34 +2972,34 @@ const zeroLiteralOf = (type: i32): string => {
 /** What `refuseMaybe` says after the type: where `node`, the maybe with its parentheses, stands, and the rewrite. */
 const maybePlaceReason = (parents: ParentTable, node: Node, parent: Node): string => {
   switch (parent.kind) {
-    case N_VAR_DECL: {
+    case NodeKind.VarDecl: {
       const list = linkedParent(parents, parent)
       const statement: Node | null = list === null ? null : linkedParent(parents, list)
       return statement !== null && (statement.flags & FLAG_CONST) !== 0 ? ANNOTATED : IN_LET
     }
-    case N_BINARY:
+    case NodeKind.Binary:
       return operatorPlaceReason(parent, node)
-    case N_UNARY:
+    case NodeKind.Unary:
       return AS_OPERAND
-    case N_LIST: {
+    case NodeKind.List: {
       const owner = linkedParent(parents, parent)
       const isArguments =
         owner !== null &&
-        ((owner.kind === N_CALL && owner.children[1] === parent) ||
-          (owner.kind === N_NEW && owner.children[2] === parent))
+        ((owner.kind === NodeKind.Call && owner.children[1] === parent) ||
+          (owner.kind === NodeKind.New && owner.children[2] === parent))
       return isArguments ? AS_ARGUMENT : ELSEWHERE
     }
-    case N_RETURN:
+    case NodeKind.Return:
       return RETURNED
-    case N_FUNCTION:
+    case NodeKind.FunctionDecl:
       return parent.children[3] === node ? RETURNED : ELSEWHERE // a concise body is its `return`
-    case N_ARROW:
+    case NodeKind.Arrow:
       return parent.children[3] === node ? RETURNED : ELSEWHERE
-    case N_TEMPLATE:
+    case NodeKind.Template:
       return IN_TEMPLATE
-    case N_PROPERTY:
+    case NodeKind.Property:
       return IN_FIELD
-    case N_ARRAY:
+    case NodeKind.Array:
       return IN_ELEMENT
     default:
       return ELSEWHERE
@@ -3044,13 +3017,13 @@ const operatorPlaceReason = (parent: Node, node: Node): string => {
     return ELSEWHERE
   }
   const target = parent.children[0]
-  if (target.kind === N_IDENT) {
+  if (target.kind === NodeKind.Ident) {
     return IN_LET // only a `let` can be assigned
   }
-  if (target.kind === N_MEMBER) {
+  if (target.kind === NodeKind.Member) {
     return IN_FIELD
   }
-  return target.kind === N_INDEX ? IN_ELEMENT : ELSEWHERE
+  return target.kind === NodeKind.Index ? IN_ELEMENT : ELSEWHERE
 }
 
 // The reasons, one per place and one diagnostic code each (NL2361-NL2369, NL2371).
@@ -3106,7 +3079,7 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
   let value = -1
   let nullable = false
   for (const member of annotation.children) {
-    if (member.kind === N_TYPE_NULL) {
+    if (member.kind === NodeKind.TypeNull) {
       nullable = true
     } else if (!isUndefinedType(member)) {
       value = resolveType(member, ctx)
@@ -3123,9 +3096,9 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
 
 const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0]
-  if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+  if (target.kind === NodeKind.Member || target.kind === NodeKind.Index) {
     const stored =
-      target.kind === N_MEMBER
+      target.kind === NodeKind.Member
         ? checkMemberAssignment(ctx, expr, scope)
         : checkIndexAssignment(ctx, expr, scope)
     clearPaths(ctx, target, scope)
@@ -3138,7 +3111,7 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     return stored
   }
-  if (target.kind !== N_IDENT) {
+  if (target.kind !== NodeKind.Ident) {
     return ctx.errorType(target, "Only simple variables can be assigned")
   }
   const local = scope.lookup(target.text)
@@ -3233,7 +3206,7 @@ export const assignInto = (
     ctx,
     value,
     scope,
-    value.kind === N_NUMBER ? literalHint(target, operand) : operand
+    value.kind === NodeKind.Number ? literalHint(target, operand) : operand
   )
   if (local !== null) {
     scope.clearNarrowing(local)
@@ -3315,10 +3288,10 @@ const checkImportedBuiltin = (
 
 const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   const callee = expr.children[0]
-  if (callee.kind === N_SUPER) {
+  if (callee.kind === NodeKind.Super) {
     return checkExpression(ctx, callee, scope, -1) // WP25: reports on the `super` token
   }
-  if (callee.kind === N_MEMBER) {
+  if (callee.kind === NodeKind.Member) {
     const promised = promiseMethodMessage(ctx, callee, scope)
     if (promised !== "") {
       return ctx.errorType(expr, promised)
@@ -3336,14 +3309,14 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     // own argument rules say something vaguer about the same mistake.
     const receiver = callee.children[0]
     if (
-      receiver.kind === N_IDENT &&
+      receiver.kind === NodeKind.Ident &&
       refuseSecretArguments(ctx, expr, scope, `${receiver.text}.${callee.text}`)
     ) {
       return T_ERROR
     }
     return checkBuiltinCall(ctx, expr, scope)
   }
-  if (callee.kind !== N_IDENT) {
+  if (callee.kind !== NodeKind.Ident) {
     // WP51: `hs[i](x)`, `pick()(x)`: a call through a reference the callee computes.
     const computed = checkExpression(ctx, callee, scope, -1)
     if (computed === T_ERROR) {
@@ -3498,7 +3471,7 @@ const refuseForeignNullable = (
   if (!ctx.table.isNullable(want) || ctx.table.stripNull(want) === T_STRING) {
     return false
   }
-  if (unwrapParens(arg).kind === N_NULL || got === T_ERROR || !ctx.table.isNullable(got)) {
+  if (unwrapParens(arg).kind === NodeKind.Null || got === T_ERROR || !ctx.table.isNullable(got)) {
     return false
   }
   ctx.error(
@@ -3566,9 +3539,9 @@ const checkDirectCall = (
  * as "before a loop whose body, condition, or update assigns the variable".
  */
 export const clearNarrowingsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope): void => {
-  if (node.kind === N_BINARY && writesLeft(node.text)) {
+  if (node.kind === NodeKind.Binary && writesLeft(node.text)) {
     clearTarget(ctx, node.children[0], scope)
-  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  } else if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     clearTarget(ctx, node.children[0], scope)
   }
   for (const child of node.children) {
@@ -3578,7 +3551,7 @@ export const clearNarrowingsAssignedIn = (ctx: CheckContext, node: Node, scope: 
 
 const clearTarget = (ctx: CheckContext, target: Node, scope: Scope): void => {
   clearPaths(ctx, target, scope)
-  if (target.kind !== N_IDENT) {
+  if (target.kind !== NodeKind.Ident) {
     return
   }
   const local = scope.lookup(target.text)
@@ -3590,12 +3563,12 @@ const clearTarget = (ctx: CheckContext, target: Node, scope: Scope): void => {
 /** Append to `into` every local `node` assigns, as `clearNarrowingsAssignedIn` finds them. */
 export const localsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope, into: Local[]): void => {
   let target: Node | null = null
-  if (node.kind === N_BINARY && writesLeft(node.text)) {
+  if (node.kind === NodeKind.Binary && writesLeft(node.text)) {
     target = node.children[0]
-  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  } else if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     target = node.children[0]
   }
-  if (target !== null && target.kind === N_IDENT) {
+  if (target !== null && target.kind === NodeKind.Ident) {
     const local = scope.lookup(target.text)
     if (local !== null) {
       addLocals(into, [local])
@@ -3653,9 +3626,9 @@ export const joinArms = (
 const writtenMembers = (ctx: CheckContext, value: Node, scope: Scope): i32[] => {
   const bare = unwrapParens(value)
   const members: i32[] = []
-  if (bare.kind === N_MEMBER && !isOptionalChain(bare)) {
+  if (bare.kind === NodeKind.Member && !isOptionalChain(bare)) {
     const receiver = bare.children[0]
-    if (receiver.kind !== N_IDENT || scope.lookup(receiver.text) !== null) {
+    if (receiver.kind !== NodeKind.Ident || scope.lookup(receiver.text) !== null) {
       return members
     }
     const info = ctx.program.enumNamed(receiver.text)
@@ -3665,7 +3638,7 @@ const writtenMembers = (ctx: CheckContext, value: Node, scope: Scope): i32[] => 
     }
     return members
   }
-  if (bare.kind === N_CONDITIONAL) {
+  if (bare.kind === NodeKind.Conditional) {
     const whenTrue = writtenMembers(ctx, bare.children[1], scope)
     const whenFalse = writtenMembers(ctx, bare.children[2], scope)
     if (whenTrue.length > 0 && whenFalse.length > 0) {
@@ -3678,7 +3651,7 @@ const writtenMembers = (ctx: CheckContext, value: Node, scope: Scope): i32[] => 
     }
     return members
   }
-  if (bare.kind === N_BINARY && bare.text === "=") {
+  if (bare.kind === NodeKind.Binary && bare.text === "=") {
     return writtenMembers(ctx, bare.children[1], scope)
   }
   return members
@@ -3688,14 +3661,14 @@ const writtenMembers = (ctx: CheckContext, value: Node, scope: Scope): i32[] => 
 const collectWritten = (ctx: CheckContext, node: Node, local: Local, scope: Scope, into: i32[]): boolean => {
   let target: Node | null = null
   let stored: Node | null = null
-  if (node.kind === N_BINARY && writesLeft(node.text)) {
+  if (node.kind === NodeKind.Binary && writesLeft(node.text)) {
     target = node.children[0]
     stored = node.text === "=" ? node.children[1] : null
-  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  } else if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     target = node.children[0]
   }
   let named: Local | null = null
-  if (target !== null && target.kind === N_IDENT) {
+  if (target !== null && target.kind === NodeKind.Ident) {
     named = scope.lookup(target.text)
   }
   if (target !== null && !(named !== null && named === local)) {

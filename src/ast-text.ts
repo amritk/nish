@@ -35,11 +35,9 @@ import {
   FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_DEFER,
-  FLAG_FOR_IN,
-  FLAG_USING,
-  FLAG_VAR,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
+  FLAG_FOR_IN,
   FLAG_GENERATOR,
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
@@ -49,10 +47,10 @@ import {
   FLAG_SATISFIES,
   FLAG_STATIC,
   FLAG_TYPE_ONLY,
-  N_STRING,
-  N_TEMPLATE_TEXT,
-  N_UNARY,
+  FLAG_USING,
+  FLAG_VAR,
   Node,
+  NodeKind,
   nodeName,
 } from "./nodes"
 
@@ -82,7 +80,7 @@ const indent = (depth: i32): string => {
  */
 const kindWithFlags = (node: Node): string => {
   let name = nodeName(node.kind)
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     return node.flags === FLAG_POSTFIX ? `${name}+postfix` : `${name}+prefix`
   }
   if ((node.flags & FLAG_EXPORTED) !== 0) {
@@ -164,7 +162,7 @@ const kindWithFlags = (node: Node): string => {
 /** One line for `node`, then its children one level deeper. */
 export const astLines = (node: Node, depth: i32, lines: string[]): void => {
   let line = `${indent(depth)}${kindWithFlags(node)} ${node.start} ${node.end}`
-  if (node.kind === N_STRING || node.kind === N_TEMPLATE_TEXT) {
+  if (node.kind === NodeKind.String || node.kind === NodeKind.TemplateText) {
     line = `${line} #${node.text.length}`
   } else if (node.text.length > 0) {
     line = `${line} ${node.text}`

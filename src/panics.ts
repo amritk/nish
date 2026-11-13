@@ -35,7 +35,7 @@ import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
-import { N_BINARY, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
@@ -740,7 +740,7 @@ const refuseSite = (
 /** The source name of the local a bare identifier binds, or `""`. */
 const siteLocalName = (program: CheckedProgram, expr: Node): string => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return ""
   }
   const local = program.nodeLocals[e.id]
@@ -749,7 +749,7 @@ const siteLocalName = (program: CheckedProgram, expr: Node): string => {
 
 /** The builtin a call names, through a `nish:` import's local name; else a method's or a function's as written. */
 const calledName = (program: CheckedProgram, call: Node): string => {
-  if (call.kind !== N_CALL) {
+  if (call.kind !== NodeKind.Call) {
     return ""
   }
   const builtin = program.nodeBuiltins[call.id]
@@ -757,7 +757,7 @@ const calledName = (program: CheckedProgram, call: Node): string => {
     return builtin
   }
   const callee = unwrapBoundsParens(call.children[0])
-  return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : ""
+  return callee.kind === NodeKind.Member || callee.kind === NodeKind.Ident ? callee.text : ""
 }
 
 /**
@@ -839,7 +839,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
 
 /** The guard for an element access or a `charCodeAt`, and for the second check of a compound store. */
 const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     return (
       "a compound store checks its index again after its right side, which may resize the array, and no " +
       "proof survives that call: compute the right side into a local first"
@@ -847,7 +847,7 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
   }
   let receiver = node
   let index = node
-  if (node.kind === N_INDEX) {
+  if (node.kind === NodeKind.Index) {
     receiver = node.children[0]
     index = node.children[1]
   } else {
@@ -899,7 +899,7 @@ const overflowAdvice = (program: CheckedProgram, table: TypeTable, node: Node): 
 /** The `nish:unsafe` call that computes what the operator at `node` computes, wrapping, spelled for `x` and `y`. */
 const wrappingForm = (node: Node): string => {
   const op = node.text
-  if (node.kind !== N_BINARY) {
+  if (node.kind !== NodeKind.Binary) {
     if (op === "++") {
       return "x = wrappingAdd(x, 1)"
     }

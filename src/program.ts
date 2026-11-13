@@ -22,7 +22,7 @@ import { CheckContext } from "./context"
 import { SourceFile } from "./diagnostics"
 import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
-import { FLAG_ASYNC, FLAG_FOREIGN, N_BINARY, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
+import { FLAG_ASYNC, FLAG_FOREIGN, Node, NodeKind } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
 import {
@@ -269,12 +269,12 @@ export class FunctionSig {
    * The body, or `null` when the declaration has none. A `BLOCK` for every
    * form but the concise arrow body (`=> n * 2`), which is the expression it
    * returns (docs/wp22-arrow-functions.md §4); the two callers that want a
-   * statement list check `kind === N_BLOCK` for themselves, and the analyses
+   * statement list check `kind === NodeKind.Block` for themselves, and the analyses
    * that only walk the tree take either.
    */
   body(): Node | null {
-    const node = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3]
-    return node.kind === N_EMPTY ? null : node
+    const node = this.decl.kind === NodeKind.Constructor ? this.decl.children[1] : this.decl.children[3]
+    return node.kind === NodeKind.Empty ? null : node
   }
 
   /**
@@ -490,7 +490,7 @@ export class FusionTable {
  * once those exist (`Compilation.checkParallel`) and reported at the call.
  */
 export class ParallelCall {
-  /** The `N_CALL`, in the module whose `parallelCalls` holds this. */
+  /** The `NodeKind.Call`, in the module whose `parallelCalls` holds this. */
   node: Node
   /** The instantiation it calls, whose `functionArgs[0]` is the body. */
   sig: FunctionSig
@@ -517,7 +517,7 @@ export class ParallelCall {
  * arrow, which is where the call runs the body (WP29).
  */
 export const capturedReads = (program: CheckedProgram, node: Node, out: Node[]): void => {
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const local = program.nodeLocals[node.id]
     if (local !== null && local.captureOf !== null) {
       out.push(node)
@@ -563,9 +563,9 @@ export class SecretNeed {
  * declarator, whose local the emitter reads where the scope's `using` is.
  */
 export class ScopeChannels {
-  /** The `N_VAR_DECL` of the `using s = scope()`. */
+  /** The `NodeKind.VarDecl` of the `using s = scope()`. */
   scope: Node
-  /** The `N_VAR_DECL` of each channel. */
+  /** The `NodeKind.VarDecl` of each channel. */
   channels: Node[]
 
   constructor(scope: Node) {
@@ -666,7 +666,7 @@ export class TemplateInfo {
   typeParams: string[]
   /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
   constraints: ConstraintList
-  /** The `N_FUNCTION` node, in either spelling. */
+  /** The `NodeKind.FunctionDecl` node, in either spelling. */
   decl: Node
   origin: SourceFile
   exported: boolean
@@ -711,7 +711,7 @@ export class StructTemplateInfo {
   typeParams: string[]
   /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
   constraints: ConstraintList
-  /** The `N_CLASS` or `N_INTERFACE` node. */
+  /** The `NodeKind.Class` or `NodeKind.Interface` node. */
   decl: Node
   origin: SourceFile
   exported: boolean
@@ -1506,7 +1506,7 @@ export class ImportBinding {
  * renamed it to locally.
  */
 export class UnsafeCall {
-  /** The `N_CALL` node's id. */
+  /** The `NodeKind.Call` node's id. */
   node: i32
   line: i32
   column: i32
@@ -1559,7 +1559,7 @@ export class StructRegistry {
  */
 export class CheckedProgram {
   source: SourceFile
-  /** The `N_SOURCE_FILE` this module parsed to. */
+  /** The `NodeKind.SourceFile` this module parsed to. */
   file: Node
   isEntry: boolean
   /**
@@ -1870,19 +1870,19 @@ export class CheckedProgram {
    * into one `bitcast`.
    */
   nodeCoercions: i32[]
-  /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */
+  /** `NodeKind.Case` node id -> the folded label, which a `switch` needs as a constant. */
   nodeCaseValues: i64[]
   /**
-   * `N_MEMBER` node id -> the integer an enum member stands for (WP23). There
+   * `NodeKind.Member` node id -> the integer an enum member stands for (WP23). There
    * is no presence flag beside it and none is needed: a member's value may be
-   * 0 or negative, but the node that carries one is exactly an `N_MEMBER` of
+   * 0 or negative, but the node that carries one is exactly an `NodeKind.Member` of
    * enum type whose receiver is not a value, and both of those are already
    * recorded (`isEnumMember`). stage0's `src/` uses a `WeakMap`, where presence is the
    * key's own answer.
    */
   nodeEnumValues: i32[]
   /**
-   * `N_INDEX` and `charCodeAt` node id -> the bounds analysis proved the index
+   * `NodeKind.Index` and `charCodeAt` node id -> the bounds analysis proved the index
    * in range (WP15 §2.1/§2.2, `src/bounds.ts`). The emitter writes the address
    * and no check for each of them, and the attribute pass leaves
    * `nish_panic_index` out of the callee set — which is the whole of what the
@@ -1957,7 +1957,7 @@ export class CheckedProgram {
    */
   nodeDisjointCopy: boolean[]
   /**
-   * `N_SPREAD` node id, for a spread among an object literal's properties ->
+   * `NodeKind.Spread` node id, for a spread among an object literal's properties ->
    * what it copies, or `null` everywhere else. The checker writes it and the
    * emitter reads nothing else about a spread; per instantiation, like the
    * proofs above, because a later spread's fields may depend on a type
@@ -2144,7 +2144,7 @@ export class CheckedProgram {
    * parser's, with the source span of the text it stands for. Call
    * `grewNodes` once the new nodes are built and before any is checked.
    */
-  newNode(kind: i32, start: i32, end: i32, text: string, children: Node[]): Node {
+  newNode(kind: NodeKind, start: i32, end: i32, text: string, children: Node[]): Node {
     const made = new Node(kind, start, end)
     made.id = this.nodeCount
     this.nodeCount = this.nodeCount + 1
@@ -2227,7 +2227,7 @@ export class CheckedProgram {
    */
   floatRemainderOf(node: Node): FunctionSig | null {
     const rem = this.floatRemainder
-    if (rem === null || node.kind !== N_BINARY || (node.text !== "%" && node.text !== "%=")) {
+    if (rem === null || node.kind !== NodeKind.Binary || (node.text !== "%" && node.text !== "%=")) {
       return null
     }
     const ty = this.nodeTypes[node.children[0].id]
@@ -2495,13 +2495,13 @@ export class CheckedProgram {
 
   /**
    * Whether `node` is an enum member reference — `Kind.If` — whose folded
-   * integer is in `nodeEnumValues` (WP23). It is an `N_MEMBER` of enum type
+   * integer is in `nodeEnumValues` (WP23). It is an `NodeKind.Member` of enum type
    * whose receiver is a *name* rather than a value, and nothing else in the
    * language has that shape, so the two tables the checker already writes
    * answer the question and no presence flag has to be stored beside them.
    */
   isEnumMember(table: TypeTable, node: Node): boolean {
-    if (node.kind !== N_MEMBER || this.nodeTypes[node.children[0].id] >= 0) {
+    if (node.kind !== NodeKind.Member || this.nodeTypes[node.children[0].id] >= 0) {
       return false
     }
     // A constant checked into a slot of its member type records that type.

@@ -13,7 +13,7 @@
 // (`src/program.ts`). The AST still holds syntax only.
 //
 // One thing to know when reading a walk against stage0's `src/`: an argument list is
-// an `N_LIST` node in this tree and is not in the `typescript` one, so the
+// an `NodeKind.List` node in this tree and is not in the `typescript` one, so the
 // parent of an argument is the list and the construct that consumes it is the
 // node above that. Every upward walk in `src/escape.ts` handles that step
 // explicitly, because the index within the list is the argument index and it

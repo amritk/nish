@@ -72,7 +72,7 @@ import {
   SECRET_SPECIFIER,
   unsafeModule,
 } from "./nish-modules"
-import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
@@ -4229,7 +4229,7 @@ const reservedPrefixText = (name: string): string => {
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 
 /** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
 const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0
@@ -4273,7 +4273,7 @@ const clashMessage = (
   const owner = sig.owner
   if (owner !== null) {
     const member =
-      sig.decl.kind === N_CONSTRUCTOR
+      sig.decl.kind === NodeKind.Constructor
         ? "is declared with a constructor"
         : `declares method \`${sig.decl.children[0].text}\``
     const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`

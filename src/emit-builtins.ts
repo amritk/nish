@@ -48,7 +48,7 @@ import {
   netRangeBuffer,
   netSymbol,
 } from "./nish-modules"
-import { N_IDENT, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
 import { resolveTarget } from "./target"
@@ -796,7 +796,7 @@ export const builtinCalleesNamed = (
 
 /** A call of a builtin by plain name, when no user function of that name is in scope. */
 export const isIdentifierBuiltinCall = (program: CheckedProgram, call: Node): boolean => {
-  if (call.children[0].kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
+  if (call.children[0].kind !== NodeKind.Ident || program.nodeCallees[call.id] !== null) {
     return false
   }
   return isBuiltinFunction(call.children[0].text)
@@ -1203,7 +1203,7 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
-  if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
+  if (callee.kind !== NodeKind.Ident || program.nodeCallees[call.id] !== null) {
     return false
   }
   const name = builtinNameOf(program, call)

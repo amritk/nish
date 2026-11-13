@@ -37,7 +37,7 @@ import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRParam, paramSuffix } from "./ir"
 import { isDigit } from "./lexer"
 import { StringMap } from "./map"
-import { N_UNARY, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FunctionSig } from "./program"
 import { StringBuilder } from "./strings"
 import { roundUpTo } from "./structs"
@@ -544,7 +544,7 @@ export const isAwaitAllDeclaration = (emitter: Emitter, decl: Node): boolean => 
     return false
   }
   const init = unwrapParens(decl.children[2])
-  if (init.kind !== N_UNARY || init.text !== "await") {
+  if (init.kind !== NodeKind.Unary || init.text !== "await") {
     return false
   }
   const call = unwrapParens(init.children[0])

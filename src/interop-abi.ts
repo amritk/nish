@@ -31,7 +31,7 @@ import { StringMap, StringSet } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { hasFunctionParameter } from "./generics"
 import { basename } from "./paths"
-import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FieldInfo, FunctionSig, STRUCT_CLASS, StructInfo, TemplateInfo } from "./program"
 import { ResultLayout, resultLayout } from "./result"
 import { StringBuilder } from "./strings"
@@ -1242,7 +1242,7 @@ const reportUninstantiated = (
  * which has none: `nameNode` in `src/compilation.ts`, for the same reason.
  */
 const sigNameNode = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 
 /**
  * `int32_t add(int32_t a, int32_t b)` for a function, or `""` when a type has

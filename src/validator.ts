@@ -44,50 +44,8 @@ import {
   FLAG_OPTIONAL,
   FLAG_SATISFIES,
   FLAG_VAR,
-  N_AS,
-  N_BIGINT,
-  N_BINARY,
-  N_ARROW,
-  N_BLOCK,
-  N_CALL,
-  N_CONSTRUCTOR,
-  N_DECORATOR,
-  N_DO,
-  N_EMPTY,
-  N_ENUM,
-  N_EXPORT_DECLARATION,
-  N_FIELD,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_IMPORT,
-  N_INDEX,
-  N_LABELED,
-  N_LIST,
-  N_MEMBER,
-  N_METHOD,
-  N_MODULE_CONST,
-  N_NAMESPACE,
-  N_NEW,
-  N_NUMBER,
-  N_PAREN,
-  N_PROPERTY,
-  N_REGEX,
-  N_STRING,
-  N_SWITCH,
-  N_TEMPLATE,
-  N_THROW,
-  N_TRY,
-  N_TYPE_ALIAS,
-  N_TYPE_NULL,
-  N_TYPE_REF,
-  N_TYPE_UNION,
-  N_UNARY,
-  N_VAR,
-  N_WHILE,
-  N_WITH,
   Node,
+  NodeKind,
 } from "./nodes"
 
 /**
@@ -168,7 +126,7 @@ const forbiddenType = (name: string): string => {
   return ""
 }
 
-/** The message for an operator the language forbids, by its text on an N_BINARY or N_UNARY, or "". */
+/** The message for an operator the language forbids, by its text on an NodeKind.Binary or NodeKind.Unary, or "". */
 const forbiddenOperator = (operator: string): string => {
   if (operator === "==" || operator === "!=") {
     return "Loose equality is forbidden; use === / !=="
@@ -233,21 +191,21 @@ const isShapeMutation = (member: string): boolean =>
  */
 const isNumericIndexShape = (expr: Node): boolean => {
   switch (expr.kind) {
-    case N_IDENT:
+    case NodeKind.Ident:
       return true
-    case N_NUMBER:
+    case NodeKind.Number:
       return true
-    case N_CALL:
+    case NodeKind.Call:
       return true
-    case N_MEMBER:
+    case NodeKind.Member:
       return true
-    case N_INDEX:
+    case NodeKind.Index:
       return true
-    case N_PAREN:
+    case NodeKind.Paren:
       return isNumericIndexShape(expr.children[0])
-    case N_UNARY:
+    case NodeKind.Unary:
       return expr.text === "-" || expr.text === "+"
-    case N_BINARY:
+    case NodeKind.Binary:
       if (
         expr.text === "+" ||
         expr.text === "-" ||
@@ -293,8 +251,8 @@ const chainWithoutDefault = (): string =>
  */
 const admitChain = (ctx: CheckContext, chain: Node): void => {
   let node = chain
-  while (node.kind === N_MEMBER || node.kind === N_CALL || node.kind === N_INDEX) {
-    if (node.kind === N_MEMBER && (node.flags & FLAG_OPTIONAL) !== 0) {
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
+    if (node.kind === NodeKind.Member && (node.flags & FLAG_OPTIONAL) !== 0) {
       ctx.program.nodeNullTests[node.children[0].id] = true
     }
     node = node.children[0]
@@ -307,51 +265,51 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
   // resemble, with a flag (`src/nodes.ts`). A `?.b` is admitted in a chain
   // whose value is the left operand of a `??`, which `admitChain` marked on
   // the way down; the other two are always refused.
-  if ((node.flags & FLAG_OPTIONAL) !== 0 && (node.kind === N_INDEX || node.kind === N_CALL)) {
+  if ((node.flags & FLAG_OPTIONAL) !== 0 && (node.kind === NodeKind.Index || node.kind === NodeKind.Call)) {
     ctx.error(
       node,
       "Optional chaining `?.` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
     )
   } else if (
     (node.flags & FLAG_OPTIONAL) !== 0 &&
-    node.kind === N_MEMBER &&
+    node.kind === NodeKind.Member &&
     !ctx.program.nodeNullTests[node.children[0].id]
   ) {
     ctx.error(node, chainWithoutDefault())
   }
-  if (node.kind === N_BINARY && node.text === "??") {
+  if (node.kind === NodeKind.Binary && node.text === "??") {
     admitChain(ctx, unwrapParens(node.children[0]))
   }
   switch (node.kind) {
-    case N_IDENT: {
+    case NodeKind.Ident: {
       const message = forbiddenValue(node.text)
       if (message.length > 0) {
         ctx.error(node, message)
       }
       break
     }
-    case N_TYPE_REF: {
+    case NodeKind.TypeRef: {
       const message = forbiddenType(node.text)
       if (message.length > 0) {
         ctx.error(node, message)
       }
       break
     }
-    case N_MEMBER:
+    case NodeKind.Member:
       rejectForbiddenMember(ctx, node)
       break
-    case N_INDEX:
+    case NodeKind.Index:
       rejectForbiddenIndex(ctx, node)
       break
-    case N_BIGINT:
+    case NodeKind.Bigint:
       ctx.error(node, "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)")
       break
-    case N_TYPE_UNION:
+    case NodeKind.TypeUnion:
       // Everything but `T | null` is refused here, before the checker reports
       // the offending member on its own — `T | undefined` is a union first.
       checkNullUnion(ctx, node)
       break
-    case N_PROPERTY:
+    case NodeKind.Property:
       // A computed key is the property's second child, where a string key
       // would be. Its expression is not swept: `[Symbol.iterator]` is one
       // refusal, not two.
@@ -364,8 +322,8 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         ctx.errorAtKey(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)")
       }
       break
-    case N_FIELD:
-    case N_METHOD:
+    case NodeKind.Field:
+    case NodeKind.Method:
       // A computed name is the member's first child, where its IDENT would be.
       // WP29 P3: `nish/threads`'s `Channel` declares `[Symbol.iterator]`, the
       // one computed name it may, for Node's `for...of`; it has no signature
@@ -380,32 +338,32 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         return
       }
       break
-    case N_NEW:
+    case NodeKind.New:
       rejectForbiddenNew(ctx, node)
       break
-    case N_CALL:
+    case NodeKind.Call:
       rejectForbiddenCall(ctx, node)
       break
-    case N_UNARY: {
+    case NodeKind.Unary: {
       const message = forbiddenOperator(node.text)
       if (message.length > 0) {
         ctx.error(node, message)
       }
       break
     }
-    case N_REGEX:
+    case NodeKind.Regex:
       ctx.error(
         node,
         "Regular expression literals are forbidden in " + LANGUAGE + " (no regex engine in the runtime)"
       )
       break
-    case N_AS:
+    case NodeKind.As:
       rejectForbiddenAssertion(ctx, node)
       break
-    case N_ENUM:
+    case NodeKind.Enum:
       rejectComputedEnumMembers(ctx, node)
       break
-    case N_BINARY: {
+    case NodeKind.Binary: {
       const message = forbiddenOperator(node.text)
       if (message.length > 0) {
         ctx.errorFix(node, message, strictEqualityFix(ctx, node))
@@ -423,7 +381,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       }
       break
     }
-    case N_VAR:
+    case NodeKind.Var:
       rejectVar(ctx, node)
       // WP32: `const a: V | undefined = m.get(k)` is the one place the maybe
       // type is spelled, and `V` itself is still swept. On a `let` the
@@ -432,32 +390,32 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         visitDeclaration(ctx, decl, inTypePosition)
       }
       return
-    case N_MODULE_CONST:
+    case NodeKind.ModuleConst:
       rejectVar(ctx, node)
       refuseUndefinedIn(ctx, node)
       break
-    case N_TRY:
+    case NodeKind.Try:
       ctx.error(
         node,
         "`try`/`catch`/`finally` is forbidden in " + LANGUAGE + " (no unwinding; use `Result<T, E>`)"
       )
       break
-    case N_WITH:
+    case NodeKind.With:
       ctx.error(node, "`with` is forbidden in " + LANGUAGE + " (no dynamic scope)")
       break
-    case N_LABELED: {
+    case NodeKind.Labeled: {
       // A label names what a `break` or `continue` leaves: a loop, a block or
       // a `switch`. On anything else -- another label among them -- it names
       // nothing a jump could use. The parser has already held every jump to a
       // label around it in the same function (`Parser.parseJump`).
       const body = node.children[0].kind
       const named =
-        body === N_WHILE ||
-        body === N_DO ||
-        body === N_FOR ||
-        body === N_FOR_OF ||
-        body === N_BLOCK ||
-        body === N_SWITCH
+        body === NodeKind.While ||
+        body === NodeKind.Do ||
+        body === NodeKind.For ||
+        body === NodeKind.ForOf ||
+        body === NodeKind.Block ||
+        body === NodeKind.Switch
       if (!named) {
         ctx.error(
           node,
@@ -466,7 +424,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       }
       break
     }
-    case N_FOR_OF:
+    case NodeKind.ForOf:
       if ((node.flags & FLAG_FOR_IN) !== 0) {
         ctx.error(
           node,
@@ -476,10 +434,10 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         )
       }
       break
-    case N_DECORATOR:
+    case NodeKind.Decorator:
       ctx.error(node, "Decorators are forbidden in " + LANGUAGE + " (no runtime metadata or class rewriting)")
       break
-    case N_NAMESPACE:
+    case NodeKind.Namespace:
       if (node.text === "global") {
         ctx.error(node, "`declare global` is forbidden in " + LANGUAGE + " (no global object to augment)")
       } else {
@@ -489,7 +447,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         )
       }
       break
-    case N_TYPE_ALIAS:
+    case NodeKind.TypeAlias:
       // The third child is the type parameter list, there only when written.
       if (node.children.length > 2) {
         ctx.error(
@@ -500,14 +458,14 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         )
       }
       break
-    case N_IMPORT:
+    case NodeKind.Import:
       rejectImportForms(ctx, node)
       return
-    case N_EXPORT_DECLARATION:
+    case NodeKind.ExportDeclaration:
       // `export { a }` is refused by pass 1 whatever it names (NL2128), and
       // nothing in it is a value for a rule here to judge.
       return
-    case N_THROW:
+    case NodeKind.Throw:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
       // reads it (so the message can point at the statement) and Phase 0
@@ -544,9 +502,9 @@ const rejectImportForms = (ctx: CheckContext, node: Node): void => {
     )
   }
   const bindings = node.children[0]
-  if (bindings.kind === N_LIST) {
+  if (bindings.kind === NodeKind.List) {
     for (const spec of bindings.children) {
-      if (spec.children[0].kind === N_STRING) {
+      if (spec.children[0].kind === NodeKind.String) {
         ctx.error(
           spec.children[0],
           "A module export name written as a string is forbidden in " +
@@ -576,18 +534,18 @@ const rejectImportForms = (ctx: CheckContext, node: Node): void => {
  */
 const rejectFunctionModifiers = (ctx: CheckContext, node: Node): void => {
   const holdsModifiers =
-    node.kind === N_FUNCTION ||
-    node.kind === N_METHOD ||
-    node.kind === N_ARROW ||
-    node.kind === N_FIELD ||
-    node.kind === N_CONSTRUCTOR
+    node.kind === NodeKind.FunctionDecl ||
+    node.kind === NodeKind.Method ||
+    node.kind === NodeKind.Arrow ||
+    node.kind === NodeKind.Field ||
+    node.kind === NodeKind.Constructor
   if (!holdsModifiers) {
     return
   }
   // WP49: a top-level function and an arrow may be `async`, and the checker
   // holds them to the rest of the rule; a method, a field and a constructor
   // may not, because a method's `this` would be a value its task keeps.
-  const asyncAllowed = node.kind === N_FUNCTION || node.kind === N_ARROW
+  const asyncAllowed = node.kind === NodeKind.FunctionDecl || node.kind === NodeKind.Arrow
   if ((node.flags & FLAG_ASYNC) !== 0 && (node.flags & FLAG_GENERATOR) === 0 && !asyncAllowed) {
     ctx.error(
       node,
@@ -606,11 +564,11 @@ const rejectVar = (ctx: CheckContext, node: Node): void => {
 }
 
 /** The identifier `undefined`, as a value. */
-export const isUndefined = (node: Node): boolean => node.kind === N_IDENT && node.text === "undefined"
+export const isUndefined = (node: Node): boolean => node.kind === NodeKind.Ident && node.text === "undefined"
 
 /** The type `undefined`, as a union member. */
 export const isUndefinedType = (node: Node): boolean =>
-  node.kind === N_TYPE_REF && node.text === "undefined" && node.children[0].children.length === 0
+  node.kind === NodeKind.TypeRef && node.text === "undefined" && node.children[0].children.length === 0
 
 /**
  * `V | undefined`, `undefined | V`, or `V | null | undefined` for a nullable
@@ -618,7 +576,7 @@ export const isUndefinedType = (node: Node): boolean =>
  * this shape (`resolveMaybeAnnotation`), so both layers read it here.
  */
 export const isMaybeAnnotation = (annotation: Node): boolean => {
-  if (annotation.kind !== N_TYPE_UNION) {
+  if (annotation.kind !== NodeKind.TypeUnion) {
     return false
   }
   let undefineds = 0
@@ -626,7 +584,7 @@ export const isMaybeAnnotation = (annotation: Node): boolean => {
   for (const member of annotation.children) {
     if (isUndefinedType(member)) {
       undefineds = undefineds + 1
-    } else if (member.kind === N_TYPE_NULL) {
+    } else if (member.kind === NodeKind.TypeNull) {
       nulls = nulls + 1
     }
   }
@@ -644,7 +602,9 @@ export const isMaybeAnnotation = (annotation: Node): boolean => {
 const isMaybeDeclaration = (decl: Node): boolean => {
   const init = unwrapParens(decl.children[2])
   const callsGet =
-    init.kind === N_CALL && init.children[0].kind === N_MEMBER && init.children[0].text === "get"
+    init.kind === NodeKind.Call &&
+    init.children[0].kind === NodeKind.Member &&
+    init.children[0].text === "get"
   return callsGet && isMaybeAnnotation(decl.children[1])
 }
 
@@ -687,7 +647,7 @@ const visitDeclaration = (ctx: CheckContext, decl: Node, inTypePosition: boolean
 const rejectComputedEnumMembers = (ctx: CheckContext, node: Node): void => {
   for (const member of node.children[1].children) {
     const initializer = member.children[1]
-    if (initializer.kind !== N_EMPTY && !isNumericLiteralShape(initializer)) {
+    if (initializer.kind !== NodeKind.Empty && !isNumericLiteralShape(initializer)) {
       ctx.error(
         initializer,
         "Enum members must be numeric literals in " + LANGUAGE + " (enums lower to plain integers)"
@@ -698,10 +658,10 @@ const rejectComputedEnumMembers = (ctx: CheckContext, node: Node): void => {
 
 /** A numeric literal, or one with a leading `-`: everything an enum member may be. */
 const isNumericLiteralShape = (expr: Node): boolean => {
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return true
   }
-  return expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER
+  return expr.kind === NodeKind.Unary && expr.text === "-" && expr.children[0].kind === NodeKind.Number
 }
 
 const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
@@ -719,7 +679,7 @@ const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
   // `import` is a keyword, so an IDENT of that name is only ever the
   // parser's receiver of `import.meta` (`src/nodes.ts`). A member access or a
   // call after it is read through and costs nothing more.
-  if (receiver.kind === N_IDENT && receiver.text === "import") {
+  if (receiver.kind === NodeKind.Ident && receiver.text === "import") {
     ctx.error(
       node,
       "`import.meta` is forbidden in " +
@@ -728,7 +688,7 @@ const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
     )
     return
   }
-  if (receiver.kind === N_IDENT && receiver.text === "Object" && isShapeMutation(node.text)) {
+  if (receiver.kind === NodeKind.Ident && receiver.text === "Object" && isShapeMutation(node.text)) {
     ctx.error(
       node,
       "`Object." + node.text + "` is forbidden in " + LANGUAGE + " (object layout is fixed at compile time)"
@@ -738,7 +698,7 @@ const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
 
 const rejectForbiddenIndex = (ctx: CheckContext, node: Node): void => {
   const key = node.children[1]
-  if (key.kind === N_STRING || key.kind === N_TEMPLATE) {
+  if (key.kind === NodeKind.String || key.kind === NodeKind.Template) {
     ctx.error(
       key,
       "String-keyed element access is forbidden in " +
@@ -754,7 +714,7 @@ const rejectForbiddenIndex = (ctx: CheckContext, node: Node): void => {
 
 const rejectForbiddenNew = (ctx: CheckContext, node: Node): void => {
   const callee = node.children[0]
-  if (callee.kind !== N_IDENT) {
+  if (callee.kind !== NodeKind.Ident) {
     return
   }
   if (callee.text === "Function") {
@@ -766,7 +726,7 @@ const rejectForbiddenNew = (ctx: CheckContext, node: Node): void => {
 
 const rejectForbiddenCall = (ctx: CheckContext, node: Node): void => {
   const callee = node.children[0]
-  if (callee.kind !== N_IDENT) {
+  if (callee.kind !== NodeKind.Ident) {
     return
   }
   // `import` is a keyword, so an IDENT of that name is only ever the
@@ -790,7 +750,7 @@ const rejectForbiddenCall = (ctx: CheckContext, node: Node): void => {
  */
 const rejectForbiddenAssertion = (ctx: CheckContext, node: Node): void => {
   const type = node.children[1]
-  if ((node.flags & FLAG_SATISFIES) !== 0 || type.kind !== N_TYPE_REF) {
+  if ((node.flags & FLAG_SATISFIES) !== 0 || type.kind !== NodeKind.TypeRef) {
     return
   }
   if (type.text === "any") {
@@ -810,10 +770,10 @@ const checkNullUnion = (ctx: CheckContext, node: Node): void => {
   let nulls = 0
   let named = 0
   for (const member of node.children) {
-    if (member.kind === N_TYPE_NULL) {
+    if (member.kind === NodeKind.TypeNull) {
       nulls = nulls + 1
     } else if (
-      member.kind === N_TYPE_REF &&
+      member.kind === NodeKind.TypeRef &&
       !builtinTypeName(member.text) &&
       (member.children.length === 0 || member.children[0].children.length === 0)
     ) {
