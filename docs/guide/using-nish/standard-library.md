@@ -2481,6 +2481,21 @@ samples into an audio buffer. Each record's words, and the page's side of every
 piece, are listed in the module's comment and in the
 [library reference](../../reference/index.md).
 
+The input differs from a terminal's in two ways. Ctrl+C is an ordinary key
+(on a page it is copy), never `EVENT_QUIT`. The reader makes up no
+auto-repeat either: a page that wants held keys to repeat sends
+`ACTION_REPEAT` records itself.
+
+To run on a page, compile with `--target wasm32` and link with
+`scripts/build.sh --profile wasm-host` ([In a browser](interop.md#in-a-browser)),
+which exports the storage for the loader. Pin the memory with `--memory <MiB>`
+so the page's views of it never go stale: the storage alone is about 2.5 MB
+(the frame is 2 MB), so give it at least 4 MiB plus what the game allocates.
+The `GAME_*` names are the keys the page reads, so keep them for this module.
+When two modules declare storage of one name, the later one's is keyed by its
+symbol instead, and a program's own `GAME_FRAME` could move this module's off
+its key.
+
 ```ts nish:ok
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth } from "nish/host/game";
 import { RASTER_SOLID, rasterRect } from "nish/raster";

@@ -17,7 +17,11 @@ PASS  pointer: the button
 PASS  pointer: x in pixels
 PASS  pointer: y in pixels
 PASS  pointer: x as the cell
-PASS  blur: the focus event arrives
+PASS  ctrl-c: its press and its release
+PASS  ctrl-c: a key, not a quit
+PASS  ctrl-c: the press
+PASS  ctrl-c: the release is kept
+PASS  blur: the focus event and the letter's release
 PASS  blur: the letter is let go
 PASS  unknown: dropped, and the next record still reads
 PASS  unknown: the record after it
@@ -75,4 +79,4 @@ PASS  frame: inside the box, a row is the width
 PASS  frame: the box's far corner
 PASS  frame: just past it
 PASS  frame: past the size is untouched
-game: 77 passed, 0 failed, 0 skipped
+game: 81 passed, 0 failed, 0 skipped

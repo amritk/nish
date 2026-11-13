@@ -22,7 +22,7 @@ PASS  rect: off the frame or weightless draws nothing
 PASS  rect: a half weight blends
 PASS  disc: the centre is the colour
 PASS  disc: a corner is untouched
-PASS  disc: an edge pixel is blended
+PASS  disc: an edge pixel is blended by its coverage
 PASS  disc: radius 0, NaN or off the frame draws nothing
 PASS  glow: the centre adds nearly the full red
 PASS  glow: past the radius adds nothing
@@ -30,7 +30,7 @@ PASS  text width: one glyph
 PASS  text width: two at scale 2
 PASS  text width: empty
 PASS  text width: scale 0
-PASS  text: a glyph lights some pixels
+PASS  text: a glyph lights exactly its strokes
 PASS  text: scale 0 or off the frame draws nothing
 PASS  text: outside ASCII draws as ?, one a UTF-8 byte
 PASS  trail: holds its capacity
@@ -40,6 +40,6 @@ PASS  particles: moved by velocity × dt
 PASS  particles: a live particle draws
 PASS  particles: a dead particle draws nothing
 PASS  short frame: its last word is drawn
-PASS  short frame: rows past its length are never written
+PASS  short frame: the rows it has hold the drawing, the rest never written
 PASS  frame: an i32[] is drawn in place
 raster: 44 passed, 0 failed, 0 skipped

@@ -1,11 +1,13 @@
-// `nish/host/game`, as a page drives it: built for wasm32 with
-// `--deterministic` (the `args` file), so nothing reaches a terminal, file or
-// clock. The test plays the page's part, pushing input records onto
-// `GAME_INPUT` and reading `GAME_SOUNDS`, `GAME_SAMPLES` and `GAME_INFO`. It
-// covers a held key and its release, a pointer press in frame pixels, a lost
-// focus releasing everything, a record of an unknown kind, a part-record, the
-// sound queue filling up, clipped samples, the size limits, and a frame drawn
-// through `nish/raster`.
+// `nish/host/game`, driven the way a page drives it. The `args` file compiles
+// it with `--target wasm32 --deterministic`, so the checker holds it to what a
+// hostless wasm32 build may do (no terminal, file or clock); the harness then
+// links and runs a native build. It does not load a wasm module into a page:
+// the test plays the page's part on the same storage, pushing input records
+// onto `GAME_INPUT` and reading `GAME_SOUNDS`, `GAME_SAMPLES` and `GAME_INFO`.
+// It covers a held key and its release, Ctrl+C read as a key and not a quit, a
+// pointer press in frame pixels, a lost focus releasing everything, a record
+// of an unknown kind, a part-record, the sound queue filling up, clipped
+// samples, the size limits, and a frame drawn through `nish/raster`.
 import {
   GAME_EVENT_WORDS,
   GAME_FRAME,
@@ -39,6 +41,7 @@ import {
   KEY_CHAR,
   KEY_LEFT,
   KeyState,
+  MOD_CTRL,
   MOD_SHIFT,
   MOUSE_LEFT,
 } from "nish/term"
@@ -93,9 +96,17 @@ export const main = (): i32 => {
   t.eqI32("pointer: y in pixels", input.events[0].py, 120)
   t.eqI32("pointer: x as the cell", input.events[0].x, 300)
 
+  push(EVENT_KEY, KEY_CHAR, 99, MOD_CTRL, ACTION_PRESS, 0, 0)
+  push(EVENT_KEY, KEY_CHAR, 99, MOD_CTRL, ACTION_RELEASE, 0, 0)
+  gameReadInput(input, toF64(5040))
+  t.eqI32("ctrl-c: its press and its release", toI32(input.events.length), 2)
+  t.eqI32("ctrl-c: a key, not a quit", input.events[0].type, EVENT_KEY)
+  t.eqI32("ctrl-c: the press", input.events[0].action, ACTION_PRESS)
+  t.eqI32("ctrl-c: the release is kept", input.events[1].action, ACTION_RELEASE)
+
   push(EVENT_FOCUS, 0, 0, 0, 0, 0, 0)
   gameReadInput(input, toF64(5048))
-  t.ok("blur: the focus event arrives", input.events.length > 0)
+  t.eqI32("blur: the focus event and the letter's release", toI32(input.events.length), 2)
   t.eqBool("blur: the letter is let go", input.isDown(KEY_CHAR, 97), false)
 
   push(99, 1, 2, 3, 4, 5, 6)

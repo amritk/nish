@@ -42,8 +42,12 @@
  * step's events and its `keys` (a `KeyState`) keep which keys are held, for
  * `isDown`. A page sees every key go up, so it sends a release for every press
  * (`keyup`) and a lost focus on `blur`, which releases every held key; the
- * reader turns `KeyState`'s synthetic releases off. A pointer event's x and y
- * are set as both the event's cell (`x`, `y`) and its pixel (`px`, `py`).
+ * reader turns `KeyState`'s synthetic releases off. A page has no terminal to
+ * quit, so Ctrl-C arrives as an ordinary key press, never `EVENT_QUIT`. Nor
+ * does the reader make up auto-repeat: a page that wants it sends
+ * `ACTION_REPEAT` records itself (a `keydown` with `repeat` set, say). A
+ * pointer event's x and y are set as both the event's cell (`x`, `y`) and its
+ * pixel (`px`, `py`).
  * A record with an unknown kind is dropped, and so is a trailing part-record
  * a page pushed out of protocol.
  *
@@ -76,6 +80,17 @@
  *       if (input.events.length > 0) gamePlaySound(0);
  *       rasterRect(GAME_FRAME, gameWidth(), gameHeight(), 0, 0, 320, 180, 0x101830, 256);
  *     };
+ *
+ * **Building it.** A page's game is compiled with `--target wasm32` and
+ * linked by `scripts/build.sh` with `--profile wasm-host`, which exports the
+ * storage above for the loader's `views()`, and `--memory <MiB>`, which pins
+ * the memory so those views never go stale. The
+ * storage alone is about 2.5 MB (`GAME_FRAME` 2 MB, `GAME_SAMPLES` 384 KB,
+ * the rings 2 KB), so pin at least 4 MiB, more for what the game itself
+ * allocates. The `GAME_*` names are the page's keys and are reserved: when
+ * two modules declare storage of one name, the later module's is keyed by its
+ * symbol instead, so a program's own `GAME_FRAME` could move this module's
+ * off the key the page reads.
  *
  * The module is ordinary Nish everywhere: a native build has the same
  * storage, so a test can push records onto `GAME_INPUT` and read the frame
@@ -197,13 +212,15 @@ const gameEventOf = (): TermEvent | null => {
  * becomes a `TermEvent`, and `input.events` becomes what `input.keys.apply`
  * makes of them at `nowMs`, so `input.isDown` answers for the keys still held.
  * The page sends real key releases, so the key state's synthetic releases are
- * turned off. A trailing part-record is dropped.
+ * turned off, and Ctrl-C is an ordinary key (a page's copy), not a quit. A
+ * trailing part-record is dropped.
  *
  * @param input - the step's input, kept by the game from step to step
  * @param nowMs - the step's clock in milliseconds, for the key state
  */
 export const gameReadInput = (input: StepInput, nowMs: f64): void => {
   input.keys.releasesAreSynthetic = false
+  input.keys.quitOnCtrlC = false
   const read: TermEvent[] = []
   while (ringSize(GAME_INPUT) >= GAME_EVENT_WORDS) {
     const e = gameEventOf()
