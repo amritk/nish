@@ -393,39 +393,39 @@ spawn.join:
   %40 = select i1 %39, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
   %41 = call i8* @nish_str_concat(i8* %34, i8* %40)
   call void @nish_print(i8* %41)
-  %42 = call i8* @nish_async_spawn(i32 1, i64 64)
-  %43 = call i8* @nish_async_enter(i8* %42)
-  %44 = getelementptr inbounds i8, i8* %42, i64 32
-  %45 = bitcast i8* %44 to { i32 }*
-  %46 = getelementptr inbounds { i32 }, { i32 }* %45, i32 0, i32 0
-  store i32 0, i32* %46
-  %47 = call i1 @nap.resume(i8* %44)
-  call void @nish_async_leave(i8* %42, i8* %43)
-  br i1 %47, label %spawn.done.1, label %spawn.join.1
-
-spawn.done.1:
-  call void @nish_async_done(i8* %42)
-  br label %spawn.join.1
-
-spawn.join.1:
-  %48 = load i32, i32* %fd.addr, align 4
-  %49 = bitcast i8* %async.kids to { i32, i32 }*
-  %50 = getelementptr inbounds { i32, i32 }, { i32, i32 }* %49, i32 0, i32 0
-  store i32 0, i32* %50
-  %51 = getelementptr inbounds { i32, i32 }, { i32, i32 }* %49, i32 0, i32 1
-  store i32 %48, i32* %51
+  %42 = load i32, i32* %fd.addr, align 4
+  %43 = bitcast i8* %async.kids to { i32, i32 }*
+  %44 = getelementptr inbounds { i32, i32 }, { i32, i32 }* %43, i32 0, i32 0
+  store i32 0, i32* %44
+  %45 = getelementptr inbounds { i32, i32 }, { i32, i32 }* %43, i32 0, i32 1
+  store i32 %42, i32* %45
   br label %await.poll
 
 await.poll:
-  %52 = call i1 @quiet.resume(i8* %async.kids)
-  br i1 %52, label %await.ready, label %await.pending
+  %46 = call i1 @quiet.resume(i8* %async.kids)
+  br i1 %46, label %await.ready, label %await.pending
 
 await.pending:
   store i32 1, i32* %async.state
   br label %async.suspend
 
 await.ready:
-  %53 = call i64 @nish_async_sleep(i32 30)
+  %47 = call i8* @nish_async_spawn(i32 1, i64 64)
+  %48 = call i8* @nish_async_enter(i8* %47)
+  %49 = getelementptr inbounds i8, i8* %47, i64 32
+  %50 = bitcast i8* %49 to { i32 }*
+  %51 = getelementptr inbounds { i32 }, { i32 }* %50, i32 0, i32 0
+  store i32 0, i32* %51
+  %52 = call i1 @nap.resume(i8* %49)
+  call void @nish_async_leave(i8* %47, i8* %48)
+  br i1 %52, label %spawn.done.1, label %spawn.join.1
+
+spawn.done.1:
+  call void @nish_async_done(i8* %47)
+  br label %spawn.join.1
+
+spawn.join.1:
+  %53 = call i64 @nish_async_sleep(i32 200)
   store i64 %53, i64* %async.wait
   br label %wait.poll
 

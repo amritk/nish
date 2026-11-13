@@ -2998,11 +2998,23 @@ does and keeps no hold on `buf`, so the array is yours again once it returns.
 as a ring's `peek`, is handed over as it is. A chunked or compressed response, an `Http1TlsServer` slot, and a write still
 held back are copied as `write` copies them.
 
-Set `Http1Config.idleInput` and a slot lends its input and head buffers back
-too, whenever it has answered a request and holds no byte of the next: a server
-holding tens of thousands of keep-alive connections that each send a request
-now and then keeps those buffers only for the connections mid-request, for two
-pool operations a request. It is off by default. An `Http1Server` builds a
+A response with a `Content-Length` is finished once `write` or `sendBody` has
+taken its last byte, and one with no body (`Content-Length: 0`, a `HEAD`, a 204
+or a 304) once `respond` has queued its head: the next request on a keep-alive
+connection is answered whether or not you call `conn.end()`. A chunked body
+needs `end()`, which writes its last chunk, and so does a chunked response to
+an HTTP/1.0 client, which is sent unframed: without it the connection waits
+and the next request is never answered. Calling `end()` on any response stays
+correct; it answers 0 once the length is met and `H1_INVALID` while bytes are
+still owed.
+
+A slot lends its input and head buffers back too, whenever it has answered a
+request and holds no byte of the next: a server holding tens of thousands of
+keep-alive connections that each send a request now and then keeps those
+buffers only for the connections mid-request, for two pool operations a
+request, and an idle connection holds about 1.2 KB. That is
+`Http1Config.idleInput`, on by default; set it to `false` and each slot keeps
+its own buffers while it rests, about 1.9 KB more a connection. An `Http1Server` builds a
 slot's connection on the first accept into it and keeps it for the next, so a
 pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.

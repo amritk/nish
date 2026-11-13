@@ -1753,6 +1753,7 @@ const DECLARED = [
     ["tests/link/net_http1_server_bad_linger/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
     ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
     ["tests/link/net_http1_server_head_reuse/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_implicit_end/main.ts", "main.h tls.ll"],
     [
       "tests/link/net_http2_cleartext/main.ts",
       "http1-server.ll main.h net_tls_record_tcp_harness.ll tls-tcp.ll tls.ll",
@@ -6349,6 +6350,7 @@ const DECLARED = [
       "tests/link/net_http1_server_bad_linger/main.ts": ["main.ll"],
       "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["main.ll"],
       "tests/link/net_http1_server_head_reuse/main.ts": ["main.ll"],
+      "tests/link/net_http1_server_implicit_end/main.ts": ["main.ll"],
       "tests/link/net_serve_burst/main.ts": ["handler.ll", "serve.ll"],
       "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll"],
       "tests/link/region_sessions_soak/main.ts": ["main.ll"],
