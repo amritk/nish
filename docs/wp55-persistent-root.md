@@ -193,9 +193,9 @@ alone, which is sound because a store through a root is an escape.
 
 | Refused | Code |
 | --- | --- |
-| root storage whose class reaches a type §3.1 does not trace | new, next free in NL2xxx |
-| `export` of root storage | new |
-| root storage read or written in a parallel body, a spawned task or a region's `f` | new |
+| root storage whose class reaches a type §3.1 does not trace | NL2766 |
+| `export` of root storage | NL2767 |
+| root storage in a program that loads `nish/threads` or `nish:region` (§4.2) | NL2768 |
 | the element of root storage something other than `C \| null` for a class `C` (`C` alone, an interface, a record) | NL2686, as today |
 
 ## 6. Proof

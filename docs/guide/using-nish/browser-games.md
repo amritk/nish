@@ -115,6 +115,43 @@ export const draw = (alpha: f64, frameMs: f64): void => {
 }
 ```
 
+A game with more than a few numbers of state keeps it in objects instead:
+module storage of a class or `null` is
+[root storage](interop.md#keeping-objects-between-calls-root-storage), and
+the world in it, with every array and object it reaches, lasts from `init`
+through every `step` and `draw` while memory stays bounded:
+
+```ts nish:ok --target wasm32
+class Ball {
+  x: f64 = 0.0
+  dx: f64 = 2.0
+}
+
+class World {
+  balls: Ball[]
+  constructor() {
+    this.balls = []
+  }
+}
+
+const world = new Array<World | null>(1)
+
+export const init = (seed: i32): void => {
+  const w = new World()
+  w.balls.push(new Ball())
+  world[0] = w
+}
+
+export const step = (nowMs: f64): void => {
+  const w = world[0]
+  if (w !== null) {
+    for (const b of w.balls) {
+      b.x = b.x + b.dx
+    }
+  }
+}
+```
+
 The sections below take each part in turn.
 
 ## Drawing: `nish/raster`

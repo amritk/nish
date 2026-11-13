@@ -4,6 +4,7 @@
 //
 //   node tests/persist/drive.mjs world    <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs director <loader.mjs> <module.wasm> <steps>
+//   node tests/persist/drive.mjs chain    <loader.mjs> <module.wasm> <steps>
 //
 // The kept heap is the arena's offset after a call, which only the runtime's
 // `nish_arena_mark` answers; the loader keeps the instance to itself, so the
@@ -14,8 +15,8 @@ import { pathToFileURL } from "node:url";
 
 const [mode, loaderPath, wasmPath, stepsArg] = process.argv.slice(2);
 const steps = Number(stepsArg);
-if (!["world", "director"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
-  console.error("usage: drive.mjs world|director <loader.mjs> <module.wasm> <steps>");
+if (!["world", "director", "chain"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
+  console.error("usage: drive.mjs world|director|chain <loader.mjs> <module.wasm> <steps>");
   process.exit(2);
 }
 
@@ -180,8 +181,37 @@ const runDirector = () => {
   console.log(`persist director: ${steps} steps (${counts}), ${frames.size} distinct frames; ${w.report()}`);
 };
 
+/**
+ * tests/cases/root_storage_page.ts, one node pushed a call: a list as long as
+ * the run, which every compaction traces end to end. A trace that recursed
+ * would run out of stack long before the end; this one keeps a work list.
+ */
+const runChain = () => {
+  let sum = 0;
+  for (let t = 1; t <= steps; t++) {
+    mod.push(t % 100);
+    sum += t % 100;
+    if (t % 9973 === 0 || t === steps) {
+      const got = mod.total();
+      if (got !== sum) {
+        fail(`total() after ${t} pushes is ${got}, expected ${sum}`);
+      }
+    }
+  }
+  // A node is 8 bytes on wasm32 (an i32 and a pointer), so the list is
+  // 8 * steps; between compactions the kept region grows to twice that and a
+  // page.
+  const live = 8 * steps;
+  if (kept() > 2 * live + 2 * PAGE) {
+    fail(`kept heap ${kept()} for a ${live}-byte list`);
+  }
+  console.log(`persist chain: ${steps} steps, total() ${sum}; memory ${mod.memory.buffer.byteLength} bytes, kept heap ${kept()}`);
+};
+
 if (mode === "world") {
   runWorld();
-} else {
+} else if (mode === "director") {
   runDirector();
+} else {
+  runChain();
 }
