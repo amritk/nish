@@ -71,8 +71,8 @@ The shape of the language, as a style guide:
 - **Declarations.** A module holds only function, `class`, `interface`, `type`
   and `import` declarations at the top level, plus module `const`s. No
   top-level `let`, no `namespace`. A numeric `enum` names a closed family of
-  kinds (`NodeKind`); bit flags stay `i32` module constants. **A function is an arrow bound to
-  a module-level `const`** — `const add = (a: i32, b: i32): i32 => a + b`, with
+  kinds (`NodeKind`); bit flags stay `i32` module constants. **A function is
+  an arrow bound to a module-level `const`** — `const add = (a: i32, b: i32): i32 => a + b`, with
   a concise body where it has one `return`. The `function` keyword still
   compiles and is the legacy spelling, so convert one when you open its file
   and write new code as an arrow. No function expressions, nested functions,

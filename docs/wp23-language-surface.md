@@ -65,7 +65,8 @@ went this way:
 Auto-numbering is TypeScript's. The record here once said an enum cannot be
 exported. That changed in 0.14.0: an imported enum is the exporter's type, bound
 before any signature is collected. LANGUAGE.md "Enums" has the rules. `src/`
-does not use enums, because Nish-0 excludes them
+uses numeric enums since Nish-0 admitted them: the AST node kinds are
+`NodeKind` in `src/nodes.ts`, and bit flags stay `i32`
 ([`.claude/selfhost.md`](../.claude/selfhost.md)).
 
 ## 4. Module-level mutable state — **decided: no**
@@ -302,8 +303,8 @@ what the chain stands for. The rule and its cases are in
 
 ## 11. What this note does not decide
 
-- **`src/` adopting §2, §3 or §5.** Nish-0 excludes aliases, enums and generics,
-  and a construct enters the language before it enters `src/` (the rolling
-  freeze, [`.claude/selfhost.md`](../.claude/selfhost.md)).
+- **`src/` adopting §2 or §5.** Nish-0 excludes aliases and generics (it has
+  admitted §3's numeric enums), and a construct enters the language before it
+  enters `src/` (the rolling freeze, [`.claude/selfhost.md`](../.claude/selfhost.md)).
 - **Diagnostic codes.** These are allocated in `src/codes.ts` when a rule
   lands, never in a design note.
