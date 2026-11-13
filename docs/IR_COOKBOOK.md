@@ -11689,7 +11689,7 @@ copies it, so nothing may free it while the task runs: `start` feeds a task a
 shared argument, and it and every caller release no arena scope over what
 they allocated (no `nish_arena` mark and reset around the call), so `tally`
 lives in `main`'s arena until the program ends. What the task allocates goes
-into its own region, freed by `nish_async_done` when it finishes; the
+into its own region, emptied by `nish_async_done` when it finishes; the
 checker refuses a store of that memory into `tally` (NL2609) and growth of a
 shared array, `Map` or `Set` (NL2615), so `count` writes only numbers
 through the pointer (`tests/cases/async_spawn_shared`,
@@ -14967,6 +14967,121 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-owned-string -->
 
+### `cErrno`: errno after a foreign call
+
+In a program that names `cErrno` (WP27 S5, `nish:unsafe`), every call to a
+`declare function` is bracketed by errno. Before it, `call i32*
+@nish_errno_ptr()` answers errno's address on this thread (the runtime's
+`return &errno;`, so each libc spells it its own way) and `store i32 0` clears
+it; after it, the first thing is a `load` through the same pointer and a
+`store` into `@nish_errno_slot`, a runtime global that is
+`thread_local(initialexec)` under `--threads`. Both come after the NUL check of
+a `string` argument and before anything done with the result, so a copy or an
+allocation that moves errno cannot reach the saved value. `cErrno()` itself is
+one `load i32` of the slot. `@parse` gets no `readonly`, as any caller of C
+does; a function whose only effect is `cErrno()` is `readonly`, never
+`readnone`, so it stays on its side of a foreign call. A program that never
+names `cErrno` emits none of this.
+
+<!-- cookbook:begin decl-ffi-errno -->
+```ts
+import { cErrno } from "nish:unsafe"
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10)
+  return cErrno() === 0 ? n : -1
+}
+
+export const main = (): i32 => (parse("99999999999999999999") === -1 ? 0 : 1)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [87 x i8] } { i64 86, [87 x i8] c"`strtol`: argument 1 (s) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@nish_errno_slot = external global i32, align 4
+@.str.2 = private unnamed_addr constant { i64, [21 x i8] } { i64 20, [21 x i8] c"99999999999999999999\00" }, align 8
+
+declare i64 @strtol(i8*, i8*, i32)
+declare void @nish_free_arena() #1
+declare nonnull i32* @nish_errno_ptr() #1
+declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noundef i64 @parse(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+entry:
+  %n.addr = alloca i64, align 8
+  %0 = call i64 @nish_str_index_of(i8* %s, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %1 = icmp sge i64 %0, 0
+  br i1 %1, label %ffi.nul, label %ffi.ok
+
+ffi.nul:
+  call void @nish_panic(i8* bitcast ({ i64, [87 x i8] }* @.str.1 to i8*))
+  unreachable
+
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %cond.true, label %cond.false
+
+cond.true:
+  %8 = load i64, i64* %n.addr, align 8
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %9 = phi i64 [ %8, %cond.true ], [ -1, %cond.false ]
+  ret i64 %9
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %0 = call i64 @parse(i8* bitcast ({ i64, [21 x i8] }* @.str.2 to i8*))
+  %1 = icmp eq i64 %0, -1
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  ret i32 %2
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-errno -->
+
 ### `u8[]`: a buffer and its count
 
 A `u8[]` or `readonly u8[]` argument to a `declare function` (WP53 B1.2) is
@@ -15350,6 +15465,149 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-struct -->
+
+### `readStruct`: a C-owned struct, copied out
+
+`readStruct(p)` from `nish:unsafe` (WP27 S4.2) is the way back from a struct
+C owns: `localeconv()` answers the address of a `struct lconv` it overwrites
+at the next call. The layout comes from context, here `current`'s return type.
+The call lowers to the allocation `new` makes in the arena,
+`nish_alloc_struct` of the struct's size, and one `llvm.memcpy` of that many
+bytes from C's address, padding included. The destination is the arena's
+8-byte-aligned block; the source is read at `align 1`, because C promised
+the struct and not its address's alignment. After the copy nothing of the
+result points into C's memory but the `CPtr` fields themselves, which are C's
+pointers still.
+
+Before the allocation the pointer is tested for `NULL`: a `declare function`
+declared to answer `CPtr` may still answer one, so `icmp eq` branches to an
+`ffi-null` panic that names the layout. There is no size test: the compiler
+cannot know how many bytes C's pointer covers. The copy is
+a fresh allocation of `current`, so returning it keeps `current`'s arena
+alive for the caller, as any returned `new` does.
+
+<!-- cookbook:begin decl-ffi-read-struct -->
+```ts
+import { readStruct } from "nish:unsafe"
+
+declare class Lconv {
+  decimalPoint: CPtr
+  thousandsSep: CPtr
+}
+declare function localeconv(): CPtr
+
+const current = (): Lconv => readStruct(localeconv())
+
+export const main = (): i32 => {
+  const lc = current()
+  return lc.decimalPoint === lc.thousandsSep ? 1 : 0
+}
+```
+
+```llvm
+%struct.Lconv = type { i8*, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"`readStruct` read a NULL pointer into a `Lconv`\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare i8* @localeconv()
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Lconv* @current() #0 {
+entry:
+  %0 = call i8* @localeconv()
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %0, i64 16, i1 false)
+  %3 = bitcast i8* %2 to %struct.Lconv*
+  ret %struct.Lconv* %3
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %lc.addr = alloca %struct.Lconv*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.Lconv* @current()
+  store %struct.Lconv* %0, %struct.Lconv** %lc.addr, align 8
+  %1 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %2 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %1, i32 0, i32 0
+  %3 = load i8*, i8** %2, align 8
+  %4 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %5 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %4, i32 0, i32 1
+  %6 = load i8*, i8** %5, align 8
+  %7 = icmp eq i8* %3, %6
+  br i1 %7, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %8
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-read-struct -->
 
 ### Numeric `enum`
 
@@ -31435,6 +31693,7 @@ declare noundef i32 @nish_async_cancel_after(i64 noundef, i32 noundef) #3
 declare nonnull i8* @nish_async_copy_str(i8* nonnull) #3
 declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #3
 declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #3
+declare nonnull i32* @nish_errno_ptr() #2
 declare noundef i64 @nish_arena_used() #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2

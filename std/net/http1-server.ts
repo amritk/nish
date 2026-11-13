@@ -132,7 +132,7 @@ import {
   HttpCompressor,
   httpAcceptEncoding,
 } from "nish/net/http-compress"
-import { netClose, netMss, netRead, netWrite, netWrite2, tcpAccept } from "nish:net"
+import { netClose, netMss, netRead, netShutdown, netWrite, netWrite2, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
   HTTP1_CHUNKED,
@@ -171,6 +171,7 @@ import { TlsServerConfig } from "nish/net/tls"
 import { HTTP_DATE_LAST_SECOND, HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields"
 import { TLS_RECORD_DONE, TLS_RECORD_STATE_OPEN, TLS_RECORD_WANT_WRITE } from "nish/net/tls/record-server"
 import { TlsTcpServer } from "nish/net/tls-tcp"
+import { any, loadU8x16, ne } from "nish:simd"
 
 /** `next`: nothing to hand over until more input arrives, the output drains, or the program answers. */
 export const H1_NEED_MORE: i32 = 0
@@ -240,10 +241,152 @@ const H1_S_CLOSING: i32 = 2
 /** `H1_ERROR` was answered; sending what is left, then done. */
 const H1_S_FAILED: i32 = 3
 
+/** `netShutdown`'s write side, for the lingering close. */
+const H1_SHUT_WRITE: i32 = 1
+
 // Where the current exchange's response stands.
 const H1_R_NONE: i32 = 0
 const H1_R_BODY: i32 = 1
 const H1_R_DONE: i32 = 2
+
+/**
+ * The longest final head `respond` keeps to write again (`Http1Connection`'s
+ * `headBytes`): one buffer of this size per connection, made at its first
+ * kept head. A longer head is written fresh every time.
+ */
+const H1_HEAD_KEEP: i32 = 1024
+
+/** The most program fields a kept head carries: a head with more is written fresh every time. */
+const H1_HEAD_FIELDS: i32 = 16
+
+/**
+ * How many responses in a row may miss the kept head before `respond` stops
+ * comparing and keeping until the `Date` turns: past it, a head is written as
+ * if nothing were kept, so heads that never repeat cost no more than that.
+ */
+const H1_HEAD_MISSES: i32 = 4
+
+// `respond`'s `Connection` field, as the kept head records it.
+const H1_CONN_NONE: i32 = 0
+const H1_CONN_CLOSE: i32 = 1
+const H1_CONN_KEEP_ALIVE: i32 = 2
+
+/** Whether `kept[at ..)` begins with all of `bytes`, a byte at a time: the path for a range a word load cannot prove inside its array. */
+const http1ServerSameByByte = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  for (let k: i32 = 0; k < toI32(bytes.length); k += 1) {
+    if (kept[at + k] !== bytes[k]) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Whether `kept[at ..)` begins with all of `bytes`, eight to fifteen of them:
+ * two eight-byte loads a side, the second overlapping the first. One range
+ * check comes first and each load's ors are grouped in pairs, as `getU64BE`'s
+ * are, so LLVM folds every eight loads into one.
+ */
+const http1ServerSame8 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  const n: i32 = toI32(bytes.length)
+  const e: i32 = at + n - 8
+  const f: i32 = n - 8
+  if (
+    !(at >= 0 && at < 2147483640 && at + 8 <= toI32(kept.length)) ||
+    !(e >= 0 && e < 2147483640 && e + 8 <= toI32(kept.length)) ||
+    !(toI32(bytes.length) >= 8 && f >= 0 && f < 2147483640 && f + 8 <= toI32(bytes.length))
+  ) {
+    return http1ServerSameByByte(kept, at, bytes)
+  }
+  return (
+    ((toU64(kept[at]) << toU64(56)) |
+      (toU64(kept[at + 1]) << toU64(48)) |
+      ((toU64(kept[at + 2]) << toU64(40)) | (toU64(kept[at + 3]) << toU64(32))) |
+      ((toU64(kept[at + 4]) << toU64(24)) |
+        (toU64(kept[at + 5]) << toU64(16)) |
+        ((toU64(kept[at + 6]) << toU64(8)) | toU64(kept[at + 7])))) ===
+      ((toU64(bytes[0]) << toU64(56)) |
+        (toU64(bytes[1]) << toU64(48)) |
+        ((toU64(bytes[2]) << toU64(40)) | (toU64(bytes[3]) << toU64(32))) |
+        ((toU64(bytes[4]) << toU64(24)) |
+          (toU64(bytes[5]) << toU64(16)) |
+          ((toU64(bytes[6]) << toU64(8)) | toU64(bytes[7])))) &&
+    ((toU64(kept[e]) << toU64(56)) |
+      (toU64(kept[e + 1]) << toU64(48)) |
+      ((toU64(kept[e + 2]) << toU64(40)) | (toU64(kept[e + 3]) << toU64(32))) |
+      ((toU64(kept[e + 4]) << toU64(24)) |
+        (toU64(kept[e + 5]) << toU64(16)) |
+        ((toU64(kept[e + 6]) << toU64(8)) | toU64(kept[e + 7])))) ===
+      ((toU64(bytes[f]) << toU64(56)) |
+        (toU64(bytes[f + 1]) << toU64(48)) |
+        ((toU64(bytes[f + 2]) << toU64(40)) | (toU64(bytes[f + 3]) << toU64(32))) |
+        ((toU64(bytes[f + 4]) << toU64(24)) |
+          (toU64(bytes[f + 5]) << toU64(16)) |
+          ((toU64(bytes[f + 6]) << toU64(8)) | toU64(bytes[f + 7]))))
+  )
+}
+
+/** `http1ServerSame8` for four to seven bytes, with four-byte loads. */
+const http1ServerSame4 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  const n: i32 = toI32(bytes.length)
+  const e: i32 = at + n - 4
+  const f: i32 = n - 4
+  if (
+    !(at >= 0 && at < 2147483640 && at + 4 <= toI32(kept.length)) ||
+    !(e >= 0 && e < 2147483640 && e + 4 <= toI32(kept.length)) ||
+    !(toI32(bytes.length) >= 4 && f >= 0 && f < 2147483640 && f + 4 <= toI32(bytes.length))
+  ) {
+    return http1ServerSameByByte(kept, at, bytes)
+  }
+  return (
+    ((toU32(kept[at]) << 24) |
+      (toU32(kept[at + 1]) << 16) |
+      ((toU32(kept[at + 2]) << 8) | toU32(kept[at + 3]))) ===
+      ((toU32(bytes[0]) << 24) | (toU32(bytes[1]) << 16) | ((toU32(bytes[2]) << 8) | toU32(bytes[3]))) &&
+    ((toU32(kept[e]) << 24) |
+      (toU32(kept[e + 1]) << 16) |
+      ((toU32(kept[e + 2]) << 8) | toU32(kept[e + 3]))) ===
+      ((toU32(bytes[f]) << 24) |
+        (toU32(bytes[f + 1]) << 16) |
+        ((toU32(bytes[f + 2]) << 8) | toU32(bytes[f + 3])))
+  )
+}
+
+/**
+ * Where `kept[at ..)` holds `bytes` and then the byte `after`: the offset one
+ * past the byte that follows `after` (the space of `: `, the LF of CR LF), or
+ * -1 when it does not, or when `after` would be at or past `limit`. Sixteen
+ * bytes at a time with a last load that overlaps the one before; a name or
+ * value under sixteen bytes is two overlapping eight- or four-byte loads, and
+ * one under four a byte at a time. A kept value holds no CR (it is field
+ * text), so a value that matches is the whole kept value; a name is held to
+ * the kept name's length by `sameHead`, since a kept value may hold a colon.
+ */
+const http1ServerKept = (kept: u8[], at: i32, limit: i32, bytes: u8[], after: i32): i32 => {
+  const n: i32 = toI32(bytes.length)
+  if (at < 0 || limit > toI32(kept.length) || n > limit - at - 2 || toI32(kept[at + n]) !== after) {
+    return -1
+  }
+  if (n >= 16) {
+    let k: i32 = 0
+    while (k < n - 16) {
+      if (any(ne(loadU8x16(kept, at + k), loadU8x16(bytes, k)))) {
+        return -1
+      }
+      k += 16
+    }
+    return any(ne(loadU8x16(kept, at + n - 16), loadU8x16(bytes, n - 16))) ? -1 : at + n + 2
+  }
+  let same: boolean = false
+  if (n >= 8) {
+    same = http1ServerSame8(kept, at, bytes)
+  } else if (n >= 4) {
+    same = http1ServerSame4(kept, at, bytes)
+  } else {
+    same = http1ServerSameByByte(kept, at, bytes)
+  }
+  return same ? at + n + 2 : -1
+}
 
 /** Panics unless `value` is in `low .. high`: a cap no connection could work with is the program's mistake. */
 const http1ServerCheckCap = (name: string, value: i32, low: i32, high: i32): void => {
@@ -430,6 +573,20 @@ export class Http1Config {
    */
   headTimeout: i32 = 30000
   /**
+   * Milliseconds `Http1Server` keeps reading, and throwing away, what a
+   * refused client still sends after its error response, before `expire`
+   * closes the slot (RFC 9112 §9.6). The server shuts its write side and
+   * drains rather than closing at once: a close with unread bytes resets the
+   * connection, and the reset can destroy the response before the client
+   * reads it.
+   */
+  lingerTimeout: i32 = 2000
+  /**
+   * The most bytes a refused slot drains before it is closed whatever is
+   * left (RFC 9112 §9.6); 0 closes at once, without a lingering close.
+   */
+  lingerBytes: i32 = 65536
+  /**
    * Lend a slot's input and head buffers back to the server between
    * exchanges: once a response is sent and no byte of the next request has
    * come, the slot gives both to pools the server's slots share, and takes
@@ -596,6 +753,8 @@ export class Http1Connection {
   lastActive: i64 = 0
   /** When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. */
   headSince: i64 = 0
+  /** When the lingering close began, in `monotonicNanos`; meaningful while `lingering`. */
+  lingerSince: i64 = 0
   private state: i32 = 0
   private response: i32 = 0
   /**
@@ -659,6 +818,8 @@ export class Http1Connection {
   mss: i32 = 0
   /** The MSS `Http1Server.accept` read from this connection's socket (`netMss`), or 0 when it reports none. */
   socketMss: i32 = 0
+  /** How many bytes the lingering close has drained, or -1 while the connection does not linger. */
+  private lingered: i32 = -1
   /**
    * The plain TCP socket the carrier sends `output` on, which `sendBody`
    * writes to directly: `Http1Server.accept` sets it, and `restart` and
@@ -680,6 +841,51 @@ export class Http1Connection {
   pong: u8[]
   /** No fields, for the responses the connection writes itself: made once. */
   private noFields: u8[][]
+  /**
+   * The last final head `respond` wrote, `headBytes[0 .. headLength)`, kept
+   * so that a response asking for the same head is a copy of it: the same
+   * status, the same field names and values byte for byte, the same framing
+   * and `Connection`, and the same `date` not reformatted since (`formats`).
+   * Empty until the first head that is kept (one of at most `H1_HEAD_KEEP`
+   * bytes, after a head of the same shape); then made once and kept for the
+   * slot's later peers, since what it holds is a function of those inputs
+   * alone.
+   */
+  private headBytes: u8[]
+  /** How many bytes of `headBytes` the kept head is; 0 while none is kept. */
+  private headLength: i32 = 0
+  /** Where the kept head's first field line starts, past the status line. */
+  private headFieldsAt: i32 = 0
+  /** The kept head's status. */
+  private headStatus: i32 = 0
+  /** The kept head's framing: a length, `HTTP1_CHUNKED` or `HTTP1_NO_BODY`. */
+  private headFraming: i32 = 0
+  /** The kept head's `Connection` field: `H1_CONN_NONE`, `H1_CONN_CLOSE` or `H1_CONN_KEEP_ALIVE`. */
+  private headConnection: i32 = 0
+  /** How many of the program's fields the kept head carries. */
+  private headFields: i32 = 0
+  /**
+   * The length of each of the kept head's field names and values, in order,
+   * name then value: `2 * H1_HEAD_FIELDS` of them, made with `headBytes`.
+   */
+  private headLengths: i32[]
+  /** The `HttpDate` the kept head's `Date` came from. */
+  private headDate: HttpDate
+  /** `headDate.formats()` when the kept head was written: a later format is a new second. */
+  private headFormats: i64 = 0
+  /** How many responses in a row have missed the kept head, up to `H1_HEAD_MISSES`. */
+  private headMisses: i32 = 0
+  /**
+   * `date.formats()` when the misses reached `H1_HEAD_MISSES`: while the date
+   * still has that count, `respond` neither compares nor keeps. -1 while on.
+   */
+  private headOff: i64 = -1
+  /**
+   * How many heads `respond` has copied from the kept one rather than written.
+   *
+   * @internal Read by `tests/link/net_http1_server_head_reuse` to tell a copied head from a written one.
+   */
+  headCopies: i64 = 0
 
   /**
    * A connection under `config`. A cap outside what the connection can work with panics.
@@ -700,6 +906,8 @@ export class Http1Connection {
     http1ServerCheckCap("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER)
     http1ServerCheckCap("idleTimeout", config.idleTimeout, one, big)
     http1ServerCheckCap("headTimeout", config.headTimeout, one, big)
+    http1ServerCheckCap("lingerTimeout", config.lingerTimeout, one, big)
+    http1ServerCheckCap("lingerBytes", config.lingerBytes, H1_ZERO, big)
     // The buffers the peer's bytes fill grow by doubling and stop at 2^30
     // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
     // buffer could need more is refused here rather than reached by a peer:
@@ -727,6 +935,9 @@ export class Http1Connection {
     this.data = this.noOutput
     this.pong = this.noOutput
     this.noFields = []
+    this.headBytes = this.noOutput
+    this.headDate = this.date
+    this.headLengths = []
     // A line must fit whole before the parser can read it, so the buffer
     // holds the longest request line or field line however small a chunk is.
     let limit: i32 = config.chunkSize
@@ -769,6 +980,14 @@ export class Http1Connection {
     this.inputEnded = false
     this.headTimed = false
     this.headSince = 0
+    // A slot's next connection starts with no kept head, and its first
+    // head is not taken for a repeat of the last connection's.
+    this.headLength = 0
+    this.headStatus = 0
+    this.headMisses = 0
+    this.headOff = -1
+    this.lingerSince = 0
+    this.lingered = -1
     this.mss = 0
     this.socketMss = 0
     this.fd = -1
@@ -900,6 +1119,7 @@ export class Http1Connection {
   /** The socket failed: nothing more is sent or read, and the connection is done. */
   abort(): void {
     this.state = H1_S_FAILED
+    this.lingered = -1
     this.outputStart = 0
     this.outputEnd = 0
     this.pongPending = false
@@ -979,7 +1199,10 @@ export class Http1Connection {
 
   /** The room at the end of the output, once what was sent is moved out of the way. */
   private room(): i32 {
-    this.acquire()
+    // Tested here, so that the usual case, an output already held, is no call.
+    if (this.outputCap === 0) {
+      this.acquire()
+    }
     const output: u8[] = this.output
     const live: i32 = this.outputEnd - this.outputStart
     if (this.outputStart > 0) {
@@ -1259,11 +1482,6 @@ export class Http1Connection {
     if (status < 100 || status > 599 || status === 101) {
       return H1_INVALID
     }
-    for (const name of names) {
-      if (http1ServerReserved(name)) {
-        return H1_INVALID
-      }
-    }
     const interim: boolean = status < 200
     const empty: boolean = interim || status === 204 || status === 304 || this.parser.methodIs("HEAD")
     if (!empty && bodyLength === HTTP1_NO_BODY) {
@@ -1277,32 +1495,59 @@ export class Http1Connection {
       close = true
     }
     let connection: string = ""
+    let code: i32 = H1_CONN_NONE
     if (!interim && close) {
       connection = "close"
+      code = H1_CONN_CLOSE
     } else if (!interim && this.parser.minor === 0) {
       connection = "keep-alive"
+      code = H1_CONN_KEEP_ALIVE
+    }
+    // Asked first, so that a second that has turned is a new head.
+    const date: u8[] = this.date.current()
+    // Off for the rest of the second once heads stop repeating, so that a
+    // program whose heads differ pays this test and no more.
+    if (!interim && this.date.formats() !== this.headOff) {
+      if (this.sameHead(status, names, values, framing, code)) {
+        if (this.headLength <= this.bodyRoom()) {
+          // `bodyRoom` stops short of the output's end, so the copy fits.
+          copyBytes(this.output, this.outputEnd, this.headBytes, H1_ZERO, this.headLength)
+          this.outputEnd += this.headLength
+          this.headMisses = 0
+          this.headCopies += 1
+          return this.begin(close, framing, empty)
+        }
+      }
+    }
+    const count: i32 = toI32(names.length)
+    for (let k: i32 = 0; k < count; k++) {
+      if (http1ServerReserved(names[k])) {
+        return H1_INVALID
+      }
     }
     const room: i32 = this.bodyRoom()
+    const start: i32 = this.outputEnd
+    const reason: string = http1ServerReason(status)
     const end: i32 = http1WriteResponseHead(
       this.output,
-      this.outputEnd,
+      start,
       status,
-      http1ServerReason(status),
+      reason,
       names,
       values,
       framing,
       connection,
-      this.date.current()
+      date
     )
     if (end === HTTP1_REFUSED) {
       return H1_INVALID
     }
-    if (end < 0 || end - this.outputEnd > room) {
+    if (end < 0 || end - start > room) {
       // The head was not written, or ate into the reserve: take it back.
-      if (end - this.outputEnd > this.config.outputSize - H1_CONTROL_RESERVE) {
+      if (end - start > this.config.outputSize - H1_CONTROL_RESERVE) {
         return H1_INVALID
       }
-      if (this.outputEnd === 0) {
+      if (start === 0) {
         return H1_INVALID
       }
       this.writeHeld = true
@@ -1312,12 +1557,123 @@ export class Http1Connection {
     if (interim) {
       return 0
     }
+    if (this.date.formats() !== this.headOff) {
+      // A head written here is a miss: the kept one did not match.
+      this.headMisses += 1
+      if (this.headMisses < H1_HEAD_MISSES) {
+        this.keepHead(start, end, status, reason, names, values, framing, code)
+      } else {
+        this.headMisses = 0
+        this.headOff = this.date.formats()
+      }
+    }
+    return this.begin(close, framing, empty)
+  }
+
+  /** The final response's head is queued: the exchange now owes its body. Answers 0. */
+  private begin(close: boolean, framing: i32, empty: boolean): i32 {
     this.closeAfter = close
     this.response = H1_R_BODY
     this.responseFraming = framing
     this.responseLeft = framing >= 0 ? framing : 0
     this.responseEmpty = empty
     return 0
+  }
+
+  /**
+   * Whether the kept head is the one `respond` would write now: the same
+   * status, framing and `Connection`, the same `date` not reformatted since,
+   * and the program's fields the same in number and, one by one, byte for
+   * byte. Its cost is a compare of the fields' bytes, which stops at the
+   * first that differs.
+   */
+  private sameHead(status: i32, names: u8[][], values: u8[][], framing: i32, connection: i32): boolean {
+    const count: i32 = toI32(names.length)
+    if (
+      this.headLength === 0 ||
+      status !== this.headStatus ||
+      framing !== this.headFraming ||
+      connection !== this.headConnection ||
+      count !== this.headFields ||
+      toI32(values.length) !== count ||
+      this.date !== this.headDate ||
+      this.date.formats() !== this.headFormats
+    ) {
+      return false
+    }
+    const kept: u8[] = this.headBytes
+    const limit: i32 = this.headLength
+    let at: i32 = this.headFieldsAt
+    const lengths: i32[] = this.headLengths
+    // `count` is both arrays' length; testing each proves every access.
+    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length) && at >= 0; i += 1) {
+      // Both lengths, so that a value cannot match the kept bytes past its
+      // own field and pass for the kept head without its text checks.
+      const name: u8[] = names[i]
+      const value: u8[] = values[i]
+      if (toI32(name.length) !== lengths[2 * i] || toI32(value.length) !== lengths[2 * i + 1]) {
+        return false
+      }
+      at = http1ServerKept(kept, at, limit, name, 58)
+      at = http1ServerKept(kept, at, limit, value, 13)
+    }
+    return at >= 0
+  }
+
+  /**
+   * Records the final head just written at `output[start .. end)`, with what
+   * it was written from, for `sameHead`. Its bytes are kept only when the
+   * head before it had the same status, `Connection` and number of fields,
+   * so that a program whose every head differs in those pays a few stores
+   * per response and no copy; a head longer than `H1_HEAD_KEEP`, or with
+   * more than `H1_HEAD_FIELDS` fields, is never kept. The framing is left
+   * out of that test (`sameHead` still compares it): a body length that
+   * varies would otherwise make the buffer's allocation wait for two equal
+   * lengths in a row among the few heads kept each second, a moment set by
+   * the clock rather than the program. The buffer is made at the first head
+   * that is kept, so a connection whose heads never repeat their shape holds
+   * none. `respond` stops calling it, and `sameHead`, for the
+   * rest of the second once `H1_HEAD_MISSES` heads in a row are written.
+   */
+  private keepHead(
+    start: i32,
+    end: i32,
+    status: i32,
+    reason: string,
+    names: u8[][],
+    values: u8[][],
+    framing: i32,
+    connection: i32
+  ): void {
+    const n: i32 = end - start
+    const fields: i32 = toI32(names.length)
+    const again: boolean =
+      status === this.headStatus && connection === this.headConnection && fields === this.headFields
+    this.headStatus = status
+    this.headFraming = framing
+    this.headConnection = connection
+    this.headFields = fields
+    this.headLength = 0
+    if (n > H1_HEAD_KEEP || fields > H1_HEAD_FIELDS) {
+      return
+    }
+    if (!again) {
+      return
+    }
+    if (toI32(this.headBytes.length) < H1_HEAD_KEEP) {
+      this.headBytes = new Array<u8>(H1_HEAD_KEEP)
+      this.headLengths = new Array<i32>(2 * H1_HEAD_FIELDS)
+    }
+    for (let i: i32 = 0; i < fields && i < toI32(values.length); i += 1) {
+      this.headLengths[2 * i] = toI32(names[i].length)
+      this.headLengths[2 * i + 1] = toI32(values[i].length)
+    }
+    copyBytes(this.headBytes, H1_ZERO, this.output, start, n)
+    // The field lines start past "HTTP/1.1 NNN " reason CRLF.
+    this.headFieldsAt = 15 + toI32(reason.length)
+    this.headLength = n
+    this.headDate = this.date
+    this.headFormats = this.date.formats()
   }
 
   /**
@@ -1804,12 +2160,66 @@ export class Http1Connection {
   }
 
   /**
-   * Whether `expire` closes the slot at `now`: idle, or a head past its deadline.
+   * Starts the lingering close at `now` (`monotonicNanos`) when the
+   * connection refused its peer (`H1_ERROR`) on a socket that still reads,
+   * the refusal is sent, and the peer has not ended its stream: the carrier
+   * then shuts its write side and drains rather than closing.
+   *
+   * @param now the current time in `monotonicNanos`, which `lingerTimeout` counts from
+   * @returns true when the lingering close began here; false when the connection should simply be closed
+   * @internal Called by `Http1Server.flush` in this module once a refused slot is done.
+   */
+  lingerStart(now: i64): boolean {
+    if (
+      this.lingered >= 0 ||
+      this.state !== H1_S_FAILED ||
+      this.fd < 0 ||
+      this.inputEnded ||
+      this.config.lingerBytes <= 0 ||
+      !this.isDone()
+    ) {
+      return false
+    }
+    this.lingered = 0
+    this.lingerSince = now
+    return true
+  }
+
+  /**
+   * Whether the connection is in its lingering close: its refusal is sent and
+   * its carrier drains what the peer still sends.
+   *
+   * @returns true from `lingerStart` until the connection is restarted or aborted
+   */
+  lingering(): boolean {
+    return this.lingered >= 0
+  }
+
+  /**
+   * Counts `n` more bytes drained in the lingering close.
+   *
+   * @param n how many bytes the carrier just read and threw away
+   * @returns true while the drain stays under `lingerBytes`; false once the slot should be closed
+   * @internal Called by `Http1Server` in this module as it drains a refused slot.
+   */
+  drained(n: i32): boolean {
+    this.lingered = this.lingered + n
+    return this.lingered < this.config.lingerBytes
+  }
+
+  /** Whether the lingering close has lasted longer than `lingerTimeout` at `now` (`monotonicNanos`). */
+  private lingerLate(now: i64): boolean {
+    return this.lingered >= 0 && now - this.lingerSince > toI64(this.config.lingerTimeout) * toI64(1000000)
+  }
+
+  /**
+   * Whether `expire` closes the slot at `now`: idle, a head past its
+   * deadline, or a lingering close past `lingerTimeout`.
    *
    * @internal Called by `Http1Server.expire` and `Http1TlsServer.expire` in this module to pick the slots to close.
    */
   expired(now: i64): boolean {
-    return this.idle(now) || this.headLate(now)
+    return this.idle(now) || this.headLate(now) || this.lingerLate(now)
   }
 
   /**
@@ -1834,7 +2244,12 @@ export class Http1Connection {
       start = this.lastActive
     }
     const head: i64 = start + toI64(this.config.headTimeout) * toI64(1000000)
-    return head < idle ? head : idle
+    const sooner: i64 = head < idle ? head : idle
+    if (this.lingered >= 0) {
+      const linger: i64 = this.lingerSince + toI64(this.config.lingerTimeout) * toI64(1000000)
+      return linger < sooner ? linger : sooner
+    }
+    return sooner
   }
 }
 
@@ -2127,6 +2542,10 @@ export class Http1Server {
       return H1_ERROR
     }
     const conn: Http1Connection = this.connections[slot]
+    if (conn.lingering()) {
+      // Its `H1_ERROR` was answered before the lingering close began.
+      return H1_NEED_MORE
+    }
     if (conn.writeHeld) {
       this.send(slot)
     }
@@ -2140,13 +2559,54 @@ export class Http1Server {
    * write is held back (its `H1_WRITE` comes from `next` once the socket is
    * writable, even when this send emptied the output). It ends
    * the serve call, so a response written after it reads the clock anew.
+   * Once a refusal (`H1_ERROR`) is sent the slot lingers: its write side is
+   * shut and what the client still sends is drained, answering
+   * `H1_WANT_READ` until the client's end of stream, `lingerBytes`, or
+   * `expire` past `lingerTimeout`; `next` answers `H1_NEED_MORE` meanwhile.
    *
    * @param slot the slot `accept` answered
    * @returns the `H1_WANT_` bits to arm the slot with, or `H1_DONE` when the program should `close` it
    */
   flush(slot: i32): i32 {
     this.date.unhold()
-    return this.settle(slot)
+    const wants: i32 = this.settle(slot)
+    if (wants !== H1_DONE || !this.holds(slot)) {
+      return wants
+    }
+    // A refusal is sent: shut the write side and drain what the client still
+    // sends (RFC 9112 §9.6), for `lingerTimeout` and `lingerBytes` at most.
+    // Closed with those bytes unread, the socket would answer them with a
+    // reset that can destroy the response before the client reads it (H1-2).
+    const now: i64 = monotonicNanos()
+    const conn: Http1Connection = this.connections[slot]
+    if (!conn.lingerStart(now) || netShutdown(this.fds[slot], H1_SHUT_WRITE) < 0) {
+      return H1_DONE
+    }
+    const deadline: i64 = conn.expiresNoSooner(now)
+    if (deadline < this.expireAfter) {
+      this.expireAfter = deadline
+    }
+    return this.drain(slot)
+  }
+
+  /**
+   * Reads and throws away what `slot`'s lingering peer sends until the
+   * socket would block, answering `H1_WANT_READ`; `H1_DONE` at its end of
+   * stream, an error, or past `lingerBytes`. What it drains is not activity:
+   * `lastActive` stays, and `expire` closes the slot past `lingerTimeout`.
+   */
+  private drain(slot: i32): i32 {
+    const conn: Http1Connection = this.connections[slot]
+    const fd: i32 = this.fds[slot]
+    while (true) {
+      const n: i32 = netRead(fd, this.scratch, H1_ZERO, toI32(this.scratch.length))
+      if (n === H1_AGAIN) {
+        return H1_WANT_READ
+      }
+      if (n <= 0 || !conn.drained(n)) {
+        return H1_DONE
+      }
+    }
   }
 
   /** `flush` within a serve call: sends, answers the interest, and keeps the clock reading. */
@@ -2155,6 +2615,9 @@ export class Http1Server {
       return H1_DONE
     }
     const conn: Http1Connection = this.connections[slot]
+    if (conn.lingering()) {
+      return this.drain(slot)
+    }
     this.send(slot)
     if (conn.isDone()) {
       return H1_DONE
@@ -2237,7 +2700,7 @@ export class Http1Server {
 
   /**
    * Closes every slot that has been idle past `idleTimeout`, or reading one
-   * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
+   * head for longer than `headTimeout`, or lingering past `lingerTimeout`, at `now` (`monotonicNanos`); answers how many.
    *
    * @param now the current time in `monotonicNanos`, which every timeout is measured against
    * @returns how many slots this call closed

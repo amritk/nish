@@ -707,7 +707,7 @@ declare function isExecutableSync(path: string): boolean;
 // ---- Unsafe (`nish:unsafe`) --------------------------------------------------
 //
 // Declared as globals so `tsc` reads a program that imports them, as every
-// `nish:` export is, but `nish` refuses a call to any of the six that is not
+// `nish:` export is, but `nish` refuses a call to any of the eight that is not
 // imported from `nish:unsafe`: the import is the module's visible opt-in. The
 // refusal reads `` `uncheckedGet` is a `nish:unsafe` function and is called only
 // through an import of it `` (NL2456). An import may rename (`as`) and cannot be
@@ -822,6 +822,50 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  * @returns a copy of the bytes before the first `NUL`.
  */
 declare function readCString(p: CPtr): string;
+/**
+ * A copy of the C struct at `p`, in a new instance of the `declare class` the
+ * call's context names: `const lc: Lconv = readStruct(localeconv())`. A type
+ * argument is not written at a call site (`readStruct<Lconv>(p)` is refused,
+ * as `identity<i32>(7)` is), so the layout comes from an annotation, a
+ * parameter or a return type, as `Ok(v)`'s type does; a call with none, or one
+ * whose context is not a `declare class`, is refused. It copies the layout's
+ * size in bytes, so the class must describe the struct's first fields (a
+ * prefix is enough) and `p` must point at that many readable bytes: undefined
+ * behaviour otherwise, as with `readCString`.
+ *
+ * The copy is the program's own: C may free or overwrite its struct straight
+ * after the call, and a `CPtr` field of the copy is still C's pointer, read
+ * with `readCString` while C keeps it live. The parameter is `CPtr`, so an
+ * unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
+ *
+ * A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
+ * naming the layout, since a `declare function` declared to answer `CPtr` may
+ * still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+ * the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
+ * `oom` beside it.
+ *
+ * The copy is new on every call and is the calling function's allocation, held
+ * by the arena like `new`. It lowers the same on wasm32, where a pointer is 4
+ * bytes and the layout is sized to match. It has no Node form.
+ * Capability: unsafe.
+ *
+ * @param p the address of a C struct a `declare function` handed back.
+ * @returns a copy of the struct, in the `declare class` its context names.
+ */
+declare function readStruct<T>(p: CPtr): T;
+
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent
+ * `declare function` call on this thread left, or 0 before any. Naming it
+ * anywhere in a program makes every foreign call zero errno just before it
+ * and save it just after, before the result is copied or anything allocated,
+ * so the runtime's own work after the call cannot change it. Meaningful only
+ * where the C function documents that it sets errno. Per thread; refused on a
+ * freestanding wasm32 build, which has no libc. Capability: unsafe.
+ *
+ * @returns the saved errno, an `i32`.
+ */
+declare function cErrno(): i32;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -1158,6 +1202,14 @@ declare function realpathSync(path: string): string | null;
  * an embedded NUL truncates one. A `wasm32` build and a WASI build have no
  * processes, and a WASI build always answers `-1`. Capability: process.spawn.
  *
+ * Under `--sandbox`, a dependency's `process.spawn=<program>` grants can make
+ * a list of the only programs the build may start. A program this builtin
+ * starts under such a list cannot start another: an exec by it, or by
+ * anything it forks, fails, so a granted `#!` script runs its interpreter's
+ * builtins alone. Where the kernel or a container's seccomp profile refuses
+ * what that takes (Docker's default profile does), the spawn fails and one
+ * line on stderr says so.
+ *
  * @param argv the program and its arguments.
  * @returns the exit status, or `128 + n` when signal `n` killed it (the shell's
  *   convention), or `-1` when the vector is empty — there is no `argv[0]` to
@@ -1172,6 +1224,9 @@ declare function spawnSync(argv: string[]): number;
  * stderr through. The two paths must not name one file: each is opened
  * separately, with its own offset, so the streams would overwrite rather than
  * interleave; capture them apart and concatenate. Capability: process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @param stdoutPath the file the child's stdout goes to, or `""`.
@@ -1199,6 +1254,9 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  * length is fixed. A `wasm32` build refuses it (NL2404). Capability:
  * process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
  * @param stdout receives what the child prints on stdout.
@@ -1224,6 +1282,9 @@ declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], 
  * and 16 MiB cap, `readonly` and typed-array spellings refused for the two
  * output arrays, refused by a `wasm32` build (NL2404). Capability:
  * process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
@@ -1254,12 +1315,18 @@ declare function spawnPipedWithin(
  * under Node, which throws. A `wasm32` build refuses it (NL2404).
  * Capability: process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @param fds the descriptors handed down, at most 64.
  * @returns the child's pid, or a negative errno: -22 more than 64 descriptors
  *   or a negative one (before anything is opened or started), -9 one that is
  *   not open, -24 (or -22 above the descriptor limit) a scratch descriptor the
- *   system cannot give.
+ *   system cannot give. Under `--sandbox` with a list of granted
+ *   programs, a spawn that cannot be held to one program is refused: -11
+ *   (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+ *   on stderr.
  */
 declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
 /**
@@ -1274,10 +1341,16 @@ declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
  * `nish:process`.
  * Capability: process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @returns the child's pid, or a negative errno: -22 (EINVAL) for an empty
  *   vector or an argument holding a NUL, and `posix_spawnp`'s own error
- *   otherwise, so a program that is not there is -2 (ENOENT).
+ *   otherwise, so a program that is not there is -2 (ENOENT). Under `--sandbox` with a list of granted
+ *   programs, a spawn that cannot be held to one program is refused: -11
+ *   (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+ *   on stderr.
  */
 declare function spawn(argv: string[]): i32;
 /**
@@ -1712,8 +1785,11 @@ declare function connectResult(fd: i32): i32;
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
  * @param flags flag 1 `SO_REUSEPORT`, so several sockets that all ask for it share a port and
- *   the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); any other
- *   bit is -22.
+ *   the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); flag 4, with
+ *   flag 1 and a group size N from 1 to 255 in bits 8 to 15, steers QUIC: the port's group hands
+ *   each datagram to its socket number (byte 0 of the Destination Connection ID) mod N, in the
+ *   order the sockets were bound, and a refused attach closes the socket and answers the errno
+ *   (-95 on Darwin). Flag 4 without 1, with 2 or with N 0, N without 4, or any other bit is -22.
  * @returns the socket's descriptor, or a negative errno.
  */
 declare function udpBind(host: string, port: i32, flags: i32): i32;
@@ -2782,7 +2858,10 @@ declare module "nish:process" {
    * @param argv The program and its arguments.
    * @returns The child's pid, or a negative errno: `-22` EINVAL for an empty
    *   vector or an argument holding a NUL, `posix_spawnp`'s own error
-   *   otherwise, so a program that is not there is `-2` ENOENT.
+   *   otherwise, so a program that is not there is `-2` ENOENT. Under `--sandbox` with a list of granted
+   *   programs, a spawn that cannot be held to one program is refused: -11
+   *   (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+   *   on stderr.
    */
   export function spawn(argv: string[]): i32;
   /**
@@ -3462,8 +3541,9 @@ declare module "nish:net" {
 }
 
 /**
- * Element access with no bounds check, signed arithmetic that wraps, and a C
- * string read through a pointer nothing proves.
+ * Element access with no bounds check, signed arithmetic that wraps, a C
+ * string or struct read through a pointer nothing proves, and the errno a C
+ * call left.
  *
  *     import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
  *
@@ -3477,12 +3557,13 @@ declare module "nish:net" {
  * is a call a reader can find. `--emit-checked` prints an `unsafe import` line
  * for each name imported and an `unsafe call` line for each site.
  *
- * The global spelling is refused (NL2456): the six are called only through an
+ * The global spelling is refused (NL2456): the eight are called only through an
  * import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
  * behaviour, which is the whole of the trade. There is no flag that turns the
  * checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
- * refuses each with exit 2. `readCString` has no Node form, because its
- * `CPtr` comes only from a `declare function`, which Node cannot call.
+ * refuses each with exit 2. `readCString`, `readStruct` and `cErrno` have no Node form,
+ * because their `CPtr` or errno comes only from a `declare function`, which Node
+ * cannot call.
  *
  * **Under Node.** `runtime/nish.mjs` answers the import: the get and set are
  * `xs[i]` and `xs[i] = v`, the wrapping three are `(a + b) | 0`,
@@ -3492,8 +3573,10 @@ declare module "nish:net" {
  * **The no-panic scope.** Under `--deny-panics` or `"nish".noPanic`,
  * `uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
  * sites, because the import has already said that an index out of range is
- * the author's to rule out. The wrapping three are not sites at all: they
- * are defined for every pair.
+ * the author's to rule out. `readStruct` is not: it tests its pointer and
+ * panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
+ * refuses it. The wrapping three are not sites at all: they are defined for
+ * every pair.
  *
  * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
  */
@@ -3563,6 +3646,27 @@ declare module "nish:unsafe" {
    * @returns A copy of the bytes before the `NUL`; C keeps its buffer.
    */
   export function readCString(p: CPtr): string;
+  /**
+   * A copy of the C struct at `p` in a new instance of the `declare class` the
+   * call's context names (`const lc: Lconv = readStruct(localeconv())`), so C
+   * may free or overwrite its struct straight after. It reads and allocates,
+   * and is native only.
+   *
+   * @param p A pointer from a `declare function`. Undefined behaviour unless
+   *   it points at the layout's size of readable bytes.
+   * @returns A copy of the struct; C keeps its own.
+   */
+  export function readStruct<T>(p: CPtr): T;
+  /**
+   * The errno the most recent `declare function` call on this thread left:
+   * a program that names `cErrno` zeroes errno just before every foreign
+   * call and saves it just after, before any result marshalling. Native and
+   * `--profile wasi` only.
+   *
+   * @returns The saved errno; 0 before any foreign call, and 0 after one that
+   *   did not set it.
+   */
+  export function cErrno(): i32;
 }
 
 /**

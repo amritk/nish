@@ -1829,7 +1829,7 @@ const DEALT_SECTIONS = {
   },
   simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
   cliChecks: {
-    name: "the contract, interop, exit-code, secret, capabilities and run-command sections",
+    name: "the contract, interop, exit-code, secret, capabilities, run-command and compat-erasure sections",
     selected: true,
     tail: true,
   },
@@ -14837,6 +14837,12 @@ if (dealtHere("arrayChecks")) {
           )
         : []
     )
+    // `nish_alloc_struct` is not declared but defined, `internal`, in each module
+    // that calls it (`src/runtime.ts`), so `--runtime-decls` has no line for it;
+    // its `define` line is its table entry, read the same way.
+    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_alloc_struct)\()/g)) {
+      runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+    }
     check(
       `--runtime-decls prints the runtime table (${runtimeByName.size} declarations)`,
       decls.status === 0 && runtimeByName.size > 0,
@@ -14966,6 +14972,45 @@ if (dealtHere("arrayChecks")) {
           r.status === 0 &&
             body.includes("@nish.ffi.str(") &&
             body.includes("@nish_str_concat(") &&
+            !body.includes("nish_arena_release"),
+          `${probeSrc}\n${ir}`
+        )
+        continue
+      }
+      // `readStruct` takes a `CPtr` and answers the `declare class` its context
+      // names, which an exported function may not return, so its probe is an
+      // internal function that `main` calls, written out.
+      if (builtin === "readStruct") {
+        const probeSrc = [
+          'import { readStruct } from "nish:unsafe";',
+          "declare class Lconv {",
+          "  decimalPoint: CPtr",
+          "  thousandsSep: CPtr",
+          "}",
+          "declare function localeconv(): CPtr;",
+          "const probe = (arg0: string): Lconv => {",
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+          "  const label = `probe ${arg0}`;",
+          "  console.log(label);",
+          "  return readStruct(localeconv());",
+          "};",
+          "export function main(): i32 {",
+          '  const lc = probe("x");',
+          "  return lc.decimalPoint === lc.thousandsSep ? 1 : 0;",
+          "}",
+          "",
+        ].join("\n")
+        const probeTs = path.join(buildDir, "alloc_probe_readStruct.ts")
+        const probeLl = path.join(buildDir, "alloc_probe_readStruct.ll")
+        fs.writeFileSync(probeTs, probeSrc)
+        const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+        const ir = r.status === 0 ? fs.readFileSync(probeLl, "utf8") : r.stderr
+        const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? ""
+        check(
+          "readStruct: a function returning its result keeps the arena (no nish_arena_release before the ret)",
+          r.status === 0 &&
+            body.includes("@nish_alloc_struct(") &&
+            body.includes("@llvm.memcpy.") &&
             !body.includes("nish_arena_release"),
           `${probeSrc}\n${ir}`
         )
@@ -21577,6 +21622,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
+      "--compat",
       "--target",
       "--cpu",
       "--profile",
@@ -23135,6 +23181,160 @@ if (dealtHere("cliChecks")) {
         badLink.stderr + stubEntries.join(", ")
       )
     }
+  }
+
+  // ---- WP28 S3: `--compat` erases to the strict dialect ---------------------------------
+  // The compatibility dialect is allowed to accept more programs as it grows and
+  // is never allowed to change one the strict dialect already has an answer for.
+  // `tests/compat-erasure.js` compiles every program in `tests/cases` with and
+  // without the flag and compares the two answers byte for byte; this section
+  // runs it over the whole corpus, then proves that it can fail.
+  //
+  // It closes this group rather than taking a key of its own in
+  // `DEALT_SECTIONS`: the group is a tail every shard deal already carries, and
+  // `scripts/shard-costs.mjs` knows a group by its first check.
+  if (!only || "compat-erasure".includes(only)) {
+    const erasureDir = path.join(buildDir, "compat-erasure")
+    const erasure = (compiler, filter, env = {}) =>
+      spawnSync(
+        process.execPath,
+        [
+          path.join(root, "tests", "compat-erasure.js"),
+          "--compiler",
+          compiler,
+          "--out",
+          path.join(erasureDir, filter === "" ? "corpus" : `self-${filter}`),
+          "--jobs",
+          String(LINK_JOBS),
+          ...(filter === "" ? [] : [filter]),
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, ...env }, maxBuffer: 64 * 1024 * 1024 }
+      )
+
+    const smoke = path.join(casesDir, "add_plain.ts")
+    const bare = spawnSync(NISH, [smoke, "--compat", "-o", path.join(buildDir, "compat-bare.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("compat-erasure: a bare `--compat` is accepted", bare.status === 0, bare.stderr)
+    const valuedOut = path.join(buildDir, "compat-valued.ll")
+    fs.rmSync(valuedOut, { force: true })
+    const valued = spawnSync(NISH, [smoke, "--compat=async", "-o", valuedOut], { cwd: root, encoding: "utf8" })
+    check(
+      "compat-erasure: `--compat=<value>` is a usage error that names the bare flag and writes no IR",
+      valued.status === 2 &&
+        valued.stderr.includes("`--compat` takes no value, and `--compat=async` gives it one") &&
+        valued.stderr.includes("write a bare `--compat`") &&
+        !fs.existsSync(valuedOut),
+      `exit ${valued.status}\n${valued.stderr}`
+    )
+
+    const corpus = erasure(NISH, "")
+    const counts =
+      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics, (\d+) cases with none\), (\d+) skipped$/m.exec(
+        corpus.stdout
+      )
+    const [positiveCount, fileCount, rejectCount, codedCount, uncodedCases, skippedCount] = (counts ?? []).slice(1).map(Number)
+    const rejectCases = cases.filter((name) => fs.existsSync(path.join(casesDir, `${name}.err`))).length
+    check(
+      "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
+      corpus.status === 0 && counts !== null,
+      corpus.stderr + corpus.stdout
+    )
+    // A run that compared nothing would agree with itself: the counts are the
+    // corpus's own, files were written and compared (a case that asks for
+    // `--emit-ast` prints instead), every reject case gave at least one coded
+    // diagnostic, and none was skipped.
+    check(
+      `compat-erasure: the run covered the corpus (${cases.length} cases) and skipped none`,
+      counts !== null &&
+        positiveCount === cases.length - rejectCases &&
+        rejectCount === rejectCases &&
+        fileCount > 0 &&
+        codedCount >= rejectCount &&
+        uncodedCases === 0 &&
+        skippedCount === 0,
+      corpus.stdout
+    )
+
+    // The negative test: a compiler that is the real one until it is handed
+    // `--compat`, and then changes one thing, named by COMPAT_TAMPER -- one line
+    // of the IR it wrote, one word of a diagnostic, or the code of one in its
+    // `--json` form. The runner has to catch each, and name where.
+    const tamperer = path.join(erasureDir, "tampering-nish.cjs")
+    fs.mkdirSync(erasureDir, { recursive: true })
+    fs.writeFileSync(
+      tamperer,
+      `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process")
+const fs = require("node:fs")
+const args = process.argv.slice(2)
+const r = spawnSync(${JSON.stringify(NISH)}, args, { maxBuffer: 64 * 1024 * 1024 })
+let [out, err] = [r.stdout.toString("latin1"), r.stderr.toString("latin1")]
+const mode = args.includes("--compat") ? process.env.COMPAT_TAMPER : undefined
+if (mode === "ir" && r.status === 0) {
+  const ll = args[args.indexOf("-o") + 1]
+  fs.writeFileSync(ll, fs.readFileSync(ll, "latin1").replace(/^define .*$/m, (line) => line + " ; tampered"), "latin1")
+}
+if (mode === "word" && !args.includes("--json")) {
+  err = err.replace("requires", "wants")
+}
+if (mode === "code" && args.includes("--json")) {
+  out = out.replace(/"code":"NL\\d+"/, '"code":"NL0000"')
+}
+process.stdout.write(out, "latin1")
+process.stderr.write(err, "latin1")
+process.exitCode = r.status ?? 1
+`,
+      { mode: 0o755 }
+    )
+    const positiveCase = "add_plain"
+    const rejectCase = "reject_type_mismatch"
+    for (const [mode, filter, phrase, caught, tamperedLine] of [
+      [
+        "ir",
+        positiveCase,
+        "one changed line of IR",
+        `compat-erasure: ${positiveCase}: --compat changed the file ${positiveCase}.ll, first at line `,
+        " ; tampered",
+      ],
+      [
+        "word",
+        rejectCase,
+        "one changed word of a diagnostic",
+        `compat-erasure: ${rejectCase}: --compat changed stderr, first at line 1\n`,
+        "Operator `+` wants two",
+      ],
+      [
+        "code",
+        rejectCase,
+        "one changed diagnostic code",
+        `compat-erasure: ${rejectCase} (--json): --compat changed stdout, first at line 1\n`,
+        '"code":"NL0000"',
+      ],
+    ]) {
+      const honest = erasure(tamperer, filter)
+      const tampered = erasure(tamperer, filter, { COMPAT_TAMPER: mode })
+      const shown = tampered.stderr.split("\n")
+      check(
+        `compat-erasure: the runner fails on ${phrase} under \`--compat\`, and shows both answers`,
+        honest.status === 0 &&
+          tampered.status === 1 &&
+          tampered.stderr.includes(caught) &&
+          shown.some((line) => line.startsWith("  without: ") && !line.includes(tamperedLine)) &&
+          shown.some((line) => line.startsWith("  with:    ") && line.includes(tamperedLine)) &&
+          !tampered.stdout.includes("byte-identical"),
+        `honest: exit ${honest.status}\n${honest.stderr}tampered: exit ${tampered.status}\n${tampered.stderr}`
+      )
+    }
+    // Nothing to compile with is the runner's own failure (exit 2), never a
+    // corpus that agrees.
+    const noCompiler = erasure(path.join(erasureDir, "no-such-compiler"), positiveCase)
+    check(
+      "compat-erasure: the runner refuses a compiler that is not there (exit 2) instead of agreeing with nothing",
+      noCompiler.status === 2 && noCompiler.stderr.includes("no compiler at"),
+      noCompiler.stderr
+    )
   }
 }
 
@@ -28889,13 +29089,13 @@ if (!only || "sandbox dependency grants".includes(only)) {
     const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
     if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
     const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
-    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
-    const build = (fixture, flags) => {
+    /** Builds <from>/<fixture> (tests/link by default) with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags, from = linkDir) => {
       const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
       const exe = path.join(out, "app")
       const r = spawnSync(
         NISH,
-        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        [path.join(from, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
         { cwd: root, encoding: "utf8" }
       )
       if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
@@ -29097,6 +29297,330 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rBothSh.stdout === "sh-ran\n0\n",
         `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
       )
+      // SBX-1's residual, fixed (docs/security/sandbox.md): Landlock grants
+      // EXECUTE on the loader to the whole tree, so a granted program that
+      // executes a path from its arguments reached the loader and, through
+      // it, any binary. Under an exec allowlist a spawn's child now completes
+      // one exec, the granted program's own start, and nothing below it execs
+      // again. The granted program here is one this check builds, so that the
+      // checks run on every machine with clang; `find` and `env`, two tools of
+      // different shape, follow where the machine has them.
+      const once = "sandbox_dep_exec_once"
+      const onceTo = "sandbox_dep_exec_once_to"
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here. */
+      const withHelper = (fixture, grants) => {
+        const copy = `${fixture}_helper`
+        const to = path.join(dir, copy)
+        fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
+        fs.mkdirSync(path.join(to, "bin"), { recursive: true })
+        const src = path.join(to, "exec-args.c")
+        fs.writeFileSync(
+          src,
+          "#include <errno.h>\n#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n" +
+            "#include <sys/prctl.h>\n#include <sys/stat.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n" +
+            "#include <linux/filter.h>\n#include <linux/seccomp.h>\n" +
+            "int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n" +
+            // `--listener <flags>`: the errno of installing an allow-all
+            // seccomp filter with those flags (8 is NEW_LISTENER), 0 for none.
+            '  if (!strcmp(argv[1], "--listener") && argc > 2) {\n' +
+            "    struct sock_filter allow = BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);\n" +
+            "    struct sock_fprog prog = {1, &allow};\n    prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);\n" +
+            "    return syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, atoi(argv[2]), &prog) < 0 ? errno : 0;\n  }\n" +
+            // `--sigblk`: how many signals this program was started with blocked.
+            '  if (!strcmp(argv[1], "--sigblk")) {\n    int n = 0;\n    sigset_t now;\n' +
+            "    sigprocmask(SIG_BLOCK, 0, &now);\n    for (int sig = 1; sig < 65; sig++) n += sigismember(&now, sig) == 1;\n    return n;\n  }\n" +
+            // `--block <program...>`: that program, started with SIGUSR1 blocked.
+            '  if (!strcmp(argv[1], "--block") && argc > 2) {\n    sigset_t usr;\n    sigemptyset(&usr);\n' +
+            "    sigaddset(&usr, SIGUSR1);\n    sigprocmask(SIG_BLOCK, &usr, 0);\n    argv++;\n  }\n" +
+            // `--fds`: how many descriptors from 3 up this program was started
+            // with that are not regular files (a pipe, a seccomp listener).
+            '  if (!strcmp(argv[1], "--fds")) {\n    int n = 0;\n    struct stat st;\n' +
+            "    for (int fd = 3; fd < 1024; fd++) n += !fstat(fd, &st) && !S_ISREG(st.st_mode);\n    return n;\n  }\n" +
+            '  execv(argv[1], argv + 1);\n  perror("exec-args");\n  return 111;\n}\n'
+        )
+        const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
+        const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
+        manifest.nish.capabilities.dependencies.pkg_runner = ["process.spawn=./bin/exec-args", ...grants]
+        fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
+        return cc.status === 0 ? copy : null
+      }
+      const helped = withHelper(once, [])
+      const hAllow = helped === null ? null : build(helped, ["--sandbox"], dir)
+      const hOpen = helped === null ? null : build(helped, [], dir)
+      const helper = helped === null ? "" : fs.realpathSync(path.join(dir, helped, "bin", "exec-args"))
+      const hList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(helped === null ? "" : ir(helped))
+      const hLoaders = hList === null ? [] : hList[1].split("\\00").filter((p) => p.startsWith("//"))
+      if (hAllow === null || hOpen === null || hLoaders.length === 0 || ungrantedCc.status !== 0) {
+        skip(
+          `sandbox dependency grants: clang could not build the granted exec-args helper or the ungranted program, or the helper has no ELF loader on the allowlist (${hLoaders.length}); one exec per spawn is not checked`
+        )
+      } else {
+        const loader = hLoaders[0].slice(1)
+        // One check per spawn builtin: each reaches `nish_spawn_start` with
+        // its own file actions. `sync`, `fds` and `spawn` leave the child's
+        // stdout on the check's pipe; a captured run answers the byte count.
+        // 111 is the helper's status when its exec fails.
+        for (const [how, builtin, held, ran] of [
+          ["sync", "spawnSync", "111\n", "sbx-1\n0\n"],
+          ["piped", "spawnPiped", "111 0\n", "0 6\n"],
+          ["within", "spawnPipedWithin", "111 0\n", "0 6\n"],
+          ["fds", "spawnWithFds", "111\n", "sbx-1\n0\n"],
+          ["spawn", "spawn", "111\n", "sbx-1\n0\n"],
+        ]) {
+          const rHeld = run(hAllow, [how, helper, loader, ungranted])
+          const rRan = run(hOpen, [how, helper, loader, ungranted])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              rHeld.stdout === held &&
+              rRan.status === 0 &&
+              rRan.stdout === ran,
+            `${helper} ${loader} ${ungranted}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        const rSelf = run(hAllow, ["sync", helper, helper])
+        const rSelfPlain = run(hOpen, ["sync", helper, helper])
+        check(
+          "sandbox dependency grants: a granted program cannot exec itself again (SBX-1)",
+          rSelf.status === 0 &&
+            rSelf.stdout === "111\n" &&
+            rSelf.stderr.includes("exec-args: ") &&
+            rSelfPlain.status === 0 &&
+            rSelfPlain.stdout === "0\n",
+          `${said(rSelf)}\n--- without --sandbox\n${said(rSelfPlain)}`
+        )
+        // The granted program still starts, and starts again: no state of one
+        // spawn (the filter, the listener) is left on the program's thread.
+        const rPlainStart = run(hAllow, ["sync", helper])
+        check(
+          "sandbox dependency grants: a granted program that execs nothing runs as before",
+          rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
+          said(rPlainStart)
+        )
+        // The rule the one exec rests on: a second listener anywhere in the
+        // subtree is refused (EBUSY, 16). The kernel lets the newest filter's
+        // "continue" stand for every filter's, so a granted program with a
+        // listener of its own would answer its children's execs itself. 8 is
+        // NEW_LISTENER; 25 adds TSYNC and TSYNC_ESRCH, the one other spelling
+        // the kernel takes it in (Linux 5.7). Without `--sandbox` the same
+        // call succeeds, which is what makes the EBUSY this filter's; where it
+        // does not (an older kernel, a launcher's own listener above the
+        // suite) that spelling is not judged.
+        const listeners = [8, 25].map((flags) => [
+          flags,
+          run(hAllow, ["sync", helper, "--listener", String(flags)]),
+          run(hOpen, ["sync", helper, "--listener", String(flags)]),
+        ])
+        const judged = listeners.filter(([, , plain]) => plain.status === 0 && plain.stdout === "0\n")
+        if (judged.length === 0 || judged[0][0] !== 8) {
+          skip(
+            `sandbox dependency grants: this machine installs no seccomp listener without --sandbox either (${listeners.map(([flags, , plain]) => `${flags}: ${plain.stdout.trim()}`).join(", ")}); the refusal of a second listener is not checked`
+          )
+        } else {
+          check(
+            "sandbox dependency grants: a granted program cannot install a seccomp listener of its own (SBX-1)",
+            judged.every(([, held]) => held.status === 0 && held.signal === null && held.stdout === "16\n"),
+            listeners
+              .map(([flags, held, plain]) => `flags ${flags}\n${said(held)}\n--- without --sandbox\n${said(plain)}`)
+              .join("\n")
+          )
+        }
+        // The two threads a spawn runs on block every signal, so the program's
+        // handlers never run in their private descriptor table; the child is
+        // handed the calling thread's mask, not theirs. Here the program is
+        // started with SIGUSR1 blocked and its child counts what it was
+        // started with blocked: that one signal, with `--sandbox` as without.
+        for (const [how, builtin] of [
+          ["sync", "spawnSync"],
+          ["spawn", "spawn"],
+        ]) {
+          const rMask = run(helper, ["--block", hAllow, how, helper, "--sigblk"])
+          const rMaskPlain = run(helper, ["--block", hOpen, how, helper, "--sigblk"])
+          const rNone = run(hAllow, [how, helper, "--sigblk"])
+          const maskShown = `${said(rMask)}\n--- without --sandbox\n${said(rMaskPlain)}\n--- nothing blocked\n${said(rNone)}`
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} starts with the caller's signal mask (SBX-1)`,
+            rMask.status === 0 && rMask.stdout === "1\n" && rMaskPlain.stdout === "1\n" && rNone.stdout === "0\n",
+            maskShown
+          )
+        }
+        // A kernel that takes the filter and not the "continue" answer (Linux
+        // 5.0 to 5.4), read on this one: the runtime built with
+        // -DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1 has that answer fail, and with
+        // =2 the error answer after it too, which leaves killing the child.
+        // The child holds the listener as well until its exec commits, so a
+        // supervisor that only closed its own copy would leave the child in
+        // its exec and the spawn waiting for good: the run's timeout would end
+        // it with a signal. Each spawn answers its refusal instead, the second
+        // one too, and the program goes on.
+        const refusedLine =
+          "nish: --sandbox: cannot hold a spawned program to one exec, so the spawn is refused (EINVAL)\n"
+        // The two paths answer different numbers through `spawn`: ENOSYS (38)
+        // is the child's own failed exec, as `posix_spawn` reports it, and
+        // ECHILD (10) the child killed and reaped.
+        for (const [sim, how, errno] of [
+          [1, "fails the child's exec", 38],
+          [2, "kills and reaps the child", 10],
+        ]) {
+          const exe = path.join(dir, `no-continue-${sim}`)
+          const rt = runtimeObjects([`-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=${sim}`])
+          const from = path.join(dir, `${helped}-sandbox`)
+          const lls = fs.readdirSync(from).filter((f) => f.endsWith(".ll"))
+          const l =
+            rt.error !== null
+              ? { status: 1, stdout: "", stderr: rt.error }
+              : spawnSync(
+                  "clang",
+                  ["-Wno-override-module", "-O2", ...lls.map((f) => path.join(from, f)), ...rt.objects, "-o", exe],
+                  { cwd: root, encoding: "utf8" }
+                )
+          const rSync = l.status === 0 ? run(exe, ["sync", helper]) : null
+          const rSpawn = l.status === 0 ? run(exe, ["spawn", helper]) : null
+          check(
+            `sandbox dependency grants: a spawn whose exec cannot be answered "continue" is refused and does not hang: the supervisor ${how} (SBX-1)`,
+            rSync !== null &&
+              rSync.status === 0 &&
+              rSync.signal === null &&
+              rSync.stdout === "-1\n" &&
+              rSync.stderr === refusedLine &&
+              rSpawn.status === 0 &&
+              rSpawn.signal === null &&
+              rSpawn.stdout === `-${errno}\n` &&
+              rSpawn.stderr === refusedLine,
+            l.status === 0 ? `${said(rSync)}\n--- spawn\n${said(rSpawn)}` : shown(l)
+          )
+        }
+        // What the granted program is started holding. The sandbox makes a
+        // pipe, a seccomp listener and the checked file's descriptor for each
+        // spawn, in a descriptor table where the lowest free numbers are the
+        // ones the child's redirects name; here 0 and 2 are free as well,
+        // closed by the shell that starts the program. The helper answers how
+        // many descriptors from 3 up it holds that are not regular files: the
+        // one `spawnWithFds` hands it (this check's stdout pipe) and no other,
+        // with `--sandbox` as without. A runner may hand every process it
+        // starts descriptors of its own (CI's does); the helper started by the
+        // shell alone counts those, and each expectation is that count more.
+        const closed = 'exec "$@" <&- 2>&-'
+        const mine = run("/bin/sh", ["-c", closed, "sh", helper, "--fds"]).status
+        for (const [how, builtin, held] of [
+          ["sync", "spawnSync", `${mine}\n`],
+          ["piped", "spawnPiped", `${mine} 0\n`],
+          ["within", "spawnPipedWithin", `${mine} 0\n`],
+          ["fds", "spawnWithFds", `${mine + 1}\n`],
+          ["spawn", "spawn", `${mine}\n`],
+        ]) {
+          const rFds = run("/bin/sh", ["-c", closed, "sh", hAllow, how, helper, "--fds"])
+          const rFdsPlain = run("/bin/sh", ["-c", closed, "sh", hOpen, how, helper, "--fds"])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} is started with no descriptor of the sandbox's, stdin and stderr closed (SBX-1)`,
+            rFds.status === 0 && rFds.signal === null && rFds.stdout === held && rFdsPlain.stdout === held,
+            `inherited from the runner: ${mine}\n${said(rFds)}\n--- without --sandbox\n${said(rFdsPlain)}`
+          )
+        }
+        // The child of `to` dies before its exec: this package has no
+        // `fs.write`, so Landlock refuses the stdout file the child opens.
+        // The spawn answers its error and does not wait for an exec that
+        // never comes (the run's timeout would end it with a signal).
+        const rDied = run(hAllow, ["to", helper])
+        const rMissing = run(hAllow, ["spawn", "sbx-1-no-such-program"])
+        check(
+          "sandbox dependency grants: a spawn whose child dies before its exec answers the error and does not hang (SBX-1)",
+          rDied.status === 0 &&
+            rDied.signal === null &&
+            rDied.stdout === "-1\n" &&
+            rMissing.status === 0 &&
+            rMissing.stdout === "-2\n",
+          `${said(rDied)}\n--- a program that is not there\n${said(rMissing)}`
+        )
+        // `spawnSyncTo` has a file action of its own, the child's open of the
+        // stdout file, which needs a write scope and so ABI 3 under strict
+        // `--sandbox` (as the fs.write=<dir> checks above).
+        const helpedTo = abi < 3 ? null : withHelper(onceTo, ["fs.write=./out"])
+        if (helpedTo === null) {
+          skip(
+            `sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3) or clang could not build the helper; one exec per spawn is not checked through spawnSyncTo`
+          )
+        } else {
+          const tAllow = build(helpedTo, ["--sandbox"], dir)
+          const tOpen = build(helpedTo, [], dir)
+          const tHelper = fs.realpathSync(path.join(dir, helpedTo, "bin", "exec-args"))
+          const heldOut = path.join(dir, helpedTo, "out", "held.txt")
+          const ranOut = path.join(dir, helpedTo, "out", "ran.txt")
+          const rHeld = run(tAllow, [heldOut, tHelper, loader, ungranted])
+          const rRan = run(tOpen, [ranOut, tHelper, loader, ungranted])
+          const text = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+          check(
+            "sandbox dependency grants: a program granted to spawnSyncTo cannot hand the loader an ungranted binary (SBX-1)",
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.stdout === "111\n" &&
+              text(heldOut) === "" &&
+              rRan !== null &&
+              rRan.status === 0 &&
+              rRan.stdout === "0\n" &&
+              text(ranOut) === "sbx-1\n",
+            `${said(rHeld)}\n${heldOut}: ${JSON.stringify(text(heldOut))}\n--- without --sandbox\n${said(rRan)}\n${ranOut}: ${JSON.stringify(text(ranOut))}`
+          )
+        }
+        // The machine's own tools. `find -exec` forks and execs per match and
+        // `env` execs in place; each is checked only where its control run,
+        // without `--sandbox`, does run the ungranted program through the
+        // loader, so a tool that is missing or of another shape is a SKIP.
+        // What says the tool itself started, and that its own exec is what
+        // failed, is no message of the tool's (GNU's and uutils' differ): it is
+        // the line `find -print` writes before its `-exec`, and the status 126
+        // or 127 POSIX gives `env` for a utility it could not invoke. A refused
+        // spawn answers -1 and prints neither.
+        const oAllow = build(once, ["--sandbox"])
+        const oOpen = build(once, [])
+        for (const [tool, argv] of [
+          ["find", ["find", ungranted, "-maxdepth", "0", "-print", "-exec", loader, ungranted, ";"]],
+          ["env", ["env", loader, ungranted]],
+        ]) {
+          const lines = (r) => r.stdout.split("\n")
+          const rRan = realOnPath(tool) === null ? null : run(oOpen, ["sync", ...argv])
+          if (rRan === null || rRan.status !== 0 || !lines(rRan).includes("sbx-1")) {
+            skip(
+              `sandbox dependency grants: \`${tool}\` is not on PATH here or did not run the loader without --sandbox (${said(rRan)}); one exec per spawn is not checked through it`
+            )
+            continue
+          }
+          const rHeld = run(oAllow, ["sync", ...argv])
+          check(
+            `sandbox dependency grants: a granted ${tool} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              !lines(rHeld).includes("sbx-1") &&
+              (tool === "find"
+                ? lines(rHeld).length === 3 && lines(rHeld)[0] === ungranted && /^\d+$/.test(lines(rHeld)[1])
+                : /^12[67]\n$/.test(rHeld.stdout)),
+            `${argv.join(" ")}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        // Another program the same grant names is no more reachable from a
+        // granted one than an ungranted program is.
+        const rOther = realOnPath("env") === null || realOnPath("true") === null ? null : run(oOpen, ["sync", "env", "true"])
+        if (rOther === null || rOther.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOther)}); a granted program's exec of another granted program is not checked`
+          )
+        } else {
+          const rOtherHeld = run(oAllow, ["sync", "env", "true"])
+          const rTrueStill = run(oAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: a granted program cannot exec another granted program (SBX-1)",
+            rOtherHeld !== null &&
+              rOtherHeld.status === 0 &&
+              // `env` started, and its exec of `true` is what failed.
+              /^12[67]\n$/.test(rOtherHeld.stdout) &&
+              rTrueStill.stdout === "0\n",
+            `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+      }
     }
   }
 }
@@ -36205,7 +36729,7 @@ if (fs.existsSync(threadsLl)) {
 // A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
 // the bit travels through callers, modules and packages like every other: here
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
-// module with no unsafe call, each of the six exports, and a dependency that
+// module with no unsafe call, each of the eight exports, and a dependency that
 // imports `nish:unsafe` when the entry package does not.
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")
@@ -36222,15 +36746,19 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
       "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
     "each.ts":
-      "import { readCString, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      "import { cErrno, readCString, readStruct, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
       '"nish:unsafe";\n\n' +
+      "declare class Rec {\n  n: i32\n}\n\n" +
       "declare function cbuf(): CPtr | null;\n\n" +
       "export const get = (xs: i32[]): i32 => uncheckedGet(xs, 0);\n" +
       "export const set = (xs: i32[]): void => {\n  uncheckedSet(xs, 0, 1);\n};\n" +
       "export const add = (a: i32): i32 => wrappingAdd(a, 1);\n" +
       "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
-      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n' +
+      "export const rec = (): i32 => {\n  const p = cbuf();\n  if (p === null) {\n    return 0;\n  }\n" +
+      "  const r: Rec = readStruct(p);\n  return r.n;\n};\n" +
+      "export const err = (): i32 => cErrno();\n",
     // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
     "package.json":
       '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
@@ -36308,10 +36836,12 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     ["sub", "wrappingSub"],
     ["mul", "wrappingMul"],
     ["str", "readCString"],
+    ["rec", "readStruct"],
+    ["err", "cErrno"],
   ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
   check(
-    "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call",
-    exportsSeen.length === 6,
+    "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 8,
     `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
   )
 

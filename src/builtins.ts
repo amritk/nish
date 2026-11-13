@@ -38,6 +38,7 @@ import { checkSimdCall } from "./simd"
 import { opaqueReferenceMessage } from "./fnrefs"
 import { routedBuiltinLocal } from "./std-modules"
 import { Scope } from "./symbols"
+import { layoutClass } from "./structs"
 import {
   isNumeric,
   T_BOOL,
@@ -432,7 +433,7 @@ const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name:
 }
 
 /**
- * A `nish:unsafe` function called by its global name. The six are declared
+ * A `nish:unsafe` function called by its global name. The eight are declared
  * as globals in `runtime/nish.d.ts`, as every `nish:` export is, but a
  * program reaches them only through the import: an unchecked index and a
  * defined wrap are each a decision about one site, and the import is what
@@ -892,6 +893,52 @@ const checkReadCString = (ctx: CheckContext, call: Node, scope: Scope, args: Nod
   return T_STRING
 }
 
+/**
+ * `readStruct(p)`, from `nish:unsafe` (WP27 S4.2, `docs/wp27-ffi.md` §9h): the
+ * struct at `p`, copied into a fresh instance of the `declare class` layout
+ * the call's context names. A type argument is never written at a call site
+ * (`reject_generic_call_type_args`), so the layout comes from where the copy
+ * goes, as `Ok(v)`'s `Result` does: an annotation, a parameter or a return
+ * type. That type is the decision, so a `type` alias and a `| null` arrive
+ * here as the layout itself.
+ */
+const checkReadStruct = (ctx: CheckContext, call: Node, scope: Scope, args: Node, want: i32): i32 => {
+  if (checkBuiltinArity(ctx, call, "readStruct", args, 1)) {
+    checkArgumentType(ctx, args.children[0], scope, "readStruct", T_CPTR)
+  }
+  if (want === T_ERROR) {
+    return T_ERROR // typed by its context alone, and the context was refused
+  }
+  if (want < 0) {
+    return ctx.errorType(
+      call,
+      "`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)"
+    )
+  }
+  const layout = ctx.table.stripNull(want)
+  if (layoutClass(ctx.program, ctx.table, layout) === null) {
+    return ctx.errorType(
+      call,
+      `\`readStruct(p)\` copies into a \`declare class\` layout, and ${ctx.table.typeName(want)} is not one`
+    )
+  }
+  return layout
+}
+
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5, `docs/wp27-ffi.md` §10): the errno
+ * the most recent `declare function` call on this thread left. Naming it is
+ * what makes every foreign call in the program zero errno before and save it
+ * after (`capturesErrno`); a freestanding wasm32 build has no libc and so no
+ * errno, and refuses it.
+ */
+const checkCErrno = (ctx: CheckContext, call: Node, args: Node): i32 => {
+  if (!refuseOnFreestandingWasm(ctx, call, "cErrno") && checkBuiltinArity(ctx, call, "cErrno", args, 0)) {
+    ctx.program.capturesErrno = true
+  }
+  return T_I32
+}
+
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
@@ -900,7 +947,7 @@ export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope
   if (isUnsafeExport(name)) {
     return ctx.errorType(call.children[0], unsafeImportMessage(name))
   }
-  return checkBuiltinFunctionNamed(ctx, call, scope, name)
+  return checkBuiltinFunctionNamed(ctx, call, scope, name, -1)
 }
 
 /**
@@ -909,7 +956,13 @@ export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope
  * imported rather than by what the identifier says — which is also what makes
  * `as` work.
  */
-export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: Scope, name: string): i32 => {
+export const checkBuiltinFunctionNamed = (
+  ctx: CheckContext,
+  call: Node,
+  scope: Scope,
+  name: string,
+  want: i32
+): i32 => {
   const args = call.children[1]
   if (isSimdExport(name)) {
     return checkSimdCall(ctx, call, scope, name)
@@ -958,6 +1011,12 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     ctx.program.noteUnsafeCall(call, name)
     if (name === "readCString") {
       return checkReadCString(ctx, call, scope, args)
+    }
+    if (name === "readStruct") {
+      return checkReadStruct(ctx, call, scope, args, want)
+    }
+    if (name === "cErrno") {
+      return checkCErrno(ctx, call, args)
     }
     return name === "uncheckedGet" || name === "uncheckedSet"
       ? checkUncheckedAccess(ctx, call, scope, name, args)

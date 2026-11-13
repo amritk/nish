@@ -49,19 +49,20 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 12 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16, RT-18 and RT-51 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`, `structs.ts`, `emit-classes.ts`, `annotations.ts`, `interop-abi.ts`, `interop-header.ts`) | 0 / 3 / 20 / 17 ⁴ | 0 / 0 / 0 / 2 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16, RT-18 and RT-51 to RT-53 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`, `structs.ts`, `emit-classes.ts`, `annotations.ts`, `interop-abi.ts`, `interop-header.ts`) | 0 / 3 / 21 / 17 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 6 ⁹ | 0 / 0 / 0 / 2 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 10 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
-| HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
-| HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
+| HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 1 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
-| WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
+| QUIC on every core | [quic-multicore.md](quic-multicore.md) | the UDP path of `nish/net/prefork`; the worker byte in `std/net/quic.ts`, `std/net/quic-listener.ts` and `std/net/quic-conn-cid.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ²⁷ |
+| WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts`; the global `Map`'s key hashes: `std/collections.ts`, `src/emit-map.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ¹⁰ |
 | Percent-decoding, query strings and URL parsing | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | YAML into a JsonDocument | [yaml.md](yaml.md) | `std/yaml-json.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 1 / 0 |
@@ -71,7 +72,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts`; the spawn-target check in `runtime/runtime-os.c` | 0 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts`; the spawn handed to the sandbox in `runtime/runtime-os.c` | 0 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts`, `src/shm-window.ts`, `src/emit-shm-window.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
@@ -88,7 +89,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 16 / 82 / 177** | **0 / 0 / 3 / 40** |
+| **Total** ⁸ | | | **3 / 16 / 83 / 182** | **0 / 0 / 3 / 37** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -116,7 +117,8 @@ the record that found it. The notes below the table name each such finding.
    and the literal `null` a `CPtr | null` parameter takes (WP27 S3.3), and
    RT-18 (Medium), a `u8[]` lent to C with its count checked (WP53 B1.2), and
    RT-20 (Medium), the C resource a `using` owns (#861), and RT-51 (Medium),
-   a `declare class` lent to C by pointer (WP27 S4.1). RT-21 (Low),
+   a `declare class` lent to C by pointer (WP27 S4.1), and RT-52 (Medium),
+   `readStruct`, a C struct copied out (WP27 S4.2). RT-21 (Low),
    `nish_argv_init` testing `malloc`'s answer for null only after computing
    from it, was found by #888's harness stage while building the runtime under
    UBSan, fixed there, and is counted as a fixed Low.
@@ -164,6 +166,9 @@ the record that found it. The notes below the table name each such finding.
    fixed Medium. Its use after close is recorded in the row, as nothing
    checks it for a socket either, and is not counted, as RT-30's Darwin
    window is not.
+
+   RT-53 (Low), the `cErrno` slot and the errno capture around a C call
+   (WP27 S5), was reviewed with nothing to fix and is not counted.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -177,8 +182,10 @@ the record that found it. The notes below the table name each such finding.
    (Medium) is counted as fixed: its Linux rows gate, and its macOS rows
    report rather than gate, for the reason its record gives.
 7. H2-2, H3-4, WT-3, WT-4 and WT-5 (Low) are accepted, with the reason in
-   their records, and are not counted, as SC-17 is not. H2-3, H3-5 and WT-2
-   are open: the program owns the loop and the clock. WT-1 repeats H3-1 and
+   their records, and are not counted, as SC-17 is not. H3-5 is open: the
+   program owns the loop and the clock. H1-2, H2-3 and WT-2 are closed and
+   counted as fixed: each layer takes the clock from the program's `expire`,
+   as H1-1's does. WT-1 repeats H3-1 and
    is counted in its own record. H3-1, H3-2, H3-3, H3-6, H3-7, H3-8 and WT-1
    are closed and counted as fixed, and QUIC-9, the microsecond pacer H3-8
    rests on, is closed and counted as a fixed Low in the QUIC row.
@@ -429,6 +436,8 @@ the record that found it. The notes below the table name each such finding.
     while writing the record, and UPSTREAM-7 (Low), UPSTREAM-12 and
     UPSTREAM-13 (Medium) in review; each is fixed with a before/after test.
     UPSTREAM-1 to UPSTREAM-6 are properties checked and found to hold.
+27. QM-3, QM-4 and QM-5 (Low) are accepted, with the reason in their record,
+    and are not counted.
 
 ## Fuzzed
 
@@ -470,7 +479,7 @@ takes a file in deletes its row.
 | `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1-codec.md` names it but no Scope table does. |
 | `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
 | `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
-| `std/net/prefork.ts` | A supervisor over `spawn`, `spawnWithFds` and signals that reads no network input. Its channels are `unixSocketPair`s it makes to its own workers before spawning them: it hands each worker exactly its ends through `spawnWithFds` (RT-40) and closes its copies of them, a supervisor channel's once its worker has started and the service pairs, made once per group, once the whole group has started, and reads its own ends only to hand them to the program's callback (`preforkSupervise`) or, through `preforkWith`, to drop what arrives. Its descriptor hygiene is RT-17 and RT-19 in `runtime.md`; `tests/link/net_prefork_channels` pins that each worker holds no descriptor but 0 to 2 and its own ends, and that a restart leaves the supervisor holding as many descriptors as before. A worker trusts the descriptor numbers in its `--nish-prefork-channels=` argument as given, the same boundary as `--nish-prefork-worker=`: whoever starts the program chooses its arguments, and the same holds for `--nish-prefork-listener=`. With `listenPort` the supervisor binds one listener per worker in CPU order before any worker starts, holds them for the run, and hands listener `k` only to worker `k` (RT-40); with `pin` each worker narrows itself to CPU `k` with `setCpuAffinity`, which never widens a mask, and more pinned workers than CPUs, or a listen field out of range, panic before anything starts. Those runtime properties are in `runtime.md` → "Properties verified"; the file itself stays unaudited. |
+| `std/net/prefork.ts` | A supervisor over `spawn`, `spawnWithFds` and signals that reads no network input. Its channels are `unixSocketPair`s it makes to its own workers before spawning them: it hands each worker exactly its ends through `spawnWithFds` (RT-40) and closes its copies of them, a supervisor channel's once its worker has started and the service pairs, made once per group, once the whole group has started, and reads its own ends only to hand them to the program's callback (`preforkSupervise`) or, through `preforkWith`, to drop what arrives. Its descriptor hygiene is RT-17 and RT-19 in `runtime.md`; `tests/link/net_prefork_channels` pins that each worker holds no descriptor but 0 to 2 and its own ends, and that a restart leaves the supervisor holding as many descriptors as before. A worker trusts the descriptor numbers in its `--nish-prefork-channels=` argument as given, the same boundary as `--nish-prefork-worker=`: whoever starts the program chooses its arguments, and the same holds for `--nish-prefork-listener=`. With `listenPort` the supervisor binds one listener per worker in CPU order before any worker starts, holds them for the run, and hands listener `k` only to worker `k` (RT-40); with `pin` each worker narrows itself to CPU `k` with `setCpuAffinity`, which never widens a mask, and more pinned workers than CPUs, or a listen field out of range, panic before anything starts. Those runtime properties are in `runtime.md` → "Properties verified"; the file itself stays unaudited. Its UDP path (`listenUdp`: the steered group, its fallback, the `--nish-prefork-udp=` flag) is reviewed in [quic-multicore.md](quic-multicore.md); the rest of the supervisor is not. |
 | `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
 | `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
 
@@ -484,13 +493,10 @@ only.
 | --- | --- | --- | --- | --- |
 | CAPS-19 | Medium | `src/capabilities.ts` (`refuseNarrowGrants`), the sandbox's seccomp filter | A `net=<host>` grant binds only literal hosts: a host computed at run time is not checked, with or without `--sandbox` | — |
 | PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
-| H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
 | HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `fetch.ts` and `websocket.ts` to spans mode |
-| H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H2C-1 | Low | `std/net/http2-cleartext.ts` | Cleartext by design: no confidentiality or integrity on the path. Serve h2c only behind a TLS-terminating proxy, on loopback or a private network | — |
-| H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
-| WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
+| H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WebTransport sessions have their own clock (WT-2) | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
 | SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`) | On the SHA-NI and ARMv8 SHA-256 path the state, the message words and every round's intermediates pass through vector registers, and on x86-64 seven spills of them, which no store from C or the language can wipe; the kernel keeps no buffer and writes only the new state to `h`, which HMAC wipes (K1-7). Recorded rather than reached, as AEAD-4 | — |
 | CHACHAHW-2 | Low | `runtime/runtime-chacha20.c` (`nish_chacha20_xor`) | On the AVX2 and NEON path the state, every round's working words and the keystream pass through vector registers, and `clang -O2` spills some to the stack, which no store from C or the language can wipe; the stack buffers the kernel names are wiped by volatile stores, and the caller's state is the caller's to wipe. Recorded rather than reached, as AEAD-4 | — |

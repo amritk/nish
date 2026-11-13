@@ -25,9 +25,10 @@
  * it, `EXECUTE` leaves the rule on `/` and each program gets a rule of its own.
  * An interpreter the grants do not name themselves is written `//<path>`, the
  * same file to the kernel, and is kept out of a spawn's reach (SBX-1): its
- * identity is recorded before step 2, and `nish_spawn_target`, which
+ * identity is recorded before step 2, and `nish_spawn_sandboxed`, which
  * runtime-os.c's spawn calls once it is set, refuses a target that is that
- * file and hands back a descriptor of any other, which the child executes.
+ * file, has the child execute a descriptor of any other, and holds that
+ * child's whole subtree to the one exec ("One exec per spawn" below).
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -70,13 +71,20 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <poll.h>
+#include <pthread.h>
+#include <sched.h>
+#include <signal.h>
+#include <spawn.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <linux/audit.h>
 #include <linux/capability.h>
 #include <linux/filter.h>
@@ -154,7 +162,9 @@ struct nish_ll_path_beneath {
 #define NISH_SB_ARCH AUDIT_ARCH_X86_64
 static const uint16_t nish_sb_always[] = {101, 310, 311, 438}; /* ptrace, process_vm_readv/writev, pidfd_getfd */
 static const uint16_t nish_sb_net[] = {41, 53, 42, 49, 50, 43, 288}; /* socket ... accept4 */
-static const uint16_t nish_sb_spawn[] = {59, 322, 57, 58}; /* execve, execveat, fork, vfork */
+#define NISH_SB_EXECVE 59
+#define NISH_SB_EXECVEAT 322
+static const uint16_t nish_sb_spawn[] = {NISH_SB_EXECVE, NISH_SB_EXECVEAT, 57, 58}; /* execve, execveat, fork, vfork */
 #define NISH_SB_CLONE 56
 static const uint16_t nish_sb_meta[] = {
     90, 91, 268, 452,   /* chmod, fchmod, fchmodat, fchmodat2 */
@@ -167,7 +177,9 @@ static const uint16_t nish_sb_meta[] = {
 #define NISH_SB_ARCH AUDIT_ARCH_AARCH64
 static const uint16_t nish_sb_always[] = {117, 270, 271, 438};
 static const uint16_t nish_sb_net[] = {198, 199, 203, 200, 201, 202, 242};
-static const uint16_t nish_sb_spawn[] = {221, 281};
+#define NISH_SB_EXECVE 221
+#define NISH_SB_EXECVEAT 281
+static const uint16_t nish_sb_spawn[] = {NISH_SB_EXECVE, NISH_SB_EXECVEAT};
 #define NISH_SB_CLONE 220
 static const uint16_t nish_sb_meta[] = {
     52, 53, 452, /* fchmod, fchmodat, fchmodat2 */
@@ -396,25 +408,33 @@ static int nish_sb_rows(struct sock_filter *prog, int at, const uint16_t *nrs, i
 #define NISH_SB_ARG0_LOW offsetof(struct seccomp_data, args)
 #endif
 
-/* Step 5: a denylist (open question 4), each row of the note's section 4.
- * The arch check comes first and kills on a mismatch, so a 32-bit entry
- * cannot step around the 64-bit numbers; on x86-64 the next instruction
- * kills any number with bit 30 set, since an x32 call reports
- * AUDIT_ARCH_X86_64 and would match none of them. */
+/* How every filter here starts, leaving the syscall number loaded. The arch
+ * check comes first and kills on a mismatch, so a 32-bit entry cannot step
+ * around the 64-bit numbers; on x86-64 the next instruction kills any number
+ * with bit 30 set, since an x32 call reports AUDIT_ARCH_X86_64 and would
+ * match none of them. */
+#if defined(__x86_64__)
+#define NISH_SB_X32                                        \
+  , BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1), \
+      BPF_STMT(BPF_RET | BPF_K, KILL)
+#else
+#define NISH_SB_X32
+#endif
+#define NISH_SB_HEAD                                                       \
+  BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)), \
+      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ARCH, 1, 0),             \
+      BPF_STMT(BPF_RET | BPF_K, KILL),                                     \
+      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)) NISH_SB_X32
+
+/* Step 5: a denylist (open question 4), each row of the note's section 4. */
 static void nish_sb_seccomp(int32_t caps) {
   uint32_t action = SECCOMP_RET_KILL_PROCESS;
   if (syscall(SYS_seccomp, SECCOMP_GET_ACTION_AVAIL, 0, &action) != 0)
     nish_sb_fail("this kernel has no seccomp filter that kills the process");
+  static const struct sock_filter head[] = {NISH_SB_HEAD};
   struct sock_filter prog[96];
-  int at = 0;
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
-  prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ARCH, 1, 0);
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, KILL);
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-#if defined(__x86_64__)
-  prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1);
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, KILL);
-#endif
+  int at = sizeof head / sizeof head[0];
+  memcpy(prog, head, sizeof head);
   at = NISH_SB_ROWS(prog, at, nish_sb_always, KILL);
   if (!(caps & CAP_BIT_NET)) at = NISH_SB_ROWS(prog, at, nish_sb_net, KILL);
   /* io_uring opens, connects and accepts sockets without those calls. */
@@ -504,8 +524,268 @@ static int nish_sb_spawn_open(const char *file, int low, char *proc) {
   }
 }
 
+/* One exec per spawn (SBX-1, docs/wp37-os-sandbox.md section 2a "One exec
+ * per spawn"). Landlock grants EXECUTE on a kept interpreter to the whole
+ * process tree, since the kernel needs it to start a granted program, so a
+ * granted program that executes a path from its arguments (`find -exec`,
+ * `env`) could run the interpreter, and through it any file. Under an exec
+ * allowlist every spawn therefore runs on two threads of its own:
+ *
+ *   - the supervisor leaves the process's descriptor table for a private copy
+ *     (`unshare(CLONE_FILES)`), so that no other thread can close or replace
+ *     a descriptor between the identity check and the exec, opens and checks
+ *     the target there, and starts the spawner;
+ *   - the spawner takes a seccomp filter that sends `execve` and `execveat`
+ *     to a user-notification listener and calls `posix_spawn`, so the child
+ *     inherits the filter. A filter cannot be removed, which is why it is a
+ *     thread that ends with the spawn and not the calling thread.
+ *
+ * Both threads run with every signal blocked, and the child is started with
+ * the calling thread's mask (`POSIX_SPAWN_SETSIGMASK`): a handler run on
+ * either would write its wake pipe by number, and in the private table that
+ * number can be the listener or the spawn's own pipe.
+ *
+ * The supervisor answers the first notification, the child's own exec, with
+ * "continue" and closes the listener; the kernel then answers every later
+ * exec in that child's subtree ENOSYS, for good. The same filter refuses a
+ * second listener (EBUSY): the kernel lets the newest filter's "continue"
+ * stand for all of them, so a granted program with a listener of its own
+ * would answer its children's execs itself.
+ *
+ * The listener, the pipe and the target live in the private table only, and
+ * go with it when both threads end. Where the filter cannot be installed
+ * (EINVAL before Linux 5.0, EBUSY beneath a launcher's own listener) the
+ * spawn is refused in both modes; where "continue" is not known (before
+ * 5.5) the supervisor fails the child's exec instead, which refuses it too. */
+#define NISH_SB_NEW_LISTENER 8u /* SECCOMP_FILTER_FLAG_NEW_LISTENER */
+#define NISH_SB_USER_NOTIF 0x7fc00000u /* SECCOMP_RET_USER_NOTIF */
+/* struct seccomp_notif and seccomp_notif_resp, spelled here like Landlock's
+ * numbers: headers older than Linux 5.0 lack them. */
+struct nish_sb_notif {
+  uint64_t id;
+  uint32_t pid, flags;
+  struct seccomp_data data;
+};
+struct nish_sb_notif_resp {
+  uint64_t id;
+  int64_t val;
+  int32_t error;
+  uint32_t flags; /* 1 is SECCOMP_USER_NOTIF_FLAG_CONTINUE */
+};
+#define NISH_SB_NOTIF_RECV _IOWR('!', 0, struct nish_sb_notif)
+#define NISH_SB_NOTIF_SEND _IOWR('!', 1, struct nish_sb_notif_resp)
+
+extern char **environ;
+
+struct nish_sb_job {
+  const char *file;
+  const int *dup; /* the `n` descriptors the actions read, or null */
+  int n;
+  int low;
+  const posix_spawn_file_actions_t *actions;
+  char **argv;
+  char proc[32];
+  int pipe[2]; /* the spawner's two answers: its listener, then its child */
+  sigset_t mask; /* the calling thread's, which the child starts with */
+  int32_t result;
+};
+
+/* `fd` moved to a close-on-exec descriptor at or above `low`, or -1 with
+ * errno. No descriptor this file makes for a spawn stays below `low`, where
+ * the child's file actions and this process's 0, 1 and 2 are. */
+static int nish_sb_lift(int fd, int low) {
+  int moved = fcntl(fd, F_DUPFD_CLOEXEC, low), e = errno;
+  close(fd);
+  errno = e;
+  return moved;
+}
+
+static void nish_sb_refuse_spawn(int e) {
+  char buf[24];
+  nish_sb_say("cannot hold a spawned program to one exec, so the spawn is refused", 0, nish_sb_errno_name(e, buf));
+}
+
+/* The answers are written through the pipe rather than left in the job, so
+ * that the supervisor wakes for the second whether or not the child ever
+ * reached its exec: a child that dies in a redirect notifies nobody. */
+static void *nish_sb_spawner(void *arg) {
+  struct nish_sb_job *job = arg;
+  static const struct sock_filter prog[] = {
+      NISH_SB_HEAD,
+      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_EXECVE, 6, 0),
+      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_EXECVEAT, 5, 0),
+      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_seccomp, 0, 3),
+      /* `seccomp`'s flags are its second argument. */
+      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, NISH_SB_ARG0_LOW + 8),
+      BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, NISH_SB_NEW_LISTENER, 0, 1),
+      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EBUSY),
+      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+      BPF_STMT(BPF_RET | BPF_K, NISH_SB_USER_NOTIF),
+  };
+  struct sock_fprog fprog = {sizeof prog / sizeof prog[0], (struct sock_filter *)prog};
+  int32_t said = (int32_t)syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, NISH_SB_NEW_LISTENER, &fprog);
+  /* The kernel gave the listener the lowest free number, which may be one
+   * the child's actions write, or this process's closed stderr. */
+  if (said >= 0) said = nish_sb_lift(said, job->low);
+  if (said < 0) said = -errno;
+  (void)!write(job->pipe[1], &said, sizeof said);
+  if (said < 0) return 0;
+  pid_t pid;
+  /* This thread blocks every signal, and a child starts with its parent's
+   * mask unless it is given one: the caller's. */
+  posix_spawnattr_t attr;
+  int failed = posix_spawnattr_init(&attr);
+  if (!failed) {
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
+    posix_spawnattr_setsigmask(&attr, &job->mask);
+    failed = posix_spawn(&pid, job->proc, job->actions, &attr, job->argv, environ);
+    posix_spawnattr_destroy(&attr);
+  }
+  said = failed ? -failed : (int32_t)pid;
+  (void)!write(job->pipe[1], &said, sizeof said);
+  return 0;
+}
+
+/* The spawner's next answer. An interrupted read is restarted: giving up
+ * there would lose a child that is already running. */
+static int32_t nish_sb_answer(int fd) {
+  int32_t said;
+  ssize_t n;
+  while ((n = read(fd, &said, sizeof said)) < 0 && errno == EINTR) {}
+  return n == sizeof said ? said : -EIO;
+}
+
+/* The supervisor's answer to one notification. The test-only
+ * `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=<n>` makes the "continue" answer fail
+ * as it does before Linux 5.5, and for 2 the error answer after it as well;
+ * `scripts/build.sh` never passes it. */
+static int nish_sb_reply(int listener, struct nish_sb_notif_resp *go) {
+#ifdef NISH_SANDBOX_SIMULATE_NO_CONTINUE
+  if (go->flags || NISH_SANDBOX_SIMULATE_NO_CONTINUE > 1) {
+    errno = EINVAL;
+    return -1;
+  }
+#endif
+  return ioctl(listener, NISH_SB_NOTIF_SEND, go);
+}
+
+static void *nish_sb_supervisor(void *arg) {
+  struct nish_sb_job *job = arg;
+  pthread_t spawner;
+  int made[2];
+  if (unshare(CLONE_FILES)) {
+    nish_sb_refuse_spawn(errno);
+    return 0;
+  }
+  /* The actions name their sources by number, and this table is now nobody
+   * else's. A source that is open here is the caller's, so no descriptor made
+   * below can take its number; one that is not would name whatever was made
+   * there, so the spawn is refused before anything is. */
+  for (int k = 0; job->dup && k < job->n; k++) {
+    if (fcntl(job->dup[k], F_GETFD) < 0) {
+      job->result = -EBADF;
+      return 0;
+    }
+  }
+  if (pipe2(made, O_CLOEXEC)) {
+    nish_sb_refuse_spawn(errno);
+    return 0;
+  }
+  /* Both ends are moved before either is tested, so that the line below is
+   * never written to an end still sitting on descriptor 2. */
+  job->pipe[0] = nish_sb_lift(made[0], job->low);
+  job->pipe[1] = nish_sb_lift(made[1], job->low);
+  if (job->pipe[0] < 0 || job->pipe[1] < 0) {
+    nish_sb_refuse_spawn(EMFILE);
+    return 0;
+  }
+  int fd = nish_sb_spawn_open(job->file, job->low, job->proc);
+  if (fd < 0) {
+    job->result = fd;
+    return 0;
+  }
+  int failed = pthread_create(&spawner, 0, nish_sb_spawner, job);
+  if (failed) {
+    nish_sb_refuse_spawn(failed);
+    return 0;
+  }
+  int32_t listener = nish_sb_answer(job->pipe[0]);
+  if (listener < 0) {
+    nish_sb_refuse_spawn(-listener);
+    job->result = listener;
+  } else {
+    struct pollfd fds[2] = {{listener, POLLIN, 0}, {job->pipe[0], POLLIN, 0}};
+    struct nish_sb_notif_resp go = {0, 0, 0, 1};
+    pid_t killed = 0;
+    /* Until the spawner answers: a child that never reaches its exec notifies
+     * nobody, and one whose exec a signal restarted notifies again. */
+    for (;;) {
+      struct nish_sb_notif exec;
+      while (poll(fds, 2, -1) < 0) {}
+      if (!(fds[0].revents & POLLIN)) break;
+      memset(&exec, 0, sizeof exec);
+      /* The child holds the listener too until its exec commits, so closing
+       * this copy releases nothing: a notification that is neither answered
+       * nor gone (ENOENT: the child was killed, or its exec restarted) would
+       * leave the child in its exec and the spawner in its `vfork` for good.
+       * Each one is therefore read again, answered, or its child killed. */
+      if (ioctl(listener, NISH_SB_NOTIF_RECV, &exec)) continue;
+      go.id = exec.id;
+      if (!nish_sb_reply(listener, &go)) break;
+      if (errno == ENOENT) continue;
+      /* "Continue" is not known here (EINVAL before Linux 5.5), and failing
+       * the exec needs no such flag. */
+      nish_sb_refuse_spawn(errno);
+      go.flags = 0;
+      go.error = -ENOSYS;
+      if (!nish_sb_reply(listener, &go)) break;
+      if (errno == ENOENT) continue;
+      killed = (pid_t)exec.pid;
+      kill(killed, SIGKILL);
+      break;
+    }
+    /* From here every exec in the child's subtree is ENOSYS. */
+    close(listener);
+    job->result = nish_sb_answer(job->pipe[0]);
+    /* `posix_spawn` reports a child killed before its exec as started. */
+    if (killed && job->result > 0) {
+      while (waitpid(job->result, 0, 0) < 0 && errno == EINTR) {}
+      job->result = -ECHILD;
+    }
+  }
+  pthread_join(spawner, 0);
+  return 0;
+}
+
+/* `nish_spawn_start`'s spawn under an exec allowlist: the child's pid, or a
+ * negative errno. `actions` is its `posix_spawn_file_actions_t`, whose `dup2`
+ * actions read the `n` descriptors of `dup` (null for none) and write `base`
+ * onward; the actions write nothing above `base + n + 2`. */
+static int32_t nish_sb_spawn_once(const char *file, const int *dup, int base, int n, const void *actions, char **argv) {
+  struct nish_sb_job job = {
+      .file = file, .dup = dup, .n = n, .low = base + n + 3, .actions = actions, .argv = argv, .result = -EAGAIN};
+  pthread_t supervisor;
+  sigset_t all;
+  /* Both threads start with every signal blocked, so the program's handlers
+   * never run on them: a handler names its descriptors by number
+   * (`signalFd`'s pipe), and in the private table that number is nothing, or
+   * one of this spawn's own. A signal sent to the process is delivered to a
+   * thread that takes it. */
+  sigfillset(&all);
+  pthread_sigmask(SIG_SETMASK, &all, &job.mask);
+  int failed = pthread_create(&supervisor, 0, nish_sb_supervisor, &job);
+  pthread_sigmask(SIG_SETMASK, &job.mask, 0);
+  if (failed) {
+    nish_sb_refuse_spawn(failed);
+    return -EAGAIN;
+  }
+  pthread_join(supervisor, 0);
+  return job.result;
+}
+
 static void nish_sb_keep_interpreters(const char *paths) {
   struct stat st;
+  if (paths) nish_spawn_sandboxed = nish_sb_spawn_once;
   for (; paths && *paths; paths += strlen(paths) + 1) {
     /* An entry gone since the build has no identity to keep, and Landlock
      * grants it nothing to execute either. */
@@ -513,7 +793,6 @@ static void nish_sb_keep_interpreters(const char *paths) {
     int n = nish_sb_nrefused++;
     if (n < NISH_SB_REFUSED) nish_sb_refused[n].dev = st.st_dev, nish_sb_refused[n].ino = st.st_ino;
   }
-  if (nish_sb_nrefused) nish_spawn_target = nish_sb_spawn_open;
 }
 
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {

@@ -87,6 +87,20 @@ until `netRead` does, and holds on to what `netWrite` could not send yet. The
 loop is level-triggered: anything you leave unread is reported again on the
 next `pollWait`.
 
+The protocol servers in `nish/net` keep no timer of their own: your loop owns
+the clock. Call their `expire(monotonicNanos())` once a turn, with a
+`pollWait` timeout no longer than the shortest deadline, and they close what
+has gone on too long. `Http1Server` closes an idle slot, a head past
+`headTimeout`, and a refused client still draining past `lingerTimeout`
+(it shuts its write side and reads what the client still sends, up to
+`lingerBytes`, so the error response is not lost to a reset).
+`Http2TlsServer` closes a client that has not acknowledged its SETTINGS
+within `settingsTimeout`, or is quiet past `idleTimeout`. A WebTransport
+layer ends a session quiet past its `idleTimeout` and drops datagrams past
+`maxDatagramsPerSecond`. Each limit has a default and is checked at start-up;
+[the standard library's `nish/net` section](standard-library.md#nishnet) has
+the details.
+
 ## Sharing a port and turning Nagle off: `tcpListenFlags`
 
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with one more
@@ -349,6 +363,70 @@ supervisor says so on stderr. A `listenPort` outside `-1..65535`, a
 `listenBacklog` of 0 or less, or other `listenFlags` stop the program with a
 panic.
 
+### QUIC on every core: `listenUdp`
+
+A QUIC connection is named by its connection ID, not by the client's address,
+so it survives the client moving to a new port or network. Over several
+workers that only holds if each datagram reaches the worker that holds its
+connection. Set `listenUdp` with `listenPort` and the supervisor binds one UDP
+socket per worker on that port, as a group the kernel steers by connection ID:
+a datagram whose destination connection ID starts with byte `k` goes to worker
+`k`. Worker `k` takes its socket with `preforkUdpListener(process.argv)` and
+the group's size with `preforkUdpCount(process.argv)`, and puts both in its
+`QuicServerConfig`, so every connection ID it hands out starts with `k`:
+
+```ts nish:ok
+import { PREFORK_STOPPED, PreforkConfig, preforkUdpCount, preforkUdpListener, preforkWith } from "nish/net/prefork";
+import { QuicServerConfig } from "nish/net/quic";
+
+/** Worker `worker`'s QUIC settings: every connection ID it issues starts with its index. */
+export const steered = (config: QuicServerConfig, worker: i32): QuicServerConfig => {
+  config.workerIndex = worker;
+  config.workerCount = preforkUdpCount(process.argv);
+  return config;
+};
+
+export const main = (): i32 => {
+  const config = new PreforkConfig();
+  config.listenPort = 4433;
+  config.listenUdp = true;
+  const worker = preforkWith(process.argv, config);
+  if (worker === PREFORK_STOPPED) {
+    return 0;
+  }
+  if (worker < 0) {
+    return 1;
+  }
+  const udp = preforkUdpListener(process.argv);
+  // Serve HTTP/3 here: `new Http3Server(steered(quicConfig, worker), h3Config, udp, slots, entropy)`.
+  return udp >= 0 ? 0 : 1;
+};
+```
+
+A server that is not part of a group leaves `workerIndex` at `-1` and
+`workerCount` at `0`. Any other pair outside `0 <= workerIndex < workerCount
+<= 255` stops the program with a panic when the `QuicListener` or
+`Http3Server` is built, naming the pair:
+
+```text
+nish/net/quic: workerIndex 2 and workerCount 2, not 0 <= k < n <= 255
+```
+
+Two more things change in a group. A worker that receives a packet for a
+connection ID that another worker issued drops it instead of answering with a
+stateless reset, since that reset would end the other worker's live
+connection. And the group holds at most 255 workers, as the steering reads one
+byte: more stops the program with a panic.
+
+Steering needs Linux. Where the kernel refuses it (off Linux, or under a
+seccomp profile that forbids the program), the supervisor says so on stderr,
+`nish/net/prefork: QUIC steering refused (-95), running one worker`, and runs
+a single worker on a plain socket, with `preforkUdpCount` answering `1`.
+A `serviceWorker` other than `0` has no place in that one-worker run, so
+there the supervisor starts nothing and answers `PREFORK_SPAWN_FAILED`.
+The underlying call is `udpBind` with flag `4`
+([`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
 ### Workers that are not restarted
 
 Set `restart` to `false` when something else restarts the service, such as
@@ -472,9 +550,10 @@ worker restarts on its own with a new pair. With `restart` off nothing is
 signalled: a worker sees its peer's exit as a hang-up on its end.
 
 A `serviceWorker` below `-1` or not below the worker count, more than 64
-workers with a service worker (the most descriptors one child is handed), a
-`channelKind` that is neither kind, or seqpacket channels off Linux stop the
-program with a panic.
+workers with a service worker (the most descriptors one child is handed: 63
+with `listenPort`, 62 with `listenUdp` too), `listenUdp` with a negative
+`listenPort`, a `channelKind` that is neither kind, or seqpacket channels off
+Linux stop the program with a panic.
 
 ## Serving a file
 

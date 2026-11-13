@@ -42,6 +42,12 @@ The inverse of `f64ToBits`: `bitsToF64(f64ToBits(x)) === x` for every `x` except
 
 </scalar-card>
 
+<scalar-card title="c​Errno" icon="phosphor/regular/function" href="#cerrno">
+
+`cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent `declare function` call on this thread left, or 0 before any.
+
+</scalar-card>
+
 <scalar-card title="connect​Result" icon="phosphor/regular/function" href="#connectresult">
 
 How the connection of a `tcpConnect` went, asked once `fd` is writable.
@@ -303,6 +309,12 @@ Block until SIGTERM or SIGINT arrives.
 <scalar-card title="read​Stdin" icon="phosphor/regular/function" href="#readstdin">
 
 Up to `len` bytes of stdin into `buf[off, off + len)`, never blocking. stdin is never made non-blocking, since that flag belongs to the open file description a shell shares with every program it starts: the call asks `select` with a timeout of 0 before it reads.
+
+</scalar-card>
+
+<scalar-card title="read​Struct" icon="phosphor/regular/function" href="#readstruct">
+
+A copy of the C struct at `p`, in a new instance of the `declare class` the call's context names: `const lc: Lconv = readStruct(localeconv())`.
 
 </scalar-card>
 
@@ -967,6 +979,26 @@ the 64 bits to read as a float.
 <scalar-field name="returns" type="f64">
 
 the `f64` those bits are.
+
+</scalar-field>
+
+### cErrno
+
+`cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent
+`declare function` call on this thread left, or 0 before any. Naming it
+anywhere in a program makes every foreign call zero errno just before it
+and save it just after, before the result is copied or anything allocated,
+so the runtime's own work after the call cannot change it. Meaningful only
+where the C function documents that it sets errno. Per thread; refused on a
+freestanding wasm32 build, which has no libc. Capability: unsafe.
+
+```ts
+function cErrno(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+the saved errno, an `i32`.
 
 </scalar-field>
 
@@ -2499,6 +2531,50 @@ the count, 0 at end of stream, or -11 when nothing is waiting.
 
 </scalar-field>
 
+### readStruct
+
+A copy of the C struct at `p`, in a new instance of the `declare class` the
+call's context names: `const lc: Lconv = readStruct(localeconv())`. A type
+argument is not written at a call site (`readStruct<Lconv>(p)` is refused,
+as `identity<i32>(7)` is), so the layout comes from an annotation, a
+parameter or a return type, as `Ok(v)`'s type does; a call with none, or one
+whose context is not a `declare class`, is refused. It copies the layout's
+size in bytes, so the class must describe the struct's first fields (a
+prefix is enough) and `p` must point at that many readable bytes: undefined
+behaviour otherwise, as with `readCString`.
+
+The copy is the program's own: C may free or overwrite its struct straight
+after the call, and a `CPtr` field of the copy is still C's pointer, read
+with `readCString` while C keeps it live. The parameter is `CPtr`, so an
+unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
+
+A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
+naming the layout, since a `declare function` declared to answer `CPtr` may
+still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
+`oom` beside it.
+
+The copy is new on every call and is the calling function's allocation, held
+by the arena like `new`. It lowers the same on wasm32, where a pointer is 4
+bytes and the layout is sized to match. It has no Node form.
+Capability: unsafe.
+
+```ts
+function readStruct<T>(p: CPtr): T
+```
+
+<scalar-field name="p" type="CPtr" required>
+
+the address of a C struct a `declare function` handed back.
+
+</scalar-field>
+
+<scalar-field name="returns" type="T">
+
+a copy of the struct, in the `declare class` its context names.
+
+</scalar-field>
+
 ### readdirSync
 
 The directory's entries, sorted ascending by bytes (not by the file system's
@@ -2980,6 +3056,9 @@ that calls it is refused as any shared write is. Also exported by
 `nish:process`.
 Capability: process.spawn.
 
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
+
 ```ts
 function spawn(argv: string[]): i32
 ```
@@ -2994,7 +3073,10 @@ the program and its arguments.
 
 the child's pid, or a negative errno: -22 (EINVAL) for an empty
   vector or an argument holding a NUL, and `posix_spawnp`'s own error
-  otherwise, so a program that is not there is -2 (ENOENT).
+  otherwise, so a program that is not there is -2 (ENOENT). Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 
@@ -3016,6 +3098,9 @@ absorbed. The two output arrays are grown by the runtime, so `readonly` is
 refused for them, as is a typed-array spelling (`Int32Array`, ...), whose
 length is fixed. A `wasm32` build refuses it (NL2404). Capability:
 process.spawn.
+
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
 
 ```ts
 function spawnPiped(
@@ -3076,6 +3161,9 @@ and 16 MiB cap, `readonly` and typed-array spellings refused for the two
 output arrays, refused by a `wasm32` build (NL2404). Capability:
 process.spawn.
 
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
+
 ```ts
 function spawnPipedWithin(
   argv: string[],
@@ -3134,6 +3222,14 @@ working directory. The argument is checked down to its element type: an
 an embedded NUL truncates one. A `wasm32` build and a WASI build have no
 processes, and a WASI build always answers `-1`. Capability: process.spawn.
 
+Under `--sandbox`, a dependency's `process.spawn=<program>` grants can make
+a list of the only programs the build may start. A program this builtin
+starts under such a list cannot start another: an exec by it, or by
+anything it forks, fails, so a granted `#!` script runs its interpreter's
+builtins alone. Where the kernel or a container's seccomp profile refuses
+what that takes (Docker's default profile does), the spawn fails and one
+line on stderr says so.
+
 ```ts
 function spawnSync(argv: string[]): number
 ```
@@ -3161,6 +3257,9 @@ string leaves that stream inherited, so one call can capture stdout and let
 stderr through. The two paths must not name one file: each is opened
 separately, with its own offset, so the streams would overwrite rather than
 interleave; capture them apart and concatenate. Capability: process.spawn.
+
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
 
 ```ts
 function spawnSyncTo(
@@ -3209,6 +3308,9 @@ them, and this process keeps its own. Reap the pid with `waitPid`. No reading
 under Node, which throws. A `wasm32` build refuses it (NL2404).
 Capability: process.spawn.
 
+Under `--sandbox` with a list of granted programs, the program started
+cannot start another, as for `spawnSync`.
+
 ```ts
 function spawnWithFds(
   argv: string[],
@@ -3233,7 +3335,10 @@ the descriptors handed down, at most 64.
 the child's pid, or a negative errno: -22 more than 64 descriptors
   or a negative one (before anything is opened or started), -9 one that is
   not open, -24 (or -22 above the descriptor limit) a scratch descriptor the
-  system cannot give.
+  system cannot give. Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 
@@ -3700,8 +3805,11 @@ the port, 0 for any.
 <scalar-field name="flags" type="i32" required>
 
 flag 1 `SO_REUSEPORT`, so several sockets that all ask for it share a port and
-  the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); any other
-  bit is -22.
+  the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); flag 4, with
+  flag 1 and a group size N from 1 to 255 in bits 8 to 15, steers QUIC: the port's group hands
+  each datagram to its socket number (byte 0 of the Destination Connection ID) mod N, in the
+  order the sockets were bound, and a refused attach closes the socket and answers the errno
+  (-95 on Darwin). Flag 4 without 1, with 2 or with N 0, N without 4, or any other bit is -22.
 
 </scalar-field>
 

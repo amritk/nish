@@ -2,8 +2,8 @@
 
 **Status:** S1 and S2 are built; S3 (§8) is built: S3.1, `string`
 parameters, S3.2, `string` returns, and S3.3, `readCString` and the
-literal-`null` `CPtr | null` parameter; S4 (§9) is being built: S4.1, a `declare class`
-as a C struct layout passed by pointer, is built; S4.2 (`readStruct`) and S5 are unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
+literal-`null` `CPtr | null` parameter; S4 (§9) is built: S4.1, a `declare class`
+as a C struct layout passed by pointer, and S4.2, `readStruct`; S5 (§10), `cErrno`, is built. S1, scalar-only `declare function`, shipped in 0.2.0
 ([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
 the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
 debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
@@ -13,9 +13,9 @@ program that reaches C
 ([wp36-capability-policy.md](wp36-capability-policy.md)), and a declaration in
 a package or a `std/` module binds the bare C name rather than the package's
 prefixed one, with duplicate declarations required to agree
-(`tests/link/ffi_package_declare`). Whether S5
-should happen at all is a language question (§3); §8 answers it for S3 and
-§9 for S4, which is being built. The rules are normative in
+(`tests/link/ffi_package_declare`). Whether S3 to S5
+should happen at all was a language question (§3); §8 answers it for S3,
+§9 for S4 and §10 for S5, all three built. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
@@ -85,8 +85,8 @@ conservatism is the feature and the stages are small.
 | S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
 | S3 | `string` ↔ `char *` marshalling, and who owns the bytes | **built**, §8: S3.1 (`string` parameters), S3.2 (`string` returns), S3.3 (`readCString`, the literal-`null` `CPtr \| null` parameter) |
-| S4 | C structs by layout declaration | §9: S4.1 (`declare class` as a layout, passed by pointer) **built**; S4.2 (`readStruct`) planned |
-| S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
+| S4 | C structs by layout declaration | **built**, §9: S4.1 (`declare class` as a layout, passed by pointer), S4.2 (`readStruct`, a copy back, §9h) |
+| S5 | `errno`: `cErrno()` in `nish:unsafe`, zeroed before and saved after each foreign call | **built**, §10 |
 
 S1 calls a great deal of libc (`getpid`, `abs`, `isatty`, `sysconf`). It is not
 enough to write `readdirSync` in Nish, the motivating request, and neither is
@@ -106,10 +106,10 @@ stage is a real decision rather than a missing line:
   than know.
 - **S5, `errno`.** A thread-local the runtime does not model.
 
-Whether S5 should happen at all is a language question, not a
-schedule (§8 answers it for S3, §9 for S4): a
-language whose selling point is that every value has one known layout may
-decide that the OS is reached through builtins on purpose.
+Whether S5 should happen at all was a language question, not a
+schedule: a language whose selling point is that every value has one known
+layout may decide that the OS is reached through builtins on purpose. §8
+answers it for S3, §9 for S4 and §10 for S5.
 [wp34-hosting-cs.md](wp34-hosting-cs.md) weighed C crypto through FFI against
 pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 
@@ -649,7 +649,7 @@ struct. A struct never crosses by value, in either direction: the C ABI for
 struct arguments and results differs per target (registers, a hidden pointer,
 split across classes) and LLVM leaves that lowering to the front end. A layout
 class as a `declare function` result is refused (`reject_ffi_struct_return`);
-S4.2's `readStruct` is how a C-owned struct comes back, by copy.
+S4.2's `readStruct` is how a C-owned struct comes back, by copy (§9h).
 
 The pointer is **borrowed for the call**, S3.1's rule (§8b) applied to a
 struct: C may read and write through it while the call runs and must not keep
@@ -679,7 +679,7 @@ callbacks and variadics.
 | Step | Delivers | Tests |
 | --- | --- | --- |
 | **S4.1** (built) | `declare class` as a layout (§9b, §9c); a layout-class `declare function` parameter lowered to a borrowed pointer (§9d) | `ffi_struct_param` (`getrlimit`/`setrlimit` round trip, `clock_gettime` twice, a nested layout); `ffi_struct_layout` (a C sidecar's `offsetof`/`sizeof` against the fields Nish read); one `reject_ffi_struct_*` per refusal; `reject_cls_declare` rewritten |
-| **S4.2** | `readStruct<T>(p: CPtr): T` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance | `ffi_struct_read` and its refusals |
+| **S4.2** (built) | `readStruct(p: CPtr)` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance of the `declare class` its context names (§9h) | `ffi_struct_read` (`localeconv`, a sidecar's static struct overwritten after the copy, a churned arena); `reject_unsafe_read_struct_*`; `reject_unsafe_no_import` extended; `panics_ffi_read_struct_null` (the `ffi-null` panic); `tests/ffi-struct.js` (the `ffi-null` site, the wasm32 size) |
 
 ### 9g. Headers, bindings and targets
 
@@ -741,3 +741,193 @@ are the layout's.
 
 The rolling freeze (§8h) holds: `std/` may declare a layout class from the
 commit that lands S4.1, `src/` not until the release after it.
+
+### 9h. `readStruct`: a C-owned struct comes back by copy (S4.2)
+
+§9d lends a struct Nish owns to C. The other direction is a struct C owns,
+whose address a `declare function` hands back: `localeconv()`'s `struct
+lconv`, `getpwnam`'s `struct passwd`, `gmtime`'s `struct tm`, each a static
+buffer the next call overwrites. Three shapes were open.
+
+1. **A view.** A layout-class value that is C's pointer, read field by field
+   in place. It costs no copy, but every read is then through memory the
+   program does not own and C may rewrite between two reads (the next
+   `localeconv()`, `setlocale`, another thread), and the value's lifetime is
+   C's, which no rule of Nish can state: a view kept in a field outlives the
+   buffer as easily as a local does. Escape analysis would have to treat a
+   layout value as possibly foreign everywhere, and §9d's borrowed pointer
+   would no longer be the only way a layout and C meet.
+2. **A borrowed reference, scoped to a block.** A view the checker keeps from
+   escaping a block, as `using` scopes an arena. That bounds the lifetime, but
+   not C's writes inside the block, and it is a new kind of value with its own
+   refusals at every place a layout may go, for a struct that is a few dozen
+   bytes.
+3. **A copy.** `readStruct(p)` allocates an instance as `new` does and copies
+   the layout's size of bytes into it, once. After the call the instance is
+   the program's, like any other: C may free or rewrite its struct, the copy
+   lives and dies by §9c's rules, and nothing about a layout value changes.
+
+S4.2 takes the copy. The cost is one `memcpy` of a struct, and the pointer is
+dereferenced exactly once, at a call the program spells in `nish:unsafe`.
+What the copy cannot do is deep-copy: a `CPtr` field of the copy is still C's
+pointer, read with `readCString` while C keeps it live, as S3.3 already
+requires.
+
+**The spelling: the layout comes from context.** The plan wrote
+`readStruct<T>(p)`, but a type argument is not written at a call site in
+Nish: `identity<i32>(7)` parses as `(identity < i32) > (7)`, and WP18 §2a
+refuses it by name. `readStruct` has nothing to infer `T` from in its argument,
+so it takes `T` from where the result goes, as `Ok(v)` and `Err(e)` do: an
+annotation (`const lc: Lconv = readStruct(p)`), a parameter, a return type or
+an assignment's target. The context, stripped of `| null`, must be a
+`declare class`; a call with no context, or one whose context is not a layout,
+is refused (`reject_unsafe_read_struct_context` holds both), and
+`readStruct<Lconv>(p)` is refused with a message that names the annotated form
+(`reject_unsafe_read_struct_type_args`). `runtime/nish.d.ts` still declares
+`readStruct<T>(p: CPtr): T`, which `tsc` infers from the same context.
+
+**A `NULL` test, and no size test.** The parameter is a non-null `CPtr`, so a
+`CPtr | null` is narrowed first, as for `readCString`
+(`reject_unsafe_read_struct_null`). That narrowing proves nothing about a
+result C answered: a `declare function` whose result is declared `CPtr` may
+still answer `NULL`, and reading a struct through it is a fault natively and a
+silent read of address 0 on wasm32. So the copy tests its pointer first and
+panics with the `ffi-null` kind, naming the layout (``` `readStruct` read a NULL
+pointer into a `Pair` ```, `panics_ffi_read_struct_null`). `--emit-panics`
+lists the call as an `ffi-null` site with the copy's `oom` beside it, and no
+proof removes the check, so `--deny-panics` refuses a call in its scope.
+`readCString` is the one reader left unchecked: it still trusts a `CPtr`
+result not to be `NULL` (RT-16) and stays an allowed `unchecked` site. The
+size is not checked: the compiler cannot know how many bytes C's pointer
+covers, so the layout must be the struct or a prefix of it. That, and the
+liveness of the pointer, are why the function is in `nish:unsafe`, and
+`--emit-checked` records the import and every call.
+
+**As built.** The checker is `checkReadStruct` in `src/builtins.ts`; the
+emitter is `emitStructCopy` in `src/emit-classes.ts`: the `NULL` test and
+its panic, then the arena allocation
+`new` makes (`nish_alloc_struct`, rounded to 8), then
+`llvm.memcpy` of the layout's size, the destination aligned to 8 and the source
+to 1, since C's struct is aligned to what C chose and the compiler knows only
+the address. The copy is a fresh allocation of the calling function
+(`isAllocatingBuiltin` in `src/escape.ts`), so a copy made in a callee and
+returned is held by the caller's scope. The size is the target's (§9g): 16 bytes for
+`{ CPtr; CPtr }` natively and 8 on wasm32. `tests/cases/ffi_struct_read` reads
+`localeconv()` and a C sidecar's static struct, and prints each copy after C
+has overwritten its struct and the arena has been churned. There is no
+`writeStruct`: writing C-owned memory stays out of scope (§9e), and a struct
+C should fill is lent to it by §9d.
+
+## 10. S5 as built: `cErrno`
+
+### 10a. The decision
+
+```ts
+import { cErrno } from "nish:unsafe";
+declare function open(path: string, flags: i32): i32;
+
+if (open("/nonexistent/x", 0) < 0) console.log(`${cErrno()}`); // 2
+```
+
+`cErrno(): i32` in [`nish:unsafe`](LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)
+answers the errno the most recent `declare function` call **on this thread**
+left. In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+runtime slot immediately after it returns, before any result marshalling.
+Before any foreign call it answers 0. A program that never names it pays
+nothing: no store, no load, no runtime call, and its IR is byte for byte what
+it was.
+
+### 10b. Why not a foreign global
+
+errno is not a variable C exports. glibc and musl define it as
+`(*__errno_location())` and Darwin as `(*__error())`, a macro over a function
+answering a pointer into thread-local storage, so `declare let errno: i32` would
+name a symbol that does not exist on any of them. Nish also has no `declare let`
+(`reject_ffi_errno_global` pins the parser's refusal). Exposing the
+platform's accessor by name would put a per-libc spelling in the compiler, so
+the runtime reads errno through C's own `errno`: `nish_errno_ptr()` is
+`return &errno;`, and each libc (glibc, musl, Darwin, wasi-libc) compiles its
+own definition of it.
+
+### 10c. Why after the call, and why before
+
+Anything the compiler runs after the call may call into libc and move errno:
+copying a `string` result into the arena (`@nish.ffi.str`, §8d), an arena
+allocation that maps a new chunk, or a later `console.log`. So the save is the
+first thing after the `call` instruction, ahead of the `NULL` check of a
+`string` result, and `cErrno()` reads the saved copy, not errno. The case
+`ffi_errno` calls a C function that sets errno to 5 and answers a C string,
+then reads 5 after the copy.
+
+The zeroing is the owner's decision at sign-off. A C function that reports
+failure only through errno, `strtol` out of range or `readdir`, which answers `NULL` both at
+the end of a directory and on an error, can only be checked if errno was 0 going in, and
+Nish exposes no setter. So in such a program `cErrno()` after a successful
+call is 0 unless the callee set it: `strtol("42")` reads 0 right after an
+out-of-range `strtol` read `ERANGE` (34).
+
+### 10d. The runtime: one pointer and one slot
+
+```c
+NISH_TLS int32_t nish_errno_slot;
+int *nish_errno_ptr(void) { return &errno; }
+```
+
+The emitted sequence around a foreign call is:
+
+```llvm
+%e = call i32* @nish_errno_ptr()      ; errno's address on this thread
+store i32 0, i32* %e
+%r = call i32 @open(i8* %p, i32 0)
+%v = load i32, i32* %e
+store i32 %v, i32* @nish_errno_slot
+```
+
+and `cErrno()` is `load i32, i32* @nish_errno_slot`. Three runtime functions
+(zero, save, read) would be the plainer shape, but `runtime.c` is held to a
+`.text*` ceiling (`tests/runtime-budgets.js`) and three functions did not fit
+under it; `nish_errno_ptr` compiles to one jump to the libc accessor, and the
+slot is data. `nish_errno_ptr` is declared `nonnull`, and the attribute pass
+gives it no memory effect of its own, so a caller of C keeps exactly the facts
+a caller of C kept before. A function that calls `cErrno()` reads memory: it is
+`readonly`, never `readnone`, so it is not moved across a foreign call or
+merged with a `cErrno()` on the other side of one. A foreign call in such a
+program is never a tail call, since the save follows it.
+
+### 10e. Threads
+
+The slot is `NISH_TLS`, `_Thread_local` under `-DNISH_THREADS=1`, and the IR of
+a `--threads` build declares it `thread_local(initialexec)`, as it does the
+arena. errno is per thread in every libc, so each thread reads what its own
+last foreign call left. A `parallel` worker cannot call a `declare function`
+at all (a foreign call is a shared write, §8 and WP20), so the per-thread case,
+`ffi_errno_threads`, runs two pthreads from its C driver: each stages a
+different errno through a Nish function, waits at a barrier until both have,
+and reads its own.
+
+### 10f. What it does not cover
+
+- **A host-module import** (`--host`, WP50) is not a C call and leaves no
+  errno, so it is neither zeroed nor saved.
+- **A `using` handle's close** (WP53) runs C's close function at scope exit
+  and is not captured: the close is the compiler's call, not the program's,
+  and a program that wants the close's errno calls the close function itself.
+- **wasm32.** A freestanding wasm build has no operating system, and a
+  `declare function` there is already refused, so `cErrno` is refused too,
+  with the wasm32 message every OS builtin gives (`reject_ffi_errno_wasm`).
+  `--profile wasi` links `runtime.c` against wasi-libc, whose `errno` is a
+  plain global, and keeps it.
+- **No setter, no `strerror`.** A program that wants the text declares
+  `strerror(e: i32): string` itself; the copy of its result does not move the
+  saved errno.
+
+### 10g. What a reviewer should push back on
+
+The capture is program-wide, not per call: naming `cErrno` once makes every
+foreign call in every module of the program pay two stores, a load and a call
+it did not ask for. A per-declaration opt-in (`@errno` on the `declare
+function`) would be cheaper and more precise, but it is a new attribute
+syntax for a few nanoseconds against a call into C, and the rule "the most
+recent foreign call on this thread" would then quietly mean "the most recent
+foreign call that asked", which is the kind of rule a reader gets wrong.

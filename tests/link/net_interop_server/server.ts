@@ -127,14 +127,27 @@ export const supportedTestcase = (name: string): boolean =>
  * WebTransport, a Retry for the runner's `retry` case, and stream limits under
  * the runner's 1,000 for `multiplexing`, which the server raises as streams
  * finish.
+ *
+ * `maxStreamData` also sizes each stream's send buffer, so it bounds the
+ * bytes sent past the oldest unacknowledged one. At 64 KiB, under the
+ * runner's 10 Mbps link and its queue (about 75 KB in flight), one lost
+ * packet used the whole buffer: once the loss was found, the server sent the
+ * hole again and nothing new for the round trip until the client
+ * acknowledged it. In `rebind-port` and `rebind-addr` the 1 s rebind landed
+ * in that quiet round trip. The client had acknowledged everything and had
+ * nothing more to answer, so it never sent from its new port, and the server
+ * followed the old one to the end: the burst after the stall and every probe
+ * went to the dead binding until the client closed on its idle timer.
+ * 256 KiB keeps new data flowing while the hole is resent, and so keeps the
+ * client answering through a rebind. `rebindChecks` in `rebind.ts` plays it.
  */
-const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
+export const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
   return {
     certificateChain: chain,
     alpn: [H3_ALPN, HQ_ALPN],
     signatureScheme: TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
     maxData: toI64(16777216),
-    maxStreamData: toI64(65536),
+    maxStreamData: toI64(262144),
     maxStreamsBidi: toI64(64),
     maxStreamsUni: toI64(8),
     localStreams: toI64(8),
@@ -143,6 +156,8 @@ const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
     activeConnectionIdLimit: toI64(4),
     statelessResetKey: randomBytes(QUIC_CONN_STATIC_KEY_SIZE),
     retryTokenKey: randomBytes(QUIC_CONN_STATIC_KEY_SIZE),
+    workerIndex: toI32(-1),
+    workerCount: toI32(0),
     retry: retry,
     retryTokenLifetime: toI64(10000),
   };

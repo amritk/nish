@@ -4936,6 +4936,73 @@ if.end:
   the link; whether the program links there is the `declare function`'s
   question, answered by the libc the target has.
 
+### `cErrno`: the errno a C call left
+
+**`cErrno(): i32`, from
+[`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping), answers the
+errno the most recent `declare function` call on this thread left, and 0
+before any.** In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+per-thread runtime slot immediately after it returns, before any result is
+marshalled; `cErrno()` reads the slot (`tests/cases/ffi_errno`,
+[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#cerrno-errno-after-a-foreign-call),
+[design](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md#10-s5-as-built-cerrno)):
+
+```ts
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10);
+  return cErrno() === 0 ? n : -1;
+};
+```
+
+```llvm
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+```
+
+- **Saved before anything else runs.** The copy of a `string` result, an arena
+  allocation or a `console.log` may call into libc and move errno, so the save
+  is the first instruction after the call, ahead of the `NULL` check of a
+  `string` result. A C function that sets errno and answers a string is read
+  correctly after the copy.
+- **Zeroed before, so a success reads 0.** `strtol` reports an out-of-range
+  number only through errno; with the zeroing, `cErrno()` after an in-range
+  call is 0 unless the callee set it. No setter is exposed.
+- **Per thread.** errno is per thread in every libc, and the slot is
+  `_Thread_local` under `--threads` (`thread_local(initialexec)` in the IR), so
+  a thread reads what its own last call left (`ffi_errno_threads`).
+- **Program-wide, and free when unnamed.** One `cErrno` anywhere makes every
+  `declare function` call in every module of the program pay the zero and the
+  save, and none of them is then a tail call. A program that never names it
+  emits none of it.
+- **Not covered:** a host-module import (`--host`) is not a C call; the close a
+  `using` handle runs at scope exit is the compiler's call, not the program's,
+  and is not captured.
+- **Not a global.** errno is a macro over a thread-local accessor in every
+  libc, so there is no `errno` symbol to declare, and `declare let errno: i32`
+  is the parser's
+  `` a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT` ``
+  (`reject_ffi_errno_global`).
+- **Refused:** an argument (`` `cErrno` expects exactly 0 arguments, got 1 ``,
+  `reject_ffi_errno_arg`), a call without the import (NL2456,
+  `reject_ffi_errno_import`), and a freestanding wasm32 build, which has no
+  operating system:
+  `` `cErrno` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_ffi_errno_wasm`). `--profile wasi` links wasi-libc and keeps it.
+- **It is `nish:unsafe` and an `unsafe` call** to `--deny unsafe`, like every
+  export of the module; it reads a defined value and is no panic site.
+
 ### A `u8[]` parameter: a buffer and its count
 
 **A `u8[]` or `readonly u8[]` parameter is a buffer C reads or writes, and a
@@ -5269,7 +5336,8 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
 - **It is not a return type or an array element.** C returning a struct by
   value, or a pointer into memory it owns, leaves the copy with no owner on
   this side: `` a C struct is only lent to C by pointer: take a `Point`
-  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
+  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); a struct
+  C owns is copied out with `readStruct` (below) from the `CPtr` C returns. An array of
   them would be a C array the program lays out element by element, and is
   `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`,
   `reject_ffi_struct_array_literal`, `reject_ffi_struct_array_new`), however
@@ -5282,6 +5350,82 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_spread`).
 - **`--emit-ts` refuses a module that declares one**, with the same message as
   for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
+
+### `readStruct`: a struct out of memory C owns
+
+**`readStruct(p)` from `nish:unsafe` copies the struct at a `CPtr` into a new
+instance of the `declare class` its context names, and the copy is the
+program's** (`tests/cases/ffi_struct_read`,
+[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#readstruct-a-c-owned-struct-copied-out),
+`docs/wp27-ffi.md` §9h). It is how a struct C keeps comes back:
+`localeconv()`'s `struct lconv`, `getpwnam`'s `struct passwd`, each a buffer
+the next call overwrites.
+
+```ts
+import { readStruct, readCString } from "nish:unsafe"
+
+declare class Lconv {
+  decimalPoint: CPtr
+  thousandsSep: CPtr
+}
+declare function localeconv(): CPtr
+
+const lc: Lconv = readStruct(localeconv())
+console.log(readCString(lc.decimalPoint))
+```
+
+```llvm
+%struct.Lconv = type { i8*, i8* }
+  %0 = call i8* @localeconv()
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %0, i64 16, i1 false)
+  %3 = bitcast i8* %2 to %struct.Lconv*
+  store %struct.Lconv* %3, %struct.Lconv** %lc.addr, align 8
+```
+
+- **The layout comes from context**, as `Ok(v)`'s does: an annotation, a
+  parameter, a return type or an assignment's target, `| null` stripped. With
+  none it is
+  `` `readStruct(p)` needs a contextual `declare class` type to copy into ``
+  (NL2764), and a context that is not a layout is
+  `` `readStruct(p)` copies into a `declare class` layout, and Plain is not one ``
+  (NL2765, `reject_unsafe_read_struct_context`). A type argument is not
+  written at a call site: `readStruct<Lconv>(p)` is refused with the annotated
+  spelling in the message (NL2763, `reject_unsafe_read_struct_type_args`).
+- **One copy, the layout's size**: the arena allocation `new` makes, then one
+  `llvm.memcpy` of the struct's bytes, padding included, from the source at
+  `align 1`, since C promised the struct and not its address's alignment. The
+  size is the target's: 16 bytes for `{ CPtr; CPtr }` natively, 8 under
+  `--profile wasi` (`tests/ffi-struct.js`). After the call C may free or
+  rewrite its struct; the copy is an instance like any `new` one, and a copy
+  made in a callee and returned is held by its caller.
+- **It does not copy deep.** A `CPtr` field of the copy is still C's pointer,
+  read with [`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) while
+  C keeps it live.
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](semantics-decisions.md#panic-sites) kind:
+  `` `readStruct` read a NULL pointer into a `Lconv` ``
+  (`tests/cases/panics_ffi_read_struct_null`). The argument is a `CPtr`, so a
+  `CPtr | null` is narrowed first
+  (`` `readStruct` expects an argument of type CPtr, got CPtr | null ``,
+  `reject_unsafe_read_struct_null`), but a `declare function` declared to
+  answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
+  `icmp eq` and the branch to `ffi.null` above.
+  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+- **The rest of the pointer is not checked**: not that it is live, not the
+  size it covers. The layout must be C's struct or a prefix of it. That is why
+  it is in [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping):
+  refused by `--deny unsafe` and recorded by `--emit-checked`.
+- **There is no `writeStruct`.** A struct C should fill is lent to it, as
+  above.
 
 ### What a declaration cannot say
 
@@ -5301,7 +5445,7 @@ Each of these is refused, and each refusal is pinned by a case:
   [function reference](#function-references) is a tag only this program's
   dispatchers read, not an address, so it is not a `CPtr` either.
 - **A read through a `CPtr`.** `p[0]` is `Cannot index a value of type CPtr`
-  (`reject_ffi_pointer_deref`); `readCString` above is the one read.
+  (`reject_ffi_pointer_deref`); `readCString` and `readStruct` above are the two reads.
 - **Inline assembly.** `asm("nop")` is an unknown function (`reject_ffi_asm`).
 - **An allocator from C memory.** `arena()` takes no argument, so `using a =
   arena(p)` is refused (`reject_ffi_allocator`).
