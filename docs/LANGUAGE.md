@@ -14649,8 +14649,8 @@ by the caller.
     release, so there is no rewrite to name.
   - **a function that keeps memory on every call** (NL9018) — a function
     that keeps an allocation of its own past the call (a local assigned more
-    than once, an array of its own, or a callee that keeps its argument), so
-    that it has no arena scope of its own, and that a loop runs on every pass
+    than once, or an array of its own; a value it only hands to a function's
+    parameter does not count), so that it has no arena scope of its own, and that a loop runs on every pass
     while the pass releases nothing — directly, or through callees that have
     no scope of their own either. Every pass adds the allocation the call kept,
     and nothing releases it while the loop runs. Reported once, at the
@@ -14660,11 +14660,16 @@ by the caller.
     what must outlive the call (`tests/cases/perf_kept_memory`). Not reported
     when the function returns a value that is not a number, a boolean, an enum
     or nothing, because then its caller owns the memory; when it manages the
-    arena itself, feeds tasks, or fills a parameter; when a rule above already
-    reports a line of it; or when every loop that runs it releases what it
-    kept — a pass with a scope of its own, a call inside a `using a = arena()`
-    block, or a caller between the loop and the function whose own scope
-    releases it on return (`tests/cases/perf_kept_memory_quiet`).
+    arena itself, feeds tasks, or fills a parameter; when every loop that
+    runs it releases what it kept — a pass with a scope of its own, a call
+    inside a `using a = arena()` block, or a caller between the loop and the
+    function whose own scope releases it on return; or when it is run only
+    through a latched function, one with an `if (<field>) { … return }`
+    guard among its top-level statements (no `else`, the field read directly
+    or through a `const`) and a later top-level assignment to that field, so
+    a call after the first that sets it returns at the guard: a once-guard or
+    a cache
+    (`tests/cases/perf_kept_memory_quiet`).
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the

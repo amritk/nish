@@ -3,9 +3,9 @@
 // than the pass), so what the calls keep grows with the loop. Three shapes keep
 // their allocation: a string `let` assigned again, a `Result` `let` assigned
 // from a conditional that may hand back the old value, and an array of the
-// function's own. `fixed`, each value its own `const`, keeps nothing, and
-// `outer` returns a number, so its own scope releases what `relabel` keeps
-// when it runs it.
+// function's own. `fixed`, each value its own `const`, keeps nothing. A scoped
+// caller as the only path from such a loop is in perf_kept_memory_quiet.ts:
+// here `main` runs `relabel` directly.
 const relabel = (n: i32): i32 => {
   let s = "none";
   if (n > 2) {
@@ -31,12 +31,10 @@ const fixed = (n: i32): i32 => {
   return s.length;
 };
 
-const outer = (n: i32): i32 => relabel(n) + 1;
-
 export const main = (): void => {
   const names: string[] = [];
   for (let i = 0; i < 1000; i++) {
-    names.push(`${relabel(i) + outer(i) + choose(i) + parts(i) + fixed(i)}`);
+    names.push(`${relabel(i) + choose(i) + parts(i) + fixed(i)}`);
   }
   console.log(`${names.length} ${names[0]} ${names[999]}`);
 };

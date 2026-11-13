@@ -5581,8 +5581,8 @@ if (!only || "performance".includes(only)) {
 
   // NL9018: a function that keeps an allocation on every call, run on every
   // pass of a loop that releases nothing. Each of the three is named at its
-  // declaration; `fixed` keeps nothing, and `outer`, which runs `relabel`,
-  // returns a number, so its own scope releases what `relabel` kept.
+  // declaration with the line of the first allocation it holds; `fixed` keeps
+  // nothing.
   const kept = compile("perf_kept_memory", "perf_kept_memory_report.ll")
   const keptLines = summaries(kept.stderr)
   check(
@@ -5596,7 +5596,9 @@ if (!only || "performance".includes(only)) {
           "analysis does not prove it dead when the function returns"
       ) &&
       keptLines[1].includes("`choose` keeps an allocation on every call") &&
-      keptLines[2].includes("`parts` keeps an allocation on every call"),
+      keptLines[1].includes("the first allocation it holds is on line 18,") &&
+      keptLines[2].includes("`parts` keeps an allocation on every call") &&
+      keptLines[2].includes("the first allocation it holds is on line 25,"),
     kept.stderr
   )
 
@@ -5795,8 +5797,9 @@ if (!only || "performance".includes(only)) {
     // once: none of them drops a value on every pass, so NL9016 is silent.
     "perf_arena_pass_quiet",
     // A function that keeps nothing past its call, one whose arena block
-    // releases it, and one run only where each pass or block releases it:
-    // NL9018 is silent on each.
+    // releases it, one run only where each pass, block or scoped caller
+    // releases it, one run only behind a once-guard or a cache, and a
+    // `getenv` result only handed to a callee: NL9018 is silent on each.
     "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",

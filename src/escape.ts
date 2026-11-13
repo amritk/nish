@@ -58,7 +58,7 @@ import {
   unwrapParens,
   unwrapStringPassthrough,
 } from "./emit-util"
-import { FLAG_USING, Node, NodeKind } from "./nodes"
+import { FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
 import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
@@ -3134,13 +3134,25 @@ const ownLeak = (facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): Fu
  * The first allocation `f` itself holds past its return, the one
  * `leaksItself` stands for: a site of its own whose flow leaks, or a call
  * to an allocating callee whose result does. `null` when none is on record.
+ * With `kept`, `f`'s unit, a value whose only doubt is that it is handed to a
+ * function's parameter is skipped: what that function does with it is its
+ * own, and the doubt is often only that its parameter fact is conservative.
  */
-const ownLeakNode = (facts: FactsTable, f: FunctionFacts): Node | null => {
+const ownLeakNode = (
+  facts: FactsTable,
+  f: FunctionFacts,
+  kept: AnalysisUnit | null,
+  table: TypeTable
+): Node | null => {
   let first: Node | null = null
   let i = 0
   while (i < f.arenaNodes.length && i < f.arenaFlows.length) {
     const node = f.arenaNodes[i]
-    if (f.arenaFlows[i] === FLOW_LEAKS && (first === null || node.start < first.start)) {
+    if (
+      f.arenaFlows[i] === FLOW_LEAKS &&
+      (first === null || node.start < first.start) &&
+      !handedOn(kept, table, node)
+    ) {
       first = node
     }
     i = i + 1
@@ -3151,13 +3163,18 @@ const ownLeakNode = (facts: FactsTable, f: FunctionFacts): Node | null => {
       site.flow === FLOW_LEAKS &&
       g !== null &&
       g.allocates &&
-      (first === null || site.node.start < first.start)
+      (first === null || site.node.start < first.start) &&
+      !handedOn(kept, table, site.node)
     ) {
       first = site.node
     }
   }
   return first
 }
+
+/** Whether `node`, in `unit` when there is one, is an argument to a function. */
+const handedOn = (unit: AnalysisUnit | null, table: TypeTable, node: Node): boolean =>
+  unit !== null && classifyUse(unit, table, node).kind === USE_ARGUMENT
 
 /** Whether `list` holds `f`. */
 const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
@@ -3184,7 +3201,9 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
  * reach through callees that take none either: memory one of them keeps goes
  * to the pass, and the pass keeps it. Every module and every instantiation is
  * walked, with its own side tables installed, because a loop that calls a
- * function parameter calls the argument inside the instantiation.
+ * function parameter calls the argument inside the instantiation. A latched
+ * function (`isLatched`) and all it reaches are left out: its work runs once,
+ * not on every pass.
  */
 export const loopReachedFunctions = (
   units: AnalysisUnit[],
@@ -3193,6 +3212,17 @@ export const loopReachedFunctions = (
 ): StringSet => {
   const reached = new StringSet()
   const work: string[] = []
+  // Marked reached up front, so neither a pass nor a callee walk enters one.
+  const latched = new StringSet()
+  for (const unit of units) {
+    for (const sig of unit.program.functions) {
+      const body = sig.body()
+      if (sig.definedIn(unit.program.source) && body !== null && isLatched(body)) {
+        latched.add(sig.name)
+        reached.add(sig.name)
+      }
+    }
+  }
   for (const unit of units) {
     const program = unit.program
     for (const sig of program.functions) {
@@ -3227,7 +3257,119 @@ export const loopReachedFunctions = (
     }
     i = i + 1
   }
-  return reached
+  const out = new StringSet()
+  let k = 0
+  while (k < reached.size()) {
+    const name = reached.at(k)
+    if (!latched.has(name)) {
+      out.add(name)
+    }
+    k = k + 1
+  }
+  return out
+}
+
+/**
+ * Whether `body` is latched: it returns early when a field path it reads
+ * (`s.prepared`, or `this.style` through a `const` that holds it) says so,
+ * and assigns that path itself further down. The first call sets the latch,
+ * as a once-guard or a cache does, and every later one returns at the guard,
+ * so what the body does after it runs once, not once per call.
+ */
+const isLatched = (body: Node): boolean => {
+  if (body.kind !== NodeKind.Block) {
+    return false
+  }
+  // Pairs of a `const`'s name and the field path it was initialised from.
+  const aliases: string[] = []
+  const guards: string[] = []
+  for (const stmt of body.children) {
+    if (stmt.kind === NodeKind.Var) {
+      for (const decl of stmt.children[0].children) {
+        const path = fieldPath(decl.children[2])
+        if (path !== "") {
+          aliases.push(decl.children[0].text)
+          aliases.push(path)
+        }
+      }
+    } else if (
+      stmt.kind === NodeKind.If &&
+      stmt.children[2].kind === NodeKind.Empty &&
+      endsInReturn(stmt.children[1])
+    ) {
+      collectGuardPaths(stmt.children[0], aliases, guards)
+    } else if (stmt.kind === NodeKind.ExprStmt && guards.length > 0) {
+      const e = unwrapParens(stmt.children[0])
+      if (e.kind === NodeKind.Binary && e.text === "=" && holdsString(guards, fieldPath(e.children[0]))) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/** The field path `node` reads, as `s.prepared` or `this.style`; `""` for anything else. */
+const fieldPath = (node: Node): string => {
+  const read = unwrapParens(node)
+  if (read.kind !== NodeKind.Member || (read.flags & FLAG_OPTIONAL) !== 0) {
+    return ""
+  }
+  const receiver = unwrapParens(read.children[0])
+  if (receiver.kind === NodeKind.This) {
+    return `this.${read.text}`
+  }
+  if (receiver.kind === NodeKind.Ident) {
+    return `${receiver.text}.${read.text}`
+  }
+  const base = fieldPath(receiver)
+  return base === "" ? "" : `${base}.${read.text}`
+}
+
+/** Each field path `cond` reads, directly or through a name `aliases` pairs with one. */
+const collectGuardPaths = (cond: Node, aliases: string[], out: string[]): void => {
+  const path = fieldPath(cond)
+  if (path !== "") {
+    out.push(path)
+    return
+  }
+  if (cond.kind === NodeKind.Ident) {
+    let i = 0
+    while (i + 1 < aliases.length) {
+      if (aliases[i] === cond.text) {
+        out.push(aliases[i + 1])
+      }
+      i = i + 2
+    }
+    return
+  }
+  if (cond.kind === NodeKind.Arrow) {
+    return
+  }
+  for (const child of cond.children) {
+    collectGuardPaths(child, aliases, out)
+  }
+}
+
+/** Whether `stmt` always ends in a `return`: one, or a block whose last statement is one. */
+const endsInReturn = (stmt: Node): boolean => {
+  if (stmt.kind === NodeKind.Return) {
+    return true
+  }
+  return (
+    stmt.kind === NodeKind.Block &&
+    stmt.children.length > 0 &&
+    endsInReturn(stmt.children[stmt.children.length - 1])
+  )
+}
+
+/** Whether `list` holds `text`. */
+const holdsString = (list: string[], text: string): boolean => {
+  for (const item of list) {
+    if (item === text) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -3330,7 +3472,7 @@ export const keptMemoryFindings = (
           `\`${f.sourceName}\` keeps an allocation on every call and runs on every pass of a loop that releases ` +
             "nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line " +
             `${program.source.lineOf(held.start)}, where this analysis does not prove it dead when the function ` +
-            "returns (a local assigned more than once, an array of its own, or a callee that keeps its argument). " +
+            "returns (a local assigned more than once, or an array of its own). " +
             "Give each value its own `const`, open a block with `using a = arena()` around the work, or keep " +
             "what must outlive the call in a region"
         )
@@ -3361,7 +3503,7 @@ const keptOwnAllocation = (
   ) {
     return null
   }
-  return ownLeakNode(facts, f)
+  return ownLeakNode(facts, f, unit, table)
 }
 
 /**
@@ -3619,7 +3761,7 @@ const keptReason = (
   // A leak of its own is the one to fix first: a callee's would not
   // give this function its scope back while its own remains.
   if (f.leaksItself) {
-    const held = ownLeakNode(facts, f)
+    const held = ownLeakNode(facts, f, null, table)
     const where =
       held === null ? "" : `; the first allocation it holds is on line ${program.source.lineOf(held.start)}`
     return (

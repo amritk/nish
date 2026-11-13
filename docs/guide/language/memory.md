@@ -129,7 +129,9 @@ The warning (NL9018) names the function and the line it keeps. Give each
 value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
 block with `using a = arena()` around the work. A loop whose passes are
 released already, because nothing a pass makes outlives it, takes back what
-the call kept, so that one does not warn.
+the call kept, so that one does not warn; nor does a function run only behind
+a once-guard or a cache (`if (this.ready) { return }` followed later by
+`this.ready = true`), since only its first call does the work.
 
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:
