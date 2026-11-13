@@ -1,9 +1,8 @@
 {
   "shardOne": 254,
-  "termIo": 57,
-  "emitTs": 145,
   "osHost": 2,
   "term": 6,
+  "termIo": 57,
   "termWasi": 5,
   "netTcp": 4,
   "netUnix": 2,
@@ -16,6 +15,7 @@
   "diagnostics": 14,
   "performance": 14,
   "memAwfy": 2,
+  "emitTs": 145,
   "fix": 10,
   "selfHosting": 210,
   "cryptoBench": 275,

@@ -179,11 +179,12 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1's 62 s of steps after the suite, 218 s. The link costs and the
   groups' costs are read from that run's four logs. With 946 link programs
   now, the job is split eight ways: about 390 s of the table each, after
-  about 200 s of setup, stage1 and pre-link sections that every shard runs
-  (job start to its first link program in three shards of `main`'s runs at
-  `2d10118`, `ea8b601` and `2f4f8e3`: 152 to 223 s, of which 28 to 45 s
+  about 200 s of setup, stage1 and pre-link sections that every shard ran
+  then (job start to its first link program in three shards of `main`'s runs
+  at `2d10118`, `ea8b601` and `2f4f8e3`: 152 to 223 s, of which 28 to 45 s
   are the steps before Test; a shard dealt a slow pre-link section, as
-  shard 5 at `ea8b601` was, takes longer).
+  shard 5 at `ea8b601` was, takes longer). That was before the golden cases
+  and the small pre-link sections were dealt, at the end of this section.
   A filtered run sends every `tail` group to shard 1, as it sent all of
   that, and counts none of them in its deal.
 
@@ -463,11 +464,13 @@ from 59 s to 30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
 where every job restored stage1 from the cache. The longest `test` job there
 took 10 min 49 s and the NEON job 4 min 38 s. What every shard still ran
-before the link programs then was about 90 s of small sections, the largest the
-performance gate (14 s), the diagnostic codes (11 s) and `--fix` (10 s). Those
+before the link programs then was about 90 s of small sections, the largest
+`fnref`'s `--profile debug` runs and lldb check (15 s), the performance
+section (14 s), the diagnostics section (14 s) and `--fix` (10 s). Those
 fifteen sections are now dealt as well (`osHost` to `fix` in
-`DEALT_SECTIONS`), each to one shard at the largest cost one of shards 1 to 4
-paid for it in that run, so a shard runs only its share of them.
+`DEALT_SECTIONS`), so a shard runs only its share of them. Their costs in
+`tests/shard-costs.json` are per-section maxima from that run: for each, the
+largest span from its first check to its last that one of shards 1 to 4 paid.
 
 ## Running the same steps locally
 

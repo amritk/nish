@@ -586,12 +586,13 @@ if (RETIRED.length > 0) {
 // sections between the native run limit and the link programs) and the
 // golden cases' work past their IR check, which `caseShard` deals by position:
 // every shard compiles every case, since later sections read that compile, and
-// does the rest for its own eighth. Shard 1 then runs every section after them that
-// is not dealt, and
-// the link programs a later section reads the output of (`LINK_READ_LATER`);
-// a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
-// sections, among them most of what follows the link programs in groups
-// marked `tail`, and the other link programs are dealt by their cost in
+// does the rest for its own eighth. Each dealt section before the link programs
+// runs in the one shard its cost deals it to. Shard 1 also runs every section
+// after the link programs that is not dealt, and the link programs a later
+// section reads the output of (`LINK_READ_LATER`); a `pinned` group
+// (`DEALT_SECTIONS`) runs in the shard it names. The dealt sections, among them
+// most of what follows the link programs in groups marked `tail`, and the
+// other link programs are dealt by their cost in
 // `tests/shard-costs.json` (see `linkShard`), and every shard but 1 stops once
 // its share is done. A filtered run (`node tests/run.js net_ --shard 2/3`)
 // deals only the programs its filter selects. What a shard leaves to
@@ -1622,10 +1623,8 @@ const DEALT_SECTIONS = {
   memAwfy: { name: "the mem_awfy section", selected: selects("mem_awfy") },
   fix: {
     name: "the tests/fix section",
-    selected:
-      !only ||
-      "fix".includes(only) ||
-      fs.readdirSync(path.join(root, "tests", "fix")).some((file) => file.includes(only)),
+    // Every run takes it, whatever its filter, as it did before it was dealt.
+    selected: true,
   },
   selfHosting: {
     name: "the WP14 self-hosting section",
