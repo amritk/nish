@@ -1903,6 +1903,8 @@ const performanceRules = (): string[] => [
   "NL9010",
   "leaves arena memory behind on every pass of this loop",
   "NL9011",
+  "keeps an allocation on every call and runs on every pass of a loop that releases nothing",
+  "NL9018",
   "already holds an allocation and this one drops it",
   "NL9003",
   "is computed in i32 and can overflow it before",

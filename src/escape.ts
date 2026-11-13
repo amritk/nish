@@ -3167,6 +3167,200 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
   return false
 }
 
+// ---- The kept-memory diagnostic (NL9018) --------------------------------------------------
+//
+// The arena-loop warning speaks at the loop, about a callee whose memory piles
+// up there. This one speaks at the callee: a function that answers no memory
+// and could release all it allocates, but keeps an allocation of its own, run
+// from a loop pass that releases nothing. Each call keeps one more, so memory
+// grows with every pass however small the function looks, and the fix is in
+// the function. It is found across every module, because the loop is often a
+// dependency's (a server's event loop calls the program's handler).
+
+/**
+ * The functions a loop pass that takes no scope calls, and everything they
+ * reach through callees that take none either: memory one of them keeps goes
+ * to the pass, and the pass keeps it. Every module and every instantiation is
+ * walked, with its own side tables installed, because a loop that calls a
+ * function parameter calls the argument inside the instantiation.
+ */
+export const loopReachedFunctions = (units: AnalysisUnit[], table: TypeTable, facts: FactsTable): StringSet => {
+  const reached = new StringSet()
+  const work: string[] = []
+  for (const unit of units) {
+    const program = unit.program
+    for (const sig of program.functions) {
+      const f = facts.get(sig.name)
+      const body = sig.body()
+      if (!sig.definedIn(program.source) || f === null || body === null) {
+        continue
+      }
+      const instance = sig.instance
+      if (instance !== null) {
+        program.enterInstance(instance)
+      }
+      collectPassCalls(program, table, f, body, false, false, reached, work)
+      if (instance !== null) {
+        program.leaveInstance()
+      }
+    }
+  }
+  // A callee with a scope of its own releases what its callees keep for it.
+  let i = 0
+  while (i < work.length) {
+    const g = facts.get(work[i])
+    if (g !== null && !g.arenaScope) {
+      let c = 0
+      while (c < g.callees.size()) {
+        const name = g.callees.at(c)
+        if (reached.add(name)) {
+          work.push(name)
+        }
+        c = c + 1
+      }
+    }
+    i = i + 1
+  }
+  return reached
+}
+
+/**
+ * Each function a call or `new` under `node` runs, when it runs on a pass
+ * that releases nothing: `inLoop` says a loop encloses `node`, `released` that
+ * a scoped pass or a `using a = arena()` block does.
+ */
+const collectPassCalls = (
+  program: CheckedProgram,
+  table: TypeTable,
+  f: FunctionFacts,
+  node: Node,
+  inLoop: boolean,
+  released: boolean,
+  reached: StringSet,
+  work: string[]
+): void => {
+  if (node.kind === NodeKind.Arrow) {
+    return
+  }
+  if (inLoop && !released) {
+    const callee = calleeAt(program, table, node)
+    if (callee !== null && reached.add(callee.name)) {
+      work.push(callee.name)
+    }
+  }
+  const isLoop = isLoopKind(node)
+  const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
+  let free = released
+  let i = 0
+  while (i < node.children.length) {
+    const child = node.children[i]
+    free = free || (node.kind === NodeKind.Block && isArenaUsing(program, child))
+    // A `for` initialiser and a `for...of` iterable run once, before the first pass.
+    const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
+    if (!isLoop || once) {
+      collectPassCalls(program, table, f, child, inLoop, free, reached, work)
+    } else {
+      // The condition and the update run outside the bracket the body takes.
+      const scoped = scope !== null && scope.scoped && child === scope.body
+      collectPassCalls(program, table, f, child, true, released || scoped, reached, work)
+    }
+    i = i + 1
+  }
+}
+
+/**
+ * The NL9018 warnings of one module: each function `reached` names (see
+ * `loopReachedFunctions`) that answers no memory, would take a scope of its
+ * own but for an allocation it holds where this analysis does not prove it
+ * dead (`leaksItself`), and so keeps what it allocates on every call. Reported
+ * at the function, naming the first allocation it holds. A function that
+ * calls `Arena.mark`, files a task or fills a parameter keeps its memory on
+ * purpose, and one refused its scope for another reason is `--explain-memory`'s
+ * to explain: the rewrites named here would not give it one. A generic
+ * function warns once, at its template.
+ */
+export const keptMemoryFindings = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  reached: StringSet
+): ArenaFinding[] => {
+  const out: ArenaFinding[] = []
+  const program = unit.program
+  const said: Node[] = []
+  for (const sig of program.functions) {
+    const f = facts.get(sig.name)
+    const body = sig.body()
+    if (
+      facts.noElision ||
+      !sig.definedIn(program.source) ||
+      f === null ||
+      body === null ||
+      !reached.has(sig.name) ||
+      holdsNode(said, sig.decl)
+    ) {
+      continue
+    }
+    const instance = sig.instance
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    const held = keptOwnAllocation(unit, table, facts, sig, f, body)
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+    if (held !== null) {
+      said.push(sig.decl)
+      out.push(
+        new ArenaFinding(
+          sig.decl,
+          `\`${f.sourceName}\` keeps an allocation on every call and runs on every pass of a loop that releases ` +
+            "nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line " +
+            `${program.source.lineOf(held.start)}, where this analysis does not prove it dead when the function ` +
+            "returns (a local assigned more than once, an array of its own, or a callee that keeps its argument). " +
+            "Give each value its own `const`, open a block with `using a = arena()` around the work, or keep " +
+            "what must outlive the call in a region"
+        )
+      )
+    }
+  }
+  return out
+}
+
+/** The first allocation `f` holds of its own when it answers no memory and holds nothing else; `null` otherwise. */
+const keptOwnAllocation = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  sig: FunctionSig,
+  f: FunctionFacts,
+  body: Node
+): Node | null => {
+  if (
+    sig.role === ROLE_CONSTRUCTOR ||
+    f.arenaScope ||
+    !f.leaksItself ||
+    f.managesArena ||
+    f.feedsTasks ||
+    f.fillsParam >= 0 ||
+    noScopeReason(unit, facts, f).length > 0 ||
+    keptAllocation(unit, table, facts, f, body) === null
+  ) {
+    return null
+  }
+  return ownLeakNode(facts, f)
+}
+
+/** Whether `list` holds `node`. */
+const holdsNode = (list: Node[], node: Node): boolean => {
+  for (const n of list) {
+    if (n === node) {
+      return true
+    }
+  }
+  return false
+}
+
 // ---- `--explain-memory` -------------------------------------------------------------------
 //
 // The arena-loop warning above speaks only where it can name a callee whose
