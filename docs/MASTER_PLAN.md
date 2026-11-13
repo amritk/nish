@@ -101,7 +101,7 @@ Design rules that every WP must respect:
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
-  | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
+  | `runtime-aes.c` | 2,709 (2026-11-13) | 2,816 |
   | `runtime-sha256.c` | 495 (2026-10-30) | 512 |
   | `runtime-chacha20.c` | 3,771 (2026-11-03) | 3,840 |
   | `runtime-term.c` | 1,825 (2026-10-24) | 2,048 |

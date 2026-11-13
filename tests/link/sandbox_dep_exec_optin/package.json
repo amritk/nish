@@ -1,0 +1,14 @@
+{
+  "name": "sandbox-dep-exec-optin",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_runner": [
+          "process.spawn=exec:env",
+          "process.spawn=true"
+        ]
+      }
+    }
+  }
+}

@@ -53,12 +53,12 @@
  *   `ROUTER_METHOD_NOT_ALLOWED`, so a server can tell 405 from 404.
  *
  * **What is unchecked.** `routerSameRange` reads with `nish:unsafe`'s
- * `uncheckedGet`, and has two callers: `enter` compares a method `add` stored
- * with the caller's method range, and `staticRoute` a path `add` stored with
- * the start of the target. The stored ranges are inside their arrays because
- * `add` pushed those bytes and nothing removes one; the caller's ranges are
- * the ones `enter` panics on when they are outside theirs. Every other read is
- * checked.
+ * `uncheckedGet`, and has one caller: `staticRoute` compares a path `add`
+ * stored with the start of the target. The stored range is inside
+ * `staticPaths` because only `add` writes that private array and nothing
+ * removes a byte; the target range is the one `enter` panics on when it is
+ * outside `target`. Every other read is checked, the method compare in
+ * `enter` included, since the method arrays are public.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -620,11 +620,11 @@ export class Router {
     const methodLength: i32 = mEnd - mStart
     for (let m: i32 = 0; m < toI32(this.methodStart.length) && this.wanted < 0; m++) {
       const at: i32 = this.methodStart[m]
-      // Both ranges are inside their arrays: `add` wrote this method's bytes
-      // at `at`, and the caller's range was checked above.
+      // Checked: `methodBytes`, `methodStart` and `methodEnd` are public, so
+      // nothing here can rely on `add` being the only writer.
       if (
         this.methodEnd[m] - at === methodLength &&
-        routerSameRange(this.methodBytes, at, method, mStart, methodLength)
+        routerSameBytes(this.methodBytes, at, method, mStart, methodLength)
       ) {
         this.wanted = m
       }
@@ -978,7 +978,7 @@ const routerLabelIsText = (bytes: u8[], at: i32, text: string, from: i32, length
 /**
  * Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same
  * bytes, read with no bounds check: the caller has both ranges inside their
- * arrays, which each of the two call sites states where it calls.
+ * arrays, which its one call site states where it calls.
  */
 const routerSameRange = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
   const stop: i32 = at + length

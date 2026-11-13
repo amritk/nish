@@ -107,12 +107,16 @@
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
- * `deadline()` says when `handleTimer` is next due. Five things run on it. The
+ * `deadline()` says when `handleTimer` is next due. Six things run on it. The
  * idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
  * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR` or three probe
  * timeouts; once it passes with nothing received, the connection closes
  * silently (`QUIC_STATE_TIMED_OUT`) and wipes its keys. Loss recovery's timer
  * declares packets lost by the time threshold or fires the probe timeout.
+ * While a stream's send buffer is full behind bytes in flight, an early
+ * ACK-eliciting probe goes half a round trip after the last ACK-eliciting
+ * packet, so a client whose NAT rebinds while nothing else is sent still
+ * answers from its new port (QUIC-12).
  *
  *  After a key update the previous read keys are kept for a probe timeout
  *  (`recovery.probeTimeout()`), for packets the network reordered, before the
@@ -313,6 +317,7 @@ import {
 import { QuicAckRanges } from "nish/net/quic-conn-ack"
 import {
   QUIC_RECOVERY_APPLICATION_CAPACITY,
+  QUIC_RECOVERY_GRANULARITY,
   QUIC_RECOVERY_HANDSHAKE_CAPACITY,
   QUIC_RECOVERY_TIMEOUT_LOSS,
   QUIC_RECOVERY_TIMEOUT_PTO,
@@ -609,7 +614,11 @@ export interface QuicServerConfig {
   /**
    * `initial_max_stream_data_bidi_remote` (and `_uni`, and `_bidi_local`
    * when the server opens streams): each stream's receive window and the
-   * size of its buffer each way, 1 to 1 MiB.
+   * size of its buffer each way, 1 to 1 MiB. The send buffer holds what the
+   * client has not acknowledged, so it bounds a stream's send-side memory
+   * and its bytes in flight: behind one lost packet a stream sends nothing
+   * new until the resend is acknowledged, and the connection sends an early
+   * ACK-eliciting probe meanwhile so a client's NAT rebinding is still seen.
    */
   maxStreamData: i64
   /** `initial_max_streams_bidi`: how many bidirectional streams the client may have open at once, 0 to 1024. */
@@ -1585,6 +1594,12 @@ export class QuicConnection {
   challengeUntil: i64 = -1
   /** How many PATH_CHALLENGE data have been drawn over the connection; see `challengeData`. */
   challengesDrawn: i64 = 0
+  /**
+   * The Application Data space's largest acknowledged packet number when
+   * the last early probe was asked for (`earlyProbeAt`), so one goes per
+   * acknowledgment that moves it; -2 before any.
+   */
+  earlyProbeAcked: i64 = -2
   private frame: QuicFrame
   /** The header and the packet numbers of the packet being read, reused for every one. */
   private header: QuicHeader
@@ -1901,6 +1916,7 @@ export class QuicConnection {
     this.appReadSlot = 0
     this.appWriteSlot = 0
     this.earlyResends = 0
+    this.earlyProbeAcked = -2
     this.resendLevel = -1
     this.now = 0
     this.idleSince = -1
@@ -2206,6 +2222,7 @@ export class QuicConnection {
     // Loss recovery's timer runs after the datagram, so an acknowledgement
     // it carries settles what it acknowledges before a probe is owed.
     this.runRecoveryTimer()
+    this.runEarlyProbe()
     return this.closed() ? this.error : QUIC_ERROR_NO_ERROR
   }
 
@@ -3787,7 +3804,8 @@ export class QuicConnection {
   /**
    * When `handleTimer` is next due, in the caller's milliseconds: the idle
    * timeout, loss recovery's timer (a time-threshold loss or the probe
-   * timeout), the end of a key update's probe timeout, or, while a path is
+   * timeout), an early probe while a stream's send buffer is full behind
+   * bytes in flight, the end of a key update's probe timeout, or, while a path is
    * validated, its PATH_CHALLENGE's resend or the end of its validation,
    * whichever comes first; once the connection has closed, the end of its closing or
    * draining period, when its keys are wiped. -1 when nothing is timed:
@@ -3812,6 +3830,10 @@ export class QuicConnection {
     const recovery: i64 = this.recovery.deadline(this.amplificationBlocked())
     if (recovery >= 0 && (due < 0 || recovery < due)) {
       due = recovery
+    }
+    const early: i64 = this.earlyProbeAt()
+    if (early >= 0 && (due < 0 || early < due)) {
+      due = early
     }
     if (this.pathValidating) {
       const path: i64 =
@@ -3858,7 +3880,10 @@ export class QuicConnection {
    * Past loss recovery's timer, packets lost by the time threshold have their
    * frames queued again, or a probe timeout queues every space's packets in
    * flight and asks for a probe (RFC 9002 §6.1.2, §6.2.4): `takeDatagram` then
-   * sends it. `receive` and `takeDatagram` run it themselves. Time never runs
+   * sends it. Past the early probe's time, while a stream's send buffer is
+   * full behind bytes in flight, a probe is asked for the same way, so the
+   * client answers from wherever its NAT now sends it.
+   * `receive` and `takeDatagram` run it themselves. Time never runs
    * backwards here: an earlier `now` than one already given counts as that one.
    *
    * @param now The caller's monotonic time in milliseconds.
@@ -3866,6 +3891,7 @@ export class QuicConnection {
   handleTimer(now: i64): void {
     this.runClocks(now)
     this.runRecoveryTimer()
+    this.runEarlyProbe()
   }
 
   /**
@@ -4208,6 +4234,61 @@ export class QuicConnection {
       return 0
     }
     return this.sealAt(space, out, at, quicPutPadding(out, next, payloadEnd - next))
+  }
+
+  /**
+   * When a sender blocked by its own stream buffer sends an ack-eliciting
+   * probe, or -1 when it need not. A stream whose send buffer is full
+   * behind a hole (`QuicStreams.bufferBlocked`) sends nothing new until
+   * the hole is acknowledged; once the client has acknowledged everything
+   * in flight it has nothing to acknowledge and sends nothing either, so a
+   * NAT rebind in that gap is never seen and every later packet, burst and
+   * probe timeout alike, goes to the old binding. Half a smoothed RTT after
+   * the last ack-eliciting packet, with the Application Data space's
+   * largest acknowledged packet moved since the last such probe, one
+   * datagram goes regardless of the window (a PING when nothing else is
+   * queued), so the client always has one to answer, from wherever it now
+   * is (RFC 9000 §9.3). One per acknowledgment that advances the space, so
+   * up to two full datagrams a round trip, a buffer-limited transfer that
+   * lost nothing included, since the probe carries any other stream's queued
+   * data; none while the sent ring is full, where a probe would resend the
+   * oldest packet in flight instead. After a validated migration
+   * `resetPath` puts the smoothed RTT back to the 333 ms initial RTT, so the
+   * probe waits about 166 ms until the new path's first sample. The probe
+   * timeout still runs as before. With the NAT beside the client, a rebind after the probe
+   * arrives and before the next burst does is still missed: only the client
+   * sending can close that half round trip.
+   */
+  private earlyProbeAt(): i64 {
+    if (this.state !== QUIC_STATE_CONNECTED || this.application.probes > 0) {
+      return -1
+    }
+    const sent: QuicSentPackets | null = this.recovery.space(TLS_LEVEL_APPLICATION)
+    if (
+      sent === null ||
+      sent.inFlight === 0 ||
+      sent.lastAckEliciting < 0 ||
+      sent.largestAcked <= this.earlyProbeAcked ||
+      sent.full() ||
+      !this.streams.bufferBlocked()
+    ) {
+      return -1
+    }
+    const half: i64 = this.recovery.smoothedRtt / 2
+    return sent.lastAckEliciting + (half > QUIC_RECOVERY_GRANULARITY ? half : QUIC_RECOVERY_GRANULARITY)
+  }
+
+  /** The early probe of `earlyProbeAt`, if it is due. */
+  private runEarlyProbe(): void {
+    const at: i64 = this.earlyProbeAt()
+    if (at < 0 || this.now < at) {
+      return
+    }
+    const sent: QuicSentPackets | null = this.recovery.space(TLS_LEVEL_APPLICATION)
+    if (sent !== null) {
+      this.earlyProbeAcked = sent.largestAcked
+      this.application.probes = 1
+    }
   }
 
   /** Loss recovery's timer, if it is due (RFC 9002 §6.2, A.9). */

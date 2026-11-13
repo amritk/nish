@@ -182,14 +182,14 @@ void nish_region_adopt(uint64_t r);
  * a node for a task of `kind` whose frame is `bytes` long, the frame 32 bytes
  * in, with a region of its own; `nish_async_enter` makes a node the running
  * task and enters its region, answering the task it displaced, which
- * `nish_async_leave` restores; `nish_async_done` frees a finished task's
- * region and reuses its node. `nish_async_wait_fd` (`dir` 0 readable, 1
- * writable) and `nish_async_sleep` answer a token `nish_async_poll` reads: -1
- * pending, 1 ready, 0 failed. `nish_async_next` answers the next task to
- * resume, blocking in the kernel until one is ready, or null when nothing is
- * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:
- * completions dropped because their task had finished, 2: spawned tasks not yet
- * finished.
+ * `nish_async_leave` restores; `nish_async_done` empties a finished task's
+ * region and reuses its node, region and all. `nish_async_wait_fd` (`dir` 0
+ * readable, 1 writable) and `nish_async_sleep` answer a token
+ * `nish_async_poll` reads: -1 pending, 1 ready, 0 failed. `nish_async_next`
+ * answers the next task to resume, blocking in the kernel until one is ready,
+ * or null when nothing is ready and nothing waits. `nish_async_stat` answers
+ * 0: nodes allocated, 1: completions dropped because their task had finished,
+ * 2: spawned tasks not yet finished.
  *
  * Cancellation is cooperative. A task's handle (`nish_async_task_id`) is its
  * slot and generation, and `main`'s is 0. `nish_async_cancel` flags a task and
@@ -1004,11 +1004,15 @@ int64_t nish_cpu_online(void);
    `nish_cpu_prime` caches the pool's CPU count while /sys is still readable. */
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths);
 void nish_sandbox_check(void);
-/* SBX-1: set by `nish_sandbox` when the exec allowlist marks an interpreter;
-   `nish_spawn_start` (runtime-os.c) then spawns the descriptor it returns,
-   through the /proc/self/fd name it writes to `proc` (32 bytes), or refuses
-   with the negative errno it returns. */
-extern int (*nish_spawn_target)(const char *file, int low, char *proc);
+/* SBX-1: set by `nish_sandbox` when the program has an exec allowlist;
+   `nish_spawn_start` (runtime-os.c) then leaves the spawn to it. It checks
+   `file` as `posix_spawnp` would resolve it, starts the child with the file
+   actions `actions` (a `posix_spawn_file_actions_t`) and `argv`, holds it to
+   that one exec, and answers its pid or a negative errno. The actions' `dup2`s
+   read the `n` descriptors of `dup` (null for none) and write `base` onward;
+   with the redirects of 1 and 2, nothing they write is above `base + n + 2`. */
+extern int32_t (*nish_spawn_sandboxed)(const char *file, const int *dup, int base, int n, const void *actions,
+                                       char **argv);
 void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 /* Keeps every later region and join on threads created and joined per call,

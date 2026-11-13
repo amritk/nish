@@ -1829,7 +1829,100 @@ The explicit entry's Ir is lower than the 5,411 (`plaintext`) and 6,588 (`json`)
      165.1  nish.http1TakeLine
 ```
 
-**From here on the gate is read against this section**: a fix's before is these tables, re-run with the same commands and durations, and its Ir per request is set against the 4,814 and 7,848 (`plaintext`) and 5,962 and 9,276 (`json`) above.
+**Until stage 6's re-measurement after task recycling ([below](#techempower-the-gate-after-task-recycling-wp49-stage-6)), the gate was read against this section**: a fix's before is these tables, re-run with the same commands and durations, and its Ir per request is set against the 4,814 and 7,848 (`plaintext`) and 5,962 and 9,276 (`json`) above.
+
+## TechEmpower: the gate after task recycling (WP49 stage 6)
+
+This re-runs the gate on `main` after two changes.
+- **Task recycling (#1493):** a finished task's node keeps its region for the node's next task, so a request's task costs no `malloc` or `free`.
+- **Response head (#1457):** a repeated HTTP/1 response head is built once per `Date` tick.
+
+The changes are library and runtime changes that serve every `nish:async` and `serve` program; nothing in `bench/techempower/` moved. Two other candidates were measured and not landed, because what a user would gain does not pay for them:
+- **Reading the request in place:** `serveTask` would hand `handle` the connection slot's buffers in place of a copy. The language's task-memory rule refuses this: `handle` may grow what it is given. The copy it would save costs about 330 Ir per request.
+- **A fixed-path table in `Router`:** callgrind (valgrind 3.22.0), Ir per match.
+  - On `examples/http-app`'s routes: 506 → 491 for `/health`, unchanged for `/notes/17`.
+  - On a 44-route router: 591 → 491 and 909 → 765 for fixed paths, unchanged for paths with parameters, and 527 → 570 for a 404.
+
+| | |
+| --- | --- |
+| Date | 2026-11-13 |
+| nish | `build/nish` built from `main` at `5c0cd6b2` (nish 0.38.0 sources), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
+| OS | linux 6.18.44 (x64) |
+| Postgres | 16, a throwaway cluster in `build/tfb/pg`, as [the baseline](#techempower-the-gates-baseline-checked-and-re-measured-wp49-stage-6) |
+| Client | wrk 4.1.0, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
+| Commands | `bash bench/techempower/run.sh --only plaintext`, then `--only json`, then `--only db`, one after another with nothing else running; `run.sh` unchanged |
+
+Every test ran the default 3 rounds of 10 s. So `/json` and the database tests are at the durations of [the re-measurement after the profile-led fixes](#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6), not the baseline's 8 s and 2 s. The method, the band and the `*` rule are unchanged. The http-twins were not built.
+
+**Outcome: the gate is not met.** Four of the six cells #1468 and #1402 judge are outside the band:
+
+The judged set is the six cells #1468 lists, narrower than the earlier sections' eleven: the cells the explicit entry's issue tracks, not every cell `run.sh` prints. `run.sh` also prints `/json` at 16, 64 and 256 as outside (−8.4%, −3.2%, −10.6%, in the tables below); they are recorded and not judged, as are `/plaintext` at 16,384, `/db` at 16 and 256, and the other database tests.
+
+| test | connections | band | async vs entry | verdict | the baseline |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `/plaintext` | 256 | 1.3% | −34.5% | outside | −27.6% |
+| `/plaintext` | 1024 | 4.4% | −24.1% | outside | −21.7% |
+| `/plaintext` | 4096 | 2.9% | −25.7% | outside | −31.3% |
+| `/json` | 128 | 10.0% | +7.3% | inside | −11.6% |
+| `/json` | 512 | 3.7% | −17.0% | outside | −13.1% |
+| `/db` | 64 | 7.9% | +4.9% | inside | −9.1% |
+
+Reading the rounds:
+
+- **`/plaintext`:** every async round is below every explicit round, at all three connection counts. For example, at 256 connections the async entry gave 1,122,886 to 1,131,320 req/s, and `entry` and `entry-copy` gave 1,626,321 to 1,730,805. The cells are outside however the band is read. #1457 builds the head once per tick for both entries, so it does not narrow the gap. At 4,096 connections the delta moved from −31.3% to −25.7%, and at 256 it moved from −27.6% to −34.5%, so this run does not show a trend.
+- **`/json` at 128:** the async entry gave 182,829 to 185,514 req/s, inside the explicit rounds' 170,948 to 192,047. The cell is inside on its rounds as well as on its median.
+- **`/json` at 512:** `entry` is bimodal (166,056, 215,934 and 217,296 req/s). The async entry's best round, 181,014, is below every `entry-copy` round (191,532 to 218,709). The cell is outside.
+- **`/db` at 64:** this cell also has one low explicit round, `db-entry`'s first, at 22,253 against 108,106 and 113,153. That widens the band to 7.9%. The async entry's rounds, 112,066 to 119,750, overlap the range of the other five explicit rounds (106,555 to 119,548), and its lowest round is above their lowest, so the cell is inside whichever way it is read. `/db` at 16 is bimodal again and is not judged.
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, after task recycling
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1723784 (1683348) | 1398714 (1088063) | 1053287 (886782) | 1201865 (1147809) | 113.7 |
+| entry-copy | 1701240 (1626321) | 1336745 (1180980) | 1084149 (925269) | 1189346 (831549) | 113.7 |
+| async | 1129843 (1122886) | 1062193 (989761) | 782668 (768754) | 481322 (447762)* | 116.2 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 1.3% 1024: 4.4% 4096: 2.9% 16384: 1.0%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -34.5% outside 1024: -24.1% outside 4096: -25.7% outside 16384: -60.0% outside*
+- /plaintext c=16384 round 1: async had 0 Non-2xx responses and socket errors c/r/w/t 0/4326/0/0
+- /plaintext c=16384 round 3: async had 0 Non-2xx responses and socket errors c/r/w/t 0/9077/0/0
+
+### /json, req/s, median (min) of 3 rounds of 10 s, after task recycling
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 126307 (123684) | 144399 (138584) | 171651 (165998) | 172369 (170948) | 206515 (142150) | 215934 (166056) | 3.9 |
+| entry-copy | 125005 (123433) | 144378 (138054) | 167802 (159413) | 189582 (182134) | 210275 (204847) | 207983 (191532) | 3.9 |
+| async | 115726 (115085) | 144457 (141874) | 166213 (157581) | 184928 (182829) | 184559 (184372) | 179200 (174695) | 8.3 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 1.0% 32: 0.0% 64: 2.2% 128: 10.0% 256: 1.8% 512: 3.7%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -8.4% outside 32: +0.0% inside 64: -3.2% outside 128: +7.3% inside 256: -10.6% outside 512: -17.0% outside
+
+### /db, req/s, median (min) of 3 rounds of 10 s, after task recycling
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 21404 (21026) | 108106 (22253) | 124419 (123313) | 66.2 |
+| db-entry-copy | 21323 (20756) | 116677 (106555) | 126312 (125950) | 66.2 |
+| async-db | 72482 (59505) | 113355 (112066) | 135956 (131814) | 36.8 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.4% 64: 7.9% 256: 1.5%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +238.6% inside 64: +4.9% inside 256: +9.3% inside
+
+### The other database tests, after task recycling
+
+These are recorded, not judged. Each cell is the async-db median against db-entry's, with the band in brackets, from 3 rounds of 10 s.
+
+| test | 16 | 64 | 256 |
+| --- | ---: | ---: | ---: |
+| `/queries?queries=20` | +3.4% (2.7%) | +13.8% (3.0%) | −13.4% (0.7%) |
+| `/updates?queries=20` | +3.3% (1.7%) | +6.4% (0.3%) | +11.3% (1.2%) |
+| `/fortunes` | −35.6% (1.2%) | −21.5% (0.3%) | −48.4% (0.5%) |
+| `/cached-queries?count=100` | +13.7% (2.0%) | +12.6% (3.6%) | +29.6% (1.2%) |
+
+**What is left.** The gap on `/plaintext` and on `/json` at 512 connections is the per-request work the async path does and the explicit one does not. The [baseline profile](#the-baseline-profile-instructions-and-system-calls-per-request) measured it at 7,848 against 4,814 instructions on `plaintext`. #1493 then took off about 520 on `plaintext` and about 490 on `json`. [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) puts the rest in the serve, handler and router hand-off. The two library candidates above would together save less than 500 instructions a request, on a gap of more than 2,500. Closing the gap needs a change to that hand-off's design: for example, no spawned task per request, or a language rule that lets a task lend its connection's buffers to `handle`. That is a decision for the owner, not a library fix.
 
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
@@ -2011,6 +2104,220 @@ node bench/http1-parse/run.mjs
 ```
 
 <!-- http-codec-baseline:end -->
+
+<!-- http-codec-regate:begin -->
+## HTTP/1 codec re-measured after the codec, head and codegen stages
+
+The explicit TechEmpower entry again, after the codec, head and codegen stages of [#1416](https://github.com/amritk/nish/issues/1416) landed, against [the baseline above](#http1-codec-baseline). The baseline's throughput ran on another VM (2.30GHz, kernel `fc-v378`), so it is not compared here. Instead the baseline's tree ran again on this VM, between two runs of `main`.
+
+| | |
+| --- | --- |
+| Date | 2026-11-13 |
+| Sources | after: `main` at `e66cf339`. Before: `b49794d8`, the baseline's `main` with its own `src/`, `std/` and `runtime/`, built by its own compiler. `4099299e`, the commit the baseline ran at, is a branch commit no longer fetchable; it differs from `b49794d8` only in `bench/http1-request`'s `varied` case |
+| nish | `build/nish` from `npm run build` on each tree (`b49794d8` bootstrapped from the 0.34.1 seed) |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB (a cloud VM, no hardware performance counters) |
+| OS | linux 6.18.44-fc-v445 (x64); `ulimit -n` 20000 |
+| Pinning | **client-shared**: every server is 1 process with 1 worker, pinned to CPU 0 by `taskset -c 0` (the entries start one worker per allowed CPU); wrk `-t 3` on CPUs 1–3. Both builds and both twins ran the same way |
+| Twins | `uws` (uWebSockets.js v20.71.0 on Node 26.12.0) and `go-fasthttp` (go1.27.2), each 1 process on CPU 0 |
+| Tools | as in the baseline: callgrind 3.22.0, perf 6.8.12, `strace -c -f`, wrk 4.1.0, `VmHWM` for RSS, cachegrind for `bench/http1-request --instructions` |
+
+`run.sh` interleaves its contestants within a run but cannot interleave two builds. The runs went in this order on one VM, each in the foreground: `main` run 1 (`/plaintext`, `/json`, browser head), then `b49794d8` (the same three, then its two profiles), then `main` run 2 (the same three). The twins are identical in all three runs, so their rows show how far the machine drifted between runs. A change in the entry counts only where it is outside the band and larger than the twins' drift.
+
+### Verdicts
+
+**Which band governs.** Each cell is held against two bands, the base run's and its own run's, and is read the cautious way both times: it counts as **worse** when it is below either band, and as a **gain** only when it is above both and larger than the twins' drift between the same runs. Taking the wider band for a loss would widen it.
+
+| # | criterion | verdict | cells |
+| --- | --- | --- | --- |
+| 1 | `profile.sh` `/plaintext` Ir per request against the 3,251 target | **NOT MET** | 3,883, down 28.4% from 5,422 but 632 over; `http1Next` is 2,331 of them |
+| 2 | `run.sh` explicit `/plaintext` at 256 and 1024 against `go-fasthttp` | **MET** | +97.6% and +124.1% at 256, +104.4% and +149.0% at 1024, outside every band; over `uws` +114.0% to +151.2% |
+| 3 | explicit `/json` and the async entry no worse than the baseline beyond the band | **NOT MET** for explicit `/json`, which is **worse**; MET for `async` | explicit `/json` is worse in four cells: `main` 2 at 128 (−3.3%, its band 0.1%), `main` 2 at 256 (−9.9%, base band 8.4%), `main` 1 at 512 (−7.4%, its band 3.5%) and `main` 2 at 512 (−18.7%, outside every band). No `async` `/plaintext` or `/json` cell is worse |
+| 8 | the real-world benches against the baseline | **MET** for `browser`, `api`, `short`, `pipelined`, `split` and `http1-parse`; **NOT MET** for `varied`, which is worse | `varied` +1.1% in time against `main`'s ±0.9% band (instructions −0.8%) |
+| 9 | `run.sh --browser-head` at 256 against the baseline | **MET** for `/plaintext`; **NOT MET** for `/json`, which is worse | `/plaintext` +13.0% in both runs; `/json` −5.9% and −11.7%, below the base band of 3.6% and both `main` bands |
+
+### Where a request's instructions go
+
+`bash bench/techempower/profile.sh --only plaintext` and `--only json` on each tree. Ir per request is deterministic; the other columns are timed.
+
+| test | Ir/req `b49794d8` | Ir/req `e66cf339` | change | system calls per request | CPU µs per request | req/s under perf |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| explicit `/plaintext` (256, 16 pipelined) | 5,426 | 3,883 | −28.4% | 0.129 → 0.129 | 0.74 → 0.61 | 1,349k → 1,633k |
+| explicit `/json` (64) | 6,597 | 5,104 | −22.6% | 2.027 → 2.026 | 7.11 → 7.19 | 140k → 138k |
+| async `/plaintext` | 9,121 | 6,311 | −30.8% | 0.134 → 0.134 | 1.08 → 0.86 | 917k → 1,157k |
+| async `/json` | 11,138 | 7,825 | −29.7% | 2.107 → 2.108 | 7.35 → 6.78 | 136k → 147k |
+
+`b49794d8` repeats the recorded 5,422 to 0.07%. The target was 3,251 (40% off 5,422): `main` is 3,883, 632 over it (19.4%), a 28.4% cut. `/json` is about 2 system calls a request, so its 1,493 fewer instructions do not show in CPU time.
+
+The top `/plaintext` frames on `main`, grouped as the baseline grouped them:
+
+| group | `b49794d8` Ir/req | `e66cf339` Ir/req | frames on `main` |
+| --- | ---: | ---: | --- |
+| parse | 3,107 | 2,452 | `http1Next` 2,330.9, `http1TakeLine` 121.1 |
+| head write | 1,357 | 439 | `http1ServerKept` 305.6, `http1ServerSame4` 127.8, `http1WriteResponseHead` 5.1, `http1PutBytes` 0.9 |
+| loop, handler and I/O | 793 | 932 | `TfbServer.resume` 447.7, the handler arrow 365.9, `Http1Connection.bodyRoom` 52.4, `nish_arena_release` 36.3, seven more under 9 each |
+| `memcpy` | 153 | 53 | |
+
+`http1HeadAppend`, the copy of the request head into the parser's buffer, no longer appears in the profile. The response head is kept and reused within a Date tick (`http1ServerKept`, `http1ServerSame4`), so the writer's byte loops fall from 1,357 to 439. The handler, inlined into `nish_main` before (323.7), is its own frame now (365.9). `http1Next` holds 60% of the instructions and 55.2% of perf's user-space samples, then `TfbServer.resume` with 10.5%.
+
+On `/json` the top frames on `main` are `http1Next` 2,404, the handler arrow 566, `TfbServer.resume` 448, `jsonWriterPutString` 434 and `http1ServerKept` 256. At `b49794d8` they included `http1WriteResponseHead` 817, `http1TakeLine` 691 and `http1HeadAppend` 252.
+
+### Throughput against the twins
+
+`bash bench/techempower/run.sh --only plaintext` and `--only json`: 3 interleaved, rotated rounds of 10 s, each server warmed for 1 s. Medians. The band is |entry − entry-copy| / entry for that run.
+
+`/plaintext`, 16 pipelined, req/s, median:
+
+| contestant | level | `main` 1 | `b49794d8` | `main` 2 | `main` 1 against `b49794d8` | `main` 2 against `b49794d8` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 256 | 1,630,562 | 1,374,462 | 1,759,284 | +18.6% | +28.0% |
+| | 1024 | 1,349,801 | 1,015,251 | 1,570,526 | +33.0% | +54.7% |
+| | 4096 | 1,031,709 | 893,582 | 1,039,378 | +15.5% | +16.3% |
+| | 16384 | 1,071,796* | 1,072,883 | 996,083 | −0.1%* | −7.2% |
+| entry-copy | 256 | 1,767,473 | 1,398,232 | 1,744,442 | | |
+| | 1024 | 1,385,614 | 1,048,531 | 1,354,527 | | |
+| | 4096 | 1,105,762 | 942,071 | 1,093,749 | | |
+| | 16384 | 1,019,251 | 906,482 | 987,632 | | |
+| async | 256 | 1,196,719 | 987,121 | 1,255,235 | +21.2% | +27.2% |
+| | 1024 | 1,046,013 | 876,087 | 995,418 | +19.4% | +13.6% |
+| | 4096 | 690,874 | 669,862 | 717,053 | +3.1% | +7.0% |
+| | 16384 | 357,445* | 343,861* | 364,486* | +4.0%* | +6.0%* |
+| uws | 256 | 740,543 | 679,307 | 729,227 | +9.0% | +7.3% |
+| | 1024 | 630,705 | 626,226 | 625,206 | +0.7% | −0.2% |
+| | 4096 | 574,580 | 585,379 | 585,519 | −1.8% | +0.0% |
+| | 16384 | 659,711 | 641,170 | 621,921* | +2.9% | −3.0%* |
+| go-fasthttp | 256 | 825,193 | 767,252 | 784,946 | +7.6% | +2.3% |
+| | 1024 | 660,363 | 641,021 | 630,628 | +3.0% | −1.6% |
+| | 4096 | 586,353 | 582,726 | 581,547 | +0.6% | −0.2% |
+| | 16384 | 571,192 | 542,139 | 550,353 | +5.4% | +1.5% |
+| band | 256 | 8.4% | 1.7% | 0.8% | | |
+| | 1024 | 2.7% | 3.3% | 13.8% | | |
+| | 4096 | 7.2% | 5.4% | 5.2% | | |
+| | 16384 | 4.9% | 15.5% | 0.8% | | |
+
+| peak RSS, MiB, `/plaintext` | `main` 1 | `b49794d8` | `main` 2 |
+| --- | ---: | ---: | ---: |
+| entry | 113.7 | 91.3 | 113.7 |
+| async | 116.2 | 95.8 | 116.2 |
+| uws | 65.4 | 65.5 | 65.5 |
+| go-fasthttp | 360.8 | 356.6 | 357.2 |
+
+A `*` cell had socket errors and is never inside a band. `async` had read errors at 16384 in every run (about 4,200 a round; 6,276 in one round of `main` 2). `entry` had 3,394 read errors in one round of `main` 1 at 16384, and `uws` 25 timeouts in `main` 2.
+
+- At 256 and 1024 the entry gains 18.6% to 54.7%, outside every band and well past the twins' drift (at most +9.0%). At 4096 it gains about 16%, outside the bands. At 16384 nothing changed beyond the noise.
+- Against the twins at 256, the entry is 2.0× (`main` 1, +97.6%) and 2.2× (`main` 2, +124.1%) `go-fasthttp`, and +120.2% and +141.3% over `uws`. At 1024: +104.4% and +149.0% over `go-fasthttp`, +114.0% and +151.2% over `uws`. The figures are client-shared: wrk on three cores is the ceiling the entry runs into, so the entry's lead is a lower bound.
+- `async` is outside the band below the entry at every level in all three runs, as at the baseline: −26.6%, −22.5%, −33.0% and −66.6%* at 256 to 16384 in `main` 1, −28.7%, −36.6%, −31.0% and −63.4%* in `main` 2, and −28.2%, −13.7%, −25.0% and −67.9%* at `b49794d8`.
+- Against `b49794d8`, `async` gains +21.2% and +27.2% at 256, above every band. At 1024 `main` 1's +19.4% is above both its bands; `main` 2's +13.6% is above the base band of 3.3% but inside its own run's 13.8%, so only `main` 1 shows a gain there. At 4096 `main` 1's +3.1% is inside the bands and `main` 2's +7.0% above both. No `async` cell is worse.
+- The entry's peak RSS rose from 91.3 to 113.7 MiB (+22.4 MiB, +24.5%) on a run whose highest level is 16,384 connections, the same in both `main` runs. That is close to the response head [#1457](https://github.com/amritk/nish/pull/1457) keeps for each connection, about 1.3 KiB × 16,384 connections ≈ 21 MiB. `async` shares `Http1Connection`, and rose by 20.4 MiB.
+
+`/json`, one request at a time, req/s, median:
+
+| contestant | run | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | `main` 1 | 116,612 | 137,982 | 155,856 | 170,741 | 187,307 | 185,065 | 3.9 |
+| | `b49794d8` | 111,563 | 129,520 | 144,567 | 173,629 | 189,690 | 199,948 | 3.1 |
+| | `main` 2 | 116,539 | 136,572 | 150,263 | 167,826 | 170,926 | 162,498 | 3.9 |
+| | `main` 1 against `b49794d8` | +4.5% | +6.5% | +7.8% | −1.7% | −1.3% | −7.4% | |
+| | `main` 2 against `b49794d8` | +4.5% | +5.4% | +3.9% | −3.3% | −9.9% | −18.7% | |
+| entry-copy | `main` 1 | 115,764 | 134,096 | 154,263 | 180,110 | 193,375 | 191,499 | |
+| | `b49794d8` | 110,161 | 126,317 | 146,902 | 152,693 | 173,776 | 180,695 | |
+| | `main` 2 | 114,576 | 132,153 | 145,697 | 167,696 | 193,900 | 169,801 | |
+| async | `main` 1 | 110,343 | 140,862 | 153,946 | 166,947 | 172,816 | 163,856 | 8.3 |
+| | `b49794d8` | 107,197 | 131,534 | 143,923 | 161,714 | 165,570 | 166,206 | 7.7 |
+| | `main` 2 | 109,986 | 133,767 | 150,203 | 162,499 | 170,814 | 159,714 | 8.3 |
+| | `main` 1 against `b49794d8` | +2.9% | +7.1% | +7.0% | +3.2% | +4.4% | −1.4% | |
+| | `main` 2 against `b49794d8` | +2.6% | +1.7% | +4.4% | +0.5% | +3.2% | −3.9% | |
+| uws, drift against `b49794d8` | `main` 1, `main` 2 | +0.7%, −0.6% | +7.6%, +2.8% | +4.0%, +1.5% | −2.3%, +2.4% | +10.5%, +7.9% | −2.1%, −7.8% | 57.7–57.9 |
+| go-fasthttp, drift | `main` 1, `main` 2 | +4.7%, +4.7% | +4.3%, −0.5% | +1.9%, −0.4% | −0.9%, +0.3% | +1.7%, −1.1% | +4.4%, +2.0% | 25.1–25.2 |
+| band | `main` 1 | 0.7% | 2.8% | 1.0% | 5.5% | 3.2% | 3.5% | |
+| | `b49794d8` | 1.3% | 2.5% | 1.6% | 12.1% | 8.4% | 9.6% | |
+| | `main` 2 | 1.7% | 3.2% | 3.0% | 0.1% | 13.4% | 4.5% | |
+
+- From 16 to 64 connections the entry gains 3.9% to 7.8%, above the bands, but the twins drifted up too. Less the larger twin drift in the same run, the gain is −0.2 and −0.2 points at 16, −1.1 and +2.6 at 32, and +3.8 and +2.4 at 64 (`main` 1, `main` 2): a gain beyond drift only at 64, and at 32 in `main` 2.
+- **From 128 to 512 the entry is worse in four cells**, each below its own run's band or the base's (see "Which band governs" under Verdicts): `main` 2 at 128, −3.3% against its band of 0.1%; `main` 2 at 256, −9.9% against the base band of 8.4% (inside its own 13.4%), while `uws` drifted +7.9%; `main` 1 at 512, −7.4% against its band of 3.5% (inside the base's 9.6%); and `main` 2 at 512, −18.7%, below every band, while `uws` drifted −7.8%. `main` 1 at 128 and 256 (−1.7%, −1.3%) are inside both bands.
+- `/json` costs about 2 system calls a request, and the profile shows server CPU per request unchanged (7.11 → 7.19 µs) though Ir fell 22.6%. A non-pipelined request is bound by `recv` and `send`, not by the codec.
+- Peak RSS: 3.1 → 3.9 MiB for the entry, 7.7 → 8.3 for `async`.
+
+### A browser-shaped request
+
+`bash bench/techempower/run.sh --browser-head`: the baseline's 759-byte `/plaintext` head (756 on `/json`), non-pipelined, 256 connections, 3 rotated rounds of 10 s.
+
+| contestant | `/plaintext` `main` 1 | `b49794d8` | `main` 2 | `/json` `main` 1 | `b49794d8` | `main` 2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 171,057 | 151,352 | 170,972 | 169,371 | 180,050 | 159,050 |
+| entry-copy | 167,810 | 163,921 | 173,911 | 170,364 | 173,556 | 154,262 |
+| uws | 156,937 | 150,538 | 152,613 | 130,114 | 154,635 | 148,551 |
+| go-fasthttp | 104,752 | 101,825 | 99,398 | 93,559 | 89,633 | 91,952 |
+| band | 1.9% | 8.3% | 1.7% | 0.6% | 3.6% | 3.0% |
+| entry against `b49794d8` | +13.0% | | +13.0% | −5.9% | | −11.7% |
+
+Peak RSS: entry 3.4 MiB on `main` against 2.9 at `b49794d8`, `uws` about 57, `go-fasthttp` about 19. No round had a non-2xx answer or a socket error.
+
+- `/plaintext`: +13.0% in both runs, outside every band (8.3% at the base) and past the twins' drift (`uws` +4.3% and +1.4%, `go-fasthttp` +2.9% and −2.4%).
+- **`/json` is worse**: −5.9% and −11.7%, outside the base band of 3.6% and both `main` bands. `uws` drifted −15.9% and −3.9% between the same runs, which covers `main` 1's drop but not `main` 2's. `main` 1's entry rounds spread from 144,435 to 190,184, so the figure is unsteady, but it is not a gain.
+- The baseline's recorded 187,080 and 183,238 ran on the 2.30GHz VM and are not comparable with these.
+
+### The codec benches
+
+`node bench/http1-request/run.mjs --instructions --base b49794d8` and `--rounds 11 --base b49794d8`. `--base` builds `std/` at `b49794d8` with the current compiler, so the columns differ only in the library. `--rounds 11` is a floor: the harness ran 16 rounds so every column takes every slot.
+
+| case | Ir/req `main` | Ir/req base | change | ns `main` (band) | ns base (band) | change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `browser` | 8,892 | 10,279 | −13.5% | 517.3 (±1.9%) | 626.8 (±0.9%) | −17.5% |
+| `api` | 7,371 | 8,491 | −13.2% | 561.6 (±0.0%) | 650.5 (±7.3%) | −13.7% |
+| `short` | 3,094 | 3,815 | −18.9% | 197.8 (±4.1%) | 252.6 (±1.4%) | −21.7% |
+| `pipelined` | 7,862 | 9,138 | −14.0% | 1,037.9 (±3.0%) | 1,259.7 (±4.6%) | −17.6% |
+| `split` | 9,257 | 10,626 | −12.9% | 559.5 (±3.9%) | 649.7 (±0.1%) | −13.9% |
+| `json1k` | 21,385 | 21,407 | −0.1% | 1,330.0 (±5.3%) | 1,389.3 (±0.7%) | −4.3% |
+| `json4k` | 73,460 | 73,446 | +0.0% | 4,277.8 (±5.0%) | 4,345.8 (±1.0%) | −1.6% |
+| `json16k` | 290,411 | 290,247 | +0.1% | 16,101.4 (±5.0%) | 17,408.8 (±1.2%) | −7.5% |
+| `json40k` | 724,665 | 724,201 | +0.1% | 41,087.0 (±2.5%) | 43,325.4 (±0.2%) | −5.2% |
+| `varied` | 4,059 | 4,092 | −0.8% | 777.7 (±0.9%) | 769.0 (±1.9%) | **+1.1%** |
+
+- `browser` and `api` are cheaper by 13% in instructions and 14% to 18% in time, outside both bands.
+- **`varied` is 1.1% slower** in time: outside `main`'s ±0.9% band, inside the base's ±1.9%, so by the rule under Verdicts it is worse and criterion 8 is NOT MET for it. Its instructions fell 0.8%. It is the case where every head misses the reuse.
+- `json4k` to `json40k` cost 0.0% to 0.1% more instructions, which is noise in a body-bound case; their times fell.
+
+`bench/http1-parse`, the parser alone (24 rounds, baseline x86-64, `u8x16` on SSE2), ns a head, median:
+
+| head | `old` | `old-copy` (band) | `new` | `new` against `old` | at the baseline |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| loadgen GET, 337 bytes | 297.1 | 298.4 (±0.4%) | 225.7 | −24.0% | −20.2% |
+| loadgen POST, 447 bytes | 406.3 | 426.9 (±5.1%) | 292.5 | −28.0% | −19.7% |
+| browser GET, 1,028 bytes | 897.5 | 883.2 (±1.6%) | 642.5 | −28.4% | −25.3% |
+
+`node bench/http1-parse/run.mjs` refuses to run on `main`: since #1460 the parser keeps each field line's CRLF, so `new`'s checksum (`5937a130`) no longer equals the `known` value frozen in `run.mjs` (`b29eddcc`). These figures come from a scratch copy of `run.mjs`, not in the tree, that skips that one check for `new` only and still checks that every round of a column agrees. `old` and `old-copy` passed the frozen check. The harness is left as it is here: `bench/http1-parse/run.mjs` needs its pinned `new` checksum updated, as a follow-up outside this stage.
+
+### Commands
+
+```sh
+apt-get update && apt-get install -y wrk linux-tools-generic valgrind strace
+npm run build
+bash bench/http-twins/build.sh uws go-fasthttp
+ulimit -n 20000
+# main 1, at e66cf339
+bash bench/techempower/run.sh --only plaintext
+bash bench/techempower/run.sh --only json
+bash bench/techempower/run.sh --browser-head
+bash bench/techempower/profile.sh --only plaintext
+bash bench/techempower/profile.sh --only json
+node bench/http1-request/run.mjs --instructions --base b49794d8
+node bench/http1-request/run.mjs --rounds 11 --base b49794d8
+# bench/http1-parse: a scratch copy of run.mjs with the known-checksum check skipped for `new` only; not in the tree
+# b49794d8, in a worktree with the seed in build/seed
+git worktree add ../nish-base b49794d8
+NISH_BOOTSTRAP=build/seed/bin/nish bash scripts/bootstrap.sh --quiet
+bash bench/techempower/run.sh --only plaintext
+bash bench/techempower/run.sh --only json
+bash bench/techempower/run.sh --browser-head
+bash bench/techempower/profile.sh --only plaintext
+bash bench/techempower/profile.sh --only json
+# main 2, at e66cf339
+bash bench/techempower/run.sh --only plaintext
+bash bench/techempower/run.sh --only json
+bash bench/techempower/run.sh --browser-head
+```
+
+<!-- http-codec-regate:end -->
 
 <!-- syscall-cost:begin -->
 ## Syscall cost
