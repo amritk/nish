@@ -124,7 +124,7 @@ function writeTrace(emitter: Emitter, traces: RootTraces, type: i32, name: strin
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via elementLLVMType
   escaping: name type
-  calls: Emitter.declareGlobal Emitter.declareType Emitter.llvm FieldInfo.inline TypeTable.isArray TypeTable.isStruct TypeTable.isUnion TypeTable.memberValue TypeTable.refOf TypeTable.stripNull TypeTable.tagsOf TypeTable.typeName TypeTable.variantsOf elementLLVMType holdsPointer inlineElementStruct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 rootStructOf sizeOf traceArrays traceFail traceOf
+  calls: Emitter.declareGlobal Emitter.declareType Emitter.llvm FieldInfo.inline TypeTable.isArray TypeTable.isStruct TypeTable.isUnion TypeTable.memberValue TypeTable.refOf TypeTable.stripNull TypeTable.tagsOf TypeTable.typeName TypeTable.variantsOf elementLLVMType holdsPointer inlineElementStruct nish_array_grow nish_str_concat nish_str_from_i32 rootStructOf sizeOf traceArrays traceFail traceOf
   pointer emitter: size=376 writesThrough=false captured=false passedTo=traceOf#0 holdsPointer#0 traceOf#0 traceOf#0 rootStructOf#0 traceFail#0 holdsPointer#0 Emitter.llvm#0 traceOf#0 traceFail#0 Emitter.declareType#0 traceArrays#0 Emitter.declareGlobal#0
   pointer traces: size=24 writesThrough=false captured=false passedTo=traceOf#1 traceOf#1 traceOf#1 traceOf#1
   stackSites=2 stackLocals=2
@@ -151,27 +151,29 @@ function writeTrace(emitter: Emitter, traces: RootTraces, type: i32, name: strin
   local +23:11 tags: i32[] (const)
   callee +23:18 TypeTable.tagsOf -> @TypeTable.tagsOf
   local +24:9 k: i32 (let)
-  callee +26:22 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +27:15 traceOf -> @traceOf
-  callee +31:14 TypeTable.isStruct -> @TypeTable.isStruct
-  local +33:11 info: StructInfo (const)
-  callee +33:18 rootStructOf -> @rootStructOf
-  local +34:11 ty: string (const)
-  callee +35:12 sizeOf -> @sizeOf
-  local +36:16 field: FieldInfo (const)
-  callee +37:51 FieldInfo.inline -> @FieldInfo.inline
-  callee +38:9 traceFail -> @traceFail
-  callee +40:11 holdsPointer -> @holdsPointer
-  local +41:15 fieldTy: string (const)
-  callee +41:25 Emitter.llvm -> @Emitter.llvm
-  callee +45:17 traceOf -> @traceOf
-  callee +45:42 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +50:5 traceFail -> @traceFail
-  callee +50:29 TypeTable.typeName -> @TypeTable.typeName
-  callee +52:3 Emitter.declareType -> @Emitter.declareType
-  local +53:9 arrays: string (const)
-  callee +53:18 traceArrays -> @traceArrays
-  callee +54:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local +26:13 variant: i32 (const)
+  local +27:13 tag: i32 (const)
+  callee +28:22 TypeTable.memberValue -> @TypeTable.memberValue
+  callee +29:15 traceOf -> @traceOf
+  callee +33:14 TypeTable.isStruct -> @TypeTable.isStruct
+  local +35:11 info: StructInfo (const)
+  callee +35:18 rootStructOf -> @rootStructOf
+  local +36:11 ty: string (const)
+  callee +37:12 sizeOf -> @sizeOf
+  local +38:16 field: FieldInfo (const)
+  callee +39:51 FieldInfo.inline -> @FieldInfo.inline
+  callee +40:9 traceFail -> @traceFail
+  callee +42:11 holdsPointer -> @holdsPointer
+  local +43:15 fieldTy: string (const)
+  callee +43:25 Emitter.llvm -> @Emitter.llvm
+  callee +47:17 traceOf -> @traceOf
+  callee +47:42 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +52:5 traceFail -> @traceFail
+  callee +52:29 TypeTable.typeName -> @TypeTable.typeName
+  callee +54:3 Emitter.declareType -> @Emitter.declareType
+  local +55:9 arrays: string (const)
+  callee +55:18 traceArrays -> @traceArrays
+  callee +56:3 Emitter.declareGlobal -> @Emitter.declareGlobal
 function rootTable(emitter: Emitter, traces: RootTraces, info: ConstInfo, data: string): void -> @rootTable [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via traceOf
