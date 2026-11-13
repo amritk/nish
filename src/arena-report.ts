@@ -540,12 +540,20 @@ const extendingUse = (unit: AnalysisUnit, facts: FactsTable, node: Node): boolea
 /**
  * True when the callee of `call` may resize an array (`resizesArray`, which
  * holds what its own callees do), so the collection handed to it may grow.
- * An unresolved callee is a builtin, and of those only the spawns append to an
- * array they are handed, their `stdout` and `stderr` (`isResizeCall`).
+ * A call through a function reference (`refCalls`) may reach anything, so it
+ * counts. Any other unresolved callee is a builtin, and of those only the
+ * spawns append to an array they are handed, their `stdout` and `stderr`
+ * (`isResizeCall`).
  */
 const calleeMayResize = (program: CheckedProgram, facts: FactsTable, call: Node): boolean => {
   const callee = program.nodeCallees[call.id]
   if (callee === null) {
+    // A call through a function reference is bound at run time: whatever it reaches is unknown.
+    for (const through of program.refCalls) {
+      if (through === call) {
+        return true
+      }
+    }
     const name = builtinNameOf(program, call)
     return name === "spawnPiped" || name === "spawnPipedWithin"
   }
@@ -751,21 +759,44 @@ const leavesLoop = (unit: AnalysisUnit, node: Node, loop: Node): boolean => {
     if (kind === NodeKind.Return || kind === NodeKind.Throw) {
       return true
     }
-    if (isLoopKind(parent) || kind === NodeKind.Switch || kind === NodeKind.Try) {
+    if (
+      isLoopKind(parent) ||
+      kind === NodeKind.Switch ||
+      kind === NodeKind.Try ||
+      kind === NodeKind.Arrow ||
+      kind === NodeKind.FunctionDecl
+    ) {
       return false
     }
     if (kind === NodeKind.Block) {
-      if (restLeaves(unit, parent.children, childIndex(parent, at) + 1, loop)) {
+      const rest = restLeaves(unit, parent.children, childIndex(parent, at) + 1, loop)
+      if (rest === REST_LEAVES) {
         return true
       }
-    } else if (kind === NodeKind.If && parent.children[0] === at && mustLeave(unit, parent, loop)) {
-      return true
+      if (rest === REST_CONTINUES) {
+        return false
+      }
+    } else if (kind === NodeKind.If && parent.children[0] === at) {
+      // From the condition, a branch runs next: a `continue` in either one is a path to the next pass.
+      if (mustLeave(unit, parent, loop)) {
+        return true
+      }
+      if (mayContinue(parent.children[1], true) || mayContinue(parent.children[2], true)) {
+        return false
+      }
     }
     at = parent
     parent = unit.parents.parentOf(at)
   }
   return false
 }
+
+/** The statements after a site leave the loop on every path. */
+const REST_LEAVES: i32 = 1
+/** A `continue` among them may start the next pass, so the site's path can reach it. */
+const REST_CONTINUES: i32 = 2
+/** Some path runs off their end into whatever follows the block. */
+const REST_FALLS: i32 = 0
 
 /** The position of `child` among `parent`'s children. */
 const childIndex = (parent: Node, child: Node): i32 => {
@@ -776,20 +807,24 @@ const childIndex = (parent: Node, child: Node): i32 => {
   return i
 }
 
-/** True when the statements of `list` from `from` on leave `loop` on every path before any can reach its next pass. */
-const restLeaves = (unit: AnalysisUnit, list: Node[], from: i32, loop: Node): boolean => {
+/**
+ * Where the statements of `list` from `from` on go: `REST_LEAVES` when they
+ * leave `loop` on every path, `REST_CONTINUES` when one may reach its next
+ * pass by a `continue`, and `REST_FALLS` when a path runs off their end.
+ */
+const restLeaves = (unit: AnalysisUnit, list: Node[], from: i32, loop: Node): i32 => {
   let i = from
   while (i < list.length) {
     const statement = list[i]
     if (mayContinue(statement, true)) {
-      return false
+      return REST_CONTINUES
     }
     if (mustLeave(unit, statement, loop)) {
-      return true
+      return REST_LEAVES
     }
     i = i + 1
   }
-  return false
+  return REST_FALLS
 }
 
 /** True when every path through `statement` leaves `loop` and none reaches its next pass. */
@@ -802,7 +837,7 @@ const mustLeave = (unit: AnalysisUnit, statement: Node, loop: Node): boolean => 
     return statement.text === "" || labelsAround(unit, loop, statement.text)
   }
   if (kind === NodeKind.Block) {
-    return restLeaves(unit, statement.children, 0, loop)
+    return restLeaves(unit, statement.children, 0, loop) === REST_LEAVES
   }
   if (kind === NodeKind.If) {
     return (

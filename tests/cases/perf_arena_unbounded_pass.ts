@@ -158,6 +158,110 @@ const skips = (log: Log): void => {
   }
 };
 
+// A pass whose temporary goes on with `continue` and breaks otherwise: the
+// `continue` starts another pass, so the temporaries pile up.
+const flagged = (log: Log): void => {
+  let k = 0;
+  while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    if (k < 9) {
+      const s = `x${k}`;
+      log.total = log.total + s.length;
+      continue;
+    }
+    break;
+  }
+};
+
+// A temporary in an `else` whose `if` arm breaks: the `else` falls through to
+// the next pass.
+const branches = (log: Log): void => {
+  let k = 0;
+  while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    if (k > 9) {
+      break;
+    } else {
+      const e = `e${k}`;
+      log.total = log.total + e.length;
+    }
+  }
+};
+
+// A labelled `continue` names the loop it goes on with: another pass.
+const labelled = (log: Log): void => {
+  let k = 0;
+  outer: while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    const l = `l${k}`;
+    log.total = log.total + l.length;
+    continue outer;
+  }
+};
+
+// A `return` inside a `switch` leaves the loop, but the walk stops at the
+// `switch` and still warns.
+const switched = (log: Log): i32 => {
+  let k = 0;
+  while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    const w = `w${k}`;
+    switch (k) {
+      case 9:
+        return w.length;
+      default:
+        log.total = log.total + 1;
+    }
+  }
+  return 0;
+};
+
+// The walked array goes through a function reference: a callee the compiler
+// cannot name, so it may resize the array.
+const passed = (log: Log): void => {
+  const ids = [1, 2];
+  const f: (xs: i32[]) => void = grow;
+  for (const id of ids) {
+    const r = `r${id}`;
+    log.total = log.total + r.length;
+    log.last = new Entry(id);
+    if (id < 2) {
+      f(ids);
+    }
+  }
+};
+
+// The body writes into the walked array by index, or takes another name for
+// it: the analysis does not follow either, so each may extend the walk.
+const stores = (log: Log): void => {
+  const ids = [1, 2];
+  for (const id of ids) {
+    const t = `t${id}`;
+    log.total = log.total + t.length;
+    log.last = new Entry(id);
+    if (id < 2) {
+      ids[0] = 2;
+    }
+  }
+};
+
+const renames = (log: Log): void => {
+  const ids = [1, 2];
+  for (const id of ids) {
+    const n = `n${id}`;
+    log.total = log.total + n.length;
+    log.last = new Entry(id);
+    const same = ids;
+    if (id < 2) {
+      same.push(2);
+    }
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -179,5 +283,16 @@ export const main = (): void => {
   lent(log, [0]);
   log.left = 3;
   skips(log);
+  log.left = 3;
+  flagged(log);
+  log.left = 3;
+  branches(log);
+  log.left = 2;
+  labelled(log);
+  log.left = 3;
+  log.total = log.total + switched(log);
+  passed(log);
+  stores(log);
+  renames(log);
   console.log(`${log.total} ${log.last.id}`);
 };

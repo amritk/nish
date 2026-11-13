@@ -14562,7 +14562,9 @@ by the caller.
       expression, by one of these:
       - adding to it: `push`, `unshift`, `splice`, `set` or `add` on it, or
         a write through `walked[k]`;
-      - passing it to a call or a `new` whose callee may resize an array;
+      - `++` or `--` on it, or spreading it;
+      - passing it to a call or a `new` whose callee may resize an array,
+        or that goes through a function reference;
       - assigning it, or storing it in a variable, field, array or object.
 
       Any other use leaves the walk bounded, and so does a call in the body
@@ -14578,8 +14580,13 @@ by the caller.
     - a `for...of` whose body extends what it walks, as above;
     - a bounded loop inside an unbounded one that releases nothing.
 
-    The rule has a known blind spot: a comparison loop whose body never
-    moves toward its bound still counts as bounded.
+    The rule has known blind spots. A comparison loop whose body never
+    moves toward its bound still counts as bounded. So does a `for...of`
+    whose collection grows by a way the rule does not follow: through an
+    alias (`const a = q; for (const x of q) a.push(x)`), through a method
+    that grows `this.items` while it is walked, or when the walked
+    expression is not a local, `this` or a field path (a call result or an
+    index expression).
 
     There is at most one warning per loop, at the innermost loop whose pass
     releases nothing. It names:
@@ -14599,7 +14606,9 @@ by the caller.
     what it allocates. A temporary handed to a callee that keeps it is passed
     on, so it is not counted. A temporary from which every path leaves the
     loop, by `return`, `throw` or a `break` out of it, is built at most once
-    each time the loop runs, so it is not counted either.
+    each time the loop runs, so it is not counted either. The walk that
+    proves it gives up at a `switch`, a `try` or a nested loop, so a
+    temporary that a `return` inside a `switch` leaves with still counts.
 
     Not reported for:
     - a bounded loop;

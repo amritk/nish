@@ -180,10 +180,22 @@ function reads(log: Log): void -> @reads
   local -1:11 peek: string (const)
   callee +0:43 sum -> @sum
   callee +1:16 new Entry -> @Entry.constructor
+function leaves(log: Log): i32 -> @leaves
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Entry.constructor more nish_alloc_struct nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false passedTo=more#0
+  stackSites=0 stackLocals=0
+  local -2:7 k: i32 (let)
+  callee -1:17 more -> @more
+  callee +0:16 new Entry -> @Entry.constructor
+  local +3:13 a: string (const)
+  local +8:13 b: string (const)
+  local +16:13 c: string (const)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via serve
-  calls: Batch.constructor Board.constructor Log.constructor counted dropped droppedSplit fielded finds nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 owned posts reads scans scoped serve
+  calls: Batch.constructor Board.constructor Log.constructor counted dropped droppedSplit fielded finds leaves nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 owned posts reads scans scoped serve
   stackSites=6 stackLocals=2
   local +0:9 log: Log (const)
   callee +0:15 new Log -> @Log.constructor
@@ -205,3 +217,4 @@ function main(): void -> @nish_main [exported entry]
   callee +15:17 new Board -> @Board.constructor
   callee +17:3 posts -> @posts
   callee +18:3 reads -> @reads
+  callee +20:27 leaves -> @leaves

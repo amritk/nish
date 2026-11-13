@@ -30,6 +30,9 @@ import TypeTable from "./types" -> struct TypeTable
 const SCOPE_NONE: i32 = 0
 const SCOPE_PASS: i32 = 1
 const SCOPE_BLOCK: i32 = 2
+const REST_LEAVES: i32 = 1
+const REST_CONTINUES: i32 = 2
+const REST_FALLS: i32 = 0
 struct ArenaSite (class) size=48 align=8
   field node: Node index=0 offset=0
   field kind: string index=1 offset=8
@@ -297,17 +300,18 @@ function extendingUse(unit: AnalysisUnit, facts: FactsTable, node: Node): boolea
   callee +27:7 calleeMayResize -> @calleeMayResize
   callee +31:12 isAssignmentOperator -> @isAssignmentOperator
 function calleeMayResize(program: CheckedProgram, facts: FactsTable, call: Node): boolean -> @calleeMayResize
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get builtinNameOf nish_panic_index nish_str_eq
   pointer program: size=888 writesThrough=false captured=false passedTo=builtinNameOf#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer call: size=40 writesThrough=false captured=false passedTo=builtinNameOf#1
   stackSites=0 stackLocals=0
   local +0:9 callee: FunctionSig | null (const)
-  local +2:11 name: string (const)
-  callee +2:18 builtinNameOf -> @builtinNameOf
-  local +5:9 calleeFacts: FunctionFacts | null (const)
-  callee +5:23 FactsTable.get -> @FactsTable.get
+  local +3:16 through: Node (const)
+  local +8:11 name: string (const)
+  callee +8:18 builtinNameOf -> @builtinNameOf
+  local +11:9 calleeFacts: FunctionFacts | null (const)
+  callee +11:23 FactsTable.get -> @FactsTable.get
 function assigned(unit: AnalysisUnit, node: Node): boolean -> @assigned
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf isAssignmentOperator nish_panic_index nish_str_eq
@@ -434,7 +438,7 @@ function pilesUp(walk: ArenaWalk, site: ArenaSite): boolean -> @pilesUp
 function leavesLoop(unit: AnalysisUnit, node: Node, loop: Node): boolean -> @leavesLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
-  calls: ParentTable.parentOf childIndex isLoopKind mustLeave nish_panic_index nish_panic_overflow restLeaves
+  calls: ParentTable.parentOf childIndex isLoopKind mayContinue mustLeave nish_panic_index nish_panic_overflow restLeaves
   pointer unit: size=16 writesThrough=false captured=false passedTo=restLeaves#0 mustLeave#0
   pointer node: size=40 writesThrough=true captured=true
   pointer loop: size=40 writesThrough=false captured=false passedTo=restLeaves#3 mustLeave#2
@@ -443,18 +447,21 @@ function leavesLoop(unit: AnalysisUnit, node: Node, loop: Node): boolean -> @lea
   local +1:7 parent: Node | null (let)
   callee +1:16 ParentTable.parentOf -> @ParentTable.parentOf
   local +3:11 kind: NodeKind (const)
-  callee +7:9 isLoopKind -> @isLoopKind
-  callee +11:11 restLeaves -> @restLeaves
-  callee +11:45 childIndex -> @childIndex
-  callee +14:69 mustLeave -> @mustLeave
-  callee +18:14 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +8:7 isLoopKind -> @isLoopKind
+  local +17:13 rest: i32 (const)
+  callee +17:20 restLeaves -> @restLeaves
+  callee +17:54 childIndex -> @childIndex
+  callee +26:11 mustLeave -> @mustLeave
+  callee +29:11 mayContinue -> @mayContinue
+  callee +29:52 mayContinue -> @mayContinue
+  callee +34:14 ParentTable.parentOf -> @ParentTable.parentOf
 function childIndex(parent: Node, child: Node): i32 -> @childIndex
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer parent: size=40 writesThrough=false captured=false
   pointer child: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
-function restLeaves(unit: AnalysisUnit, list: Node[], from: i32, loop: Node): boolean -> @restLeaves
+function restLeaves(unit: AnalysisUnit, list: Node[], from: i32, loop: Node): i32 -> @restLeaves
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: mayContinue mustLeave nish_panic_index

@@ -207,6 +207,36 @@ const reads = (log: Log): void => {
   }
 };
 
+// More shapes where every path from the temporary leaves the loop: an `if`
+// with no `else` whose block breaks, both arms of an `if` leaving, and a
+// labelled `break` out of the loop.
+const leaves = (log: Log): i32 => {
+  let k = 0;
+  outer: while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    if (k === 7) {
+      const a = `a${k}`;
+      log.total = log.total + a.length;
+      break;
+    }
+    if (k === 8) {
+      const b = `b${k}`;
+      if (b.length > 1) {
+        return b.length;
+      } else {
+        break;
+      }
+    }
+    if (k === 9) {
+      const c = `c${k}`;
+      log.total = log.total + c.length;
+      break outer;
+    }
+  }
+  return 0;
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -227,5 +257,7 @@ export const main = (): void => {
   log.left = 2;
   posts(log, board);
   reads(log);
+  log.left = 9;
+  log.total = log.total + leaves(log);
   console.log(`${log.total} ${log.last.id} ${d} ${e} ${k} ${f} ${board.title}`);
 };
