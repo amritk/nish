@@ -446,10 +446,10 @@ const manifestRepeatedMember = (members: ManifestMembers): i32 => {
 
 /**
  * The root package's `"nish"` field, read strictly (docs/wp36-capability-policy.md
- * §3): where its `noPanic`, `capabilities` and `host` values start, or -1 for one it
+ * §3): where its `noPanic`, `capabilities`, `host` and `compat` values start, or -1 for one it
  * does not write. `problem` is the opening of the NL3036 message when the
  * field is not one object, written once, whose only keys are `noPanic`,
- * `capabilities` and `host` (WP50 stage 2's host modules), each written once, with the span it is reported at; both
+ * `capabilities`, `host` (WP50 stage 2's host modules) and `compat` (WP28), each written once, with the span it is reported at; both
  * positions are then -1, so nothing in a field the reader cannot vouch for is
  * honoured. Keys are decoded as JSON.parse decodes them, so an escaped
  * spelling is the key it spells.
@@ -464,6 +464,8 @@ export class NishManifest {
   hostAt: i32
   /** One past the end of the `host` value. */
   hostEnd: i32
+  /** WP28: where the `compat` value starts, `true` or an array (`manifestCompat`), or -1. */
+  compatAt: i32
 
   constructor() {
     this.problem = ""
@@ -473,6 +475,7 @@ export class NishManifest {
     this.capabilitiesAt = -1
     this.hostAt = -1
     this.hostEnd = -1
+    this.compatAt = -1
   }
 }
 
@@ -557,6 +560,15 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
       // NL2694), so that the refusal names the host list rather than the field.
       out.hostAt = valueAt
       out.hostEnd = fields.valueEnd[f]
+    } else if (key === "compat") {
+      const isTrue = manifest.substring(valueAt, fields.valueEnd[f]) === "true"
+      if (
+        !isTrue &&
+        (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET)
+      ) {
+        return manifestNishProblem("`compat` is neither `true` nor an array", valueAt, fields.valueEnd[f])
+      }
+      out.compatAt = valueAt
     } else {
       return manifestNishProblem(
         `\`${key}\` is no key of \`${condition}\``,
@@ -574,6 +586,35 @@ export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
   const out = new ManifestList()
   if (at >= 0 && at < manifest.length && manifest.charCodeAt(at) === OPEN_BRACKET) {
     manifestReadList(manifest, at, out)
+  }
+  return out
+}
+
+/**
+ * WP28: what a package's `nish.compat` asks for, from the position
+ * `manifestNish` found it at: every built feature (`true`, and `list` is
+ * empty) or exactly the ones `list` names. With no `compat` key neither is
+ * set, and the package asks for the strict dialect.
+ */
+export class ManifestCompat {
+  all: boolean
+  list: ManifestList
+
+  constructor() {
+    this.all = false
+    this.list = new ManifestList()
+  }
+}
+
+export const manifestCompat = (manifest: string, at: i32): ManifestCompat => {
+  const out = new ManifestCompat()
+  if (at < 0 || at >= manifest.length) {
+    return out
+  }
+  if (manifest.charCodeAt(at) === OPEN_BRACKET) {
+    manifestReadList(manifest, at, out.list)
+  } else {
+    out.all = true
   }
   return out
 }

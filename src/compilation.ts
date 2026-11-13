@@ -167,7 +167,10 @@ import {
   ManifestList,
   NishManifest,
   nishExportEntry,
+  ManifestCompat,
+  manifestCompat,
 } from "./manifest"
+import { compatFeatureNames, compatHasFeature, compatKnownText } from "./compat"
 import {
   ARRAY_SPECIFIER,
   COLLECTIONS_SPECIFIER,
@@ -661,6 +664,9 @@ export class Compilation {
    */
   load(path: string, name: string, packageOverride: string): boolean {
     const first = this.modules.length
+    if (first === 0) {
+      this.settleDialect(path)
+    }
     const firstDiagnostic = this.sink.count()
     const filesBefore = this.sink.fileOrder.size()
     const discovered = this.discover(path, name, packageOverride)
@@ -1193,6 +1199,11 @@ export class Compilation {
       failed.error = `Package \`${parsed.name}\` declares \`engines.${PACKAGE_CONDITION}\` as \`${manifestEngineRange(text, PACKAGE_CONDITION)}\`, which is not a range this compiler reads: the one it accepts is a floor, \`>=X.Y.Z\` or \`>=X.Y\``
       return failed
     }
+    const ceiling = this.compatCeiling(parsed.name, specifier, text)
+    if (ceiling.length > 0) {
+      failed.error = ceiling
+      return failed
+    }
     const entry = nishExportEntry(
       text,
       parsed.subpath,
@@ -1319,6 +1330,7 @@ export class Compilation {
     const nish = this.readRootNish(manifest)
     this.readNoPanic(manifest, nish)
     this.readCapabilityPolicy(manifest, nish)
+    this.readCompat(manifest, nish)
     this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
       return false
@@ -1676,6 +1688,123 @@ export class Compilation {
   }
 
   /**
+   * WP28: the root package's dialect is the program's ceiling. The refusal
+   * for dependency `name`, imported as `specifier`, whose manifest `text`
+   * asks through its own `nish.compat` for the compatibility dialect under a
+   * strict root, or for a feature the root does not allow; empty when it asks
+   * for nothing more. A dependency's `"nish"` field is read for this key
+   * alone, and one the strict reader refuses asks for nothing: its source is
+   * checked in the root's dialect either way, so this only names the cause
+   * before the first construct that needs the feature would.
+   */
+  compatCeiling(name: string, specifier: string, text: string): string {
+    const nish = manifestNish(text, PACKAGE_CONDITION)
+    if (nish.problem.length > 0 || nish.compatAt < 0) {
+      return ""
+    }
+    const tail = `the root package's \`compat\` does not allow: a program is compiled in its root package's dialect, so \`${specifier}\` cannot be part of this one until the root's \`package.json\` allows it in \`${PACKAGE_CONDITION}.compat\` (or the build passes \`--compat\`)`
+    if (!this.opts.compat) {
+      return `Package \`${name}\` asks for the compatibility dialect, which ${tail}`
+    }
+    const asked = manifestCompat(text, nish.compatAt)
+    const wanted = asked.all ? compatFeatureNames() : asked.list.entries
+    for (const feature of wanted) {
+      let allowed = false
+      for (const have of this.opts.compatFeatures) {
+        if (have === feature) {
+          allowed = true
+        }
+      }
+      if (!compatHasFeature(feature)) {
+        return `Package \`${name}\` asks for the compatibility feature \`${feature}\`, which the root package's \`compat\` does not allow: a program is compiled in its root package's dialect, and \`${feature}\` is no feature of it that this compiler has built, so \`${specifier}\` cannot be part of this program`
+      }
+      if (!allowed) {
+        return `Package \`${name}\` asks for the compatibility feature \`${feature}\`, which ${tail}`
+      }
+    }
+    return ""
+  }
+
+  /**
+   * WP28: the program's dialect, settled before its first module is read
+   * because a checker is built with the number mode. `--compat` decides it;
+   * without the flag the root package's `nish.compat` does, `true` for every
+   * built feature or an array for exactly some, and a manifest whose `"nish"`
+   * field is refused asks for nothing (`check` reports it, NL3036). A name
+   * that is no feature is left out here and refused by `readCompat`. The
+   * compatibility dialect then means `--number-mode f64`, unless the command
+   * line names a mode.
+   */
+  settleDialect(entryPath: string): void {
+    if (!this.opts.compatFlag) {
+      this.opts.compat = false
+      this.opts.compatFeatures = []
+      const dir = this.manifestDirAbove(entryPath)
+      const text: string | null = dir === null ? null : readFileSyncOrNull(joinPath([dir, "package.json"]))
+      if (text !== null) {
+        const nish = manifestNish(text, PACKAGE_CONDITION)
+        if (nish.problem.length === 0 && nish.compatAt >= 0) {
+          this.opts.compat = true
+          this.opts.compatFeatures = this.compatAsked(manifestCompat(text, nish.compatAt))
+        }
+      }
+    }
+    if (this.opts.compat && !this.opts.numberModeFlag) {
+      this.opts.numberMode = NUMBER_MODE_F64
+    }
+  }
+
+  /** The built features a manifest's `compat` asks for: all of them, or the ones of its list that are built. */
+  compatAsked(asked: ManifestCompat): string[] {
+    if (asked.all) {
+      return compatFeatureNames()
+    }
+    const out: string[] = []
+    for (const name of asked.list.entries) {
+      if (compatHasFeature(name)) {
+        out.push(name)
+      }
+    }
+    return out
+  }
+
+  /**
+   * WP28: what `check` says about the dialect `settleDialect` chose. A name in
+   * the root package's `nish.compat` that is no feature is refused where
+   * `package.json` writes it (NL3056), whether or not `--compat` overrode the
+   * list: a list that is wrong is wrong on every build. And `--compat` beside
+   * an explicit `--number-mode i32` is honoured and priced once, in the
+   * `performance` class (NL9018): the dialect's reason for f64 is that a
+   * program written for a JavaScript engine expects its arithmetic.
+   */
+  readCompat(source: SourceFile | null, nish: NishManifest | null): void {
+    if (source !== null && nish !== null) {
+      const asked = manifestCompat(source.text, nish.compatAt)
+      let i = 0
+      while (i < asked.list.entries.length && i < asked.list.offsets.length && i < asked.list.ends.length) {
+        const name = asked.list.entries[i]
+        if (!compatHasFeature(name)) {
+          this.sink.report(
+            source,
+            asked.list.offsets[i],
+            asked.list.ends[i],
+            `\`${name}\` is no feature of the compatibility dialect: \`${PACKAGE_CONDITION}.compat\` is \`true\` or an array of feature names, and ${compatKnownText()}`
+          )
+        }
+        i = i + 1
+      }
+    }
+    if (this.opts.compat && this.opts.numberModeFlag && this.opts.numberMode !== NUMBER_MODE_F64) {
+      this.sink.reportPerformance(
+        this.entry().checker.ctx.source,
+        0,
+        0,
+        "`--number-mode i32` beside the compatibility dialect: a bare `number` is the 32-bit integer and not the double a JavaScript engine computes with, so arithmetic that leaves 32 bits panics here where it would carry on there; drop `--number-mode i32` for the dialect's own f64"
+      )
+    }
+  }
+
+  /**
    * The root package's manifest, the `package.json` nearest above the entry,
    * spelled from the entry's path, or null when there is none: where
    * `"nish".noPanic` and `"nish".capabilities` are read.
@@ -1696,8 +1825,8 @@ export class Compilation {
   /**
    * The root package's `"nish"` field, read strictly (`manifestNish`), or null
    * when there is no manifest or the field is refused: it is one object,
-   * written once, whose only keys are `noPanic`, `capabilities` and `host`, and
-   * anything else is NL3036 where `package.json` writes it, so that nothing
+   * written once, whose only keys are `noPanic`, `capabilities`, `host` and
+   * `compat`, and anything else is NL3036 where `package.json` writes it, so that nothing
    * the reader cannot vouch for is honoured, a policy least of all.
    */
   readRootNish(source: SourceFile | null): NishManifest | null {
@@ -1712,7 +1841,7 @@ export class Compilation {
       source,
       nish.problemStart,
       nish.problemEnd,
-      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\` and \`host\`, each written once`
+      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\`, \`host\` and \`compat\`, each written once`
     )
     return null
   }

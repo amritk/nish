@@ -1190,6 +1190,26 @@ const pgTls = (why, filesByProgram) =>
   )
 
 const DECLARED = [
+  // WP28 C0: `--compat` and `nish.compat` are new, so the 0.38.0 seed refuses
+  // the flag and the key, and reads no dependency's `nish` field.
+  {
+    program: "tests/cases/perf_compat_number_i32.ts",
+    file: "exit",
+    changelog: "nish.compat and the dialect in the IR",
+    why: "the case is compiled with --compat, which the 0.38.0 seed refuses as an unknown flag, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/compat_manifest_program/main.ts",
+    file: "exit",
+    changelog: "nish.compat and the dialect in the IR",
+    why: "the root package.json writes nish.compat, which the 0.38.0 seed refuses as no key of the nish field, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/compat_ceiling_dialect/main.ts",
+    file: "exit",
+    changelog: "nish.compat and the dialect in the IR",
+    why: "a dependency's package.json asks for the compatibility dialect and the strict root does not allow it, which the candidate refuses with NL3057; the 0.38.0 seed reads no dependency's nish field, so only the reference compiles it",
+  },
   // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
   // by one interleaved wNAF pass, so the module every importer writes moves.
   ...["p256.ll", "std_crypto_p256.ll"].map((file) => ({

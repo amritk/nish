@@ -196,7 +196,7 @@ likely to add to it:
   symbol table, so function names resolve without the debug file.)
 - **`--number-mode f64`** — makes a bare `number` a 64-bit float rather than
   the default `i32`. Code that spells its widths (`i32`, `f64`) means the same
-  thing in both modes.
+  thing in both modes. [`--compat`](compat.md) implies it.
 - **`--target <triple>` or `--target host`** — stamps the IR with a target's
   data layout, for cross-compiling or for reading optimised IR by hand.
   `--link` does not need it.
@@ -665,10 +665,13 @@ leaves the IR unchanged.
   Use it for a simulation a server and a browser both run and must agree on
   ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
 - **`--compat`** selects the compatibility dialect, which will accept more of
-  TypeScript than Nish does by default. It accepts nothing more yet: a program
-  compiles to the same bytes with it, and a refused program is refused in the
-  same words. The flag takes no value, and `--compat=<anything>` is a usage
-  error (exit 2). `nish run` and `--fix` take it too.
+  TypeScript than Nish does by default. It has no feature yet, so today it
+  means one thing: a bare `number` is a 64-bit float, as `--number-mode f64`
+  makes it. `--compat=<feature>,...` allows only the features it names, and a
+  name that is no feature is a usage error (exit 2). `"compat"` in your
+  `package.json`'s `"nish"` field selects the dialect without the flag.
+  `nish run` and `--fix` take it too
+  ([The compatibility dialect](compat.md)).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).

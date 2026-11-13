@@ -138,6 +138,7 @@ and the language specification.
   [regions](language/regions.md), [vectors (SIMD)](language/simd.md) and
   [async functions](language/async.md).
 - **Using Nish** — [the command-line interface](using-nish/cli.md),
+  [the compatibility dialect](using-nish/compat.md),
   [the standard library](using-nish/standard-library.md),
   [calling Nish from other languages](using-nish/interop.md),
   [threads](using-nish/threads.md),

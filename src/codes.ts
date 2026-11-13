@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 923
+export const RULE_COUNT: i32 = 926
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -533,6 +533,8 @@ const diagnosticRules = (): string[] => [
   "NL2369",
   "` cannot declare `static readonly json`: a handle is never serialised, and its options would name the pointer it owns",
   "NL2566",
+  "` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host` and `compat`, each written once",
+  "NL3036",
   "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
   "NL2284",
   " has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`",
@@ -597,8 +599,6 @@ const diagnosticRules = (): string[] => [
   "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
   "NL2055",
-  "` field is one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once",
-  "NL3036",
   "An `async` function's return type is `Promise<T>`: write the answer `T` inside it, `Promise<void>` for none",
   "NL2655",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
@@ -621,6 +621,8 @@ const diagnosticRules = (): string[] => [
   "NL2234",
   "` reads a file, and a freestanding wasm32 build has no file system to read (build with `--profile wasi`)",
   "NL2718",
+  ", which the root package's `compat` does not allow: a program is compiled in its root package's dialect",
+  "NL3057",
   "` is not a `declare function`: a handle is closed by the C function its dispose names, and nothing else",
   "NL2569",
   "` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself",
@@ -1236,6 +1238,8 @@ const diagnosticRules = (): string[] => [
   "NL2504",
   "`, which the capability policy does not grant (",
   "NL2459",
+  " is no feature of the compatibility dialect: `",
+  "NL3056",
   " values; build it with `[]` and `push` instead",
   "NL2022",
   ", and a declared C function takes scalars only",
@@ -1893,6 +1897,8 @@ const performanceRules = (): string[] => [
   "NL9014",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
+  "beside the compatibility dialect: a bare `number` is the 32-bit integer",
+  "NL9018",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",

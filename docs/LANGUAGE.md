@@ -13547,7 +13547,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities` and `host` — is NL3036
+  than `noPanic`, `capabilities`, `host` and `compat` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as
@@ -14876,15 +14876,10 @@ by the caller.
 - **`--deny-retention`** refuses a program whose own code keeps arena memory
   that nothing can reach, for a long-running program that cannot afford it; see
   [Retention as an error](#retention-as-an-error) below.
-- **`--compat`** selects the compatibility dialect. It is a dialect flag, not
-  a diagnostic one, and it accepts nothing yet: every rule of this document
-  holds under it, a program that compiles emits the same bytes of IR with it
-  as without, and a program that is refused is refused with the same exit
-  status, code and message. The flag takes no value: `--compat=<anything>` is
-  a usage error (exit 2). The invariant outlives this stage: a later
-  `--compat` may accept a program the strict dialect refuses, and may never
-  change the answer for one it does not
-  (`tests/compat-erasure.js`, over every program in `tests/cases`).
+- **`--compat`** selects the compatibility dialect, and
+  **`--compat=<feature>,...`** selects it with only the features it names. It
+  is a dialect flag, not a diagnostic one; the rules are
+  [The compatibility dialect](#the-compatibility-dialect) below.
 - **`--emit-arena <file.json>`** writes every allocation site of the program
   with where its memory goes, beside the IR, and changes no byte of it; see
   [Arena placement](#arena-placement) below.
@@ -15223,7 +15218,7 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic`, `capabilities` and `host`, each written once**, and anything
+  keys are `noPanic`, `capabilities`, `host` and `compat`, each written once**, and anything
   else is an error (NL3036) where `package.json` writes it: a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
@@ -15266,6 +15261,70 @@ performance warning about the same check is not printed beside the error.
 - `--deny-panics` changes no byte of the IR: a program it accepts is the one the
   build compiles without it. With `--emit-ast`, which stops before the checker,
   it is a usage error (exit 2).
+
+### The compatibility dialect
+
+Nish has two dialects. The strict one is this document. The compatibility
+dialect will accept more of TypeScript, feature by feature; it has no feature
+yet, so today it differs from the strict dialect in one thing only, the
+number a bare `number` is.
+
+- **`--compat` selects the dialect with every feature this compiler has
+  built; `--compat=<feature>,...` selects it with only the features named.**
+  A name that is no feature is a usage error (exit 2) that names it and
+  writes no IR, and so is an empty list (`--compat=`). No feature is built, so
+  every `--compat=<list>` is refused today. `nish run` and `--fix` take the
+  flag too.
+- **`"compat"` in the root package's `"nish"` field selects it without the
+  flag**: `true` for every built feature, or an array of feature names for
+  exactly those (`[]` for the dialect with no feature). The root package is
+  the one whose `package.json` is nearest above the entry module. A value that
+  is neither is NL3036 (`tests/link/compat_manifest_not_a_list`), and a name
+  in the array that is no feature is NL3056, where `package.json` writes it
+  (`compat_manifest_unknown_feature`). `--compat` on the command line decides
+  the dialect alone when it is given: the manifest's list is still checked,
+  and not otherwise consulted.
+- **The root package's dialect is the program's ceiling.** Every module of a
+  program is compiled in one dialect, the root's. A dependency whose own
+  `package.json` asks for the compatibility dialect is refused under a strict
+  root (NL3057, at the import that brings it in,
+  `tests/link/compat_ceiling_dialect`), and one that lists a feature the
+  root's dialect does not have is refused the same way
+  (`compat_ceiling_feature`). A dependency that asks for no more than the root
+  allows compiles (`compat_manifest_program`), and so does the first under a
+  build that passes `--compat`. A dependency's `"nish"` field is read for this
+  key alone.
+- **The dialect implies `--number-mode f64`**: a bare `number` is the double,
+  as a JavaScript engine computes it, and every rule of
+  `--number-mode f64` applies unchanged — its diagnostics
+  included, so a `main` that returns a bare `number` is refused with NL2140
+  under `--compat` exactly as it is under `--number-mode f64`. A
+  `--number-mode` on the command line wins, on either side of `--compat`.
+  `--number-mode i32` beside the dialect is honoured and priced: one
+  `performance` warning, NL9018, at the entry module's first character,
+  because arithmetic that leaves 32 bits panics there where the double would
+  carry on (`tests/cases/perf_compat_number_i32`). `--no-warn-performance`
+  silences it, as it does the rest of its class.
+- **Every module of a compat build says so.** Its IR ends with the named
+  metadata `!nish.compat`, one node whose first operand is the number mode
+  (`!"f64"` or `!"i32"`) and whose others are the allowed features in the
+  compiler's order:
+
+  ```llvm
+  !nish.compat = !{!0}
+  !0 = !{!"f64"}
+  ```
+
+  A strict build carries no `!nish.compat`. `--emit-checked` opens with the
+  same facts on one line, `compat number=f64 features=[]`, and prints no such
+  line for a strict build.
+- **The dialect only adds.** A strict build is unchanged by all of the above,
+  byte for byte. A compat build with no feature is `--number-mode f64`: the
+  same IR but for the mark, the same refusals in the same words. And under one
+  number mode a compat build and a strict build differ in the mark alone.
+  `tests/compat-erasure.js` checks both over every program in `tests/cases`,
+  and a later feature may accept a program the strict dialect refuses but may
+  never change the answer for one it does not.
 
 ### Retention as an error
 

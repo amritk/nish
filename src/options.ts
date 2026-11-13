@@ -276,13 +276,21 @@ export class Options {
    */
   updateCapabilityLock: boolean
   /**
-   * WP28: `--compat`, the dialect. The compatibility dialect is where a
-   * program written for a JavaScript engine will be met part way, and in this
-   * release it accepts nothing the strict dialect does not: no rule of the
-   * checker and no lowering reads this, so the flag changes no diagnostic and
-   * no byte of the IR (`tests/compat-erasure.js` holds that over the corpus).
+   * WP28: whether this build is in the compatibility dialect, where a program
+   * written for a JavaScript engine is met part way. `Compilation.settleDialect`
+   * decides it before the first module loads: `--compat` (`compatFlag`), or
+   * else `nish.compat` in the root `package.json`. It implies
+   * `--number-mode f64` unless the command line names a mode
+   * (`numberModeFlag`), and no feature is built yet, so beyond that it
+   * changes no diagnostic and no instruction (`tests/compat-erasure.js`).
    */
   compat: boolean
+  /** The command line gave `--compat` or `--compat=<list>`, which the root manifest does not override. */
+  compatFlag: boolean
+  /** The features this build allows (`src/compat.ts`): the program's ceiling. */
+  compatFeatures: string[]
+  /** The command line gave `--number-mode`, which `--compat` then does not choose. */
+  numberModeFlag: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -326,6 +334,9 @@ export class Options {
     this.sandboxExec = []
     this.updateCapabilityLock = false
     this.compat = false
+    this.compatFlag = false
+    this.compatFeatures = []
+    this.numberModeFlag = false
   }
 
   /**

@@ -148,6 +148,11 @@
                 "title": "The CLI",
                 "filepath": "docs/guide/using-nish/cli.md"
               },
+              "/compat": {
+                "type": "page",
+                "title": "The compatibility dialect",
+                "filepath": "docs/guide/using-nish/compat.md"
+              },
               "/standard-library": {
                 "type": "page",
                 "title": "The standard library",

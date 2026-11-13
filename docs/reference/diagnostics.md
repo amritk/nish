@@ -28,7 +28,7 @@ The type checker: 757 codes.
 
 <scalar-card title="NL3xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl3xxx.md">
 
-Modules and the driver: 54 codes.
+Modules and the driver: 56 codes.
 
 </scalar-card>
 
@@ -52,7 +52,7 @@ Portability warnings: 12 codes.
 
 <scalar-card title="NL9xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl9xxx.md">
 
-Performance warnings: 17 codes.
+Performance warnings: 18 codes.
 
 </scalar-card>
 

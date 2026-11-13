@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_manifest_unknown_feature/package.json","line":5,"column":16,"endLine":5,"endColumn":23,"severity":"error","code":"NL3056","message":"`asnyc` is no feature of the compatibility dialect: `nish.compat` is `true` or an array of feature names, and this compiler has built none yet"}

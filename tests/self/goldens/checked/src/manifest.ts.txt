@@ -58,7 +58,7 @@ struct ManifestMembers (class) size=48 align=8
   field valueEnd: i32[] index=4 offset=32
   field broken: i32 index=5 offset=40
   constructor -> @ManifestMembers.constructor
-struct NishManifest (class) size=32 align=8 exported
+struct NishManifest (class) size=40 align=8 exported
   field problem: string index=0 offset=0
   field problemStart: i32 index=1 offset=8
   field problemEnd: i32 index=2 offset=12
@@ -66,7 +66,12 @@ struct NishManifest (class) size=32 align=8 exported
   field capabilitiesAt: i32 index=4 offset=20
   field hostAt: i32 index=5 offset=24
   field hostEnd: i32 index=6 offset=28
+  field compatAt: i32 index=7 offset=32
   constructor -> @NishManifest.constructor
+struct ManifestCompat (class) size=16 align=8 exported
+  field all: boolean index=0 offset=0
+  field list: ManifestList index=1 offset=8
+  constructor -> @ManifestCompat.constructor
 struct ManifestProblem (class) size=16 align=8 exported
   field message: string index=0 offset=0
   field start: i32 index=1 offset=8
@@ -228,14 +233,14 @@ function manifestRepeatedMember(members: ManifestMembers): i32 -> @manifestRepea
   local +2:9 j: i32 (let)
 function NishManifest.constructor(this: NishManifest): void -> @NishManifest.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function manifestSpanEnd(start: i32, end: i32): i32 -> @manifestSpanEnd
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end start
   stackSites=0 stackLocals=0
 function manifestNishProblem(problem: string, start: i32, end: i32): NishManifest -> @manifestNishProblem
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: end problem start
   calls: NishManifest.constructor manifestSpanEnd nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -243,9 +248,9 @@ function manifestNishProblem(problem: string, start: i32, end: i32): NishManifes
   callee +0:15 new NishManifest -> @NishManifest.constructor
   callee +3:20 manifestSpanEnd -> @manifestSpanEnd
 function manifestNish(manifest: string, condition: string): NishManifest -> @manifestNish [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: manifest
-  calls: NishManifest.constructor manifestMalformedAt manifestMembers manifestNishProblem manifestRepeatedMember manifestSkipBlank nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from
+  calls: NishManifest.constructor manifestMalformedAt manifestMembers manifestNishProblem manifestRepeatedMember manifestSkipBlank nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 out: NishManifest (const)
   callee +0:15 new NishManifest -> @NishManifest.constructor
@@ -268,7 +273,9 @@ function manifestNish(manifest: string, condition: string): NishManifest -> @man
   local +46:11 key: string (const)
   local +47:11 valueAt: i32 (const)
   callee +50:16 manifestNishProblem -> @manifestNishProblem
-  callee +61:14 manifestNishProblem -> @manifestNishProblem
+  local +61:13 isTrue: boolean (const)
+  callee +66:16 manifestNishProblem -> @manifestNishProblem
+  callee +70:14 manifestNishProblem -> @manifestNishProblem
 function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNoPanic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: at manifest
@@ -277,6 +284,20 @@ function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNo
   local +0:9 out: ManifestList (const)
   callee +0:15 new ManifestList -> @ManifestList.constructor
   callee +2:5 manifestReadList -> @manifestReadList
+function ManifestCompat.constructor(this: ManifestCompat): void -> @ManifestCompat.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: ManifestList.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:17 new ManifestList -> @ManifestList.constructor
+function manifestCompat(manifest: string, at: i32): ManifestCompat -> @manifestCompat [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: at manifest
+  calls: ManifestCompat.constructor manifestReadList nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 out: ManifestCompat (const)
+  callee +0:15 new ManifestCompat -> @ManifestCompat.constructor
+  callee +5:5 manifestReadList -> @manifestReadList
 function manifestAbsolutePath(path: string): boolean -> @manifestAbsolutePath
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index

@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 17 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 18 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -430,4 +430,12 @@ export const main = (): i32 => {
 
 ```text
 this call through `op` can reach 9 functions, more than eight, so it branches on a `switch` of them where a direct call would not; they came in through `ops: ((x: i32) => i32)[] = [f0, f1, f2, f3, f4, f5, f6, f7, f8]` (nl9017_fnref_wide_set.ts:40)
+```
+
+## NL9018
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…beside the compatibility dialect: a bare `number` is the 32-bit integer
 ```

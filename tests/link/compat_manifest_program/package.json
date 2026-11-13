@@ -1,0 +1,7 @@
+{
+  "name": "compat-manifest-program",
+  "private": true,
+  "nish": {
+    "compat": true
+  }
+}
