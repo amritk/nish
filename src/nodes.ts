@@ -43,7 +43,7 @@ export enum NodeKind {
   // NodeKind.ExportDeclaration the exported name and the local one. `{ type a }` is
   // FLAG_TYPE_ONLY (NL2243).
   ImportSpec = 5,
-  FunctionDecl = 6, // children: name, LIST of PARAM, return type, BLOCK, LIST of type parameters (WP18)
+  FunctionDecl = 6, // not `Function`, a name Phase 0 forbids; children: name, LIST of PARAM, return type, BLOCK, LIST of type parameters (WP18)
   Param = 7, // children: name, type
   Class = 8, // children: name, extends, LIST of implements, LIST of members, LIST of type parameters (WP18 G5)
   Interface = 9, // children: name, LIST of FIELD, LIST of type parameters (WP18 G5)
@@ -109,7 +109,7 @@ export enum NodeKind {
   TypeParen = 56, // children: the type inside the parentheses
   TypeReadonly = 57, // `readonly T[]`; children: the type the modifier applies to
   // A declaration rather than a type, but numbered here because the numbers are
-  // appended and never moved: forty constants and a `nodeName` switch read the
+  // appended and never moved: the member values and a `nodeName` switch read the
   // same either way, and renumbering them would churn every one of them.
   TypeAlias = 58, // `type X = T;`; children: name, the aliased type, and a LIST of type parameters only when it has one (refused, NL1054)
   // `enum X { A = 1 }` (WP23); children: name, LIST of ENUM_MEMBER.

@@ -50,7 +50,7 @@ a type that already exists. Exported aliases arrived with WP34 N1. LANGUAGE.md
 than TypeScript, and it has to be: two values are compatible only when their
 types are identical, and an enum that were silently `i32` would be the one
 exception. The motivating count was `src/`'s three principal discriminant
-families (`N_*`, `TOK_*`, `T_*`): 171 `i32` constants sharing one type, in a
+families (`N_*`, now `NodeKind`; `TOK_*`; `T_*`): 171 `i32` constants sharing one type, in a
 compiler that dispatches on all three. The three choices the decision forced
 went this way:
 
