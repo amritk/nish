@@ -389,7 +389,9 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
     check(
       "ffi_owned_string: a literal `null` for a `CPtr | null` parameter is `i8* null`, and the copy is `@nish.ffi.str` behind a `NULL` test",
       /call i8\* @realpath\(i8\* %\d+, i8\* null\)/.test(irOf(owned)) &&
-        /icmp eq i8\* %\d+, null\n\s+br i1 %\d+, label %ffi\.null\d*, label %ffi\.copy\d*/.test(irOf(owned)) &&
+        /icmp eq i8\* %\d+, null\n\s+br i1 %\d+, label %ffi\.null\d*, label %ffi\.copy\d*/.test(
+          irOf(owned)
+        ) &&
         /call i8\* @nish\.ffi\.str\(i8\* %\d+\)/.test(irOf(owned)),
       irOf(owned)
     )
