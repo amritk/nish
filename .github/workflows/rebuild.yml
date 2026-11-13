@@ -120,7 +120,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
 
       # The same two installs release.yml's `binaries` job makes, so that a
       # difference is the release's and not this workflow's.
@@ -170,6 +170,7 @@ jobs:
       - name: Fetch the seed (the release before)
         env:
           GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           ASSET: ${{ matrix.target.asset }}
           PREVIOUS: ${{ needs.latest.outputs.previous }}
         run: |
@@ -231,7 +232,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
 
       - name: Install LLVM 18 + lld
         uses: ./.github/actions/apt-install
