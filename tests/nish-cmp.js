@@ -3822,6 +3822,12 @@ const DECLARED = [
     why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
   },
   {
+    program: "tests/link/sandbox_dep_exec_once/main.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: 'the fixture calls `spawnPipedWithin`, which the 0.38.0 seed refuses with "Unknown function" (#1387)',
+  },
+  {
     program: "tests/cases/io_spawn_piped_within.ts",
     file: "exit",
     changelog: SPAWN_PIPED_WITHIN,

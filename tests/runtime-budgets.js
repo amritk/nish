@@ -198,6 +198,10 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * through this file, so they are here rather than in a unit of their own. The budget is the
  * next 256-byte boundary, leaving 183. The 480 bytes are the same before and after
  * `spawnPipedWithin` (5,338 from 4,858 without it).
+ *
+ * The file measures **5,761 bytes** on 2026-11-12, same toolchain: 5,791 after the
+ * exec grant's identity check (#1447), then 30 given back when a spawn under an exec
+ * allowlist was handed whole to `runtime-sandbox.c`. The ceiling stands, leaving 127.
  */
 const RUNTIME_OS_TEXT_BUDGET = 5888
 /**
@@ -689,8 +693,24 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * Measured 3,143 against 2,558 before it on 2026-11-11 with clang 18.1.3 on
  * linux-x64. Here rather than in `runtime-os.c`, whose spawn reaches it through a
  * pointer only `nish_sandbox` sets, so a build without `--sandbox` links none of it.
+ *
+ * Raised to 4,096, the next 256-byte boundary, for SBX-1's second part (WP37): the
+ * one exec a spawn under an exec allowlist is held to, which is two threads, a
+ * seccomp filter with a user-notification listener and the loop that answers it.
+ * Measured 4,067 against 3,143 before it on 2026-11-12 with clang 18.1.3 on
+ * linux-x64; `runtime-os.c` gave back 30 bytes (5,761 from 5,791), its spawn now
+ * handed over whole.
+ *
+ * Raised to 4,352, the next 256-byte boundary, the same day: a spawn whose exec the
+ * supervisor cannot answer "continue" has its exec failed, or the child killed and
+ * reaped, so that the spawn answers its refusal. Measured 4,199 against 4,067.
+ *
+ * Raised to 4,608, the next 256-byte boundary, the same day: both threads of a spawn
+ * run with every signal blocked and the child is given the calling thread's mask
+ * through spawn attributes, and a thread that cannot be started prints the refusal
+ * line. Measured 4,409 against 4,199, leaving 199.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 3328
+const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`

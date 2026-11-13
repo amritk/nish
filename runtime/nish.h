@@ -1004,11 +1004,15 @@ int64_t nish_cpu_online(void);
    `nish_cpu_prime` caches the pool's CPU count while /sys is still readable. */
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths);
 void nish_sandbox_check(void);
-/* SBX-1: set by `nish_sandbox` when the exec allowlist marks an interpreter;
-   `nish_spawn_start` (runtime-os.c) then spawns the descriptor it returns,
-   through the /proc/self/fd name it writes to `proc` (32 bytes), or refuses
-   with the negative errno it returns. */
-extern int (*nish_spawn_target)(const char *file, int low, char *proc);
+/* SBX-1: set by `nish_sandbox` when the program has an exec allowlist;
+   `nish_spawn_start` (runtime-os.c) then leaves the spawn to it. It checks
+   `file` as `posix_spawnp` would resolve it, starts the child with the file
+   actions `actions` (a `posix_spawn_file_actions_t`) and `argv`, holds it to
+   that one exec, and answers its pid or a negative errno. The actions' `dup2`s
+   read the `n` descriptors of `dup` (null for none) and write `base` onward;
+   with the redirects of 1 and 2, nothing they write is above `base + n + 2`. */
+extern int32_t (*nish_spawn_sandboxed)(const char *file, const int *dup, int base, int n, const void *actions,
+                                       char **argv);
 void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 /* Keeps every later region and join on threads created and joined per call,
