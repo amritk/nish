@@ -313,6 +313,7 @@ import {
 import { QuicAckRanges } from "nish/net/quic-conn-ack"
 import {
   QUIC_RECOVERY_APPLICATION_CAPACITY,
+  QUIC_RECOVERY_GRANULARITY,
   QUIC_RECOVERY_HANDSHAKE_CAPACITY,
   QUIC_RECOVERY_TIMEOUT_LOSS,
   QUIC_RECOVERY_TIMEOUT_PTO,
@@ -1585,6 +1586,12 @@ export class QuicConnection {
   challengeUntil: i64 = -1
   /** How many PATH_CHALLENGE data have been drawn over the connection; see `challengeData`. */
   challengesDrawn: i64 = 0
+  /**
+   * The Application Data space's largest acknowledged packet number when
+   * the last early probe was asked for (`earlyProbeAt`), so one goes per
+   * acknowledgment that moves it; -2 before any.
+   */
+  earlyProbeAcked: i64 = -2
   private frame: QuicFrame
   /** The header and the packet numbers of the packet being read, reused for every one. */
   private header: QuicHeader
@@ -1901,6 +1908,7 @@ export class QuicConnection {
     this.appReadSlot = 0
     this.appWriteSlot = 0
     this.earlyResends = 0
+    this.earlyProbeAcked = -2
     this.resendLevel = -1
     this.now = 0
     this.idleSince = -1
@@ -3813,6 +3821,10 @@ export class QuicConnection {
     if (recovery >= 0 && (due < 0 || recovery < due)) {
       due = recovery
     }
+    const early: i64 = this.earlyProbeAt()
+    if (early >= 0 && (due < 0 || early < due)) {
+      due = early
+    }
     if (this.pathValidating) {
       const path: i64 =
         this.challengeResendAt < this.challengeUntil ? this.challengeResendAt : this.challengeUntil
@@ -3866,6 +3878,7 @@ export class QuicConnection {
   handleTimer(now: i64): void {
     this.runClocks(now)
     this.runRecoveryTimer()
+    this.runEarlyProbe()
   }
 
   /**
@@ -4208,6 +4221,52 @@ export class QuicConnection {
       return 0
     }
     return this.sealAt(space, out, at, quicPutPadding(out, next, payloadEnd - next))
+  }
+
+  /**
+   * When a sender blocked by its own stream buffer sends an ack-eliciting
+   * probe, or -1 when it need not. A stream whose send buffer is full
+   * behind a hole (`QuicStreams.bufferBlocked`) sends nothing new until
+   * the hole is acknowledged; once the client has acknowledged everything
+   * in flight it has nothing to acknowledge and sends nothing either, so a
+   * NAT rebind in that gap is never seen and every later packet, burst and
+   * probe timeout alike, goes to the old binding. Half a smoothed RTT after
+   * the last ack-eliciting packet, with the Application Data space's
+   * largest acknowledged packet moved since the last such probe, one
+   * datagram goes regardless of the window (a PING when nothing else is
+   * queued), so the client always has one to answer, from wherever it now
+   * is (RFC 9000 §9.3). One per acknowledgment that advances the space, at
+   * most one a round trip; the probe timeout still runs as before.
+   */
+  private earlyProbeAt(): i64 {
+    if (this.state !== QUIC_STATE_CONNECTED || this.application.probes > 0) {
+      return -1
+    }
+    const sent: QuicSentPackets | null = this.recovery.space(TLS_LEVEL_APPLICATION)
+    if (
+      sent === null ||
+      sent.inFlight === 0 ||
+      sent.lastAckEliciting < 0 ||
+      sent.largestAcked <= this.earlyProbeAcked ||
+      !this.streams.bufferBlocked()
+    ) {
+      return -1
+    }
+    const half: i64 = this.recovery.smoothedRtt / 2
+    return sent.lastAckEliciting + (half > QUIC_RECOVERY_GRANULARITY ? half : QUIC_RECOVERY_GRANULARITY)
+  }
+
+  /** The early probe of `earlyProbeAt`, if it is due. */
+  private runEarlyProbe(): void {
+    const at: i64 = this.earlyProbeAt()
+    if (at < 0 || this.now < at) {
+      return
+    }
+    const sent: QuicSentPackets | null = this.recovery.space(TLS_LEVEL_APPLICATION)
+    if (sent !== null) {
+      this.earlyProbeAcked = sent.largestAcked
+      this.application.probes = 1
+    }
   }
 
   /** Loss recovery's timer, if it is due (RFC 9002 §6.2, A.9). */

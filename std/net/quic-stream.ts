@@ -1182,6 +1182,22 @@ export class QuicStreams {
   }
 
   /**
+   * Whether a stream's send buffer is full behind bytes the peer has not
+   * acknowledged, with nothing of it left to send: the application offered
+   * more than `room` took, and every byte the buffer holds is in flight. The
+   * stream then sends nothing new until an ACK frees room.
+   * @internal Read by quic.ts, for its early probe.
+   */
+  bufferBlocked(): boolean {
+    for (const stream of this.slots) {
+      if (stream.id >= 0 && stream.wantsWrite && stream.room() <= 0 && !stream.wantsToSend()) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
    * Takes the peer's transport parameters (RFC 9000 §18.2): its limits on
    * the streams this side opens, the credit each kind of stream starts with,
    * and the connection's.
