@@ -1262,7 +1262,10 @@ const iteratorPlaceReason = (ctx: CheckContext, access: Node, call: boolean): st
   if (parent.kind === NodeKind.Return) {
     return ITERATOR_RETURNED
   }
-  if ((parent.kind === NodeKind.Arrow || parent.kind === NodeKind.FunctionDecl) && parent.children[3] === node) {
+  if (
+    (parent.kind === NodeKind.Arrow || parent.kind === NodeKind.FunctionDecl) &&
+    parent.children[3] === node
+  ) {
     return ITERATOR_RETURNED // a concise body is its `return`
   }
   return ITERATOR_ELSEWHERE
