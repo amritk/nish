@@ -177,9 +177,8 @@
         ),
         copyButton()
       ),
-      // The stage is a picture of what the text beside it already says, so its
-      // editor and beams are hidden from assistive technology rather than read
-      // out line by line. The terminal stays reachable: it takes a command.
+      // The stage is a picture of what the text beside it already says, so it
+      // is hidden from assistive technology, all but the terminal's input.
       el(
         "div.nish-hero__stage",
         {},
@@ -229,73 +228,35 @@
       )
     )
 
-  /**
-   * The hero's terminal, which takes a line once focused: Enter runs it. Its
-   * first key loads what it answers from /break/ (shell.mjs); one command loads
-   * a second module from there. Until the first arrives, or if it fails, every
-   * command but that one is not found.
-   */
+  /** The hero's terminal: its first key imports the shell that runs it (examples/break-web). */
   const terminal = (...children) => {
-    const typed = el("span")
-    const said = el("span.nish-hero__said", { "aria-live": "polite" })
     const term = el(
       "div.nish-hero__window.nish-hero__terminal",
       { tabindex: "0", role: "textbox", "aria-label": "Terminal" },
-      ...children,
-      el(
-        "pre.nish-hero__code.nish-hero__line-in",
-        {},
-        said,
-        el("b", {}, "$ "),
-        typed,
-        el("i.nish-hero__caret")
-      )
+      ...children
     )
-    let opening = null
-    // The shell: a promise while it loads, then the module, or false if it failed.
-    let shell = null
-    const say = (text) => (said.textContent = text)
-    term.addEventListener("keydown", (event) => {
+    const keys = []
+    const first = (event) => {
       const key = event.key
-      const line = typed.textContent
-      if (event.ctrlKey || event.metaKey || event.altKey) {
-        return
-      }
-      // Built into /break/ beside the game (examples/break-web/build.mjs); a failed load leaves the fallback below.
-      const shellUrl = "/break/shell.mjs"
-      shell ??= import(shellUrl).then(
-        (module) => (shell = module),
-        () => (shell = false)
-      )
-      if (key === "Enter") {
-        typed.textContent = ""
-        const command = line.trim()
-        const fallback = command === "nish break" ? null : `${command.split(" ")[0]}: command not found`
-        const answer = shell?.answer ? shell.answer(command) : fallback
-        if (answer === null || answer === shell?.OPEN) {
-          say(`$ ${command}\nloading…\n`)
-          // The game is built into /break/ (examples/break-web/build.mjs), not beside this file.
-          const url = "/break/break.mjs"
-          opening ??= import(url)
-          opening
-            .then((game) => game.open({ focus: term, say: (text) => say(`$ ${command}\n${text}\n`) }))
-            .then(() => say(""))
-            .catch((error) => {
-              opening = null
-              say(`$ ${command}\nnish break: ${error.message}\n`)
-            })
-        } else {
-          say(command === "" ? "" : `$ ${command}\n${answer}\n`)
-        }
-      } else if (key === "Backspace") {
-        typed.textContent = line.slice(0, -1)
-      } else if (key.length === 1 && line.length < 40) {
-        typed.textContent = line + key
-      } else {
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        !(key.length < 2 || key === "Enter" || key === "Backspace")
+      ) {
         return
       }
       event.preventDefault()
-    })
+      // Keys typed while it loads are handed over; a failed load is retried on the next key.
+      const shellUrl = "/break/shell.mjs"
+      if (keys.push(key) === 1) {
+        import(shellUrl).then(
+          (shell) => shell.attach(term, keys, first),
+          () => (keys.length = 0)
+        )
+      }
+    }
+    term.addEventListener("keydown", first)
     return term
   }
 

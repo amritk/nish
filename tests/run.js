@@ -11667,9 +11667,10 @@ if (dealtHere("fileServer")) {
 }
 
 // ---- break-web: the game behind the docs hero terminal ---------------------------
-// docs/site/site.js imports docs/site/break/break.mjs when the hero terminal is
-// asked for the game; examples/break-web/build.mjs builds that directory and it
-// is committed. tests/break-web/check.mjs runs the trigger and the page side
+// docs/site/site.js imports docs/site/break/shell.mjs on the hero terminal's
+// first key, and the shell imports break.mjs when asked for the game;
+// examples/break-web/build.mjs builds that directory and it is committed.
+// tests/break-web/check.mjs runs the terminal, the shell and the page side
 // under Node with a fake DOM and prints a line per check.
 if (dealtHere("breakWeb")) {
   const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
@@ -11677,7 +11678,7 @@ if (dealtHere("breakWeb")) {
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 36
+  const BREAK_WEB_CHECKS = 37
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))

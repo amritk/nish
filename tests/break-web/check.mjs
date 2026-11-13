@@ -1,4 +1,4 @@
-// Checks the docs hero terminal's game trigger and the page side of the game
+// Checks the docs hero terminal (docs/site/site.js and its shell), and the page side of the game
 // (examples/break-web/break.mjs) under Node, with a small fake DOM. Prints one
 // `ok <name>` or `not ok <name>\t<detail>` line per check, then `checks: <n>`;
 // the `break-web` section of tests/run.js turns each line into a check and
@@ -117,41 +117,40 @@ const type = (node, line) => {
   press(node, "Enter")
 }
 
-// --- site.js: the terminal costs the page two dynamic imports ----------------
+// --- site.js: the terminal costs the page one dynamic import -----------------
 
 const siteFile = path.join(root, "docs", "site", "site.js")
 const site = fs.readFileSync(siteFile, "utf8")
 const imports = [...site.matchAll(/\bimport\b\s*(\(|[^(\s])/g)]
 check(
-  "site.js reaches the shell and the game only through two dynamic imports of /break/",
-  imports.length === 2 &&
-    imports.every((m) => m[1] === "(") &&
-    /\bconst url = "\/break\/break\.mjs"\s+opening \?\?= import\(url\)/.test(site) &&
-    /\bconst shellUrl = "\/break\/shell\.mjs"\s+shell \?\?= import\(shellUrl\)/.test(site),
+  "site.js reaches /break/ only through one dynamic import of its shell",
+  imports.length === 1 && imports[0][1] === "(" && /\bconst shellUrl = "\/break\/shell\.mjs"[^]*\bimport\(shellUrl\)/.test(site),
   imports.map((m) => m[0]).join(", ")
 )
 // Nothing else reaches /break/ before it is asked for: no preload, no module
-// worker, no fetch of the bundle, and no word of its .wasm.
+// worker, no fetch, no word of the game's module or its .wasm.
 check(
-  "site.js names /break/ nowhere but those imports",
-  !/\.wasm\b|modulepreload|\bpreload\b|\bprefetch\b|\bfetch\(|\bWorker\(/.test(site) && site.split(/["'`]\/break\//).length === 3,
-  "site.js mentions .wasm, a preload, a fetch or a worker, or quotes a /break/ path a third time"
+  "site.js names /break/ nowhere but that import",
+  !/\.wasm\b|break\.mjs|modulepreload|\bpreload\b|\bprefetch\b|\bfetch\(|\bWorker\(/.test(site) &&
+    site.split(/["'`]\/break\//).length === 2,
+  "site.js mentions .wasm, break.mjs, a preload, a fetch or a worker, or quotes a /break/ path twice"
 )
 
-// The hero's script ships on every docs page: the terminal may add under 1 KB
-// to it, gzipped. The baseline is site.js on main without the terminal's
-// imports (71c41439).
+// The hero's script ships on every docs page, so all the terminal does lives in
+// the lazy shell: site.js may grow by under 400 B gzipped for it. The baseline
+// is site.js on main before the terminal took keys (71c41439).
 const SITE_GZIP_BEFORE = 3480
+const SITE_GZIP_GROWTH = 400
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(
-  "site.js grows by under 1 KB gzipped",
-  gzipped - SITE_GZIP_BEFORE < 1024,
+  `site.js grows by under ${SITE_GZIP_GROWTH} B gzipped`,
+  gzipped - SITE_GZIP_BEFORE < SITE_GZIP_GROWTH,
   `${gzipped} B gzipped, ${SITE_GZIP_BEFORE} B before`
 )
 
 /**
- * Runs site.js in a fresh fake document. Its `import(...)`s go to
- * `load(specifier)`, so a test decides what each import does.
+ * Runs site.js in a fresh fake document. Its `import(...)` goes to
+ * `load(specifier)`, so a test decides what the import does.
  */
 const runSite = (load) => {
   const { document, host } = makeDocument()
@@ -166,10 +165,16 @@ const runSite = (load) => {
     site.replace(/\bimport\(/g, "load(")
   )
   run(document, window, class { observe() {} }, () => {}, Node, load)
-  return { document, host, terminal: host.find("nish-hero__terminal"), said: host.find("nish-hero__said") }
+  return { document, host, terminal: host.find("nish-hero__terminal") }
+}
+const keydown = (key, mods = {}) => {
+  const event = { key, ctrlKey: false, metaKey: false, altKey: false, prevented: false, ...mods }
+  event.preventDefault = () => (event.prevented = true)
+  return event
 }
 
 {
+  // A shell that cannot be fetched.
   const asked = []
   const hero = runSite((specifier) => {
     asked.push(specifier)
@@ -177,46 +182,34 @@ const runSite = (load) => {
   })
   check("site.js builds a focusable hero terminal", hero.terminal?.attributes.tabindex === "0", hero.host.textContent)
   check("site.js imports nothing before the terminal's first key", asked.length === 0, asked.join(", "))
-  type(hero.terminal, "ls")
+  const ctrl = keydown("r", { ctrlKey: true })
+  hero.terminal.dispatch("keydown", ctrl)
+  const tab = keydown("Tab")
+  hero.terminal.dispatch("keydown", tab)
+  check("the terminal leaves shortcuts and Tab alone, and imports nothing for them", !ctrl.prevented && !tab.prevented && asked.length === 0,
+    asked.join(", "))
+  const first = press(hero.terminal, "l")
+  press(hero.terminal, "s")
+  check("the first key asks for the shell once, and nothing else", first.prevented && asked.join(", ") === "/break/shell.mjs",
+    asked.join(", "))
   await settle()
-  check("without its shell the terminal finds no command", /ls: command not found/.test(hero.said.textContent), hero.said.textContent)
-  check("the first key asks for the shell, and nothing else", asked.join(", ") === "/break/shell.mjs", asked.join(", "))
-  type(hero.terminal, "ls")
-  check("a shell that failed to load is not asked for again", asked.length === 1, asked.join(", "))
-  const games = () => asked.filter((s) => s === "/break/break.mjs").length
-  type(hero.terminal, "nish break")
-  await settle()
-  await settle()
-  check("a failed import says why in the terminal", /nish break: Failed to fetch/.test(hero.said.textContent), hero.said.textContent)
-  check("without its shell the terminal still opens the game", games() === 1, asked.join(", "))
-  // The hero is still usable: it takes the next command, and retries the import.
-  type(hero.terminal, "nish break")
-  await settle()
-  await settle()
-  check("after a failed import the terminal takes the command again and retries", games() === 2, asked.join(", "))
-  const typed = press(hero.terminal, "x")
-  check("after a failed import the terminal still takes keys", typed.prevented && /\$ x/.test(hero.terminal.textContent),
-    hero.terminal.textContent)
+  press(hero.terminal, "l")
+  check("a key after a failed import asks for the shell again", asked.length === 2, asked.join(", "))
 }
 
 {
-  const opened = []
-  const hero = runSite((specifier) =>
-    specifier === "/break/break.mjs"
-      ? Promise.resolve({ open: (how) => (opened.push(how), Promise.resolve()) })
-      : Promise.reject(new Error("offline"))
+  // A shell that loads: site.js hands it the terminal, the keys typed while it
+  // loaded, and its own listener to take down.
+  const attached = []
+  const hero = runSite(() => Promise.resolve({ attach: (...args) => attached.push(args) }))
+  type(hero.terminal, "ls")
+  await settle()
+  check(
+    "the loaded shell gets the terminal and every key typed while it loaded",
+    attached.length === 1 && attached[0][0] === hero.terminal && attached[0][1].join(",") === "l,s,Enter" &&
+      hero.terminal.listeners.get("keydown")?.includes(attached[0][2]),
+    JSON.stringify(attached.map((a) => a[1]))
   )
-  type(hero.terminal, "nish break")
-  await settle()
-  await settle()
-  check("the command opens the game with the terminal to return focus to", opened.length === 1 && opened[0].focus === hero.terminal,
-    opened.length)
-  check("the terminal line clears once the game opens", hero.said.textContent === "", hero.said.textContent)
-  opened[0].say("boom")
-  check("the game can say a line in the terminal", /\$ nish break\nboom/.test(hero.said.textContent), hero.said.textContent)
-  const ctrl = { key: "r", ctrlKey: true, metaKey: false, altKey: false, prevented: false, preventDefault() { this.prevented = true } }
-  hero.terminal.dispatch("keydown", ctrl)
-  check("the terminal leaves the browser's shortcuts alone", !ctrl.prevented)
 }
 
 // --- shell.mjs: what the terminal answers ------------------------------------
@@ -258,23 +251,50 @@ const asks = (args, cwd) => spawnSync(nish, args, { cwd, encoding: "utf8" })
 }
 
 {
-  // The terminal with its shell: it prints the shell's answers, and opens the game on OPEN.
+  // site.js with the shell's source: the shell takes the terminal over.
+  const source = await import(pathToFileURL(path.join(root, "examples", "break-web", "shell.mjs")).href)
   const opened = []
-  const hero = runSite((specifier) =>
-    specifier === "/break/shell.mjs" && shell !== null
-      ? Promise.resolve(shell)
+  const games = []
+  let fail = true
+  let hero = null
+  const load = () => {
+    games.push(fail)
+    return fail
+      ? Promise.reject(new Error("Failed to fetch dynamically imported module"))
       : Promise.resolve({ open: (how) => (opened.push(how), Promise.resolve()) })
+  }
+  hero = runSite(() =>
+    Promise.resolve({ attach: (term, keys, first) => source.attach(term, keys, first, { document: hero.document, load }) })
   )
-  press(hero.terminal, "n")
-  press(hero.terminal, "Backspace")
-  await settle()
   type(hero.terminal, "nish game")
-  check("the terminal prints the shell's answer", hero.said.textContent === `$ nish game\n${shell?.answer("nish game")}\n`,
-    hero.said.textContent)
+  await settle()
+  const said = () => hero.host.find("nish-hero__said")?.textContent
+  check("keys typed while the shell loads are answered once it has", said() === `$ nish game\n${source.answer("nish game")}\n`, said())
+  check("the shell takes the terminal's keys in place of site.js", hero.terminal.listeners.get("keydown")?.length === 1,
+    hero.terminal.listeners.get("keydown")?.length)
+  type(hero.terminal, "ls")
+  check("the terminal prints the shell's answer", said() === `$ ls\n${source.answer("ls")}\n`, said())
+  type(hero.terminal, "x".repeat(50))
+  check("the terminal takes a line of at most 40 characters", said() === `$ ${"x".repeat(40)}\n${source.answer("x".repeat(40))}\n`, said())
   type(hero.terminal, "nish break")
   await settle()
   await settle()
-  check("the terminal opens the game on the shell's word", opened.length === 1, opened.length)
+  check("a failed import of the game says why in the terminal", /nish break: Failed to fetch/.test(said()), said())
+  fail = false
+  type(hero.terminal, "nish break")
+  await settle()
+  await settle()
+  check("after a failed import the terminal takes the command again and retries", games.length === 2, games.length)
+  check("the command opens the game with the terminal to return focus to", opened.length === 1 && opened[0].focus === hero.terminal,
+    opened.length)
+  check("the terminal line clears once the game opens", said() === "", said())
+  opened[0].say("boom")
+  check("the game can say a line in the terminal", /\$ nish break\nboom/.test(said()), said())
+  const ctrl = keydown("r", { ctrlKey: true })
+  hero.terminal.dispatch("keydown", ctrl)
+  const tab = keydown("Tab")
+  hero.terminal.dispatch("keydown", tab)
+  check("the shell leaves shortcuts and Tab alone", !ctrl.prevented && !tab.prevented)
 }
 
 // --- break.mjs: the overlay ---------------------------------------------------

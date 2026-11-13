@@ -1,4 +1,4 @@
-// The page side of the game behind the docs hero terminal: docs/site/site.js
+// The page side of the game behind the docs hero terminal: its shell (shell.mjs)
 // imports this module (as /break/break.mjs) only when the terminal is asked
 // for it, so none of it, nor the .wasm, costs a page that never asks.
 //
