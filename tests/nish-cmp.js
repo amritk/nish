@@ -1303,6 +1303,19 @@ const DECLARED = [
     changelog: "(H3-5)",
     why: "the program sets Http3Config.idleTimeout or headTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
   })),
+  // H3-5: Http3Config gains idleTimeout and headTimeout, so the C header of
+  // every program that exports a type reaching it gains the two fields.
+  ...[
+    "tests/link/net_quic_prefork/main.ts",
+    "tests/link/net_quic_worker/main.ts",
+    "tests/link/net_webtransport_bad_idle/main.ts",
+    "tests/link/net_webtransport_bad_rate/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "(H3-5)",
+    why: "Http3Config gains the int32_t fields idleTimeout and headTimeout, which the seed's std/net does not have, so the program's header declares two more fields",
+  })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
     file: "deflate.ll",
