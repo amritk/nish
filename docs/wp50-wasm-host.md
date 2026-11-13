@@ -1011,6 +1011,7 @@ Each would be its own note, on its own measurement:
   page, which then calls an export with the result. Later, WP49's lowering of
   an `async` function to a fixed-size state machine could run on wasm with the
   page as its executor: it resolves the promise and calls a resume export.
-  That would let module code write `await gpuReady()`. It is its own note.
+  That would let module code write `await gpuReady()`. It is its own note,
+  [wp54-async-wasm.md](wp54-async-wasm.md), proposed.
 - **Regions on freestanding wasm.** §6 shows the driven module does not need
   them.

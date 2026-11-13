@@ -283,6 +283,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |
 | 52 | Fast rebuilds for `nish run` | [wp52](wp52-run-rebuilds.md) |
 | 53 | Buffers and handles across `declare function` | [wp53](wp53-ffi-buffers-handles.md) |
+| 54 | `async` on wasm, with the page as the executor: proposed, for a service that runs on Workers | [wp54](wp54-async-wasm.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
