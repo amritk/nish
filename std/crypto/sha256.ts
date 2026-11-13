@@ -561,8 +561,29 @@ export class Sha256 {
    * @returns A fresh 32-byte digest, which the caller owns.
    */
   digest(): u8[] {
+    const out: u8[] = new Array<u8>(SHA256_SIZE)
+    const from: i32 = 0
+    this.digestInto(out, from)
+    return out
+  }
+
+  /**
+   * Writes the 32-byte message digest (FIPS 180-4 §6.2.2, the final H^(N) in
+   * big-endian order) at `out[at .. at + 32)` and ends the computation, with
+   * nothing allocated. A window outside `out` panics before anything is
+   * written or the hasher is finished, rather than writing the part of the
+   * digest that fits.
+   *
+   * @param out The caller's array the digest is written into.
+   * @param at Where the 32 digest bytes start in `out`.
+   */
+  digestInto(out: u8[], at: i32): void {
     if (this.finished) {
       panic("Sha256: digest called twice")
+    }
+    const size: i32 = toI32(out.length)
+    if (at < 0 || at > size - SHA256_SIZE) {
+      panic("Sha256: the digest window is outside its array")
     }
     this.finished = true
     // §5.1.1: a single 1 bit, then zeros up to 56 bytes into a block, then the
@@ -588,17 +609,16 @@ export class Sha256 {
       block[SHA256_BLOCK - 1 - i] = toU8(bits >>> toU64(8 * i))
     }
     sha256Compress(this.state, this.schedule, block, 0)
-    const out: u8[] = new Array<u8>(SHA256_SIZE)
     const state: u32[] = this.state
     const words: i32 = toI32(state.length)
-    for (let i: i32 = 0; i < words; i += 1) {
+    for (let i: i32 = 0; i < words && 4 * i + 3 < SHA256_SIZE; i += 1) {
       const word: u32 = state[i]
-      out[4 * i] = toU8(word >>> 24)
-      out[4 * i + 1] = toU8(word >>> 16)
-      out[4 * i + 2] = toU8(word >>> 8)
-      out[4 * i + 3] = toU8(word)
+      const p: i32 = at + 4 * i
+      out[p] = toU8(word >>> 24)
+      out[p + 1] = toU8(word >>> 16)
+      out[p + 2] = toU8(word >>> 8)
+      out[p + 3] = toU8(word)
     }
-    return out
   }
 }
 
