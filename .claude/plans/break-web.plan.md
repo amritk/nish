@@ -8,7 +8,7 @@ stages:
     verification: npm run check && npm run lint && node tests/run.js break && node tests/run.js term && node tests/run.js self && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && build/nish tests/link/break_core/main.ts --target wasm32 -o build/break-core.ll
     todos:
       - id: core-input-module
-        content: Move the input types the scenes read (TermEvent, KeyState, TermInput and the key constants) out of std/term-io.ts into a pure std module with no nish-colon imports, re-exported from term-io so existing importers keep compiling — see Break core
+        content: Add a pure std/input.ts with StepInput (events plus key state, no nish-colon imports) that the scenes take instead of term-io's TermInput; term-io stays as it is and the terminal shell points a reused StepInput at its input by reference each step — see Break core
       - id: core-director
         content: Split src/break.ts into a host-agnostic director (scene flow, settings record, auto-resolution decision, seed taken as a parameter) and the terminal shell that keeps runTerminal, getenv, toasts and the size prompt — see Break core
       - id: core-settings-hook
@@ -75,12 +75,16 @@ The terminal-specific parts are:
 
 ## Break core
 
-**Owns:** `src/break*.ts`, `std/term-io.ts`, `std/term.ts`, `std/input.ts`, `std/README.md`, `docs/reference/**`, `scalar.config.json`, `docs/guide/using-nish/standard-library.md`, `tests/link/break_*/**`, `tests/self/goldens/checked/**`, `tests/nish-cmp.js`, `scripts/undocumented.txt`
+**Owns:** `src/break*.ts`, `std/term-io.ts`, `std/term.ts`, `std/input.ts`, `scripts/gen-reference.mjs` (the AREAS entry), `tests/link/std_input/**`, `std/README.md`, `docs/reference/**`, `scalar.config.json`, `docs/guide/using-nish/standard-library.md`, `tests/link/break_*/**`, `tests/self/goldens/checked/**`, `tests/nish-cmp.js`, `scripts/undocumented.txt`
 
 The rules for this stage:
 
 - **Native behaviour is frozen.** The `break` pty test, `tests/link/break_game` and its expected output pass unchanged. This stage is a refactor of where code lives.
-- **Input module.** Name it `std/input.ts` unless `std/README.md`'s naming rules say otherwise. It is pure: no `nish:` import, so it compiles for `wasm32`. `std/term-io.ts` re-exports what it moved, so no importer changes.
+- **Input module.** `std/input.ts` (`nish/input`) is pure: no `nish:` import, so it compiles for `wasm32`. It holds `StepInput`: the events and the key state, whose types and constants already live in the pure `nish/term`.
+  - **Why not re-export from term-io.** The language cannot make term-io's `TermInput` satisfy an imported interface. `implements` resolves only local structs, and `export {} from` is refused. A checker fix would not help `src/` under the rolling freeze either.
+  - **How the hosts share it.** `nish/term-io` and its `TermInput` are unchanged, so this is no public API break. The terminal shell points one reused `StepInput` at term-io's events and keys by reference each step.
+  - **Tests.** `tests/link/break_{game,intro,menu}` may switch their drivers to `StepInput`, but their `expected.out` stays byte-identical.
+  - **Extra files.** `scripts/gen-reference.mjs` needs an `AREAS` entry for the module, and `tests/link/std_input` is its link case.
 - **Director.**
   - The host-agnostic part takes the seed, the settings record and the help text as inputs. It returns the scene answer each step, and the draw call takes the framebuffer and `alpha`.
   - Auto-resolution is a decision the director makes from frame times the host reports, so both hosts share it.
