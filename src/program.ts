@@ -1813,6 +1813,16 @@ export class CheckedProgram {
    */
   memberMarks: i32[]
   memberStamp: i32
+  /**
+   * What enum narrowing answered (`holdNamed` in `expressions.ts`), an open
+   * hash of six ints an entry: the enum plus one (0 is empty), the held set,
+   * the two sets it was narrowed by, `keep`, and the set it left. The table
+   * has `narrowMemoSlots` entries, a power of two, `narrowMemoUsed` of them
+   * taken.
+   */
+  narrowMemo: i32[]
+  narrowMemoSlots: i32
+  narrowMemoUsed: i32
   /** `isCollections()`, decided once: the package and the path never change. */
   collectionsLibrary: boolean
   /** `isSecretLibrary()`, decided once, as `collectionsLibrary` is. */
@@ -2111,6 +2121,9 @@ export class CheckedProgram {
     this.enumMemberLists = []
     this.memberMarks = []
     this.memberStamp = 0
+    this.narrowMemo = []
+    this.narrowMemoSlots = 0
+    this.narrowMemoUsed = 0
     let i = 0
     while (i < nodeCount) {
       this.nodeTypes[i] = -1

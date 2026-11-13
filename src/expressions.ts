@@ -136,7 +136,7 @@ import {
 } from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
-import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
+import { CheckedProgram, FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
 import { simdCompareMessage, simdImportMessage } from "./simd"
@@ -2543,20 +2543,20 @@ const namedBy = (ctx: CheckContext, member: i32, first: i32[], second: i32[]): b
 }
 
 /**
- * Narrow the enum variable `local` from `current`, what it holds, to the
- * members `first` or `second` names (`keep`), or to those neither does, when
- * that is fewer. Counted before any list is built, so a test that leaves
- * `local` as it was allocates nothing.
+ * What the enum variable `local` holds once narrowed from `current`, what it
+ * holds, to the members `first` or `second` names (`keep`), or to those
+ * neither does: a `Scope.hold` set, or -1 when that leaves it as it was.
+ * Counted before any list is built, so a test that leaves `local` as it was
+ * allocates nothing.
  */
-const holdNamed = (
+const keptSet = (
   ctx: CheckContext,
-  scope: Scope,
   local: Local,
   current: i32[],
   first: i32[],
   second: i32[],
   keep: boolean
-): void => {
+): i32 => {
   const stamp = stampMembers(ctx, local.type, current, first, second)
   const marks = ctx.program.memberMarks
   let count = 0
@@ -2566,7 +2566,7 @@ const holdNamed = (
     }
   }
   if (current.length === 0 || count === current.length) {
-    return
+    return -1
   }
   const kept: i32[] = []
   for (const member of current) {
@@ -2574,17 +2574,163 @@ const holdNamed = (
       kept.push(member)
     }
   }
-  holdKept(ctx, scope, local, kept)
+  return keptId(ctx, kept)
 }
 
-/** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
-export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
-  const held = scope.heldBy(local)
+/** `kept`, the members an enum variable is left, as the set `Scope.hold` records. */
+const keptId = (ctx: CheckContext, kept: i32[]): i32 => {
+  if (kept.length === 1) {
+    return kept[0]
+  }
+  return kept.length === 0 ? MEMBERS_NONE : memberListId(ctx, kept)
+}
+
+/** The members a `Scope.hold` set names, -1 being every member of `enumType`'s. */
+const heldList = (ctx: CheckContext, enumType: i32, held: i32): i32[] => {
   if (held === MEMBERS_NONE) {
     return []
   }
-  return namesMembers(held) ? membersOfSet(ctx, held) : enumMembersOf(ctx, local.type)
+  return namesMembers(held) ? membersOfSet(ctx, held) : enumMembersOf(ctx, enumType)
 }
+
+/**
+ * Narrow the enum variable `local`, which holds the set `current`, to the
+ * members the sets `first` or `second` name (`keep`), or to those neither
+ * does (`keptSet`). Sets are `Scope.hold`'s, -1 being every member; the
+ * answer depends on nothing else, and the lists sets name are never changed,
+ * so it is recalled (`CheckedProgram.narrowMemo`): a chain of tests over one
+ * enum builds each list it narrows to once, and shares its id.
+ */
+const holdNamed = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  current: i32,
+  first: i32,
+  second: i32,
+  keep: boolean
+): void => {
+  const program = ctx.program
+  const at = memoSlot(program, local.type, current, first, second, keep ? 1 : 0)
+  let set = memoRead(program.narrowMemo, at + 5)
+  if (memoRead(program.narrowMemo, at) === 0) {
+    set = keptSet(
+      ctx,
+      local,
+      heldList(ctx, local.type, current),
+      heldList(ctx, local.type, first),
+      heldList(ctx, local.type, second),
+      keep
+    )
+    const memo = program.narrowMemo
+    memo[at] = local.type + 1
+    memo[at + 1] = current
+    memo[at + 2] = first
+    memo[at + 3] = second
+    memo[at + 4] = keep ? 1 : 0
+    memo[at + 5] = set
+    program.narrowMemoUsed = program.narrowMemoUsed + 1
+  }
+  if (set !== -1) {
+    holdSet(scope, local, set)
+  }
+}
+
+/** The ints one `narrowMemo` entry takes: the enum plus one, the four keys, and the answer. */
+const MEMO_WIDTH: i32 = 6
+
+/** `memo[at]`, or 0, an empty entry, past its end. */
+const memoRead = (memo: i32[], at: i32): i32 => (at >= 0 && at < memo.length ? memo[at] : 0)
+
+/**
+ * Where the entry for these keys starts in `narrowMemo`, found or the empty
+ * one it goes in; the table doubles when it is half full, so there is one.
+ */
+const memoSlot = (
+  program: CheckedProgram,
+  enumType: i32,
+  current: i32,
+  first: i32,
+  second: i32,
+  keep: i32
+): i32 => {
+  if (program.narrowMemoUsed * 2 >= program.narrowMemoSlots) {
+    growMemo(program)
+  }
+  const memo = program.narrowMemo
+  const mask = program.narrowMemoSlots - 1
+  let slot = (enumType * 31 + current) & mask
+  slot = (slot * 31 + first) & mask
+  slot = (slot * 31 + second) & mask
+  slot = (slot * 2 + keep) & mask
+  let at = slot * MEMO_WIDTH
+  while (
+    memoRead(memo, at) !== 0 &&
+    !(
+      memoRead(memo, at) === enumType + 1 &&
+      memoRead(memo, at + 1) === current &&
+      memoRead(memo, at + 2) === first &&
+      memoRead(memo, at + 3) === second &&
+      memoRead(memo, at + 4) === keep
+    )
+  ) {
+    slot = (slot + 1) & mask
+    at = slot * MEMO_WIDTH
+  }
+  return at
+}
+
+/** Double `narrowMemo`, putting each entry back where its keys now land. */
+const growMemo = (program: CheckedProgram): void => {
+  const old = program.narrowMemo
+  const slots = program.narrowMemoSlots === 0 ? 256 : program.narrowMemoSlots * 2
+  const memo: i32[] = []
+  let i = 0
+  while (i < slots * MEMO_WIDTH) {
+    memo.push(0)
+    i = i + 1
+  }
+  program.narrowMemo = memo
+  program.narrowMemoSlots = slots
+  program.narrowMemoUsed = 0
+  let from = 0
+  while (from + MEMO_WIDTH <= old.length) {
+    if (memoRead(old, from) !== 0) {
+      const enumType = memoRead(old, from) - 1
+      const at = memoSlot(
+        program,
+        enumType,
+        memoRead(old, from + 1),
+        memoRead(old, from + 2),
+        memoRead(old, from + 3),
+        memoRead(old, from + 4)
+      )
+      let k = 0
+      while (k < MEMO_WIDTH) {
+        memo[at + k] = memoRead(old, from + k)
+        k = k + 1
+      }
+      program.narrowMemoUsed = program.narrowMemoUsed + 1
+    }
+    from = from + MEMO_WIDTH
+  }
+}
+
+/** Record that the enum variable `local` holds `set`, a `Scope.hold` set that is not -1. */
+const holdSet = (scope: Scope, local: Local, set: i32): void => {
+  if (set >= 0) {
+    scope.hold(local, set)
+    scope.narrow(local, set)
+    return
+  }
+  // A member type an earlier test narrowed it to no longer holds.
+  scope.narrow(local, local.type)
+  scope.hold(local, set)
+}
+
+/** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
+export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] =>
+  heldList(ctx, local.type, scope.heldBy(local))
 
 /**
  * Narrow the enum variable `local` to the members it may still hold that are
@@ -2599,19 +2745,20 @@ export const narrowHeld = (
   members: i32[],
   keep: boolean
 ): void => {
-  holdNamed(ctx, scope, local, heldMembers(ctx, scope, local), members, [], keep)
+  if (members.length === 0 || (members.length === 1 && ctx.table.isEnumMemberType(members[0]))) {
+    const named = members.length === 1 ? members[0] : MEMBERS_NONE
+    holdNamed(ctx, scope, local, scope.heldBy(local), named, MEMBERS_NONE, keep)
+    return
+  }
+  const set = keptSet(ctx, local, heldMembers(ctx, scope, local), members, [], keep)
+  if (set !== -1) {
+    holdSet(scope, local, set)
+  }
 }
 
 /** Record that the enum variable `local` holds one of `kept`, fewer members than it could before. */
 export const holdKept = (ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void => {
-  if (kept.length === 1) {
-    scope.hold(local, kept[0])
-    scope.narrow(local, kept[0])
-    return
-  }
-  // A member type an earlier test narrowed it to no longer holds.
-  scope.narrow(local, local.type)
-  scope.hold(local, kept.length === 0 ? MEMBERS_NONE : memberListId(ctx, kept))
+  holdSet(scope, local, keptId(ctx, kept))
 }
 
 /** A union variable read where tag tests excluded every variant. */
@@ -2764,8 +2911,7 @@ export const addLocals = (into: Local[], locals: Local[]): void => {
 
 /** Narrow the enum variable `local` to the members `first` or `second` leaves it, when fewer than it holds. */
 const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
-  const current = heldMembers(ctx, scope, local)
-  holdNamed(ctx, scope, local, current, heldMembers(ctx, first, local), heldMembers(ctx, second, local), true)
+  holdNamed(ctx, scope, local, scope.heldBy(local), first.heldBy(local), second.heldBy(local), true)
 }
 
 /**
