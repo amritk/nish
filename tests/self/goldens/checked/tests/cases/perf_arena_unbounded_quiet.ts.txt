@@ -9,6 +9,12 @@ struct Log (class) size=16 align=8
   field total: i32 index=1 offset=8
   field left: i32 index=2 offset=12
   constructor -> @Log.constructor
+struct Batch (class) size=8 align=8
+  field ids: i32[] index=0 offset=0
+  constructor -> @Batch.constructor
+struct Board (class) size=8 align=8
+  field title: string index=0 offset=0
+  constructor -> @Board.constructor
 function Entry.constructor(this: Entry, id: i32): void -> @Entry.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: id
@@ -99,6 +105,22 @@ function owned(log: Log, other: i32[]): void -> @owned
   local -1:11 mark: string (const)
   callee +1:16 new Entry -> @Entry.constructor
   callee +2:5 grow -> @grow
+function Batch.constructor(this: Batch): void -> @Batch.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function fielded(log: Log, batch: Batch, other: i32[]): void -> @fielded
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Entry.constructor grow nish_alloc_struct nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false
+  pointer batch: size=8 writesThrough=false captured=false
+  pointer other: size=0 writesThrough=true captured=false passedTo=grow#0
+  stackSites=0 stackLocals=0
+  local -2:14 id: i32 (const)
+  local -1:11 tag: string (const)
+  callee +1:16 new Entry -> @Entry.constructor
+  callee +2:5 grow -> @grow
 function scoped(log: Log): i32 -> @scoped
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via more
@@ -109,11 +131,60 @@ function scoped(log: Log): i32 -> @scoped
   local +1:7 k: i32 (let)
   callee +2:10 more -> @more
   local +3:11 s: string (const)
+function finds(log: Log): i32 -> @finds
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Entry.constructor more nish_alloc_struct nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false passedTo=more#0
+  stackSites=0 stackLocals=0
+  local -2:7 k: i32 (let)
+  callee -1:10 more -> @more
+  callee +0:16 new Entry -> @Entry.constructor
+  local +3:13 found: string (const)
+  local +7:13 gone: string (const)
+function Board.constructor(this: Board): void -> @Board.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pin(board: Board, title: string): void -> @pin
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: title
+  pointer board: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function posts(log: Log, board: Board): void -> @posts
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via more
+  calls: more nish_panic_overflow nish_str_concat nish_str_from_i32 pin
+  pointer log: size=16 writesThrough=true captured=false passedTo=more#0
+  pointer board: size=8 writesThrough=true captured=false passedTo=pin#0
+  stackSites=0 stackLocals=0
+  local +0:7 k: i32 (let)
+  callee +1:10 more -> @more
+  callee +2:5 pin -> @pin
+function sum(xs: i32[]): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 t: i32 (let)
+  local +1:14 x: i32 (const)
+function reads(log: Log): void -> @reads
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Entry.constructor nish_alloc_struct nish_panic_overflow nish_str_concat nish_str_from_i32 sum
+  pointer log: size=16 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local -3:9 ids: i32[] (const)
+  local -2:14 id: i32 (const)
+  local -1:11 peek: string (const)
+  callee +0:43 sum -> @sum
+  callee +1:16 new Entry -> @Entry.constructor
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via serve
-  calls: Log.constructor counted dropped droppedSplit nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 owned scans scoped serve
-  stackSites=3 stackLocals=1
+  calls: Batch.constructor Board.constructor Log.constructor counted dropped droppedSplit fielded finds nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 owned posts reads scans scoped serve
+  stackSites=6 stackLocals=2
   local +0:9 log: Log (const)
   callee +0:15 new Log -> @Log.constructor
   callee +2:3 serve -> @serve
@@ -124,5 +195,13 @@ function main(): void -> @nish_main [exported entry]
   callee +7:13 droppedSplit -> @droppedSplit
   callee +8:3 scans -> @scans
   callee +9:3 owned -> @owned
-  local +11:9 k: i32 (const)
-  callee +11:13 scoped -> @scoped
+  callee +10:3 fielded -> @fielded
+  callee +10:16 new Batch -> @Batch.constructor
+  local +12:9 k: i32 (const)
+  callee +12:13 scoped -> @scoped
+  local +14:9 f: i32 (const)
+  callee +14:13 finds -> @finds
+  local +15:9 board: Board (const)
+  callee +15:17 new Board -> @Board.constructor
+  callee +17:3 posts -> @posts
+  callee +18:3 reads -> @reads

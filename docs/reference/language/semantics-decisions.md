@@ -649,7 +649,7 @@ by the caller.
       expression, by one of these:
       - adding to it: `push`, `unshift`, `splice`, `set` or `add` on it, or
         a write through `walked[k]`;
-      - passing it to a call or a `new`;
+      - passing it to a call or a `new` whose callee may resize an array;
       - assigning it, or storing it in a variable, field, array or object.
 
       Any other use leaves the walk bounded, and so does a call in the body
@@ -683,7 +683,10 @@ by the caller.
 
     Only a temporary the pass drops counts. These do not: an array a `push`
     grows, a value stored or passed on, and a call to a function that stores
-    what it allocates.
+    what it allocates. A temporary handed to a callee that keeps it is passed
+    on, so it is not counted. A temporary from which every path leaves the
+    loop, by `return`, `throw` or a `break` out of it, is built at most once
+    each time the loop runs, so it is not counted either.
 
     Not reported for:
     - a bounded loop;

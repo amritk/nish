@@ -325,11 +325,26 @@ function growingArgument(ctx: CheckContext, previous: i32[], args: i32[]): i32 -
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   callee +2:36 containsType -> @containsType
+function growingChainArgument(ctx: CheckContext, template: TemplateInfo, previous: i32[], args: i32[]): i32 -> @growingChainArgument
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: containsType receiverOf
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=containsType#0 containsType#0
+  pointer template: size=64 writesThrough=false captured=false passedTo=receiverOf#0
+  pointer previous: size=0 writesThrough=false captured=false
+  pointer args: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +1:9 receiver: StructInstantiation | null (const)
+  callee +1:20 receiverOf -> @receiverOf
+  local +3:16 before: i32 (const)
+  callee +7:33 containsType -> @containsType
+  local +13:14 before: i32 (const)
+  callee +17:31 containsType -> @containsType
 function expandingAncestor(ctx: CheckContext, from: Instantiation | null, template: TemplateInfo, args: i32[]): Expansion | null -> @expandingAncestor
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
-  calls: Expansion.constructor chainArguments growingArgument nish_alloc_struct
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=growingArgument#0
+  calls: Expansion.constructor chainArguments growingChainArgument nish_alloc_struct
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=growingChainArgument#0
   pointer from: size=192 writesThrough=true captured=true
   pointer template: size=64 writesThrough=false captured=false passedTo=chainArguments#0
   pointer args: size=0 writesThrough=true captured=true passedTo=chainArguments#1
@@ -339,8 +354,7 @@ function expandingAncestor(ctx: CheckContext, from: Instantiation | null, templa
   local +1:7 at: Instantiation | null (let)
   local +13:11 owner: TemplateInfo | null (const)
   local +15:13 index: i32 (const)
-  callee +15:21 growingArgument -> @growingArgument
-  callee +15:42 chainArguments -> @chainArguments
+  callee +15:21 growingChainArgument -> @growingChainArgument
   callee +17:16 new Expansion -> @Expansion.constructor
 function chainArguments(template: TemplateInfo, args: i32[]): i32[] -> @chainArguments
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false

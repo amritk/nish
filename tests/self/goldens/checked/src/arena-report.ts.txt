@@ -5,7 +5,6 @@ import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import CallSite from "./attributes" -> struct CallSite
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
-import isCountedLoop from "./attributes" -> function @isCountedLoop
 import LoopScope from "./attributes" -> struct LoopScope
 import isBuiltinConversion from "./bounds" -> function @isBuiltinConversion
 import builtinNameOf from "./emit-util" -> function @builtinNameOf
@@ -28,7 +27,6 @@ import FunctionSig from "./program" -> struct FunctionSig
 import StringBuilder from "./strings" -> struct StringBuilder
 import addJsonQuoted from "./strings" -> function @addJsonQuoted
 import TypeTable from "./types" -> struct TypeTable
-import Local from "./symbols" -> struct Local
 const SCOPE_NONE: i32 = 0
 const SCOPE_PASS: i32 = 1
 const SCOPE_BLOCK: i32 = 2
@@ -191,23 +189,20 @@ function growingAround(walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: Around.constructor boundedPasses nish_alloc_struct
   pointer walk: size=112 writesThrough=false captured=false passedTo=boundedPasses#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=boundedPasses#2 Around.constructor#3
+  pointer node: size=40 writesThrough=true captured=true passedTo=boundedPasses#1 Around.constructor#3
   pointer loop: size=40 writesThrough=true captured=true passedTo=Around.constructor#4
   pointer around: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 table: TypeTable | null (const)
-  local +1:9 bounded: boolean (const)
-  callee +1:37 boundedPasses -> @boundedPasses
-  callee +2:10 new Around -> @Around.constructor
-function boundedPasses(walk: ArenaWalk, table: TypeTable, loop: Node): boolean -> @boundedPasses
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: comparesInChain isCountedLoop nish_panic_index readsOnly walksOwnArray
+  local +0:9 bounded: boolean (const)
+  callee +0:42 boundedPasses -> @boundedPasses
+  callee +1:10 new Around -> @Around.constructor
+function boundedPasses(walk: ArenaWalk, loop: Node): boolean -> @boundedPasses
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: bodyExtendsWalked comparesInChain nish_panic_index readsOnly
   pointer walk: size=112 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=isCountedLoop#1
-  pointer loop: size=40 writesThrough=false captured=false passedTo=isCountedLoop#2 walksOwnArray#1
+  pointer loop: size=40 writesThrough=false captured=false passedTo=bodyExtendsWalked#2
   stackSites=0 stackLocals=0
-  callee +0:12 isCountedLoop -> @isCountedLoop
-  callee +0:65 walksOwnArray -> @walksOwnArray
+  callee +0:13 bodyExtendsWalked -> @bodyExtendsWalked
   local +3:9 condition: Node (const)
   callee +4:45 readsOnly -> @readsOnly
   callee +7:10 comparesInChain -> @comparesInChain
@@ -242,35 +237,77 @@ function readsOnly(program: CheckedProgram, expr: Node): boolean -> @readsOnly
   callee +30:7 readsOnly -> @readsOnly
   callee +33:33 isPureConversion -> @isPureConversion
   callee +34:12 readsOnly -> @readsOnly
-function walksOwnArray(unit: AnalysisUnit, loop: Node): boolean -> @walksOwnArray
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: ParentTable.parentOf nish_panic_index unwrapParens walkedUses
-  pointer unit: size=16 writesThrough=false captured=false passedTo=walkedUses#0
-  pointer loop: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
+function extendsReceiver(name: string): boolean -> @extendsReceiver
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
   stackSites=0 stackLocals=0
-  local +0:9 iterable: Node (const)
-  callee +0:20 unwrapParens -> @unwrapParens
-  local +4:9 local: Local | null (const)
-  local +8:7 fn: Node | null (let)
-  callee +8:25 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +15:10 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +17:25 walkedUses -> @walkedUses
-function walkedUses(unit: AnalysisUnit, node: Node, local: Local, iterable: Node): i32 -> @walkedUses
+function sameWalked(program: CheckedProgram, a: Node, b: Node): boolean -> @sameWalked
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq sameWalked unwrapParens
+  pointer program: size=888 writesThrough=false captured=false passedTo=sameWalked#0
+  pointer a: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  pointer b: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  stackSites=0 stackLocals=0
+  local +0:9 x: Node (const)
+  callee +0:13 unwrapParens -> @unwrapParens
+  local +1:9 y: Node (const)
+  callee +1:13 unwrapParens -> @unwrapParens
+  local +12:11 lx: Local | null (const)
+  local +13:11 ly: Local | null (const)
+  callee +20:33 sameWalked -> @sameWalked
+function bodyExtendsWalked(unit: AnalysisUnit, facts: FactsTable, loop: Node): boolean -> @bodyExtendsWalked
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: extendsIn nish_panic_index unwrapParens
+  pointer unit: size=16 writesThrough=false captured=false passedTo=extendsIn#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=extendsIn#1
+  pointer loop: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 extendsIn -> @extendsIn
+  callee +0:44 unwrapParens -> @unwrapParens
+function extendsIn(unit: AnalysisUnit, facts: FactsTable, node: Node, walked: Node): boolean -> @extendsIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: ParentTable.parentOf assigned nish_panic_index nish_panic_overflow nish_str_eq walkedUses
-  pointer unit: size=16 writesThrough=false captured=false passedTo=assigned#0 walkedUses#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
-  pointer local: size=64 writesThrough=false captured=false passedTo=walkedUses#2
-  pointer iterable: size=40 writesThrough=false captured=false passedTo=walkedUses#3
+  calls: extendingUse extendsIn sameWalked
+  pointer unit: size=16 writesThrough=false captured=false passedTo=extendingUse#0 extendsIn#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=extendingUse#1 extendsIn#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=sameWalked#1 extendingUse#2
+  pointer walked: size=40 writesThrough=true captured=true passedTo=sameWalked#2 extendsIn#3
   stackSites=0 stackLocals=0
-  local +0:7 declarations: i32 (let)
-  local +2:11 parent: Node | null (const)
-  callee +2:20 ParentTable.parentOf -> @ParentTable.parentOf
-  local +7:13 bound: Local | null (const)
-  callee +14:73 assigned -> @assigned
-  local +19:14 child: Node (const)
-  local +20:11 inner: i32 (const)
-  callee +20:19 walkedUses -> @walkedUses
+  callee +0:36 sameWalked -> @sameWalked
+  callee +0:78 extendingUse -> @extendingUse
+  local +3:14 child: Node (const)
+  callee +4:9 extendsIn -> @extendsIn
+function extendingUse(unit: AnalysisUnit, facts: FactsTable, node: Node): boolean -> @extendingUse
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: node
+  calls: ParentTable.parentOf assigned calleeMayResize extendsReceiver isAssignmentOperator nish_panic_index nish_str_eq
+  pointer unit: size=16 writesThrough=false captured=false passedTo=assigned#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=calleeMayResize#1
+  pointer node: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:7 use: Node (let)
+  local +1:7 parent: Node | null (let)
+  callee +1:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +4:14 ParentTable.parentOf -> @ParentTable.parentOf
+  local +10:11 call: Node | null (const)
+  callee +10:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +12:7 extendsReceiver -> @extendsReceiver
+  callee +16:42 assigned -> @assigned
+  local +19:11 call: Node | null (const)
+  callee +19:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +24:7 calleeMayResize -> @calleeMayResize
+  callee +28:12 isAssignmentOperator -> @isAssignmentOperator
+function calleeMayResize(program: CheckedProgram, facts: FactsTable, call: Node): boolean -> @calleeMayResize
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FactsTable.get builtinNameOf nish_panic_index nish_str_eq
+  pointer program: size=888 writesThrough=false captured=false passedTo=builtinNameOf#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=builtinNameOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 callee: FunctionSig | null (const)
+  local +2:11 name: string (const)
+  callee +2:18 builtinNameOf -> @builtinNameOf
+  local +5:9 calleeFacts: FunctionFacts | null (const)
+  callee +5:23 FactsTable.get -> @FactsTable.get
 function assigned(unit: AnalysisUnit, node: Node): boolean -> @assigned
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf isAssignmentOperator nish_panic_index nish_str_eq
@@ -384,14 +421,82 @@ function unboundedPassFindings(unit: AnalysisUnit, table: TypeTable, facts: Fact
   callee +28:18 unboundedFinding -> @unboundedFinding
 function pilesUp(walk: ArenaWalk, site: ArenaSite): boolean -> @pilesUp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get nish_panic_index nish_str_eq
+  calls: FactsTable.get leavesLoop nish_panic_index nish_str_eq
   pointer walk: size=112 writesThrough=false captured=false
   pointer site: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 id: i32 (const)
-  local +1:9 call: CallSite | null (const)
-  local +5:9 callee: FunctionFacts | null (const)
-  callee +5:18 FactsTable.get -> @FactsTable.get
+  local +0:9 loop: Node | null (const)
+  callee +1:24 leavesLoop -> @leavesLoop
+  local +4:9 id: i32 (const)
+  local +5:9 call: CallSite | null (const)
+  local +9:9 callee: FunctionFacts | null (const)
+  callee +9:18 FactsTable.get -> @FactsTable.get
+function leavesLoop(unit: AnalysisUnit, node: Node, loop: Node): boolean -> @leavesLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: node
+  calls: ParentTable.parentOf childIndex isLoopKind mustLeave nish_panic_index nish_panic_overflow restLeaves
+  pointer unit: size=16 writesThrough=false captured=false passedTo=restLeaves#0 mustLeave#0
+  pointer node: size=40 writesThrough=true captured=true
+  pointer loop: size=40 writesThrough=false captured=false passedTo=restLeaves#3 mustLeave#2
+  stackSites=0 stackLocals=0
+  local +0:7 at: Node (let)
+  local +1:7 parent: Node | null (let)
+  callee +1:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local +3:11 kind: NodeKind (const)
+  callee +7:9 isLoopKind -> @isLoopKind
+  callee +11:11 restLeaves -> @restLeaves
+  callee +11:45 childIndex -> @childIndex
+  callee +14:69 mustLeave -> @mustLeave
+  callee +18:14 ParentTable.parentOf -> @ParentTable.parentOf
+function childIndex(parent: Node, child: Node): i32 -> @childIndex
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer parent: size=40 writesThrough=false captured=false
+  pointer child: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+function restLeaves(unit: AnalysisUnit, list: Node[], from: i32, loop: Node): boolean -> @restLeaves
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  calls: mayContinue mustLeave nish_panic_index
+  pointer unit: size=16 writesThrough=false captured=false passedTo=mustLeave#0
+  pointer list: size=0 writesThrough=false captured=false
+  pointer loop: size=40 writesThrough=false captured=false passedTo=mustLeave#2
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 statement: Node (const)
+  callee +3:9 mayContinue -> @mayContinue
+  callee +6:9 mustLeave -> @mustLeave
+function mustLeave(unit: AnalysisUnit, statement: Node, loop: Node): boolean -> @mustLeave
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: labelsAround mayContinue mustLeave nish_panic_index nish_str_eq restLeaves
+  pointer unit: size=16 writesThrough=false captured=false passedTo=labelsAround#0 restLeaves#0 mustLeave#0 mustLeave#0
+  pointer statement: size=40 writesThrough=false captured=false
+  pointer loop: size=40 writesThrough=false captured=false passedTo=labelsAround#1 restLeaves#3 mustLeave#2 mustLeave#2
+  stackSites=0 stackLocals=0
+  local +0:9 kind: NodeKind (const)
+  callee +5:37 labelsAround -> @labelsAround
+  callee +8:12 restLeaves -> @restLeaves
+  callee +12:8 mayContinue -> @mayContinue
+  callee +13:7 mustLeave -> @mustLeave
+  callee +14:7 mustLeave -> @mustLeave
+function labelsAround(unit: AnalysisUnit, loop: Node, label: string): boolean -> @labelsAround
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: ParentTable.parentOf nish_str_eq
+  pointer unit: size=16 writesThrough=false captured=false
+  pointer loop: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
+  stackSites=0 stackLocals=0
+  local +0:7 at: Node | null (let)
+  callee +0:12 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +5:10 ParentTable.parentOf -> @ParentTable.parentOf
+function mayContinue(node: Node, direct: boolean): boolean -> @mayContinue
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isLoopKind mayContinue nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false passedTo=isLoopKind#0
+  stackSites=0 stackLocals=0
+  local +0:9 inner: boolean (const)
+  callee +0:28 isLoopKind -> @isLoopKind
+  local +1:14 child: Node (const)
+  callee +2:9 mayContinue -> @mayContinue
 function noteUnbounded(loops: UnboundedLoop[], site: ArenaSite): void -> @noteUnbounded
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
