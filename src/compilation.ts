@@ -979,7 +979,13 @@ export class Compilation {
         continue
       }
       const target = found.path
-      if (readFileSyncOrNull(target) === null) {
+      let missing = false
+      {
+        // The file's text is read only to see that it is there; the pass drops it.
+        using _a = arena()
+        missing = readFileSyncOrNull(target) === null
+      }
+      if (missing) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
