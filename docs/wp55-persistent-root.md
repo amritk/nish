@@ -42,6 +42,21 @@ multiple of the live graph, whatever the program allocates per call. The cost
 is a tracing copy, paid for by the compiler describing every type the root can
 reach. **Chosen.**
 
+**D. One export that never returns, yielding each frame.** The conventional
+port: `run()` loops for ever and suspends at a host import once a frame,
+through JSPI (`WebAssembly.Suspending`/`promising`) where the browser has it
+and an Asyncify build (`wasm-opt --asyncify`) where it does not. It needs no
+language change, but it does not bound memory: inside one call nothing
+releases the arena, so every step's allocations stay until the call returns,
+which it never does. That is exactly how native `nish break` runs today, and
+it grows with play time too: `nish src/break.ts --explain-memory` reports that
+`wallUpdate` and `stepBreakDirector` store what they allocate into memory, so
+no pass of `playBreak`'s loop (`src/break.ts`, around `runTerminal`) is
+scoped, and each frame's allocations live until `playBreak` returns. D would
+also add a second build path: JSPI is not in every browser, and Asyncify needs
+binaryen's `wasm-opt`, which `scripts/build.sh` treats as optional, and its
+instrumentation grows the module and slows the functions it rewrites. Rejected: it moves the loop, not the memory.
+
 `nish:region` ([WP46](wp46-long-running-memory.md)) is not an alternative: a
 region is an arena of its own that grows until it is freed whole, so a root in
 a region that the program re-enters every step grows with play time just as A
