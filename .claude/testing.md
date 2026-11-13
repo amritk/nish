@@ -272,6 +272,27 @@ because the body is not the changelog.
   609 / 1,424 bytes from an earlier head, while `tests/run.js` recorded
   597 / 1,403.
 
+## Checks that spawn a process
+
+A check in `tests/run.js` that spawns a process, or runs one under
+`--sandbox`, passes here and then runs on CI's ubuntu runners, which are not
+this container in two ways a check can trip on:
+
+- **Their coreutils are uutils**: one multicall binary whose messages, and
+  sometimes exit codes, differ from GNU's. A check that matches `cat`'s or
+  `ls`'s error text, or tells two tools apart by their files, holds here and
+  fails there.
+- **Node inherits descriptors from the runner.** `/proc/self/fd` of the test
+  process counts more there than here, so a count of the test process's own
+  descriptors proves nothing about what the program under test leaked.
+
+So the check builds its own helper, a small C or Nish program that does the
+one thing being proven and reports it by exit status, and asserts on that
+status. It never matches a tool's message text and never counts the test
+process's own descriptors. Where a descriptor count is the claim, the program
+under test takes it from its own `/proc/self/fd`, before and after, and the
+check reads the difference.
+
 ## Testing a Nish program in Nish
 
 Everything above is the harness that tests the *compiler*. A program the
