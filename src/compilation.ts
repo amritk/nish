@@ -1283,7 +1283,8 @@ export class Compilation {
     let dir = normalizePath(from)
     let steps = 0
     let searching = true
-    while (searching) {
+    // `steps` never passes the limit: the pass that reaches it stops the walk.
+    while (searching && steps <= PACKAGE_WALK_LIMIT) {
       if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
         const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name])
         if (readFileSyncOrNull(joinPath([candidate, "package.json"])) !== null) {

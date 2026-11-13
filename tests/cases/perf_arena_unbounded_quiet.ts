@@ -188,6 +188,25 @@ const posts = (log: Log, board: Board): void => {
   }
 };
 
+// Reads the array it is handed and resizes none.
+const sum = (xs: i32[]): i32 => {
+  let t = 0;
+  for (const x of xs) {
+    t = t + x;
+  }
+  return t;
+};
+
+// The walked array goes to `sum`, which only reads it, so the walk is bounded.
+const reads = (log: Log): void => {
+  const ids = [5, 6];
+  for (const id of ids) {
+    const peek = `peek ${id}`;
+    log.total = log.total + peek.length + sum(ids);
+    log.last = new Entry(id);
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -207,5 +226,6 @@ export const main = (): void => {
   const board = new Board();
   log.left = 2;
   posts(log, board);
+  reads(log);
   console.log(`${log.total} ${log.last.id} ${d} ${e} ${k} ${f} ${board.title}`);
 };

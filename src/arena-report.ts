@@ -362,7 +362,7 @@ const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
  */
 const boundedPasses = (walk: ArenaWalk, loop: Node): boolean => {
   if (loop.kind === NodeKind.ForOf) {
-    return !bodyExtendsWalked(walk.unit, loop)
+    return !bodyExtendsWalked(walk.unit, walk.facts, loop)
   }
   // `while`: condition, body; `do`: body, condition; `for`: initializer, condition, ...
   const condition = loop.kind === NodeKind.While ? loop.children[0] : loop.children[1]
@@ -466,20 +466,21 @@ const sameWalked = (program: CheckedProgram, a: Node, b: Node): boolean => {
  * True when the `for...of` `loop`'s body can extend the collection it walks:
  * somewhere in the body the same walked expression (`sameWalked`) has an
  * element or entry added to it (`push`, `unshift`, `splice`, `set`, `add`, or a
- * write through `walked[k]`), is passed to a call or a `new`, or is assigned or
+ * write through `walked[k]`), is passed to a call or a `new` whose callee may
+ * resize an array (`calleeMayResize`), or is assigned or
  * stored (an assignment's target or value, a declaration's initializer, an
  * array or object literal's element). Only those uses count; a call that
  * resizes some other array leaves the walk bounded.
  */
-const bodyExtendsWalked = (unit: AnalysisUnit, loop: Node): boolean =>
-  extendsIn(unit, loop.children[2], unwrapParens(loop.children[1]))
+const bodyExtendsWalked = (unit: AnalysisUnit, facts: FactsTable, loop: Node): boolean =>
+  extendsIn(unit, facts, loop.children[2], unwrapParens(loop.children[1]))
 
-const extendsIn = (unit: AnalysisUnit, node: Node, walked: Node): boolean => {
-  if (node.kind === walked.kind && sameWalked(unit.program, node, walked) && extendingUse(unit, node)) {
+const extendsIn = (unit: AnalysisUnit, facts: FactsTable, node: Node, walked: Node): boolean => {
+  if (node.kind === walked.kind && sameWalked(unit.program, node, walked) && extendingUse(unit, facts, node)) {
     return true
   }
   for (const child of node.children) {
-    if (extendsIn(unit, child, walked)) {
+    if (extendsIn(unit, facts, child, walked)) {
       return true
     }
   }
@@ -487,7 +488,7 @@ const extendsIn = (unit: AnalysisUnit, node: Node, walked: Node): boolean => {
 }
 
 /** True when the use `node` of the walked collection may add to it or hand it to code that may. */
-const extendingUse = (unit: AnalysisUnit, node: Node): boolean => {
+const extendingUse = (unit: AnalysisUnit, facts: FactsTable, node: Node): boolean => {
   let use = node
   let parent = unit.parents.parentOf(use)
   while (parent !== null && parent.kind === NodeKind.Paren) {
@@ -511,7 +512,8 @@ const extendingUse = (unit: AnalysisUnit, node: Node): boolean => {
     return (
       call !== null &&
       ((call.kind === NodeKind.Call && call.children[1] === parent) ||
-        (call.kind === NodeKind.New && call.children[2] === parent))
+        (call.kind === NodeKind.New && call.children[2] === parent)) &&
+      calleeMayResize(unit.program, facts, call)
     )
   }
   if (parent.kind === NodeKind.Binary) {
@@ -524,6 +526,22 @@ const extendingUse = (unit: AnalysisUnit, node: Node): boolean => {
     return parent.children[2] === use
   }
   return parent.kind === NodeKind.Array || parent.kind === NodeKind.Property || parent.kind === NodeKind.Spread
+}
+
+/**
+ * True when the callee of `call` may resize an array (`resizesArray`, which
+ * holds what its own callees do), so the collection handed to it may grow.
+ * An unresolved callee is a builtin, and of those only the spawns append to an
+ * array they are handed, their `stdout` and `stderr` (`isResizeCall`).
+ */
+const calleeMayResize = (program: CheckedProgram, facts: FactsTable, call: Node): boolean => {
+  const callee = program.nodeCallees[call.id]
+  if (callee === null) {
+    const name = builtinNameOf(program, call)
+    return name === "spawnPiped" || name === "spawnPipedWithin"
+  }
+  const calleeFacts = facts.get(callee.name)
+  return calleeFacts === null || calleeFacts.resizesArray
 }
 
 /** True when `node` is the target of an assignment or an update. */
