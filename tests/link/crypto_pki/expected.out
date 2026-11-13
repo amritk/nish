@@ -98,7 +98,16 @@ PASS  a wildcard below an excluded subtree
 PASS  a wildcard over a permitted subtree
 PASS  a dNSName subtree of . excludes every name
 PASS  a self-issued leaf outside a permitted subject
-pki name constraints: 14 passed, 0 failed, 0 skipped
+PASS  a mapped address under no constraint
+PASS  an IPv4-mapped address in an excluded IPv4 subtree
+PASS  an IPv4 address in an excluded mapped subtree
+PASS  a mapped address outside the excluded IPv4 subtree
+PASS  an IPv4 address beside an excluded ::/0
+PASS  a mapped address is not in a permitted IPv4 subtree
+PASS  an IPv4 address in a permitted IPv4 subtree
+PASS  a mapped SAN does not name its IPv4 host
+PASS  an IPv4 SAN does not name its mapped host
+pki name constraints: 23 passed, 0 failed, 0 skipped
 PASS  an empty chain
 PASS  a leaf that is no certificate
 PASS  an intermediate that is no certificate
