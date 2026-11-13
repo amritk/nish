@@ -2,7 +2,8 @@
 
 The record of the release check (issue #1523): `nish/release`, the standard
 library module that asks GitHub for the newest release; the update notice
-every compile and `nish --version` may print; and `nish upgrade`, which
+a command that exits 0 or 1 (a compile, `nish --version`, `nish --help`) may
+print; and `nish upgrade`, which
 installs a release. It says what each one trusts, what an attacker who
 controls the answer, the cache or the command line can do with it, and the test
 that pins each property. It is written with the code, at base commit
@@ -50,8 +51,12 @@ The attacker may control:
 - **Another local user** who can write into a directory on the cache's path.
 
 Out of scope: a compromised GitHub account or release, which signs nothing
-the client could check (REL-2), and a user who sets `NISH_RELEASE_URL` to a
-server of their own, which is a test seam and is held to https or loopback.
+the client could check (REL-2), and a user who sets `NISH_RELEASE_URL` (where
+the latest version is asked) or `NISH_RELEASE_RAW_URL` (whose `install.sh` is
+fetched and run) to a server of their own. Both are test seams, held to https
+or http to loopback (`baseAllowed`); whoever sets this user's environment can
+already run code as this user, so choosing the installer's host gives them
+nothing new.
 
 ## What is defended
 
@@ -66,7 +71,8 @@ user names it, and then with a line that says it is a downgrade.
 
 Tests: `nish upgrade: with no version, an older latest installs nothing`,
 `nish upgrade 0.1.0: an explicit older version says it is a downgrade and installs it`,
-`nish/release: versions, ordering, redirects and bases`.
+`nish/release: versions, ordering, redirects and bases` (which also orders
+prereleases, numbers by value, and refuses a garbage candidate or current).
 
 ### A redirect that is not a release
 
@@ -77,7 +83,8 @@ with a query or fragment names none, and neither does a 200, a 500, garbage
 or silence: the check exits 3 and the notice prints nothing.
 
 Tests: `nish upgrade --check: a server that is ${name} gives exit 3 within the lookup's time`
-(for `elsewhere`, `login`, `refuse`, `garbage`, `slow` and `down`),
+(for `elsewhere`, `login`, `refuse`, `garbage`, `slow` and `down`; each server
+but `down` is shown to be asked, and `slow` to be ended by the two-second limit),
 `nish/release: versions, ordering, redirects and bases`.
 
 ### A version that escapes its URL
@@ -98,8 +105,11 @@ port of digits and a path may follow, so `http://localhost:@host` is refused
 (REL-6).
 
 Tests: `nish upgrade ${bad}: exit 2, before any network access` (for
-`1.0.0/../x`, `0.40.0?x`, `1.2`, `01.2.3`, `1.2.3.4`, `1.2.3-`, `1.0.0-01`
-and others; the server's log shows no request),
+`1.0.0/../x`, `0.40.0?x`, `1.0.0#x`, a space, tab or newline, `1.0.0%2e`,
+`1.0.0%2f`, `1.2`, `01.2.3`, `1.2.3.4`, `1.2.3-`, `1.0.0-01` and others; the
+server's log shows no request), `nish/release: versions, ordering, redirects
+and bases` (the same characters against `releaseValidVersion`, and a tag with
+`?x` or `#x` after it),
 `nish upgrade: a release URL that is plain http to another host is refused (exit 2)`,
 `nish upgrade: a loopback release URL that names another host after the colon is refused (exit 2)`.
 
@@ -129,6 +139,14 @@ Tests: `update notice: a cache that is a symlink is not believed`,
 `update notice: a world-writable cache directory is made 0700, so the next run believes it`,
 `nish upgrade --check: a failed check keeps the newer release the cache names`,
 `nish/release: versions, ordering, redirects and bases` (its cache line),
+`nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it`,
+`nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead`,
+`nish/release: a cache parses only as its two lines, with a valid or empty version`,
+`nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed`,
+`nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none`,
+`nish/release: a cache file, or its directory, owned by another user is not believed`
+(run where the test can make another user's file: as root or with
+passwordless `sudo`, as on CI's runners; elsewhere it is a skip that says so),
 `update notice: a cache ${what} is refreshed by exactly one check` (stale and
 future), `update notice: two runs on a fresh cache make no network check`.
 

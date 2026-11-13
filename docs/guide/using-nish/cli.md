@@ -618,8 +618,9 @@ three numbers with no leading zeros, then an optional `-prerelease` and
 
 ### The update notice
 
-When a newer release is out, a compile or `nish --version` run on a terminal
-ends with one line on stderr:
+When a newer release is out, a command run on a terminal that exits 0 or 1
+(a compile, `nish --version`, `nish --help`, `--describe` and the like) ends
+with one line on stderr:
 
 ```
 nish 0.40.0 is available (you have 0.39.0); run `nish upgrade`
@@ -648,7 +649,7 @@ else chooses what the line says. What the check trusts is in the
 | 0 | success |
 | 1 | the program was rejected: a compile error, or an input file that does not exist |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
-| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written) |
+| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed |
 | 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own

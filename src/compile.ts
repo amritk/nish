@@ -680,6 +680,8 @@ const commandMain = (): number => {
     console.error(`no file named ${process.argv[1]}. every loop needs one, though.`)
     return 1
   }
+  // `nish upgrade` is a documented command, so unlike `break` it wins over a
+  // file named `upgrade` in the working directory, as `run` does.
   if (process.argv[1] === "upgrade") {
     return upgrade()
   }

@@ -500,7 +500,8 @@ const upgradeUsage = (plan: UpgradePlan, message: string): UpgradePlan => {
 
 /**
  * Reads `nish upgrade [<version>] [--check]` (`args` from index `from`, what
- * follows `upgrade`) and how the compiler at `real` was installed. Everything that can
+ * follows `upgrade`) and how the compiler at `real` was installed. `--help`
+ * prints the usage on stdout, status 0. Everything that can
  * refuse without the network refuses here: a flag it does not know, a version
  * that is not `validVersion` (so `1.0.0/../x` never reaches a URL), a base
  * override that is not `baseAllowed`, and an install it cannot upgrade in
@@ -513,6 +514,13 @@ export const planUpgrade = (args: string[], from: i32, real: string): UpgradePla
     const arg = args[i]
     if (arg === "--check") {
       plan.check = true
+    } else if (arg === "--help" || arg === "-h") {
+      // Asked for, the usage is an answer: stdout and exit 0, as `nish --help` is.
+      console.log(`usage: ${CLI} upgrade [<version>] [--check]`)
+      console.log("  installs the newest release, or <version>, over the install.sh install that runs it")
+      console.log("  --check  prints the running version and the newest release, and installs nothing")
+      plan.status = 0
+      return plan
     } else if (arg.startsWith("-")) {
       return upgradeUsage(plan, `unknown flag ${arg}`)
     } else if (plan.version.length > 0) {

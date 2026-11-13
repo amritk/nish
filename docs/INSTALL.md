@@ -146,7 +146,8 @@ changes nothing. Running the install script again does the same job: it
 installs over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and
 says `nothing to do` when the version already matches.
 
-Once a day at most, a compile or `nish --version` on a terminal checks for a
+Once a day at most, a command on a terminal that exits 0 or 1 (a compile,
+`nish --version`, `nish --help` and the like) checks for a
 newer release in the background and prints one line on stderr when there is
 one. `NISH_NO_UPDATE_CHECK=1` turns it off; it is never shown in CI, with
 `--json`, in `nish run`, or when stderr is not a terminal

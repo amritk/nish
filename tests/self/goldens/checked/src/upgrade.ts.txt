@@ -222,29 +222,29 @@ function upgradeUsage(plan: UpgradePlan, message: string): UpgradePlan -> @upgra
   stackSites=0 stackLocals=0
 function planUpgrade(args: string[], from: i32, real: string): UpgradePlan -> @planUpgrade [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via upgradeUsage
+  sharedWrite: via nish_print
   escaping: from real
-  calls: envName installChannel jsonQuote nish_alloc_struct nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_write rawBase releaseBase upgradeUsage validVersion wrapperBeside
+  calls: envName installChannel jsonQuote nish_alloc_struct nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write rawBase releaseBase upgradeUsage validVersion wrapperBeside
   pointer args: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 plan: UpgradePlan (const)
   local +1:12 i: i32 (let)
   local +2:11 arg: string (const)
-  callee +6:14 upgradeUsage -> @upgradeUsage
-  callee +8:14 upgradeUsage -> @upgradeUsage
-  callee +9:17 validVersion -> @validVersion
-  callee +10:14 upgradeUsage -> @upgradeUsage
-  callee +10:59 jsonQuote -> @jsonQuote
-  callee +16:12 upgradeUsage -> @upgradeUsage
-  callee +18:15 releaseBase -> @releaseBase
-  callee +19:14 rawBase -> @rawBase
-  callee +21:12 upgradeUsage -> @upgradeUsage
-  callee +23:10 envName -> @envName
-  callee +23:40 envName -> @envName
-  local +29:9 channel: InstallChannel (const)
-  callee +29:19 installChannel -> @installChannel
-  callee +29:40 wrapperBeside -> @wrapperBeside
-  local +31:11 wanted: string (const)
+  callee +13:14 upgradeUsage -> @upgradeUsage
+  callee +15:14 upgradeUsage -> @upgradeUsage
+  callee +16:17 validVersion -> @validVersion
+  callee +17:14 upgradeUsage -> @upgradeUsage
+  callee +17:59 jsonQuote -> @jsonQuote
+  callee +23:12 upgradeUsage -> @upgradeUsage
+  callee +25:15 releaseBase -> @releaseBase
+  callee +26:14 rawBase -> @rawBase
+  callee +28:12 upgradeUsage -> @upgradeUsage
+  callee +30:10 envName -> @envName
+  callee +30:40 envName -> @envName
+  local +36:9 channel: InstallChannel (const)
+  callee +36:19 installChannel -> @installChannel
+  callee +36:40 wrapperBeside -> @wrapperBeside
+  local +38:11 wanted: string (const)
 function askLatest(helper: string, base: string, out: string): Latest | null -> @askLatest
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn_to
