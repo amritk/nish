@@ -62,6 +62,19 @@ PASS  an obs-text byte anywhere in a 40-byte value is read, every cut agreeing
 PASS  refused with 400: HTTP/1.1 without Host
 PASS  refused with 400: HTTP/1.1 with two Host fields
 PASS  refused with 400: HTTP/1.0 with two Host fields
+PASS  refused with 400: a Host with a space in it
+PASS  refused with 400: a Host with userinfo
+PASS  refused with 400: a Host with a path
+PASS  refused with 400: a Host that is a list
+PASS  refused with 400: a Host whose port is not digits
+PASS  refused with 400: a Host whose port is past 65535
+PASS  refused with 400: a Host with an unclosed IPv6 bracket
+PASS  refused with 400: a Host that reads as a number but is no IPv4 address
+PASS  refused with 400: an HTTP/1.0 Host with a space in it
+PASS  a Host with a port is read
+PASS  an IPv6 Host with a port is read
+PASS  an IPv4 Host is read
+PASS  an empty Host is read, as before
 PASS  refused with 400: Transfer-Encoding before Content-Length
 PASS  refused with 400: Content-Length as a list
 PASS  refused with 400: a signed Content-Length
@@ -526,4 +539,4 @@ PASS  and writes only the bytes from the start on
 PASS  http1WriteLastChunk writes the last chunk at its offset
 PASS  and is HTTP1_NO_ROOM four bytes from the end
 PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
-http1: 528 passed, 0 failed, 0 skipped
+http1: 541 passed, 0 failed, 0 skipped

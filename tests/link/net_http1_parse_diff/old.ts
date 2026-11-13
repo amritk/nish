@@ -3,9 +3,11 @@
 // It is the differential test's reference. Do not edit; run the script.
 // Hand-mirrored since, each marked where it lands: the rules a security fix
 // added to the live parser, read through its own exported helper, so that the
-// two still agree on everything else (docs/security/http1-codec.md, H1-8).
+// two still agree on everything else (docs/security/http1-codec.md, H1-8 and
+// H1-9).
 import { copyBytes } from "nish/bytes"
 import { http1ChunkExtValid } from "nish/net/http1-codec"
+import { urlIsHostPort } from "nish/net/url"
 import {
   and,
   any,
@@ -1193,6 +1195,7 @@ const h1oldEndOfHead = (p: H1oldParser): i32 => {
   const spans: i32[] = p.spans
   const head: u8[] = p.head
   let hosts: i32 = 0
+  let hostField: i32 = -1
   let lengths: i32 = 0
   let lengthField: i32 = -1
   let codingFields: i32 = 0
@@ -1204,6 +1207,7 @@ const h1oldEndOfHead = (p: H1oldParser): i32 => {
     const b: i32 = spans[4 * i + 1]
     if (h1oldHeadIs(head, a, b, "host", false)) {
       hosts += 1
+      hostField = i
     } else if (h1oldHeadIs(head, a, b, "content-length", false)) {
       lengths += 1
       lengthField = i
@@ -1218,6 +1222,15 @@ const h1oldEndOfHead = (p: H1oldParser): i32 => {
   }
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return h1oldFail(p, 400, "a request without exactly one Host")
+  }
+  // Hand-mirrored from the live parser (the Host value, H1-9).
+  if (
+    hosts === 1 &&
+    hostField >= 0 &&
+    4 * hostField + 3 < toI32(spans.length) &&
+    !urlIsHostPort(head, spans[4 * hostField + 2], spans[4 * hostField + 3])
+  ) {
+    return h1oldFail(p, 400, "a Host that is not a host and port")
   }
   if (codingFields > 0) {
     if (lengths > 0) {

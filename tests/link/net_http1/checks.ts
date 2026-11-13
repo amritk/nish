@@ -520,6 +520,20 @@ export const http1Checks = (): i32 => {
   refused(t, "HTTP/1.1 without Host", "GET / HTTP/1.1\r\n\r\n", 400);
   refused(t, "HTTP/1.1 with two Host fields", "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n", 400);
   refused(t, "HTTP/1.0 with two Host fields", "GET / HTTP/1.0\r\nHost: a\r\nHost: a\r\n\r\n", 400);
+  // The one Host is `uri-host [":" port]` (§3.2), checked by url.ts's rules.
+  refused(t, "a Host with a space in it", "GET / HTTP/1.1\r\nHost: a b\r\n\r\n", 400);
+  refused(t, "a Host with userinfo", "GET / HTTP/1.1\r\nHost: evil@a\r\n\r\n", 400);
+  refused(t, "a Host with a path", "GET / HTTP/1.1\r\nHost: a/b\r\n\r\n", 400);
+  refused(t, "a Host that is a list", "GET / HTTP/1.1\r\nHost: a, b\r\n\r\n", 400);
+  refused(t, "a Host whose port is not digits", "GET / HTTP/1.1\r\nHost: a:8x\r\n\r\n", 400);
+  refused(t, "a Host whose port is past 65535", "GET / HTTP/1.1\r\nHost: a:65536\r\n\r\n", 400);
+  refused(t, "a Host with an unclosed IPv6 bracket", "GET / HTTP/1.1\r\nHost: [::1\r\n\r\n", 400);
+  refused(t, "a Host that reads as a number but is no IPv4 address", "GET / HTTP/1.1\r\nHost: 127.1\r\n\r\n", 400);
+  refused(t, "an HTTP/1.0 Host with a space in it", "GET / HTTP/1.0\r\nHost: a b\r\n\r\n", 400);
+  t.eqI32("a Host with a port is read", statusOf("GET / HTTP/1.1\r\nHost: example.com:8080\r\n\r\n"), zero);
+  t.eqI32("an IPv6 Host with a port is read", statusOf("GET / HTTP/1.1\r\nHost: [::1]:80\r\n\r\n"), zero);
+  t.eqI32("an IPv4 Host is read", statusOf("GET / HTTP/1.1\r\nHost: 10.0.0.2\r\n\r\n"), zero);
+  t.eqI32("an empty Host is read, as before", statusOf("GET / HTTP/1.1\r\nHost: \r\n\r\n"), zero);
   refused(
     t,
     "Transfer-Encoding before Content-Length",

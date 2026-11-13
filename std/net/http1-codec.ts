@@ -35,7 +35,8 @@
  *   (§2.2); whitespace before the first field or an obs-fold (§2.2, §5.2);
  *   whitespace between a field name and its colon (§5.1); a field value with a
  *   control character; a 1.1 request without exactly one `Host`, or a 1.0
- *   request with more than one (§3.2, RFC 9110 §7.2); `Content-Length` that is
+ *   request with more than one (§3.2, RFC 9110 §7.2), or a `Host` that is not
+ *   `uri-host [":" port]` (§3.2, by `urlIsHostPort`); `Content-Length` that is
  *   not one run of digits, or that appears twice (§6.3); `Transfer-Encoding`
  *   together with `Content-Length`, in a 1.0 request, or whose last coding is
  *   not `chunked` (§6.1, §6.3); a malformed chunk size, chunk extension or
@@ -81,6 +82,7 @@
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
 import { copyBytes } from "nish/bytes"
+import { urlIsHostPort } from "nish/net/url"
 import {
   and,
   any,
@@ -301,6 +303,11 @@ export class Http1Parser {
    * @internal Counted by the field-line parser in this module as each name is lowered, and read by `http1EndOfHead`.
    */
   hostFields: i32 = 0
+  /**
+   * The index of the last Host field, or -1.
+   * @internal Set by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  hostField: i32 = -1
   /**
    * Content-Length fields the request's head has kept so far.
    * @internal Counted by the field-line parser in this module, and read by `http1EndOfHead`.
@@ -710,6 +717,7 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.sectionBytes = 0
   p.fieldCount = 0
   p.hostFields = 0
+  p.hostField = -1
   p.lengthFields = 0
   p.lengthField = -1
   p.codingFields = 0
@@ -1442,6 +1450,7 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
     const kind: i32 = http1FramingField(p.head, at, nameEnd - a)
     if (kind === HTTP1_FIELD_HOST) {
       p.hostFields += 1
+      p.hostField = p.headerCount
     } else if (kind === HTTP1_FIELD_LENGTH) {
       p.lengthFields += 1
       p.lengthField = p.headerCount
@@ -1486,6 +1495,18 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
   const lengthField: i32 = p.lengthField
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return http1Fail(p, 400, "a request without exactly one Host")
+  }
+  // The one Host must be a host and an optional port (§3.2): a value such as
+  // `a@b`, `a/b` or `a, b` is read one way by this program and another by a
+  // proxy or a virtual-host table in front of it. An empty Host is allowed.
+  const hostField: i32 = p.hostField
+  if (
+    hosts === 1 &&
+    hostField >= 0 &&
+    4 * hostField + 3 < toI32(spans.length) &&
+    !urlIsHostPort(head, spans[4 * hostField + 2], spans[4 * hostField + 3])
+  ) {
+    return http1Fail(p, 400, "a Host that is not a host and port")
   }
   if (p.codingFields > 0) {
     if (lengths > 0) {
