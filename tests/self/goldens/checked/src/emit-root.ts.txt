@@ -188,11 +188,13 @@ function rootTable(emitter: Emitter, traces: RootTraces, info: ConstInfo, data: 
   callee +1:3 Emitter.declareType -> @Emitter.declareType
   callee +2:3 Emitter.declareGlobal -> @Emitter.declareGlobal
   local +5:9 symbols: string[] (const)
-  local +10:9 refs: string[] (const)
-  local +11:14 symbol: string (const)
-  callee +13:7 Emitter.declareGlobal -> @Emitter.declareGlobal
-  local +17:9 n: i32 (const)
-  callee +18:3 Emitter.declareGlobal -> @Emitter.declareGlobal
-  local +19:9 keep: string (const)
-  callee +19:16 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +20:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  local +11:9 refs: string[] (const)
+  local +12:14 symbol: string (const)
+  local +13:9 own: boolean (let)
+  local +14:16 c: ConstInfo (const)
+  callee +20:7 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local +24:9 n: i32 (const)
+  callee +25:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local +26:9 keep: string (const)
+  callee +26:16 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +27:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition

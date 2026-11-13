@@ -243,10 +243,17 @@ export const rootTable = (emitter: Emitter, traces: RootTraces, info: ConstInfo,
   if (symbols.length === 0 || symbols[0] !== info.storageSymbol) {
     return
   }
-  // The first root's module hands every table to the runtime.
+  // The first root's module hands every table to the runtime. A table this
+  // module writes itself is defined here; only another module's is external.
   const refs: string[] = []
   for (const symbol of symbols) {
-    if (symbol !== info.storageSymbol) {
+    let own = false
+    for (const c of emitter.program.constantList) {
+      if (c.root && c.origin === emitter.program.source && c.storageSymbol === symbol) {
+        own = true
+      }
+    }
+    if (!own) {
       emitter.declareGlobal(`@${symbol}.root = external constant %nish.root`)
     }
     refs.push(`%nish.root* @${symbol}.root`)
