@@ -349,36 +349,14 @@ const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
 }
 
 /**
- * True when something the program holds bounds how many passes `loop` runs: it
- * is counted (`isCountedLoop`), it walks a collection (`for...of`), or its
- * condition compares with `<`, `<=`, `>` or `>=`, the scan of a length or a
- * budget. What is left runs for as long as the program decides at run time:
- * `while (true)`, `for (;;)`, `while (poll())`, `while (event !== DONE)`.
+ * True when `loop` is counted (`isCountedLoop`, the rule loop attributes and
+ * NL9011 share): its pass count is fixed when it starts. Every other loop runs
+ * for as long as the program decides at run time: `while (true)`, `for (;;)`,
+ * `while (poll())`, `while (k < n && poll())`, a `for...of` whose body extends
+ * what it walks.
  */
-const boundedPasses = (walk: ArenaWalk, table: TypeTable, loop: Node): boolean => {
-  if (loop.kind === NodeKind.ForOf || isCountedLoop(walk.unit, table, loop, walk.facts)) {
-    return true
-  }
-  if (loop.kind === NodeKind.While) {
-    return comparesOrder(loop.children[0])
-  }
-  return (loop.kind === NodeKind.Do || loop.kind === NodeKind.For) && comparesOrder(loop.children[1])
-}
-
-/** True when `condition`, or a conjunct of it, is an ordering comparison. */
-const comparesOrder = (condition: Node): boolean => {
-  if (condition.kind === NodeKind.Paren) {
-    return comparesOrder(condition.children[0])
-  }
-  if (condition.kind !== NodeKind.Binary) {
-    return false
-  }
-  const op = condition.text
-  if (op === "&&") {
-    return comparesOrder(condition.children[0]) || comparesOrder(condition.children[1])
-  }
-  return op === "<" || op === "<=" || op === ">" || op === ">="
-}
+const boundedPasses = (walk: ArenaWalk, table: TypeTable, loop: Node): boolean =>
+  isCountedLoop(walk.unit, table, loop, walk.facts)
 
 /** The scopes around a function's body: none. */
 const outsideLoops = (): Around => new Around(null, null, null, null, false)
