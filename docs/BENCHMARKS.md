@@ -1831,6 +1831,97 @@ The explicit entry's Ir is lower than the 5,411 (`plaintext`) and 6,588 (`json`)
 
 **From here on the gate is read against this section**: a fix's before is these tables, re-run with the same commands and durations, and its Ir per request is set against the 4,814 and 7,848 (`plaintext`) and 5,962 and 9,276 (`json`) above.
 
+## TechEmpower: the gate after task recycling (WP49 stage 6)
+
+This re-runs the gate on `main` after two changes.
+- **Task recycling (#1493):** a finished task's node keeps its region for the node's next task, so a request's task costs no `malloc` or `free`.
+- **Response head (#1457):** a repeated HTTP/1 response head is built once per `Date` tick.
+
+The changes are library and runtime changes that serve every `nish:async` and `serve` program; nothing in `bench/techempower/` moved. Two other candidates were measured and not landed, because what a user would gain does not pay for them:
+- **Reading the request in place:** `serveTask` would hand `handle` the connection slot's buffers in place of a copy. The language's task-memory rule refuses this: `handle` may grow what it is given. The copy it would save costs about 330 Ir per request.
+- **A fixed-path table in `Router`:** callgrind, Ir per match.
+  - On `examples/http-app`'s routes: 506 → 491 for `/health`, unchanged for `/notes/17`.
+  - On a 44-route router: 591 → 491 and 909 → 765 for fixed paths, unchanged for paths with parameters, and 527 → 570 for a 404.
+
+| | |
+| --- | --- |
+| Date | 2026-11-13 |
+| nish | `build/nish` built from `main` at `5c0cd6b2` (nish 0.38.0 sources), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
+| OS | linux 6.18.44 (x64) |
+| Postgres | 16, a throwaway cluster in `build/tfb/pg`, as [the baseline](#techempower-the-gates-baseline-checked-and-re-measured-wp49-stage-6) |
+| Client | wrk 4.1.0, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
+| Commands | `bash bench/techempower/run.sh --only plaintext`, then `--only json`, then `--only db`, one after another with nothing else running; `run.sh` unchanged |
+
+Every test ran the default 3 rounds of 10 s. So `/json` and the database tests are at the durations of [the re-measurement after the profile-led fixes](#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6), not the baseline's 8 s and 2 s. The method, the band and the `*` rule are unchanged. The http-twins were not built.
+
+**Outcome: the gate is not met.** Four of the six cells #1468 and #1402 judge are outside the band:
+
+| test | connections | band | async vs entry | verdict | the baseline |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `/plaintext` | 256 | 1.3% | −34.5% | outside | −27.6% |
+| `/plaintext` | 1024 | 4.4% | −24.1% | outside | −21.7% |
+| `/plaintext` | 4096 | 2.9% | −25.7% | outside | −31.3% |
+| `/json` | 128 | 10.0% | +7.3% | inside | −11.6% |
+| `/json` | 512 | 3.7% | −17.0% | outside | −13.1% |
+| `/db` | 64 | 7.9% | +4.9% | inside | −9.1% |
+
+Reading the rounds:
+
+- **`/plaintext`:** every async round is below every explicit round, at all three connection counts. For example, at 256 connections the async entry gave 1,122,886 to 1,131,320 req/s, and `entry` and `entry-copy` gave 1,626,321 to 1,730,805. The cells are outside however the band is read. #1457 builds the head once per tick for both entries, so it does not narrow the gap. At 4,096 connections the delta moved from −31.3% to −25.7%, and at 256 it moved from −27.6% to −34.5%, so this run does not show a trend.
+- **`/json` at 128:** the async entry gave 182,829 to 185,514 req/s, inside the explicit rounds' 170,948 to 192,047. The cell is inside on its rounds as well as on its median.
+- **`/json` at 512:** `entry` is bimodal (166,056, 215,934 and 217,296 req/s). The async entry's best round, 181,014, is below every `entry-copy` round (191,532 to 218,709). The cell is outside.
+- **`/db` at 64:** this cell also has one low explicit round, `db-entry`'s first, at 22,253 against 108,106 and 113,153. That widens the band to 7.9%. The async entry's rounds, 112,066 to 119,750, are inside the range of the other five explicit rounds (106,555 to 119,548), so the cell is inside whichever way it is read. `/db` at 16 is bimodal again and is not judged.
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, after task recycling
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1723784 (1683348) | 1398714 (1088063) | 1053287 (886782) | 1201865 (1147809) | 113.7 |
+| entry-copy | 1701240 (1626321) | 1336745 (1180980) | 1084149 (925269) | 1189346 (831549) | 113.7 |
+| async | 1129843 (1122886) | 1062193 (989761) | 782668 (768754) | 481322 (447762)* | 116.2 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 1.3% 1024: 4.4% 4096: 2.9% 16384: 1.0%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -34.5% outside 1024: -24.1% outside 4096: -25.7% outside 16384: -60.0% outside*
+- /plaintext c=16384 round 1: async had 0 Non-2xx responses and socket errors c/r/w/t 0/4326/0/0
+- /plaintext c=16384 round 3: async had 0 Non-2xx responses and socket errors c/r/w/t 0/9077/0/0
+
+### /json, req/s, median (min) of 3 rounds of 10 s, after task recycling
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 126307 (123684) | 144399 (138584) | 171651 (165998) | 172369 (170948) | 206515 (142150) | 215934 (166056) | 3.9 |
+| entry-copy | 125005 (123433) | 144378 (138054) | 167802 (159413) | 189582 (182134) | 210275 (204847) | 207983 (191532) | 3.9 |
+| async | 115726 (115085) | 144457 (141874) | 166213 (157581) | 184928 (182829) | 184559 (184372) | 179200 (174695) | 8.3 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 1.0% 32: 0.0% 64: 2.2% 128: 10.0% 256: 1.8% 512: 3.7%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -8.4% outside 32: +0.0% inside 64: -3.2% outside 128: +7.3% inside 256: -10.6% outside 512: -17.0% outside
+
+### /db, req/s, median (min) of 3 rounds of 10 s, after task recycling
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 21404 (21026) | 108106 (22253) | 124419 (123313) | 66.2 |
+| db-entry-copy | 21323 (20756) | 116677 (106555) | 126312 (125950) | 66.2 |
+| async-db | 72482 (59505) | 113355 (112066) | 135956 (131814) | 36.8 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.4% 64: 7.9% 256: 1.5%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +238.6% inside 64: +4.9% inside 256: +9.3% inside
+
+### The other database tests, after task recycling
+
+These are recorded, not judged. Each cell is the async-db median against db-entry's, with the band in brackets, from 3 rounds of 10 s.
+
+| test | 16 | 64 | 256 |
+| --- | ---: | ---: | ---: |
+| `/queries?queries=20` | +3.4% (2.7%) | +13.8% (3.0%) | −13.4% (0.7%) |
+| `/updates?queries=20` | +3.3% (1.7%) | +6.4% (0.3%) | +11.3% (1.2%) |
+| `/fortunes` | −35.6% (1.2%) | −21.5% (0.3%) | −48.4% (0.5%) |
+| `/cached-queries?count=100` | +13.7% (2.0%) | +12.6% (3.6%) | +29.6% (1.2%) |
+
+**What is left.** The gap on `/plaintext` and on `/json` at 512 connections is the per-request work the async path does and the explicit one does not. The [baseline profile](#the-baseline-profile-instructions-and-system-calls-per-request) measured it at 7,848 against 4,814 instructions on `plaintext`. #1493 then took off about 520 on `plaintext` and about 490 on `json`. [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) puts the rest in the serve, handler and router hand-off. The two library candidates above would together save less than 500 instructions a request, on a gap of more than 2,500. Closing the gap needs a change to that hand-off's design: for example, no spawned task per request, or a language rule that lets a task lend its connection's buffers to `handle`. That is a decision for the owner, not a library fix.
+
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 
