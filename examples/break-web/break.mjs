@@ -171,12 +171,41 @@ background:#fff2;color:#fff;font:1.25rem/1 system-ui,sans-serif;cursor:pointer}
 let current = null
 
 /**
+ * Grows `overlay` out of `from`'s box, or with `back` shrinks it into it: a
+ * clip from that rectangle to the whole screen, over an overlay that is full
+ * size throughout, so the game lays out once. Null, and nothing moves, with no
+ * box to grow from, no Web Animations, or a reader who asked for less motion.
+ */
+const grow = (overlay, from, view, back) => {
+  if (
+    !from?.isConnected ||
+    !overlay.animate ||
+    !view ||
+    view.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  ) {
+    return null
+  }
+  const box = from.getBoundingClientRect()
+  const sides = [box.top, view.innerWidth - box.right, view.innerHeight - box.bottom, box.left]
+  const frames = [
+    { clipPath: `inset(${sides.map((side) => `${Math.max(0, side)}px`).join(" ")} round 12px)` },
+    { clipPath: "inset(0 round 0)" },
+  ]
+  return overlay.animate(back ? frames.reverse() : frames, {
+    duration: back ? 260 : 420,
+    easing: "cubic-bezier(.2,.8,.2,1)",
+    fill: "forwards",
+  })
+}
+
+/**
  * Opens the game over the page. Resolves once it runs; rejects, with the page
  * as it was, when it cannot start. While it runs, Quit on its title, the
  * close control or an error closes it and hands focus back to `focus`; an
  * error is told to `say` in one line first.
  *
  * @param options.focus - the element focus returns to on close
+ * @param options.from - the element the overlay grows out of and shrinks back into (the terminal)
  * @param options.say - shows one line of text where the game was asked for
  * @param options.document - the document to cover (the page's)
  * @param options.storage - where settings are kept (localStorage)
@@ -186,6 +215,7 @@ let current = null
  */
 export const open = ({
   focus,
+  from,
   say,
   document = globalThis.document,
   storage = pageStorage(),
@@ -212,6 +242,8 @@ export const open = ({
   close.textContent = "×"
   overlay.append(style, canvas, close)
   document.body.append(overlay)
+  const view = document.defaultView
+  grow(overlay, from, view, false)
   // Focus into the overlay at once, to the close control until the game runs:
   // keys while it loads reach the overlay (Escape closes), not the page beneath.
   close.focus({ preventScroll: true })
@@ -224,8 +256,16 @@ export const open = ({
     }
     current = null
     controller.abort()
-    overlay.remove()
     focus?.focus?.()
+    // Shrinking, it no longer takes the pointer: the page under it is back.
+    const shrink = grow(overlay, from, view, true)
+    if (shrink === null) {
+      overlay.remove()
+    } else {
+      overlay.style.pointerEvents = "none"
+      const gone = () => overlay.remove()
+      shrink.finished.then(gone, gone)
+    }
   }
   close.addEventListener("click", shut)
   // Modal: Tab moves between the canvas and the close control only, Escape

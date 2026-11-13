@@ -143,7 +143,11 @@ export const attach = (
     opening ??= load()
     opening
       .then((game) =>
-        game.open({ focus: touched ? null : input, say: (text) => say(`$ ${command}\n${text}\n`) })
+        game.open({
+          focus: touched ? null : input,
+          from: term,
+          say: (text) => say(`$ ${command}\n${text}\n`),
+        })
       )
       .then(() => say(""))
       .catch((error) => {

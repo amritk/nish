@@ -720,6 +720,50 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
   overlays(document)[0]?.children.find((c) => c instanceof Node && c.tag === "button")?.dispatch("click", event("click"))
 }
 
+{
+  // Opened from the terminal, the overlay grows out of its box, and shrinks back into it on close.
+  const { document } = makeDocument()
+  let reduced = false
+  document.defaultView = { innerWidth: 800, innerHeight: 600, matchMedia: () => ({ matches: reduced }) }
+  const animations = []
+  Node.prototype.animate = function (frames, options) {
+    const made = { frames, options, finished: Promise.resolve() }
+    animations.push(made)
+    return made
+  }
+  const from = new Node("div")
+  from.isConnected = true
+  from.getBoundingClientRect = () => ({ top: 400, right: 700, bottom: 520, left: 100 })
+  const closeOf = () => overlays(document)[0]?.children.find((c) => c instanceof Node && c.tag === "button")
+  const terminalBox = "inset(400px 100px 80px 100px round 12px)"
+  const grown = openFake(document, { from })
+  check("opened from the terminal, the overlay grows out of the terminal's box to the whole screen",
+    animations.length === 1 && animations[0].frames[0].clipPath === terminalBox && animations[0].frames[1].clipPath === "inset(0 round 0)",
+    JSON.stringify(animations.map((a) => a.frames)))
+  await grown.started
+  closeOf().dispatch("click", event("click"))
+  const shrinking = overlays(document)[0]
+  check("closed, it hands focus back at once and shrinks into the terminal, letting the pointer through",
+    animations.length === 2 && animations[1].frames[1].clipPath === terminalBox && grown.focus.focused === 1 &&
+      shrinking?.style.pointerEvents === "none", JSON.stringify(animations[1]?.frames))
+  await settle()
+  check("and leaves the page once it has shrunk", overlays(document).length === 0)
+
+  reduced = true
+  const still = openFake(document, { from })
+  await still.started
+  closeOf().dispatch("click", event("click"))
+  check("under reduced motion it opens and closes without moving", animations.length === 2 && overlays(document).length === 0)
+  reduced = false
+  from.isConnected = false
+  const gone = openFake(document, { from })
+  await gone.started
+  closeOf().dispatch("click", event("click"))
+  check("with the terminal gone from the page it opens and closes without moving",
+    animations.length === 2 && overlays(document).length === 0)
+  delete Node.prototype.animate
+}
+
 // --- game.wasm: the built module plays as the terminal game does -------------
 // The committed module, loaded through break.mjs's linkLoader as the page loads
 // it, is driven with tests/link/break_core_wasm's script by writing key records
