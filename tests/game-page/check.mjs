@@ -421,7 +421,8 @@ const start = async (settings, options) => {
   canvas.dispatch("pointerdown", { pointerType: "mouse", pointerId: 9, button: 0, clientX: 100, clientY: 180 });
   check("mouse: a press captures the pointer", JSON.stringify(canvas.captured) === "[9]", JSON.stringify(canvas.captured));
   check("sound: a context the browser refuses is not kept", audio.made === made, audio.made);
-  run(1);
+  // Two frames: a display frame of exactly one step's length can, by rounding, hold none.
+  run(2);
   check("mouse: a press serves", state().SCORE[2] === 0, state().SCORE[2]);
   canvas.dispatch("blur", {});
   check(
