@@ -108,6 +108,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP50: A WebAssembly module a TypeScript page drives](wp50-wasm-host.md) | Landed | 6 of 6 |
 | [WP52: Fast rebuilds for `nish run`](wp52-run-rebuilds.md) | Landed | 1 of 2 |
 | [WP53: Buffers and handles across `declare function`](wp53-ffi-buffers-handles.md) | Landed | 1 of 1 |
+| [WP55: An object graph a WebAssembly module keeps between calls](wp55-persistent-root.md) | Landed | 1 of 1 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 | [WP41: A wide multiply](wp41-mul-wide.md) | Declined | 1 of 1 |
 

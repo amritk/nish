@@ -256,6 +256,20 @@ export class Options {
    */
   panicSites: boolean
   /**
+   * WP55: the root storage of the whole program, by symbol, in module order,
+   * for a build that makes a page module. The module declaring the first one
+   * writes `nish_root_keep`, which hands every root's table to the runtime.
+   * Set by `Compilation.emit`.
+   */
+  rootSymbols: string[]
+  /**
+   * WP55: some module of the program declares root storage, so memory older
+   * than a call is reachable from a module constant as well as from the
+   * parameters, and `rootsHoldNoPointer` proves nothing. Set by
+   * `Compilation.analyze`, native and wasm builds alike.
+   */
+  holdsRoots: boolean
+  /**
    * WP37: the directories `--allow fs.read=<dir>` and `--allow fs.write=<dir>`
    * scope those capabilities to under `--sandbox`, each resolved to its
    * absolute, symlink-free path. Empty when the capability is granted whole
@@ -321,6 +335,8 @@ export class Options {
     this.sandbox = 0
     this.sandboxCapabilities = 0
     this.panicSites = false
+    this.rootSymbols = []
+    this.holdsRoots = false
     this.sandboxRead = []
     this.sandboxWrite = []
     this.sandboxExec = []

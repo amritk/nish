@@ -65,8 +65,9 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 ```
 
 The script needs only `sh`, `curl` and `tar`. It installs the prebuilt
-compiler into `~/.nish` and ends by printing the `export PATH=…` line to add
-to your shell profile.
+compiler into `~/.nish` and puts it on your `PATH` in your shell's startup
+file (zsh, bash, fish, or `~/.profile`); `--no-modify-path` leaves that file
+alone.
 
 **Or with npm**, which needs Node.js 22.18+:
 

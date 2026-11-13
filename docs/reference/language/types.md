@@ -1126,10 +1126,13 @@ gives up on: it keeps the checker's widened state.
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
 union is refused, and so is a union-holding field of any class or interface
-the compilation declares, exported or not, under any sidecar flag
-(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
-lays out every class and interface of the program, a private one too
-(`reject_union_private_field`). The message is
+the compilation declares, exported or not, under a flag that lays the classes
+out as C structs (`--emit-header`, `--emit-napi`, `--emit-napi-async`): a
+header lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). A build with `--emit-dts` alone describes no
+class, so there a union field of a class only the module reads — root
+storage's graph among them — is accepted; a union in an exported function's
+parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions

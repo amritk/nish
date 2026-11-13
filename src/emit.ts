@@ -30,6 +30,7 @@
 //     parameters at `emitFunction`, the `!dbg` location around every statement
 //     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
+import { RootTraces } from "./emit-root"
 import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
 import { emitRegionBody } from "./emit-region"
@@ -346,6 +347,8 @@ export class Emitter {
   paramObjectValues: string[]
   /** Runtime symbols this module referenced; drives which declarations are emitted. */
   usedRuntime: StringSet
+  /** Runtime symbols this module defines itself (root storage's arena resets, WP55): never declared. */
+  definesRuntime: StringSet
   /** Interned string literals: text -> index into `stringRefs`. */
   strings: StringMap
   stringRefs: string[]
@@ -432,6 +435,7 @@ export class Emitter {
     this.paramObjectNames = []
     this.paramObjectValues = []
     this.usedRuntime = new StringSet()
+    this.definesRuntime = new StringSet()
     this.readsArenaGlobal = false
     this.strings = new StringMap()
     this.stringRefs = []
@@ -468,9 +472,10 @@ export class Emitter {
       this.module.addTypeDecl(decl)
     }
     // WP50 S3: module storage is static, so it is defined here and not built.
+    const traces = new RootTraces()
     for (const info of this.program.constantList) {
       if (info.storage && info.origin === this.program.source) {
-        storageGlobals(this, info)
+        storageGlobals(this, info, traces)
       }
     }
     for (const sig of this.program.functions) {
@@ -1290,7 +1295,7 @@ export class Emitter {
     }
     for (const rt of this.runtime.functions) {
       // Intrinsics are not part of the C ABI prelude: declared only when used.
-      if (!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) {
+      if ((!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) || this.definesRuntime.has(rt.name)) {
         continue
       }
       const group = this.opts.optimizeAttributes ? ` ${this.module.attrGroupFor(rt.attrs)}` : ""
