@@ -6,8 +6,7 @@
 // the elapsed time tells the two apart; the upper bound is loose for a loaded
 // runner. The measured time is not printed.
 import { OPEN_CREATE, OPEN_READWRITE, SQLITE_BUSY, openDatabase } from "nish/sqlite";
-import { monotonicNanos } from "nish:process";
-import { spawnSync } from "nish:process";
+import { monotonicNanos, spawnSync } from "nish:process";
 
 const path: string = "build/sqlite_busy_backoff.db";
 const clean = (): void => {
