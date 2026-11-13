@@ -343,7 +343,7 @@ const graphSum = (t) => {
 };
 
 /**
- * tests/persist/graph.ts: cycles, a hub two root storages and two slots share,
+ * tests/module-storage/persist/graph.ts: cycles, a hub two root storages and two slots share,
  * arrays of arrays with empty rows, an empty array and string, and an array
  * reset to empty and grown again, under 80 KB of garbage a call, so at least
  * every third keep compacts. After each, `check` must find every identity and back
@@ -376,7 +376,7 @@ const runGraph = () => {
 };
 
 /**
- * tests/persist/shapes.ts: in-place record arrays, union and nullable-union
+ * tests/module-storage/persist/shapes.ts: in-place record arrays, union and nullable-union
  * fields, an array of nullable objects and 1- and 8-byte element arrays, each
  * of which a wrong offset or stride in a descriptor would corrupt without a
  * crash. Every step `check` must answer 0; for the first SHAPES_SAME steps

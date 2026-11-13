@@ -161,7 +161,7 @@ function recheckStorage(ctx: CheckContext, info: ConstInfo): void -> @recheckSto
   local +13:9 at: Node (const)
   callee +14:3 storageFaultReport -> @storageFaultReport
   callee +14:49 TypeTable.typeName -> @TypeTable.typeName
-function rootClass(program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null -> @rootClass [exported]
+function rootClass(program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null -> @rootClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: CheckedProgram.struct TypeTable.isNullable TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull

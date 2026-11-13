@@ -285,7 +285,7 @@ export const recheckStorage = (ctx: CheckContext, info: ConstInfo): void => {
  * (`docs/wp55-persistent-root.md` §3), or null. `C` alone, an interface and a
  * record stay module storage, refused by NL2686 as before.
  */
-export const rootClass = (program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null => {
+const rootClass = (program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null => {
   if (program === null || elem < 0 || !table.isNullable(elem)) {
     return null
   }

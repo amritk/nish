@@ -35183,8 +35183,11 @@ if (!only || "module-storage".includes(only)) {
     const dir = path.join(buildDir, "module-storage")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "module-storage"))) {
-      fs.copyFileSync(path.join(root, "tests", "module-storage", name), path.join(dir, name))
+    // Files only: tests/module-storage/persist/ holds the persist section's programs.
+    for (const entry of fs.readdirSync(path.join(root, "tests", "module-storage"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(root, "tests", "module-storage", entry.name), path.join(dir, entry.name))
+      }
     }
     const at = (name) => path.join(dir, name)
     const compiled = spawnSync(
@@ -35822,7 +35825,8 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 
 // ---- persist: root storage kept across export calls (docs/wp55-persistent-root.md) --
 // Two modules with root storage, built for a page and driven from Node through
-// the loader `--emit-dts` writes (tests/persist/drive.mjs): world.ts, whose
+// the loader `--emit-dts` writes (tests/persist/drive.mjs; the programs live in
+// tests/module-storage/persist/): world.ts, whose
 // every step adds, drops and renames objects the root reaches and leaves
 // garbage, and director.ts, whose root is the real break director. Each runs
 // 100,000 steps; the driver checks the answers and that linear memory and the
@@ -35830,10 +35834,10 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // steps beside an instance whose keep does nothing and must match it frame for
 // frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
 // call to 200,000 nodes, which every compaction traces end to end: a trace
-// that recursed would run out of stack. A fourth, tests/persist/graph.ts, keeps
+// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
 // and empty arrays and strings through a compaction at least every third call
-// (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/persist/shapes.ts, keeps the
+// (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
 // layouts a wrong offset or stride would corrupt silently: an array of records
 // kept in place, a union and a nullable-union field, a `(C | null)[]` and
 // `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
@@ -35847,7 +35851,7 @@ if (!only || "persist".includes(only)) {
   const unionDir = path.join(buildDir, "persist-union")
   fs.rmSync(unionDir, { recursive: true, force: true })
   fs.mkdirSync(unionDir, { recursive: true })
-  const unionArgs = ["tests/persist/union-field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
+  const unionArgs = ["tests/module-storage/persist/union-field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
   const dtsOnly = spawnSync(NISH, unionArgs, { cwd: root, encoding: "utf8" })
   check("persist: a union field in a class compiles with --emit-dts alone", dtsOnly.status === 0, shown(dtsOnly))
   const withHeader = spawnSync(NISH, [...unionArgs, "--emit-header", path.join(unionDir, "u.h")], { cwd: root, encoding: "utf8" })
@@ -35858,7 +35862,7 @@ if (!only || "persist".includes(only)) {
   )
   const late = spawnSync(
     NISH,
-    ["tests/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
+    ["tests/module-storage/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
     { cwd: root, encoding: "utf8" }
   )
   const lateIr = late.status === 0 ? fs.readFileSync(path.join(unionDir, "late-class.ll"), "utf8") : ""
@@ -35875,11 +35879,11 @@ if (!only || "persist".includes(only)) {
     const dir = path.join(buildDir, "persist")
     fs.rmSync(dir, { recursive: true, force: true })
     for (const [stem, source, steps, says] of [
-      ["world", "tests/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
-      ["director", "tests/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
+      ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
+      ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
       ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
-      ["graph", "tests/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
-      ["shapes", "tests/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
+      ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
+      ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
     ]) {
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })

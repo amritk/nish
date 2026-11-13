@@ -11,8 +11,8 @@ import {
   drawBreakDirector,
   sizeBreakFramebuffer,
   stepBreakDirector,
-} from "../../src/break-director"
-import { BreakSettings } from "../../src/break-menu"
+} from "../../../src/break-director"
+import { BreakSettings } from "../../../src/break-menu"
 
 const WIDTH: i32 = 320
 const HEIGHT: i32 = 180
