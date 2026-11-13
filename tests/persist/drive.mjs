@@ -5,6 +5,7 @@
 //   node tests/persist/drive.mjs world    <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs director <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs chain    <loader.mjs> <module.wasm> <steps>
+//   node tests/persist/drive.mjs graph    <loader.mjs> <module.wasm> <steps>
 //
 // The kept heap is the arena's offset after a call, which only the runtime's
 // `nish_arena_mark` answers; the loader keeps the instance to itself, so the
@@ -15,21 +16,37 @@ import { pathToFileURL } from "node:url";
 
 const [mode, loaderPath, wasmPath, stepsArg] = process.argv.slice(2);
 const steps = Number(stepsArg);
-if (!["world", "director", "chain"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
-  console.error("usage: drive.mjs world|director|chain <loader.mjs> <module.wasm> <steps>");
+if (!["world", "director", "chain", "graph"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
+  console.error("usage: drive.mjs world|director|chain|graph <loader.mjs> <module.wasm> <steps>");
   process.exit(2);
 }
 
 const NativeInstance = WebAssembly.Instance;
 let instance = null;
+let keeps = true;
 WebAssembly.Instance = function Instance(module, imports) {
   instance = new NativeInstance(module, imports);
-  return instance;
+  if (keeps) {
+    return instance;
+  }
+  // A reference that never compacts: the loader's keep does nothing, so
+  // every block stays where it was made and nothing is released.
+  return { exports: { ...instance.exports, nish_root_keep() {} } };
 };
 const { loadSync } = await import(pathToFileURL(loaderPath).href);
 const { ringOver } = await import(new URL("../../runtime/page.mjs", import.meta.url).href);
-const mod = loadSync(new WebAssembly.Module(readFileSync(wasmPath)));
-const kept = () => Number(instance.exports.nish_arena_mark());
+const wasmModule = new WebAssembly.Module(readFileSync(wasmPath));
+/** A fresh instance of the module, compacting or not, with its own `kept`. */
+const load = (compacts) => {
+  keeps = compacts;
+  const loaded = loadSync(wasmModule);
+  const own = instance;
+  keeps = true;
+  return { mod: loaded, kept: () => Number(own.exports.nish_arena_mark()) };
+};
+const main = load(true);
+const mod = main.mod;
+const kept = main.kept;
 const fail = (message) => {
   console.error(`persist ${mode}: ${message}`);
   process.exit(1);
@@ -121,8 +138,13 @@ const ACTION_PRESS = 1;
 const ACTION_RELEASE = 3;
 const SCENES = ["menu", "game", "intro"];
 
-const runDirector = () => {
-  const input = ringOver(mod.memory, mod.layout.GAME_INPUT);
+/**
+ * A scripted player for `m`: Enter every 3 s takes the intro to the menu and
+ * the menu into a game; in a game, hold left or right for a second and serve
+ * with space. `play(t)` feeds step `t`'s keys.
+ */
+const player = (m) => {
+  const input = ringOver(m.memory, m.layout.GAME_INPUT);
   const key = (kind, code, action) => {
     if (input.free() >= 7) {
       for (const word of [EVENT_KEY, kind, code, 0, action, 0, 0]) {
@@ -134,15 +156,8 @@ const runDirector = () => {
     key(kind, code, ACTION_PRESS);
     key(kind, code, ACTION_RELEASE);
   };
-  mod.init(1505);
-  const w = watch();
-  const seen = new Map();
-  const frames = new Set();
   let held = 0;
-  for (let t = 1; t <= steps; t++) {
-    // A scripted player: Enter every 3 s takes the intro to the menu and the
-    // menu into a game; in a game, hold left or right for a second and
-    // serve with space.
+  return (t) => {
     if (t % 360 === 0) {
       tap(KEY_ENTER, 0);
     }
@@ -156,6 +171,60 @@ const runDirector = () => {
       }
       tap(KEY_CHAR, 32);
     }
+  };
+};
+
+/**
+ * Steps the director runs beside a reference that never compacts. Its kept
+ * heap grows slowly, so the first compaction comes near step 16,000; 40,000
+ * covers three.
+ */
+const SAME_STEPS = 40000;
+
+/**
+ * The director twice in lockstep, one instance compacting after every call
+ * and one whose keep does nothing: every answer must match, so a compaction
+ * that moved a block wrong, or rewrote a pointer it should not have, shows as
+ * a frame that differs from the one nothing moved under.
+ */
+const sameAsUncompacted = () => {
+  const a = load(true);
+  const b = load(false);
+  const playA = player(a.mod);
+  const playB = player(b.mod);
+  a.mod.init(1505);
+  b.mod.init(1505);
+  let compactions = 0;
+  for (let t = 1; t <= SAME_STEPS; t++) {
+    playA(t);
+    playB(t);
+    const before = a.kept();
+    const got = [a.mod.step(), a.mod.scene(), a.mod.draw()];
+    const want = [b.mod.step(), b.mod.scene(), b.mod.draw()];
+    if (got.some((v, i) => v !== want[i])) {
+      fail(`step ${t}: step/scene/draw answered ${got} compacting, ${want} without`);
+    }
+    // Two calls, each ending in a keep: lower after them than before means
+    // at least one compacted.
+    if (a.kept() < before) {
+      compactions++;
+    }
+  }
+  if (compactions === 0) {
+    fail(`no compaction in ${SAME_STEPS} steps beside the reference`);
+  }
+  return compactions;
+};
+
+const runDirector = () => {
+  const compactions = sameAsUncompacted();
+  const play = player(mod);
+  mod.init(1505);
+  const w = watch();
+  const seen = new Map();
+  const frames = new Set();
+  for (let t = 1; t <= steps; t++) {
+    play(t);
     const running = mod.step();
     w.note(t);
     if (running !== 1) {
@@ -178,7 +247,10 @@ const runDirector = () => {
     fail(`frames ${info[0]}x${info[1]}, ${frames.size} distinct`);
   }
   const counts = SCENES.map((s) => `${s} ${seen.get(s)}`).join(", ");
-  console.log(`persist director: ${steps} steps (${counts}), ${frames.size} distinct frames; ${w.report()}`);
+  console.log(
+    `persist director: ${steps} steps (${counts}), ${frames.size} distinct frames; ${w.report()}; ` +
+      `the first ${SAME_STEPS} match an uncompacted run frame for frame across ${compactions} compactions`
+  );
 };
 
 /**
@@ -208,10 +280,61 @@ const runChain = () => {
   console.log(`persist chain: ${steps} steps, total() ${sum}; memory ${mod.memory.buffer.byteLength} bytes, kept heap ${kept()}`);
 };
 
+/** What graph.ts's `draw` answers after `t` steps, worked out on its own. */
+const graphSum = (t) => {
+  let sum = 0;
+  for (let id = Math.max(1, t - 31); id <= t; id++) {
+    sum += id + 1 + digits(id);
+  }
+  for (let k = Math.max(1, t - 7); k <= t; k++) {
+    const n = k % 4;
+    sum += n + n * (3 + digits(k)) + (k * n * (n - 1)) / 2;
+  }
+  for (let v = t - (t % 10) + 1; v <= t; v++) {
+    sum += v + 1;
+  }
+  return sum + t * 7 + ((49985001 + 9999 * t) % 1000);
+};
+
+/**
+ * tests/persist/graph.ts: cycles, a hub two root storages and two slots share,
+ * arrays of arrays with empty rows, an empty array and string, and an array
+ * reset to empty and grown again, under 80 KB of garbage a call, so at least
+ * every third keep compacts. After each, `check` must find every identity and back
+ * pointer intact and `draw` the checksum the steps add up to.
+ */
+const runGraph = () => {
+  mod.init();
+  const w = watch();
+  let compactions = 0;
+  for (let t = 1; t <= steps; t++) {
+    const before = kept();
+    mod.step();
+    w.note(t);
+    if (kept() < before) {
+      compactions++;
+    }
+    const bad = mod.check();
+    if (bad !== 0) {
+      fail(`check() answered ${bad} after ${t} steps (${compactions} compactions)`);
+    }
+    const got = mod.draw();
+    if (got !== graphSum(t)) {
+      fail(`draw() after ${t} steps is ${got}, expected ${graphSum(t)}`);
+    }
+  }
+  if (compactions < steps / 3) {
+    fail(`only ${compactions} compactions in ${steps} steps`);
+  }
+  console.log(`persist graph: ${steps} steps, ${compactions} compactions, every check and draw() right; ${w.report()}`);
+};
+
 if (mode === "world") {
   runWorld();
 } else if (mode === "director") {
   runDirector();
+} else if (mode === "graph") {
+  runGraph();
 } else {
   runChain();
 }

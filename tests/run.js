@@ -34984,9 +34984,15 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // every step adds, drops and renames objects the root reaches and leaves
 // garbage, and director.ts, whose root is the real break director. Each runs
 // 100,000 steps; the driver checks the answers and that linear memory and the
-// kept heap stay flat after warm-up. A third, tests/cases/root_storage_page.ts,
-// grows one list a node a call to 200,000 nodes, which every compaction traces
-// end to end: a trace that recursed would run out of stack.
+// kept heap stay flat after warm-up; the director also runs its first 40,000
+// steps beside an instance whose keep does nothing and must match it frame for
+// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
+// call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. A fourth, tests/persist/graph.ts, keeps
+// cycles, one object two root storages and two slots share, arrays of arrays
+// and empty arrays and strings through a compaction every other call, checking
+// each identity after each. Each also links under plain `--profile wasm`,
+// where runtime-wasm.c is built without NISH_WASM_HOST.
 if (!only || "persist".includes(only)) {
   const why = wasmHostTools()
   if (why !== null) {
@@ -34996,8 +35002,9 @@ if (!only || "persist".includes(only)) {
     fs.rmSync(dir, { recursive: true, force: true })
     for (const [stem, source, steps, says] of [
       ["world", "tests/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
-      ["director", "tests/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
+      ["director", "tests/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
       ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction"],
+      ["graph", "tests/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through 10,000 compactions"],
     ]) {
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })
@@ -35021,6 +35028,8 @@ if (!only || "persist".includes(only)) {
         .filter((f) => f.endsWith(".ll"))
         .map((f) => path.join(out, f))
       const wasm = path.join(out, `${stem}.wasm`)
+      const plain = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", path.join(out, `${stem}-plain.wasm`), "--profile", "wasm"])
+      check(`persist: ${stem} links under --profile wasm, which defines nish_runtime_root_keep too`, plain.status === 0, shown(plain))
       const linked = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", wasm, "--profile", "wasm-host"])
       check(`persist: ${stem} links under --profile wasm-host`, linked.status === 0, shown(linked))
       if (linked.status !== 0) {
