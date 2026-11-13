@@ -18,4 +18,8 @@ PASS  byte cap: nothing kept
 PASS  yaml: a document with an error
 PASS  document: past the last
 PASS  after a refusal, a load succeeds and clears the code
-std/yaml-json loadText: 20 passed, 0 failed, 0 skipped
+PASS  reuse: an earlier text loads
+PASS  reuse: an alias to a collection in a key is built afresh
+PASS  reuse: an earlier merge sequence loads
+PASS  reuse: an alias to a merge sequence is built afresh
+std/yaml-json loadText: 24 passed, 0 failed, 0 skipped

@@ -55,6 +55,11 @@ Loads documents of a `YamlStream` into a `JsonDocument`.
 <scalar-callout type="info">
 
 `load` clears the document and builds document `d` of the stream into it.
+`loadText(text, d, doc)` parses `text` and does the same with no second
+walk of the node tree, about a seventh faster when nothing else
+needs the stream; its values, ranges and refusals are `load(parseYaml(text), d,
+doc)`'s, and it falls back to `load` for any document it cannot build in
+one sweep (a refusal, a merge it cannot copy, an alias to a later node).
 Every value's `start` and `end` are the byte range of the YAML node it came
 from, as `YamlStream.start` and `end` give it (an anchor or a tag in front
 is not included), and every key's `keyStart` and `keyEnd` the range of its
@@ -202,6 +207,7 @@ class YamlJsonLoader
 | `failed: i32` | The last `load`'s code: `0`, a `YAML_JSON_ERR_*` code or a `JSON_VALUE_ERR_*` code. |
 | `maxDepth: i32` | How deeply collections may nest, counting copies; `JSON_WRITER_MAX_DEPTH` so the result can be written. |
 | `load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue` | Clears `doc` and loads document `d` of `stream` into it. Nothing is kept from a load that fails. |
+| `loadText(text: string, d: i32, doc: JsonDocument): JsonValue` | Parses `text` and loads its document `d` into `doc`: the same values, ranges and refusals as `load(parseYaml(text), d, doc)`. |
 
 ## Limits
 

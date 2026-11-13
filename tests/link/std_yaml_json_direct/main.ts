@@ -106,6 +106,16 @@ const yjdRefusals = (t: Suite): void => {
   t.eqI32("yaml: a document with an error", loader.loadText("a: [1\n", 0, doc), YAML_JSON_ERR_YAML);
   t.eqI32("document: past the last", loader.loadText("a: 1\n", 1, doc), YAML_JSON_ERR_DOCUMENT);
   t.ok("after a refusal, a load succeeds and clears the code", loader.loadText("a: 1\n", 0, doc) >= 0 && loader.failed === 0);
+
+  // A collection anchored in a key is not built by the sweep. An alias to it
+  // must not copy what the same node number held in an earlier text.
+  t.ok("reuse: an earlier text loads", loader.loadText("- [7]\n- 8\n", 0, doc) >= 0);
+  const keyed = "? &k [9]\n: 1\nz: *k\n";
+  const reused = loader.loadText(keyed, 0, doc);
+  t.eqStr("reuse: an alias to a collection in a key is built afresh", reused < 0 ? `refused ${reused}` : doc.stringify(reused), '{"[ 9 ]":1,"z":[9]}');
+  t.ok("reuse: an earlier merge sequence loads", loader.loadText("- [7]\n- {a: [8]}\n", 0, doc) >= 0);
+  const merged = loader.loadText("<<: &s [{p: 1}]\nq: *s\n", 0, doc);
+  t.eqStr("reuse: an alias to a merge sequence is built afresh", merged < 0 ? `refused ${merged}` : doc.stringify(merged), '{"q":[{"p":1}],"p":1}');
 };
 
 export const main = (): number => {

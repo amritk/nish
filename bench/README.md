@@ -2427,11 +2427,12 @@ uses no property escape. The figures are in
 
 `yaml-json/run.mjs` times `nish/yaml`'s parse alone (**parse**) against the
 parse plus `YamlJsonLoader.load` into a `JsonDocument` with its source ranges
-(**load**), both from `yaml-json/main.ts`. The input is an OpenAPI document
-the script generates into `build/yaml-json/openapi.yaml` from a fixed pattern:
-`--paths` paths (default 1000, about 1.1 MB), with an anchored parameter every
-path aliases and a merge key into each response map, so aliases and merges
-are on the measured path. The binary is built twice with
+(**load**), and against `YamlJsonLoader.loadText`, which parses and builds in
+one sweep (**direct**), all from `yaml-json/main.ts`. The input is an OpenAPI
+document the script generates into `build/yaml-json/openapi.yaml` from a fixed
+pattern: `--paths` paths (default 1000, about 1.1 MB), with an anchored
+parameter every path aliases and a merge key into each response map, so
+aliases and merges are on the measured path. The binary is built twice with
 `--link --profile speed` and `cmp` must find the pair byte-identical; the gap
 between them is the noise band. Rounds are interleaved, rotated and every
 other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
@@ -2441,15 +2442,18 @@ On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
 
 | Workload | Median | Copy | Band | MB/s |
 | --- | ---: | ---: | ---: | ---: |
-| parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
-| load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
+| parse | 17.641 ms | 17.101 ms | 3.2% | 59.8 |
+| load | 31.176 ms | 29.224 ms | 6.7% | 33.9 |
+| direct | 27.019 ms | 28.018 ms | 3.7% | 39.1 |
 
-Both rows time the whole binary, so **load** includes the parse. In wall
-clock, parse plus load is 1.94x the parse alone; the load step by itself is
-the 17.6 ms a document between them, 0.94x the parse, for 75,025 values from
-276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`, a document
-is 136M instructions to parse and 309M to parse and load, 2.27x; the load
-step alone is 173M, 1.27x the parse. The load step retires more instructions
+Every row times the whole binary, so **load** and **direct** include the
+parse. In wall clock, parse plus load is 1.77x the parse alone and direct is
+1.53x, 1.15x faster than parse plus load (1.04x between the slower direct
+binary and the faster load one). Under `valgrind --tool=callgrind`, a document
+is 135M instructions to parse, 298M to parse and load (2.21x) and 278M to load
+directly (2.06x): the sweep's build step is 143M against `load`'s 163M. What
+is left is building the values themselves (scalar decoding, the alias copies
+and merges), which both paths do. The load step retires more instructions
 than the parse but takes less time than it.
 
 ```bash
