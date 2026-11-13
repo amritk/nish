@@ -1,0 +1,932 @@
+PASS  five pipelined requests are answered
+PASS  each with the head the writer writes, then its body
+PASS  the first two heads are written and the three after them copied
+PASS  another status: the base head
+PASS  another status: the base head: written
+PASS  another status: the base head, kept
+PASS  another status: the base head, kept: written
+PASS  another status: the base head, copied
+PASS  another status: the base head, copied: copied
+PASS  another status
+PASS  another status: written
+PASS  another body length: the base head
+PASS  another body length: the base head: written
+PASS  another body length: the base head, kept
+PASS  another body length: the base head, kept: written
+PASS  another body length: the base head, copied
+PASS  another body length: the base head, copied: copied
+PASS  another body length
+PASS  another body length: written
+PASS  a value of the same length, changed: the base head
+PASS  a value of the same length, changed: the base head: written
+PASS  a value of the same length, changed: the base head, kept
+PASS  a value of the same length, changed: the base head, kept: written
+PASS  a value of the same length, changed: the base head, copied
+PASS  a value of the same length, changed: the base head, copied: copied
+PASS  a value of the same length, changed
+PASS  a value of the same length, changed: written
+PASS  a name of the same length in another case: the base head
+PASS  a name of the same length in another case: the base head: written
+PASS  a name of the same length in another case: the base head, kept
+PASS  a name of the same length in another case: the base head, kept: written
+PASS  a name of the same length in another case: the base head, copied
+PASS  a name of the same length in another case: the base head, copied: copied
+PASS  a name of the same length in another case
+PASS  a name of the same length in another case: written
+PASS  a field more: the base head
+PASS  a field more: the base head: written
+PASS  a field more: the base head, kept
+PASS  a field more: the base head, kept: written
+PASS  a field more: the base head, copied
+PASS  a field more: the base head, copied: copied
+PASS  a field more
+PASS  a field more: written
+PASS  a field fewer, its value never carried over: the base head
+PASS  a field fewer, its value never carried over: the base head: written
+PASS  a field fewer, its value never carried over: the base head, kept
+PASS  a field fewer, its value never carried over: the base head, kept: written
+PASS  a field fewer, its value never carried over: the base head, copied
+PASS  a field fewer, its value never carried over: the base head, copied: copied
+PASS  a field fewer, its value never carried over
+PASS  a field fewer, its value never carried over: written
+PASS  the fields in another order: the base head
+PASS  the fields in another order: the base head: written
+PASS  the fields in another order: the base head, kept
+PASS  the fields in another order: the base head, kept: written
+PASS  the fields in another order: the base head, copied
+PASS  the fields in another order: the base head, copied: copied
+PASS  the fields in another order
+PASS  the fields in another order: written
+PASS  fresh arrays with the kept head's bytes: the base head
+PASS  fresh arrays with the kept head's bytes: the base head: written
+PASS  fresh arrays with the kept head's bytes: the base head, kept
+PASS  fresh arrays with the kept head's bytes: the base head, kept: written
+PASS  fresh arrays with the kept head's bytes: the base head, copied
+PASS  fresh arrays with the kept head's bytes: the base head, copied: copied
+PASS  fresh arrays with the kept head's bytes
+PASS  fresh arrays with the kept head's bytes: copied
+PASS  one body length
+PASS  one body length: written
+PASS  another body length, kept
+PASS  another body length, kept: written
+PASS  that length again, copied
+PASS  that length again, copied: copied
+PASS  arrays answered in place
+PASS  arrays answered in place: written
+PASS  arrays answered in place, kept
+PASS  arrays answered in place, kept: written
+PASS  arrays answered in place, copied
+PASS  arrays answered in place, copied: copied
+PASS  one byte changed in place in the same array
+PASS  one byte changed in place in the same array: written
+PASS  a 201
+PASS  a 201: written
+PASS  a 201, kept
+PASS  a 201, kept: written
+PASS  a 201, copied
+PASS  a 201, copied: copied
+PASS  a 200 after 201s
+PASS  a 200 after 201s: written
+PASS  a 301
+PASS  a 301: written
+PASS  a 301, kept
+PASS  a 301, kept: written
+PASS  a 301, copied
+PASS  a 301, copied: copied
+PASS  a 200 after 301s
+PASS  a 200 after 301s: written
+PASS  a 302
+PASS  a 302: written
+PASS  a 302, kept
+PASS  a 302, kept: written
+PASS  a 302, copied
+PASS  a 302, copied: copied
+PASS  a 200 after 302s
+PASS  a 200 after 302s: written
+PASS  a 404
+PASS  a 404: written
+PASS  a 404, kept
+PASS  a 404, kept: written
+PASS  a 404, copied
+PASS  a 404, copied: copied
+PASS  a 200 after 404s
+PASS  a 200 after 404s: written
+PASS  a 500
+PASS  a 500: written
+PASS  a 500, kept
+PASS  a 500, kept: written
+PASS  a 500, copied
+PASS  a 500, copied: copied
+PASS  a 200 after 500s
+PASS  a 200 after 500s: written
+PASS  a 503
+PASS  a 503: written
+PASS  a 503, kept
+PASS  a 503, kept: written
+PASS  a 503, copied
+PASS  a 503, copied: copied
+PASS  a 200 after 503s
+PASS  a 200 after 503s: written
+PASS  two answers in one second
+PASS  two in the next carry the next second's Date
+PASS  the turn writes a head, the next is copied
+PASS  a later millisecond of the same second reformats nothing
+PASS  and its head is copied
+PASS  and its head is copied: copied
+PASS  three kept alive, then one with Connection: close
+PASS  the third is copied, the close written
+PASS  three HTTP/1.0 keep-alive answers, then an HTTP/1.1 one
+PASS  the third HTTP/1.0 head is copied, the HTTP/1.1 one written
+PASS  GET, GET, HEAD, GET
+PASS  the HEAD's head and the GET's after it are copied
+PASS  three GETs, then a HEAD with another length
+PASS  the third GET's head is copied, the HEAD's written
+PASS  a 100 after two answers and before a third
+PASS  the 100 is written and the answer after it copied
+PASS  three chunked answers, then one to HTTP/1.0
+PASS  the third chunked head is copied
+PASS  three 204s
+PASS  the third 204 is copied
+PASS  three 304s
+PASS  the third 304 is copied
+PASS  three answers before the error, the third copied
+PASS  a refused version is answered 505 and closed
+PASS  an error after a copied head is that same 505
+PASS  three answers before the long target, the third copied
+PASS  a target past maxTarget is answered 414 and closed
+PASS  and so after a copied head
+PASS  a head of A and B is kept and copied
+PASS  a name spanning two kept lines is refused
+PASS  a last value spanning the kept Date and Content-Length is refused
+PASS  then a head of A: b: c
+PASS  a name that takes in a colon of the kept value is refused
+PASS  nothing is queued by either
+PASS  a head of over 1 KiB twice
+PASS  written both times
+PASS  a head of over 1 KiB, then a short one with its field three times
+PASS  the short one is copied twice
+PASS  seventeen fields twice
+PASS  written both times
+PASS  a value of 1 changed at 0: the base head
+PASS  a value of 1 changed at 0: the base head: written
+PASS  a value of 1 changed at 0: the base head, kept
+PASS  a value of 1 changed at 0: the base head, kept: written
+PASS  a value of 1 changed at 0: the base head, copied
+PASS  a value of 1 changed at 0: the base head, copied: copied
+PASS  a value of 1 changed at 0
+PASS  a value of 1 changed at 0: written
+PASS  a name of 1 changed at 0: the base head
+PASS  a name of 1 changed at 0: the base head: written
+PASS  a name of 1 changed at 0: the base head, kept
+PASS  a name of 1 changed at 0: the base head, kept: written
+PASS  a name of 1 changed at 0: the base head, copied
+PASS  a name of 1 changed at 0: the base head, copied: copied
+PASS  a name of 1 changed at 0
+PASS  a name of 1 changed at 0: written
+PASS  a value of 2 changed at 0: the base head
+PASS  a value of 2 changed at 0: the base head: written
+PASS  a value of 2 changed at 0: the base head, kept
+PASS  a value of 2 changed at 0: the base head, kept: written
+PASS  a value of 2 changed at 0: the base head, copied
+PASS  a value of 2 changed at 0: the base head, copied: copied
+PASS  a value of 2 changed at 0
+PASS  a value of 2 changed at 0: written
+PASS  a name of 2 changed at 0: the base head
+PASS  a name of 2 changed at 0: the base head: written
+PASS  a name of 2 changed at 0: the base head, kept
+PASS  a name of 2 changed at 0: the base head, kept: written
+PASS  a name of 2 changed at 0: the base head, copied
+PASS  a name of 2 changed at 0: the base head, copied: copied
+PASS  a name of 2 changed at 0
+PASS  a name of 2 changed at 0: written
+PASS  a value of 2 changed at 1: the base head
+PASS  a value of 2 changed at 1: the base head: written
+PASS  a value of 2 changed at 1: the base head, kept
+PASS  a value of 2 changed at 1: the base head, kept: written
+PASS  a value of 2 changed at 1: the base head, copied
+PASS  a value of 2 changed at 1: the base head, copied: copied
+PASS  a value of 2 changed at 1
+PASS  a value of 2 changed at 1: written
+PASS  a name of 2 changed at 1: the base head
+PASS  a name of 2 changed at 1: the base head: written
+PASS  a name of 2 changed at 1: the base head, kept
+PASS  a name of 2 changed at 1: the base head, kept: written
+PASS  a name of 2 changed at 1: the base head, copied
+PASS  a name of 2 changed at 1: the base head, copied: copied
+PASS  a name of 2 changed at 1
+PASS  a name of 2 changed at 1: written
+PASS  a value of 2 changed at 1: the base head
+PASS  a value of 2 changed at 1: the base head: written
+PASS  a value of 2 changed at 1: the base head, kept
+PASS  a value of 2 changed at 1: the base head, kept: written
+PASS  a value of 2 changed at 1: the base head, copied
+PASS  a value of 2 changed at 1: the base head, copied: copied
+PASS  a value of 2 changed at 1
+PASS  a value of 2 changed at 1: written
+PASS  a name of 2 changed at 1: the base head
+PASS  a name of 2 changed at 1: the base head: written
+PASS  a name of 2 changed at 1: the base head, kept
+PASS  a name of 2 changed at 1: the base head, kept: written
+PASS  a name of 2 changed at 1: the base head, copied
+PASS  a name of 2 changed at 1: the base head, copied: copied
+PASS  a name of 2 changed at 1
+PASS  a name of 2 changed at 1: written
+PASS  a value of 3 changed at 0: the base head
+PASS  a value of 3 changed at 0: the base head: written
+PASS  a value of 3 changed at 0: the base head, kept
+PASS  a value of 3 changed at 0: the base head, kept: written
+PASS  a value of 3 changed at 0: the base head, copied
+PASS  a value of 3 changed at 0: the base head, copied: copied
+PASS  a value of 3 changed at 0
+PASS  a value of 3 changed at 0: written
+PASS  a name of 3 changed at 0: the base head
+PASS  a name of 3 changed at 0: the base head: written
+PASS  a name of 3 changed at 0: the base head, kept
+PASS  a name of 3 changed at 0: the base head, kept: written
+PASS  a name of 3 changed at 0: the base head, copied
+PASS  a name of 3 changed at 0: the base head, copied: copied
+PASS  a name of 3 changed at 0
+PASS  a name of 3 changed at 0: written
+PASS  a value of 3 changed at 1: the base head
+PASS  a value of 3 changed at 1: the base head: written
+PASS  a value of 3 changed at 1: the base head, kept
+PASS  a value of 3 changed at 1: the base head, kept: written
+PASS  a value of 3 changed at 1: the base head, copied
+PASS  a value of 3 changed at 1: the base head, copied: copied
+PASS  a value of 3 changed at 1
+PASS  a value of 3 changed at 1: written
+PASS  a name of 3 changed at 1: the base head
+PASS  a name of 3 changed at 1: the base head: written
+PASS  a name of 3 changed at 1: the base head, kept
+PASS  a name of 3 changed at 1: the base head, kept: written
+PASS  a name of 3 changed at 1: the base head, copied
+PASS  a name of 3 changed at 1: the base head, copied: copied
+PASS  a name of 3 changed at 1
+PASS  a name of 3 changed at 1: written
+PASS  a value of 3 changed at 2: the base head
+PASS  a value of 3 changed at 2: the base head: written
+PASS  a value of 3 changed at 2: the base head, kept
+PASS  a value of 3 changed at 2: the base head, kept: written
+PASS  a value of 3 changed at 2: the base head, copied
+PASS  a value of 3 changed at 2: the base head, copied: copied
+PASS  a value of 3 changed at 2
+PASS  a value of 3 changed at 2: written
+PASS  a name of 3 changed at 2: the base head
+PASS  a name of 3 changed at 2: the base head: written
+PASS  a name of 3 changed at 2: the base head, kept
+PASS  a name of 3 changed at 2: the base head, kept: written
+PASS  a name of 3 changed at 2: the base head, copied
+PASS  a name of 3 changed at 2: the base head, copied: copied
+PASS  a name of 3 changed at 2
+PASS  a name of 3 changed at 2: written
+PASS  a value of 4 changed at 0: the base head
+PASS  a value of 4 changed at 0: the base head: written
+PASS  a value of 4 changed at 0: the base head, kept
+PASS  a value of 4 changed at 0: the base head, kept: written
+PASS  a value of 4 changed at 0: the base head, copied
+PASS  a value of 4 changed at 0: the base head, copied: copied
+PASS  a value of 4 changed at 0
+PASS  a value of 4 changed at 0: written
+PASS  a name of 4 changed at 0: the base head
+PASS  a name of 4 changed at 0: the base head: written
+PASS  a name of 4 changed at 0: the base head, kept
+PASS  a name of 4 changed at 0: the base head, kept: written
+PASS  a name of 4 changed at 0: the base head, copied
+PASS  a name of 4 changed at 0: the base head, copied: copied
+PASS  a name of 4 changed at 0
+PASS  a name of 4 changed at 0: written
+PASS  a value of 4 changed at 2: the base head
+PASS  a value of 4 changed at 2: the base head: written
+PASS  a value of 4 changed at 2: the base head, kept
+PASS  a value of 4 changed at 2: the base head, kept: written
+PASS  a value of 4 changed at 2: the base head, copied
+PASS  a value of 4 changed at 2: the base head, copied: copied
+PASS  a value of 4 changed at 2
+PASS  a value of 4 changed at 2: written
+PASS  a name of 4 changed at 2: the base head
+PASS  a name of 4 changed at 2: the base head: written
+PASS  a name of 4 changed at 2: the base head, kept
+PASS  a name of 4 changed at 2: the base head, kept: written
+PASS  a name of 4 changed at 2: the base head, copied
+PASS  a name of 4 changed at 2: the base head, copied: copied
+PASS  a name of 4 changed at 2
+PASS  a name of 4 changed at 2: written
+PASS  a value of 4 changed at 3: the base head
+PASS  a value of 4 changed at 3: the base head: written
+PASS  a value of 4 changed at 3: the base head, kept
+PASS  a value of 4 changed at 3: the base head, kept: written
+PASS  a value of 4 changed at 3: the base head, copied
+PASS  a value of 4 changed at 3: the base head, copied: copied
+PASS  a value of 4 changed at 3
+PASS  a value of 4 changed at 3: written
+PASS  a name of 4 changed at 3: the base head
+PASS  a name of 4 changed at 3: the base head: written
+PASS  a name of 4 changed at 3: the base head, kept
+PASS  a name of 4 changed at 3: the base head, kept: written
+PASS  a name of 4 changed at 3: the base head, copied
+PASS  a name of 4 changed at 3: the base head, copied: copied
+PASS  a name of 4 changed at 3
+PASS  a name of 4 changed at 3: written
+PASS  a value of 5 changed at 0: the base head
+PASS  a value of 5 changed at 0: the base head: written
+PASS  a value of 5 changed at 0: the base head, kept
+PASS  a value of 5 changed at 0: the base head, kept: written
+PASS  a value of 5 changed at 0: the base head, copied
+PASS  a value of 5 changed at 0: the base head, copied: copied
+PASS  a value of 5 changed at 0
+PASS  a value of 5 changed at 0: written
+PASS  a name of 5 changed at 0: the base head
+PASS  a name of 5 changed at 0: the base head: written
+PASS  a name of 5 changed at 0: the base head, kept
+PASS  a name of 5 changed at 0: the base head, kept: written
+PASS  a name of 5 changed at 0: the base head, copied
+PASS  a name of 5 changed at 0: the base head, copied: copied
+PASS  a name of 5 changed at 0
+PASS  a name of 5 changed at 0: written
+PASS  a value of 5 changed at 2: the base head
+PASS  a value of 5 changed at 2: the base head: written
+PASS  a value of 5 changed at 2: the base head, kept
+PASS  a value of 5 changed at 2: the base head, kept: written
+PASS  a value of 5 changed at 2: the base head, copied
+PASS  a value of 5 changed at 2: the base head, copied: copied
+PASS  a value of 5 changed at 2
+PASS  a value of 5 changed at 2: written
+PASS  a name of 5 changed at 2: the base head
+PASS  a name of 5 changed at 2: the base head: written
+PASS  a name of 5 changed at 2: the base head, kept
+PASS  a name of 5 changed at 2: the base head, kept: written
+PASS  a name of 5 changed at 2: the base head, copied
+PASS  a name of 5 changed at 2: the base head, copied: copied
+PASS  a name of 5 changed at 2
+PASS  a name of 5 changed at 2: written
+PASS  a value of 5 changed at 4: the base head
+PASS  a value of 5 changed at 4: the base head: written
+PASS  a value of 5 changed at 4: the base head, kept
+PASS  a value of 5 changed at 4: the base head, kept: written
+PASS  a value of 5 changed at 4: the base head, copied
+PASS  a value of 5 changed at 4: the base head, copied: copied
+PASS  a value of 5 changed at 4
+PASS  a value of 5 changed at 4: written
+PASS  a name of 5 changed at 4: the base head
+PASS  a name of 5 changed at 4: the base head: written
+PASS  a name of 5 changed at 4: the base head, kept
+PASS  a name of 5 changed at 4: the base head, kept: written
+PASS  a name of 5 changed at 4: the base head, copied
+PASS  a name of 5 changed at 4: the base head, copied: copied
+PASS  a name of 5 changed at 4
+PASS  a name of 5 changed at 4: written
+PASS  a value of 7 changed at 0: the base head
+PASS  a value of 7 changed at 0: the base head: written
+PASS  a value of 7 changed at 0: the base head, kept
+PASS  a value of 7 changed at 0: the base head, kept: written
+PASS  a value of 7 changed at 0: the base head, copied
+PASS  a value of 7 changed at 0: the base head, copied: copied
+PASS  a value of 7 changed at 0
+PASS  a value of 7 changed at 0: written
+PASS  a name of 7 changed at 0: the base head
+PASS  a name of 7 changed at 0: the base head: written
+PASS  a name of 7 changed at 0: the base head, kept
+PASS  a name of 7 changed at 0: the base head, kept: written
+PASS  a name of 7 changed at 0: the base head, copied
+PASS  a name of 7 changed at 0: the base head, copied: copied
+PASS  a name of 7 changed at 0
+PASS  a name of 7 changed at 0: written
+PASS  a value of 7 changed at 3: the base head
+PASS  a value of 7 changed at 3: the base head: written
+PASS  a value of 7 changed at 3: the base head, kept
+PASS  a value of 7 changed at 3: the base head, kept: written
+PASS  a value of 7 changed at 3: the base head, copied
+PASS  a value of 7 changed at 3: the base head, copied: copied
+PASS  a value of 7 changed at 3
+PASS  a value of 7 changed at 3: written
+PASS  a name of 7 changed at 3: the base head
+PASS  a name of 7 changed at 3: the base head: written
+PASS  a name of 7 changed at 3: the base head, kept
+PASS  a name of 7 changed at 3: the base head, kept: written
+PASS  a name of 7 changed at 3: the base head, copied
+PASS  a name of 7 changed at 3: the base head, copied: copied
+PASS  a name of 7 changed at 3
+PASS  a name of 7 changed at 3: written
+PASS  a value of 7 changed at 6: the base head
+PASS  a value of 7 changed at 6: the base head: written
+PASS  a value of 7 changed at 6: the base head, kept
+PASS  a value of 7 changed at 6: the base head, kept: written
+PASS  a value of 7 changed at 6: the base head, copied
+PASS  a value of 7 changed at 6: the base head, copied: copied
+PASS  a value of 7 changed at 6
+PASS  a value of 7 changed at 6: written
+PASS  a name of 7 changed at 6: the base head
+PASS  a name of 7 changed at 6: the base head: written
+PASS  a name of 7 changed at 6: the base head, kept
+PASS  a name of 7 changed at 6: the base head, kept: written
+PASS  a name of 7 changed at 6: the base head, copied
+PASS  a name of 7 changed at 6: the base head, copied: copied
+PASS  a name of 7 changed at 6
+PASS  a name of 7 changed at 6: written
+PASS  a value of 8 changed at 0: the base head
+PASS  a value of 8 changed at 0: the base head: written
+PASS  a value of 8 changed at 0: the base head, kept
+PASS  a value of 8 changed at 0: the base head, kept: written
+PASS  a value of 8 changed at 0: the base head, copied
+PASS  a value of 8 changed at 0: the base head, copied: copied
+PASS  a value of 8 changed at 0
+PASS  a value of 8 changed at 0: written
+PASS  a name of 8 changed at 0: the base head
+PASS  a name of 8 changed at 0: the base head: written
+PASS  a name of 8 changed at 0: the base head, kept
+PASS  a name of 8 changed at 0: the base head, kept: written
+PASS  a name of 8 changed at 0: the base head, copied
+PASS  a name of 8 changed at 0: the base head, copied: copied
+PASS  a name of 8 changed at 0
+PASS  a name of 8 changed at 0: written
+PASS  a value of 8 changed at 4: the base head
+PASS  a value of 8 changed at 4: the base head: written
+PASS  a value of 8 changed at 4: the base head, kept
+PASS  a value of 8 changed at 4: the base head, kept: written
+PASS  a value of 8 changed at 4: the base head, copied
+PASS  a value of 8 changed at 4: the base head, copied: copied
+PASS  a value of 8 changed at 4
+PASS  a value of 8 changed at 4: written
+PASS  a name of 8 changed at 4: the base head
+PASS  a name of 8 changed at 4: the base head: written
+PASS  a name of 8 changed at 4: the base head, kept
+PASS  a name of 8 changed at 4: the base head, kept: written
+PASS  a name of 8 changed at 4: the base head, copied
+PASS  a name of 8 changed at 4: the base head, copied: copied
+PASS  a name of 8 changed at 4
+PASS  a name of 8 changed at 4: written
+PASS  a value of 8 changed at 7: the base head
+PASS  a value of 8 changed at 7: the base head: written
+PASS  a value of 8 changed at 7: the base head, kept
+PASS  a value of 8 changed at 7: the base head, kept: written
+PASS  a value of 8 changed at 7: the base head, copied
+PASS  a value of 8 changed at 7: the base head, copied: copied
+PASS  a value of 8 changed at 7
+PASS  a value of 8 changed at 7: written
+PASS  a name of 8 changed at 7: the base head
+PASS  a name of 8 changed at 7: the base head: written
+PASS  a name of 8 changed at 7: the base head, kept
+PASS  a name of 8 changed at 7: the base head, kept: written
+PASS  a name of 8 changed at 7: the base head, copied
+PASS  a name of 8 changed at 7: the base head, copied: copied
+PASS  a name of 8 changed at 7
+PASS  a name of 8 changed at 7: written
+PASS  a value of 9 changed at 0: the base head
+PASS  a value of 9 changed at 0: the base head: written
+PASS  a value of 9 changed at 0: the base head, kept
+PASS  a value of 9 changed at 0: the base head, kept: written
+PASS  a value of 9 changed at 0: the base head, copied
+PASS  a value of 9 changed at 0: the base head, copied: copied
+PASS  a value of 9 changed at 0
+PASS  a value of 9 changed at 0: written
+PASS  a name of 9 changed at 0: the base head
+PASS  a name of 9 changed at 0: the base head: written
+PASS  a name of 9 changed at 0: the base head, kept
+PASS  a name of 9 changed at 0: the base head, kept: written
+PASS  a name of 9 changed at 0: the base head, copied
+PASS  a name of 9 changed at 0: the base head, copied: copied
+PASS  a name of 9 changed at 0
+PASS  a name of 9 changed at 0: written
+PASS  a value of 9 changed at 4: the base head
+PASS  a value of 9 changed at 4: the base head: written
+PASS  a value of 9 changed at 4: the base head, kept
+PASS  a value of 9 changed at 4: the base head, kept: written
+PASS  a value of 9 changed at 4: the base head, copied
+PASS  a value of 9 changed at 4: the base head, copied: copied
+PASS  a value of 9 changed at 4
+PASS  a value of 9 changed at 4: written
+PASS  a name of 9 changed at 4: the base head
+PASS  a name of 9 changed at 4: the base head: written
+PASS  a name of 9 changed at 4: the base head, kept
+PASS  a name of 9 changed at 4: the base head, kept: written
+PASS  a name of 9 changed at 4: the base head, copied
+PASS  a name of 9 changed at 4: the base head, copied: copied
+PASS  a name of 9 changed at 4
+PASS  a name of 9 changed at 4: written
+PASS  a value of 9 changed at 8: the base head
+PASS  a value of 9 changed at 8: the base head: written
+PASS  a value of 9 changed at 8: the base head, kept
+PASS  a value of 9 changed at 8: the base head, kept: written
+PASS  a value of 9 changed at 8: the base head, copied
+PASS  a value of 9 changed at 8: the base head, copied: copied
+PASS  a value of 9 changed at 8
+PASS  a value of 9 changed at 8: written
+PASS  a name of 9 changed at 8: the base head
+PASS  a name of 9 changed at 8: the base head: written
+PASS  a name of 9 changed at 8: the base head, kept
+PASS  a name of 9 changed at 8: the base head, kept: written
+PASS  a name of 9 changed at 8: the base head, copied
+PASS  a name of 9 changed at 8: the base head, copied: copied
+PASS  a name of 9 changed at 8
+PASS  a name of 9 changed at 8: written
+PASS  a value of 15 changed at 0: the base head
+PASS  a value of 15 changed at 0: the base head: written
+PASS  a value of 15 changed at 0: the base head, kept
+PASS  a value of 15 changed at 0: the base head, kept: written
+PASS  a value of 15 changed at 0: the base head, copied
+PASS  a value of 15 changed at 0: the base head, copied: copied
+PASS  a value of 15 changed at 0
+PASS  a value of 15 changed at 0: written
+PASS  a name of 15 changed at 0: the base head
+PASS  a name of 15 changed at 0: the base head: written
+PASS  a name of 15 changed at 0: the base head, kept
+PASS  a name of 15 changed at 0: the base head, kept: written
+PASS  a name of 15 changed at 0: the base head, copied
+PASS  a name of 15 changed at 0: the base head, copied: copied
+PASS  a name of 15 changed at 0
+PASS  a name of 15 changed at 0: written
+PASS  a value of 15 changed at 7: the base head
+PASS  a value of 15 changed at 7: the base head: written
+PASS  a value of 15 changed at 7: the base head, kept
+PASS  a value of 15 changed at 7: the base head, kept: written
+PASS  a value of 15 changed at 7: the base head, copied
+PASS  a value of 15 changed at 7: the base head, copied: copied
+PASS  a value of 15 changed at 7
+PASS  a value of 15 changed at 7: written
+PASS  a name of 15 changed at 7: the base head
+PASS  a name of 15 changed at 7: the base head: written
+PASS  a name of 15 changed at 7: the base head, kept
+PASS  a name of 15 changed at 7: the base head, kept: written
+PASS  a name of 15 changed at 7: the base head, copied
+PASS  a name of 15 changed at 7: the base head, copied: copied
+PASS  a name of 15 changed at 7
+PASS  a name of 15 changed at 7: written
+PASS  a value of 15 changed at 14: the base head
+PASS  a value of 15 changed at 14: the base head: written
+PASS  a value of 15 changed at 14: the base head, kept
+PASS  a value of 15 changed at 14: the base head, kept: written
+PASS  a value of 15 changed at 14: the base head, copied
+PASS  a value of 15 changed at 14: the base head, copied: copied
+PASS  a value of 15 changed at 14
+PASS  a value of 15 changed at 14: written
+PASS  a name of 15 changed at 14: the base head
+PASS  a name of 15 changed at 14: the base head: written
+PASS  a name of 15 changed at 14: the base head, kept
+PASS  a name of 15 changed at 14: the base head, kept: written
+PASS  a name of 15 changed at 14: the base head, copied
+PASS  a name of 15 changed at 14: the base head, copied: copied
+PASS  a name of 15 changed at 14
+PASS  a name of 15 changed at 14: written
+PASS  a value of 16 changed at 0: the base head
+PASS  a value of 16 changed at 0: the base head: written
+PASS  a value of 16 changed at 0: the base head, kept
+PASS  a value of 16 changed at 0: the base head, kept: written
+PASS  a value of 16 changed at 0: the base head, copied
+PASS  a value of 16 changed at 0: the base head, copied: copied
+PASS  a value of 16 changed at 0
+PASS  a value of 16 changed at 0: written
+PASS  a name of 16 changed at 0: the base head
+PASS  a name of 16 changed at 0: the base head: written
+PASS  a name of 16 changed at 0: the base head, kept
+PASS  a name of 16 changed at 0: the base head, kept: written
+PASS  a name of 16 changed at 0: the base head, copied
+PASS  a name of 16 changed at 0: the base head, copied: copied
+PASS  a name of 16 changed at 0
+PASS  a name of 16 changed at 0: written
+PASS  a value of 16 changed at 8: the base head
+PASS  a value of 16 changed at 8: the base head: written
+PASS  a value of 16 changed at 8: the base head, kept
+PASS  a value of 16 changed at 8: the base head, kept: written
+PASS  a value of 16 changed at 8: the base head, copied
+PASS  a value of 16 changed at 8: the base head, copied: copied
+PASS  a value of 16 changed at 8
+PASS  a value of 16 changed at 8: written
+PASS  a name of 16 changed at 8: the base head
+PASS  a name of 16 changed at 8: the base head: written
+PASS  a name of 16 changed at 8: the base head, kept
+PASS  a name of 16 changed at 8: the base head, kept: written
+PASS  a name of 16 changed at 8: the base head, copied
+PASS  a name of 16 changed at 8: the base head, copied: copied
+PASS  a name of 16 changed at 8
+PASS  a name of 16 changed at 8: written
+PASS  a value of 16 changed at 15: the base head
+PASS  a value of 16 changed at 15: the base head: written
+PASS  a value of 16 changed at 15: the base head, kept
+PASS  a value of 16 changed at 15: the base head, kept: written
+PASS  a value of 16 changed at 15: the base head, copied
+PASS  a value of 16 changed at 15: the base head, copied: copied
+PASS  a value of 16 changed at 15
+PASS  a value of 16 changed at 15: written
+PASS  a name of 16 changed at 15: the base head
+PASS  a name of 16 changed at 15: the base head: written
+PASS  a name of 16 changed at 15: the base head, kept
+PASS  a name of 16 changed at 15: the base head, kept: written
+PASS  a name of 16 changed at 15: the base head, copied
+PASS  a name of 16 changed at 15: the base head, copied: copied
+PASS  a name of 16 changed at 15
+PASS  a name of 16 changed at 15: written
+PASS  a value of 17 changed at 0: the base head
+PASS  a value of 17 changed at 0: the base head: written
+PASS  a value of 17 changed at 0: the base head, kept
+PASS  a value of 17 changed at 0: the base head, kept: written
+PASS  a value of 17 changed at 0: the base head, copied
+PASS  a value of 17 changed at 0: the base head, copied: copied
+PASS  a value of 17 changed at 0
+PASS  a value of 17 changed at 0: written
+PASS  a name of 17 changed at 0: the base head
+PASS  a name of 17 changed at 0: the base head: written
+PASS  a name of 17 changed at 0: the base head, kept
+PASS  a name of 17 changed at 0: the base head, kept: written
+PASS  a name of 17 changed at 0: the base head, copied
+PASS  a name of 17 changed at 0: the base head, copied: copied
+PASS  a name of 17 changed at 0
+PASS  a name of 17 changed at 0: written
+PASS  a value of 17 changed at 8: the base head
+PASS  a value of 17 changed at 8: the base head: written
+PASS  a value of 17 changed at 8: the base head, kept
+PASS  a value of 17 changed at 8: the base head, kept: written
+PASS  a value of 17 changed at 8: the base head, copied
+PASS  a value of 17 changed at 8: the base head, copied: copied
+PASS  a value of 17 changed at 8
+PASS  a value of 17 changed at 8: written
+PASS  a name of 17 changed at 8: the base head
+PASS  a name of 17 changed at 8: the base head: written
+PASS  a name of 17 changed at 8: the base head, kept
+PASS  a name of 17 changed at 8: the base head, kept: written
+PASS  a name of 17 changed at 8: the base head, copied
+PASS  a name of 17 changed at 8: the base head, copied: copied
+PASS  a name of 17 changed at 8
+PASS  a name of 17 changed at 8: written
+PASS  a value of 17 changed at 16: the base head
+PASS  a value of 17 changed at 16: the base head: written
+PASS  a value of 17 changed at 16: the base head, kept
+PASS  a value of 17 changed at 16: the base head, kept: written
+PASS  a value of 17 changed at 16: the base head, copied
+PASS  a value of 17 changed at 16: the base head, copied: copied
+PASS  a value of 17 changed at 16
+PASS  a value of 17 changed at 16: written
+PASS  a name of 17 changed at 16: the base head
+PASS  a name of 17 changed at 16: the base head: written
+PASS  a name of 17 changed at 16: the base head, kept
+PASS  a name of 17 changed at 16: the base head, kept: written
+PASS  a name of 17 changed at 16: the base head, copied
+PASS  a name of 17 changed at 16: the base head, copied: copied
+PASS  a name of 17 changed at 16
+PASS  a name of 17 changed at 16: written
+PASS  a value of 31 changed at 0: the base head
+PASS  a value of 31 changed at 0: the base head: written
+PASS  a value of 31 changed at 0: the base head, kept
+PASS  a value of 31 changed at 0: the base head, kept: written
+PASS  a value of 31 changed at 0: the base head, copied
+PASS  a value of 31 changed at 0: the base head, copied: copied
+PASS  a value of 31 changed at 0
+PASS  a value of 31 changed at 0: written
+PASS  a name of 31 changed at 0: the base head
+PASS  a name of 31 changed at 0: the base head: written
+PASS  a name of 31 changed at 0: the base head, kept
+PASS  a name of 31 changed at 0: the base head, kept: written
+PASS  a name of 31 changed at 0: the base head, copied
+PASS  a name of 31 changed at 0: the base head, copied: copied
+PASS  a name of 31 changed at 0
+PASS  a name of 31 changed at 0: written
+PASS  a value of 31 changed at 15: the base head
+PASS  a value of 31 changed at 15: the base head: written
+PASS  a value of 31 changed at 15: the base head, kept
+PASS  a value of 31 changed at 15: the base head, kept: written
+PASS  a value of 31 changed at 15: the base head, copied
+PASS  a value of 31 changed at 15: the base head, copied: copied
+PASS  a value of 31 changed at 15
+PASS  a value of 31 changed at 15: written
+PASS  a name of 31 changed at 15: the base head
+PASS  a name of 31 changed at 15: the base head: written
+PASS  a name of 31 changed at 15: the base head, kept
+PASS  a name of 31 changed at 15: the base head, kept: written
+PASS  a name of 31 changed at 15: the base head, copied
+PASS  a name of 31 changed at 15: the base head, copied: copied
+PASS  a name of 31 changed at 15
+PASS  a name of 31 changed at 15: written
+PASS  a value of 31 changed at 30: the base head
+PASS  a value of 31 changed at 30: the base head: written
+PASS  a value of 31 changed at 30: the base head, kept
+PASS  a value of 31 changed at 30: the base head, kept: written
+PASS  a value of 31 changed at 30: the base head, copied
+PASS  a value of 31 changed at 30: the base head, copied: copied
+PASS  a value of 31 changed at 30
+PASS  a value of 31 changed at 30: written
+PASS  a name of 31 changed at 30: the base head
+PASS  a name of 31 changed at 30: the base head: written
+PASS  a name of 31 changed at 30: the base head, kept
+PASS  a name of 31 changed at 30: the base head, kept: written
+PASS  a name of 31 changed at 30: the base head, copied
+PASS  a name of 31 changed at 30: the base head, copied: copied
+PASS  a name of 31 changed at 30
+PASS  a name of 31 changed at 30: written
+PASS  a value of 32 changed at 0: the base head
+PASS  a value of 32 changed at 0: the base head: written
+PASS  a value of 32 changed at 0: the base head, kept
+PASS  a value of 32 changed at 0: the base head, kept: written
+PASS  a value of 32 changed at 0: the base head, copied
+PASS  a value of 32 changed at 0: the base head, copied: copied
+PASS  a value of 32 changed at 0
+PASS  a value of 32 changed at 0: written
+PASS  a name of 32 changed at 0: the base head
+PASS  a name of 32 changed at 0: the base head: written
+PASS  a name of 32 changed at 0: the base head, kept
+PASS  a name of 32 changed at 0: the base head, kept: written
+PASS  a name of 32 changed at 0: the base head, copied
+PASS  a name of 32 changed at 0: the base head, copied: copied
+PASS  a name of 32 changed at 0
+PASS  a name of 32 changed at 0: written
+PASS  a value of 32 changed at 16: the base head
+PASS  a value of 32 changed at 16: the base head: written
+PASS  a value of 32 changed at 16: the base head, kept
+PASS  a value of 32 changed at 16: the base head, kept: written
+PASS  a value of 32 changed at 16: the base head, copied
+PASS  a value of 32 changed at 16: the base head, copied: copied
+PASS  a value of 32 changed at 16
+PASS  a value of 32 changed at 16: written
+PASS  a name of 32 changed at 16: the base head
+PASS  a name of 32 changed at 16: the base head: written
+PASS  a name of 32 changed at 16: the base head, kept
+PASS  a name of 32 changed at 16: the base head, kept: written
+PASS  a name of 32 changed at 16: the base head, copied
+PASS  a name of 32 changed at 16: the base head, copied: copied
+PASS  a name of 32 changed at 16
+PASS  a name of 32 changed at 16: written
+PASS  a value of 32 changed at 31: the base head
+PASS  a value of 32 changed at 31: the base head: written
+PASS  a value of 32 changed at 31: the base head, kept
+PASS  a value of 32 changed at 31: the base head, kept: written
+PASS  a value of 32 changed at 31: the base head, copied
+PASS  a value of 32 changed at 31: the base head, copied: copied
+PASS  a value of 32 changed at 31
+PASS  a value of 32 changed at 31: written
+PASS  a name of 32 changed at 31: the base head
+PASS  a name of 32 changed at 31: the base head: written
+PASS  a name of 32 changed at 31: the base head, kept
+PASS  a name of 32 changed at 31: the base head, kept: written
+PASS  a name of 32 changed at 31: the base head, copied
+PASS  a name of 32 changed at 31: the base head, copied: copied
+PASS  a name of 32 changed at 31
+PASS  a name of 32 changed at 31: written
+PASS  a value of 33 changed at 0: the base head
+PASS  a value of 33 changed at 0: the base head: written
+PASS  a value of 33 changed at 0: the base head, kept
+PASS  a value of 33 changed at 0: the base head, kept: written
+PASS  a value of 33 changed at 0: the base head, copied
+PASS  a value of 33 changed at 0: the base head, copied: copied
+PASS  a value of 33 changed at 0
+PASS  a value of 33 changed at 0: written
+PASS  a name of 33 changed at 0: the base head
+PASS  a name of 33 changed at 0: the base head: written
+PASS  a name of 33 changed at 0: the base head, kept
+PASS  a name of 33 changed at 0: the base head, kept: written
+PASS  a name of 33 changed at 0: the base head, copied
+PASS  a name of 33 changed at 0: the base head, copied: copied
+PASS  a name of 33 changed at 0
+PASS  a name of 33 changed at 0: written
+PASS  a value of 33 changed at 16: the base head
+PASS  a value of 33 changed at 16: the base head: written
+PASS  a value of 33 changed at 16: the base head, kept
+PASS  a value of 33 changed at 16: the base head, kept: written
+PASS  a value of 33 changed at 16: the base head, copied
+PASS  a value of 33 changed at 16: the base head, copied: copied
+PASS  a value of 33 changed at 16
+PASS  a value of 33 changed at 16: written
+PASS  a name of 33 changed at 16: the base head
+PASS  a name of 33 changed at 16: the base head: written
+PASS  a name of 33 changed at 16: the base head, kept
+PASS  a name of 33 changed at 16: the base head, kept: written
+PASS  a name of 33 changed at 16: the base head, copied
+PASS  a name of 33 changed at 16: the base head, copied: copied
+PASS  a name of 33 changed at 16
+PASS  a name of 33 changed at 16: written
+PASS  a value of 33 changed at 32: the base head
+PASS  a value of 33 changed at 32: the base head: written
+PASS  a value of 33 changed at 32: the base head, kept
+PASS  a value of 33 changed at 32: the base head, kept: written
+PASS  a value of 33 changed at 32: the base head, copied
+PASS  a value of 33 changed at 32: the base head, copied: copied
+PASS  a value of 33 changed at 32
+PASS  a value of 33 changed at 32: written
+PASS  a name of 33 changed at 32: the base head
+PASS  a name of 33 changed at 32: the base head: written
+PASS  a name of 33 changed at 32: the base head, kept
+PASS  a name of 33 changed at 32: the base head, kept: written
+PASS  a name of 33 changed at 32: the base head, copied
+PASS  a name of 33 changed at 32: the base head, copied: copied
+PASS  a name of 33 changed at 32
+PASS  a name of 33 changed at 32: written
+PASS  sixteen fields
+PASS  sixteen fields: written
+PASS  sixteen fields, kept
+PASS  sixteen fields, kept: written
+PASS  sixteen fields, copied
+PASS  sixteen fields, copied: copied
+PASS  short fields
+PASS  short fields: written
+PASS  short fields, kept
+PASS  short fields, kept: written
+PASS  short fields, copied
+PASS  short fields, copied: copied
+PASS  short fields, one byte changed
+PASS  short fields, one byte changed: written
+PASS  a streak's base head
+PASS  a streak's base head: written
+PASS  a streak's base head, kept
+PASS  a streak's base head, kept: written
+PASS  a streak's base head, copied
+PASS  a streak's base head, copied: copied
+PASS  a miss in a row, 1
+PASS  a miss in a row, 1: written
+PASS  a miss in a row, 2
+PASS  a miss in a row, 2: written
+PASS  a miss in a row, 3
+PASS  a miss in a row, 3: written
+PASS  a miss in a row, 4
+PASS  a miss in a row, 4: written
+PASS  the fourth miss repeated: off, so written
+PASS  the fourth miss repeated: off, so written: written
+PASS  and again: written
+PASS  and again: written: written
+PASS  the base head too: written
+PASS  the base head too: written: written
+PASS  the streak copied nothing past its base
+PASS  the next second: on again, written
+PASS  the next second: on again, written: written
+PASS  the next second: kept, then copied
+PASS  the next second: kept, then copied: copied
+PASS  another shape in a row, 1
+PASS  another shape in a row, 1: written
+PASS  another shape in a row, 2
+PASS  another shape in a row, 2: written
+PASS  another shape in a row, 3
+PASS  another shape in a row, 3: written
+PASS  another shape in a row, 4
+PASS  another shape in a row, 4: written
+PASS  then one head, off: written 1
+PASS  then one head, off: written 1: written
+PASS  then one head, off: written 2
+PASS  then one head, off: written 2: written
+PASS  then one head, off: written 3
+PASS  then one head, off: written 3: written
+PASS  the next second: written
+PASS  the next second: written: written
+PASS  the next second: copied
+PASS  the next second: copied: copied
+PASS  a broken streak's base head
+PASS  a broken streak's base head: written
+PASS  a broken streak's base head, kept
+PASS  a broken streak's base head, kept: written
+PASS  a broken streak's base head, copied
+PASS  a broken streak's base head, copied: copied
+PASS  round 1, miss 1
+PASS  round 1, miss 1: written
+PASS  round 1, miss 2
+PASS  round 1, miss 2: written
+PASS  round 1, miss 3
+PASS  round 1, miss 3: written
+PASS  round 1, the third miss's head again
+PASS  round 1, the third miss's head again: copied
+PASS  round 2, miss 1
+PASS  round 2, miss 1: written
+PASS  round 2, miss 2
+PASS  round 2, miss 2: written
+PASS  round 2, miss 3
+PASS  round 2, miss 3: written
+PASS  round 2, the third miss's head again
+PASS  round 2, the third miss's head again: copied
+PASS  a restarted streak, miss 1
+PASS  a restarted streak, miss 1: written
+PASS  a restarted streak, miss 2
+PASS  a restarted streak, miss 2: written
+PASS  a restarted streak, miss 3
+PASS  a restarted streak, miss 3: written
+PASS  a restarted streak, miss 4
+PASS  a restarted streak, miss 4: written
+PASS  restarted while off: written
+PASS  restarted while off: written: written
+PASS  restarted while off: kept
+PASS  restarted while off: kept: written
+PASS  restarted while off: copied
+PASS  restarted while off: copied: copied
+PASS  the restarted slot copied one
+PASS  before the restart
+PASS  before the restart: written
+PASS  before the restart, kept
+PASS  before the restart, kept: written
+PASS  before the restart, copied
+PASS  before the restart, copied: copied
+PASS  after the restart
+PASS  after the restart: written
+PASS  after the restart, kept
+PASS  after the restart, kept: written
+PASS  after the restart, copied
+PASS  after the restart, copied: copied
+PASS  a full-sized body
+PASS  a full-sized body: written
+PASS  a full-sized body, kept
+PASS  a full-sized body, kept: written
+PASS  a full-sized body, copied
+PASS  a full-sized body, copied: copied
+PASS  the same head with one byte too little room is held
+PASS  held: not copied
+PASS  held: nothing queued
+PASS  held: the copied response is whole
+PASS  then the program is asked to write
+PASS  the same head again
+PASS  now copied
+PASS  its bytes
+PASS  two hundred answers, each byte for byte
+PASS  two heads written, 198 copied
+http1 head reuse: 931 passed, 0 failed, 0 skipped

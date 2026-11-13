@@ -7,7 +7,7 @@
 - [x] Stage 1: `--sandbox` and `--sandbox=best-effort`, with Landlock and seccomp
 - [x] Stage 2: the `fs.read=<dir>` and `fs.write=<dir>` scopes
 - [x] Dependency-grant scopes and the exec allowlist under `--sandbox`
-- [x] Close SBX-1: the loader a granted program reaches can run any program
+- [x] Close SBX-1: the loader a granted program reaches can run any program, as a spawn target and from the granted program's own exec (one exec per spawn)
 - [ ] Scopes in the `package.json` manifest *(deferred)*
 - [ ] Refuse IFUNC resolvers at link time *(deferred)*
 - [ ] `nish run` sandboxed by default *(deferred)*

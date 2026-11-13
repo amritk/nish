@@ -1202,6 +1202,14 @@ declare function realpathSync(path: string): string | null;
  * an embedded NUL truncates one. A `wasm32` build and a WASI build have no
  * processes, and a WASI build always answers `-1`. Capability: process.spawn.
  *
+ * Under `--sandbox`, a dependency's `process.spawn=<program>` grants can make
+ * a list of the only programs the build may start. A program this builtin
+ * starts under such a list cannot start another: an exec by it, or by
+ * anything it forks, fails, so a granted `#!` script runs its interpreter's
+ * builtins alone. Where the kernel or a container's seccomp profile refuses
+ * what that takes (Docker's default profile does), the spawn fails and one
+ * line on stderr says so.
+ *
  * @param argv the program and its arguments.
  * @returns the exit status, or `128 + n` when signal `n` killed it (the shell's
  *   convention), or `-1` when the vector is empty — there is no `argv[0]` to
@@ -1216,6 +1224,9 @@ declare function spawnSync(argv: string[]): number;
  * stderr through. The two paths must not name one file: each is opened
  * separately, with its own offset, so the streams would overwrite rather than
  * interleave; capture them apart and concatenate. Capability: process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @param stdoutPath the file the child's stdout goes to, or `""`.
@@ -1243,6 +1254,9 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  * length is fixed. A `wasm32` build refuses it (NL2404). Capability:
  * process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
  * @param stdout receives what the child prints on stdout.
@@ -1268,6 +1282,9 @@ declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], 
  * and 16 MiB cap, `readonly` and typed-array spellings refused for the two
  * output arrays, refused by a `wasm32` build (NL2404). Capability:
  * process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
@@ -1298,12 +1315,18 @@ declare function spawnPipedWithin(
  * under Node, which throws. A `wasm32` build refuses it (NL2404).
  * Capability: process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @param fds the descriptors handed down, at most 64.
  * @returns the child's pid, or a negative errno: -22 more than 64 descriptors
  *   or a negative one (before anything is opened or started), -9 one that is
  *   not open, -24 (or -22 above the descriptor limit) a scratch descriptor the
- *   system cannot give.
+ *   system cannot give. Under `--sandbox` with a list of granted
+ *   programs, a spawn that cannot be held to one program is refused: -11
+ *   (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+ *   on stderr.
  */
 declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
 /**
@@ -1318,10 +1341,16 @@ declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
  * `nish:process`.
  * Capability: process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @returns the child's pid, or a negative errno: -22 (EINVAL) for an empty
  *   vector or an argument holding a NUL, and `posix_spawnp`'s own error
- *   otherwise, so a program that is not there is -2 (ENOENT).
+ *   otherwise, so a program that is not there is -2 (ENOENT). Under `--sandbox` with a list of granted
+ *   programs, a spawn that cannot be held to one program is refused: -11
+ *   (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+ *   on stderr.
  */
 declare function spawn(argv: string[]): i32;
 /**
@@ -2829,7 +2858,10 @@ declare module "nish:process" {
    * @param argv The program and its arguments.
    * @returns The child's pid, or a negative errno: `-22` EINVAL for an empty
    *   vector or an argument holding a NUL, `posix_spawnp`'s own error
-   *   otherwise, so a program that is not there is `-2` ENOENT.
+   *   otherwise, so a program that is not there is `-2` ENOENT. Under `--sandbox` with a list of granted
+   *   programs, a spawn that cannot be held to one program is refused: -11
+   *   (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+   *   on stderr.
    */
   export function spawn(argv: string[]): i32;
   /**

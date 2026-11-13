@@ -53,7 +53,7 @@ bounds.ok:
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 1
   %23 = bitcast i32* %22 to <4 x i32>*
-  %24 = load <4 x i32>, <4 x i32>* %23, align 4
+  %24 = load <4 x i32>, <4 x i32>* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %25 = extractelement <4 x i32> %24, i32 3
   %26 = call i8* @nish_str_from_i32(i32 %25)
   call void @nish_print(i8* %26)
@@ -78,7 +78,7 @@ bounds.ok.1:
   %38 = bitcast i8* %37 to i32*
   %39 = getelementptr inbounds i32, i32* %38, i64 2
   %40 = bitcast i32* %39 to <4 x i32>*
-  %41 = load <4 x i32>, <4 x i32>* %40, align 4
+  %41 = load <4 x i32>, <4 x i32>* %40, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %42 = extractelement <4 x i32> %41, i32 0
   %43 = call i8* @nish_str_from_i32(i32 %42)
   call void @nish_print(i8* %43)
