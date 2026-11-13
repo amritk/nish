@@ -1,19 +1,19 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
 **Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
-#1343), stage 6 measured, gate not met: re-measured on 2026-11-12 after the
-profile-led fixes (#1421, #1419, #1459), and still outside the band on
-`plaintext` 256/1024/4096, `json` 128/512 and `db` 64; the follow-up is the
-task memory in `runtime/runtime-async.c` and a redesign of the
-serve/handler/router hand-off (§6, §10).** The language half — `async`,
+#1343), stage 6 measured, gate not met: re-measured on 2026-11-13 after task
+recycling (#1493) and the cached response head (#1457), and still outside the
+band on `plaintext` 256/1024/4096 and `json` 512 (`json` 128 and `db` 64 now
+inside); what is left needs a redesign of the serve/handler/router hand-off,
+an owner's decision (§6, §10).** The language half — `async`,
 `await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
 and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
 tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
 cancellation (part 7). D1's condition does not hold yet: the async TFB entries
-are still outside the explicit ones' noise band on `plaintext`, `json` and `db`
-([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6)).
+are still outside the explicit ones' noise band on `plaintext` and `json`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-task-recycling-wp49-stage-6)).
 The anchors below are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays
 normative; the API in this note beyond what it states is a proposal and is not
 compiled by `npm test`. This note reopens
@@ -492,6 +492,22 @@ and per request 7,848 instructions against 4,814 on `plaintext` and 9,276
 against 5,962 on `json`. Its `json` rounds are 8 s and its database rounds
 2 s, so a fix is compared at the same durations.
 
+**After task recycling (2026-11-13).** Task recycling (#1493) took about 520
+instructions a request off `plaintext` and about 490 off `json`. The gate was
+then re-run on `main` with `run.sh` unchanged
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-task-recycling-wp49-stage-6)).
+`json` at 128 and `db` at 64 are now inside the band. `plaintext` at 256, 1,024
+and 4,096 is still outside (−34.5%, −24.1%, −25.7%), and so is `json` at 512
+(−17.0%). Two other library changes were measured and not landed:
+- Reading the request in place in `serveTask`: the task-memory rule refuses it,
+  since `handle` may grow what it is given, and the copy it would save is about
+  330 instructions.
+- A fixed-path table in `Router`: it saves at most about 150 instructions per
+  match, and a 404 costs about 40 more.
+
+The rest of the gap is in how the serve, handler and router hand-off is shaped.
+Closing it is a design decision for the owner, so stage 6 stays open.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,
@@ -610,7 +626,7 @@ page for anything a user sees.
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
 | 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379) and the profile-led ones (#1421, #1419, #1459) the async entry is still outside the band on `plaintext` 256/1024/4096, `json` 128/512 and `db` 64 (§6, re-measured 2026-11-12); the follow-up is the task memory in `runtime/runtime-async.c` and a serve/handler/router redesign |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); the follow-up is a redesign of the serve/handler/router hand-off, the owner's decision |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.

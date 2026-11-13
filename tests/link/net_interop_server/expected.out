@@ -68,10 +68,13 @@ PASS  and one sealed under the second key resumes under the previous one
 PASS  the client connects, and the server is ready to send
 PASS  a 64 KiB buffer: the first data packet is lost, and an ACK of the rest reports it
 PASS  in the round trip that follows the server sends the hole again and nothing new: its buffer is 64 KiB past the hole
-PASS  the client, which acknowledged it before its port moved, never sends from the new one, and everything after goes to the old
+PASS  the timed client connects
+PASS  played in time, the rebind comes after the client received the hole's resend
+PASS  the server's early probe draws an ACK from the new port, and the server follows within two round trips
+PASS  and 256 KiB, four buffers, arrive in order within twenty round trips
 PASS  the client connects, and the server is ready to send
 PASS  the interop buffer: the same loss, reported the same way
 PASS  in the round trip that follows the server sends the hole again and new data with it, past 64 KiB and the path's flight
 PASS  the client acknowledges what arrives after the rebind from the new port, and the server follows it
 PASS  and new data reaches the client there
-interop server: 72 passed, 0 failed, 0 skipped
+interop server: 75 passed, 0 failed, 0 skipped
