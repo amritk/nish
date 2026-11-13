@@ -543,7 +543,8 @@ export class TypeTable {
     if (at < 0) {
       at = this.memberEnums.length
       this.memberEnums.push(enumType)
-      this.memberTables.push([])
+      const fresh: i32[] = []
+      this.memberTables.push(fresh)
     }
     const ids = this.memberTables[at]
     while (ids.length <= value) {

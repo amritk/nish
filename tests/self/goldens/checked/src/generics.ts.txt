@@ -296,7 +296,7 @@ function instanceSymbol(table: TypeTable, base: string, args: i32[]): string -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: base
   calls: TypeTable.mangle nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.mangle#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.mangle#0
   pointer args: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 out: string (let)
@@ -305,7 +305,7 @@ function instanceSymbol(table: TypeTable, base: string, args: i32[]): string -> 
 function instanceDisplayName(table: TypeTable, base: string, args: i32[]): string -> @instanceDisplayName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
   pointer args: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:7 out: string (let)
@@ -317,7 +317,7 @@ function instanceStructType(table: TypeTable, base: string, args: i32[]): i32 ->
   sharedWrite: via TypeTable.structOf
   escaping: base
   calls: TypeTable.setDisplayName TypeTable.structOf instanceDisplayName instanceSymbol
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.structOf#0 instanceSymbol#0 TypeTable.setDisplayName#0 instanceDisplayName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.structOf#0 instanceSymbol#0 TypeTable.setDisplayName#0 instanceDisplayName#0
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceSymbol#2 instanceDisplayName#2
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -330,7 +330,7 @@ function canonicalArgument(table: TypeTable, type: i32): i32 -> @canonicalArgume
   sharedWrite: via TypeTable.withState
   escaping: type
   calls: TypeTable.isResult TypeTable.withState
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.withState#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.withState#0
   stackSites=0 stackLocals=0
   callee +0:3 TypeTable.isResult -> @TypeTable.isResult
   callee +0:26 TypeTable.withState -> @TypeTable.withState
@@ -490,7 +490,7 @@ function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancesto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: index template
   calls: TypeTable.typeName chainArguments chainParameters instanceDisplayName nish_panic_index nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
   pointer template: size=64 writesThrough=true captured=true passedTo=chainParameters#0
   pointer ancestor: size=192 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
@@ -509,7 +509,7 @@ function nonTerminatingStructMessage(table: TypeTable, template: StructTemplateI
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: TypeTable.typeName instanceDisplayName nish_panic_index nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
   pointer template: size=64 writesThrough=false captured=false
   pointer ancestor: size=40 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
@@ -1002,7 +1002,7 @@ function unionCheckedArguments(template: StructTemplateInfo, args: i32[]): i32[]
 function holdsAnyUnion(table: TypeTable, types: i32[]): boolean -> @holdsAnyUnion
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsUnion
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0
   pointer types: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 type: i32 (const)
@@ -1019,7 +1019,7 @@ function functionInstanceDisplayName(table: TypeTable, base: string, args: i32[]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: base
   calls: TypeTable.typeName instanceDisplayName nish_alloc_struct nish_array_grow nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=instanceDisplayName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=instanceDisplayName#0 TypeTable.typeName#0
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   pointer functions: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -1087,7 +1087,7 @@ function functionTypeText(table: TypeTable, names: string[], types: i32[], retur
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: returnType
   calls: TypeTable.typeName nish_alloc_struct nish_array_grow nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
   pointer names: size=0 writesThrough=false captured=false
   pointer types: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
@@ -1135,7 +1135,7 @@ function argumentWords(call: Node, name: string, index: i32, capital: boolean): 
 function mismatchMessage(table: TypeTable, lead: string, fn: FunctionSig, param: Node, wanted: string): string -> @mismatchMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: functionTypeText nish_panic_index nish_str_concat writtenNames
-  pointer table: size=112 writesThrough=false captured=false passedTo=functionTypeText#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=functionTypeText#0
   pointer fn: size=200 writesThrough=false captured=false passedTo=writtenNames#0
   pointer param: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0

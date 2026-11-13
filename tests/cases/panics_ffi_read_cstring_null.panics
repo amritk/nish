@@ -1,0 +1,4 @@
+{"functions":[
+{"name":"present","symbol":"present","module":"tests/cases/panics_ffi_read_cstring_null.ts","line":11,"panics":[{"kind":"ffi-null","line":12,"column":21,"proven":false},{"kind":"oom","line":12,"column":21,"allowed":true}]},
+{"name":"absent","symbol":"absent","module":"tests/cases/panics_ffi_read_cstring_null.ts","line":16,"panics":[{"kind":"ffi-null","line":17,"column":21,"proven":false},{"kind":"oom","line":17,"column":21,"allowed":true}]}
+]}

@@ -46,7 +46,7 @@ function madeVector(table: TypeTable, name: string): i32 -> @madeVector
   sharedWrite: via TypeTable.vectorOf
   escaping: name
   calls: TypeTable.vectorOf simdLaneType simdSuffix
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.vectorOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.vectorOf#0
   stackSites=0 stackLocals=0
   local +0:7 lane: i32 (let)
   callee +0:14 simdLaneType -> @simdLaneType
@@ -255,7 +255,7 @@ function floatLanes(table: TypeTable, vector: i32): boolean -> @floatLanes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: vector
   calls: TypeTable.refOf
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.refOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.refOf#0
   stackSites=0 stackLocals=0
   local +0:9 lane: i32 (const)
   callee +0:16 TypeTable.refOf -> @TypeTable.refOf
@@ -387,7 +387,7 @@ function castTarget(table: TypeTable, name: string): i32 -> @castTarget
   sharedWrite: via TypeTable.vectorOf
   escaping: name
   calls: TypeTable.vectorOf simdLaneType simdSuffix
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.vectorOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.vectorOf#0
   stackSites=0 stackLocals=0
   local +0:9 lane: i32 (const)
   callee +0:16 simdLaneType -> @simdLaneType
@@ -457,7 +457,7 @@ function comparePredicate(table: TypeTable, name: string, vector: i32): string -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: vector
   calls: TypeTable.refOf nish_str_concat nish_str_eq
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.refOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.refOf#0
   stackSites=0 stackLocals=0
   local +0:9 lane: i32 (const)
   callee +0:16 TypeTable.refOf -> @TypeTable.refOf

@@ -154,8 +154,8 @@ function heldLayout(program: CheckedProgram, table: TypeTable, t: i32, seen: Str
   sharedWrite: via heldLayout
   escaping: t
   calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf heldLayout
-  pointer program: size=832 writesThrough=false captured=false passedTo=heldLayout#0 heldLayout#0 heldLayout#0 CheckedProgram.struct#0 heldLayout#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 heldLayout#1 TypeTable.refOf#0 heldLayout#1 TypeTable.okOf#0 heldLayout#1 TypeTable.errOf#0 TypeTable.nameOf#0 heldLayout#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=heldLayout#0 heldLayout#0 heldLayout#0 CheckedProgram.struct#0 heldLayout#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 heldLayout#1 TypeTable.refOf#0 heldLayout#1 TypeTable.okOf#0 heldLayout#1 TypeTable.errOf#0 TypeTable.nameOf#0 heldLayout#1
   pointer seen: size=8 writesThrough=false captured=false passedTo=heldLayout#3 heldLayout#3 heldLayout#3 StringSet.has#0 StringSet.add#0 heldLayout#3
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)

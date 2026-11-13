@@ -96,7 +96,7 @@ function fieldAlign(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: pointer
   calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf TypeTable.stripNull
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
   pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
@@ -110,7 +110,7 @@ function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: pointer
   calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf TypeTable.stripNull fieldAlign nish_panic_overflow roundUpTo
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
   pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
@@ -508,8 +508,8 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
-  pointer program: size=832 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
   local +3:9 info: StructInfo | null (const)
@@ -600,7 +600,7 @@ function markTemplateImplements(program: CheckedProgram, decl: Node): void -> @m
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
-  pointer program: size=832 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
+  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -7:14 iface: Node (const)
@@ -644,7 +644,7 @@ function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @
   sharedWrite: via StringSet.add
   escaping: type
   calls: StringSet.add TypeTable.errOf TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.variantsOf noteStructNames
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.isResult#0 noteStructNames#0 TypeTable.okOf#0 noteStructNames#0 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 noteStructNames#0 TypeTable.refOf#0 noteStructNames#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.isResult#0 noteStructNames#0 TypeTable.okOf#0 noteStructNames#0 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 noteStructNames#0 TypeTable.refOf#0 noteStructNames#0
   pointer out: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 noteStructNames#2 noteStructNames#2 noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isStruct -> @TypeTable.isStruct
@@ -666,7 +666,7 @@ function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteStructNames
   calls: nish_panic_index noteStructNames
-  pointer table: size=112 writesThrough=false captured=false passedTo=noteStructNames#0 noteStructNames#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=noteStructNames#0 noteStructNames#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
@@ -677,7 +677,7 @@ function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSe
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteStructNames
   calls: noteStructNames signatureStructNames
-  pointer table: size=112 writesThrough=false captured=false passedTo=noteStructNames#0 signatureStructNames#0 signatureStructNames#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=noteStructNames#0 signatureStructNames#0 signatureStructNames#0
   pointer info: size=176 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 signatureStructNames#2 signatureStructNames#2
   stackSites=0 stackLocals=0

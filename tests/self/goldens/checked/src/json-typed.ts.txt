@@ -241,13 +241,13 @@ function jsonReadPresence(ctx: CheckContext, info: StructInfo, value: Node): voi
   callee -3:7 jsonPresenceFlagIs -> @jsonPresenceFlagIs
 function jsonIsUnionTag(table: TypeTable, member: i32): boolean -> @jsonIsUnionTag
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer table: size=112 writesThrough=false captured=false
+  pointer table: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 tags: i32[] (const)
 function jsonHasTag(table: TypeTable, info: StructInfo): boolean -> @jsonHasTag
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isEnumMemberType
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isEnumMemberType#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isEnumMemberType#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
@@ -323,8 +323,8 @@ function jsonClassOf(program: CheckedProgram, table: TypeTable, type: i32): Stru
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
-  pointer program: size=832 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:8 TypeTable.isStruct -> @TypeTable.isStruct
   local +3:9 info: StructInfo | null (const)
@@ -334,8 +334,8 @@ function jsonMapOf(program: CheckedProgram, table: TypeTable, type: i32): Struct
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.isCollections CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf nish_panic_index nish_str_eq
-  pointer program: size=832 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:8 TypeTable.isStruct -> @TypeTable.isStruct
   local +3:9 info: StructInfo | null (const)
@@ -347,8 +347,8 @@ function jsonVariantsOf(program: CheckedProgram, table: TypeTable, type: i32): S
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.variantsOf jsonClassOf nish_array_grow
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonClassOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0 jsonClassOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonClassOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0 jsonClassOf#1
   stackSites=0 stackLocals=0
   local +0:9 out: StructInfo[] (const)
   local +1:14 variant: i32 (const)
@@ -359,8 +359,8 @@ function jsonBadVariant(program: CheckedProgram, table: TypeTable, type: i32): i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.variantsOf jsonClassOf
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonClassOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0 jsonClassOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonClassOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0 jsonClassOf#1
   stackSites=0 stackLocals=0
   local +0:14 variant: i32 (const)
   callee +0:25 TypeTable.variantsOf -> @TypeTable.variantsOf
@@ -369,8 +369,8 @@ function jsonRootsOf(program: CheckedProgram, table: TypeTable, type: i32): Stru
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isUnion TypeTable.stripNull jsonClassOf jsonVariantsOf nish_array_grow
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonVariantsOf#0 jsonClassOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 jsonVariantsOf#1 jsonClassOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonVariantsOf#0 jsonClassOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 jsonVariantsOf#1 jsonClassOf#1
   stackSites=0 stackLocals=0
   local +0:9 base: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -382,7 +382,7 @@ function jsonRootsOf(program: CheckedProgram, table: TypeTable, type: i32): Stru
   callee +6:15 jsonClassOf -> @jsonClassOf
 function jsonTagsVariant(table: TypeTable, info: StructInfo, field: FieldInfo): boolean -> @jsonTagsVariant
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer table: size=112 writesThrough=false captured=false
+  pointer table: size=128 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false
   pointer field: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -393,7 +393,7 @@ function jsonTagsVariant(table: TypeTable, info: StructInfo, field: FieldInfo): 
 function jsonWireTag(table: TypeTable, info: StructInfo, field: FieldInfo): string -> @jsonWireTag [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.nameOf jsonTagsVariant
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonTagsVariant#0 TypeTable.nameOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonTagsVariant#0 TypeTable.nameOf#0
   pointer info: size=176 writesThrough=false captured=false passedTo=jsonTagsVariant#1
   pointer field: size=80 writesThrough=false captured=false passedTo=jsonTagsVariant#2
   stackSites=0 stackLocals=0
@@ -403,8 +403,8 @@ function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: JsonField.constructor TypeTable.isArray TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.isUnion TypeTable.refOf TypeTable.stripNull jsonClassOf jsonIsUnionTag jsonMapOf jsonScalar jsonValueOf jsonVariantsOf nish_alloc_struct nish_panic_index
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonVariantsOf#0 jsonVariantsOf#0 jsonClassOf#0 jsonMapOf#0 jsonValueOf#0 jsonClassOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isEnumMemberType#0 jsonIsUnionTag#0 TypeTable.isUnion#0 jsonVariantsOf#1 TypeTable.isEnum#0 TypeTable.isArray#0 TypeTable.isReadonlyArray#0 TypeTable.refOf#0 TypeTable.isEnum#0 TypeTable.isUnion#0 jsonVariantsOf#1 jsonClassOf#1 jsonMapOf#1 jsonValueOf#1 jsonClassOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonVariantsOf#0 jsonVariantsOf#0 jsonClassOf#0 jsonMapOf#0 jsonValueOf#0 jsonClassOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isEnumMemberType#0 jsonIsUnionTag#0 TypeTable.isUnion#0 jsonVariantsOf#1 TypeTable.isEnum#0 TypeTable.isArray#0 TypeTable.isReadonlyArray#0 TypeTable.refOf#0 TypeTable.isEnum#0 TypeTable.isUnion#0 jsonVariantsOf#1 jsonClassOf#1 jsonMapOf#1 jsonValueOf#1 jsonClassOf#1
   pointer field: size=80 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
   stackSites=0 stackLocals=0
   local +0:9 nullable: boolean (const)
@@ -461,8 +461,8 @@ function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
 function jsonFieldOf(program: CheckedProgram, table: TypeTable, field: FieldInfo): JsonField | null -> @jsonFieldOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: jsonValueOf
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonValueOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonValueOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonValueOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonValueOf#1
   pointer field: size=80 writesThrough=true captured=true passedTo=jsonValueOf#2
   stackSites=0 stackLocals=0
   callee +0:3 jsonValueOf -> @jsonValueOf
@@ -479,8 +479,8 @@ function jsonClasses(program: CheckedProgram, table: TypeTable, roots: StructInf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonValuesOf
   calls: StringSet.add StringSet.constructor jsonFieldOf jsonValuesOf nish_array_grow
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonFieldOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonFieldOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonFieldOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonFieldOf#1
   pointer roots: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local +0:9 out: StructInfo[] (const)
@@ -504,8 +504,8 @@ function jsonValues(program: CheckedProgram, table: TypeTable, roots: StructInfo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonClasses
   calls: jsonClasses jsonFieldOf jsonValuesOf
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonClasses#0 jsonFieldOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonClasses#1 jsonFieldOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonClasses#0 jsonFieldOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonClasses#1 jsonFieldOf#1
   pointer roots: size=0 writesThrough=false captured=false passedTo=jsonClasses#2
   stackSites=0 stackLocals=0
   local +0:9 out: JsonField[] (const)
@@ -523,8 +523,8 @@ function jsonMadeClasses(program: CheckedProgram, table: TypeTable, roots: Struc
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonValues
   calls: StringSet.add StringSet.constructor jsonMakes jsonValues nish_array_grow
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonValues#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonValues#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonValues#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonValues#1
   pointer roots: size=0 writesThrough=false captured=false passedTo=jsonValues#2
   stackSites=1 stackLocals=1
   local +0:9 out: StructInfo[] (const)
@@ -543,8 +543,8 @@ function jsonMaps(program: CheckedProgram, table: TypeTable, roots: StructInfo[]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonValues
   calls: StringSet.add StringSet.constructor jsonMakes jsonValues nish_array_grow
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonValues#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonValues#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonValues#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonValues#1
   pointer roots: size=0 writesThrough=false captured=false passedTo=jsonValues#2
   stackSites=1 stackLocals=1
   local +0:9 out: StructInfo[] (const)
@@ -559,8 +559,8 @@ function jsonUnionIn(program: CheckedProgram, table: TypeTable, type: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isArray TypeTable.isUnion TypeTable.refOf TypeTable.stripNull jsonMapOf nish_panic_index
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonMapOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.isArray#0 TypeTable.isUnion#0 TypeTable.refOf#0 TypeTable.refOf#0 jsonMapOf#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonMapOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.isArray#0 TypeTable.isUnion#0 TypeTable.refOf#0 TypeTable.refOf#0 jsonMapOf#1
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   local +3:11 base: i32 (const)
@@ -577,7 +577,7 @@ function jsonNotClassVariant(table: TypeTable, name: string, union: i32, variant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: union variant
   calls: TypeTable.typeName nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
   stackSites=0 stackLocals=0
   callee +0:28 TypeTable.typeName -> @TypeTable.typeName
   callee +0:67 TypeTable.typeName -> @TypeTable.typeName
@@ -585,7 +585,7 @@ function jsonTagField(table: TypeTable, info: StructInfo, union: i32): FieldInfo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: union
   calls: StructInfo.field TypeTable.tagNameOf
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.tagNameOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.tagNameOf#0
   pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
   stackSites=0 stackLocals=0
   callee +0:3 StructInfo.field -> @StructInfo.field
@@ -594,8 +594,8 @@ function jsonUnionRefusal(program: CheckedProgram, table: TypeTable, union: i32)
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: union
   calls: StringMap.constructor StringMap.get StringMap.has StringMap.set TypeTable.typeName jsonQuote jsonTagField jsonVariantsOf jsonWireTag nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonVariantsOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonVariantsOf#1 jsonTagField#0 jsonWireTag#0 TypeTable.typeName#0
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonVariantsOf#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonVariantsOf#1 jsonTagField#0 jsonWireTag#0 TypeTable.typeName#0
   stackSites=1 stackLocals=1
   local +0:9 variants: StructInfo[] | null (const)
   callee +0:20 jsonVariantsOf -> @jsonVariantsOf
@@ -621,8 +621,8 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   sharedWrite: via jsonClasses
   escaping: name type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.stripNull TypeTable.typeName jsonBadVariant jsonClasses jsonFieldOf jsonMadeClasses jsonNotClassVariant jsonRootsOf jsonUnionIn jsonUnionRefusal nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 CheckedProgram.struct#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 CheckedProgram.struct#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
   stackSites=1 stackLocals=1
   local +0:9 base: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -702,8 +702,8 @@ function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, ro
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via jsonValues
   calls: StringSet.add StringSet.constructor jsonAddUnionMethods jsonDecodeMethod jsonEncodeHelper jsonScalarMethod jsonValues nish_alloc_struct
-  pointer program: size=832 writesThrough=false captured=false passedTo=jsonValues#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=jsonValues#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=jsonValues#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=jsonValues#1
   pointer roots: size=0 writesThrough=false captured=false passedTo=jsonValues#2
   stackSites=2 stackLocals=0
   local +0:9 names: StringSet (const)
@@ -751,8 +751,8 @@ function jsonRouteCallees(program: CheckedProgram, table: TypeTable, sig: Functi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonRouteNames
   calls: CheckedProgram.struct FunctionSig.definedIn StringSet.at StringSet.has StringSet.size StructInfo.method TypeTable.isUnion TypeTable.nameOf TypeTable.stripNull jsonMadeClasses jsonMapMethods jsonMaps jsonRootsOf jsonRouteNames nish_array_grow nish_panic_index
-  pointer program: size=832 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 jsonRootsOf#0 jsonRouteNames#0 jsonMaps#0 jsonMadeClasses#0 jsonMaps#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.nameOf#0 jsonRootsOf#1 TypeTable.isUnion#0 TypeTable.stripNull#0 jsonRouteNames#1 jsonMaps#1 jsonMadeClasses#1 jsonMaps#1
+  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 jsonRootsOf#0 jsonRouteNames#0 jsonMaps#0 jsonMadeClasses#0 jsonMaps#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.nameOf#0 jsonRootsOf#1 TypeTable.isUnion#0 TypeTable.stripNull#0 jsonRouteNames#1 jsonMaps#1 jsonMadeClasses#1 jsonMaps#1
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: FunctionSig[] (const)

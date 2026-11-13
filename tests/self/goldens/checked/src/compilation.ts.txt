@@ -2150,14 +2150,14 @@ function passedOnlyTo(f: FunctionFacts | null, name: string): string -> @passedO
 function importsCollection(program: CheckedProgram, name: string): boolean -> @importsCollection
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer program: size=832 writesThrough=false captured=false
+  pointer program: size=848 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 imp: ImportBinding (const)
 function declarationNameOf(program: CheckedProgram, name: string): Node | null -> @declarationNameOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.ownAlias CheckedProgram.ownEnum CheckedProgram.struct CheckedProgram.structTemplate nish_panic_index
-  pointer program: size=832 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
+  pointer program: size=848 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0 CheckedProgram.ownAlias#0 CheckedProgram.ownEnum#0
   stackSites=0 stackLocals=0
   local +0:9 struct: StructInfo | null (const)
   callee +0:18 CheckedProgram.struct -> @CheckedProgram.struct
@@ -2236,7 +2236,7 @@ function describePackage(packageName: string): string -> @describePackage
 function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig, previousFile: string, file: string, packageName: string): string -> @clashMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer previous: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2255,7 +2255,7 @@ function sameSignature(a: FunctionSig, b: FunctionSig): boolean -> @sameSignatur
 function signatureText(table: TypeTable, sig: FunctionSig): string -> @signatureText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_alloc_struct nish_array_grow nish_str_concat
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 params: string[] (const)

@@ -971,7 +971,7 @@ function narrowSwitched(ctx: CheckContext, scope: Scope, tagged: Local | null, h
   pointer scope: size=56 writesThrough=false captured=false passedTo=narrowToTags#1 narrowHeld#1
   pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowToTags#2
   pointer held: size=64 writesThrough=true captured=true passedTo=narrowHeld#2
-  pointer members: size=0 writesThrough=false captured=false passedTo=narrowToTags#3 narrowHeld#3
+  pointer members: size=0 writesThrough=true captured=false passedTo=narrowToTags#3 narrowHeld#3
   stackSites=0 stackLocals=0
   callee +0:5 narrowToTags -> @narrowToTags
   callee +2:5 narrowHeld -> @narrowHeld
@@ -984,7 +984,7 @@ function narrowClause(ctx: CheckContext, clauseScope: Scope, tagged: Local | nul
   pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
   pointer held: size=64 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
-  pointer group: size=0 writesThrough=false captured=false passedTo=withoutMembers#2 narrowSwitched#4
+  pointer group: size=0 writesThrough=true captured=false passedTo=withoutMembers#2 narrowSwitched#4
   stackSites=0 stackLocals=0
   callee +0:5 narrowSwitched -> @narrowSwitched
   callee +5:7 withoutMembers -> @withoutMembers
@@ -999,7 +999,7 @@ function narrowAfterSwitch(ctx: CheckContext, scope: Scope, tagged: Local | null
   pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
   pointer held: size=64 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
-  pointer reaching: size=0 writesThrough=false captured=false passedTo=withoutMembers#2 narrowSwitched#4
+  pointer reaching: size=0 writesThrough=true captured=false passedTo=withoutMembers#2 narrowSwitched#4
   stackSites=0 stackLocals=0
   callee +0:5 narrowSwitched -> @narrowSwitched
   callee +5:7 withoutMembers -> @withoutMembers

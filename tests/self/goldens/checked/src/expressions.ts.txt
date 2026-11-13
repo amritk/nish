@@ -118,6 +118,7 @@ import refuseValueArrow from "./fnrefs" -> function @refuseValueArrow
 import ParentTable from "./parents" -> struct ParentTable
 import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import unwrapParens from "./emit-util" -> function @unwrapParens
+import CheckedProgram from "./program" -> struct CheckedProgram
 import FieldInfo from "./program" -> struct FieldInfo
 import FunctionSig from "./program" -> struct FunctionSig
 import StructInfo from "./program" -> struct StructInfo
@@ -150,6 +151,7 @@ import R_UNKNOWN from "./types" -> const R_UNKNOWN
 const WANT_RANGE: i32 = -3 [exported]
 const WANT_INFERRED: i32 = -4 [exported]
 const MEMBERS_NONE: i32 = -2
+const MEMO_WIDTH: i32 = 6
 const WANT_MAYBE: i32 = -2 [exported]
 const IN_LET: string = " and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`"
 const AS_ARGUMENT: string = " and cannot be passed as an argument: a value that may be missing does not cross a call; give it a default with `??`, or bind it to a `const` and pass it where `!== undefined` has narrowed it"
@@ -1643,13 +1645,12 @@ function namedBy(ctx: CheckContext, member: i32, first: i32[], second: i32[]): b
   callee +2:9 TypeTable.memberValue -> @TypeTable.memberValue
   local +6:14 other: i32 (const)
   callee +7:9 TypeTable.memberValue -> @TypeTable.memberValue
-function holdNamed(ctx: CheckContext, scope: Scope, local: Local, current: i32[], first: i32[], second: i32[], keep: boolean): void -> @holdNamed
+function keptSet(ctx: CheckContext, local: Local, current: i32[], first: i32[], second: i32[], keep: boolean): i32 -> @keptSet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: holdKept isMarked namedBy nish_array_grow nish_panic_overflow stampMembers
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=stampMembers#0 namedBy#0 namedBy#0 holdKept#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=holdKept#1
-  pointer local: size=64 writesThrough=true captured=true passedTo=holdKept#2
+  calls: isMarked keptId namedBy nish_array_grow nish_panic_overflow stampMembers
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=stampMembers#0 namedBy#0 namedBy#0 keptId#0
+  pointer local: size=64 writesThrough=false captured=false
   pointer current: size=0 writesThrough=false captured=false passedTo=stampMembers#2
   pointer first: size=0 writesThrough=false captured=false passedTo=stampMembers#3 namedBy#2 namedBy#2
   pointer second: size=0 writesThrough=false captured=false passedTo=stampMembers#4 namedBy#3 namedBy#3
@@ -1665,46 +1666,141 @@ function holdNamed(ctx: CheckContext, scope: Scope, local: Local, current: i32[]
   local -2:14 member: i32 (const)
   callee -1:22 isMarked -> @isMarked
   callee -1:55 namedBy -> @namedBy
-  callee +3:3 holdKept -> @holdKept
-function heldMembers(ctx: CheckContext, scope: Scope, local: Local): i32[] -> @heldMembers [exported]
+  callee +3:10 keptId -> @keptId
+function keptId(ctx: CheckContext, kept: i32[]): i32 -> @keptId
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via enumMembersOf
-  calls: Scope.heldBy enumMembersOf membersOfSet namesMembers
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=membersOfSet#0 enumMembersOf#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=Scope.heldBy#1
+  sharedWrite: via memberListId
+  calls: memberListId
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=memberListId#0
+  pointer kept: size=0 writesThrough=true captured=true passedTo=memberListId#1
   stackSites=0 stackLocals=0
-  local +0:9 held: i32 (const)
-  callee +0:16 Scope.heldBy -> @Scope.heldBy
-  callee +4:10 namesMembers -> @namesMembers
-  callee +4:31 membersOfSet -> @membersOfSet
-  callee +4:57 enumMembersOf -> @enumMembersOf
-function narrowHeld(ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void -> @narrowHeld [exported]
+  callee +0:45 memberListId -> @memberListId
+function heldList(ctx: CheckContext, enumType: i32, held: i32): i32[] -> @heldList
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via holdNamed
-  escaping: keep
-  calls: heldMembers holdNamed
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdNamed#0 heldMembers#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=holdNamed#1 heldMembers#1
-  pointer local: size=64 writesThrough=true captured=true passedTo=holdNamed#2 heldMembers#2
-  pointer members: size=0 writesThrough=false captured=false passedTo=holdNamed#4
-  stackSites=1 stackLocals=0
-  callee +0:3 holdNamed -> @holdNamed
-  callee +0:32 heldMembers -> @heldMembers
-function holdKept(ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void -> @holdKept [exported]
+  sharedWrite: via enumMembersOf
+  escaping: enumType held
+  calls: enumMembersOf membersOfSet namesMembers
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=membersOfSet#0 enumMembersOf#0
+  stackSites=0 stackLocals=0
+  callee +0:10 namesMembers -> @namesMembers
+  callee +0:31 membersOfSet -> @membersOfSet
+  callee +0:57 enumMembersOf -> @enumMembersOf
+function holdNamed(ctx: CheckContext, scope: Scope, local: Local, current: i32, first: i32, second: i32, keep: boolean): void -> @holdNamed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: current first keep second
+  calls: heldList holdSet keptSet memoRead memoSlot nish_panic_index nish_panic_overflow
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=keptSet#0 heldList#0 heldList#0 heldList#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=holdSet#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=keptSet#1 holdSet#1
+  stackSites=0 stackLocals=0
+  local -13:9 program: CheckedProgram (const)
+  local -12:9 at: i32 (const)
+  callee -12:14 memoSlot -> @memoSlot
+  local -11:7 set: i32 (let)
+  callee -11:13 memoRead -> @memoRead
+  callee -10:7 memoRead -> @memoRead
+  callee -9:11 keptSet -> @keptSet
+  callee -6:7 heldList -> @heldList
+  callee -5:7 heldList -> @heldList
+  callee -4:7 heldList -> @heldList
+  local -1:11 memo: i32[] (const)
+  callee +9:5 holdSet -> @holdSet
+function memoRead(memo: i32[], at: i32): i32 -> @memoRead
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  pointer memo: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function memoSlot(program: CheckedProgram, enumType: i32, current: i32, first: i32, second: i32, keep: i32): i32 -> @memoSlot
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via growMemo
+  calls: growMemo memoRead nish_panic_overflow
+  pointer program: size=848 writesThrough=true captured=false passedTo=growMemo#0
+  stackSites=0 stackLocals=0
+  callee +0:5 growMemo -> @growMemo
+  local +2:9 memo: i32[] (const)
+  local +3:9 mask: i32 (const)
+  local +4:7 slot: i32 (let)
+  local +8:7 at: i32 (let)
+  callee +10:5 memoRead -> @memoRead
+  callee +12:7 memoRead -> @memoRead
+  callee +13:7 memoRead -> @memoRead
+  callee +14:7 memoRead -> @memoRead
+  callee +15:7 memoRead -> @memoRead
+  callee +16:7 memoRead -> @memoRead
+function growMemo(program: CheckedProgram): void -> @growMemo
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: memoRead memoSlot nish_array_grow nish_panic_index nish_panic_overflow
+  pointer program: size=848 writesThrough=true captured=false passedTo=memoSlot#0
+  stackSites=0 stackLocals=0
+  local -8:9 old: i32[] (const)
+  local -7:9 slots: i32 (const)
+  local -6:9 memo: i32[] (const)
+  local -5:7 i: i32 (let)
+  local +3:7 from: i32 (let)
+  callee +5:9 memoRead -> @memoRead
+  local +6:13 enumType: i32 (const)
+  callee +6:24 memoRead -> @memoRead
+  local +7:13 at: i32 (const)
+  callee +7:18 memoSlot -> @memoSlot
+  callee +10:9 memoRead -> @memoRead
+  callee +11:9 memoRead -> @memoRead
+  callee +12:9 memoRead -> @memoRead
+  callee +13:9 memoRead -> @memoRead
+  local +15:11 k: i32 (let)
+  callee +17:24 memoRead -> @memoRead
+function holdSet(scope: Scope, local: Local, set: i32): void -> @holdSet
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Scope.hold
-  calls: Scope.hold Scope.narrow memberListId nish_panic_index
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=memberListId#0
+  escaping: set
+  calls: Scope.hold Scope.narrow
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.hold#0 Scope.narrow#0 Scope.narrow#0 Scope.hold#0
   pointer local: size=64 writesThrough=true captured=true passedTo=Scope.hold#1 Scope.narrow#1 Scope.narrow#1 Scope.hold#1
-  pointer kept: size=0 writesThrough=true captured=true passedTo=memberListId#1
   stackSites=0 stackLocals=0
   callee +0:5 Scope.hold -> @Scope.hold
   callee +1:5 Scope.narrow -> @Scope.narrow
   callee +5:3 Scope.narrow -> @Scope.narrow
   callee +6:3 Scope.hold -> @Scope.hold
-  callee +6:56 memberListId -> @memberListId
+function heldMembers(ctx: CheckContext, scope: Scope, local: Local): i32[] -> @heldMembers [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via heldList
+  calls: Scope.heldBy heldList
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldList#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0
+  pointer local: size=64 writesThrough=false captured=false passedTo=Scope.heldBy#1
+  stackSites=0 stackLocals=0
+  callee +0:3 heldList -> @heldList
+  callee +0:29 Scope.heldBy -> @Scope.heldBy
+function narrowHeld(ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void -> @narrowHeld [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via holdNamed
+  escaping: keep
+  calls: Scope.heldBy TypeTable.isEnumMemberType heldMembers holdNamed holdSet keptSet
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdNamed#0 keptSet#0 heldMembers#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=holdNamed#1 Scope.heldBy#0 heldMembers#1 holdSet#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=holdNamed#2 Scope.heldBy#1 keptSet#1 heldMembers#2 holdSet#1
+  pointer members: size=0 writesThrough=true captured=false passedTo=keptSet#3
+  stackSites=1 stackLocals=0
+  callee +0:56 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  local +1:11 named: i32 (const)
+  callee +2:5 holdNamed -> @holdNamed
+  callee +2:34 Scope.heldBy -> @Scope.heldBy
+  local +5:9 set: i32 (const)
+  callee +5:15 keptSet -> @keptSet
+  callee +5:35 heldMembers -> @heldMembers
+  callee +7:5 holdSet -> @holdSet
+function holdKept(ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void -> @holdKept [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via holdSet
+  calls: holdSet keptId
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=keptId#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=holdSet#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=holdSet#1
+  pointer kept: size=0 writesThrough=true captured=true passedTo=keptId#1
+  stackSites=0 stackLocals=0
+  callee +0:3 holdSet -> @holdSet
+  callee +0:25 keptId -> @keptId
 function exhaustedMessage(name: string): string -> @exhaustedMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -1821,19 +1917,18 @@ function addLocals(into: Local[], locals: Local[]): void -> @addLocals [exported
   local -6:16 had: Local (const)
 function joinHeld(ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void -> @joinHeld
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via heldMembers
-  calls: heldMembers holdNamed
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=heldMembers#0 holdNamed#0 heldMembers#0 heldMembers#0
-  pointer scope: size=56 writesThrough=false captured=false passedTo=heldMembers#1 holdNamed#1
-  pointer local: size=64 writesThrough=true captured=true passedTo=heldMembers#2 holdNamed#2 heldMembers#2 heldMembers#2
-  pointer first: size=56 writesThrough=false captured=false passedTo=heldMembers#1
-  pointer second: size=56 writesThrough=false captured=false passedTo=heldMembers#1
+  sharedWrite: via holdNamed
+  calls: Scope.heldBy holdNamed
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdNamed#0
+  pointer scope: size=56 writesThrough=false captured=false passedTo=holdNamed#1 Scope.heldBy#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=holdNamed#2 Scope.heldBy#1 Scope.heldBy#1 Scope.heldBy#1
+  pointer first: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0
+  pointer second: size=56 writesThrough=false captured=false passedTo=Scope.heldBy#0
   stackSites=0 stackLocals=0
-  local +0:9 current: i32[] (const)
-  callee +0:19 heldMembers -> @heldMembers
-  callee +1:3 holdNamed -> @holdNamed
-  callee +1:41 heldMembers -> @heldMembers
-  callee +1:73 heldMembers -> @heldMembers
+  callee +0:3 holdNamed -> @holdNamed
+  callee +0:32 Scope.heldBy -> @Scope.heldBy
+  callee +0:53 Scope.heldBy -> @Scope.heldBy
+  callee +0:74 Scope.heldBy -> @Scope.heldBy
 function variantsIn(ctx: CheckContext, union: i32, type: i32): i32[] -> @variantsIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type union

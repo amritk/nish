@@ -914,8 +914,12 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **110,976 bytes** (+64) by path MTU discovery (RFC 9000 §14.3): the
  * connection's path MTU, its limit, the search's bounds, the probe in flight and
  * its counters, and recovery's datagram size.
+ *
+ * Moved to **110,984 bytes** (+8) by #1485's early probe: the connection's
+ * `earlyProbeAcked`, the largest acknowledged packet its last early probe was
+ * asked at, so that one probe goes per acknowledgement.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110976
+export const HTTP3_SERVER_SLOT_BYTES = 110984
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

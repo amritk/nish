@@ -712,8 +712,8 @@ function CalleeEffects.constructor(this: CalleeEffects, program: CheckedProgram,
   escaping: program table
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
-  pointer program: size=832 writesThrough=true captured=true
-  pointer table: size=112 writesThrough=true captured=true
+  pointer program: size=848 writesThrough=true captured=true
+  pointer table: size=128 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new StringMap -> @StringMap.constructor
 function CalleeEffects.argument(this: CalleeEffects, callees: FunctionSig | null[], types: i32[], coercions: i32[], call: Node, j: i32): i32 -> @CalleeEffects.argument [method]

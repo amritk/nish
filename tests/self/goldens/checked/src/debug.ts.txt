@@ -87,7 +87,7 @@ function bitsOfIn(table: TypeTable, type: i32): i32 -> @bitsOfIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.enumBase TypeTable.isHostHandle TypeTable.isMask TypeTable.isRanged TypeTable.isRegion TypeTable.isVector TypeTable.laneCount bitsOf
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.isMask#0 TypeTable.laneCount#0 TypeTable.isRegion#0 TypeTable.isHostHandle#0 TypeTable.enumBase#0 TypeTable.isRanged#0
+  pointer table: size=128 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.isMask#0 TypeTable.laneCount#0 TypeTable.isRegion#0 TypeTable.isHostHandle#0 TypeTable.enumBase#0 TypeTable.isRanged#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isVector -> @TypeTable.isVector
   callee +4:7 TypeTable.isMask -> @TypeTable.isMask
@@ -117,8 +117,8 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   calls: DebugInfo.fileOf IRModule.addModuleFlag IRModule.addNamedMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.constructor nish_alloc_struct nish_str_concat quote
   pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.fileOf#0
   pointer module: size=112 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addModuleFlag#0 IRModule.addModuleFlag#0
-  pointer program: size=832 writesThrough=true captured=true
-  pointer table: size=112 writesThrough=true captured=true
+  pointer program: size=848 writesThrough=true captured=true
+  pointer table: size=128 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:21 new StringMap -> @StringMap.constructor
   callee +2:21 new StringMap -> @StringMap.constructor
