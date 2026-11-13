@@ -19,7 +19,9 @@ router's (`docs/security/router.md`). What it adds is a fixed set of request
 slots, a copy of each request into its task's region, and a copy of each
 answer back into its slot's preallocated buffers. Every one of those is
 bounded by a `ServeLimits` field the program set: the slots by `inFlight`,
-an answer's body by `responseBytes`, its content type by 128 bytes.
+an answer's body by `responseBytes`, its content type by 128 bytes. Why the
+request is a copy, and how long each side of it lives, is
+[the request's lifetime](#the-requests-lifetime) below.
 
 A task never writes past its slot's buffers and never stores its own memory
 into the server's: the spawn rule (`docs/LANGUAGE.md`, NL2609, NL2610,
@@ -65,6 +67,49 @@ a task reading or writing another request's memory. The program, its
 `ServeLimits` and its `handle` are trusted; but `handle` builds its response
 from the request, so a response field the peer can shape (a content type
 echoed from a header, a body sized by the request) is treated as the peer's.
+
+## The request's lifetime
+
+A task reads a copy of its request, never the handler's own. WP49 stage 6 set
+out to drop that copy and have the task read the `HttpRequest` that
+`HttpHandler.take` answered. The language refuses it, in both shapes it can
+take, so the copy stays and this is the rule the code is built to:
+
+1. **The handler's request is written once, before it is taken, and is the
+   server's.** `HttpHandler.begin` copies the head and spans out of the
+   carrier's parser into a pooled `HttpRequest`, routes it and gathers the
+   body into the same object; only then is it queued and taken. From `take`
+   to its answer it is on no free list (`release` runs only from the answer
+   or a late answer's drop), so nothing rewrites it while a task copies it,
+   and a pipelined successor is parsed into another object (HANDLER-4).
+2. **The task copies it first, with no await before the copy.** `serveTask`
+   allocates a `HttpRequest` in its own region and copies `headLength` bytes
+   of head, `4 × headerCount` spans, the parameters and the body. The copy
+   reads the server's memory and stores none of it, which the spawn rule
+   allows. Each count is one the handler bounded: the head by the carrier's
+   head cap, the body by `bodyBytes`.
+3. **`Request` and `Request.raw` are the task's, and go when it ends.** A
+   handler may keep neither: the spawn rule refuses a program that stores one
+   in anything the task shares (NL2609; the guide's `stats.last = req`). What
+   the handler made from the request — a string, a number — is its own on the
+   same terms. A hang-up or a deadline that cancels a task leaves its copy
+   readable until the task ends.
+4. **The server reads only the handler's object again.** `serveAnswer`
+   answers through `st.reqs[k]`, the request `take` answered, never through
+   anything the task made; its `slot` and `gen` are what drop an answer for
+   a connection that closed meanwhile (SERVE-10).
+
+Reading in place is refused twice over. A `Request` made in the task's region
+over the server's `HttpRequest` is "memory outside a region kept by the
+region's memory" — the rule cannot know the server outlives every task. A
+`Request` the server made once per slot and handed to `handle` is refused for
+any handler that "may grow it": one that writes through its argument and
+allocates, which `HttpRequest.queryIndex`'s two scratch fields make true of
+every handler that reads a query parameter, and which the checker also
+reports for a handler that only calls a method on a `Response` it just made.
+Lifting either is a change to the region rules in `src/`, not to this module.
+The copy costs about 450 instructions of the 7,900 a pipelined `/plaintext`
+request takes.
 
 ## Findings
 
