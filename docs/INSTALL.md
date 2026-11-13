@@ -158,9 +158,24 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh   
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh -s 0.4.0 # a version
 sh install.sh --dir /opt/nish     # somewhere other than ~/.nish (or NISH_INSTALL)
 sh install.sh --force             # reinstall the version already there
-sh install.sh --uninstall         # remove it
+sh install.sh --no-modify-path    # leave shell startup files alone (or NISH_NO_MODIFY_PATH=1)
+sh install.sh --uninstall         # remove it, and the PATH line it added
 sh install.sh --help              # all of the above
 ```
+
+The script puts the install's `bin/` on your `PATH` in the startup file of the
+shell `$SHELL` names: `~/.zshrc` for zsh (under `$ZDOTDIR` when that is set),
+`~/.bashrc` for bash on Linux, for bash on macOS whichever of
+`~/.bash_profile`, `~/.bash_login` and `~/.profile` a login bash already reads
+(`~/.bash_profile` when there is none), `conf.d/nish.fish` in fish's
+configuration directory for fish, and `~/.profile` for any other shell. The
+line sits between `# >>> nish >>>` and `# <<< nish <<<` and is added once:
+running the script again, or `nish upgrade`, leaves it as it is, and
+`--uninstall` takes it out of every file it may have gone into. Nothing is
+written when the directory is already on `PATH`, or when its path holds a
+quote, a backslash, a colon or a newline (the script prints the line to add
+instead). The script cannot change the `PATH` of the shell you ran it from, so
+it ends by naming the file to `source` there.
 
 An upgrade cannot leave you without a compiler. The new one is unpacked beside
 the old, checked that it runs *and* that it reports the version that was asked
