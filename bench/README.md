@@ -2427,8 +2427,8 @@ uses no property escape. The figures are in
 
 `yaml-json/run.mjs` times `nish/yaml`'s parse alone (**parse**) against the
 parse plus `YamlJsonLoader.load` into a `JsonDocument` with its source ranges
-(**load**), and against `YamlJsonLoader.loadText`, which parses and builds in
-one sweep (**direct**), all from `yaml-json/main.ts`. The input is an OpenAPI
+(**load**), and against `YamlJsonLoader.loadText`, which builds the values
+during the parse, as the parser ends each collection (**direct**), all from `yaml-json/main.ts`. The input is an OpenAPI
 document the script generates into `build/yaml-json/openapi.yaml` from a fixed
 pattern: `--paths` paths (default 1000, about 1.1 MB), with an anchored
 parameter every path aliases and a merge key into each response map, so
@@ -2438,26 +2438,27 @@ between them is the noise band. Rounds are interleaved, rotated and every
 other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
 input (default 32). It is run by hand and is not in `tests/run.js`.
 
-On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
+On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds,
+two runs back to back:
 
-| Workload | Median | Copy | Band | MB/s |
+| Workload | Run 1 | Band | Run 2 | Band |
 | --- | ---: | ---: | ---: | ---: |
-| parse | 17.641 ms | 17.101 ms | 3.2% | 59.8 |
-| load | 31.176 ms | 29.224 ms | 6.7% | 33.9 |
-| direct | 27.019 ms | 28.018 ms | 3.7% | 39.1 |
+| parse | 15.365 ms | 3.4% | 16.234 ms | 7.5% |
+| load | 32.324 ms | 6.6% | 28.889 ms | 5.3% |
+| direct | 30.751 ms | 1.8% | 30.604 ms | 2.4% |
 
 Every row times the whole binary, so **load** and **direct** include the
-parse. In wall clock, parse plus load is 1.77x the parse alone and direct is
-1.53x, 1.15x faster than parse plus load (1.04x between the slower direct
-binary and the faster load one). The wall-clock gain is near the noise on
-this container: a second 15-round run gave parse 16.645 ms (2.1%), load
-28.046 ms (1.2%) and direct 27.160 ms (4.7%), 1.03x, inside direct's band, so
-the instruction counts are the steadier measure. Under `valgrind --tool=callgrind`, a document
-is 135M instructions to parse, 298M to parse and load (2.21x) and 278M to load
-directly (2.06x): the sweep's build step is 143M against `load`'s 163M. What
-is left is building the values themselves (scalar decoding, the alias copies
-and merges), which both paths do. The load step retires more instructions
-than the parse but takes less time than it.
+parse. Direct is 2.00x and 1.89x the parse alone. Against parse plus load it is
+1.05x faster in run 1 and 0.94x in run 2, both inside load's band. A
+31-round run with tighter bands (parse 15.754 ms at 0.3%, load 29.391 ms at
+3.3%, direct 29.876 ms at 0.4%) gave 0.98x: on this container the wall clock
+does not separate them. The instruction counts do.
+Under `valgrind --tool=callgrind`, taking the difference between a 2-document
+and a 1-document run, a document is 136.4M instructions to parse, 305.0M to
+parse and load (2.25x) and 259.6M to load directly (1.90x), 15% fewer. The
+build step is 123M against `load`'s 169M. What is left is building the values
+themselves (scalar decoding, the alias copies and merges), which both paths
+do, and it alone is close to the parse.
 
 ```bash
 node bench/yaml-json/run.mjs

@@ -2549,6 +2549,7 @@ struct JsonDocument (class) size=248 align=8 exported
   method copyMember -> @nish.JsonDocument.copyMember
   method copySlot -> @nish.JsonDocument.copySlot
   method copyAt -> @nish.JsonDocument.copyAt
+  method clearKeyRange -> @nish.JsonDocument.clearKeyRange
   method copyBytes -> @nish.JsonDocument.copyBytes
   method write -> @nish.JsonDocument.write
   method writeAt -> @nish.JsonDocument.writeAt
@@ -3617,8 +3618,8 @@ function JsonDocument.copyAt(this: JsonDocument, x: i32): i32 -> @nish.JsonDocum
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.copyBytes
   escaping: x
-  calls: nish.JsonDocument.append nish.JsonDocument.copyBytes nish.JsonDocument.copySlot nish.JsonDocument.hasKeyRange nish.JsonDocument.kindAt nish.JsonDocument.memberSlot nish.JsonDocument.newNode nish.JsonDocument.placeKeyRange nish.JsonDocument.rangeArrays nish.JsonDocument.reserve nish.jsonValueGet nish_panic_overflow
-  pointer this: size=248 writesThrough=true captured=false passedTo=nish.JsonDocument.kindAt#0 nish.JsonDocument.copyBytes#0 nish.JsonDocument.newNode#0 nish.JsonDocument.newNode#0 nish.JsonDocument.newNode#0 nish.JsonDocument.reserve#0 nish.JsonDocument.copySlot#0 nish.JsonDocument.copyBytes#0 nish.JsonDocument.append#0 nish.JsonDocument.hasKeyRange#0 nish.JsonDocument.rangeArrays#0 nish.JsonDocument.placeKeyRange#0 nish.JsonDocument.memberSlot#0
+  calls: nish.JsonDocument.append nish.JsonDocument.clearKeyRange nish.JsonDocument.copyBytes nish.JsonDocument.copySlot nish.JsonDocument.hasKeyRange nish.JsonDocument.kindAt nish.JsonDocument.memberSlot nish.JsonDocument.newNode nish.JsonDocument.placeKeyRange nish.JsonDocument.rangeArrays nish.JsonDocument.reserve nish.jsonValueGet nish_panic_overflow
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.JsonDocument.kindAt#0 nish.JsonDocument.copyBytes#0 nish.JsonDocument.newNode#0 nish.JsonDocument.newNode#0 nish.JsonDocument.newNode#0 nish.JsonDocument.reserve#0 nish.JsonDocument.copySlot#0 nish.JsonDocument.copyBytes#0 nish.JsonDocument.append#0 nish.JsonDocument.hasKeyRange#0 nish.JsonDocument.rangeArrays#0 nish.JsonDocument.placeKeyRange#0 nish.JsonDocument.memberSlot#0 nish.JsonDocument.clearKeyRange#0 nish.JsonDocument.memberSlot#0
   stackSites=0 stackLocals=0
   local +0:11 kind: i32 (const)
   callee +0:23 JsonDocument.kindAt -> @nish.JsonDocument.kindAt
@@ -3652,6 +3653,20 @@ function JsonDocument.copyAt(this: JsonDocument, x: i32): i32 -> @nish.JsonDocum
   callee +33:11 JsonDocument.memberSlot -> @nish.JsonDocument.memberSlot
   callee +34:11 jsonValueGet -> @nish.jsonValueGet
   callee +35:11 jsonValueGet -> @nish.jsonValueGet
+  callee +38:9 JsonDocument.clearKeyRange -> @nish.JsonDocument.clearKeyRange
+  callee +38:28 JsonDocument.memberSlot -> @nish.JsonDocument.memberSlot
+function JsonDocument.clearKeyRange(this: JsonDocument, s: i32): void -> @nish.JsonDocument.clearKeyRange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDocument.rangeArrays
+  escaping: s
+  calls: nish.JsonDocument.hasKeyRange nish.JsonDocument.rangeArrays nish.jsonValuePut
+  pointer this: size=248 writesThrough=true captured=false passedTo=nish.JsonDocument.hasKeyRange#0 nish.JsonDocument.rangeArrays#0
+  stackSites=0 stackLocals=0
+  callee +0:9 JsonDocument.hasKeyRange -> @nish.JsonDocument.hasKeyRange
+  local +1:13 r: JsonValueRanges (const)
+  callee +1:34 JsonDocument.rangeArrays -> @nish.JsonDocument.rangeArrays
+  callee +2:7 jsonValuePut -> @nish.jsonValuePut
+  callee +3:7 jsonValuePut -> @nish.jsonValuePut
 function JsonDocument.copyBytes(this: JsonDocument, from: i32, n: i32): void -> @nish.JsonDocument.copyBytes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

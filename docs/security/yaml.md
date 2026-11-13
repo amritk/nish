@@ -27,19 +27,30 @@ findings, all fixed.
 
 | File | Functions |
 | --- | --- |
-| `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; the direct path `loadText`, `sweep`, `markSkips`, `sweepNode`, `mapCounts`, `sweepSeq`, `sweepMap`, `mergeMembers`, `pushEntry`, `valueOf`; `yamlJsonErrorName` |
-| `std/yaml.ts` | `YamlParser`: `checkMerge`, `aliasedSeqMerges`, `mergesMap` (the merge-value check only); `YamlStream.keyName` (the key-text cache both paths read) |
+| `std/yaml-json.ts` | `YamlJsonLoader`: `load`, `count`, `pushNode`, `pushParts`, `sizeOf`, `partSize`, `plus`, `build`, `tooMuchText`, `buildScalar`, `buildSeq`, `buildMap`, `mergeInto`, `mergeMap`, `newMergeStamp`, `markMerged`, `addEntry`, `findEntry`, `isMergeKey`; the direct path `loadText`, `collection`, `directRoot`, `home`, `counts`, `seqCounts`, `mapCounts`, `mergeCharge`, `sweepSeq`, `sweepMap`, `mergeMembers`, `pushEntry`, `valueOf`; `yamlJsonErrorName` |
+| `std/yaml.ts` | `YamlParser`: `checkMerge`, `aliasedSeqMerges`, `mergesMap` (the merge-value check only), `loadInto`, `ended` (the hook that hands the direct path each collection); `parseYamlInto`; `YamlStream.keyName` (the key-text cache the direct path reads) |
+| `std/json-value.ts` | The copies the direct path makes: `JsonDocument.copyValue`, `copyMember`, `copyAt`, `clearKeyRange`, `copyBytes`, `placeKeyRange` |
 
-Out of scope: the rest of `std/yaml.ts` (the parser and its anchors) and
-`std/json-value.ts` (the document, covered by [json.md](json.md)).
+Out of scope: the rest of `std/yaml.ts` (the parser and its anchors) and the
+rest of `std/json-value.ts` (the document, covered by [json.md](json.md)).
 
-**The direct path.** `loadText(text, d, doc)` parses and builds in one
-sweep, without `load`'s count-then-build walk. It refuses nothing itself:
-before it builds, it checks every bound `load` checks (the expansion count
-against `maxValues`, the depth, the merge budget, the text a copy adds against
-`maxTotalBytes`), and on any doubt, every refusal included, it clears the
-document and runs `load` on the same stream, so a refusal's code and range are
-always `load`'s own. YJ-6 is the one defect this path had before it landed.
+**The direct path.** `loadText(text, d, doc)` parses with a hook
+(`parseYamlInto`): as the parser ends each map and sequence of document `d`,
+`collection` counts it from what it holds and builds each map then; a
+sequence is built when what holds it is. It refuses nothing itself: each
+count is checked against every bound `load` checks (the expansion count
+against `maxValues`, the depth, the merge budget and merge hops), a copy's or
+merged member's text is charged against `maxTotalBytes` before it is made,
+and on any doubt, every refusal included, the direct path stops and `load`
+runs on the parsed stream, which clears the document first, so a refusal's
+code and range are always `load`'s own. A document the parse reports an
+error in is loaded by `load`. The parse still builds the stream's node
+arrays, which its own checks read (duplicate keys, merge values, tags) and
+which `load` needs for the fallback. A map built only to be merged, or a
+sequence first built by an alias that copies it, stays in the document with
+nothing holding it, so `doc.top` can be above `load`'s for the same text; a
+value that cannot fit only stops the direct path, and `load` answers. YJ-6
+is the one defect this path had before it landed.
 
 ## Threat model
 
@@ -59,7 +70,7 @@ deeper than the loader's `maxDepth` (`std/yaml-json.ts:216`, set to
 | YJ-3 | Low | `std/yaml-json.ts:614`, `:622` (`mergeInto`) | A merge key whose value is not a mapping (`<<: 5`, `<<: [1, 2]`, `<<: *scalar`) was skipped by the loader. `parseYaml` already refuses each of these (`YAML_ERR_BAD_MERGE`), so a parsed stream never reached the skip; a stream the parser did not check could. | **Fixed** in `c0145a7`: the loader refuses them too, as `YAML_JSON_ERR_MERGE` at the value. The test reaches the loader's own check, not only the parser's: it parses each shape with `merge` off, so the parser's check is skipped, then turns `stream.merge` on before the load. |
 | YJ-4 | Medium | `std/yaml-json.ts:605` (`mergeInto`) | Merging was not linear when a merge value is a shared sequence. `mergeInto` walked a sequence's items once per merge key that names it, and an item already merged into the map was skipped uncharged, so `x: &x {}`, `s: &s [*x, *x, …]` with 100,000 items (about 500 KB) and then about 35,000 maps `{<<: *s}` (about 300 KB) made the loader take about 3.5 × 10^9 steps from about 1 MB of text, all inside the budget YJ-1 added. | **Fixed** in `9efc0ea`: the walk of a merge sequence charges its item count to the same budget before it starts, past which the load is `YAML_JSON_ERR_EXPANSION` at the merge key. Before: the scaled-down test (200 items, 200 maps, `maxValues` 1,000) loaded, and its check read `expected -43, got 8388608`. After: it is refused at `<<: *s`. |
 | YJ-5 | Medium | `std/yaml.ts:3232` (`checkMerge`, called by `makePair`, `:3214`) | The parser's merge check has YJ-4's shape and runs first. For every merge pair whose value is a sequence, or an alias to one, `checkMerge` walks the sequence's items to see that each merges a map, so the input of YJ-4 costs about 3.5 × 10^9 steps in `parseYaml` before the loader is called, and the loader's budget never sees it. A program that parses with `merge` off skips the check, and with it merging. | **Fixed** in this change: the first merge that names a sequence through an alias reads its items, up to the first that merges no map, and the parser keeps the verdict per sequence node (`aliasedSeqMerges`, `std/yaml.ts:3595`, against `mergeVerdicts`, `:1824`); every later alias merge of it is answered from the verdict, still reported at its alias when bad. A sequence written out at the merge key is read where it stands, linear in the text. The items read are counted in `YamlStream.mergeItemsChecked` (`:421`). Before: `x: &x {}`, `s: &s [*x × N]` and N maps `{<<: *s}` read N² items, 160,000 at N = 400, and parsed in 13, 85 and 233 ms at N = 2,000, 4,000 and 8,000 (34, 68 and 136 KB). After: N items, and 1, 2 and 5 ms. |
-| YJ-6 | Medium | `std/yaml-json.ts` (`markSkips`, `sweepNode`) | The sweep kept its per-node sizes in `load`'s `sizes` array, which `count` assumes is zero except where it wrote. After the sweep gave up, the fallback `load` read the sweep's sizes as its own: an alias bomb was refused with the wrong code and range (`-34` at 0-21 for `-43` `YAML_JSON_ERR_EXPANSION` at 19-21), and a `maxValues` refusal at the wrong node. A cap could also be applied to a stale count. | **Fixed** before landing: the sweep keeps its sizes in its own `totals` array, and `load`'s arrays are only ever written by `load`. Found by the differential test of `tests/link/std_yaml_json_direct`, which compares every answer and range of `loadText` with `load(parseYaml(text))`. Review found a second slip of the same kind: a node the sweep does not build (a collection anchored in a key, or a merge sequence) kept the value its node number held in an earlier `loadText` on the same loader, and an alias to it copied that stale value (`? &k [9]`, `z: *k` after `- [7]` gave a broken document). `markSkips` now clears every node's value of the document before the sweep. |
+| YJ-6 | Medium | `std/yaml-json.ts:456` (`home`), `:397` (`collection`) | The sweep kept its per-node sizes in `load`'s `sizes` array, which `count` assumes is zero except where it wrote. After the sweep gave up, the fallback `load` read the sweep's sizes as its own: an alias bomb was refused with the wrong code and range (`-34` at 0-21 for `-43` `YAML_JSON_ERR_EXPANSION` at 19-21), and a `maxValues` refusal at the wrong node. A cap could also be applied to a stale count. | **Fixed** before landing: the sweep keeps its sizes in its own `totals` array, and `load`'s arrays are only ever written by `load`. Found by the differential test of `tests/link/std_yaml_json_direct`, which compares every answer and range of `loadText` with `load(parseYaml(text))`. Review found a second slip of the same kind: a node the sweep does not build (a collection anchored in a key, or a merge sequence) kept the value its node number held in an earlier `loadText` on the same loader, and an alias to it copied that stale value (`? &k [9]`, `z: *k` after `- [7]` gave a broken document). Each collection the parse hands over is stamped with its `loadText`'s pass (`stamps`, set in `collection`), and `home` takes a collection's value only when its stamp is this pass, so no value from an earlier text is ever copied; a collection in a key turns the direct path off. Pinned by "reuse: an alias to a collection in a key is built afresh" and "reuse: an alias to a merge sequence is built afresh". |
 
 ## Properties verified
 
@@ -133,5 +144,15 @@ check is named by its exact string.
   are refused", "byte cap: at the copy that does not fit", "byte cap: nothing
   kept"; and for a loader reused across texts, "reuse: an alias to a
   collection in a key is built afresh", "reuse: an alias to a merge sequence
-  is built afresh". Every load of `tests/link/std_yaml_json` is run through `loadText`
-  too: "direct: loadText answers as load(parseYaml(text)) does".
+  is built afresh". A merged member's text is charged before it is copied:
+  "byte cap: merged copies past maxTotalBytes are refused", "byte cap: the
+  direct path refused the merge copy before making it", "byte cap: nothing
+  kept after a merge copy". Merges and scalars load alike both ways, and by
+  the direct path itself: "same: nested merges, own keys winning", "same: one
+  map merged twice", "same: a merge into a map an alias copies", "same: a
+  merged value that is an alias", "same: 99 merge hops" against "same: 100
+  merge hops", "same: a stream's second document, with an alias", "same: plain
+  scalars JSON spells otherwise, and a tagged one", each with its "built
+  during the parse". Every load of `tests/link/std_yaml_json` is also run
+  through `loadText` on a fresh loader: "direct: loadText answers as
+  load(parseYaml(text)) does".

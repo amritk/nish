@@ -1516,9 +1516,14 @@ JSON reads YAML with the same code. `load(stream, d, doc)` clears `doc` and
 answers the root, with every value's range (`start`, `end`) and every key's
 (`keyStart`, `keyEnd`) set to the YAML node's bytes. When you have the text
 and need nothing else from the stream, `loadText(text, d, doc)` parses and
-loads in one call and is faster: it builds the values as it reads the nodes,
-with no second walk, and answers exactly what `load(parseYaml(text), d, doc)`
-would, refusals included.
+loads in one call. It builds each map's values while the parser is still
+running, as the parser ends that map, and answers exactly what
+`load(parseYaml(text), d, doc)` would, refusals included. On a 1.1 MB OpenAPI
+document this runs about 15% fewer instructions than parsing and then calling
+`load`. A document it cannot build during the parse, such as one with an
+error or a key that is not a scalar, goes through `load`. The parser still
+builds its node tree either way, because its own checks need it. `loader.directLoaded` tells you which
+way the last call went.
 
 A scalar is typed by the core schema: `0x1F` and `0o17` load as the exact
 decimal numbers `31` and `15`, and `.inf`, `-.inf` and `.nan`, which JSON

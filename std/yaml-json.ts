@@ -14,11 +14,11 @@
  *     // root < 0: loader.failed, loader.errorStart, loader.errorEnd
  *
  * `load` clears the document and builds document `d` of the stream into it.
- * `loadText(text, d, doc)` parses `text` and does the same with no second
- * walk of the node tree, about a seventh faster when nothing else needs
- * the stream; its values, ranges and refusals are `load(parseYaml(text), d,
- * doc)`'s, and it falls back to `load` for any document it cannot build in
- * one sweep (a refusal, a merge it cannot copy, an alias to a later node).
+ * `loadText(text, d, doc)` parses `text` and builds the values during the
+ * parse, as the parser ends each collection, when nothing else needs the
+ * stream; its values, ranges and refusals are `load(parseYaml(text), d,
+ * doc)`'s, and it runs `load` on the parsed stream for any document it cannot
+ * build that way (a refusal, a diagnostic, a key that is not a scalar).
  * Every value's `start` and `end` are the byte range of the YAML node it came
  * from, as `YamlStream.start` and `end` give it (an anchor or a tag in front
  * is not included), and every key's `keyStart` and `keyEnd` the range of its
@@ -116,7 +116,6 @@ import {
   YAML_INT,
   YAML_MAP,
   YAML_NULL,
-  YAML_PAIR,
   YAML_PLAIN,
   YAML_SCALAR,
   YAML_SEQ,

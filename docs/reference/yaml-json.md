@@ -55,11 +55,11 @@ Loads documents of a `YamlStream` into a `JsonDocument`.
 <scalar-callout type="info">
 
 `load` clears the document and builds document `d` of the stream into it.
-`loadText(text, d, doc)` parses `text` and does the same with no second
-walk of the node tree, about a seventh faster when nothing else needs
-the stream; its values, ranges and refusals are `load(parseYaml(text), d,
-doc)`'s, and it falls back to `load` for any document it cannot build in
-one sweep (a refusal, a merge it cannot copy, an alias to a later node).
+`loadText(text, d, doc)` parses `text` and builds the values during the
+parse, as the parser ends each collection, when nothing else needs the
+stream; its values, ranges and refusals are `load(parseYaml(text), d,
+doc)`'s, and it runs `load` on the parsed stream for any document it cannot
+build that way (a refusal, a diagnostic, a key that is not a scalar).
 Every value's `start` and `end` are the byte range of the YAML node it came
 from, as `YamlStream.start` and `end` give it (an anchor or a tag in front
 is not included), and every key's `keyStart` and `keyEnd` the range of its
@@ -202,12 +202,13 @@ class YamlJsonLoader
 | Member | |
 | --- | --- |
 | `new YamlJsonLoader()` | A loader that holds collections to `JSON_WRITER_MAX_DEPTH`, so whatever it loads can be written back out. |
+| `directLoaded: boolean` | Whether the last `loadText` built its values during the parse; `false` when it ran `load` on the parsed stream. |
 | `errorEnd: i32` | One past the last byte the failure is about; `-1` after a load that succeeds. |
 | `errorStart: i32` | The first byte the failure is about; `-1` after a load that succeeds. |
 | `failed: i32` | The last `load`'s code: `0`, a `YAML_JSON_ERR_*` code or a `JSON_VALUE_ERR_*` code. |
 | `maxDepth: i32` | How deeply collections may nest, counting copies; `JSON_WRITER_MAX_DEPTH` so the result can be written. |
 | `load(stream: YamlStream, d: i32, doc: JsonDocument): JsonValue` | Clears `doc` and loads document `d` of `stream` into it. Nothing is kept from a load that fails. |
-| `loadText(text: string, d: i32, doc: JsonDocument): JsonValue` | Parses `text` and loads its document `d` into `doc`: the same values, ranges and refusals as `load(parseYaml(text), d, doc)`. |
+| `loadText(text: string, d: i32, doc: JsonDocument): JsonValue` | Parses `text` and loads its document `d` into `doc`: the same values, ranges and refusals as `load(parseYaml(text), d, doc)`. The values are built during the parse: the parser hands each map and sequence of document `d` to the loader as it ends, and the loader builds each map then and each sequence when the collection holding it is built, from the values of what it holds. The parse still makes the stream's nodes, which its own checks read; the loader does not walk them again. A document within reach of a limit, or with a diagnostic, is loaded by `load` from the parsed stream instead, which answers the refusal. |
 
 ## Limits
 
