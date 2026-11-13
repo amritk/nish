@@ -2599,7 +2599,7 @@ const keptOne = (ctx: CheckContext, current: i32[], member: i32, keep: boolean):
   const kept = new Array<i32>(current.length - 1)
   for (let i = 0; i < kept.length; i++) {
     const from = i < at ? i : i + 1
-    if (from < current.length) {
+    if (from >= 0 && from < current.length) {
       kept[i] = current[from]
     }
   }

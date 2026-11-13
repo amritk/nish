@@ -1669,16 +1669,17 @@ function keptSet(ctx: CheckContext, local: Local, current: i32[], first: i32[], 
   callee +3:10 keptId -> @keptId
 function keptOne(ctx: CheckContext, current: i32[], member: i32, keep: boolean): i32 -> @keptOne
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: member
-  calls: keptId nish_panic nish_panic_index nish_panic_overflow
+  calls: keptId nish_panic nish_panic_index
   pointer ctx: size=336 writesThrough=false captured=false passedTo=keptId#0
   pointer current: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -16:9 at: i32 (const)
-  local -3:9 kept: i32[] (const)
-  local -2:7 i: i32 (let)
-  callee +7:10 keptId -> @keptId
+  local -17:9 at: i32 (const)
+  local -4:9 kept: i32[] (const)
+  local -3:12 i: i32 (let)
+  local -2:11 from: i32 (const)
+  callee +3:10 keptId -> @keptId
 function keptId(ctx: CheckContext, kept: i32[]): i32 -> @keptId
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via memberListId
