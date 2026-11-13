@@ -14,6 +14,7 @@ page, generated from the same source.
 usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
        nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
+       nish upgrade [<version>] [--check]     install a newer release
        nish -v, --version | -h, --help
 ```
 
@@ -580,6 +581,65 @@ first) in the installed package, and the flags an agent's loop needs —
 `NISH_AGENT=0` (or `false`, `no`, `off`) turns this off when one of those
 variables is set for some other reason. If the package's `docs/AI.md` cannot
 be found, the section names it without a path.
+
+## Staying up to date: `nish upgrade`
+
+`nish upgrade` installs the latest release when it is newer than the compiler
+you are running, and does nothing when it is not:
+
+```bash
+nish upgrade            # the latest release, if it is newer
+nish upgrade 0.40.0     # a version you name, newer or older
+nish upgrade --check    # print the version you have and the latest; install nothing
+```
+
+`--check` prints two lines, `current 0.39.0` and `latest  0.40.0`, and exits
+0, or 3 when the latest cannot be found: no network, GitHub refusing or slow
+to answer (it waits at most two seconds).
+
+How it installs depends on how you installed:
+
+- **With the install script** (`~/.nish` or your `--dir`): it fetches the
+  release's own `install.sh`, from that release's tag and never `main`, into a
+  private file, and runs it as `sh install.sh <version> --dir <your install>`.
+  The script checks the download and swaps the new compiler in only once it
+  runs, as [Installation](../getting-started/installation.md) describes. With no
+  version named it never installs an older release, or the same one; a
+  version you name that is older is installed, with a line saying it is a
+  downgrade.
+- **With npm**: npm owns the files, so it prints the command to run,
+  `npm install -g nish@<version>`, and exits 2 without changing anything.
+- **From a checkout**: it refuses with exit 2. Pull and rebuild instead.
+
+A version must be a semantic version, such as `0.40.0` or `1.0.0-rc.1`:
+three numbers with no leading zeros, then an optional `-prerelease` and
+`+build`. Anything else, such as `1.2` or `1.0.0/../x`, is a usage error
+(exit 2) before anything is fetched.
+
+### The update notice
+
+When a newer release is out, a compile or `nish --version` run on a terminal
+ends with one line on stderr:
+
+```
+nish 0.40.0 is available (you have 0.39.0); run `nish upgrade`
+```
+
+It never changes stdout or the exit code. Finding out costs nothing you wait
+for: the answer comes from a cache under `~/.cache/nish/release` (or
+`$XDG_CACHE_HOME`), and when that is missing or more than a day old a check
+runs in the background, so GitHub is asked at most once a day. The line is
+never shown:
+
+- when stderr is not a terminal (piped, redirected, or under a script),
+- with `--json`,
+- in `nish run`, whose stderr is your program's,
+- in CI (`CI` set to anything but empty, `0` or `false`),
+- with `NISH_NO_UPDATE_CHECK=1`, which also stops the check itself.
+
+A cache another user could have written is ignored and replaced, so nobody
+else chooses what the line says. What the check trusts is in the
+[security record](../../security/release.md).
 
 ## Exit codes
 

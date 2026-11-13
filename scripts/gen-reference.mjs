@@ -1332,7 +1332,7 @@ const AREAS = [
     about: "DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server",
     key: "/net",
     icon: "globe",
-    names: ["net"],
+    names: ["net", "release"],
   },
   {
     title: "Cryptography",

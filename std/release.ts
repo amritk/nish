@@ -20,7 +20,7 @@
  *   newer and nothing here ever proposes a downgrade.
  * - `releaseTagFromLocation(base, location)` — the version a
  *   `/releases/latest` redirect names, or null for anything that is not
- *   exactly `<base>/releases/tag/v<version>` (or without the `v`).
+ *   exactly `<base>/releases/tag/v<version>`.
  * - `releaseLatest(base, timeoutMs)` — asks `<base>/releases/latest` once,
  *   without following the redirect, and answers its version or null. Every
  *   failure is null: a server that is down, slow, refuses, or answers
@@ -78,7 +78,7 @@ export const releaseValidVersion = (v: string): boolean => {
   if (n === 0 || n > 64) {
     return false
   }
-  const first: i32 = v.charCodeAt(0)
+  const first: i32 = toI32(v.charCodeAt(0))
   if (first < 48 || first > 57) {
     return false
   }
@@ -86,7 +86,7 @@ export const releaseValidVersion = (v: string): boolean => {
     return false
   }
   for (let i: i32 = 0; i < n; i++) {
-    const c: i32 = v.charCodeAt(i)
+    const c: i32 = toI32(v.charCodeAt(i))
     const digit: boolean = c >= 48 && c <= 57
     const letter: boolean = (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
     if (!digit && !letter && c !== 46 && c !== 45 && c !== 43) {
@@ -104,7 +104,7 @@ const releaseNumber = (s: string): i64 => {
   }
   let value: i64 = 0
   for (let i: i32 = 0; i < n; i++) {
-    const c: i32 = s.charCodeAt(i)
+    const c: i32 = toI32(s.charCodeAt(i))
     if (c < 48 || c > 57) {
       return -1
     }
@@ -113,19 +113,29 @@ const releaseNumber = (s: string): i64 => {
   return value
 }
 
-/** Whether every dot-separated identifier of a prerelease is non-empty and alphanumeric or `-`. */
-const releasePreWellFormed = (pre: string): boolean => {
-  const parts: string[] = split(pre, ".")
+/**
+ * Whether every dot-separated identifier of a prerelease or build is non-empty
+ * and alphanumeric or `-`; in a prerelease (`pre`) one of digits alone has no
+ * leading zero.
+ */
+const releasePreWellFormed = (text: string, pre: boolean): boolean => {
+  const parts: string[] = split(text, ".")
   for (const part of parts) {
     if (part.length === 0) {
       return false
     }
+    let digits: boolean = true
     for (let i: i32 = 0; i < toI32(part.length); i++) {
-      const c: i32 = part.charCodeAt(i)
-      const ok: boolean = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 45
+      const c: i32 = toI32(part.charCodeAt(i))
+      const digit: boolean = c >= 48 && c <= 57
+      const ok: boolean = digit || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 45
       if (!ok) {
         return false
       }
+      digits = digits && digit
+    }
+    if (pre && digits && part.length > 1 && part.charCodeAt(0) === 48) {
+      return false
     }
   }
   return true
@@ -146,7 +156,7 @@ export const releaseParseVersion = (v: string): ReleaseVersion | null => {
   let core: string = v
   const plus: i32 = toI32(core.indexOf("+"))
   if (plus >= 0) {
-    if (plus + 1 === toI32(core.length) || !releasePreWellFormed(core.slice(plus + 1))) {
+    if (plus + 1 === toI32(core.length) || !releasePreWellFormed(core.slice(plus + 1), false)) {
       return null
     }
     core = core.slice(0, plus)
@@ -156,7 +166,7 @@ export const releaseParseVersion = (v: string): ReleaseVersion | null => {
   if (dash >= 0) {
     pre = core.slice(dash + 1)
     core = core.slice(0, dash)
-    if (!releasePreWellFormed(pre)) {
+    if (!releasePreWellFormed(pre, true)) {
       return null
     }
   }
@@ -176,7 +186,12 @@ export const releaseParseVersion = (v: string): ReleaseVersion | null => {
 }
 
 /** -1, 0 or 1 as `a` is below, equal to or above `b`. */
-const releaseSign = (a: i64, b: i64): i32 => (a < b ? -1 : a > b ? 1 : 0)
+const releaseSign = (a: i64, b: i64): i32 => {
+  if (a < b) {
+    return -1
+  }
+  return a > b ? 1 : 0
+}
 
 /** Two prerelease identifiers in semver's order: numbers below words, numbers by value, words by ASCII. */
 const releaseCompareIdent = (a: string, b: string): i32 => {
@@ -191,9 +206,8 @@ const releaseCompareIdent = (a: string, b: string): i32 => {
   if (nb >= 0) {
     return 1
   }
-  const n: i32 = a.length < b.length ? toI32(a.length) : toI32(b.length)
-  for (let i: i32 = 0; i < n; i++) {
-    const d: i32 = a.charCodeAt(i) - b.charCodeAt(i)
+  for (let i: i32 = 0; i < toI32(a.length) && i < toI32(b.length); i++) {
+    const d: i32 = toI32(a.charCodeAt(i)) - toI32(b.charCodeAt(i))
     if (d !== 0) {
       return d < 0 ? -1 : 1
     }
@@ -214,8 +228,7 @@ const releaseComparePre = (a: string, b: string): i32 => {
   }
   const pa: string[] = split(a, ".")
   const pb: string[] = split(b, ".")
-  const n: i32 = pa.length < pb.length ? pa.length : pb.length
-  for (let i: i32 = 0; i < n; i++) {
+  for (let i: i32 = 0; i < toI32(pa.length) && i < toI32(pb.length); i++) {
     const c: i32 = releaseCompareIdent(pa[i], pb[i])
     if (c !== 0) {
       return c
@@ -238,7 +251,10 @@ export const releaseCompare = (a: string, b: string): i32 => {
   const va: ReleaseVersion | null = releaseParseVersion(a)
   const vb: ReleaseVersion | null = releaseParseVersion(b)
   if (va === null || vb === null) {
-    return va === null && vb === null ? 0 : va === null ? -1 : 1
+    if (va === null && vb === null) {
+      return 0
+    }
+    return va === null ? -1 : 1
   }
   let c: i32 = releaseSign(va.major, vb.major)
   if (c === 0) {
@@ -269,8 +285,7 @@ export const releaseIsNewer = (candidate: string, current: string): boolean =>
 
 /**
  * The version a `/releases/latest` redirect names: `location` must be exactly
- * `<base>/releases/tag/v<version>` or `<base>/releases/tag/<version>`, and the
- * version must parse. A redirect anywhere else — another repository, a login
+ * `<base>/releases/tag/v<version>`, and the version must parse. A redirect anywhere else — another repository, a login
  * page, the releases list when there is no release, a query or fragment — names
  * none.
  *
@@ -279,15 +294,28 @@ export const releaseIsNewer = (candidate: string, current: string): boolean =>
  * @returns The version, without a `v`, or null.
  */
 export const releaseTagFromLocation = (base: string, location: string): string | null => {
-  const prefix: string = `${base}/releases/tag/`
+  const prefix: string = `${base}/releases/tag/v`
   if (!location.startsWith(prefix)) {
     return null
   }
-  let version: string = location.slice(prefix.length)
-  if (version.startsWith("v")) {
-    version = version.slice(1)
-  }
+  const version: string = location.slice(prefix.length)
   return releaseParseVersion(version) === null ? null : version
+}
+
+/** Whether `rest`, what follows a host, is empty, a path, or a port of digits then nothing or a path. */
+const releasePortThenPath = (rest: string): boolean => {
+  const n: i32 = toI32(rest.length)
+  if (n === 0 || rest.charCodeAt(0) === 47) {
+    return true
+  }
+  if (rest.charCodeAt(0) !== 58) {
+    return false
+  }
+  let i: i32 = 1
+  while (i < n && rest.charCodeAt(i) >= 48 && rest.charCodeAt(i) <= 57) {
+    i++
+  }
+  return i > 1 && (i === n || rest.charCodeAt(i) === 47)
 }
 
 /**
@@ -304,7 +332,7 @@ export const releaseBaseAllowed = (base: string): boolean => {
   }
   const loopback: string[] = ["http://127.0.0.1", "http://localhost", "http://[::1]"]
   for (const host of loopback) {
-    if (base === host || base.startsWith(`${host}/`) || base.startsWith(`${host}:`)) {
+    if (base.startsWith(host) && releasePortThenPath(base.slice(host.length))) {
       return true
     }
   }
@@ -375,9 +403,9 @@ export const releaseFetchInstaller = (
   const res: HttpResponse | null = client.fetch(new HttpRequest("GET", `${rawBase}/v${version}/install.sh`))
   let ok: boolean = false
   if (res !== null && res.status === 200) {
-    const body: u8[] | null = res.body.readAll(1048576)
+    const body: u8[] | null = res.body.readAll(toI32(1048576))
     if (body !== null && body.length > 0) {
-      ok = writeFileBytesSync(path, body) === body.length
+      ok = writeFileBytesSync(path, body) === toI32(body.length)
     }
   }
   client.close()
@@ -392,19 +420,33 @@ export const releaseFetchInstaller = (
  * @param path The file.
  * @returns True when the file may be read and believed.
  */
-export const releaseFileTrusted = (path: string): boolean => {
+export const releaseFileTrusted = (path: string): boolean => releaseOwnedPrivate(path, 0x8000)
+
+/** Whether `path`, not followed if a link, is of file type `kind`, this user's, and writable by no one else. */
+const releaseOwnedPrivate = (path: string, kind: i64): boolean => {
   const om: i64 = lstatOwnerModeSync(path)
   if (om < 0) {
     return false
   }
   const owner: i64 = (om >> 32) & 0xffffffff
   const mode: i64 = om & 0xffff
-  return (mode & 0xf000) === 0x8000 && owner === geteuid() && (mode & 0o022) === 0
+  return (mode & 0xf000) === kind && owner === geteuid() && (mode & 0o022) === 0
+}
+
+/** Where the last `/` of `path` is, or 0 when it has none after its first byte. */
+const releaseLastSlash = (path: string): i32 => {
+  let slash: i32 = toI32(path.length) - 1
+  while (slash > 0 && path.charCodeAt(slash) !== 47) {
+    slash--
+  }
+  return slash
 }
 
 /**
  * The cache at `path`, or null when there is none, it cannot be believed (see
- * `releaseFileTrusted`) or it does not parse. Its format is two lines,
+ * `releaseFileTrusted`; its directory, too, must be a directory this user
+ * owns that no one else can write, so nobody else can swap the file between
+ * the check and the read) or it does not parse. Its format is two lines,
  * `checked <ms>` and `latest <version>`, the version empty when the check found
  * none.
  *
@@ -412,6 +454,10 @@ export const releaseFileTrusted = (path: string): boolean => {
  * @returns What the cache holds, or null.
  */
 export const releaseCacheRead = (path: string): ReleaseCache | null => {
+  const slash: i32 = releaseLastSlash(path)
+  if (slash > 0 && !releaseOwnedPrivate(path.slice(0, slash), 0x4000)) {
+    return null
+  }
   if (!releaseFileTrusted(path)) {
     return null
   }
@@ -470,10 +516,7 @@ export const releaseCacheFresh = (cache: ReleaseCache, nowMs: i64, maxAgeMs: i64
  * @returns True when the cache was written.
  */
 export const releaseCacheWrite = (path: string, latest: string, nowMs: i64): boolean => {
-  let slash: i32 = toI32(path.length) - 1
-  while (slash > 0 && path.charCodeAt(slash) !== 47) {
-    slash--
-  }
+  const slash: i32 = releaseLastSlash(path)
   if (slash > 0) {
     const made: i32 = mkdirSyncMode(path.slice(0, slash), 0o700)
     if (made !== 0 && made !== -17) {

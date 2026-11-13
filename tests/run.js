@@ -27838,6 +27838,325 @@ if (dealtHere("runCache")) {
       }
     }
   }
+
+  // `nish upgrade` and the update notice (src/upgrade.ts, std/release.ts,
+  // docs/security/release.md). A local server stands in for GitHub: its
+  // `/<name>/releases/latest` answers as the name says, and every request is
+  // logged so a check can say none was made. The notice is read through a
+  // pseudo-terminal (`script`), the only way stderr is a TTY here.
+  if (selects("upgrade", "nish/release", "update-notice")) {
+    if (!HAS_CLANG) {
+      skip("nish upgrade: clang not on PATH, so the release helper cannot be linked")
+    } else {
+      const upDir = path.join(buildDir, "upgrade")
+      fs.rmSync(upDir, { recursive: true, force: true })
+      fs.mkdirSync(upDir, { recursive: true })
+      const cacheHome = path.join(upDir, "cache")
+      const requests = path.join(upDir, "requests.log")
+      fs.writeFileSync(requests, "")
+      const serverJs = path.join(upDir, "server.cjs")
+      fs.writeFileSync(
+        serverJs,
+        `const http = require("http")
+const fs = require("fs")
+const log = process.argv[2]
+const server = http.createServer((req, res) => {
+  fs.appendFileSync(log, req.url + "\\n")
+  const at = \`http://127.0.0.1:\${server.address().port}\`
+  const [, name, ...rest] = req.url.split("/")
+  const tail = rest.join("/")
+  if (tail === "releases/latest") {
+    if (name === "newer") return res.writeHead(302, { Location: \`\${at}/newer/releases/tag/v99.0.0\` }).end()
+    if (name === "older") return res.writeHead(302, { Location: \`\${at}/older/releases/tag/v0.0.1\` }).end()
+    if (name === "elsewhere") return res.writeHead(302, { Location: \`\${at}/other/releases/tag/v99.0.0\` }).end()
+    if (name === "login") return res.writeHead(302, { Location: "https://example.com/login?v99.0.0" }).end()
+    if (name === "refuse") return res.writeHead(500).end("no")
+    if (name === "garbage") return res.writeHead(200).end("v99.0.0\\n<html>")
+    if (name === "slow") return
+  }
+  if (name === "raw" && tail.endsWith("/install.sh")) {
+    return res.writeHead(200).end('printf "%s\\\\n" "$@" > "$3/installed-with"\\n')
+  }
+  res.writeHead(404).end()
+})
+server.listen(0, "127.0.0.1", () => console.log(server.address().port))
+`,
+      )
+      const server = spawn(process.execPath, [serverJs, requests], { stdio: ["ignore", "pipe", "inherit"] })
+      const port = await new Promise((resolve) => server.stdout.once("data", (d) => resolve(String(d).trim())))
+      const origin = `http://127.0.0.1:${port}`
+      const asked = () => fs.readFileSync(requests, "utf8").split("\n").filter(Boolean)
+      const env = (name, extra = {}) => {
+        const e = {
+          ...process.env,
+          XDG_CACHE_HOME: cacheHome,
+          NISH_RELEASE_URL: `${origin}/${name}`,
+          NISH_RELEASE_RAW_URL: `${origin}/raw`,
+        }
+        delete e.CI
+        delete e.NISH_NO_UPDATE_CHECK
+        return { ...e, ...extra }
+      }
+      const up = (args, name = "newer", extra = {}, exe = NISH) =>
+        spawnSync(exe, ["upgrade", ...args], { encoding: "utf8", env: env(name, extra), timeout: 120000 })
+      try {
+        // The library's pure half, from a program: what a version is, which is newer, and what a redirect names.
+        const probe = path.join(upDir, "release_probe.ts")
+        fs.writeFileSync(
+          probe,
+          `import { releaseBaseAllowed, releaseCacheRead, releaseCompare, releaseIsNewer, releaseParseVersion, releaseTagFromLocation, releaseValidVersion } from "nish/release"
+
+export const main = (): number => {
+  const b = "https://github.com/o/r"
+  console.log(\`\${releaseValidVersion("0.40.0")} \${releaseValidVersion("1.0.0-rc.1+b.2")} \${releaseValidVersion("1.0.0/../x")} \${releaseValidVersion("0.40.0?x")} \${releaseValidVersion("1.0.0%2f")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0")} \${releaseCompare("0.10.0", "0.9.0")} \${releaseCompare("1.0.0+a", "1.0.0+b")}\`)
+  console.log(\`\${releaseIsNewer("0.40.0", "0.39.0")} \${releaseIsNewer("0.39.0", "0.39.0")} \${releaseIsNewer("0.38.0", "0.39.0")}\`)
+  const t = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0\`)
+  const other = releaseTagFromLocation(b, "https://github.com/o/other/releases/tag/v0.40.0")
+  const list = releaseTagFromLocation(b, \`\${b}/releases\`)
+  const escape = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0/../../x\`)
+  console.log(\`\${t === null ? "null" : t} \${other === null} \${list === null} \${escape === null}\`)
+  console.log(\`\${releaseBaseAllowed(b)} \${releaseBaseAllowed("http://127.0.0.1:8/x")} \${releaseBaseAllowed("http://example.com")} \${releaseBaseAllowed("http://127.0.0.1.example.com")}\`)
+  const bare = releaseTagFromLocation(b, b + "/releases/tag/0.40.0")
+  console.log(\`\${releaseParseVersion("1.0.0-01") === null} \${releaseParseVersion("1.0.0+01") !== null} \${bare === null} \${releaseBaseAllowed("http://localhost:@evil.example")} \${releaseBaseAllowed("http://localhost:8080")}\`)
+  console.log(\`\${releaseCacheRead(${JSON.stringify(path.join(upDir, "shared", "notice"))}) === null} \${releaseCacheRead(${JSON.stringify(path.join(upDir, "private", "notice"))}) !== null}\`)
+  return 0
+}
+`,
+        )
+        for (const [dir, mode] of [["shared", 0o775], ["private", 0o700]]) {
+          fs.mkdirSync(path.join(upDir, dir), { recursive: true })
+          fs.writeFileSync(path.join(upDir, dir, "notice"), "checked 1\nlatest 99.0.0\n", { mode: 0o600 })
+          fs.chmodSync(path.join(upDir, dir), mode)
+        }
+        const lib = spawnSync(NISH, ["run", probe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }) })
+        check(
+          "nish/release: versions, ordering, redirects and bases",
+          lib.status === 0 &&
+            lib.stdout ===
+              "true true false false false\n-1 1 0\ntrue false false\n0.40.0 true true true\ntrue true false false\ntrue true true false true\ntrue true\n",
+          `${lib.status}: ${lib.stdout}${lib.stderr}`,
+        )
+
+        // Refusals that need no network: a version that is not one, an unknown flag.
+        for (const bad of ["1.0.0/../x", "0.40.0?x", "v0.40.0", "--yes", "1.2", "01.2.3", "1.2.3.4", "1.2.3-", "1.0.0-01"]) {
+          const before = asked().length
+          const r = up([bad])
+          check(
+            `nish upgrade ${bad}: exit 2, before any network access`,
+            r.status === 2 && r.stderr.includes("usage: nish upgrade") && asked().length === before,
+            `${r.status}: ${r.stderr}`,
+          )
+        }
+        const remote = up(["--check"], "newer", { NISH_RELEASE_URL: "http://example.com/x" })
+        check(
+          "nish upgrade: a release URL that is plain http to another host is refused (exit 2)",
+          remote.status === 2,
+          `${remote.status}: ${remote.stderr}`,
+        )
+        const userinfo = up(["--check"], "newer", { NISH_RELEASE_URL: "http://localhost:@example.com/x" })
+        check(
+          "nish upgrade: a loopback release URL that names another host after the colon is refused (exit 2)",
+          userinfo.status === 2,
+          `${userinfo.status}: ${userinfo.stderr}`,
+        )
+
+        // --check: current and latest, exit 0; no answer of any kind, exit 3 and nothing on stdout.
+        const checked = up(["--check"])
+        const version = spawnSync(NISH, ["--version"], { encoding: "utf8" }).stdout.trim().split(" ")[1]
+        check(
+          "nish upgrade --check: prints current and latest, exit 0",
+          checked.status === 0 && checked.stdout === `current ${version}\nlatest  99.0.0\n`,
+          `${checked.status}: ${checked.stdout}${checked.stderr}`,
+        )
+        for (const name of ["elsewhere", "login", "refuse", "garbage", "slow", "down"]) {
+          const started = Date.now()
+          const r = up(["--check"], name, name === "down" ? { NISH_RELEASE_URL: "http://127.0.0.1:9/x" } : {})
+          const took = Date.now() - started
+          check(
+            `nish upgrade --check: a server that is ${name} gives exit 3 within the lookup's time`,
+            r.status === 3 && r.stdout === "" && took < 15000,
+            `${r.status} after ${took} ms: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // A check that learns nothing leaves the cache as it was: a newer release it names is not forgotten.
+        const kept = path.join(cacheHome, "nish", "release", `notice-${version}`)
+        fs.mkdirSync(path.dirname(kept), { recursive: true, mode: 0o700 })
+        fs.writeFileSync(kept, "checked 1\nnewer 99.0.0\n", { mode: 0o600 })
+        const failed = up(["--check"], "refuse")
+        check(
+          "nish upgrade --check: a failed check keeps the newer release the cache names",
+          failed.status === 3 && fs.readFileSync(kept, "utf8") === "checked 1\nnewer 99.0.0\n",
+          `${failed.status}: ${fs.readFileSync(kept, "utf8")}`,
+        )
+
+        // npm's install and a checkout's: refused with the way to upgrade, exit 2, nothing fetched or changed.
+        const npmExe = path.join(upDir, "npm", "node_modules", "@amritk", "nish-linux-x64", "nish")
+        fs.mkdirSync(path.dirname(npmExe), { recursive: true })
+        fs.copyFileSync(NISH, npmExe)
+        fs.chmodSync(npmExe, 0o755)
+        const before = asked().length
+        const npm = up(["0.40.0"], "newer", {}, npmExe)
+        check(
+          "nish upgrade: an npm install prints the npm line and exits 2",
+          npm.status === 2 && npm.stderr.includes("npm install -g nish@0.40.0") && asked().length === before,
+          `${npm.status}: ${npm.stderr}`,
+        )
+        const source = up([])
+        check(
+          "nish upgrade: a build from a checkout refuses, exit 2",
+          source.status === 2 && source.stderr.includes("not installed by install.sh") && asked().length === before,
+          `${source.status}: ${source.stderr}`,
+        )
+
+        // A curl install: install.sh comes from the tag and is run with the version and the install directory.
+        const inst = path.join(upDir, "curl-install")
+        fs.mkdirSync(path.join(inst, "libexec"), { recursive: true })
+        fs.mkdirSync(path.join(inst, "bin"))
+        fs.mkdirSync(path.join(inst, "scripts"))
+        fs.copyFileSync(NISH, path.join(inst, "libexec", "nish"))
+        fs.chmodSync(path.join(inst, "libexec", "nish"), 0o755)
+        fs.writeFileSync(
+          path.join(inst, "bin", "nish"),
+          `#!/bin/sh\n# Written by install.sh.\nexec '${path.join(inst, "libexec", "nish")}' "$@"\n`,
+          { mode: 0o755 },
+        )
+        fs.cpSync(path.join(root, "std"), path.join(inst, "std"), { recursive: true })
+        fs.cpSync(path.join(root, "runtime"), path.join(inst, "runtime"), { recursive: true })
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(inst, "scripts", "build.sh"))
+        fs.copyFileSync(path.join(root, "package.json"), path.join(inst, "package.json"))
+        const wrapper = path.join(inst, "bin", "nish")
+        const installedWith = path.join(inst, "installed-with")
+        const latest = up([], "newer", {}, wrapper)
+        check(
+          "nish upgrade: a curl install runs the tag's install.sh with the latest version and its directory",
+          latest.status === 0 &&
+            asked().includes("/raw/v99.0.0/install.sh") &&
+            fs.existsSync(installedWith) &&
+            fs.readFileSync(installedWith, "utf8") === `99.0.0\n--dir\n${inst}\n`,
+          `${latest.status}: ${latest.stderr}`,
+        )
+        fs.rmSync(installedWith, { force: true })
+        const older = up([], "older", {}, wrapper)
+        check(
+          "nish upgrade: with no version, an older latest installs nothing",
+          older.status === 0 && older.stderr.includes("up to date") && !fs.existsSync(installedWith),
+          `${older.status}: ${older.stderr}`,
+        )
+        const pinned = up(["0.1.0"], "newer", {}, wrapper)
+        check(
+          "nish upgrade 0.1.0: an explicit older version says it is a downgrade and installs it",
+          pinned.status === 0 &&
+            pinned.stderr.includes("downgrade") &&
+            fs.readFileSync(installedWith, "utf8") === `0.1.0\n--dir\n${inst}\n`,
+          `${pinned.status}: ${pinned.stderr}`,
+        )
+
+        // The notice, read through a terminal.
+        if (process.platform !== "linux" || !has("script")) {
+          skip("update notice: needs util-linux script for a terminal")
+        } else {
+          const cacheFile = path.join(cacheHome, "nish", "release", `notice-${version}`)
+          const notice = `nish 99.0.0 is available (you have ${version}); run \`nish upgrade\``
+          const plant = (checkedMs, newer = "99.0.0") => {
+            fs.rmSync(cacheFile, { force: true })
+            fs.mkdirSync(path.dirname(cacheFile), { recursive: true, mode: 0o700 })
+            fs.writeFileSync(cacheFile, `checked ${checkedMs}\nnewer${newer === "" ? "" : ` ${newer}`}\n`, { mode: 0o600 })
+          }
+          const tty = (args, extra = {}) => {
+            const r = spawnSync("script", ["-qec", '"$NISH_UP_EXE" $NISH_UP_ARGS', "/dev/null"], {
+              encoding: "utf8",
+              env: env("newer", { NISH_UP_EXE: NISH, NISH_UP_ARGS: args, ...extra }),
+              timeout: 60000,
+            })
+            return { status: r.status, out: (r.stdout || "").replace(/\r/g, "") }
+          }
+          const hello = path.join(upDir, "hello.ts")
+          fs.writeFileSync(hello, 'export const main = (): number => {\n  console.log("hi")\n  return 0\n}\n')
+          const lines = (out) => out.split("\n").filter((l) => l === notice).length
+          plant(Date.now())
+          const quiet = tty("--version", { NISH_NO_UPDATE_CHECK: "1" })
+          const shown = tty("--version")
+          check(
+            "update notice: nish --version on a terminal prints the line once, exit unchanged",
+            shown.status === 0 && lines(shown.out) === 1 && shown.out.replace(`${notice}\n`, "") === quiet.out,
+            JSON.stringify(shown),
+          )
+          const compiled = tty(`${hello} -o ${path.join(upDir, "hello.ll")}`)
+          check("update notice: a compile on a terminal prints the line once", compiled.status === 0 && lines(compiled.out) === 1, JSON.stringify(compiled))
+          for (const [what, args, extra] of [
+            ["NISH_NO_UPDATE_CHECK=1", "--version", { NISH_NO_UPDATE_CHECK: "1" }],
+            ["CI=true", "--version", { CI: "true" }],
+            ["--json", `--json ${hello} -o ${path.join(upDir, "hello.ll")}`, {}],
+            ["nish run", `run ${hello}`, {}],
+            ["a usage error", "--number-mode", {}],
+          ]) {
+            const r = tty(args, extra)
+            check(`update notice: not shown with ${what}`, lines(r.out) === 0, JSON.stringify(r))
+          }
+          const piped = spawnSync(NISH, ["--version"], { encoding: "utf8", env: env("newer") })
+          check("update notice: not shown when stderr is not a terminal", !piped.stderr.includes("available"), piped.stderr)
+
+          // A cache that is not to be believed: no line, whatever it says.
+          fs.rmSync(cacheFile, { force: true })
+          const planted = path.join(upDir, "planted")
+          fs.writeFileSync(planted, `checked ${Date.now()}\nnewer 99.0.0\n`, { mode: 0o600 })
+          fs.symlinkSync(planted, cacheFile)
+          check("update notice: a cache that is a symlink is not believed", lines(tty("--version").out) === 0)
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          check("update notice: a group-writable cache is not believed", lines(tty("--version").out) === 0)
+          plant(Date.now())
+          fs.chmodSync(path.dirname(cacheFile), 0o777)
+          check("update notice: a cache in a world-writable directory is not believed", lines(tty("--version").out) === 0)
+          const dirMode = fs.statSync(path.dirname(cacheFile)).mode & 0o777
+          check(
+            "update notice: a world-writable cache directory is made 0700, so the next run believes it",
+            dirMode === 0o700,
+            dirMode.toString(8),
+          )
+          fs.chmodSync(path.dirname(cacheFile), 0o700)
+
+          // At most one network check a day: a fresh cache asks nothing, a stale or future one is refreshed once.
+          const waitFor = (ok) => {
+            const until = Date.now() + 20000
+            while (!ok() && Date.now() < until) spawnSync("sleep", ["0.2"])
+            return ok()
+          }
+          const lookups = () => asked().filter((u) => u === "/newer/releases/latest").length
+          // The checks the refused caches above started finish first.
+          for (let seen = -1; seen !== lookups(); ) {
+            seen = lookups()
+            spawnSync("sleep", ["2"])
+          }
+          plant(Date.now())
+          let base = lookups()
+          tty("--version")
+          tty("--version")
+          spawnSync("sleep", ["1"])
+          check("update notice: two runs on a fresh cache make no network check", lookups() === base)
+          for (const [what, when] of [
+            ["older than 24 h", Date.now() - 25 * 3600 * 1000],
+            ["dated in the future", Date.now() + 3600 * 1000],
+          ]) {
+            plant(when, "")
+            base = lookups()
+            tty("--version")
+            tty("--version")
+            const refreshed = waitFor(() => /newer 99\.0\.0/.test(fs.readFileSync(cacheFile, "utf8")))
+            spawnSync("sleep", ["1"])
+            check(
+              `update notice: a cache ${what} is refreshed by exactly one check`,
+              refreshed && lookups() === base + 1,
+              `${lookups() - base} lookups; ${fs.readFileSync(cacheFile, "utf8")}`,
+            )
+          }
+        }
+      } finally {
+        server.kill()
+      }
+    }
+  }
 }
 
 // A filtered run's `tail` groups are shard 1's, and the line below names them.

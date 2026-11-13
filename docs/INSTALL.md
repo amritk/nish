@@ -135,9 +135,22 @@ profile. On a platform it has no binary for it says so and names the four it
 does build — the npm route covers exactly the same four and no more, because
 since 0.6.0 there is no compiler inside that package to fall back to either.
 
-**Upgrading is running it again.** There is no separate command: it installs
-over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and says
-`nothing to do` when the version already matches.
+**Upgrade with `nish upgrade`.** It asks GitHub for the latest release and,
+when it is newer than the compiler you are running, fetches that release's own
+`install.sh` (from its tag, never `main`) into a private file and runs it over
+your install's directory. `nish upgrade 0.4.0` installs a version you name, and
+says so when it is older; `nish upgrade --check` only prints the version you
+have and the latest. A compiler installed with npm is upgraded with npm:
+`nish upgrade` prints the `npm install -g nish@<version>` line to run and
+changes nothing. Running the install script again does the same job: it
+installs over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and
+says `nothing to do` when the version already matches.
+
+Once a day at most, a compile or `nish --version` on a terminal checks for a
+newer release in the background and prints one line on stderr when there is
+one. `NISH_NO_UPDATE_CHECK=1` turns it off; it is never shown in CI, with
+`--json`, in `nish run`, or when stderr is not a terminal
+([the CLI guide](guide/using-nish/cli.md#staying-up-to-date-nish-upgrade)).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh          # latest
