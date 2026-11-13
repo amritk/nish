@@ -34978,6 +34978,61 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
   }
 }
 
+// ---- persist: root storage kept across export calls (docs/wp55-persistent-root.md) --
+// Two modules with root storage, built for a page and driven from Node through
+// the loader `--emit-dts` writes (tests/persist/drive.mjs): world.ts, whose
+// every step adds, drops and renames objects the root reaches and leaves
+// garbage, and director.ts, whose root is the real break director. Each runs
+// 100,000 steps; the driver checks the answers and that linear memory and the
+// kept heap stay flat after warm-up.
+if (!only || "persist".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`persist: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "persist")
+    fs.rmSync(dir, { recursive: true, force: true })
+    for (const stem of ["world", "director"]) {
+      const out = path.join(dir, stem)
+      fs.mkdirSync(out, { recursive: true })
+      const compiled = spawnSync(
+        NISH,
+        [`tests/persist/${stem}.ts`, "--target", "wasm32", "--emit-dts", path.join(out, `${stem}.d.ts`), "-o", `${out}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      check(`persist: ${stem}.ts compiles for wasm32 with --emit-dts`, compiled.status === 0, shown(compiled))
+      if (compiled.status !== 0) {
+        continue
+      }
+      const loader = fs.readFileSync(path.join(out, `${stem}.mjs`), "utf8")
+      check(
+        `persist: ${stem}'s loader hands each call's arena to nish_root_keep, not nish_arena_release`,
+        loader.includes("raw.nish_root_keep(mark)") && !loader.includes("raw.nish_arena_release("),
+        loader
+      )
+      const lls = fs
+        .readdirSync(out)
+        .filter((f) => f.endsWith(".ll"))
+        .map((f) => path.join(out, f))
+      const wasm = path.join(out, `${stem}.wasm`)
+      const linked = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", wasm, "--profile", "wasm-host"])
+      check(`persist: ${stem} links under --profile wasm-host`, linked.status === 0, shown(linked))
+      if (linked.status !== 0) {
+        continue
+      }
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, "100000"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `persist: ${stem} answers right for 100,000 steps with memory and the kept heap flat`,
+        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: 100000 steps`),
+        shown(ran)
+      )
+    }
+  }
+}
+
 // ---- nish/page/frame: the framebuffer presenter and the fixed-step loop ------------
 // tests/page-frame/check.mjs runs runtime/page-frame.mjs under Node against fake
 // WebGPU, WebGL 2 and Canvas 2D objects and prints a line per check. A real

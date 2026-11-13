@@ -34,11 +34,14 @@ const fail = (message) => {
   process.exit(1);
 };
 
+/** The slack the kept heap may pass its warm-up peak by: one wasm page. */
+const PAGE = 65536;
+
 /**
- * Memory and kept heap, sampled after every call once the first tenth of the
- * run has warmed up: the most either reached in the warm-up is the bound the
- * rest must stay under, so a leak of a few bytes a step shows long before the
- * end.
+ * Memory and kept heap, sampled after every call once the first quarter of
+ * the run has warmed up (the director takes some 10,000 steps to reach its
+ * largest): the most either reached in the warm-up is the bound the rest must
+ * stay under, so a leak of a few bytes a step shows long before the end.
  */
 const watch = () => {
   let warm = false;
@@ -52,16 +55,17 @@ const watch = () => {
       if (!warm) {
         memMax = Math.max(memMax, mem);
         keptMax = Math.max(keptMax, k);
-        warm = step >= steps / 10;
+        warm = step >= steps / 4;
         return;
       }
       if (mem > memMax) {
         fail(`memory grew from ${memMax} to ${mem} bytes at step ${step}`);
       }
-      // The kept heap is the live graph plus at most one call's garbage:
-      // compaction runs when the arena has grown past twice the live bytes
-      // and a page, so after the warm-up it never passes what it reached there.
-      if (k > keptMax) {
+      // Compaction runs once the kept region passes twice the live bytes and
+      // a page, so the region's peak moves by twice what the live graph does
+      // (a score gaining a digit). A page of slack covers that; a leak of a
+      // few bytes a step passes it within the run.
+      if (k > keptMax + PAGE) {
         fail(`kept heap grew from ${keptMax} to ${k} at step ${step}`);
       }
       worst = Math.max(worst, k);
@@ -136,8 +140,8 @@ const runDirector = () => {
   let held = 0;
   for (let t = 1; t <= steps; t++) {
     // A scripted player: Enter every 3 s takes the intro to the menu and the
-    // menu into a game; in a game, hold left or right for a second, serve
-    // with space, and let the ball fall so the game ends back at the menu.
+    // menu into a game; in a game, hold left or right for a second and
+    // serve with space.
     if (t % 360 === 0) {
       tap(KEY_ENTER, 0);
     }

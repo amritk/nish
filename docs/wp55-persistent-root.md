@@ -1,6 +1,6 @@
 # WP55: an object graph a WebAssembly module keeps between calls
 
-**Status: proposed (2026-11-13), design first.** Stage R1 builds it.
+**Status: landed (2026-11-13).** Stage R1 built it.
 
 ## 1. The problem
 
@@ -156,10 +156,18 @@ argument inside the bracket, before `nish_root_keep` runs; the runtime keeps no
 pointer into the arena across calls. So a compaction moves every pointer that
 names a kept object.
 
-Inside a call nothing changes. The escape analysis (`src/escape.ts`) already
-treats a store into module storage, or into an object loaded from it, as an
-escape: an allocation stored into the root graph is heap memory, never a stack
-slot or memory a function's own scope releases.
+Inside a call, a function's own arena scope must not release what it stored
+into the root graph. The escape analysis (`src/escape.ts`) counts any store of
+an allocation into memory as an escape, so an allocation stored into a root
+slot, or into an object or array loaded from one, is heap memory, never a stack
+slot or memory the storing function's scope releases. What it could not see
+was the other half of the containment proof, `rootsHoldNoPointer`: a function
+whose parameters hold no pointer was taken to reach no memory older than the
+call, so an `init()` that stores a fresh object into a root still counted as
+contained, and the scope the callee rule gives a contained function released
+the object's arrays, which its constructor had allocated. A program that declares root storage, on any target, loses
+that half (`Options.holdsRoots`), and containment rests on `!allocEscapes`
+alone, which is sound because a store through a root is an escape.
 
 ### 4.2 Interactions
 
@@ -204,7 +212,7 @@ slot or memory a function's own scope releases.
 
 ## 7. Stages
 
-- [ ] R1: root storage — checker, descriptors, `nish_root_keep`, loader,
+- [x] R1: root storage — checker, descriptors, `nish_root_keep`, loader,
   tests and docs
 
 ## Not in this work package

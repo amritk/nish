@@ -74,7 +74,7 @@ export const draw = (): i32 => {
   for (let i = 0; i < n; i++) {
     const p = s.fb.pixels[i]
     GAME_FRAME[i] = p
-    sum = (sum * 31 + p) | 0
+    sum = (sum * 31 + (p & 0xffffff)) % 1000003
   }
   return sum
 }
