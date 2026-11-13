@@ -23,6 +23,8 @@ PASS  a copy after every prefix digests the prefix and leaves the original alone
 PASS  a copy of a hasher that has seen "abc" digests "abc"
 PASS  a second copy, later, digests everything fed since
 PASS  and the original still digests the same
+PASS  digestInto writes the digest of "abc" at its offset
+PASS  and leaves the byte after the window alone
 PASS  each digest is a fresh array
 PASS  a digest is SHA256_SIZE bytes long
-sha256: 27 passed, 0 failed, 0 skipped
+sha256: 29 passed, 0 failed, 0 skipped

@@ -330,6 +330,21 @@ export const sha256Checks = (): i32 => {
   );
   t.eqStr("and the original still digests the same", hexOf(transcript.digest()), afterAll);
 
+  // --- digestInto -----------------------------------------------------------
+  // The digest lands in the caller's window and nowhere else.
+  const into: Sha256 = new Sha256();
+  into.update(msg896, start, abc);
+  const window: u8[] = repeated(0x55, 34);
+  const at: i32 = 1;
+  const fill: i32 = 0x55;
+  into.digestInto(window, at);
+  t.eqStr(
+    "digestInto writes the digest of \"abc\" at its offset",
+    hexOf(prefix(window, 33)),
+    "55ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  );
+  t.eqI32("and leaves the byte after the window alone", toI32(window[33]), fill);
+
   // A digest is a fresh array each time, so writing into one cannot change another.
   const first: u8[] = sha256(empty);
   const second: u8[] = sha256(empty);

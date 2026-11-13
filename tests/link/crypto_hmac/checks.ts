@@ -129,6 +129,18 @@ const sha512InChunks = (key: u8[], data: u8[], chunk: i32): string => {
   return hexOf(mac.digest());
 };
 
+/** Whether `HmacSha256.digestInto` at offset 0 writes the tag `digest` answers. */
+const sha256IntoMatches = (key: u8[], data: u8[]): boolean => {
+  const from: i32 = 0;
+  const byDigest = new HmacSha256(key);
+  byDigest.update(data, from, toI32(data.length));
+  const byInto = new HmacSha256(key);
+  byInto.update(data, from, toI32(data.length));
+  const into: u8[] = new Array<u8>(32);
+  byInto.digestInto(into, from);
+  return hexOf(into) == hexOf(byDigest.digest());
+};
+
 /** Whether every byte of `xs` is zero. */
 const zeroBytes = (xs: u8[]): boolean => {
   let acc: i32 = 0;
@@ -431,6 +443,27 @@ export const hmacChecks = (): i32 => {
   wiped512.update(data2, start, toI32(data2.length));
   t.eqStr("HmacSha512.digest answers the tag", hexOf(wiped512.digest()), hexOf(tag512));
   t.ok("and leaves both of HmacSha512's hashers zeroed", sha512Wiped(wiped512));
+  // `digestInto` writes the same tag into the caller's window, leaves the bytes
+  // around it alone, and wipes the hashers and the inner-digest buffer too.
+  const into256 = new HmacSha256(key6);
+  into256.update(data7, start, toI32(data7.length));
+  const window256: u8[] = repeated(0xaa, 34);
+  const at: i32 = 1;
+  into256.digestInto(window256, at);
+  t.eqStr("HmacSha256.digestInto writes RFC 4231 test case 7's tag", hexOf(prefix(window256, 33)), "aa" + tag7Sha256);
+  t.ok("and leaves the byte after the window alone", window256[33] == toU8(0xaa));
+  t.ok("and leaves both of HmacSha256's hashers zeroed", sha256Wiped(into256));
+  t.ok("and leaves HmacSha256's inner-digest buffer zeroed", zeroBytes(into256.innerDigest));
+  t.ok(
+    "HmacSha256.digestInto matches digest on RFC 4231 test cases 1-7",
+    sha256IntoMatches(key1, data1) &&
+      sha256IntoMatches(key2, data2) &&
+      sha256IntoMatches(key3, data3) &&
+      sha256IntoMatches(key4, data4) &&
+      sha256IntoMatches(key5, data5) &&
+      sha256IntoMatches(key6, data6) &&
+      sha256IntoMatches(key6, data7)
+  );
   // A scratch keyed with a key longer than its block hashes the key in its
   // inner hasher first; starting that hasher again must not leave the key's
   // last partial block behind in it.

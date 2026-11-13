@@ -51,9 +51,14 @@ PASS  HmacSha384.digest answers the tag
 PASS  and leaves both of HmacSha384's hashers zeroed
 PASS  HmacSha512.digest answers the tag
 PASS  and leaves both of HmacSha512's hashers zeroed
+PASS  HmacSha256.digestInto writes RFC 4231 test case 7's tag
+PASS  and leaves the byte after the window alone
+PASS  and leaves both of HmacSha256's hashers zeroed
+PASS  and leaves HmacSha256's inner-digest buffer zeroed
+PASS  HmacSha256.digestInto matches digest on RFC 4231 test cases 1-7
 PASS  HmacSha256Scratch.begin with a 131-byte key leaves none of it in the inner block
 PASS  and its HMAC-SHA-256 tag is still RFC 4231 test case 7's
 PASS  HmacSha384Scratch.begin with a 131-byte key leaves none of it in the inner block
 PASS  and its HMAC-SHA-384 tag is still RFC 4231 test case 7's
 PASS  each tag is a fresh array
-hmac: 58 passed, 0 failed, 0 skipped
+hmac: 63 passed, 0 failed, 0 skipped

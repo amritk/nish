@@ -258,7 +258,7 @@ export class HmacSha256 {
    * Where `digestInto` puts the inner digest on its way into `outer`, so that
    * it allocates nothing; zero except during that call, which wipes it.
    */
-  private innerDigest: u8[]
+  innerDigest: u8[]
 
   /**
    * Keys the computation. A key longer than 64 bytes is replaced by its
@@ -552,12 +552,9 @@ export const hmacSha512Verify = (key: u8[], data: u8[], tag: u8[]): boolean =>
 // "`using a = arena()`", NL2424). The scratch below is the same computation in
 // hashers the caller allocates once and keeps: `begin` keys it again by
 // rewriting their state in place, and `finishInto` writes the tag into the
-// caller's array. What it allocates on the way — the digests a SHA-384
-// hasher answers — dies with the call that made it, so a caller may run it a
+// caller's array. What it allocates on the way — the two digests a hasher
+// answers — dies with the call that made it, so a caller may run it a
 // thousand times inside one arena scope and leave the arena where it was.
-// `HmacSha256Scratch` allocates nothing at all: a long key's hash and the
-// inner digest pass through an array it already holds, and the tag goes
-// straight into the caller's (`Sha256.digestInto`).
 
 /**
  * Makes `to` the hasher `from` is — the same point in the same message, as
@@ -635,10 +632,7 @@ export class HmacSha256Scratch {
   private fresh: Sha256
   /** One key block XOR a pad, wiped as soon as it is absorbed. */
   private pad: u8[]
-  /**
-   * The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with
-   * instead, and the inner digest on its way into `outer`; wiped after each use.
-   */
+  /** The SHA-256 of a key longer than a block, which RFC 2104 §2 keys with instead; wiped once used. */
   private keyHash: u8[]
 
   /**
@@ -670,7 +664,11 @@ export class HmacSha256Scratch {
     }
     hmacCopySha256(this.fresh, this.inner)
     this.inner.update(key, off, len)
-    this.inner.digestInto(this.keyHash, HMAC_FROM)
+    const digest: u8[] = this.inner.digest()
+    for (let i: i32 = 0; i < toI32(digest.length) && i < toI32(this.keyHash.length); i += 1) {
+      this.keyHash[i] = digest[i]
+    }
+    secureZero(digest)
     this.keyBlocks(this.keyHash, HMAC_FROM, SHA256_SIZE)
     secureZero(this.keyHash)
   }
@@ -719,12 +717,14 @@ export class HmacSha256Scratch {
     if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
       panic("HmacSha256Scratch: the tag window is outside its array")
     }
-    // `keyHash` is free once `begin` has wiped it, so the inner digest passes
-    // through it rather than through an array of its own.
-    this.inner.digestInto(this.keyHash, HMAC_FROM)
-    this.outer.update(this.keyHash, HMAC_FROM, SHA256_SIZE)
-    secureZero(this.keyHash)
-    this.outer.digestInto(out, at)
+    const innerDigest: u8[] = this.inner.digest()
+    this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
+    secureZero(innerDigest)
+    const tag: u8[] = this.outer.digest()
+    for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
+      out[at + i] = tag[i]
+    }
+    secureZero(tag)
   }
 
   /** Zeroes both keyed hashers, for a caller done with the key; `begin` starts again. */
