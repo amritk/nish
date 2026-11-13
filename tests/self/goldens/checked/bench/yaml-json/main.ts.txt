@@ -8510,7 +8510,7 @@ function YamlJsonLoader.storeJsonNumber(this: YamlJsonLoader, at: i32): i32 -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.storeSpan
   escaping: at
-  calls: nish.JsonDocument.storeSpan nish.YamlStream.style nish.yamlJsonAt nish.yamlJsonByte nish.yamlJsonDigits nish.yamlJsonIsDigit nish_panic_index nish_panic_overflow
+  calls: nish.JsonDocument.storeSpan nish.YamlStream.style nish.yamlJsonAt nish.yamlJsonByte nish.yamlJsonDigits nish.yamlJsonIsDigit nish_panic_index
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
@@ -8521,18 +8521,18 @@ function YamlJsonLoader.storeJsonNumber(this: YamlJsonLoader, at: i32): i32 -> @
   local +6:11 to: i32 (const)
   callee +6:21 yamlJsonAt -> @nish.yamlJsonAt
   local +10:9 i: i32 (let)
-  local +14:11 lead: i32 (const)
-  callee +14:23 yamlJsonByte -> @nish.yamlJsonByte
-  callee +20:16 yamlJsonIsDigit -> @nish.yamlJsonIsDigit
-  callee +21:11 yamlJsonDigits -> @nish.yamlJsonDigits
-  local +26:13 fraction: i32 (const)
-  callee +26:29 yamlJsonDigits -> @nish.yamlJsonDigits
-  local +34:13 sign: i32 (const)
-  callee +34:25 yamlJsonByte -> @nish.yamlJsonByte
-  local +38:13 exponent: i32 (const)
-  callee +38:29 yamlJsonDigits -> @nish.yamlJsonDigits
-  local +47:11 noStop: i32 (const)
-  callee +48:12 JsonDocument.storeSpan -> @nish.JsonDocument.storeSpan
+  local +18:11 lead: i32 (const)
+  callee +18:23 yamlJsonByte -> @nish.yamlJsonByte
+  callee +24:16 yamlJsonIsDigit -> @nish.yamlJsonIsDigit
+  callee +25:11 yamlJsonDigits -> @nish.yamlJsonDigits
+  local +30:13 fraction: i32 (const)
+  callee +30:29 yamlJsonDigits -> @nish.yamlJsonDigits
+  local +38:13 sign: i32 (const)
+  callee +38:25 yamlJsonByte -> @nish.yamlJsonByte
+  local +42:13 exponent: i32 (const)
+  callee +42:29 yamlJsonDigits -> @nish.yamlJsonDigits
+  local +51:11 noStop: i32 (const)
+  callee +52:12 JsonDocument.storeSpan -> @nish.JsonDocument.storeSpan
 function YamlJsonLoader.storeKey(this: YamlJsonLoader, key: i32): i32 -> @nish.YamlJsonLoader.storeKey [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlJsonLoader.storeScalar

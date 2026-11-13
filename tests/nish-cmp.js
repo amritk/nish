@@ -5930,7 +5930,7 @@ const DECLARED = [
     }
   ),
   ...byFinding(YAML_LOAD_CUTS)(
-    "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
+    "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickCount` and `quickPart` over `quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
     {
       "tests/link/std_yaml_json_golden/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
       "tests/link/std_yaml_json_own_keys/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],

@@ -2464,13 +2464,16 @@ state a document:
 | Workload | Before | After |
 | --- | ---: | ---: |
 | parse | 135.82M | 135.06M |
-| parse + load | 298.85M | 237.27M |
-| load step alone | 163.03M | 102.21M |
+| parse + load | 298.85M | 237.26M |
+| load step alone | 163.03M | 102.20M |
 
 #1072 recorded 309M and 173M for the same input on its own head; `main` at
 `e0a1661e`, with the compiler and library changes since, measures the
 298.85M and 163.03M above, and that is the baseline here. The load step is
-now 0.76x the parse in instructions. What is left of it, from `callgrind`:
+37.3% cheaper (a 40% cut, 97.82M, was the aim; parse plus load is 237.26M
+against the 233.6M that would have met it) and now 0.76x the parse in
+instructions. What is left of it, from `callgrind` on the same input, as
+inclusive costs that overlap (they sum to about 127M, more than the step):
 `build`'s own dispatch (about 24.5M), copying scalar text into the document
 (`storeSpan`, 19M), decoding quoted and escaped scalars (`yamlDecode`, 16.7M),
 storing scalars (16.4M), reading node types (12M over two call sites), array

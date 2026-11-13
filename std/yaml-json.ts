@@ -684,6 +684,10 @@ export class YamlJsonLoader {
     if (toI32(source.charCodeAt(i)) === YAML_JSON_DASH) {
       i += 1
     }
+    // A sign alone: the byte past it is not this scalar's.
+    if (i >= to) {
+      return -1
+    }
     const lead: i32 = yamlJsonByte(source, i)
     if (lead === YAML_JSON_ZERO) {
       i += 1
