@@ -709,7 +709,7 @@ a.nish-hero__cta:hover {
 .nish-tok-n {
   color: var(--scalar-color-orange);
 }
-.nish-hero__cmd b {
+.nish-hero__terminal b {
   color: var(--scalar-color-accent);
 }
 .nish-hero__out {
@@ -780,8 +780,7 @@ a.nish-hero__cta:hover {
 
 /* The terminal takes a line, through a hidden input: off-screen text would
    scroll the page to it, so it sits inside the terminal, unseen, at 16px so
-   iOS does not zoom in on focus. While the terminal has focus the hero's
-   animation holds on its last frame; the shell (/break/shell.mjs) styles the
+   iOS does not zoom in on focus. The shell (/break/shell.mjs) styles the
    rest once it loads. */
 .nish-hero__input {
   position: absolute;
@@ -798,8 +797,40 @@ a.nish-hero__cta:hover {
   outline: 2px solid var(--scalar-color-accent);
   outline-offset: 2px;
 }
-.nish-hero__terminal:focus-within * {
-  animation: none;
+/* Held (hovered or focused; site.js sets data-held), the terminal shows the
+   loop's last frame, or with "blank" none of it, and a prompt under it. An
+   !important declaration outranks an animation, so the loop runs on beneath
+   and, let go, picks up in step with the rest of the hero. The prompt's line
+   is kept while hidden, so a hold does not grow the terminal. */
+.nish-hero__terminal[data-held] :is(.nish-hero__code, .nish-hero__typed, .nish-hero__out) {
+  opacity: 1 !important;
+  clip-path: none !important;
+  transform: none !important;
+}
+.nish-hero__terminal[data-held] > pre:first-of-type {
+  padding-bottom: 0;
+}
+.nish-hero__terminal[data-held="blank"] :is(.nish-hero__cmd, .nish-hero__out) {
+  display: none;
+}
+.nish-hero__ready {
+  visibility: hidden;
+}
+[data-held] .nish-hero__ready {
+  visibility: visible;
+}
+.nish-hero__ready i {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  background: var(--scalar-color-accent);
+  animation: nish-blink 1s steps(1, end) infinite;
+}
+@keyframes nish-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 /* The middle of the stage: beams, the compiler, the targets. */
