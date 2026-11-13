@@ -38,7 +38,10 @@
  * stored as eight `u32` words, low first, and the 64-bit functions read word
  * pairs into `u64` locals (`arg1Limb0` is words 0 and 1) and write their limbs
  * back as word pairs. That is one of four things the translation changes;
- * nothing else changes.
+ * nothing else changes. Reading every limb into a local before any
+ * arithmetic also keeps what the 32-bit `square` did on purpose: its input's
+ * pointer is not spilled in the way the aarch64 disassembly check once
+ * misread (#334), so `ct_asm_p256` keeps reading `square` on aarch64.
  *
  *  C's out-pointers become answers. In the 32-bit functions each of fiat's
  *  `addcarryx`, `subborrowx` and `mulx` helpers answers its two outputs

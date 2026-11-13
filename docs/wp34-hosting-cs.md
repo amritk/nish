@@ -312,7 +312,7 @@ itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 | **R2** | Extended CONNECT (RFC 9220), HTTP datagrams (RFC 9297) and **WebTransport over HTTP/3**: sessions, datagrams, unidirectional and bidirectional streams, and close. It is pinned to the draft Chrome negotiates today; that draft's SETTINGS and headers are recorded once from a `wtransport` 0.7 exchange and held as a golden | Chrome through Playwright; a `wtransport` (Rust) client against the Nish server, which is the cross-implementation test | R1, Q4 | built against a Nish client, with a `wtransport` 0.7 exchange recorded and replayed byte for byte; Chromium through Playwright opens a session and echoes a datagram and a stream in S2's interop job (#487) |
 | **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 | built in nish as `examples/relay/`, with the `cargo test` cases and fixtures ported and every refusal across loopback; N9's soak flat (0 bytes a session over 100,000, with #492, #512 and #515); `boot-check`, `bench:offload` and the cs port open, 0.17.0 carrying R2; DATA down above 1,164 bytes landed with DPLPMTUD (#1458) |
 
-**What is left, in order.** *2026-11-12:* K2 to K4's disassembly (#1464), K5's safegcd field inversion and windowed verify (#1469, 64-bit limbs still open), T1's secp256r1 key shares and TLS-4 (#1449, #1479), WP39 G1 (#1437) and G2 (#1454), Q3's congestion cases (#1477) and A1's DPLPMTUD (#1458) are done. K5's 64-bit field limbs are done too ([the result](#k5-p-256-64-bit-limbs--the-result)). What remains here is the cs side, AEAD-4, the `--cpu` flag, H3-5 and #1485.
+**What is left, in order.** *2026-11-12:* K2 to K4's disassembly (#1464), K5's safegcd field inversion and windowed verify (#1469, 64-bit limbs still open), T1's secp256r1 key shares and TLS-4 (#1449, #1479), WP39 G1 (#1437) and G2 (#1454), Q3's congestion cases (#1477) and A1's DPLPMTUD (#1458) are done. K5's field arithmetic is on 64-bit limbs too ([the result](#k5-p-256-64-bit-limbs--the-result)); its scalar arithmetic on 64-bit limbs is a recorded follow-up. What remains here is the cs side, AEAD-4, the `--cpu` flag, H3-5 and #1485.
 
 *2026-11-08:* the chain Q3 → Q4 → R1 → R2 that
 was the critical path is built, and A1 with it. So are the HTTP/1.1 and
@@ -1144,7 +1144,8 @@ The machine is an `Intel(R) Xeon(R) Processor @ 2.10GHz`.
 The twin matches to the instruction, so the band is 0 Ir.
 
 **Wall clock** (`node bench/p256.mjs --self --binary <b1d94315>`, 9 rounds of
-3, at `492bd9b7`), min / median µs: public key 64.6 / 66.0 against 68.5 /
+3, at `492bd9b7`; `std/crypto/p256.ts` has not changed since that commit, so
+the figures stand for this head), min / median µs: public key 64.6 / 66.0 against 68.5 /
 78.1, sign 66.2 / 73.2 against 74.3 / 87.8, verify 367.3 / 417.7 against
 456.0 / 522.2. That is head 5.7% / 15.5%, 10.9% / 16.6% and 19.5% / 20.0%
 faster; head's own copy is within −1.8% / +1.0%, +6.5% / +2.3% and +1.1% /

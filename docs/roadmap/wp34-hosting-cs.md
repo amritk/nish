@@ -15,7 +15,7 @@
 - [x] A1: the relay in Nish, `examples/relay/`, with the loopback suite ([#489](https://github.com/amritk/nish/pull/489)) and the interop job ([#487](https://github.com/amritk/nish/pull/487))
 - [x] K2, K3, K4: the remaining constant-time disassembly (ChaCha rounds, the bitsliced AES fallback, the X25519 ladder) ([#1464](https://github.com/amritk/nish/pull/1464)); AEAD-4 and the `--cpu` flag stay open
 - [x] K5: a safegcd field inversion and a windowed verify ([#1469](https://github.com/amritk/nish/pull/1469))
-- [x] K5: 64-bit limbs, a scalar safegcd for verify, and a cached table for G ([#1516](https://github.com/amritk/nish/pull/1516), [#1518](https://github.com/amritk/nish/pull/1518))
+- [x] K5: field arithmetic on 64-bit limbs, a scalar safegcd for verify, and a cached table for G (the scalar arithmetic on 64-bit limbs is a recorded follow-up; [#1516](https://github.com/amritk/nish/pull/1516), [#1518](https://github.com/amritk/nish/pull/1518))
 - [x] T1: secp256r1 key shares on the server, direct and through HelloRetryRequest, and the TLS-4 carrier idle timeout ([#1449](https://github.com/amritk/nish/pull/1449), [#1479](https://github.com/amritk/nish/pull/1479))
 - [x] T2, H1, H2: `curl --http1.1`, Autobahn and Chrome over HTTP/1.1 in the interop job (WP39 G1, [#1437](https://github.com/amritk/nish/pull/1437)); the lingering close, the HTTP/2 SETTINGS and idle timeouts and WebTransport's session clock (WP39 G2, [#1454](https://github.com/amritk/nish/pull/1454)); H3-5 stays open
 - [x] Q3: the interop runner's goodput and crosstraffic cases, both passing for quic-go and ngtcp2 ([#1477](https://github.com/amritk/nish/pull/1477))
