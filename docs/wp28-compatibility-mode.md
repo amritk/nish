@@ -373,8 +373,9 @@ sequential suspension*, and what runs underneath is chosen by a flag.
 no longer.** WP49 built a restricted `async` in strict
 ([LANGUAGE.md](LANGUAGE.md#async-functions-async-and-await)): no expression
 has a promise type, an `await` takes a direct call, and a call to an `async`
-function is awaited where it is made, which are §6.3's two rules arrived at
-from the other side. Two things in the rest of this section are therefore
+function is awaited where it is made unless `spawn` starts it, which are
+§6.3's two rules arrived at from the other side, with `spawn` as the one
+door out of the second. Two things in the rest of this section are therefore
 stale as written, and are left as the argument they were:
 
 - §6.3's premise, "there is still no event loop, no callback and no promise,
