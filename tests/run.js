@@ -7091,6 +7091,9 @@ if (!only || "arena_removed".includes(only)) {
 //                  flag, which must write the same modules byte for byte. It is here for
 //                  a program a case cannot be, one that imports `nish/threads`
 //   args           extra CLI flags (e.g. --strict-exports)
+//   ulimit         arguments to bash's `ulimit` that the program runs under (e.g.
+//                  `-n 1024`, so a program that uses up its descriptors meets the
+//                  limit fast whatever the host's hard limit; Linux and Darwin only)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
 //                  module with a golden is compared, so there is no missing one to write;
 //                  `--update-link-goldens` rewrites each golden that differs from what
@@ -7513,7 +7516,11 @@ const runLinkProgram = async (name) => {
   // The programs in flight share the repository root as their working
   // directory, and nothing in it: each writes only a directory of its own and
   // binds port 0 (see above, with net_prefork's one rebind).
-  const run = await runNative(`link/${name}`, exe, [])
+  const limits = fs.existsSync(side("ulimit")) ? read("ulimit").trim() : ""
+  const run =
+    limits === ""
+      ? await runNative(`link/${name}`, exe, [])
+      : await runNative(`link/${name} (ulimit ${limits})`, "bash", ["-c", `ulimit ${limits} && exec "$0"`, exe])
   if (run.death !== null) {
     expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
     return record
@@ -29132,6 +29139,42 @@ if (!only || "thread_stack".includes(only)) {
         said(room)
       )
     }
+  }
+}
+
+// The first `nish:net` call that makes a descriptor raises the soft
+// RLIMIT_NOFILE to the hard limit (runtime/runtime-net.c,
+// `nish_net_raise_nofile`; RT-54 in docs/security/runtime.md). The program
+// starts under a soft limit of 64 with the hard limit left as it was, makes a
+// listener, then holds 200 loop descriptors: without the raise its pollCreate
+// answers -24 near 61. A host whose hard limit is under 256 cannot show the
+// raise, so the section skips there. The verdict is the program's exit status
+// and its line, never a message of bash's.
+if (!only || "net_fd_limit".includes(only)) {
+  const hard = process.platform === "win32" ? null : spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" })
+  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  if (!HAS_CLANG || hard === null) {
+    skip("net_fd_limit: the raise is read under bash's ulimit, and this host has no clang or is Windows")
+  } else if (!(room >= 256)) {
+    skip(`net_fd_limit: the hard descriptor limit here is ${hard.stdout.trim()}, under the 256 the check needs`)
+  } else {
+    const dir = path.join(buildDir, "net_fd_limit")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "raise")
+    const c = spawnSync(NISH, [path.join(linkDir, "net_fd_limit", "raise.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r =
+      c.status === 0
+        ? spawnSync("bash", ["-c", 'ulimit -S -n 64 && exec "$0"', exe], { encoding: "utf8", timeout: 60000 })
+        : null
+    check(
+      "net_fd_limit: under a soft limit of 64, a program that has called tcpListen holds 200 more descriptors",
+      r !== null && r.status === 0 && r.stdout === "held 200 descriptors past a soft limit of 64\n",
+      r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+    )
   }
 }
 
