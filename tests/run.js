@@ -17224,8 +17224,10 @@ if (dealtHere("simd")) {
   // register the caller does not keep and every caller-saved general one, so no round key, H
   // power or keystream block outlives the call in a register (docs/security/crypto-aead.md,
   // AEAD-4). Here each kernel's `clang -O2` assembly, on x86-64, x86-64 at x86-64-v3 and
-  // aarch64, must reach every `ret` through a run of zeroing idioms and then only the
-  // epilogue (pops, the stack pointer, `vzeroupper`); that run must zero every vector
+  // aarch64, must leave through the clear: every `ret`, and every tail jump, follows only the
+  // epilogue (pops, the stack pointer, `vzeroupper`) back to a run of zeroing idioms or to a
+  // call of `nish_aes_clear`, or is a jump to it, whose body must be nothing but zeroing
+  // idioms and its `ret`. What the exit runs must zero every vector
   // register and caller-saved general register the rest of the body names; and a vector
   // register stored to the stack must land in a buffer the kernel wipes after the store (both
   // 8-byte halves stored zero: ctr's keystream, ghash's padded block), never a spill no clear
@@ -17293,6 +17295,11 @@ if (dealtHere("simd")) {
         )
         const lines = String(o.stdout).split("\n")
         const out = new Map()
+        // The registers `nish_aes_clear` zeroes, when its body is zeroing idioms and a `ret`.
+        const clearBody = o.status === 0 ? functionBody(lines, "nish_aes_clear", target) : null
+        const clearZeroes = clearBody?.slice(0, -1).map(zeroes) ?? [null]
+        const cleared = /^retq?$/.test(clearBody?.at(-1) ?? "") && clearZeroes.every((regs) => regs !== null) ? new Set(clearZeroes.flat()) : new Set()
+        const toClear = /^(jmp|b|callq?|bl)\s+nish_aes_clear$/
         for (const kernel of kernels) {
           const body = o.status === 0 ? functionBody(lines, kernel, target) : null
           if (body === null) {
@@ -17305,17 +17312,22 @@ if (dealtHere("simd")) {
           body.forEach((line, at) => {
             const wiped = new Set(body.slice(at + 1).flatMap((later) => zeroStore(later) ?? []))
             if ((vectorStore(line) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
-            if (!/^retq?$/.test(line)) return
+            const tail = /^(jmp|b)\s+nish_aes_clear$/.test(line)
+            if (!tail && !/^retq?$/.test(line)) return
             let i = at - 1
             while (i >= 0 && epilogue.test(body[i])) i--
             const zeroed = new Set()
+            if (tail || (i >= 0 && toClear.test(body[i]))) {
+              for (const reg of cleared) zeroed.add(reg)
+              if (!tail) i--
+            }
             for (; i >= 0 && zeroes(body[i]) !== null; i--) {
               for (const reg of zeroes(body[i])) zeroed.add(reg)
               inClear.add(i)
             }
             clears.push({ at, zeroed })
           })
-          if (clears.length === 0) faults.push("no ret")
+          if (clears.length === 0) faults.push("no ret and no jump to nish_aes_clear")
           const used = new Set()
           body.forEach((line, at) => {
             if (inClear.has(at)) return
@@ -17338,7 +17350,7 @@ if (dealtHere("simd")) {
         const real = read("runtime/runtime-aes.c", target)
         const bare = read(noClear, target)
         check(
-          `runtime-aes.c on ${name}: the AES kernels clear their registers at clang -O2 (each ret follows a run of zeroing idioms that covers every vector and caller-saved register the kernel names, and every vector stored to the stack lands in a wiped buffer), where a twin with no nish_aes_clear call has all four refused`,
+          `runtime-aes.c on ${name}: the AES kernels clear their registers at clang -O2 (each ret or tail jump reaches, past the epilogue, a run of zeroing idioms or nish_aes_clear that covers every vector and caller-saved register the kernel names, and every vector stored to the stack lands in a wiped buffer), where a twin with no nish_aes_clear call has all four refused`,
           source.split(call).length - 1 === kernels.length &&
             [...real.values()].every((faults) => faults.length === 0) &&
             [...bare.values()].every((faults) => faults.length > 0),

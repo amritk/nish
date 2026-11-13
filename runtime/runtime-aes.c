@@ -159,8 +159,10 @@ NISH_AES_INLINE void nish_aes_wipe16(void *p) {
    x86-64-v3`) the whole of every YMM register, which `vzeroall` clears; on
    AArch64 v0 to v7 and v16 to v31, since AAPCS64 has the callee keep v8 to v15's
    low halves. Every instruction is a zeroing idiom: no input, so no secret
-   reaches it, and no flag a branch reads after it. */
-NISH_AES_INLINE void nish_aes_clear(void) {
+   reaches it, and no flag a branch reads after it. It is one function the
+   kernels jump to as their last act (a tail call at `-O2`, after their
+   epilogue), not inlined into each: the same clear in a quarter of the bytes. */
+static __attribute__((noinline)) NISH_AES_TARGET void nish_aes_clear(void) {
 #if defined(NISH_AES_X86)
 #if defined(__AVX__)
 #define NISH_AES_CLEAR_VEC "vzeroall\n\t"
