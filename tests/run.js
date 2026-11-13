@@ -29290,9 +29290,9 @@ if (!only || "sandbox dependency grants".includes(only)) {
       // different shape, follow where the machine has them.
       const once = "sandbox_dep_exec_once"
       const onceTo = "sandbox_dep_exec_once_to"
-      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here. */
-      const withHelper = (fixture, grants) => {
-        const copy = `${fixture}_helper`
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here, with `prefix` (`exec:`) before it. */
+      const withHelper = (fixture, grants, prefix = "") => {
+        const copy = `${fixture}_helper${prefix === "" ? "" : "_exec"}${grants.length === 0 ? "" : "_more"}`
         const to = path.join(dir, copy)
         fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
         fs.mkdirSync(path.join(to, "bin"), { recursive: true })
@@ -29323,7 +29323,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
         )
         const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
         const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
-        manifest.nish.capabilities.dependencies.pkg_runner = ["process.spawn=./bin/exec-args", ...grants]
+        manifest.nish.capabilities.dependencies.pkg_runner = [`process.spawn=${prefix}./bin/exec-args`, ...grants]
         fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
         return cc.status === 0 ? copy : null
       }
@@ -29601,6 +29601,75 @@ if (!only || "sandbox dependency grants".includes(only)) {
               /^12[67]\n$/.test(rOtherHeld.stdout) &&
               rTrueStill.stdout === "0\n",
             `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+        // WP40 §2a: a program granted `process.spawn=exec:<program>` keeps
+        // its subtree's reach of the allowlist (docs/security/sandbox.md,
+        // "Limits"). The compiler marks it `///` and the runtime starts it
+        // without the one-exec filter, through the same identity check: it
+        // runs another granted program and, through the loader, an ungranted
+        // binary, where the same helper granted plainly gets 111 (above). A
+        // program granted both ways is granted `exec:`. The loader named
+        // directly is refused still, and without `--sandbox` the runs agree.
+        for (const [grants, how] of [
+          [[], "granted exec:"],
+          [["process.spawn=./bin/exec-args"], "granted exec: and plainly"],
+        ]) {
+          const freed = withHelper(once, grants, "exec:")
+          const fAllow = freed === null ? null : build(freed, ["--sandbox"], dir)
+          const fOpen = freed === null ? null : build(freed, [], dir)
+          if (fAllow === null || fOpen === null) {
+            skip(`sandbox dependency grants: clang could not build the exec-args helper ${how}; exec: is not checked`)
+            continue
+          }
+          const fHelper = fs.realpathSync(path.join(dir, freed, "bin", "exec-args"))
+          const fList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(freed))
+          const fEntries = fList === null ? [] : fList[1].split("\\00")
+          const rLoaderOnce = run(fAllow, ["sync", fHelper, loader, ungranted])
+          const rLoaderOpen = run(fOpen, ["sync", fHelper, loader, ungranted])
+          const rSelfOnce = run(fAllow, ["sync", fHelper, fHelper])
+          const rDirect = run(fAllow, ["sync", loader, ungranted])
+          check(
+            `sandbox dependency grants: a program ${how} starts the loader with an ungranted binary, and itself (WP40 §2a)`,
+            fEntries.includes(`//${fHelper}`) &&
+              !fEntries.includes(fHelper) &&
+              rLoaderOnce.status === 0 &&
+              rLoaderOnce.signal === null &&
+              rLoaderOnce.stdout === "sbx-1\n0\n" &&
+              rLoaderOpen.stdout === "sbx-1\n0\n" &&
+              rSelfOnce.status === 0 &&
+              rSelfOnce.stdout === "0\n" &&
+              rDirect.status === 0 &&
+              rDirect.stdout === "-1\n",
+            `${fEntries.join(" ")}\n${said(rLoaderOnce)}\n--- without --sandbox\n${said(rLoaderOpen)}\n--- itself\n${said(rSelfOnce)}\n--- the loader directly\n${said(rDirect)}`
+          )
+        }
+        check(
+          "sandbox dependency grants: an allowlist with no exec: grant marks nothing /// (WP40 §2a)",
+          !hList[1].split("\\00").some((p) => p.startsWith("///")),
+          hList[1]
+        )
+        // The grant written in a checked-in manifest, with the machine's own
+        // tools: `env`, granted `exec:`, runs `true`, granted plainly, where
+        // the plain `env` of sandbox_dep_exec_once could not (above).
+        const optin = "sandbox_dep_exec_optin"
+        const xAllow = build(optin, ["--sandbox"])
+        const rOptinOpen = rOther === null || rOther.stdout !== "0\n" ? null : run(build(optin, []), ["sync", "env", "true"])
+        if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOptinOpen)}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else {
+          const rOptin = run(xAllow, ["sync", "env", "true"])
+          const rTrueHeld = run(xAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: env granted exec: runs another granted program (WP40 §2a)",
+            rOptin !== null &&
+              rOptin.status === 0 &&
+              rOptin.stdout === "0\n" &&
+              rTrueHeld.stdout === "0\n" &&
+              /@\.sandbox\.exec = [^"]*c"[^"]*\/\/\/[^"\\]*env\\00/.test(ir(optin)),
+            `${said(rOptin)}\n--- true\n${said(rTrueHeld)}\n${ir(optin)}`
           )
         }
       }
