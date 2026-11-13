@@ -423,6 +423,43 @@ const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 =
 }
 
 /**
+ * `growingArgument` with `chainArguments(template, previous)` as the earlier
+ * tuple, read in place rather than built: the receiver's type arguments, then
+ * `previous`. `expandingAncestor` asks it once per link of a chain no count
+ * bounds, so a tuple built per link would pile up until its caller returns.
+ */
+const growingChainArgument = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  previous: i32[],
+  args: i32[]
+): i32 => {
+  let i = 0
+  const receiver = receiverOf(template)
+  if (receiver !== null) {
+    for (const before of receiver.typeArgs) {
+      if (i >= args.length) {
+        return -1
+      }
+      if (before !== args[i] && containsType(ctx, before, args[i])) {
+        return i
+      }
+      i = i + 1
+    }
+  }
+  for (const before of previous) {
+    if (i >= args.length) {
+      return -1
+    }
+    if (before !== args[i] && containsType(ctx, before, args[i])) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
+}
+
+/**
  * The ancestor instantiation of the same template whose type arguments this
  * request grows, or `null` when the request is finite by §4's rule.
  *
@@ -451,7 +488,7 @@ const expandingAncestor = (
     // function template is one object per declaration.
     const owner = at.template
     if (owner !== null && owner.decl === template.decl) {
-      const index = growingArgument(ctx, chainArguments(owner, at.typeArgs), wanted)
+      const index = growingChainArgument(ctx, owner, at.typeArgs, wanted)
       if (index >= 0) {
         return new Expansion(at, index)
       }

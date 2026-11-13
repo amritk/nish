@@ -3011,7 +3011,14 @@ every pass's string, because nothing frees a value a later pass replaced:
 value with `const` inside the loop when only the pass reads it, or keep
 numbers across passes and build the value once after the loop. A server, or
 anything that runs for a long time, should compile with `--deny-retention`,
-which makes this warning and the three like it errors.
+which makes this warning and the four like it errors.
+
+**Build a request's temporaries in an arena block.** A pass of a loop with
+no bound on its passes (`while (true)`, a server's poll loop) that calls
+`accept`, `respond` or anything else that stores is refused its own scope,
+so a reply string it builds stays until the loop ends: NL9018. Build it in
+`{ using a = arena(); ... }` inside the loop body, copy what must outlive the
+block into a buffer made before the loop, and call what stores after it.
 
 Everything else is bumped from the arena, which is released when `main`
 returns. To give memory back sooner, scope it with `using a = arena()`;
