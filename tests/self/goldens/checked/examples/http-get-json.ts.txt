@@ -13276,11 +13276,6 @@ function p256FiatScalarAdd(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish
   callee -2:20 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
   local -1:9 x42: u32 (const)
   callee -1:20 p256FiatCmovznzU32 -> @nish.p256FiatCmovznzU32
-function p256FiatScalarSetOne(out1: u32[]): void -> @nish.p256FiatScalarSetOne
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  pointer out1: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
 function p256SetLimbs(out: u32[], l0: u32, l1: u32, l2: u32, l3: u32, l4: u32, l5: u32, l6: u32, l7: u32): void -> @nish.p256SetLimbs
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
