@@ -95,9 +95,9 @@ value. It does not count an assignment to a frame local, so it implies
 `nish_arena_keep` refuses whenever it is uncertain (`p` is not in the current
 chunk, the mark is stale or `0`, or the mark is newer than `p`). Refusing only
 reclaims less. The bracket is independent of `--no-stack-alloc`
-(`mem_reclaim_no_stack_alloc`). `mem_reclaim_guards` covers the refused shapes,
-and `runtime-wasm.c` does not provide `nish_arena_keep` because the
-freestanding wasm profile has no strings. The rule, its soundness argument and
+(`mem_reclaim_no_stack_alloc`). `mem_reclaim_guards` covers the refused shapes.
+`runtime-wasm.c`'s `nish_arena_keep` always refuses (it returns `p`), so string
+code built for wasm32, such as `nish/term` in a game, links and reclaims less. The rule, its soundness argument and
 the measurements are in
 [wp9-optimisation.md](wp9-optimisation.md#the-call-site-reclaim).
 

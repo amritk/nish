@@ -35097,7 +35097,7 @@ if (!only || "game-page".includes(only)) {
         encoding: "utf8",
       })
       // The count is pinned, as page-frame's is: a check that goes missing is caught.
-      const GAME_PAGE_CHECKS = 47
+      const GAME_PAGE_CHECKS = 69
       const lines = res.stdout.split("\n")
       const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
       const counted = lines.find((line) => line.startsWith("checks: "))
@@ -35112,6 +35112,34 @@ if (!only || "game-page".includes(only)) {
         const tab = rest.indexOf("\t")
         check(`game-page: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
       }
+    }
+
+    // The starter as a user has it: copied out of the repository beside an
+    // installed nish package (node_modules/nish, here a link to this checkout)
+    // and its node_modules/.bin/nish, built with a bare `node build.mjs`.
+    const away = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-starter-"))
+    try {
+      const copy = path.join(away, "my-game")
+      fs.cpSync(path.join(root, "examples", "game-starter"), copy, {
+        recursive: true,
+        filter: (from) => path.basename(from) !== "dist",
+      })
+      fs.mkdirSync(path.join(away, "node_modules", ".bin"), { recursive: true })
+      fs.symlinkSync(root, path.join(away, "node_modules", "nish"), "dir")
+      // A shim, not a link: the compiler finds std/ and runtime/ from the path it was run by.
+      const bin = path.join(away, "node_modules", ".bin", "nish")
+      fs.writeFileSync(bin, `#!/bin/sh\nexec '${path.resolve(NISH)}' "$@"\n`, { mode: 0o755 })
+      const copied = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+      check(
+        "game-page: the starter copied out of the repository builds against the installed package",
+        copied.status === 0 && fs.statSync(path.join(copy, "dist", "game.wasm"), { throwIfNoEntry: false })?.isFile() === true,
+        shown(copied)
+      )
+      const refused = spawnSync(process.execPath, ["build.mjs", "--out", away], { cwd: copy, encoding: "utf8" })
+      check("game-page: build.mjs refuses an --out holding the game", refused.status !== 0 && fs.existsSync(path.join(copy, "game.ts")),
+        shown(refused))
+    } finally {
+      fs.rmSync(away, { recursive: true, force: true })
     }
   }
 
@@ -35138,12 +35166,16 @@ if (!only || "game-page".includes(only)) {
       "    onFallback: (from: Backend, to: Backend, reason: string, fresh: HTMLCanvasElement) => console.warn(from, to, reason, fresh),",
       "    loader: { load: async (source: WebAssembly.Module) => source },",
       "    imports: {},",
+      "    onError: (error: unknown) => console.error(error),",
+      "    signal: new AbortController().signal,",
+      '    loaderUrl: new URL("./game.mjs", document.baseURI),',
       "  })",
       "  game.muted = false",
+      "  const running: boolean = game.running",
       "  const now: HTMLCanvasElement = game.presenter.canvas",
       "  game.stop()",
       "  await startGame(canvas, \"game.wasm\", { touch: false, sound: false })",
-      "  return game.fps + game.refreshHz + now.width + (game.module === null ? 0 : 1)",
+      "  return game.fps + game.refreshHz + now.width + (game.module === null || !running ? 0 : 1)",
       "}",
       "",
     ].join("\n")

@@ -116,6 +116,12 @@ void nish_free_arena(void) { nish_arena.off = 0; } /* memory cannot be returned 
 uint64_t nish_arena_used(void) { return nish_arena.off; }
 uint64_t nish_arena_mark(void) { return nish_arena.buf ? (uint64_t)(uintptr_t)(nish_arena.buf + nish_arena.off) : 0; }
 void nish_arena_release(uint64_t mark) { nish_arena.off = mark ? mark - (uintptr_t)nish_arena.buf : 0; }
+/* The call-site reclaim's keep (wp6-memory.md §2a). The native runtime moves
+   `p` down onto the mark; here it always refuses, the answer runtime.c gives
+   whenever it is uncertain: `p` stays where it is and nothing is released, so
+   it reads and writes no memory and only reclaims less. String code reached
+   from wasm (nish/term) calls it; without it the link fails. */
+void *nish_arena_keep(uint64_t mark, void *p) { (void)mark; return p; }
 
 /* ---- Arrays: %struct.nish_array = type { i64, i64, i8* } */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;

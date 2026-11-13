@@ -6,7 +6,7 @@
 // siblings, so a page serves the three files as they are.
 //
 // Every browser object (`fetch`, `WebAssembly`, `AudioContext`,
-// `ResizeObserver`, `devicePixelRatio`, `addEventListener`) is read from
+// `ResizeObserver`, `matchMedia`, `devicePixelRatio`, `addEventListener`) is read from
 // `globalThis` when it is used, never when the module loads, so
 // tests/game-page drives it under Node against fakes.
 
@@ -89,6 +89,56 @@ const keyWords = (key) => {
 const modifiers = (e) =>
   (e.shiftKey ? MOD_SHIFT : 0) | (e.altKey ? MOD_ALT : 0) | (e.ctrlKey ? MOD_CTRL : 0) | (e.metaKey ? MOD_SUPER : 0);
 
+/** The error an aborted start rejects with: the signal's reason, or an AbortError. */
+const aborted = (signal) =>
+  signal.reason ??
+  (typeof globalThis.DOMException === "function"
+    ? new globalThis.DOMException("nish/page/game: the start was aborted", "AbortError")
+    : new Error("nish/page/game: the start was aborted"));
+
+/** Throws a TypeError naming `what` unless `ok`. */
+const expect = (ok, what) => {
+  if (!ok) {
+    throw new TypeError(`nish/page/game: ${what}`);
+  }
+};
+
+/** Checks every option before `startGame` does anything, so a bad one costs nothing to undo. */
+const validate = (url, options) => {
+  expect(options !== null && typeof options === "object", "options is an object");
+  const { keys, touch, stepsPerSecond, maxStepsPerFrame } = options;
+  expect(keys === undefined || (Array.isArray(keys) && keys.every((k) => typeof k === "string")), "keys is an array of KeyboardEvent.key names");
+  if (touch !== undefined && touch !== false) {
+    expect(touch !== null && typeof touch === "object" && Array.isArray(touch.zones), "touch is false or { zones, tap }");
+    for (const z of touch.zones) {
+      expect(
+        [z?.x, z?.y, z?.width, z?.height].every(Number.isFinite) && typeof z.key === "string",
+        "each touch zone is { x, y, width, height, key }"
+      );
+    }
+    expect(touch.tap === undefined || touch.tap === null || typeof touch.tap === "string", "touch.tap is a key name");
+  }
+  expect(
+    stepsPerSecond === undefined || (Number.isFinite(stepsPerSecond) && stepsPerSecond > 0),
+    `stepsPerSecond is a positive number, not ${stepsPerSecond}`
+  );
+  expect(
+    maxStepsPerFrame === undefined || (Number.isInteger(maxStepsPerFrame) && maxStepsPerFrame >= 1),
+    `maxStepsPerFrame is a whole number of at least 1, not ${maxStepsPerFrame}`
+  );
+  for (const name of ["onError", "onFallback"]) {
+    expect(options[name] === undefined || typeof options[name] === "function", `${name} is a function`);
+  }
+  expect(
+    options.signal === undefined || typeof options.signal?.addEventListener === "function",
+    "signal is an AbortSignal"
+  );
+  expect(
+    options.loader !== undefined || options.loaderUrl !== undefined || /\.wasm$/.test(url.pathname),
+    `${url.href} does not end in .wasm, so its loader cannot be found beside it; pass options.loader or options.loaderUrl`
+  );
+};
+
 /** A rejection naming the module's missing part. */
 const missing = (what) => new TypeError(`nish/page/game: the module has no ${what}, which a game over nish/host/game exports`);
 
@@ -97,11 +147,14 @@ const missing = (what) => new TypeError(`nish/page/game: the module has no ${wha
  * bytes arrive, or, when the server's MIME type is not `application/wasm`,
  * `compile` over the whole body.
  */
-const compileFrom = async (url) => {
+const compileFrom = async (url, signal) => {
   let response;
   try {
-    response = await globalThis.fetch(url);
+    response = await globalThis.fetch(url, signal === undefined ? undefined : { signal });
   } catch (e) {
+    if (signal?.aborted) {
+      throw aborted(signal);
+    }
     throw new Error(`nish/page/game: could not fetch ${url}: ${e instanceof Error ? e.message : String(e)}`);
   }
   if (!response.ok) {
@@ -129,15 +182,18 @@ const resolve = (wasmUrl) => {
 /**
  * Loads a game built over `nish/host/game` and runs it on `canvas`.
  *
- * The module at `wasmUrl` is compiled with streaming compilation and
- * instantiated by its generated loader: `options.loader`, or the `.mjs`
- * beside the `.wasm` (`game.wasm` → `game.mjs`). It must export
+ * The module at `wasmUrl` is compiled with `WebAssembly.compileStreaming` and
+ * instantiated by its generated loader: `options.loader`, the module at
+ * `options.loaderUrl`, or the `.mjs` beside the `.wasm` (`game.wasm` →
+ * `game.mjs`). It must export
  * `init(seed)`, `step(nowMs)` and `draw(alpha, frameMs)` and keep
  * `nish/host/game`'s storage; `sound(id)` and `resize(width, height)` are
  * optional. `init` runs once; `sound` runs for ids 0, 1, ... until it answers
  * 0, and each answer's samples become an `AudioBuffer`; then `step` runs
  * `stepsPerSecond` times a second and `draw` once per display frame, after
  * which `GAME_FRAME` is presented in place at `GAME_INFO`'s width and height.
+ * A throw from the module (a panic) or from presenting its frame stops the
+ * game, as `stop()` does, and reaches `options.onError`.
  *
  * @param canvas - the canvas to draw on; a fallback may replace it, see `presenter.canvas`
  * @param wasmUrl - the module's URL, read against the page's base URL
@@ -146,20 +202,32 @@ const resolve = (wasmUrl) => {
  */
 export const startGame = async (canvas, wasmUrl, options = {}) => {
   const url = resolve(wasmUrl);
+  validate(url, options);
   const keys = new Set((options.keys ?? DEFAULT_KEYS).map(keyName));
   const touch = options.touch === false ? null : (options.touch ?? DEFAULT_TOUCH);
   const stepsPerSecond = options.stepsPerSecond ?? 60;
   const soundOn = options.sound !== false;
+  const signal = options.signal;
   let muted = options.sound?.muted === true;
+  const checkAbort = () => {
+    if (signal?.aborted) {
+      throw aborted(signal);
+    }
+  };
+  checkAbort();
 
+  const loaderHref =
+    options.loaderUrl === undefined ? url.href.replace(/\.wasm(?=$|[?#])/, ".mjs") : resolve(options.loaderUrl).href;
   const [loader, compiled] = await Promise.all([
-    options.loader ?? import(url.href.replace(/\.wasm(?=$|[?#])/, ".mjs")),
-    compileFrom(url.href),
+    options.loader ?? import(loaderHref),
+    compileFrom(url.href, signal),
   ]);
+  checkAbort();
   if (typeof loader?.load !== "function") {
     throw new TypeError("nish/page/game: the loader has no load(source) export; pass the module's generated .mjs as options.loader");
   }
   const game = await loader.load(compiled, options.imports);
+  checkAbort();
   for (const name of ["init", "step", "draw"]) {
     if (typeof game[name] !== "function") {
       throw missing(`export \`${name}\``);
@@ -192,8 +260,12 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
   // ---- input --------------------------------------------------------------
 
   let running = false;
+  // The keys the game has seen pressed, and the releases a full ring refused,
+  // retried before each step: the game sees every press it is told of released.
   const held = new Map();
+  const unreleased = new Map();
   const touches = new Map();
+  const buttons = new Map();
   let pendingMove = null;
 
   const push = (type, what, code, mods, action, x, y) => {
@@ -210,20 +282,48 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     if (words === null) {
       return;
     }
-    const again = held.has(id);
-    held.set(id, words);
-    push(EVENT_KEY, words[0], words[1], mods, again || repeat ? ACTION_REPEAT : ACTION_PRESS, 0, 0);
+    // A key whose release is still queued is down as far as the game knows.
+    const again = held.has(id) || unreleased.delete(id);
+    if (push(EVENT_KEY, words[0], words[1], mods, again || repeat ? ACTION_REPEAT : ACTION_PRESS, 0, 0) || again) {
+      held.set(id, words);
+    }
   };
   const releaseKey = (id, mods) => {
     const words = held.get(id);
     if (words !== undefined) {
       held.delete(id);
-      push(EVENT_KEY, words[0], words[1], mods, ACTION_RELEASE, 0, 0);
+      if (!push(EVENT_KEY, words[0], words[1], mods, ACTION_RELEASE, 0, 0)) {
+        unreleased.set(id, words);
+      }
+    }
+  };
+  const flushReleases = () => {
+    for (const [id, words] of unreleased) {
+      if (!push(EVENT_KEY, words[0], words[1], 0, ACTION_RELEASE, 0, 0)) {
+        return;
+      }
+      unreleased.delete(id);
+    }
+  };
+  const pressButton = (e) => {
+    const [x, y] = framePoint(e);
+    pendingMove = null;
+    const button = MOUSE_BUTTONS[e.button] ?? MOUSE_NONE;
+    if (push(EVENT_MOUSE, button, 0, modifiers(e), ACTION_PRESS, x, y)) {
+      buttons.set(e.button, [x, y]);
+    }
+  };
+  const releaseButton = (index, mods, x, y) => {
+    if (buttons.delete(index)) {
+      push(EVENT_MOUSE, MOUSE_BUTTONS[index] ?? MOUSE_NONE, 0, mods, ACTION_RELEASE, x, y);
     }
   };
   const releaseAll = () => {
     for (const id of [...held.keys()]) {
       releaseKey(id, 0);
+    }
+    for (const [index, [x, y]] of [...buttons]) {
+      releaseButton(index, 0, x, y);
     }
     touches.clear();
   };
@@ -251,27 +351,52 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
 
   // ---- sound --------------------------------------------------------------
 
+  // The context is made on the first gesture and resumed on every later one
+  // until it runs: a browser starts it suspended unless the gesture activates
+  // the page (a click, a key, a touch's end), and a pointerdown on a phone does not.
   let audio = null;
   let buffers = [];
   const unlock = () => {
-    if (audio !== null || !soundOn || sounds.length === 0) {
+    if (!running || !soundOn || sounds.length === 0) {
       return;
     }
-    const Context = globalThis.AudioContext ?? globalThis.webkitAudioContext;
-    if (typeof Context !== "function") {
-      return;
+    if (audio === null) {
+      const Context = globalThis.AudioContext ?? globalThis.webkitAudioContext;
+      if (typeof Context !== "function") {
+        return;
+      }
+      let context = null;
+      try {
+        context = new Context();
+        // A sound the browser refuses (a rate it cannot play) is skipped, not the rest.
+        buffers = sounds.map(({ rate, samples }) => {
+          try {
+            const buffer = context.createBuffer(1, samples.length, rate);
+            buffer.copyToChannel(samples, 0);
+            return buffer;
+          } catch {
+            return undefined;
+          }
+        });
+      } catch {
+        // No context this time; the next gesture tries again.
+        buffers = [];
+        Promise.resolve(context?.close?.()).catch(() => {});
+        return;
+      }
+      audio = context;
     }
-    audio = new Context();
-    buffers = sounds.map(({ rate, samples }) => {
-      const buffer = audio.createBuffer(1, samples.length, rate);
-      buffer.copyToChannel(samples, 0);
-      return buffer;
-    });
-    audio.resume?.();
+    if (audio.state !== "running") {
+      try {
+        Promise.resolve(audio.resume?.()).catch(() => {});
+      } catch {
+        // A resume refused now is tried again on the next gesture.
+      }
+    }
   };
   const play = (id) => {
     const buffer = buffers[id];
-    if (audio === null || muted || buffer === undefined) {
+    if (audio === null || muted || buffer === undefined || audio.state === "closed") {
       return;
     }
     const source = audio.createBufferSource();
@@ -282,23 +407,32 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
 
   // ---- listeners ----------------------------------------------------------
 
+  /** Ctrl, Alt and Meta make a key the browser's (Ctrl+Enter, Alt+Arrow, Cmd+Arrow), not the game's. */
+  const shortcut = (e) => e.ctrlKey === true || e.altKey === true || e.metaKey === true;
   const onKeyDown = (e) => {
     const name = keyName(e.key);
-    if (!running || !keys.has(name)) {
+    if (!running) {
+      return;
+    }
+    if (name !== "Escape") {
+      unlock();
+    }
+    if (!keys.has(name) || shortcut(e)) {
       return;
     }
     e.preventDefault();
-    unlock();
     pressKey(e.code || name, name, modifiers(e), e.repeat === true);
   };
   const onKeyUp = (e) => {
     const name = keyName(e.key);
-    if (!running || !(held.has(e.code || name) || keys.has(name))) {
+    const id = e.code || name;
+    if (!running || !held.has(id)) {
       return;
     }
     e.preventDefault();
-    releaseKey(e.code || name, modifiers(e));
+    releaseKey(id, modifiers(e));
   };
+  const onGesture = () => unlock();
   const onPointerDown = (e) => {
     if (!running) {
       return;
@@ -318,13 +452,20 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
       }
       return;
     }
-    const [x, y] = framePoint(e);
-    pendingMove = null;
-    push(EVENT_MOUSE, MOUSE_BUTTONS[e.button] ?? MOUSE_NONE, 0, modifiers(e), ACTION_PRESS, x, y);
+    // Captured, so a release off the canvas still reaches it.
+    try {
+      presenter.canvas.setPointerCapture?.(e.pointerId);
+    } catch {
+      // A pointer the browser no longer tracks; its release comes as a cancel.
+    }
+    pressButton(e);
   };
   const onPointerUp = (e) => {
     if (!running) {
       return;
+    }
+    if (e.type === "pointerup") {
+      unlock();
     }
     if (e.pointerType === "touch") {
       const t = touches.get(e.pointerId);
@@ -341,7 +482,7 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
       return;
     }
     const [x, y] = framePoint(e);
-    push(EVENT_MOUSE, MOUSE_BUTTONS[e.button] ?? MOUSE_NONE, 0, modifiers(e), ACTION_RELEASE, x, y);
+    releaseButton(e.button, modifiers(e), x, y);
   };
   const onPointerMove = (e) => {
     if (running && e.pointerType !== "touch") {
@@ -367,6 +508,22 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
   };
   const onWindowResize = () => fit();
 
+  // A devicePixelRatio change with no CSS resize (a zoom, a move to another
+  // display) is heard through a media query for the ratio it was.
+  let ratioQuery = null;
+  const onRatio = () => {
+    watchRatio();
+    fit();
+  };
+  const watchRatio = () => {
+    ratioQuery?.removeEventListener?.("change", onRatio);
+    ratioQuery = null;
+    if (running && typeof globalThis.matchMedia === "function") {
+      ratioQuery = globalThis.matchMedia(`(resolution: ${globalThis.devicePixelRatio || 1}dppx)`);
+      ratioQuery?.addEventListener?.("change", onRatio);
+    }
+  };
+
   const canvasListeners = [
     ["keydown", onKeyDown],
     ["keyup", onKeyUp],
@@ -374,6 +531,8 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     ["pointerup", onPointerUp],
     ["pointercancel", onPointerUp],
     ["pointermove", onPointerMove],
+    ["click", onGesture],
+    ["touchend", onGesture],
     ["blur", onBlur],
     ["focus", onFocus],
   ];
@@ -408,6 +567,41 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
   // ---- presenter and loop -------------------------------------------------
 
   let presenter = null;
+  let loop = null;
+  let stopped = false;
+  const teardown = () => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    running = false;
+    loop?.stop();
+    bind(null);
+    observer?.disconnect();
+    ratioQuery?.removeEventListener?.("change", onRatio);
+    ratioQuery = null;
+    globalThis.document?.removeEventListener?.("visibilitychange", onVisibility);
+    globalThis.removeEventListener?.("resize", onWindowResize);
+    signal?.removeEventListener?.("abort", teardown);
+    held.clear();
+    unreleased.clear();
+    touches.clear();
+    buttons.clear();
+    if (audio !== null) {
+      Promise.resolve(audio.close?.()).catch(() => {});
+      audio = null;
+    }
+    presenter?.destroy();
+  };
+  /** Stops the game on a throw from the module or the presenter, and reports it. */
+  const fail = (error) => {
+    teardown();
+    if (options.onError === undefined) {
+      throw error;
+    }
+    options.onError(error);
+  };
+
   presenter = await createPresenter(canvas, {
     prefer: options.prefer,
     onFallback: (from, to, reason, fresh) => {
@@ -420,6 +614,10 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
       options.onFallback?.(from, to, reason, fresh);
     },
   });
+  if (signal?.aborted) {
+    presenter.destroy();
+    throw aborted(signal);
+  }
 
   const fit = () => {
     const box = presenter.canvas.getBoundingClientRect();
@@ -429,40 +627,56 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     }
   };
 
-  running = true;
-  bind(presenter.canvas);
-  globalThis.document?.addEventListener?.("visibilitychange", onVisibility);
-  globalThis.addEventListener?.("resize", onWindowResize);
-  fit();
-  presenter.canvas.focus?.({ preventScroll: true });
-
   let steps = 0;
-  const loop = runFixedStep({
-    stepsPerSecond,
-    maxStepsPerFrame: options.maxStepsPerFrame,
-    step: () => {
-      if (pendingMove !== null) {
-        const [x, y, mods] = pendingMove;
-        pendingMove = null;
-        push(EVENT_MOUSE, MOUSE_NONE, 0, mods, ACTION_MOVE, x, y);
-      }
-      game.step((steps * 1000) / stepsPerSecond);
-      steps++;
-      while (queue.size() > 0) {
-        play(queue.shift());
-      }
-    },
-    render: (alpha, frameMs) => {
-      game.draw(alpha, frameMs);
-      // views() after the call: a memory that grew has a new buffer.
-      const s = storage();
-      const w = s.GAME_INFO[0];
-      const h = s.GAME_INFO[1];
-      if (w > 0 && h > 0) {
-        presenter.present(s.GAME_FRAME, w, h);
-      }
-    },
-  });
+  try {
+    running = true;
+    bind(presenter.canvas);
+    globalThis.document?.addEventListener?.("visibilitychange", onVisibility);
+    globalThis.addEventListener?.("resize", onWindowResize);
+    signal?.addEventListener?.("abort", teardown);
+    watchRatio();
+    fit();
+    presenter.canvas.focus?.({ preventScroll: true });
+
+    loop = runFixedStep({
+      stepsPerSecond,
+      maxStepsPerFrame: options.maxStepsPerFrame,
+      step: () => {
+        try {
+          flushReleases();
+          if (pendingMove !== null) {
+            const [x, y, mods] = pendingMove;
+            pendingMove = null;
+            push(EVENT_MOUSE, MOUSE_NONE, 0, mods, ACTION_MOVE, x, y);
+          }
+          game.step((steps * 1000) / stepsPerSecond);
+          steps++;
+          while (queue.size() > 0) {
+            play(queue.shift());
+          }
+        } catch (e) {
+          fail(e);
+        }
+      },
+      render: (alpha, frameMs) => {
+        try {
+          game.draw(alpha, frameMs);
+          // views() after the call: a memory that grew has a new buffer.
+          const s = storage();
+          const w = s.GAME_INFO[0];
+          const h = s.GAME_INFO[1];
+          if (w > 0 && h > 0) {
+            presenter.present(s.GAME_FRAME, w, h);
+          }
+        } catch (e) {
+          fail(e);
+        }
+      },
+    });
+  } catch (e) {
+    teardown();
+    throw e;
+  }
 
   return {
     presenter,
@@ -479,21 +693,9 @@ export const startGame = async (canvas, wasmUrl, options = {}) => {
     set muted(value) {
       muted = value === true;
     },
-    stop() {
-      if (!running) {
-        return;
-      }
-      running = false;
-      loop.stop();
-      bind(null);
-      observer?.disconnect();
-      globalThis.document?.removeEventListener?.("visibilitychange", onVisibility);
-      globalThis.removeEventListener?.("resize", onWindowResize);
-      held.clear();
-      touches.clear();
-      audio?.close?.();
-      audio = null;
-      presenter.destroy();
+    get running() {
+      return running;
     },
+    stop: teardown,
   };
 };

@@ -46,7 +46,10 @@ export interface GameLoader {
 export interface GameOptions {
   /** The seed passed to `init`; the clock's milliseconds by default. */
   readonly seed?: number;
-  /** The `KeyboardEvent.key` names the game reads; others reach the page untouched. `DEFAULT_KEYS` by default. */
+  /**
+   * The `KeyboardEvent.key` names the game reads; others, and any key held
+   * with Ctrl, Alt or Meta, reach the page untouched. `DEFAULT_KEYS` by default.
+   */
   readonly keys?: readonly string[];
   /** The touch zones and tap; `false` reads touches as nothing. `DEFAULT_TOUCH` by default. */
   readonly touch?: TouchOptions | false;
@@ -68,8 +71,20 @@ export interface GameOptions {
    * @param canvas - the canvas `to` presents on
    */
   onFallback?(from: Backend, to: Backend, reason: string, canvas: HTMLCanvasElement): void;
+  /**
+   * Called once when the module throws (a panic) in `step` or `draw`, or its
+   * frame cannot be presented. The game has already stopped, as `stop()`
+   * stops it. Without it the error is thrown from the animation frame.
+   *
+   * @param error - what was thrown
+   */
+  onError?(error: unknown): void;
+  /** Aborting it rejects a start still loading with its reason, or stops a running game. */
+  readonly signal?: AbortSignal;
   /** The module's generated loader; the `.mjs` beside the `.wasm` is imported when absent. */
   readonly loader?: GameLoader;
+  /** The loader's URL, read against the page's base URL, when `loader` is absent and it is not the `.mjs` beside the `.wasm`. */
+  readonly loaderUrl?: string | URL;
   /** Imports passed to the loader's `load`, such as `onPanic`. */
   readonly imports?: object;
 }
@@ -86,6 +101,8 @@ export interface Game {
   readonly refreshHz: number;
   /** Whether sounds the game plays are dropped. */
   muted: boolean;
+  /** Whether the loop runs: false after `stop()`, an abort, or an error. */
+  readonly running: boolean;
   /** Ends the loop, removes the listeners, closes the audio and releases the presenter. */
   stop(): void;
 }
@@ -106,7 +123,7 @@ export declare const DEFAULT_TOUCH: TouchOptions;
  * @param canvas - the canvas to draw on; a fallback may replace it, see `presenter.canvas`
  * @param wasmUrl - the module's URL, read against the page's base URL
  * @param options - the seed, the keys and touch zones the game reads, the sound, the tier, the loader
- * @returns the running game; it rejects when the module cannot be fetched or lacks an export or storage it needs
+ * @returns the running game; it rejects when an option is malformed, the start is aborted, or the module cannot be fetched or lacks an export or storage it needs
  */
 export declare function startGame(
   canvas: HTMLCanvasElement,

@@ -52,8 +52,9 @@ nothing else:
 Two more are optional. **`sound(id: i32): i32`** makes sound `id`; the page
 calls it for 0, 1, 2, ... before the first step, until it answers 0.
 **`resize(width: i32, height: i32): void`** hears the canvas's size in CSS
-pixels whenever it changes, for a game that fits its framebuffer to the
-window.
+pixels, rounded to whole ones, once at start and whenever the size or the
+display's pixel ratio changes, for a game that fits its framebuffer to the
+window (with `gameSetSize`, in framebuffer pixels).
 
 The game's state lives in module storage: typed arrays declared at the top of
 the module, which keep their values from call to call. This game moves a
@@ -162,7 +163,9 @@ from `nish/term`:
 
 The page reads only the keys a game uses — the arrows, space, Enter and
 Escape by default — so the browser keeps the rest (a reload, a tab switch).
-The page's `keys` option names others by their `KeyboardEvent.key`.
+The page's `keys` option names others by their `KeyboardEvent.key`. A key held
+with Ctrl, Alt or Meta is the browser's too (Alt+Left goes back), even one the
+game reads.
 
 `input.isDown(key, 0)` answers whether a key is held, from the `KeyState` the
 input was built with. A `KeyState` cannot live in module storage, so a game
@@ -190,9 +193,21 @@ so the page holds its sounds until then; the game need not care. The game's
 
 ## Building
 
-The build compiles the game for `wasm32`, one `.ll` per module, writes the
-loader the page imports beside it, and links the modules with the wasm
-runtime into one `.wasm` (`$NISH` is where the `nish` package is installed, `node_modules/nish`):
+Copy `examples/game-starter` to a directory of your own, install the `nish`
+package there, and build:
+
+```console
+$ npm install nish
+$ node build.mjs
+```
+
+`build.mjs` writes `dist/`, one directory to serve: the `.wasm`, its loader,
+`index.html` and the three files of `nish/page/game` it imports. It finds the
+toolchain in the installed package (`node_modules/nish`) and the `nish`
+command in `node_modules/.bin`; `--nish <path>` names another compiler,
+`--out <dir>` another directory (one of its own: the build empties it first)
+and `--memory <MiB>` the memory size. It runs two commands, which a build of
+your own can run instead (`$NISH` is `node_modules/nish`):
 
 ```console
 $ nish game.ts --target wasm32 --emit-dts out/game.d.ts -o ll/
@@ -205,13 +220,6 @@ imports it from beside the `.wasm`. `--memory 16` fixes the module's memory at
 16 MiB, which the framebuffer, the sound samples and a game's own state fit in
 with room to spare: a fixed memory never moves, so the page reads the
 framebuffer in place every frame without copying it.
-[`examples/game-starter/build.mjs`](https://github.com/amritk/nish/blob/main/examples/game-starter/build.mjs)
-runs these steps and copies the page's files next to the module, giving one
-directory to serve:
-
-```console
-$ node examples/game-starter/build.mjs --out build/my-game
-```
 
 ## The page
 
@@ -228,8 +236,9 @@ The page is a canvas and one call:
 
 `startGame(canvas, wasmUrl, options?)` fetches and compiles the module while
 it imports the loader, calls `init`, gathers the sounds, and starts the loop;
-it resolves to the running game, or rejects when the module cannot be fetched
-or lacks an export it needs. The game has:
+it resolves to the running game, or rejects when an option is malformed, the
+start is aborted, or the module cannot be fetched or lacks an export it needs.
+The game has:
 
 - `presenter`, which draws the frames: `presenter.backend` is the tier in use
   and `presenter.canvas` the canvas it draws on;
@@ -237,16 +246,23 @@ or lacks an export it needs. The game has:
   shown in HTML, say);
 - `fps` and `refreshHz`, the frames drawn a second and the display's rate;
 - `muted`, which turns sound off and on;
+- `running`, false once the game has stopped;
 - `stop()`, which ends the loop, removes every listener and closes the audio.
 
 The options are all optional: `seed` (passed to `init`), `keys` (the keys the
 game reads), `touch` (its zones and tap, or `false`), `stepsPerSecond` (60),
 `maxStepsPerFrame` (8), `sound` (`false`, or `{ muted: true }` to start
-muted), `prefer` and `onFallback` (below), `loader` (the loader, imported
-yourself, for a bundler) and `imports` (passed to the loader, such as
-`onPanic`). Without a bundler, an import map lets the browser find
+muted), `prefer` and `onFallback` (below), `onError` (below), `signal` (an
+`AbortSignal`: aborting it rejects a start still loading, or stops the game),
+`loader` (the loader, imported yourself, for a bundler), `loaderUrl` (the
+loader's URL, when it is not the `.mjs` beside a `.wasm` URL) and `imports`
+(passed to the loader, such as `onPanic`). Without a bundler, an import map lets the browser find
 `nish/page/game`, or the page imports the file by its path, as
 `examples/game-starter` does.
+
+A panic in `step` or `draw`, or a frame the presenter cannot show, stops the
+game as `stop()` does and calls `onError(error)` once; without `onError` the
+error is thrown from the animation frame, where the console shows it.
 
 The canvas's CSS size decides how big the game looks; the page keeps its
 drawing buffer at the canvas's size in device pixels and fits the frame in it,
@@ -261,7 +277,7 @@ opened as a `file://` URL cannot fetch the module: serve the directory, even
 for a quick look:
 
 ```console
-$ python3 -m http.server --directory build/my-game
+$ python3 -m http.server --directory dist
 ```
 
 ## Fallback tiers

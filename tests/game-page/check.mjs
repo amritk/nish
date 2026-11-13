@@ -9,7 +9,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import os from "node:os";
 import { startGame } from "../../runtime/page-game.mjs";
+import { ringOver } from "../../runtime/page.mjs";
 import { installClock, World } from "../page-frame/fakes.mjs";
 
 const dir = path.resolve(process.argv[2]);
@@ -36,7 +38,9 @@ WebAssembly.compile = (bytes) => {
   compiled.whole += bytes.byteLength === gameBytes ? 1 : 0;
   return realCompile(bytes);
 };
+let fetched = 0;
 globalThis.fetch = async (url) => {
+  fetched++;
   const file = new URL(url).pathname;
   if (!fs.existsSync(file)) {
     return new Response("not found", { status: 404, statusText: "Not Found" });
@@ -61,11 +65,26 @@ const windowEvents = target({});
 globalThis.addEventListener = windowEvents.addEventListener;
 globalThis.removeEventListener = windowEvents.removeEventListener;
 globalThis.devicePixelRatio = 2;
+/** Every media query the page made, each one a target its `change` is dispatched on. */
+const queries = [];
+globalThis.matchMedia = (media) => {
+  const q = target({ media, matches: true });
+  queries.push(q);
+  return q;
+};
 
-const audio = { made: 0, closed: 0, buffers: [], started: [] };
+// A context starts suspended; resume() makes it run only once `resumes` is set,
+// as a browser does only inside a gesture that activates the page.
+const audio = { made: 0, closed: 0, buffers: [], started: [], resumed: 0, resumes: false, failNext: false, last: null };
 globalThis.AudioContext = class {
   constructor() {
+    if (audio.failNext) {
+      audio.failNext = false;
+      throw new Error("no audio device");
+    }
     audio.made++;
+    audio.last = this;
+    this.state = "suspended";
     this.destination = { kind: "destination" };
   }
   createBuffer(channels, length, rate) {
@@ -77,9 +96,16 @@ globalThis.AudioContext = class {
     const source = { buffer: null, connect: (to) => (source.to = to), start: () => audio.started.push(source) };
     return source;
   }
-  resume() {}
+  resume() {
+    audio.resumed++;
+    if (audio.resumes) {
+      this.state = "running";
+    }
+    return Promise.resolve();
+  }
   close() {
     audio.closed++;
+    this.state = "closed";
   }
 };
 
@@ -112,6 +138,9 @@ const makeWorld = (settings) => {
   proto.setAttribute ??= function (name, value) {
     this.attributes[name] = String(value);
   };
+  proto.setPointerCapture ??= function (id) {
+    this.captured = [...(this.captured ?? []), id];
+  };
   for (const c of world.canvases) {
     c.style ??= {};
   }
@@ -135,6 +164,22 @@ const key = (k, code, extra) => ({
   ...extra,
 });
 const FRAME_MS = 1000 / 60;
+
+/** The input records queued for the next step, each [type, what, code, mods, action, x, y]. */
+const queued = (game) => {
+  const words = new Int32Array(game.module.memory.buffer, game.module.layout.GAME_INPUT.at, game.module.layout.GAME_INPUT.length);
+  const ring = ringOver(game.module.memory, game.module.layout.GAME_INPUT);
+  const capacity = ring.capacity;
+  const flat = [];
+  for (let i = 0; i < ring.size(); i++) {
+    flat.push(words[2 + ((words[0] + i) % capacity)]);
+  }
+  const records = [];
+  for (let i = 0; i + 7 <= flat.length; i += 7) {
+    records.push(flat.slice(i, i + 7));
+  }
+  return records;
+};
 
 /** Starts the starter in a fresh world; `run(n)` advances n display frames. */
 const start = async (settings, options) => {
@@ -183,7 +228,12 @@ const start = async (settings, options) => {
       last[0].byteOffset === game.module.layout.GAME_FRAME.at,
     last && `${last[0].byteOffset} vs ${game.module.layout.GAME_FRAME.at}`
   );
-  check("present: the frame is drawn, not left black", last !== undefined && last[0].subarray(0, 320 * 180).some((p) => p !== 0));
+  // The paddle is 48x4 at y 164, centred on x 160 before any input: 0xf0f0f0 there, the background below it.
+  const pixel = (x, y) => last[0][y * 320 + x] & 0xffffff;
+  const paddleRows = [164, 165, 166, 167].every((y) => [137, 160, 183].every((x) => pixel(x, y) === 0xf0f0f0));
+  check("present: the frame is drawn, the paddle where the game put it",
+    last !== undefined && paddleRows && pixel(160, 170) !== 0xf0f0f0 && pixel(130, 165) !== 0xf0f0f0,
+    last && [pixel(160, 165), pixel(160, 170), pixel(130, 165)].map((p) => p.toString(16)).join());
 
   // --- The canvas ------------------------------------------------------------
   const canvas = game.presenter.canvas;
@@ -201,6 +251,14 @@ const start = async (settings, options) => {
     JSON.stringify(resized) === JSON.stringify([[640, 360, 2]]), JSON.stringify(resized));
   windowEvents.dispatch("resize", {});
   check("resize: a window resize does too", resized.length === 2, resized.length);
+  const ratio = queries.at(-1);
+  check("resize: the ratio is watched through a media query", ratio?.media === "(resolution: 2dppx)", ratio?.media);
+  globalThis.devicePixelRatio = 3;
+  ratio.dispatch("change", {});
+  check("resize: a devicePixelRatio change refits at the new ratio, and watches it",
+    resized.at(-1)?.[2] === 3 && ratio.listenerCount() === 0 && queries.at(-1).media === "(resolution: 3dppx)",
+    `${JSON.stringify(resized.at(-1))} ${queries.at(-1).media}`);
+  globalThis.devicePixelRatio = 2;
 
   // --- Keys ------------------------------------------------------------------
   const paddle = () => state().BALL[4];
@@ -214,6 +272,10 @@ const start = async (settings, options) => {
   const other = key("a", "KeyA");
   canvas.dispatch("keydown", other);
   check("keys: any other key keeps its default", !other.prevented);
+  const shortcut = key("ArrowLeft", "ArrowLeft", { altKey: true });
+  canvas.dispatch("keydown", shortcut);
+  check("keys: a game key held with Alt, Ctrl or Meta is the browser's", !shortcut.prevented && queued(game).length === 0,
+    JSON.stringify(queued(game)));
   canvas.dispatch("keyup", key("ArrowRight", "ArrowRight"));
   run(1);
   const released = paddle();
@@ -245,6 +307,14 @@ const start = async (settings, options) => {
     audio.buffers.length === 3 && audio.buffers.every((b) => b.rate === 22050 && b.length > 0 && b.data.some((s) => s !== 0)),
     JSON.stringify(audio.buffers.map((b) => [b.rate, b.length]))
   );
+  check("sound: the context is resumed inside the gesture", audio.resumed >= 1 && audio.last.state === "suspended", audio.resumed);
+  const tries = audio.resumed;
+  canvas.dispatch("click", {});
+  check("sound: each later gesture resumes it again while it is suspended", audio.resumed === tries + 1, audio.resumed);
+  audio.resumes = true;
+  canvas.dispatch("pointerup", { pointerType: "mouse", button: 0, clientX: 0, clientY: 0, type: "pointerup" });
+  canvas.dispatch("click", {});
+  check("sound: and stops once it runs", audio.last.state === "running" && audio.resumed === tries + 2, audio.resumed);
   check("serve: waiting before a serve", state().SCORE[2] === 1);
   canvas.dispatch("keydown", key(" ", "Space"));
   run(1);
@@ -267,8 +337,11 @@ const start = async (settings, options) => {
   game.stop();
   check("stop: no frame left requested", clock.pending === null);
   check("stop: no listener left on the canvas", [...canvas.listeners.values()].every((l) => l.length === 0));
-  check("stop: none on the document or window", world.document.listenerCount() === 0 && windowEvents.listenerCount() === 0,
-    `${world.document.listenerCount()} ${windowEvents.listenerCount()}`);
+  check(
+    "stop: none on the document, the window or the media query",
+    world.document.listenerCount() === 0 && windowEvents.listenerCount() === 0 && queries.every((q) => q.listenerCount() === 0),
+    `${world.document.listenerCount()} ${windowEvents.listenerCount()}`
+  );
   check("stop: the resize observer disconnected", observers.at(-1).targets.length === 0);
   check("stop: the AudioContext closed", audio.closed === 1, audio.closed);
   const after = presented.length;
@@ -322,6 +395,46 @@ const start = async (settings, options) => {
   check("mouse: a move puts the paddle under the pointer", Math.abs(state().BALL[4] - 50) < 1e-9, state().BALL[4]);
   const gl = canvas.context;
   check("webgl2: the frame uploaded", gl.calls.some((c) => c[0] === "texSubImage2D" || c[0] === "texImage2D"));
+  const made = audio.made;
+  audio.failNext = true;
+  canvas.dispatch("pointerdown", { pointerType: "mouse", pointerId: 9, button: 0, clientX: 100, clientY: 180 });
+  check("mouse: a press captures the pointer", JSON.stringify(canvas.captured) === "[9]", JSON.stringify(canvas.captured));
+  check("sound: a context the browser refuses is not kept", audio.made === made, audio.made);
+  run(1);
+  canvas.dispatch("blur", {});
+  check(
+    "mouse: blur releases the button held",
+    queued(game).some((r) => r[0] === 2 && r[1] === 1 && r[4] === 3),
+    JSON.stringify(queued(game))
+  );
+  canvas.dispatch("click", {});
+  check("sound: the next gesture makes it again", audio.made === made + 1, audio.made);
+  game.stop();
+}
+
+// --- A full input ring --------------------------------------------------------
+
+{
+  const { game, run, state } = await start({ contexts: ["2d"] });
+  const canvas = game.presenter.canvas;
+  canvas.dispatch("keydown", key("ArrowRight", "ArrowRight"));
+  // Presses of keys the starter ignores fill the ring; a step drains it.
+  for (let i = 0; queued(game).length < 64 && i < 64; i++) {
+    canvas.dispatch("keydown", key("ArrowUp", `Up${i}`));
+  }
+  const ring = ringOver(game.module.memory, game.module.layout.GAME_INPUT);
+  check("ring: filled", ring.free() < 7, ring.free());
+  const refused = key("Enter", "Enter");
+  canvas.dispatch("keydown", refused);
+  const refusedUp = key("Enter", "Enter");
+  canvas.dispatch("keyup", refusedUp);
+  check("ring: a press the full ring refused is not held, so its release is the page's", !refusedUp.prevented);
+  canvas.dispatch("keyup", key("ArrowRight", "ArrowRight"));
+  run(3);
+  const stopped = state().BALL[4];
+  run(5);
+  check("ring: a release the full ring refused reaches a later step", state().BALL[4] === stopped,
+    `${stopped} -> ${state().BALL[4]}`);
   game.stop();
 }
 
@@ -378,6 +491,69 @@ const without = (strip) => ({
 {
   const message = await refusal("game.wasm", { loader: {} });
   check("refuse: a loader without load rejects, saying so", message !== null && message.includes("load(source)"), message);
+}
+
+// --- Errors, aborts and options -----------------------------------------------
+
+{
+  const errors = [];
+  const loader = {
+    load: async (module, imports) => {
+      const real = await import(pathToFileURL(path.join(dir, "game.mjs")).href);
+      const g = await real.load(module, imports);
+      return {
+        ...g,
+        step: () => {
+          throw new Error("panic in step");
+        },
+      };
+    },
+  };
+  const { game, clock, run } = await start({ contexts: ["2d"] }, { loader, onError: (e) => errors.push(e) });
+  const canvas = game.presenter.canvas;
+  run(2);
+  check("error: a throw from step reaches onError once", errors.length === 1 && errors[0].message === "panic in step",
+    errors.map(String).join());
+  check("error: the game has stopped", game.running === false && clock.pending === null);
+  check("error: its listeners are gone", [...canvas.listeners.values()].every((l) => l.length === 0));
+}
+{
+  const controller = new AbortController();
+  const { game, clock } = await start({ contexts: ["2d"] }, { signal: controller.signal });
+  check("abort: a running game runs until its signal aborts", game.running === true);
+  controller.abort();
+  check("abort: then it stops", game.running === false && clock.pending === null);
+}
+{
+  const before = fetched;
+  const message = await refusal("game.wasm", { signal: AbortSignal.abort() });
+  check("abort: an aborted signal rejects the start before any fetch", message !== null && /abort/i.test(message) && fetched === before,
+    message);
+}
+{
+  const before = fetched;
+  const bad = [
+    await refusal("game.wasm", { stepsPerSecond: 0 }),
+    await refusal("game.wasm", { keys: "ArrowLeft" }),
+    await refusal("game.wasm", { touch: { zones: [{ x: 0, y: 0, width: 1, height: 1 }] } }),
+    await refusal("game.wasm", { onError: "log" }),
+  ];
+  check("options: malformed ones reject before any fetch", bad.every((m) => m !== null) && fetched === before,
+    `${JSON.stringify(bad)} ${fetched - before}`);
+}
+{
+  const message = await refusal("game.bin");
+  check("loader: a module URL not ending in .wasm needs a loader, and says so", message?.includes("loaderUrl") === true, message);
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "game-page-"));
+  fs.copyFileSync(path.join(dir, "game.wasm"), path.join(elsewhere, "module.bin"));
+  const world = makeWorld({ contexts: ["2d"] });
+  installClock();
+  const game = await startGame(world.canvas, pathToFileURL(path.join(elsewhere, "module.bin")), {
+    loaderUrl: pathToFileURL(path.join(dir, "game.mjs")),
+  });
+  check("loader: loaderUrl names it", typeof game.module.step === "function" && game.running);
+  game.stop();
+  fs.rmSync(elsewhere, { recursive: true, force: true });
 }
 
 await settle();

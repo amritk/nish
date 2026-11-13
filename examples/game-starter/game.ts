@@ -40,6 +40,8 @@ const PADDLE_W: f64 = 48.0
 const PADDLE_Y: f64 = 164.0
 const BALL_R: f64 = 4.0
 const STEP_S: f64 = 1.0 / 60.0
+/** The ball's top speed on each axis, in px/s: each hit speeds it up to here. */
+const MAX_DY: f64 = 300.0
 
 /** The sounds, by the id the page fetches them with: a paddle hit, a wall, a miss. */
 const SOUND_HIT: i32 = 0
@@ -85,10 +87,12 @@ const readInput = (nowMs: f64): StepInput => {
   return input
 }
 
-/** Put the ball on the paddle, waiting for a serve. */
+/** Put the ball on the paddle, waiting for a serve; it jumps there, with no trail drawn. */
 const park = (): void => {
   BALL[X] = BALL[PADDLE]
   BALL[Y] = PADDLE_Y - BALL_R - 1.0
+  BALL[LAST_X] = BALL[X]
+  BALL[LAST_Y] = BALL[Y]
   BALL[DX] = 0.0
   BALL[DY] = 0.0
   SCORE[2] = 1
@@ -164,15 +168,13 @@ export const step = (nowMs: f64): void => {
     BALL[Y] = BALL_R
     gamePlaySound(SOUND_WALL)
   }
+  // A hit is the ball's bottom crossing the paddle's top this step, however fast it falls.
   const off: f64 = BALL[X] - BALL[PADDLE]
-  if (
-    BALL[DY] > 0.0 &&
-    BALL[Y] + BALL_R >= PADDLE_Y &&
-    BALL[Y] < PADDLE_Y + 4.0 &&
-    Math.abs(off) <= PADDLE_W / 2.0 + BALL_R
-  ) {
-    BALL[DY] = -BALL[DY] * 1.04
-    BALL[DX] = BALL[DX] + off * 4.0
+  const crossed = BALL[LAST_Y] + BALL_R <= PADDLE_Y && BALL[Y] + BALL_R >= PADDLE_Y
+  if (BALL[DY] > 0.0 && crossed && Math.abs(off) <= PADDLE_W / 2.0 + BALL_R) {
+    BALL[Y] = PADDLE_Y - BALL_R
+    BALL[DY] = -Math.min(BALL[DY] * 1.04, MAX_DY)
+    BALL[DX] = Math.min(Math.max(BALL[DX] + off * 4.0, -MAX_DY), MAX_DY)
     SCORE[0] = SCORE[0] + 1
     SCORE[1] = Math.max(SCORE[1], SCORE[0])
     gamePlaySound(SOUND_HIT)
