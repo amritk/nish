@@ -272,10 +272,10 @@ function extendsIn(unit: AnalysisUnit, facts: FactsTable, node: Node, walked: No
   pointer node: size=40 writesThrough=true captured=true passedTo=sameWalked#1 extendingUse#2
   pointer walked: size=40 writesThrough=true captured=true passedTo=sameWalked#2 extendsIn#3
   stackSites=0 stackLocals=0
-  callee +0:36 sameWalked -> @sameWalked
-  callee +0:78 extendingUse -> @extendingUse
-  local +3:14 child: Node (const)
-  callee +4:9 extendsIn -> @extendsIn
+  callee +0:5 sameWalked -> @sameWalked
+  callee +1:5 extendingUse -> @extendingUse
+  local +5:14 child: Node (const)
+  callee +6:9 extendsIn -> @extendsIn
 function extendingUse(unit: AnalysisUnit, facts: FactsTable, node: Node): boolean -> @extendingUse
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -291,11 +291,11 @@ function extendingUse(unit: AnalysisUnit, facts: FactsTable, node: Node): boolea
   local +10:11 call: Node | null (const)
   callee +10:18 ParentTable.parentOf -> @ParentTable.parentOf
   callee +12:7 extendsReceiver -> @extendsReceiver
-  callee +16:42 assigned -> @assigned
-  local +19:11 call: Node | null (const)
-  callee +19:18 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +24:7 calleeMayResize -> @calleeMayResize
-  callee +28:12 isAssignmentOperator -> @isAssignmentOperator
+  callee +19:42 assigned -> @assigned
+  local +22:11 call: Node | null (const)
+  callee +22:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +27:7 calleeMayResize -> @calleeMayResize
+  callee +31:12 isAssignmentOperator -> @isAssignmentOperator
 function calleeMayResize(program: CheckedProgram, facts: FactsTable, call: Node): boolean -> @calleeMayResize
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get builtinNameOf nish_panic_index nish_str_eq

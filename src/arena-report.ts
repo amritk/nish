@@ -476,7 +476,11 @@ const bodyExtendsWalked = (unit: AnalysisUnit, facts: FactsTable, loop: Node): b
   extendsIn(unit, facts, loop.children[2], unwrapParens(loop.children[1]))
 
 const extendsIn = (unit: AnalysisUnit, facts: FactsTable, node: Node, walked: Node): boolean => {
-  if (node.kind === walked.kind && sameWalked(unit.program, node, walked) && extendingUse(unit, facts, node)) {
+  if (
+    node.kind === walked.kind &&
+    sameWalked(unit.program, node, walked) &&
+    extendingUse(unit, facts, node)
+  ) {
     return true
   }
   for (const child of node.children) {
@@ -501,7 +505,10 @@ const extendingUse = (unit: AnalysisUnit, facts: FactsTable, node: Node): boolea
   if (parent.kind === NodeKind.Member) {
     const call = unit.parents.parentOf(parent)
     return (
-      extendsReceiver(parent.text) && call !== null && call.kind === NodeKind.Call && call.children[0] === parent
+      extendsReceiver(parent.text) &&
+      call !== null &&
+      call.kind === NodeKind.Call &&
+      call.children[0] === parent
     )
   }
   if (parent.kind === NodeKind.Index) {
@@ -525,7 +532,9 @@ const extendingUse = (unit: AnalysisUnit, facts: FactsTable, node: Node): boolea
   if (parent.kind === NodeKind.VarDecl) {
     return parent.children[2] === use
   }
-  return parent.kind === NodeKind.Array || parent.kind === NodeKind.Property || parent.kind === NodeKind.Spread
+  return (
+    parent.kind === NodeKind.Array || parent.kind === NodeKind.Property || parent.kind === NodeKind.Spread
+  )
 }
 
 /**

@@ -428,7 +428,12 @@ const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 =
  * `previous`. `expandingAncestor` asks it once per link of a chain no count
  * bounds, so a tuple built per link would pile up until its caller returns.
  */
-const growingChainArgument = (ctx: CheckContext, template: TemplateInfo, previous: i32[], args: i32[]): i32 => {
+const growingChainArgument = (
+  ctx: CheckContext,
+  template: TemplateInfo,
+  previous: i32[],
+  args: i32[]
+): i32 => {
   let i = 0
   const receiver = receiverOf(template)
   if (receiver !== null) {
