@@ -1280,12 +1280,39 @@ const DECLARED = [
   // #1542: HmacSha256 holds a 32-byte inner-digest buffer and gains
   // digestInto, and Sha256 gains digestInto, so every module that imports
   // either, and every module or header that lays HmacSha256 out, moves.
-  ...["client.ll", "hkdf.ll", "hmac.ll", "jwt.ll", "postgres.ll", "quic-packet.ll", "record-client.ll", "record-server.ll", "record.ll", "schedule.ll", "sha256.ll", "std_crypto_hkdf.ll", "std_crypto_hmac.ll", "std_net_tls_client.ll", "std_net_tls_record.ll"].map((file) => ({
+  ...[
+    "client.ll",
+    "hkdf.ll",
+    "hmac.ll",
+    "jwt.ll",
+    "postgres.ll",
+    "quic-packet.ll",
+    "record-client.ll",
+    "record-server.ll",
+    "record.ll",
+    "schedule.ll",
+    "sha256.ll",
+    "std_crypto_hkdf.ll",
+    "std_crypto_hmac.ll",
+    "std_net_tls_client.ll",
+    "std_net_tls_record.ll",
+  ].map((file) => ({
     file,
     changelog: HMAC_DIGEST_INTO,
     why: "std/crypto/sha256.ts and std/crypto/hmac.ts gain digestInto and a new panic string, and HmacSha256 gains its inner-digest buffer (a third array field), so the hashing modules and every std module that imports them have new functions, a wider HmacSha256 and renumbered strings",
   })),
-  ...["tests/link/crypto_hmac/main.ts", "tests/link/crypto_hmac_f64/main.ts", "tests/link/crypto_hmac_sha256_digest_into_negative/main.ts", "tests/link/crypto_hmac_sha256_digest_into_past_end/main.ts", "tests/link/crypto_hmac_sha256_digest_into_short/main.ts", "tests/link/crypto_hmac_sha256_digest_into_twice/main.ts", "tests/link/crypto_hmac_sha256_update_after_digest_into/main.ts", "tests/link/crypto_sha256/main.ts", "tests/link/crypto_sha256_digest_into_window/main.ts", "tests/link/crypto_sha256_f64/main.ts"].map((program) => ({
+  ...[
+    "tests/link/crypto_hmac/main.ts",
+    "tests/link/crypto_hmac_f64/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_negative/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_past_end/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_short/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_twice/main.ts",
+    "tests/link/crypto_hmac_sha256_update_after_digest_into/main.ts",
+    "tests/link/crypto_sha256/main.ts",
+    "tests/link/crypto_sha256_digest_into_window/main.ts",
+    "tests/link/crypto_sha256_f64/main.ts",
+  ].map((program) => ({
     program,
     file: "exit",
     changelog: HMAC_DIGEST_INTO,
@@ -1388,10 +1415,22 @@ const DECLARED = [
     ["tests/link/net_tls_p256/main.ts", "main.ll net_tls_common_client.ll server.ll"],
     ["tests/link/net_tls_record_f64/main.ts", "net_tls_record_common_client.ll"],
     ["tests/link/net_tls_record_refusals/main.ts", "net_tls_record_common_client.ll"],
-    ["tests/link/net_tls_record_size_limit/main.ts", "bytes.ll checks.ll net_tls_common_client.ll net_tls_record_common_client.ll server.ll"],
-    ["tests/link/net_tls_record_size_limit_f64/main.ts", "bytes.ll checks.ll net_tls_common_client.ll net_tls_record_common_client.ll server.ll"],
-    ["tests/link/net_tls_record_tcp/main.ts", "bytes.ll held.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll server.ll"],
-    ["tests/link/net_tls_record_tcp_f64/main.ts", "bytes.ll held.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll server.ll"],
+    [
+      "tests/link/net_tls_record_size_limit/main.ts",
+      "bytes.ll checks.ll net_tls_common_client.ll net_tls_record_common_client.ll server.ll",
+    ],
+    [
+      "tests/link/net_tls_record_size_limit_f64/main.ts",
+      "bytes.ll checks.ll net_tls_common_client.ll net_tls_record_common_client.ll server.ll",
+    ],
+    [
+      "tests/link/net_tls_record_tcp/main.ts",
+      "bytes.ll held.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll server.ll",
+    ],
+    [
+      "tests/link/net_tls_record_tcp_f64/main.ts",
+      "bytes.ll held.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll server.ll",
+    ],
     ["tests/link/net_tls_resume/main.ts", "net_tls_record_common_client.ll"],
     ["tests/link/net_tls_resume_bench/main.ts", "net_tls_record_common_client.ll"],
     ["tests/link/net_tls_resume_f64/main.ts", "net_tls_record_common_client.ll"],
