@@ -6608,7 +6608,7 @@ const INT32_MAX: f64 = 2147483647.0
  * A `for...of` over an array is counted unless its body may extend the array.
  * Every other loop (`while`, `do`, other `for` shapes) is unbounded.
  */
-const isCountedLoop = (
+export const isCountedLoop = (
   unit: AnalysisUnit,
   table: TypeTable,
   loop: Node,

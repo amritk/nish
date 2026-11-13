@@ -1911,6 +1911,8 @@ const performanceRules = (): string[] => [
   "NL9006",
   "drops the one the pass before gave it",
   "NL9016",
+  "and nothing bounds how many passes it runs",
+  "NL9018",
   "is called here inside a loop and",
   "NL9008",
   "is not proven to be in range for",

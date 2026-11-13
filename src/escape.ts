@@ -3477,7 +3477,7 @@ const loopUpdate = (loop: Node): Node | null =>
   loop.kind === NodeKind.For && loop.children.length > 2 ? loop.children[2] : null
 
 /** Where a loop's kept memory goes back: the nearest bracket around it, or the function's own end. */
-const keptUntil = (
+export const keptUntil = (
   unit: AnalysisUnit,
   f: FunctionFacts,
   isMain: boolean,
@@ -3499,7 +3499,7 @@ const keptUntil = (
 }
 
 /** Why a loop that allocates has no scope of its own, for `--explain-memory`. */
-const loopKeptReason = (unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string => {
+export const loopKeptReason = (unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string => {
   if (facts.noElision) {
     return NO_ELISION_REASON
   }

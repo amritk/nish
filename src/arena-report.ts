@@ -12,19 +12,24 @@
 // in `main` is the rest of the run. That is the placement a long-running
 // program reads the report for (docs/LANGUAGE.md, "Arena placement").
 
-import { AnalysisUnit, CallSite, FactsTable, FunctionFacts, LoopScope } from "./attributes"
+import { AnalysisUnit, CallSite, FactsTable, FunctionFacts, isCountedLoop, LoopScope } from "./attributes"
 import { builtinNameOf, dottedName } from "./emit-util"
 import {
+  ArenaFinding,
   FLOW_LEAKS,
+  FLOW_LOCAL,
   FLOW_RETURNED,
   isArenaUsing,
   isLoopKind,
+  keptUntil,
+  loopKeptReason,
   loopScopeOf,
   reclaimsReturnedString,
 } from "./escape"
 import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { StringBuilder, addJsonQuoted } from "./strings"
+import { TypeTable } from "./types"
 
 /** No scope of the walk encloses the node: the function's own placement decides. */
 const SCOPE_NONE: i32 = 0
@@ -48,13 +53,47 @@ class ArenaSite {
    * program asks first.
    */
   accumulates: boolean
+  /** The scopes around the site, which say where an accumulating site piles up and whether anything bounds it. */
+  around: Around
 
-  constructor(node: Node, kind: string, placement: string, callee: string, accumulates: boolean) {
+  constructor(node: Node, kind: string, placement: string, callee: string, accumulates: boolean, around: Around) {
     this.node = node
     this.kind = kind
     this.placement = placement
     this.callee = callee
     this.accumulates = accumulates
+    this.around = around
+  }
+}
+
+/**
+ * The scopes the walk is inside at a node: the innermost scoped pass and
+ * `using a = arena()` block around it, which are where memory goes back, and
+ * the innermost loop since then whose pass releases nothing, around which a
+ * site's memory piles up. `unbounded` says some loop between the node and that
+ * release is not counted (`isCountedLoop`), so nothing bounds the pile (NL9018).
+ */
+class Around {
+  pass: LoopScope | null
+  block: Node | null
+  /** The innermost loop around the node whose pass does not release it, or null: the node does not run pass after pass. */
+  loop: Node | null
+  /** `loop`'s scope, when it has an entry in `f.loopScopes`. */
+  loopScope: LoopScope | null
+  unbounded: boolean
+
+  constructor(
+    pass: LoopScope | null,
+    block: Node | null,
+    loop: Node | null,
+    loopScope: LoopScope | null,
+    unbounded: boolean
+  ) {
+    this.pass = pass
+    this.block = block
+    this.loop = loop
+    this.loopScope = loopScope
+    this.unbounded = unbounded
   }
 }
 
@@ -76,9 +115,15 @@ class ArenaWalk {
   /** Whether every call to this function releases what it leaves, but its returned string (`nish_arena_keep`). */
   reclaimed: boolean
   sites: ArenaSite[]
+  unit: AnalysisUnit
+  /** The type table `isCountedLoop` reads, or null when nothing asks whether a pile is bounded. */
+  table: TypeTable | null
 
-  constructor(program: CheckedProgram, facts: FactsTable, sig: FunctionSig, f: FunctionFacts) {
+  constructor(unit: AnalysisUnit, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, table: TypeTable | null) {
+    const program = unit.program
+    this.unit = unit
     this.program = program
+    this.table = table
     this.facts = facts
     this.sig = sig
     this.f = f
@@ -187,17 +232,18 @@ const builtinName = (program: CheckedProgram, node: Node): string => {
 }
 
 /**
- * Record `node` if it is a site, with the placement `scope` gives it. `growing`
- * says the innermost loop around it releases nothing per pass, so its memory
- * piles up until the placement's release; a stack slot is reused every pass,
- * so it never does.
+ * Record `node` if it is a site, with the placement `scope` gives it. When the
+ * innermost loop around it releases nothing per pass (`around.loop`), its
+ * memory piles up until the placement's release; a stack slot is reused every
+ * pass, so it never does.
  */
-const visitSite = (walk: ArenaWalk, node: Node, scope: i32, growing: boolean): void => {
+const visitSite = (walk: ArenaWalk, node: Node, scope: i32, around: Around): void => {
   if (node.id >= walk.arenaFlow.length) {
     return
   }
+  const growing = around.loop !== null
   if (walk.f.stackSites[node.id]) {
-    walk.sites.push(new ArenaSite(node, siteKind(node), "stack", "", false))
+    walk.sites.push(new ArenaSite(node, siteKind(node), "stack", "", false, around))
     return
   }
   const call = walk.calls[node.id]
@@ -205,7 +251,7 @@ const visitSite = (walk: ArenaWalk, node: Node, scope: i32, growing: boolean): v
     const callee = walk.facts.get(call.callee)
     const name = callee === null ? call.callee : callee.sourceName
     const placement = placementAt(walk, scope, call.flow, call.escapes)
-    walk.sites.push(new ArenaSite(node, "call", placement, name, growing && isGarbage(placement)))
+    walk.sites.push(new ArenaSite(node, "call", placement, name, growing && isGarbage(placement), around))
     return
   }
   const flow = walk.arenaFlow[node.id]
@@ -215,7 +261,7 @@ const visitSite = (walk: ArenaWalk, node: Node, scope: i32, growing: boolean): v
   const kind = siteKind(node)
   const name = kind === "builtin" ? builtinName(walk.program, node) : ""
   const placement = placementAt(walk, scope, flow, walk.escapes[node.id])
-  walk.sites.push(new ArenaSite(node, kind, placement, name, growing && isGarbage(placement)))
+  walk.sites.push(new ArenaSite(node, kind, placement, name, growing && isGarbage(placement), around))
 }
 
 /**
@@ -235,33 +281,28 @@ const isGarbage = (placement: string): boolean =>
 /**
  * The walk, which carries the innermost scope around each node the way the
  * emitter opens them: a scoped pass for a loop's body, and a block from its
- * `using a = arena()` to its end. It carries `growing` beside it: a node runs
- * on every pass of a loop that does not release it. A loop's head, its
- * condition and its update, runs every pass outside the bracket its body
- * takes; a `for` initialiser and a `for...of` iterable run once, before it. A
- * lifted arrow is a function of its own and is listed as one.
+ * `using a = arena()` to its end. It carries `around` beside it, whose `loop`
+ * says a node runs on every pass of a loop that does not release it. A loop's
+ * head, its condition and its update, runs every pass outside the bracket its
+ * body takes; a `for` initialiser and a `for...of` iterable run once, before
+ * it. A lifted arrow is a function of its own and is listed as one.
  */
-const walkNode = (
-  walk: ArenaWalk,
-  program: CheckedProgram,
-  node: Node,
-  scope: i32,
-  growing: boolean
-): void => {
+const walkNode = (walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i32, around: Around): void => {
   if (node.kind === NodeKind.Arrow) {
     return
   }
-  visitSite(walk, node, scope, growing)
+  visitSite(walk, node, scope, around)
   const isLoop = isLoopKind(node)
   const loop: LoopScope | null = isLoop ? loopScopeOf(walk.f, node) : null
   let inner = scope
-  let innerGrowing = growing
+  let innerAround = around
+  const grown = isLoop ? growingAround(walk, node, loop, around) : around
   let i = 0
   while (i < node.children.length) {
     const child = node.children[i]
     if (node.kind === NodeKind.Block && isArenaUsing(program, child)) {
       inner = SCOPE_BLOCK
-      innerGrowing = false
+      innerAround = new Around(around.pass, child, null, null, false)
     }
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
@@ -271,19 +312,30 @@ const walkNode = (
         program,
         child,
         node.kind === NodeKind.Block ? inner : scope,
-        node.kind === NodeKind.Block ? innerGrowing : growing
+        node.kind === NodeKind.Block ? innerAround : around
       )
     } else if (loop !== null && child === loop.body && loop.scoped) {
-      walkNode(walk, program, child, SCOPE_PASS, false)
+      walkNode(walk, program, child, SCOPE_PASS, new Around(loop, around.block, null, null, false))
     } else {
       // The body of a loop whose pass nothing releases, or the head of any
       // loop: an enclosing scope still releases it, but only once this loop
-      // is done, so it piles up until then.
-      walkNode(walk, program, child, scope, true)
+      // is done, so it piles up until then, and only a count of its passes
+      // bounds how much.
+      walkNode(walk, program, child, scope, grown)
     }
     i = i + 1
   }
 }
+
+/** `around` inside `node`, a loop whose pass releases nothing of what `around` holds. */
+const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, around: Around): Around => {
+  const table = walk.table
+  const counted = table === null || isCountedLoop(walk.unit, table, node, walk.facts)
+  return new Around(around.pass, around.block, node, loop, around.unbounded || !counted)
+}
+
+/** The scopes around a function's body: none. */
+const outsideLoops = (): Around => new Around(null, null, null, null, false)
 
 /**
  * The `--emit-arena` file: every function the program defines with a body, in
@@ -312,8 +364,8 @@ export const arenaJson = (units: AnalysisUnit[], facts: FactsTable): string => {
       if (f === null || body === null) {
         continue
       }
-      const walk = new ArenaWalk(program, facts, sig, f)
-      walkNode(walk, program, body, SCOPE_NONE, false)
+      const walk = new ArenaWalk(unit, facts, sig, f, null)
+      walkNode(walk, program, body, SCOPE_NONE, outsideLoops())
       out.add(first ? "\n" : ",\n")
       first = false
       out.add('{"name":')
@@ -341,4 +393,161 @@ export const arenaJson = (units: AnalysisUnit[], facts: FactsTable): string => {
   }
   out.add("\n]}\n")
   return out.toText()
+}
+
+// ---- The unbounded-pass diagnostic (NL9018) -----------------------------------------------
+//
+// A performance warning read off the sites `--emit-arena` marks
+// `"accumulates":true`, so the warning and the audit file cannot disagree. Of
+// those, it keeps the ones no count of passes bounds: some loop between the
+// site and the scope that releases its memory is not counted
+// (`isCountedLoop`). That is the shape of a request loop that builds a
+// temporary per request: the pile grows for as long as the program serves.
+
+/** One loop the warning names, and the sites it keeps that nothing bounds. */
+class UnboundedLoop {
+  first: ArenaSite
+  more: i32
+
+  constructor(first: ArenaSite) {
+    this.first = first
+    this.more = 0
+  }
+}
+
+/**
+ * The NL9018 warnings of one module: one per loop whose pass releases nothing,
+ * at that loop, for the accumulating sites inside it that no counted loop
+ * bounds. A site on one of the lines in `named`, which another retention
+ * warning of the module already reports, is left to that warning.
+ */
+export const unboundedPassFindings = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  named: i32[]
+): ArenaFinding[] => {
+  const out: ArenaFinding[] = []
+  const program = unit.program
+  const entry = program.entryMain
+  for (const sig of program.functions) {
+    const f: FunctionFacts | null = sig.definedIn(program.source) && !sig.foreign() ? facts.get(sig.name) : null
+    const body = sig.body()
+    if (f === null || body === null) {
+      continue
+    }
+    const instance = sig.instance
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    const walk = new ArenaWalk(unit, facts, sig, f, table)
+    walkNode(walk, program, body, SCOPE_NONE, outsideLoops())
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+    const loops: UnboundedLoop[] = []
+    for (const site of walk.sites) {
+      if (pilesUp(walk, site) && named.indexOf(program.source.lineOf(site.node.start)) < 0) {
+        noteUnbounded(loops, site)
+      }
+    }
+    for (const loop of loops) {
+      // A generic function's instances share its loops: it is named once.
+      if (!namedAlready(out, loopId(loop.first))) {
+        out.push(unboundedFinding(walk, entry !== null && entry === sig, loop))
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Whether `site` is one the warning names: it accumulates, no counted loop
+ * bounds it, and it allocates. Growing an array is not counted: the buffers a
+ * `push` outgrows add up to less than the array it fills, which the program
+ * still holds, so they grow with what it keeps and not with its passes. A call is a site of `--emit-arena` for the
+ * memory its callee may hand over, but only a callee that leaves memory
+ * behind (`netAllocates`) adds to the pile: an accessor that returns a
+ * pointer it was given allocates nothing.
+ */
+const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
+  if (!site.accumulates || !site.around.unbounded || site.kind === "push") {
+    return false
+  }
+  const id = site.node.id
+  const call = walk.calls[id]
+  if (call === null) {
+    return walk.arenaFlow[id] === FLOW_LOCAL && !walk.escapes[id]
+  }
+  const callee = walk.facts.get(call.callee)
+  return callee !== null && callee.netAllocates && callee.contained && call.flow === FLOW_LOCAL && !call.escapes
+}
+
+/** Count `site` under the loop it piles up around, or start that loop's entry. */
+const noteUnbounded = (loops: UnboundedLoop[], site: ArenaSite): void => {
+  for (const loop of loops) {
+    if (loopId(loop.first) === loopId(site)) {
+      loop.more = loop.more + 1
+      return
+    }
+  }
+  loops.push(new UnboundedLoop(site))
+}
+
+/** The id of the loop `site` piles up around, or -1 outside every loop. */
+const loopId = (site: ArenaSite): i32 => {
+  const loop = site.around.loop
+  return loop === null ? -1 : loop.id
+}
+
+const namedAlready = (out: ArenaFinding[], id: i32): boolean => {
+  for (const finding of out) {
+    if (finding.node.id === id) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The warning for one loop: where its passes' memory goes back, why no pass releases it, and the rewrite. */
+const unboundedFinding = (walk: ArenaWalk, isMain: boolean, loop: UnboundedLoop): ArenaFinding => {
+  const around = loop.first.around
+  const node = around.loop
+  if (node === null) {
+    return new ArenaFinding(loop.first.node, "")
+  }
+  const until = keptUntil(walk.unit, walk.f, isMain, around.pass, around.block)
+  const scope = around.loopScope
+  // A scoped loop keeps only what its condition or update allocates.
+  const reason =
+    scope === null
+      ? "nothing proves that what a pass allocated is unreachable once it ends"
+      : scope.scoped
+        ? "it is in the loop's condition or update, which run outside the scope each pass takes"
+        : loopKeptReason(walk.unit, walk.facts, scope)
+  const what = sitePhrase(walk.program, loop.first)
+  const more =
+    loop.more === 0 ? " piles" : ` and ${loop.more} more allocation${loop.more === 1 ? "" : "s"} pile`
+  return new ArenaFinding(
+    node,
+    `this loop keeps what each pass allocates ${until}, because ${reason}, and nothing bounds how many passes it ` +
+      `runs, so ${what}${more} up for as long as it runs. Move the per-pass work that builds it into a block ` +
+      "inside the loop body that opens with `using a = arena()`, which the compiler refuses if anything allocated " +
+      "there could outlive the block"
+  )
+}
+
+/** The site the warning names first, in words, by its `--emit-arena` kind. */
+const sitePhrase = (program: CheckedProgram, site: ArenaSite): string => {
+  const line = program.source.lineOf(site.node.start)
+  if (site.kind === "call") {
+    return `what \`${site.callee}\` leaves behind on line ${line}`
+  }
+  if (site.kind === "builtin") {
+    return `what \`${site.callee}\` allocates on line ${line}`
+  }
+  if (site.kind === "print") {
+    return `what printing on line ${line} allocates`
+  }
+  return `the ${site.kind === "new" ? "object" : site.kind} built on line ${line}`
 }
