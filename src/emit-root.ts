@@ -78,7 +78,10 @@ const rootStructOf = (emitter: Emitter, type: i32): StructInfo => {
     return info
   }
   process.exit(
-    internalErrorFor(`emitter: root storage: unknown struct \`${emitter.table.typeName(type)}\``, emitter.opts.json)
+    internalErrorFor(
+      `emitter: root storage: unknown struct \`${emitter.table.typeName(type)}\``,
+      emitter.opts.json
+    )
   )
 }
 

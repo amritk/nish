@@ -2104,7 +2104,9 @@ export const storageGlobals = (emitter: Emitter, info: ConstInfo, traces: RootTr
   // WP55: a page reads no root storage, so its data stays internal and is
   // reached through the root table instead (`src/emit-root.ts`).
   const kept = info.root && emitter.opts.rootSymbols.length > 0
-  emitter.declareGlobal(`@${info.storageSymbol}.data = ${kept ? "internal " : ""}global ${data} zeroinitializer, align 16`)
+  emitter.declareGlobal(
+    `@${info.storageSymbol}.data = ${kept ? "internal " : ""}global ${data} zeroinitializer, align 16`
+  )
   if (kept) {
     rootTable(emitter, traces, info, data)
   }

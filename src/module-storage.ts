@@ -343,7 +343,13 @@ const checkRootClosure = (ctx: CheckContext, info: ConstInfo): void => {
  * `path (type)`; `""` when everything is traceable, `"!"` when a type that
  * was already reported (a poisoned class) stops the walk silently.
  */
-const rootFault = (ctx: CheckContext, scope: CheckedProgram, seen: boolean[], type: i32, path: string): string => {
+const rootFault = (
+  ctx: CheckContext,
+  scope: CheckedProgram,
+  seen: boolean[],
+  type: i32,
+  path: string
+): string => {
   const table = ctx.table
   if (type < 0) {
     return "!"

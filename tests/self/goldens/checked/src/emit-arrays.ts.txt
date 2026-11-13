@@ -1861,8 +1861,8 @@ function storageGlobals(emitter: Emitter, info: ConstInfo, traces: RootTraces): 
   callee +2:3 Emitter.declareType -> @Emitter.declareType
   local +5:9 kept: boolean (const)
   callee +6:3 Emitter.declareGlobal -> @Emitter.declareGlobal
-  callee +8:5 rootTable -> @rootTable
-  callee +10:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  callee +10:5 rootTable -> @rootTable
+  callee +12:3 Emitter.declareGlobal -> @Emitter.declareGlobal
 function storageDeclaration(emitter: Emitter, info: ConstInfo): void -> @storageDeclaration [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType

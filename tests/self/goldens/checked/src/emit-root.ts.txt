@@ -61,7 +61,7 @@ function rootStructOf(emitter: Emitter, type: i32): StructInfo -> @rootStructOf
   callee +0:16 CheckedProgram.struct -> @CheckedProgram.struct
   callee +0:39 TypeTable.nameOf -> @TypeTable.nameOf
   callee +5:5 internalErrorFor -> @internalErrorFor
-  callee +5:65 TypeTable.typeName -> @TypeTable.typeName
+  callee +6:50 TypeTable.typeName -> @TypeTable.typeName
 function rootClosureStructs(emitter: Emitter): StructInfo[] -> @rootClosureStructs [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteClosure

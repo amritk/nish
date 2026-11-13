@@ -5646,6 +5646,16 @@ const DECLARED = [
     ],
     "tests/link/net_webtransport_f64/main.ts": ["clock.ll"],
   }),
+  // WP55: module storage of `C | null` is root storage, which the seed
+  // refuses as NL2686.
+  ...["tests/cases/root_storage.ts", "tests/cases/root_storage_page.ts", "docs/cookbook/storage-root.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "root storage's object graph",
+      why: "the program declares module storage of a class or null, which the seed refuses with NL2686 and the candidate keeps as root storage, so only the candidate compiles it",
+    })
+  ),
 ]
 
 /**
