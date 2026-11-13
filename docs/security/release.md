@@ -157,6 +157,13 @@ and a checked time that is not a number),
 `update notice: a world-readable cache owned by another user is not believed`
 (the `-O` check alone refuses it; a skip that says so where the test cannot
 make another user's file),
+`update notice: a private cache in a ${mode} directory owned by another user is not believed or rewritten`
+(at 0755 the directory half of the `-O` check alone refuses it; at 0777 only
+the failed `chmod` keeps the cache from being rewritten, REL-5; as root the
+run is made as uid 65534 with `setpriv`, since root may chmod any directory),
+`update notice: a cache in another user's directory starts no network check`,
+`update notice: each refused cache started one check` (a cache not believed
+is treated as missing),
 `nish upgrade --check: a failed check keeps the newer release the cache names`,
 `nish/release: versions, ordering, redirects and bases` (its cache line),
 `nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it`,
@@ -198,7 +205,11 @@ cache before it starts, so a server that is down is asked at most once a day.
 Tests: `update notice: nish --version on a terminal prints the line once, exit unchanged`,
 `update notice: a compile on a terminal prints the line once`,
 `update notice: not shown when stderr is not a terminal`,
-`update notice: not shown with ${what}`.
+`update notice: not shown with ${what}`,
+`update notice: a run that starts a check is not held by it` (against a
+server that never answers, the run is back before the lookup's 2 s limit),
+`update notice: a cache ${what} is refreshed by exactly one check` (REL-1:
+the hangup is ignored, so the detached check reaches the server).
 
 ## Findings
 
@@ -207,6 +218,6 @@ Tests: `update notice: nish --version on a terminal prints the line once, exit u
 | REL-1 | Low | `src/upgrade.ts` (`startNoticeCheck`) | The background check, started from a terminal, was killed by the hangup the terminal sent when the command that started it exited, so it never reached the server and the cache never learned of a newer release. | **Fixed** before the module shipped: the shell that detaches it runs `trap "" HUP` first. Before, `update notice: a cache ${what} is refreshed by exactly one check` failed (the server saw no lookup); after, it passes. |
 | REL-2 | Low | `install.sh`, `releaseFetchInstaller` | The release is trusted on the strength of TLS to GitHub and the tag's name: no signature is checked, so a compromised release installs what it says. | **Open, accepted.** The same trust as the documented `curl \| sh` install ([`supply-chain.md`](supply-chain.md)), with a pinned tag rather than `main`. |
 | REL-3 | Low | `src/upgrade.ts` (`NOTICE_PROBE`, `updateNotice`) | The probe checks the cache's owner and mode, then the compiler reads it: a file swapped between the two is read unchecked. | **Open, accepted.** Swapping it needs write access to its directory, which the probe has already required to be this user's alone. |
-| REL-4 | Low | `std/release.ts` (`releaseCacheRead`) | The file's owner and mode were checked but not its directory's, so in a directory another user can write the file could be swapped between the check and the read, and the swapped one believed. | **Fixed** before the module shipped: the directory must be a directory (not a link) this user owns that no one else can write. Before, `nish/release: versions, ordering, redirects and bases` read a cache in a 0775 directory (its last line printed `false true`); after, it is refused (`true true`). |
-| REL-5 | Low | `src/upgrade.ts` (`writeNoticeCache`) | A cache directory already there and writable by its group (a umask of 002) was never made private, so the probe refused the cache on every run and every run on a terminal started a network check. | **Fixed** before the module shipped: an existing directory is made 0700 with `chmod`, and when that fails nothing is kept and no check starts. Before, `update notice: a world-writable cache directory is made 0700, so the next run believes it` failed (mode 777); after, it passes. |
+| REL-4 | Low | `std/release.ts` (`releaseCacheRead`) | The file's owner and mode were checked but not its directory's, so in a directory another user can write the file could be swapped between the check and the read, and the swapped one believed. | **Fixed** before the module shipped: the directory must be a directory (not a link) this user owns that no one else can write. Before, `nish/release: versions, ordering, redirects and bases` read a cache in a 0775 directory (its cache line, the seventh, printed `false true`); after, it is refused (`true true`). |
+| REL-5 | Low | `src/upgrade.ts` (`writeNoticeCache`) | A cache directory already there and writable by its group (a umask of 002) was never made private, so the probe refused the cache on every run and every run on a terminal started a network check. | **Fixed** before the module shipped: an existing directory is made 0700 with `chmod`, and when that fails nothing is kept and no check starts. Before, `update notice: a world-writable cache directory is made 0700, so the next run believes it` failed (mode 777); after, it passes. That nothing is kept when `chmod` fails is pinned by the 777 case of `update notice: a private cache in a ${mode} directory owned by another user is not believed or rewritten` and by `update notice: a cache in another user's directory starts no network check`: with the failure ignored, the run rewrites the cache in the other user's world-writable directory and its check asks the server, and both fail. |
 | REL-6 | Low | `src/upgrade.ts` (`baseAllowed`), `std/release.ts` (`releaseBaseAllowed`) | A release URL override was accepted when it began `http://localhost:`, so `http://localhost:@host/` — whose host is `host` — passed the loopback rule, and a release could be asked of another host over plain http. | **Fixed** before the module shipped: after the host only `:<digits>` then `/` or the end may follow. Before, `nish upgrade: ${what} is refused (exit 2), named, before any request` (its loopback case, `http://localhost:@example.com/x`) ran the check; after, it exits 2 naming `NISH_RELEASE_URL`, with no request made. |

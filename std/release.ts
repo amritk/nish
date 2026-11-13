@@ -29,7 +29,7 @@
  *   answer kept in a file the program names, believed only when it is a
  *   regular file this user owns that no one else can write, and only for
  *   `maxAgeMs` (a check dated in the future counts as stale).
- * - `releaseFetchInstaller(rawBase, version, path)` — the `install.sh` of one
+ * - `releaseFetchInstaller(rawBase, version, path, timeoutMs)` — the `install.sh` of one
  *   release tag, written to a file for the caller to run, never piped into a
  *   shell.
  *

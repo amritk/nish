@@ -28052,6 +28052,7 @@ export const main = (): number => {
         fs.writeFileSync(linkTarget, "kept\n", { mode: 0o600 })
         fs.symlinkSync(linkTarget, path.join(cacheDir, "s", "c"))
         // Another user's file, or directory, needs root or sudo to make: the test makes them where it can.
+        const modeOf = (p) => fs.lstatSync(p).mode & 0o777
         const privileged = (args) =>
           process.getuid() === 0 ? spawnSync(args[0], args.slice(1)) : spawnSync("sudo", ["-n", ...args])
         const canChown = process.platform === "linux" && privileged(["true"]).status === 0
@@ -28063,97 +28064,96 @@ export const main = (): number => {
           fs.writeFileSync(cachePaths.foreignDir, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
           privileged(["chown", "65534", cachePaths.foreignFile, path.dirname(cachePaths.foreignDir)])
         }
-        const cacheProbe = path.join(upDir, "release_cache_probe.ts")
-        const q = (p) => JSON.stringify(p)
-        fs.writeFileSync(
-          cacheProbe,
-          `import { ReleaseCache, releaseCacheFresh, releaseCacheParse, releaseCacheRead, releaseCacheWrite, releaseCheckCached, releaseFileTrusted } from "nish/release"
+        try {
+          const cacheProbe = path.join(upDir, "release_cache_probe.ts")
+          const q = (p) => JSON.stringify(p)
+          fs.writeFileSync(
+            cacheProbe,
+            `import { ReleaseCache, releaseCacheFresh, releaseCacheParse, releaseCacheRead, releaseCacheWrite, releaseCheckCached, releaseFileTrusted } from "nish/release"
 
-const show = (c: ReleaseCache | null): string => (c === null ? "null" : \`\${c.checkedMs}/\${c.latest}\`)
-const orNull = (s: string | null): string => (s === null ? "null" : s)
+  const show = (c: ReleaseCache | null): string => (c === null ? "null" : \`\${c.checkedMs}/\${c.latest}\`)
+  const orNull = (s: string | null): string => (s === null ? "null" : s)
 
-export const main = (): number => {
-  const d = ${q(cacheDir)}
-  console.log(\`\${releaseCacheWrite(\`\${d}/w/c\`, "99.0.0", 1000)} \${show(releaseCacheRead(\`\${d}/w/c\`))} \${releaseCacheWrite(\`\${d}/s/c\`, "1.0.0", 3)} \${show(releaseCacheRead(\`\${d}/s/c\`))}\`)
-  const c = releaseCacheParse("checked 1000\\nlatest 99.0.0\\n")
-  if (c === null) {
-    return 1
+  export const main = (): number => {
+    const d = ${q(cacheDir)}
+    console.log(\`\${releaseCacheWrite(\`\${d}/w/c\`, "99.0.0", 1000)} \${show(releaseCacheRead(\`\${d}/w/c\`))} \${releaseCacheWrite(\`\${d}/s/c\`, "1.0.0", 3)} \${show(releaseCacheRead(\`\${d}/s/c\`))}\`)
+    const c = releaseCacheParse("checked 1000\\nlatest 99.0.0\\n")
+    if (c === null) {
+      return 1
+    }
+    const day: i64 = 86400000
+    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
+    console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
+    console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
+    const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const again = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const current = releaseCheckCached(${q(`${origin}/newer`)}, "99.0.0", \`\${d}/k/c\`, day, 5000)
+    const refused = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    const kept = releaseCacheRead(\`\${d}/f/c\`)
+    const refusedAgain = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    console.log(\`\${orNull(newer)} \${orNull(again)} \${orNull(current)} \${orNull(refused)} [\${kept === null ? "null" : kept.latest}] \${orNull(refusedAgain)}\`)
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignFile)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignDir)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.fifo)})))
+    return 0
   }
-  const day: i64 = 86400000
-  console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
-  console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
-  console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
-  const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
-  const again = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
-  const current = releaseCheckCached(${q(`${origin}/newer`)}, "99.0.0", \`\${d}/k/c\`, day, 5000)
-  const refused = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
-  const kept = releaseCacheRead(\`\${d}/f/c\`)
-  const refusedAgain = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
-  console.log(\`\${orNull(newer)} \${orNull(again)} \${orNull(current)} \${orNull(refused)} [\${kept === null ? "null" : kept.latest}] \${orNull(refusedAgain)}\`)
-  console.log(show(releaseCacheRead(${q(cachePaths.foreignFile)})))
-  console.log(show(releaseCacheRead(${q(cachePaths.foreignDir)})))
-  console.log(show(releaseCacheRead(${q(cachePaths.fifo)})))
-  return 0
-}
-`,
-        )
-        const lookupsOf = (name) => asked().filter((u) => u === `/${name}/releases/latest`).length
-        const [newerBefore, refuseBefore] = [lookupsOf("newer"), lookupsOf("refuse")]
-        // A writer waits on the FIFO, so a read that opened it would get a believable cache, not hang.
-        const fifoWriter = madeFifo
-          ? spawn("sh", ["-c", 'printf "checked 7\\nlatest 1.0.0\\n" > "$1"', "sh", cachePaths.fifo], { stdio: "ignore" })
-          : null
-        const cacheRun = spawnSync(NISH, ["run", cacheProbe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }), timeout: 120000 })
-        if (fifoWriter !== null) fifoWriter.kill()
-        const cacheLines = (cacheRun.stdout || "").split("\n")
-        const modeOf = (p) => fs.lstatSync(p).mode & 0o777
-        check(
-          "nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it",
-          cacheRun.status === 0 &&
-            cacheLines[0] === "true 1000/99.0.0 true 3/1.0.0" &&
-            modeOf(path.join(cacheDir, "w", "c")) === 0o600 &&
-            modeOf(path.join(cacheDir, "w")) === 0o700 &&
-            fs.lstatSync(path.join(cacheDir, "s", "c")).isFile() &&
-            fs.readFileSync(linkTarget, "utf8") === "kept\n",
-          `${cacheRun.status}: ${cacheRun.stdout}${cacheRun.stderr}`,
-        )
-        check(
-          "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
-          cacheLines[1] === "true true false false",
-          cacheLines[1],
-        )
-        check(
-          "nish/release: a cache parses only as its two lines, with a valid or empty version and nothing after them",
-          cacheLines[2] === "5/ null null null null null 5/1.0.0",
-          cacheLines[2],
-        )
-        check(
-          "nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed",
-          cacheLines[3] === "7/1.0.0 null null null null true false",
-          cacheLines[3],
-        )
-        check(
-          "nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none",
-          cacheLines[4] === "99.0.0 99.0.0 null null [] null" &&
-            lookupsOf("newer") === newerBefore + 1 &&
-            lookupsOf("refuse") === refuseBefore + 1,
-          `${cacheLines[4]}; ${lookupsOf("newer") - newerBefore} and ${lookupsOf("refuse") - refuseBefore} lookups`,
-        )
-        if (madeFifo) {
-          check("nish/release: a private FIFO at the cache path is not believed", cacheLines[7] === "null", cacheLines[7])
-        } else {
-          skip("nish/release: a FIFO at the cache path: mkfifo failed")
-        }
-        if (canChown) {
-          // Each is readable by this run and otherwise private, so the owner check alone refuses it.
-          const readable = (p) => {
-            try {
-              return fs.readFileSync(p, "utf8") === "checked 7\nlatest 1.0.0\n"
-            } catch {
-              return false
-            }
+  `,
+          )
+          const lookupsOf = (name) => asked().filter((u) => u === `/${name}/releases/latest`).length
+          const [newerBefore, refuseBefore] = [lookupsOf("newer"), lookupsOf("refuse")]
+          // A writer waits on the FIFO, so a read that opened it would get a believable cache, not hang.
+          const fifoWriter = madeFifo
+            ? spawn("sh", ["-c", 'printf "checked 7\\nlatest 1.0.0\\n" > "$1"', "sh", cachePaths.fifo], { stdio: "ignore" })
+            : null
+          const cacheRun = spawnSync(NISH, ["run", cacheProbe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }), timeout: 120000 })
+          if (fifoWriter !== null) fifoWriter.kill()
+          const cacheLines = (cacheRun.stdout || "").split("\n")
+          check(
+            "nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it",
+            cacheRun.status === 0 &&
+              cacheLines[0] === "true 1000/99.0.0 true 3/1.0.0" &&
+              modeOf(path.join(cacheDir, "w", "c")) === 0o600 &&
+              modeOf(path.join(cacheDir, "w")) === 0o700 &&
+              fs.lstatSync(path.join(cacheDir, "s", "c")).isFile() &&
+              fs.readFileSync(linkTarget, "utf8") === "kept\n",
+            `${cacheRun.status}: ${cacheRun.stdout}${cacheRun.stderr}`,
+          )
+          check(
+            "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
+            cacheLines[1] === "true true false false",
+            cacheLines[1],
+          )
+          check(
+            "nish/release: a cache parses only as its two lines, with a valid or empty version and nothing after them",
+            cacheLines[2] === "5/ null null null null null 5/1.0.0",
+            cacheLines[2],
+          )
+          check(
+            "nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed",
+            cacheLines[3] === "7/1.0.0 null null null null true false",
+            cacheLines[3],
+          )
+          check(
+            "nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none",
+            cacheLines[4] === "99.0.0 99.0.0 null null [] null" &&
+              lookupsOf("newer") === newerBefore + 1 &&
+              lookupsOf("refuse") === refuseBefore + 1,
+            `${cacheLines[4]}; ${lookupsOf("newer") - newerBefore} and ${lookupsOf("refuse") - refuseBefore} lookups`,
+          )
+          if (madeFifo) {
+            check("nish/release: a private FIFO at the cache path is not believed", cacheLines[7] === "null", cacheLines[7])
+          } else {
+            skip("nish/release: a FIFO at the cache path: mkfifo failed")
           }
-          try {
+          if (canChown) {
+            // Each is readable by this run and otherwise private, so the owner check alone refuses it.
+            const readable = (p) => {
+              try {
+                return fs.readFileSync(p, "utf8") === "checked 7\nlatest 1.0.0\n"
+              } catch {
+                return false
+              }
+            }
             check(
               "nish/release: a world-readable cache file owned by another user is not believed",
               cacheLines[5] === "null" && readable(cachePaths.foreignFile),
@@ -28164,11 +28164,11 @@ export const main = (): number => {
               cacheLines[6] === "null" && readable(cachePaths.foreignDir),
               `${cacheLines[6]}; readable ${readable(cachePaths.foreignDir)}`,
             )
-          } finally {
-            privileged(["chown", "-R", String(process.getuid()), cacheDir])
+          } else {
+            skip("nish/release: a cache owned by another user: making one needs root or passwordless sudo")
           }
-        } else {
-          skip("nish/release: a cache owned by another user: making one needs root or passwordless sudo")
+        } finally {
+          if (canChown) privileged(["chown", "-R", String(process.getuid()), cacheDir])
         }
 
         // Refusals that need no network: a version that is not one, an unknown flag.
@@ -28331,8 +28331,10 @@ export const main = (): number => {
             fs.mkdirSync(path.dirname(cacheFile), { recursive: true, mode: 0o700 })
             fs.writeFileSync(cacheFile, `checked ${checkedMs}\nnewer${newer === "" ? "" : ` ${newer}`}\n`, { mode: 0o600 })
           }
-          const tty = (args, extra = {}) => {
-            const r = spawnSync("script", ["-qec", '"$NISH_UP_EXE" $NISH_UP_ARGS', "/dev/null"], {
+          // `runAs` prefixes the command, to run it as another user.
+          const tty = (args, extra = {}, runAs = []) => {
+            const cmd = [...runAs, "script", "-qec", '"$NISH_UP_EXE" $NISH_UP_ARGS', "/dev/null"]
+            const r = spawnSync(cmd[0], cmd.slice(1), {
               encoding: "utf8",
               env: env("newer", { NISH_UP_EXE: NISH, NISH_UP_ARGS: args, ...extra }),
               timeout: 60000,
@@ -28457,8 +28459,9 @@ export const main = (): number => {
           }
 
           // At most one network check a day: a fresh cache asks nothing, a stale or future one is refreshed once.
-          const waitFor = (ok) => {
-            const until = Date.now() + 20000
+          // Polls until `ok`, for at most `ms`. Waiting out a short `ms` for what must not happen ends early when it does.
+          const waitFor = (ok, ms = 20000) => {
+            const until = Date.now() + ms
             while (!ok() && Date.now() < until) spawnSync("sleep", ["0.2"])
             return ok()
           }
@@ -28469,12 +28472,32 @@ export const main = (): number => {
             waitFor(() => refuseLookups() === refusedBefore + refusedRuns),
             `${refuseLookups() - refusedBefore} lookups`,
           )
+          // The check is detached: a run that starts one against a server that never answers is back before the
+          // lookup's 2 s limit could end it, and the check still asks.
+          const slowLookups = () => asked().filter((u) => u === "/slow/releases/latest").length
+          const slowBefore = slowLookups()
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          const startedAt = Date.now()
+          const detached = tty("--version", { NISH_RELEASE_URL: `${origin}/slow` })
+          const took = Date.now() - startedAt
+          check(
+            "update notice: a run that starts a check is not held by it",
+            detached.status === 0 && took < 2000 && waitFor(() => slowLookups() === slowBefore + 1),
+            `${took} ms; ${slowLookups() - slowBefore} lookups`,
+          )
           plant(Date.now())
           let base = lookups()
+          const fresh = fs.readFileSync(cacheFile, "utf8")
           tty("--version")
           tty("--version")
-          spawnSync("sleep", ["1"])
-          check("update notice: two runs on a fresh cache make no network check", lookups() === base)
+          // A started check rewrites the cache before it asks, so an unchanged cache shows none started.
+          const unchanged = fs.readFileSync(cacheFile, "utf8") === fresh
+          check(
+            "update notice: two runs on a fresh cache make no network check",
+            unchanged && !waitFor(() => lookups() !== base, 3000),
+            `cache unchanged ${unchanged}; ${lookups() - base} lookups`,
+          )
           for (const [what, when] of [
             ["older than 24 h", Date.now() - 25 * 3600 * 1000],
             ["dated in the future", Date.now() + 3600 * 1000],
@@ -28484,12 +28507,53 @@ export const main = (): number => {
             tty("--version")
             tty("--version")
             const refreshed = waitFor(() => /newer 99\.0\.0/.test(fs.readFileSync(cacheFile, "utf8")))
-            spawnSync("sleep", ["1"])
+            // A second check, if the second run started one, would ask within the wait.
+            const second = waitFor(() => lookups() > base + 1, 3000)
             check(
               `update notice: a cache ${what} is refreshed by exactly one check`,
-              refreshed && lookups() === base + 1 && modeOf(cacheFile) === 0o600,
+              refreshed && !second && lookups() === base + 1 && modeOf(cacheFile) === 0o600,
               `${lookups() - base} lookups, mode ${modeOf(cacheFile).toString(8)}; ${fs.readFileSync(cacheFile, "utf8")}`,
             )
+          }
+          // This user's private cache in another user's directory. At 0755 only the directory half of the owner
+          // check refuses it; at 0777 the mode check does, and only the failed `chmod 700` keeps the run from
+          // writing its cache there and starting a check (REL-5). A started check rewrites the cache first, and
+          // then asks the server. Root may chmod any directory, so under root the run is made as uid 65534,
+          // which is given the cache's other directories (where the release helper is built) while the cache's
+          // own stays root's; otherwise sudo gives the cache's directory to 65534.
+          const asOther = process.getuid() === 0
+          if (canChown && (!asOther || has("setpriv"))) {
+            const dir = path.dirname(cacheFile)
+            const runAs = asOther ? ["setpriv", "--reuid=65534", "--regid=65534", "--clear-groups"] : []
+            const foreignLookups = () => asked().filter((u) => u === "/foreign/releases/latest").length
+            try {
+              if (asOther) privileged(["chown", "-R", "65534", cacheHome])
+              for (const mode of [0o755, 0o777]) {
+                plant(Date.now())
+                const before = fs.readFileSync(cacheFile, "utf8")
+                fs.chmodSync(dir, mode)
+                privileged(["chown", asOther ? "0" : "65534", dir])
+                if (asOther) privileged(["chown", "65534", cacheFile])
+                try {
+                  const r = tty("--version", { NISH_RELEASE_URL: `${origin}/foreign` }, runAs)
+                  const after = fs.readFileSync(cacheFile, "utf8")
+                  check(
+                    `update notice: a private cache in a ${mode.toString(8)} directory owned by another user is not believed or rewritten`,
+                    r.status === 0 && lines(r.out) === 0 && after === before,
+                    `${JSON.stringify(r)}; cache ${JSON.stringify(after)}`,
+                  )
+                } finally {
+                  privileged(["chown", "-R", asOther ? "65534" : String(process.getuid()), dir])
+                  fs.chmodSync(dir, 0o700)
+                }
+              }
+              const asking = waitFor(() => foreignLookups() > 0, 5000)
+              check("update notice: a cache in another user's directory starts no network check", !asking, `${foreignLookups()} lookups`)
+            } finally {
+              privileged(["chown", "-R", String(process.getuid()), cacheHome])
+            }
+          } else {
+            skip("update notice: a cache in another user's directory: needs root with setpriv, or passwordless sudo")
           }
         }
       } finally {

@@ -326,7 +326,7 @@ const writeNoticeCache = (path: string, nowMs: i64, newer: string): boolean => {
   if (made !== 0 && made !== -17) {
     return false
   }
-  const privateDir: string[] = ["chmod", "700", "--", dir]
+  const privateDir: string[] = ["/bin/chmod", "700", "--", dir]
   if (made === -17 && spawnSyncTo(privateDir, "/dev/null", "/dev/null") !== 0) {
     return false
   }
