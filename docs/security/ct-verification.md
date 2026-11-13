@@ -620,25 +620,32 @@ review.
   (`aesBitslicedRound` with the helpers it inlines, `ghashMultiply` and
   `aesGcmTagMask` are read as copies, with `loops` `aesEncryptBatch`, and
   as `branches` `aesPack`, `aesUnpack` and `aesSubWord`.)
-- **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
-  `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
+- **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FieldInvert`,
   `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
   `p256ScalarInverse` with its safegcd helpers `p256Safegcd`, `p256ToSigned30`,
   `p256FromSigned30`, `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`,
   `p256AddModulus30` and `p256Normalize30` (shared with `p256FieldInvert`
   since #1430),
-  `p256SubBorrow`, `p256Below`, `p256ReduceOnce`, `p256AffineX`,
+  `p256Below`, `p256ReduceOnce`, `p256AffineX`,
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`.
 
   (The field and scalar multiplies, add, subtract and conditional move, the
   point doubling and addition, the table move and select, and one window step
-  are read as copies or reshaped copies, as are the comb's digit, fifteen-entry
-  select, mixed addition, masked keep and one comb step, and safegcd's thirty
+  are read as copies or reshaped copies, as are the signed comb's recoding
+  (`p256BaseRecode`, with `p256SubBorrow`, `p256FiatSelectznz` and
+  `p256FiatScalarAdd`, since ECC-7), digit, masked entry move
+  (`p256BaseMove`), 32-entry signed select, mixed addition and one comb step,
+  and safegcd's thirty
   divsteps and its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the
   module's divstep loop unrolled thirty times, which `tests/run.js` holds to
   the module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
-  their limb loops unrolled.) `p256Verify` handles only public data.
+  their limb loops unrolled. Since ECC-8 the field multiply, square, add and
+  subtract are fiat's 64-bit ones, and their copies read the 64-bit helpers
+  as the module does: `p256FiatMulxU64Hi`, the add-with-carry and
+  subtract-with-borrow pairs, and `p256FiatCmovznzU64`, with `ct-check` lines
+  marking `p256FiatMulxU64Hi`'s operands and `p256FiatCmovznzU64`'s condition
+  and choices secret.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
