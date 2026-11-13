@@ -228,35 +228,35 @@
       )
     )
 
-  /** The hero's terminal: its first key imports the shell that runs it (examples/break-web). */
+  /** The hero's terminal: a hidden input takes its line; its first use imports the shell (examples/break-web). */
   const terminal = (...children) => {
-    const term = el(
-      "div.nish-hero__window.nish-hero__terminal",
-      { tabindex: "0", role: "textbox", "aria-label": "Terminal" },
-      ...children
-    )
-    const keys = []
+    const input = el("input.nish-hero__input", {
+      "aria-label": "Terminal",
+      autocapitalize: "off",
+      autocorrect: "off",
+      spellcheck: "false",
+      enterkeyhint: "go",
+    })
+    const term = el("div.nish-hero__window.nish-hero__terminal", {}, ...children, input)
+    term.addEventListener("click", () => input.focus())
+    // Lines entered while it loads are answered once it has; a failed load is retried.
+    const lines = []
+    let shell = null
     const first = (event) => {
-      const key = event.key
-      if (
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        !(key.length < 2 || key === "Enter" || key === "Backspace")
-      ) {
+      if (event.key === "Enter" && !event.isComposing) {
+        lines.push(input.value)
+        input.value = ""
+      } else if (event.type !== "input") {
         return
       }
-      event.preventDefault()
-      // Keys typed while it loads are handed over; a failed load is retried on the next key.
       const shellUrl = "/break/shell.mjs"
-      if (keys.push(key) === 1) {
-        import(shellUrl).then(
-          (shell) => shell.attach(term, keys, first),
-          () => (keys.length = 0)
-        )
-      }
+      shell ??= import(shellUrl).then(
+        (m) => m.attach(term, input, lines, first),
+        () => (shell = null)
+      )
     }
-    term.addEventListener("keydown", first)
+    input.addEventListener("input", first)
+    input.addEventListener("keydown", first)
     return term
   }
 

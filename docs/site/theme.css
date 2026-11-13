@@ -652,7 +652,9 @@ a.nish-hero__cta:hover {
   gap: 14px 0;
 }
 .nish-hero__terminal {
+  position: relative;
   grid-column: 1 / -1;
+  cursor: text;
 }
 
 .nish-hero__window {
@@ -776,10 +778,24 @@ a.nish-hero__cta:hover {
   animation: nish-hero-out var(--nish-cycle) var(--nish-ease) infinite;
 }
 
-/* The terminal takes a line. Its prompt comes in with the output; once the
-   terminal has focus the animation holds on its last frame, so what is typed
-   stays put. */
-.nish-hero__terminal:focus-visible {
+/* The terminal takes a line, through a hidden input: off-screen text would
+   scroll the page to it, so it sits inside the terminal, unseen, at 16px so
+   iOS does not zoom in on focus. Its prompt comes in with the output; while
+   the terminal has focus, and for good once the shell has taken it over
+   (--live), the animation holds on its last frame, so what is typed stays
+   put. */
+.nish-hero__input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+}
+.nish-hero__terminal:has(.nish-hero__input:focus-visible) {
   outline: 2px solid var(--scalar-color-accent);
   outline-offset: 2px;
 }
@@ -787,8 +803,10 @@ a.nish-hero__cta:hover {
   padding-top: 0;
   animation: nish-hero-out var(--nish-cycle) var(--nish-ease) infinite;
 }
-.nish-hero__terminal:focus *,
-.nish-hero__terminal:focus .nish-hero__line-in {
+.nish-hero__terminal:focus-within *,
+.nish-hero__terminal:focus-within .nish-hero__line-in,
+.nish-hero__terminal--live *,
+.nish-hero__terminal--live .nish-hero__line-in {
   animation: none;
 }
 .nish-hero__said {
@@ -805,7 +823,7 @@ a.nish-hero__cta:hover {
   background: var(--scalar-color-accent);
   opacity: 0.25;
 }
-.nish-hero__terminal:focus .nish-hero__caret {
+.nish-hero__terminal:focus-within .nish-hero__caret {
   opacity: 1;
   animation: nish-caret 1s steps(1, end) infinite;
 }

@@ -31,12 +31,10 @@ import {
 import { SOUND_COUNT } from "../../src/break-game"
 import { BreakSettings } from "../../src/break-menu"
 import { SAMPLE_RATE, SOUND_HELLO, voiceSamples } from "../../src/break-voices"
+import { BREAK_HELP } from "./help"
 
 /** A frame time to start from, until frames are timed: 60 Hz, in milliseconds. */
 const FIRST_FRAME_MS: f64 = 1000.0 / 60.0
-
-/** What the help screen shows: the terminal's is `--help`, which a page has no use for. */
-const HELP: string = "nish: a compiler\n"
 
 /** BREAK_LINK's words; break.mjs reads and writes the same ones. */
 const LINK_QUIT: i32 = 0
@@ -111,7 +109,7 @@ const keepSettings = (s: BreakSettings): void => {
 export const init = (seed: i32): void => {
   BREAK_LINK[LINK_QUIT] = 0
   gameSetSize(GAME_MAX_WIDTH, GAME_MAX_HEIGHT)
-  ROOT[0] = new BreakPage(new BreakDirector(toI64(seed), linkedSettings(), HELP, false))
+  ROOT[0] = new BreakPage(new BreakDirector(toI64(seed), linkedSettings(), BREAK_HELP, false))
 }
 
 /** One sound's samples for the page; 0 past the last id. */

@@ -7,6 +7,7 @@
 // compares the count, so a run cut short is caught.
 
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -34,6 +35,8 @@ class Node {
     this.listeners = new Map()
     this.focused = 0
     this.text = ""
+    this.value = ""
+    this.maxLength = -1
     const node = this
     this.classList = { add: (c) => (node.className = `${node.className} ${c}`.trim()) }
     this.style = { setProperty: () => {} }
@@ -105,17 +108,26 @@ const makeDocument = () => {
   return { document, host }
 }
 
-/** A keydown on `node`, with what the handler reads. */
-const press = (node, key) => {
-  const event = { key, ctrlKey: false, metaKey: false, altKey: false, prevented: false }
-  event.preventDefault = () => (event.prevented = true)
-  node.dispatch("keydown", event)
-  return event
+/** An event of `type` with what the handlers read, and a record of preventDefault. */
+const event = (type, fields = {}) => {
+  const made = { type, ctrlKey: false, metaKey: false, altKey: false, isComposing: false, prevented: false, ...fields }
+  made.preventDefault = () => (made.prevented = true)
+  return made
 }
-const type = (node, line) => {
-  for (const key of line) {
-    press(node, key)
-  }
+/** A keydown of `key` on `node`. */
+const press = (node, key, fields = {}) => {
+  const made = event("keydown", { key, target: node, ...fields })
+  node.dispatch("keydown", made)
+  return made
+}
+/** Types `text` into the input `node`, as a soft keyboard does: its value changes, then an input event. */
+const typeIn = (node, text) => {
+  node.value += text
+  node.dispatch("input", event("input"))
+}
+/** Types `line` into `node`, then Enter. */
+const enter = (node, line) => {
+  typeIn(node, line)
   press(node, "Enter")
 }
 
@@ -169,11 +181,6 @@ const runSite = (load) => {
   run(document, window, class { observe() {} }, () => {}, Node, load)
   return { document, host, terminal: host.find("nish-hero__terminal") }
 }
-const keydown = (key, mods = {}) => {
-  const event = { key, ctrlKey: false, metaKey: false, altKey: false, prevented: false, ...mods }
-  event.preventDefault = () => (event.prevented = true)
-  return event
-}
 
 {
   // A shell that cannot be fetched.
@@ -182,35 +189,46 @@ const keydown = (key, mods = {}) => {
     asked.push(specifier)
     return Promise.reject(new Error("Failed to fetch dynamically imported module"))
   })
-  check("site.js builds a focusable hero terminal", hero.terminal?.attributes.tabindex === "0", hero.host.textContent)
-  check("site.js imports nothing before the terminal's first key", asked.length === 0, asked.join(", "))
-  const ctrl = keydown("r", { ctrlKey: true })
-  hero.terminal.dispatch("keydown", ctrl)
-  const tab = keydown("Tab")
-  hero.terminal.dispatch("keydown", tab)
-  check("the terminal leaves shortcuts and Tab alone, and imports nothing for them", !ctrl.prevented && !tab.prevented && asked.length === 0,
+  const input = hero.terminal?.find("nish-hero__input")
+  const a = input?.attributes ?? {}
+  check(
+    "site.js gives the hero terminal a text input a soft keyboard can type into",
+    input?.tag === "input" && a.autocapitalize === "off" && a.autocorrect === "off" && a.spellcheck === "false" &&
+      a.enterkeyhint === "go" && a["aria-label"] !== undefined,
+    JSON.stringify(a)
+  )
+  check("the terminal itself claims no role or focus of its own", hero.terminal?.attributes.role === undefined &&
+    hero.terminal?.attributes.tabindex === undefined, JSON.stringify(hero.terminal?.attributes))
+  hero.terminal.dispatch("click", event("click"))
+  check("a tap on the terminal focuses its input, inside the tap", input.focused === 1, input.focused)
+  check("site.js imports nothing before the input is used", asked.length === 0, asked.join(", "))
+  const ctrl = press(input, "r", { ctrlKey: true })
+  const tab = press(input, "Tab")
+  check("the input leaves shortcuts and Tab alone, and imports nothing for them", !ctrl.prevented && !tab.prevented && asked.length === 0,
     asked.join(", "))
-  const first = press(hero.terminal, "l")
-  press(hero.terminal, "s")
-  check("the first key asks for the shell once, and nothing else", first.prevented && asked.join(", ") === "/break/shell.mjs",
-    asked.join(", "))
+  typeIn(input, "l")
+  typeIn(input, "s")
+  check("the first input asks for the shell once, and nothing else", asked.join(", ") === "/break/shell.mjs", asked.join(", "))
   await settle()
-  press(hero.terminal, "l")
-  check("a key after a failed import asks for the shell again", asked.length === 2, asked.join(", "))
+  typeIn(input, "x")
+  check("an input after a failed import asks for the shell again", asked.length === 2, asked.join(", "))
 }
 
 {
-  // A shell that loads: site.js hands it the terminal, the keys typed while it
-  // loaded, and its own listener to take down.
+  // A shell that loads: site.js hands it the terminal, its input, the lines
+  // entered while it loaded, and its own listener to take down.
   const attached = []
-  const hero = runSite(() => Promise.resolve({ attach: (...args) => attached.push(args) }))
-  type(hero.terminal, "ls")
+  const hero = runSite(() => Promise.resolve({ attach: (...args) => attached.push([...args, [...args[2]]]) }))
+  const input = hero.terminal.find("nish-hero__input")
+  enter(input, "ls")
+  typeIn(input, "nish")
   await settle()
+  const [term, given, , first, lines] = attached[0] ?? []
   check(
-    "the loaded shell gets the terminal and every key typed while it loaded",
-    attached.length === 1 && attached[0][0] === hero.terminal && attached[0][1].join(",") === "l,s,Enter" &&
-      hero.terminal.listeners.get("keydown")?.includes(attached[0][2]),
-    JSON.stringify(attached.map((a) => a[1]))
+    "the loaded shell gets the terminal, its input, each line entered while it loaded, and site.js's listener",
+    attached.length === 1 && term === hero.terminal && given === input && lines.join("|") === "ls" && input.value === "nish" &&
+      input.listeners.get("input")?.includes(first) && input.listeners.get("keydown")?.includes(first),
+    JSON.stringify(attached.map((x) => x[4]))
   )
 }
 
@@ -220,14 +238,30 @@ const keydown = (key, mods = {}) => {
 const shellFile = path.join(root, "docs", "site", "break", "shell.mjs")
 const shell = fs.existsSync(shellFile) ? await import(pathToFileURL(shellFile).href) : null
 check("docs/site/break/shell.mjs is built", shell !== null, shellFile)
-const asks = (args, cwd) => spawnSync(nish, args, { cwd, encoding: "utf8" })
+// The compiler as build.mjs asks it: as a person at a terminal sees it, not an
+// agent, so whoever runs this gets the same answers.
+const person = (colour) => {
+  const env = { ...process.env, NISH_AGENT: "0" }
+  for (const name of ["CLAUDECODE", "GEMINI_CLI", "NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE"]) {
+    delete env[name]
+  }
+  return colour ? { ...env, FORCE_COLOR: "1" } : { ...env, NO_COLOR: "1" }
+}
+const asks = (args, cwd, env = person(false)) => spawnSync(nish, args, { cwd, env, encoding: "utf8" })
 {
-  // build.mjs names the guide as the package does, not by the path this checkout found it at.
   const help = asks(["--help"])
-  const wanted = help.stdout.replace(/\n$/, "").replace(/\S*\/docs\/AI\.md$/m, "docs/AI.md in the nish package")
+  const wanted = help.stdout.replace(/\n$/, "")
   check("the shell's nish --help is the compiler's", shell?.answer("nish --help") === wanted && help.status === 0,
     `${help.status}: ${help.stdout.slice(0, 80)}`)
-  check("the shell's help names no path on the machine that built it", !String(shell?.HELP).includes(root) && !/\/docs\/AI\.md/.test(String(shell?.HELP)))
+  // The game's intro breaks the help apart as the terminal game's does: the
+  // same text, in its colours (src/break.ts passes helpText(new Style(true, true), "")).
+  const helpTs = fs.readFileSync(path.join(root, "examples", "break-web", "help.ts"), "utf8")
+  const gameHelp = JSON.parse(/export const BREAK_HELP: string =\n  ("(?:[^"\\]|\\.)*")\n/.exec(helpTs)?.[1] ?? "null")
+  const coloured = asks(["--help"], undefined, person(true))
+  check("the game's help is the compiler's --help in its colours", gameHelp === coloured.stdout.replace(/\n$/, "") &&
+    gameHelp.includes("\u001b["), String(gameHelp).slice(0, 80))
+  const named = [root, "docs/AI.md", os.homedir()].filter((p) => [shell?.HELP, gameHelp].some((h) => String(h).includes(p)))
+  check("neither help names a path on the machine that built it", named.length === 0, named.join(", "))
   check("the shell's bare nish prints the same help", shell?.answer("nish") === shell?.HELP && shell?.HELP !== "")
   const version = asks(["--version"])
   check("the shell's nish --version is the compiler's", shell?.answer("nish --version") === version.stdout.replace(/\n$/, ""),
@@ -269,36 +303,58 @@ const asks = (args, cwd) => spawnSync(nish, args, { cwd, encoding: "utf8" })
       : Promise.resolve({ open: (how) => (opened.push(how), Promise.resolve()) })
   }
   hero = runSite(() =>
-    Promise.resolve({ attach: (term, keys, first) => source.attach(term, keys, first, { document: hero.document, load }) })
+    Promise.resolve({
+      attach: (term, input, lines, first) => source.attach(term, input, lines, first, { document: hero.document, load }),
+    })
   )
-  type(hero.terminal, "nish game")
+  const input = hero.terminal.find("nish-hero__input")
+  enter(input, "nish game")
+  typeIn(input, "l")
   await settle()
   const said = () => hero.host.find("nish-hero__said")?.textContent
-  check("keys typed while the shell loads are answered once it has", said() === `$ nish game\n${source.answer("nish game")}\n`, said())
-  check("the shell takes the terminal's keys in place of site.js", hero.terminal.listeners.get("keydown")?.length === 1,
-    hero.terminal.listeners.get("keydown")?.length)
-  type(hero.terminal, "ls")
-  check("the terminal prints the shell's answer", said() === `$ ls\n${source.answer("ls")}\n`, said())
-  type(hero.terminal, "x".repeat(50))
-  check("the terminal takes a line of at most 40 characters", said() === `$ ${"x".repeat(40)}\n${source.answer("x".repeat(40))}\n`, said())
-  type(hero.terminal, "nish break")
+  check("a line entered while the shell loads is answered once it has", said() === `$ nish game\n${source.answer("nish game")}\n`, said())
+  const typed = () => hero.host.find("nish-hero__caret")?.parent?.children.find((c) => c instanceof Node && c.tag === "span")?.textContent
+  check("what was typed while it loaded stays on the line", typed() === "l" && input.value === "l", `${typed()} ${input.value}`)
+  check("the shell takes the input's events in place of site.js",
+    input.listeners.get("input")?.length === 1 && input.listeners.get("keydown")?.length === 1, input.listeners.get("input")?.length)
+  check("the terminal stays still for good once the shell has it", hero.terminal.className.includes("nish-hero__terminal--live"),
+    hero.terminal.className)
+  const drawn = hero.host.find("nish-hero__caret")?.parent
+  check("a screen reader hears the answers, not the drawn copy of the line",
+    hero.host.find("nish-hero__said")?.attributes["aria-live"] === "polite" && drawn?.attributes["aria-hidden"] === "true" &&
+      hero.host.find("nish-hero__said")?.parent !== drawn)
+  typeIn(input, "s")
+  check("the line shows what is typed", typed() === "ls", typed())
+  const ls = press(input, "Enter")
+  check("the terminal prints the shell's answer and clears the line", said() === `$ ls\n${source.answer("ls")}\n` && input.value === "" &&
+    typed() === "" && ls.prevented, said())
+  const composing = press(input, "Enter", { isComposing: true })
+  check("an Enter that ends a composition runs nothing", !composing.prevented)
+  typeIn(input, "x".repeat(50))
+  check("the terminal takes a line of at most 40 characters", input.maxLength === 40 && input.value === "x".repeat(40) &&
+    typed() === "x".repeat(40), input.value.length)
+  press(input, "Enter")
+  enter(input, "nish break")
   await settle()
   await settle()
   check("a failed import of the game says why in the terminal", /nish break: Failed to fetch/.test(said()), said())
   fail = false
-  type(hero.terminal, "nish break")
+  enter(input, "nish break")
   await settle()
   await settle()
   check("after a failed import the terminal takes the command again and retries", games.length === 2, games.length)
-  check("the command opens the game with the terminal to return focus to", opened.length === 1 && opened[0].focus === hero.terminal,
+  check("the command opens the game with the input to return focus to", opened.length === 1 && opened[0].focus === input,
     opened.length)
   check("the terminal line clears once the game opens", said() === "", said())
   opened[0].say("boom")
   check("the game can say a line in the terminal", /\$ nish break\nboom/.test(said()), said())
-  const ctrl = keydown("r", { ctrlKey: true })
-  hero.terminal.dispatch("keydown", ctrl)
-  const tab = keydown("Tab")
-  hero.terminal.dispatch("keydown", tab)
+  enter(input, "nish break")
+  await settle()
+  await settle()
+  check("nish break again, once the game is shut, opens it again without a second import",
+    opened.length === 2 && games.length === 2, `${opened.length} ${games.length}`)
+  const ctrl = press(input, "r", { ctrlKey: true })
+  const tab = press(input, "Tab")
   check("the shell leaves shortcuts and Tab alone", !ctrl.prevented && !tab.prevented)
 }
 
@@ -316,8 +372,40 @@ const page = await import(pathToFileURL(path.join(root, "examples", "break-web",
   check("saved settings of the wrong length read as none", page.readSettings(storage) === null)
   page.writeSettings(storage, [0, 2, -1, 1, 1, 0, 1])
   check("settings round-trip through storage", JSON.stringify(page.readSettings(storage)) === "[0,2,-1,1,1,0,1]", store.get(page.STORE))
-  page.writeSettings({ setItem: () => { throw new Error("quota") } }, [0, 0, 0, 0, 0, 0, 0])
-  check("a storage that refuses a write is not an error", true)
+  // Each field one past its range, either way, and a fraction: another page on the origin may have written them.
+  const outside = [
+    [5, 0, 0, 0, 0, 0, 0],
+    [-1, 0, 0, 0, 0, 0, 0],
+    [0, 6, 0, 0, 0, 0, 0],
+    [0, 0, -2, 0, 0, 0, 0],
+    [0, 0, 4, 0, 0, 0, 0],
+    [0, 0, 0, 2, 0, 0, 0],
+    [0, 0, 0, 0, 2, 0, 0],
+    [0, 0, 0, 0, 0, -1, 0],
+    [0, 0, 0, 0, 0, 0, 2],
+    [0.5, 0, 0, 0, 0, 0, 0],
+  ].filter((words) => {
+    store.set(page.STORE, JSON.stringify(words))
+    return page.readSettings(storage) !== null
+  })
+  check("saved settings out of a field's range read as none", outside.length === 0, JSON.stringify(outside))
+  const edges = [
+    [4, 5, 3, 1, 1, 1, 1],
+    [0, 0, -1, 0, 0, 0, 0],
+  ].filter((words) => {
+    store.set(page.STORE, JSON.stringify(words))
+    return JSON.stringify(page.readSettings(storage)) !== JSON.stringify(words)
+  })
+  check("saved settings at each field's ends read back", edges.length === 0, JSON.stringify(edges))
+  store.set(page.STORE, "[0,2,-1,1,1,0,1]")
+  let threw = null
+  try {
+    page.writeSettings({ setItem: () => { throw new Error("quota") } }, [0, 0, 0, 0, 0, 0, 0])
+  } catch (e) {
+    threw = e
+  }
+  check("a storage that refuses a write is not an error", threw === null, threw)
+  check("a storage that refuses a read reads as none", page.readSettings({ getItem: () => { throw new Error("denied") } }) === null)
 }
 
 {
@@ -343,12 +431,113 @@ const page = await import(pathToFileURL(path.join(root, "examples", "break-web",
   check("a failed start hands focus back", focus.focused === 1, focus.focused)
 }
 
+/**
+ * Opens the overlay with a stand-in for startGame that resolves at once and
+ * keeps what it was handed, so a test can quit the game through the loader
+ * as the module would.
+ */
+const openFake = (document, extra = {}) => {
+  const focus = new Node("input")
+  const runs = []
+  const started = page.open({
+    focus,
+    say: () => {},
+    document,
+    storage: null,
+    wasm: new URL("file:///nowhere/game.wasm"),
+    loader: { load: async () => fakeGame() },
+    start: async (canvas, url, options) => {
+      runs.push({ canvas, url, options })
+    },
+    ...extra,
+  })
+  return { focus, runs, started }
+}
+/** A module with BREAK_LINK whose next step quits. */
+const fakeGame = () => {
+  const link = new Int32Array(10)
+  return {
+    layout: { BREAK_LINK: 0 },
+    views: () => ({ storage: { BREAK_LINK: link } }),
+    step: () => (link[0] = 1),
+  }
+}
+const overlays = (document) => [...document.body.all()].filter((n) => n.className === "nish-break")
+
+{
+  const { document } = makeDocument()
+  const first = openFake(document)
+  const second = openFake(document)
+  check("a second open while one runs returns the first's promise, with one overlay",
+    first.started === second.started && overlays(document).length === 1 && second.runs.length === 0, overlays(document).length)
+  await first.started
+  const [overlay] = overlays(document)
+  const run = first.runs[0]
+  check("the overlay is a modal dialog", overlay?.attributes.role === "dialog" && overlay?.attributes["aria-modal"] === "true",
+    JSON.stringify(overlay?.attributes))
+  const canvas = overlay.children.find((c) => c instanceof Node && c.tag === "canvas")
+  const close = overlay.children.find((c) => c instanceof Node && c.tag === "button")
+  const fromCanvas = press(overlay, "Tab", { target: canvas })
+  const fromClose = press(overlay, "Tab", { target: close, shiftKey: true })
+  check("Tab and Shift+Tab stay between the game and its close control",
+    fromCanvas.prevented && fromClose.prevented && close.focused === 1 && canvas.focused === 1, `${close.focused} ${canvas.focused}`)
+  const wheel = event("wheel")
+  overlay.dispatch("wheel", wheel)
+  const touch = event("touchmove")
+  overlay.dispatch("touchmove", touch)
+  check("a wheel or a drag over the game does not scroll the page", wheel.prevented && touch.prevented)
+  // The module asks to quit: Escape on its title.
+  const game = await run.options.loader.load(new Uint8Array(), {})
+  game.step(0)
+  check("quitting removes the overlay, stops the game and hands focus back",
+    overlays(document).length === 0 && run.options.signal.aborted && first.focus.focused === 1,
+    `${overlays(document).length} ${run.options.signal.aborted} ${first.focus.focused}`)
+  const again = openFake(document)
+  await again.started
+  check("opening again after a quit starts a fresh game", again.started !== first.started && again.runs.length === 1 &&
+    overlays(document).length === 1 && !again.runs[0].options.signal.aborted, overlays(document).length)
+  const button = overlays(document)[0]?.children.find((c) => c instanceof Node && c.tag === "button")
+  button?.dispatch("click", event("click"))
+  check("the close control removes the overlay, stops the game and hands focus back",
+    overlays(document).length === 0 && again.runs[0].options.signal.aborted && again.focus.focused === 1,
+    `${overlays(document).length} ${again.focus.focused}`)
+}
+
+{
+  // Reading localStorage can throw (storage blocked for the site): the game opens without saved settings.
+  const { document } = makeDocument()
+  const had = Object.getOwnPropertyDescriptor(globalThis, "localStorage")
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get: () => {
+      throw new Error("SecurityError: the operation is insecure")
+    },
+  })
+  let error = null
+  try {
+    const { started } = openFake(document, { storage: undefined })
+    await started
+  } catch (e) {
+    error = e
+  } finally {
+    if (had === undefined) {
+      delete globalThis.localStorage
+    } else {
+      Object.defineProperty(globalThis, "localStorage", had)
+    }
+  }
+  check("a localStorage that throws when read does not stop the game opening", error === null, error)
+  overlays(document)[0]?.children.find((c) => c instanceof Node && c.tag === "button")?.dispatch("click", event("click"))
+}
+
 // --- game.wasm: the built module plays as the terminal game does -------------
 // The committed module, loaded through break.mjs's linkLoader as the page loads
 // it, is driven with tests/link/break_core_wasm's script by writing key records
 // into GAME_INPUT as nish/page/game does. With the resolution setting at 270
-// lines both draw a 480x270 frame, so every checkpoint's hash must be the one
-// that test prints: the page runs the same game, not a lookalike.
+// lines both draw a 480x270 frame, so every checkpoint's hash after the intro
+// must be the one that test prints: the page runs the same game, not a
+// lookalike. The intro breaks apart the compiler's --help (help.ts), where that
+// test hands in a one-line stand-in, so its frame is the same size and differs.
 
 const built = path.join(root, "docs", "site", "break")
 {
@@ -416,7 +605,10 @@ const built = path.join(root, "docs", "site", "break")
   idle(20)
   step([[RIGHT, RELEASE]])
   seen["paddle right"] = frame()
-  for (const name of ["intro", "menu", "level", "paddle right"]) {
+  check("the built module's intro frame draws the compiler's help, not break_core_wasm's stand-in",
+    wanted.intro !== undefined && seen.intro.split(" ")[0] === wanted.intro.split(" ")[0] && seen.intro !== wanted.intro,
+    `${seen.intro} vs ${wanted.intro}`)
+  for (const name of ["menu", "level", "paddle right"]) {
     check(`the built module's ${name} frame is break_core_wasm's`, wanted[name] !== undefined && seen[name] === wanted[name],
       `${seen[name]} vs ${wanted[name]}`)
   }
@@ -462,6 +654,27 @@ const built = path.join(root, "docs", "site", "break")
   edited((m) => (m.help = "0".repeat(64)))
   const help = verify()
   check("--check fails once the compiler's --help drifts from the page's", help.status === 1 && /--help/.test(help.stderr), help.stderr)
+  fs.writeFileSync(manifestFile, committed)
+  const agent = spawnSync(process.execPath, [build, "--check", "--out", copy, "--nish", nish], {
+    encoding: "utf8",
+    env: { ...process.env, CLAUDECODE: "1", NISH_AGENT: "1", FORCE_COLOR: "1" },
+  })
+  check("--check asks the compiler as a person would, whoever runs it", agent.status === 0, agent.stderr)
+  const loaderFile = path.join(copy, "game.mjs")
+  const loader = fs.readFileSync(loaderFile)
+  fs.appendFileSync(loaderFile, "\n// edited\n")
+  const tampered = verify()
+  check("--check fails on a served file changed since the build",
+    tampered.status === 1 && /game\.mjs \(not the file this build wrote\)/.test(tampered.stderr), tampered.stderr)
+  fs.writeFileSync(loaderFile, loader)
+  const shellCopy = path.join(copy, "shell.mjs")
+  const shellText = fs.readFileSync(shellCopy, "utf8")
+  fs.writeFileSync(shellCopy, shellText.replace(/export const VERSION = "[^"]*"/, 'export const VERSION = "nish 0.0.0"'))
+  edited((m) => (m.outputs["shell.mjs"] = createHash("sha256").update(fs.readFileSync(shellCopy)).digest("hex")))
+  const answers = verify()
+  check("--check fails on a shell whose --version is not the compiler's, even with its hash recorded",
+    answers.status === 1 && /shell\.mjs \(its --help or --version is not the compiler's\)/.test(answers.stderr), answers.stderr)
+  fs.writeFileSync(shellCopy, shellText)
   fs.writeFileSync(manifestFile, committed)
   const memory = verify("--memory", "64")
   check("--check fails on another --memory", memory.status === 1 && /--memory \(32 → 64\)/.test(memory.stderr), memory.stderr)

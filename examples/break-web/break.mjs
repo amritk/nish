@@ -59,7 +59,27 @@ const KEYS = [
   "F9",
 ]
 
-/** The settings kept under STORE: seven whole numbers, or null when there are none or they are not that. */
+/**
+ * Each setting's least and greatest value, in BreakSettings' field order, as
+ * src/break-menu.ts's applySettingLine accepts them: fps and resolution index
+ * its FPS_CHOICE_COUNT (5) and RESOLUTION_CHOICE_COUNT (6) choices, graphics
+ * is -1 (automatic) to 3, and effects, smoothing, stats and sound are 0 or 1.
+ */
+const RANGES = [
+  [0, 4],
+  [0, 5],
+  [-1, 3],
+  [0, 1],
+  [0, 1],
+  [0, 1],
+  [0, 1],
+]
+
+/**
+ * The settings kept under STORE: seven whole numbers each in its RANGES, or
+ * null when there are none or they are not that. Another page on this origin
+ * can write the key, so nothing out of range reaches the game.
+ */
 export const readSettings = (storage) => {
   let words
   try {
@@ -67,7 +87,17 @@ export const readSettings = (storage) => {
   } catch {
     return null
   }
-  return Array.isArray(words) && words.length === FIELDS && words.every(Number.isInteger) ? words : null
+  const fits = (w, i) => Number.isInteger(w) && w >= RANGES[i][0] && w <= RANGES[i][1]
+  return Array.isArray(words) && words.length === FIELDS && words.every(fits) ? words : null
+}
+
+/** The page's localStorage, or null where reading it throws (storage blocked, an opaque origin). */
+const pageStorage = () => {
+  try {
+    return globalThis.localStorage ?? null
+  } catch {
+    return null
+  }
 }
 
 /** Keeps `words` under STORE; a storage that refuses (private mode, a full quota) keeps nothing. */
@@ -116,7 +146,7 @@ export const linkLoader = (loader, saved, onSave, onQuit) => ({
 })
 
 const css = `
-.nish-break{position:fixed;inset:0;z-index:2147483000;background:#000}
+.nish-break{position:fixed;inset:0;z-index:2147483000;background:#000;overscroll-behavior:contain;touch-action:none}
 .nish-break canvas{display:block;width:100%;height:100%;outline:none;touch-action:none}
 .nish-break button{position:absolute;top:.5rem;right:.5rem;width:2.25rem;height:2.25rem;border:0;border-radius:50%;
 background:#fff2;color:#fff;font:1.25rem/1 system-ui,sans-serif;cursor:pointer}
@@ -137,14 +167,16 @@ let current = null
  * @param options.storage - where settings are kept (localStorage)
  * @param options.wasm - the game module's URL (game.wasm beside this file)
  * @param options.loader - the module's generated loader (game.mjs beside this file)
+ * @param options.start - what runs it (nish/page/game's startGame); a test hands in its own
  */
 export const open = ({
   focus,
   say,
   document = globalThis.document,
-  storage = globalThis.localStorage,
+  storage = pageStorage(),
   wasm = new URL("game.wasm", import.meta.url),
   loader,
+  start = startGame,
 } = {}) => {
   if (current !== null) {
     return current.started
@@ -153,6 +185,7 @@ export const open = ({
   const overlay = document.createElement("div")
   overlay.className = "nish-break"
   overlay.setAttribute("role", "dialog")
+  overlay.setAttribute("aria-modal", "true")
   overlay.setAttribute("aria-label", "Game")
   const style = document.createElement("style")
   style.textContent = css
@@ -177,9 +210,26 @@ export const open = ({
     focus?.focus?.()
   }
   close.addEventListener("click", shut)
+  // Modal: Tab moves between the canvas and the close control only, and a
+  // wheel or a drag over the overlay cannot scroll the page beneath it.
+  const signal = controller.signal
+  overlay.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Tab") {
+        event.preventDefault()
+        const next = event.target === close ? canvas : close
+        next.focus()
+      }
+    },
+    { signal }
+  )
+  for (const type of ["wheel", "touchmove"]) {
+    overlay.addEventListener(type, (event) => event.preventDefault(), { passive: false, signal })
+  }
   me.started = (async () => {
     try {
-      await startGame(canvas, wasm.toString(), {
+      await start(canvas, wasm.toString(), {
         stepsPerSecond: STEPS_PER_SECOND,
         keys: KEYS,
         signal: controller.signal,
