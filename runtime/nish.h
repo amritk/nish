@@ -135,6 +135,13 @@ void nish_arena_release(uint64_t mark);
  * it) leaves the arena untouched and answers `p`. Compiled callers use it to
  * reclaim the temporaries a string-returning callee left behind. */
 void *nish_arena_keep(uint64_t mark, void *p);
+/* Root keep (WP55, wasm only, defined in runtime-wasm.c): after an export call
+ * that began at `mark`, keep what the `count` root storages in `roots` reach
+ * and compact the kept region when it outgrows them. A page module's
+ * `nish_root_keep(mark)` calls it with its `@nish.roots` table; the loader
+ * calls that in place of `nish_arena_release(mark)`. */
+struct nish_root;
+void nish_runtime_root_keep(uint64_t mark, const struct nish_root *const *roots, int32_t count);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t nish_arena_used(void);
 
