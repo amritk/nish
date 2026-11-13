@@ -123,6 +123,13 @@ check(
   imports.length === 1 && imports[0][1] === "(" && /\bconst url = "\/break\/break\.mjs"\s+opening \?\?= import\(url\)/.test(site),
   imports.map((m) => m[0]).join(", ")
 )
+// Nothing else reaches the game before it is asked for: no preload, no module
+// worker, no fetch of the bundle, and no word of its .wasm.
+check(
+  "site.js names the game nowhere but that import",
+  !/\.wasm\b|modulepreload|\bpreload\b|\bprefetch\b|\bfetch\(|\bWorker\(/.test(site) && site.split(/["'`]\/break\//).length === 2,
+  "site.js mentions .wasm, a preload, a fetch or a worker, or quotes a /break/ path twice"
+)
 
 // The hero's script ships on every docs page: the trigger may add under 1 KB
 // to it, gzipped. The baseline is site.js as it was before the trigger.
