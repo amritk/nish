@@ -244,10 +244,27 @@ it on the first step.
 the blocks it reached and the slots to rewrite in scratch above `off`, and
 sorts with a heapsort, so nothing in it recurses: "persist: chain keeps a
 200,000-node list through every compaction" traces one list 200,000 nodes
-long. The scratch is linear in the number of blocks, some 40 bytes a block,
-and a vector that grows hands its old copy back for reuse: that list, 2.2 MB
-live, peaks memory at 14.1 MB, which the next call's allocations reuse. A module that cannot grow
-memory for it panics `memory`, as an allocation would.
+long. The scratch is linear in the number of blocks and pointer slots, at
+worst about 220 bytes an object and 32 bytes a slot, and a vector that grows
+hands its old copy back for reuse: that list, 1.6 MB of live nodes (a
+2,213,360-byte kept heap with the static data and the nodes pushed since the
+last compaction), peaks memory at 14,090,240 bytes, 8.8× live, which the
+next call's allocations reuse; the test fails past 10× live or the worst-case
+bound. A module that cannot grow memory for it panics `memory`, as an
+allocation would, and the loader records that kind, not `trap`.
+
+**A keep that fails after the call returned kills the module and replaces
+the result.** `guardLoader` runs `nish_root_keep` in `finally`, after the
+export's result was read. If the keep panics or traps, the module is marked
+dead with the kind the panic import recorded (`memory` for scratch that
+cannot grow; `trap` only for a bare trap), and the error is thrown from that
+call in place of its result: the caller learns the module is dead from the
+call that killed it, not from the next one. The result is lost, which is
+right: whatever it described was computed by a module that is now dead.
+Pinned only as the loader's text ("persist: world's loader keeps the panic
+kind a failed keep recorded and only marks a bare trap"): making the keep
+fail at run time needs memory that grew for the call but cannot grow by the
+scratch's size, which no fixed `--memory` gives reliably.
 
 **An emptied arena empties the roots.** `nish_reset_arena` and
 `nish_free_arena` clear every root slot first, so no root is left pointing at
