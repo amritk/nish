@@ -237,10 +237,10 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
     } else {
       const source = write("limits.ts", LIMITS)
       const exe = path.join(dir, "limits")
-      const built = compile(source, path.join(dir, "limits") + ".ir" + path.sep, ["--link", exe])
+      const built = compile(source, path.join(dir, "limits.ir") + path.sep, ["--link", exe])
       const ran =
         built.status === 0
-          ? spawnSync("sh", ["-c", 'ulimit -Sn 123 && "$1"; ulimit -Sn; ulimit -Hn', "sh", exe], {
+          ? spawnSync("sh", ["-c", 'ulimit -Sn 123 && "$1" && ulimit -Sn && ulimit -Hn', "sh", exe], {
               encoding: "utf8",
             })
           : built
