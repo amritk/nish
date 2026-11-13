@@ -32,6 +32,17 @@ const fail = (message) => {
   process.stderr.write(`break-web: ${message}\n`)
   process.exit(1)
 }
+// The flags, and --check; anything else is refused, so a misspelt flag cannot
+// quietly build with a default.
+const FLAGS = ["--out", "--nish", "--memory"]
+for (let i = 2; i < process.argv.length; i += 1) {
+  const name = process.argv[i]
+  if (FLAGS.includes(name)) {
+    i += 1
+  } else if (name !== "--check") {
+    fail(`unknown argument ${name}; the flags are ${FLAGS.join(", ")} and --check`)
+  }
+}
 const flag = (name, fallback) => {
   const at = process.argv.indexOf(name)
   if (at < 0) {
@@ -56,13 +67,16 @@ const MANIFEST = "manifest.json"
 /** The runtime files the page needs, as they ship in the package. */
 const PAGE = ["page-game.mjs", "page-frame.mjs", "page.mjs"]
 
+/** What a build serves: the module, its loader, the page and the shell, and PAGE under nish/. */
+const SERVED = ["game.wasm", "game.mjs", "break.mjs", "shell.mjs", ...PAGE.map((f) => `nish/${f}`)]
+
 /**
  * Every source the module is built from: game.ts and each file it imports,
  * followed through relative and `nish/…` (std/) specifiers. `nish:` modules
  * are the compiler's own and move with its version.
  */
 const sources = () => {
-  const seen = new Set()
+  const seen = new Map()
   const visit = (file) => {
     if (seen.has(file)) {
       return
@@ -70,8 +84,8 @@ const sources = () => {
     if (!fs.existsSync(file)) {
       fail(`${path.relative(root, file)} is imported but does not exist`)
     }
-    seen.add(file)
     const text = fs.readFileSync(file, "utf8")
+    seen.set(file, text)
     for (const [, spec] of text.matchAll(/\bfrom\s+"([^"]+)"/g)) {
       if (spec.startsWith("nish/")) {
         visit(path.join(root, "std", `${spec.slice("nish/".length)}.ts`))
@@ -81,13 +95,17 @@ const sources = () => {
     }
   }
   visit(path.join(here, "game.ts"))
-  return [...seen]
+  return seen
 }
+
+/** `file` as the manifest names it: relative to the repository, with forward slashes. */
+const key = (file) => path.relative(root, file).split(path.sep).join("/")
 
 /** The inputs, relative to the repository, each with its hash, in a stable order. */
 const inputs = () => {
+  const read = sources()
   const files = [
-    ...sources(),
+    ...read.keys(),
     path.join(here, "break.mjs"),
     path.join(here, "build.mjs"),
     path.join(here, "shell.mjs"),
@@ -96,9 +114,9 @@ const inputs = () => {
     ...PAGE.map((f) => path.join(root, "runtime", f)),
   ]
   const hashes = {}
-  for (const file of files.map((f) => path.relative(root, f).split(path.sep).join("/")).sort()) {
-    hashes[file] = createHash("sha256")
-      .update(fs.readFileSync(path.join(root, file)))
+  for (const file of files.sort((a, b) => (key(a) < key(b) ? -1 : 1))) {
+    hashes[key(file)] = createHash("sha256")
+      .update(read.get(file) ?? fs.readFileSync(file))
       .digest("hex")
   }
   return hashes
@@ -161,7 +179,7 @@ if (checking) {
       changed.push(`${name}${why}`)
     }
   }
-  for (const name of ["game.wasm", "game.mjs", "break.mjs", "shell.mjs", ...PAGE.map((f) => `nish/${f}`)]) {
+  for (const name of SERVED) {
     if (!fs.existsSync(path.join(out, name))) {
       changed.push(`${path.relative(root, path.join(out, name))} (missing from the build)`)
     }
@@ -187,14 +205,11 @@ const inside = (dir, of) => {
 if (path.dirname(out) === out || inside(out, here) || inside(out, process.cwd()) || inside(out, root)) {
   fail(`--out ${out} holds the game, the repository or the working directory; name a directory of its own`)
 }
+// The top-level names a build leaves, and those it writes and removes.
 const written = new Set([
-  "game.wasm",
+  ...SERVED.map((name) => name.split("/")[0]),
   "game.wasm.sites.json",
-  "game.mjs",
   "game.d.ts",
-  "break.mjs",
-  "shell.mjs",
-  "nish",
   "ll",
   MANIFEST,
 ])

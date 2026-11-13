@@ -4,7 +4,7 @@
   "memory": "32",
   "inputs": {
     "examples/break-web/break.mjs": "20304e422f30a2699b435559ae81974a812b8abbbd19137eac03a7bf246e412c",
-    "examples/break-web/build.mjs": "96806f44743f3bd3930cc524998cd924afd3b68242880f11b7ef724ad4183565",
+    "examples/break-web/build.mjs": "c29266ba1f5895118ff2f7726495cdab98949907088a9fc85e82a9fc822d1243",
     "examples/break-web/game.ts": "585b66a578dc4dda34586169686226639b613c8fd62d8f57b81aaea561238f1e",
     "examples/break-web/shell.mjs": "4294f9edc87cae69d150485edb8e74ffb7486daa2cbd8926d92d269599f428b8",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
