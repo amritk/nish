@@ -803,8 +803,10 @@ class HmacSha256
 | --- | --- |
 | `new HmacSha256(key: u8[])` | Keys the computation. A key longer than 64 bytes is replaced by its SHA-256 (RFC 2104 §2), which is wiped once used (`hmacKeySha256`). |
 | `inner: Sha256` | H(K XOR ipad, …), fed the key block in the constructor and the message after. |
+| `innerDigest: u8[]` | Where `digestInto` puts the inner digest on its way into `outer`, so that it allocates nothing; zero except during that call, which wipes it. |
 | `outer: Sha256` | H(K XOR opad, …), fed the key block in the constructor and the inner digest last. |
-| `digest(): u8[]` | Ends the computation and wipes both hashers. |
+| `digest(): u8[]` | Ends the computation and wipes both hashers and the inner digest. The tag is the one allocation. |
+| `digestInto(out: u8[], at: i32): void` | Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and wipes both hashers and the inner digest, with nothing allocated. A window outside `out` panics before anything is written; so does a second `digest` or `digestInto`, in the inner hasher. |
 | `update(data: u8[], off: i32, len: i32): void` | Absorbs `data[off .. off + len)`; a window outside `data` panics in `Sha256.update`. |
 
 ### HmacSha256Scratch

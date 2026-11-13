@@ -138,7 +138,42 @@ const sha256IntoMatches = (key: u8[], data: u8[]): boolean => {
   byInto.update(data, from, toI32(data.length));
   const into: u8[] = new Array<u8>(32);
   byInto.digestInto(into, from);
-  return hexOf(into) == hexOf(byDigest.digest());
+  return hexOf(into) === hexOf(byDigest.digest());
+};
+
+/** A fresh 32-byte array that escapes, so it is allocated as a tag is. */
+const freshTag = (): u8[] => new Array<u8>(32);
+
+/** Arena bytes one escaping 32-byte array takes, the cost of a tag. */
+const tagCost = (): i64 => {
+  const before: i64 = Arena.used();
+  const tag: u8[] = freshTag();
+  const cost: i64 = Arena.used() - before;
+  tag[0] = toU8(1);
+  return cost;
+};
+
+/** Arena bytes `HmacSha256.digest` takes, keyed and fed before the count starts. */
+const digestCost = (key: u8[], data: u8[]): i64 => {
+  const from: i32 = 0;
+  const mac = new HmacSha256(key);
+  mac.update(data, from, toI32(data.length));
+  const before: i64 = Arena.used();
+  const tag: u8[] = mac.digest();
+  const cost: i64 = Arena.used() - before;
+  tag[0] = toU8(1);
+  return cost;
+};
+
+/** Arena bytes `HmacSha256.digestInto` takes, its tag array made before the count starts. */
+const digestIntoCost = (key: u8[], data: u8[]): i64 => {
+  const from: i32 = 0;
+  const mac = new HmacSha256(key);
+  mac.update(data, from, toI32(data.length));
+  const tag: u8[] = new Array<u8>(32);
+  const before: i64 = Arena.used();
+  mac.digestInto(tag, from);
+  return Arena.used() - before;
 };
 
 /** Whether every byte of `xs` is zero. */
@@ -451,9 +486,12 @@ export const hmacChecks = (): i32 => {
   const at: i32 = 1;
   into256.digestInto(window256, at);
   t.eqStr("HmacSha256.digestInto writes RFC 4231 test case 7's tag", hexOf(prefix(window256, 33)), "aa" + tag7Sha256);
-  t.ok("and leaves the byte after the window alone", window256[33] == toU8(0xaa));
+  t.ok("and leaves the byte after the window alone", window256[33] === toU8(0xaa));
   t.ok("and leaves both of HmacSha256's hashers zeroed", sha256Wiped(into256));
   t.ok("and leaves HmacSha256's inner-digest buffer zeroed", zeroBytes(into256.innerDigest));
+  const noBytes: i64 = 0;
+  t.eqI64("HmacSha256.digestInto allocates nothing", digestIntoCost(key6, data7), noBytes);
+  t.eqI64("HmacSha256.digest allocates only its tag", digestCost(key6, data7), tagCost());
   t.ok(
     "HmacSha256.digestInto matches digest on RFC 4231 test cases 1-7",
     sha256IntoMatches(key1, data1) &&

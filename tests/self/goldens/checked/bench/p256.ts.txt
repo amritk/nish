@@ -4200,6 +4200,7 @@ struct Sha256 (class) size=40 align=8 exported
   method update -> @nish.Sha256.update
   method copy -> @nish.Sha256.copy
   method digest -> @nish.Sha256.digest
+  method digestInto -> @nish.Sha256.digestInto
 function sha256Rotr(x: u32, n: u32): u32 -> @nish.sha256Rotr
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -4677,11 +4678,22 @@ function Sha256.copy(this: Sha256): Sha256 -> @nish.Sha256.copy [exported method
   local -1:16 i: i32 (let)
   callee +5:5 sha256CopyBytes -> @nish.sha256CopyBytes
 function Sha256.digest(this: Sha256): u8[] -> @nish.Sha256.digest [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Sha256.digestInto
+  calls: nish.Sha256.digestInto nish_panic
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#0
+  stackSites=0 stackLocals=0
+  local +0:11 out: u8[] (const)
+  local +1:11 from: i32 (const)
+  callee +2:5 Sha256.digestInto -> @nish.Sha256.digestInto
+function Sha256.digestInto(this: Sha256, out: u8[], at: i32): void -> @nish.Sha256.digestInto [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.sha256Compress nish_panic nish_panic_index nish_panic_overflow
   pointer this: size=40 writesThrough=true captured=false
+  pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -4:11 size: i32 (const)
   local +6:11 block: u8[] (const)
   local +7:11 blockEnd: i32 (const)
   local +8:11 fill: i32 (const)
@@ -4691,11 +4703,11 @@ function Sha256.digest(this: Sha256): u8[] -> @nish.Sha256.digest [exported meth
   local +19:11 bits: u64 (const)
   local +20:14 i: i32 (let)
   callee +23:5 sha256Compress -> @nish.sha256Compress
-  local +24:11 out: u8[] (const)
-  local +25:11 state: u32[] (const)
-  local +26:11 words: i32 (const)
-  local +27:14 i: i32 (let)
-  local +28:13 word: u32 (const)
+  local +24:11 state: u32[] (const)
+  local +25:11 words: i32 (const)
+  local +26:14 i: i32 (let)
+  local +27:13 word: u32 (const)
+  local +28:13 p: i32 (const)
 function sha256(data: u8[]): u8[] -> @nish.sha256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.update
