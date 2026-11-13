@@ -14,7 +14,8 @@ const p256SeamScalarFermat = (out: u32[], a: u32[]): void => {
   const e: u32[] = p256Order()
   e[0] = e[0] - 2
   const acc: u32[] = p256Limbs()
-  p256FiatScalarSetOne(acc)
+  // One in the Montgomery domain: 2^256 mod n, least significant limb first.
+  p256SetLimbs(acc, 0x39cdaaf, 0xc46353d, 0x58e8617b, 0x43190552, 0x0, 0x0, 0xffffffff, 0x0)
   for (let bit: i32 = 255; bit >= 0; bit--) {
     p256FiatScalarMul(acc, acc, acc)
     const word: u32 = e[bit / 32]

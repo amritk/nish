@@ -3552,21 +3552,6 @@ const p256FiatScalarAdd = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   out1[7] = x42
 }
 
-/** fiat's `fiat_p256_scalar_set_one`: returns the field element one in the Montgomery domain. */
-const p256FiatScalarSetOne = (out1: u32[]): void => {
-  if (toI32(out1.length) < 8) {
-    return
-  }
-  out1[0] = 0x39cdaaf
-  out1[1] = 0xc46353d
-  out1[2] = 0x58e8617b
-  out1[3] = 0x43190552
-  out1[4] = 0x0
-  out1[5] = 0x0
-  out1[6] = 0xffffffff
-  out1[7] = 0x0
-}
-
 /** The eight limbs `l0` (least significant) to `l7` written into `out`. */
 const p256SetLimbs = (
   out: u32[],
