@@ -19,6 +19,7 @@ import arenaLoopFindings from "./escape" -> function @arenaLoopFindings
 import explainMemory from "./escape" -> function @explainMemory
 import keptMemoryFindings from "./escape" -> function @keptMemoryFindings
 import loopReachedFunctions from "./escape" -> function @loopReachedFunctions
+import mayKeepMemory from "./escape" -> function @mayKeepMemory
 import MemoryReport from "./escape" -> struct MemoryReport
 import portabilityFindings from "./portability" -> function @portabilityFindings
 import liftScript from "./script" -> function @liftScript
@@ -1616,22 +1617,25 @@ function Compilation.checkScopes(this: Compilation, facts: FactsTable): void -> 
 function Compilation.reportArenaLoops(this: Compilation): void -> @Compilation.reportArenaLoops [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
-  calls: Compilation.analyze Compilation.inRootPackage DiagnosticSink.reportPerformance arenaLoopFindings keptMemoryFindings loopReachedFunctions
+  calls: Compilation.analyze Compilation.inRootPackage DiagnosticSink.reportPerformance arenaLoopFindings keptMemoryFindings loopReachedFunctions mayKeepMemory nish_array_grow
   pointer this: size=208 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.inRootPackage#0
-  stackSites=0 stackLocals=0
+  stackSites=1 stackLocals=1
   local +0:11 facts: FactsTable (const)
   callee +0:19 Compilation.analyze -> @Compilation.analyze
   local +1:16 unit: AnalysisUnit (const)
   local +2:18 finding: ArenaFinding (const)
   callee +2:29 arenaLoopFindings -> @arenaLoopFindings
   callee +3:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
-  local +11:11 reached: StringSet (const)
-  callee +11:21 loopReachedFunctions -> @loopReachedFunctions
+  local +11:11 roots: AnalysisUnit[] (const)
   local +12:16 unit: AnalysisUnit (const)
-  callee +13:12 Compilation.inRootPackage -> @Compilation.inRootPackage
-  local +16:18 finding: ArenaFinding (const)
-  callee +16:29 keptMemoryFindings -> @keptMemoryFindings
-  callee +17:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  callee +13:11 Compilation.inRootPackage -> @Compilation.inRootPackage
+  callee +17:10 mayKeepMemory -> @mayKeepMemory
+  local +20:11 reached: StringSet (const)
+  callee +20:21 loopReachedFunctions -> @loopReachedFunctions
+  local +21:16 unit: AnalysisUnit (const)
+  local +22:18 finding: ArenaFinding (const)
+  callee +22:29 keptMemoryFindings -> @keptMemoryFindings
+  callee +23:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
 function Compilation.reportPortability(this: Compilation): void -> @Compilation.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via portabilityFindings
