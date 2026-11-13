@@ -1,0 +1,2 @@
+`--deny-retention` refuses this NL9018 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more
+`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing

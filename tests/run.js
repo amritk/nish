@@ -5579,6 +5579,27 @@ if (!only || "performance".includes(only)) {
     passDrop.stderr
   )
 
+  // NL9018: a function that keeps an allocation on every call, run on every
+  // pass of a loop that releases nothing. Each of the three is named at its
+  // declaration; `fixed` keeps nothing, and `outer`, which runs `relabel`,
+  // returns a number, so its own scope releases what `relabel` kept.
+  const kept = compile("perf_kept_memory", "perf_kept_memory_report.ll")
+  const keptLines = summaries(kept.stderr)
+  check(
+    "performance: a function that keeps an allocation per call and runs on every unreleased pass of a loop warns at its declaration",
+    kept.status === 0 &&
+      keptLines.length === 3 &&
+      positions(keptLines) === "9:1,17:1,23:1" &&
+      keptLines[0].includes(
+        "`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so " +
+          "the memory it keeps grows with every pass: the first allocation it holds is on line 12, where this " +
+          "analysis does not prove it dead when the function returns"
+      ) &&
+      keptLines[1].includes("`choose` keeps an allocation on every call") &&
+      keptLines[2].includes("`parts` keeps an allocation on every call"),
+    kept.stderr
+  )
+
   // The arithmetic rules. These are not advice about speed: each one is a
   // program that does not compute what it was written to compute, and the
   // message has to name the rewrite all the same.
@@ -5773,6 +5794,10 @@ if (!only || "performance".includes(only)) {
     // a local of the pass, an assignment of no allocation and a loop that runs
     // once: none of them drops a value on every pass, so NL9016 is silent.
     "perf_arena_pass_quiet",
+    // A function that keeps nothing past its call, one whose arena block
+    // releases it, and one run only where each pass or block releases it:
+    // NL9018 is silent on each.
+    "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that

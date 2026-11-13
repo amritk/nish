@@ -105,6 +105,32 @@ needs it, or keep numbers across passes and build the string once after the
 loop. Building a string up with `s = s + t` in a loop is the same problem and
 has its own warning.
 
+A function a loop calls on every pass can keep memory the same way. When a
+function assigns a `let` a second string, as `relabel` does below, the
+compiler cannot prove the first one dead when it returns, so the function
+keeps what it allocated on every call:
+
+```ts
+const relabel = (n: i32): i32 => {   // warning: keeps an allocation on every call
+  let s = "none";
+  if (n > 2) {
+    s = `b${n}`;
+  }
+  return s.length;
+};
+
+const names: string[] = [];
+for (let i = 0; i < 1000000; i++) {
+  names.push(`${relabel(i)}`);
+}
+```
+
+The warning (NL9018) names the function and the line it keeps. Give each
+value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
+block with `using a = arena()` around the work. A loop whose passes are
+released already, because nothing a pass makes outlives it, takes back what
+the call kept, so that one does not warn.
+
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:
 

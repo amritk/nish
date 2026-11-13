@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 923
+export const RULE_COUNT: i32 = 924
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1893,6 +1893,8 @@ const performanceRules = (): string[] => [
   "NL9014",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
+  "keeps an allocation on every call and runs on every pass of a loop that releases nothing",
+  "NL9018",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",
@@ -1903,8 +1905,6 @@ const performanceRules = (): string[] => [
   "NL9010",
   "leaves arena memory behind on every pass of this loop",
   "NL9011",
-  "keeps an allocation on every call and runs on every pass of a loop that releases nothing",
-  "NL9018",
   "already holds an allocation and this one drops it",
   "NL9003",
   "is computed in i32 and can overflow it before",
