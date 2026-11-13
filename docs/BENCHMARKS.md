@@ -1829,7 +1829,7 @@ The explicit entry's Ir is lower than the 5,411 (`plaintext`) and 6,588 (`json`)
      165.1  nish.http1TakeLine
 ```
 
-**From here on the gate is read against this section**: a fix's before is these tables, re-run with the same commands and durations, and its Ir per request is set against the 4,814 and 7,848 (`plaintext`) and 5,962 and 9,276 (`json`) above.
+**Until stage 6's re-measurement after task recycling ([below](#techempower-the-gate-after-task-recycling-wp49-stage-6)), the gate was read against this section**: a fix's before is these tables, re-run with the same commands and durations, and its Ir per request is set against the 4,814 and 7,848 (`plaintext`) and 5,962 and 9,276 (`json`) above.
 
 ## TechEmpower: the gate after task recycling (WP49 stage 6)
 
@@ -1839,7 +1839,7 @@ This re-runs the gate on `main` after two changes.
 
 The changes are library and runtime changes that serve every `nish:async` and `serve` program; nothing in `bench/techempower/` moved. Two other candidates were measured and not landed, because what a user would gain does not pay for them:
 - **Reading the request in place:** `serveTask` would hand `handle` the connection slot's buffers in place of a copy. The language's task-memory rule refuses this: `handle` may grow what it is given. The copy it would save costs about 330 Ir per request.
-- **A fixed-path table in `Router`:** callgrind, Ir per match.
+- **A fixed-path table in `Router`:** callgrind (valgrind 3.22.0), Ir per match.
   - On `examples/http-app`'s routes: 506 → 491 for `/health`, unchanged for `/notes/17`.
   - On a 44-route router: 591 → 491 and 909 → 765 for fixed paths, unchanged for paths with parameters, and 527 → 570 for a 404.
 
@@ -1858,6 +1858,8 @@ Every test ran the default 3 rounds of 10 s. So `/json` and the database tests a
 
 **Outcome: the gate is not met.** Four of the six cells #1468 and #1402 judge are outside the band:
 
+The judged set is the six cells #1468 lists, narrower than the earlier sections' eleven: the cells the explicit entry's issue tracks, not every cell `run.sh` prints. `run.sh` also prints `/json` at 16, 64 and 256 as outside (−8.4%, −3.2%, −10.6%, in the tables below); they are recorded and not judged, as are `/plaintext` at 16,384, `/db` at 16 and 256, and the other database tests.
+
 | test | connections | band | async vs entry | verdict | the baseline |
 | --- | ---: | ---: | ---: | --- | ---: |
 | `/plaintext` | 256 | 1.3% | −34.5% | outside | −27.6% |
@@ -1872,7 +1874,7 @@ Reading the rounds:
 - **`/plaintext`:** every async round is below every explicit round, at all three connection counts. For example, at 256 connections the async entry gave 1,122,886 to 1,131,320 req/s, and `entry` and `entry-copy` gave 1,626,321 to 1,730,805. The cells are outside however the band is read. #1457 builds the head once per tick for both entries, so it does not narrow the gap. At 4,096 connections the delta moved from −31.3% to −25.7%, and at 256 it moved from −27.6% to −34.5%, so this run does not show a trend.
 - **`/json` at 128:** the async entry gave 182,829 to 185,514 req/s, inside the explicit rounds' 170,948 to 192,047. The cell is inside on its rounds as well as on its median.
 - **`/json` at 512:** `entry` is bimodal (166,056, 215,934 and 217,296 req/s). The async entry's best round, 181,014, is below every `entry-copy` round (191,532 to 218,709). The cell is outside.
-- **`/db` at 64:** this cell also has one low explicit round, `db-entry`'s first, at 22,253 against 108,106 and 113,153. That widens the band to 7.9%. The async entry's rounds, 112,066 to 119,750, are inside the range of the other five explicit rounds (106,555 to 119,548), so the cell is inside whichever way it is read. `/db` at 16 is bimodal again and is not judged.
+- **`/db` at 64:** this cell also has one low explicit round, `db-entry`'s first, at 22,253 against 108,106 and 113,153. That widens the band to 7.9%. The async entry's rounds, 112,066 to 119,750, overlap the range of the other five explicit rounds (106,555 to 119,548), and its lowest round is above their lowest, so the cell is inside whichever way it is read. `/db` at 16 is bimodal again and is not judged.
 
 ### /plaintext, req/s, median (min) of 3 rounds of 10 s, after task recycling
 
