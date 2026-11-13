@@ -3982,12 +3982,13 @@ export class Compilation {
       }
       let v = 0
       while (v < values.length) {
+        const value = values[v]
         if (v >= granted) {
-          cli.push(`/${values[v]}`)
-        } else if (execs.indexOf(values[v]) >= 0) {
-          cli.push(`//${values[v]}`)
+          cli.push(`/${value}`)
+        } else if (execs.indexOf(value) >= 0) {
+          cli.push(`//${value}`)
         } else {
-          cli.push(values[v])
+          cli.push(value)
         }
         v = v + 1
       }

@@ -2042,41 +2042,42 @@ function Compilation.narrowSandbox(this: Compilation, facts: FactsTable): void -
   pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 functionIndex#0 rootReach#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=functionIndex#1 rootReach#1
   stackSites=3 stackLocals=2
-  local -87:11 caps: i32 (const)
-  callee -86:23 capabilityIndex -> @capabilityIndex
-  callee -86:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
-  local -83:11 reach: DependencyReach (const)
-  callee -83:19 dependencyPackages -> @dependencyPackages
-  local -79:11 index: FunctionIndex (const)
-  callee -79:19 functionIndex -> @functionIndex
-  callee -78:5 dependencyMasks -> @dependencyMasks
-  local -77:11 root: i32 (const)
-  callee -77:18 rootReach -> @rootReach
-  local -76:16 c: i32 (const)
+  local -88:11 caps: i32 (const)
+  callee -87:23 capabilityIndex -> @capabilityIndex
+  callee -87:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
+  local -84:11 reach: DependencyReach (const)
+  callee -84:19 dependencyPackages -> @dependencyPackages
+  local -80:11 index: FunctionIndex (const)
+  callee -80:19 functionIndex -> @functionIndex
+  callee -79:5 dependencyMasks -> @dependencyMasks
+  local -78:11 root: i32 (const)
+  callee -78:18 rootReach -> @rootReach
+  local -77:16 c: i32 (const)
+  callee -76:7 capabilityIndex -> @capabilityIndex
   callee -75:7 capabilityIndex -> @capabilityIndex
   callee -74:7 capabilityIndex -> @capabilityIndex
-  callee -73:7 capabilityIndex -> @capabilityIndex
-  local -71:13 bit: i32 (const)
-  local -70:11 cli: string[] (let)
-  callee -69:17 capabilityIndex -> @capabilityIndex
-  callee -67:24 capabilityIndex -> @capabilityIndex
-  local -61:13 values: string[] (const)
-  local -60:13 execs: string[] (const)
-  local -59:11 reached: boolean (let)
-  local -58:11 scoped: boolean (let)
-  local -57:11 p: i32 (let)
-  local -51:17 g: i32 (const)
-  local -50:15 named: boolean (let)
-  local -48:17 j: i32 (let)
-  callee -39:17 addOnce -> @addOnce
-  callee -37:19 addOnce -> @addOnce
-  local -14:13 granted: i32 (const)
-  callee -13:17 capabilityIndex -> @capabilityIndex
-  local -12:13 k: i32 (let)
-  local -10:17 interpreter: string | null (const)
-  callee -10:31 programInterpreter -> @programInterpreter
-  callee -8:13 addOnce -> @addOnce
-  local -3:11 v: i32 (let)
+  local -72:13 bit: i32 (const)
+  local -71:11 cli: string[] (let)
+  callee -70:17 capabilityIndex -> @capabilityIndex
+  callee -68:24 capabilityIndex -> @capabilityIndex
+  local -62:13 values: string[] (const)
+  local -61:13 execs: string[] (const)
+  local -60:11 reached: boolean (let)
+  local -59:11 scoped: boolean (let)
+  local -58:11 p: i32 (let)
+  local -52:17 g: i32 (const)
+  local -51:15 named: boolean (let)
+  local -49:17 j: i32 (let)
+  callee -40:17 addOnce -> @addOnce
+  callee -38:19 addOnce -> @addOnce
+  local -15:13 granted: i32 (const)
+  callee -14:17 capabilityIndex -> @capabilityIndex
+  local -13:13 k: i32 (let)
+  local -11:17 interpreter: string | null (const)
+  callee -11:31 programInterpreter -> @programInterpreter
+  callee -9:13 addOnce -> @addOnce
+  local -4:11 v: i32 (let)
+  local -2:15 value: string (const)
 function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.emit [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
