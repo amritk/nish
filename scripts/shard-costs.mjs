@@ -32,7 +32,8 @@
  * - a section is found in the one shard that ran it (every other shard's log
  *   delegates it by name) by the name of a check it prints (`RECOGNIZERS`). A
  *   section before the link programs is the gap from the line before its first
- *   check to its last one; one after them runs until the next section that
+ *   check to its last one, looked for after the golden cases' checks (from
+ *   `PRE_LINK_STARTS`); one after them runs until the next section that
  *   shard ran starts, or its summary.
  * - `shardOne` is what only shard 1 runs: from its first check after the
  *   dealt sections to its summary, plus its job's steps after the suite. A
@@ -175,7 +176,28 @@ const RECOGNIZERS = {
   releaseChecks: /^runtime\/nish\.d\.ts type-checks/,
   cSymbols: /^c-symbols:/,
   runCache: /^module cache:/,
+  osHost: /^(os_[a-z_]+|waitPid): /,
+  term: /^(term_(calls|import|pty|restore)|caps_tty): (?!(under )?the `--profile wasi`)/,
+  termWasi: /^term_\w+: (under )?the `--profile wasi`/,
+  netTcp: /^net_tcp(_echo|_calls)?: /,
+  netUnix: /^net_unix: /,
+  netMss: /^net_mss: /,
+  fileWasi: /^(file_\w+|mem_file_stream_flat): the `--profile wasi`/,
+  fnref: /^fnref/,
+  netTlsTcp: /^net_tls_tcp: /,
+  http2: /^net_http2_cleartext: /,
+  tlsClient: /^net_tls_client_tcp: /,
+  diagnostics: /^(diagnostics|codes|union_scale|security-scope|dbg_locals|-g|objdump)[: ]/,
+  performance: /^(performance|mem_loop_scope|perf_bounds_toi32_user)[: ]/,
+  memAwfy: /^mem_awfy: /,
+  fix: /^fix /,
 }
+/**
+ * The check after the golden cases' own: a section before the link programs
+ * is looked for from here on, since the cases' checks carry the same names
+ * as some sections' (`os_now_i32: IR matches golden` against `os_host`'s).
+ */
+const PRE_LINK_STARTS = /^native run limit: /
 /** Shard 1's first check after every dealt section: where `shardOne` starts. */
 const SHARD_ONE_STARTS = /^every program LINK_READ_LATER keeps in shard 1/
 
@@ -320,8 +342,12 @@ const measureShard = (lines, shard, shards, linkCount) => {
     out.link[p.name] = (out.link[p.name] ?? 0) + Math.max(0, lines[p.end].t - prev)
     prev = lines[p.end].t
   }
+  const preLink = find(PRE_LINK_STARTS, 0, linkStart)
+  if (preLink < 0) {
+    fail(`shard ${shard}/${shards} prints nothing ${PRE_LINK_STARTS} matches before its link programs`)
+  }
   for (const s of owned.filter((o) => o.beforeLink)) {
-    const first = find(RECOGNIZERS[s.key], 0, linkStart)
+    const first = find(RECOGNIZERS[s.key], preLink, linkStart)
     if (first < 0) {
       fail(
         `shard ${shard}/${shards} ran ${s.key} but prints nothing ${RECOGNIZERS[s.key]} matches before its link programs`
