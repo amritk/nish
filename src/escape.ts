@@ -3261,13 +3261,19 @@ const collectPassCalls = (
     free = free || (node.kind === NodeKind.Block && isArenaUsing(program, child))
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
-    if (!isLoop || once) {
-      collectPassCalls(program, table, f, child, inLoop, free, reached, work)
-    } else {
-      // The condition and the update run outside the bracket the body takes.
-      const scoped = scope !== null && scope.scoped && child === scope.body
-      collectPassCalls(program, table, f, child, true, released || scoped, reached, work)
-    }
+    const pass = isLoop && !once
+    // The condition and the update run outside the bracket the body takes.
+    const scoped = pass && scope !== null && scope.scoped && child === scope.body
+    collectPassCalls(
+      program,
+      table,
+      f,
+      child,
+      inLoop || pass,
+      pass ? released || scoped : free,
+      reached,
+      work
+    )
     i = i + 1
   }
 }
@@ -3281,7 +3287,8 @@ const collectPassCalls = (
  * calls `Arena.mark`, files a task or fills a parameter keeps its memory on
  * purpose, and one refused its scope for another reason is `--explain-memory`'s
  * to explain: the rewrites named here would not give it one. A generic
- * function warns once, at its template.
+ * function warns once, at its template. The caller asks `mayKeepMemory`
+ * first, which also answers no when elision is off.
  */
 export const keptMemoryFindings = (
   unit: AnalysisUnit,
@@ -3291,17 +3298,17 @@ export const keptMemoryFindings = (
 ): ArenaFinding[] => {
   const out: ArenaFinding[] = []
   const program = unit.program
-  const said: Node[] = []
+  // The declarations already warned at, by node id: instances share their template's.
+  const said = new StringSet()
   for (const sig of program.functions) {
     const f = facts.get(sig.name)
     const body = sig.body()
     if (
-      facts.noElision ||
       !sig.definedIn(program.source) ||
       f === null ||
       body === null ||
       !reached.has(sig.name) ||
-      holdsNode(said, sig.decl)
+      said.has(`${sig.decl.id}`)
     ) {
       continue
     }
@@ -3314,7 +3321,7 @@ export const keptMemoryFindings = (
       program.leaveInstance()
     }
     if (held !== null) {
-      said.push(sig.decl)
+      said.add(`${sig.decl.id}`)
       out.push(
         new ArenaFinding(
           sig.decl,
@@ -3355,11 +3362,21 @@ const keptOwnAllocation = (
   return ownLeakNode(facts, f)
 }
 
-/** Whether `list` holds `node`. */
-const holdsNode = (list: Node[], node: Node): boolean => {
-  for (const n of list) {
-    if (n === node) {
-      return true
+/**
+ * Whether NL9018 could warn in any of `units` at all: some function there may
+ * keep an allocation of its own. When none can, the whole-program walk of
+ * `loopReachedFunctions` is skipped; with elision off, nothing is kept.
+ */
+export const mayKeepMemory = (units: AnalysisUnit[], facts: FactsTable): boolean => {
+  if (facts.noElision) {
+    return false
+  }
+  for (const unit of units) {
+    for (const sig of unit.program.functions) {
+      const f = facts.get(sig.name)
+      if (f !== null && f.leaksItself && !f.arenaScope && sig.definedIn(unit.program.source)) {
+        return true
+      }
     }
   }
   return false

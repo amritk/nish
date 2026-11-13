@@ -59,6 +59,7 @@ import {
   explainMemory,
   keptMemoryFindings,
   loopReachedFunctions,
+  mayKeepMemory,
   MemoryReport,
 } from "./escape"
 import { portabilityFindings } from "./portability"
@@ -3060,11 +3061,17 @@ export class Compilation {
         )
       }
     }
-    const reached = loopReachedFunctions(this.analysisUnits, this.table, facts)
+    const roots: AnalysisUnit[] = []
     for (const unit of this.analysisUnits) {
-      if (!this.inRootPackage(unit.program.source)) {
-        continue
+      if (this.inRootPackage(unit.program.source)) {
+        roots.push(unit)
       }
+    }
+    if (!mayKeepMemory(roots, facts)) {
+      return
+    }
+    const reached = loopReachedFunctions(this.analysisUnits, this.table, facts)
+    for (const unit of roots) {
       for (const finding of keptMemoryFindings(unit, this.table, facts, reached)) {
         this.sink.reportPerformance(
           unit.program.source,
