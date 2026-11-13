@@ -805,20 +805,22 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  *
  * The parameter is `CPtr`, so an unnarrowed `CPtr | null` is refused (``
  * `readCString` expects an argument of type CPtr, got CPtr | null ``) and `if
- * (p !== null)` comes first; a `declare function` whose result is declared
- * `CPtr` gets no check, so declare a result that may be `NULL` as `CPtr |
- * null`.
+ * (p !== null)` comes first. A `declare function` declared to answer `CPtr`
+ * may still answer `NULL`, so the call tests `p` first and panics with
+ * `ffi-null` on `NULL` (`` `readCString` read a NULL pointer ``, exit 1), as
+ * `readStruct` does; declare a result that may be `NULL` as `CPtr | null`.
  *
  * The copy is new on every call and is the calling function's allocation, and
  * it is refused inside a `using a = arena()` block that would release one held
  * outside it (`` `readCString(p)` may be allocated inside the `using arena()`
- * block ``). Under `--deny-panics` it is an allowed `unchecked` site, with the
- * copy's `oom` beside it, and the pointer it reads is `ffi`. It lowers the same
+ * block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+ * proof removes, so the scope refuses the call (the copy's `oom` beside it is
+ * allowed), and the pointer it reads is `ffi`. It lowers the same
  * on wasm32, where whether the program links is the `declare function`'s
  * question. It has no Node form, as a `CPtr` comes only from a `declare
  * function`, which Node cannot call. Capability: unsafe.
  *
- * @param p the address a `declare function` handed back.
+ * @param p the address a `declare function` handed back; `NULL` panics.
  * @returns a copy of the bytes before the first `NUL`.
  */
 declare function readCString(p: CPtr): string;
@@ -3539,11 +3541,11 @@ declare module "nish:net" {
  * `i64`. A program that stays in range prints the same as natively.
  *
  * **The no-panic scope.** Under `--deny-panics` or `"nish".noPanic`,
- * `uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
- * sites, because the import has already said that an index out of range is
- * the author's to rule out. `readStruct` is not: it tests its pointer and
+ * `uncheckedGet` and `uncheckedSet` are allowed `unchecked` sites, because
+ * the import has already said that an index out of range is the author's to
+ * rule out. `readCString` and `readStruct` are not: each tests its pointer and
  * panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
- * refuses it. The wrapping three are not sites at all: they are defined for
+ * refuses them. The wrapping three are not sites at all: they are defined for
  * every pair.
  *
  * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
@@ -3607,10 +3609,11 @@ declare module "nish:unsafe" {
   /**
    * The `NUL`-terminated bytes at `p`, copied into a new string by
    * `@nish.ffi.str`, the scan-and-copy a `string` result of a
-   * `declare function` uses. It reads and allocates, and is native only.
+   * `declare function` uses, after a `NULL` test that panics with
+   * `ffi-null`. It reads and allocates, and is native only.
    *
-   * @param p A pointer from a `declare function`. Undefined behaviour unless
-   *   it points at a live C string.
+   * @param p A pointer from a `declare function`; `NULL` panics. Undefined
+   *   behaviour unless it points at a live C string.
    * @returns A copy of the bytes before the `NUL`; C keeps its buffer.
    */
   export function readCString(p: CPtr): string;
