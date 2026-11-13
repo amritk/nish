@@ -32,6 +32,15 @@
 // `p256ScalarMult` calls and an addition, on u1 and u2 of n - 1, n - 2, the
 // all-ones-top n - 2^k and random scalars, and on a sum that is the identity.
 //
+// Last, the field arithmetic itself (K5's 64-bit limbs): `p256FiatMul`,
+// `p256FiatSquare`, `p256FiatAdd` and `p256FiatSub`, which run on four `u64`
+// limbs with the high half of each 64 x 64 product and every carry and
+// borrow computed in plain `u64` arithmetic, against a bit-serial Montgomery
+// reference over nine 32-bit limbs that shares none of their code. The
+// operands are 0, 1, 2, p - 1, p - 2, (p + 1) / 2, every 2^k and 2^k - 1,
+// p - 2^(32 j), every byte repeated, each against a short list of partners
+// that sets every carry chain, and 2,000 random pairs.
+//
 // Every safegcd output is folded into one checksum, so equal lines mean equal
 // bytes. `tests/run.js` runs it natively and as a `--profile wasi` module
 // under Node.
@@ -40,6 +49,8 @@ import {
   p256SeamDoubleMultReference,
   p256SeamFieldInverse,
   p256SeamFieldInvert,
+  p256SeamFieldOp,
+  p256SeamFieldOpReference,
   p256SeamInverse,
   p256SeamInvert,
 } from "./p256"
@@ -158,6 +169,37 @@ const agreeSum = (hash: u64[], tally: Tally, name: string, u1: u8[], u2: u8[], k
   }
 }
 
+/** A field op's name, by `p256SeamFieldOp`'s number. */
+const opName = (op: i32): string => {
+  if (op === 0) {
+    return "mul"
+  }
+  if (op === 1) {
+    return "square"
+  }
+  return op === 2 ? "add" : "sub"
+}
+
+/** Every field op on `x` and `y` by fiat's 64-bit limbs and by the reference, folded and compared. */
+const agreeOps = (hash: u64[], tally: Tally, name: string, x: u8[], y: u8[]): void => {
+  for (let op: i32 = 0; op < 4; op++) {
+    const fiat: u8[] = p256SeamFieldOp(op, x, y)
+    const reference: u8[] = p256SeamFieldOpReference(op, x, y)
+    fold(hash, fiat)
+    tally.scalars = tally.scalars + 1
+    if (toHex(fiat) === toHex(reference)) {
+      tally.agreed = tally.agreed + 1
+    } else if (tally.reported < 10) {
+      tally.reported = tally.reported + 1
+      console.log(`disagree: ${opName(op)} ${name}`)
+      console.log(`  x         ${toHex(x)}`)
+      console.log(`  y         ${toHex(y)}`)
+      console.log(`  fiat      ${toHex(fiat)}`)
+      console.log(`  reference ${toHex(reference)}`)
+    }
+  }
+}
+
 /** 32 random bytes from `state`, the top byte cleared so the value is below n. */
 const randomBelowN = (state: u64[]): u8[] => {
   const k: u8[] = new Array<u8>(32)
@@ -273,6 +315,50 @@ export const main = (): i32 => {
     agreeSum(hash, sums, `random ${c}`, randomBelowN(state), randomBelowN(state), randomBelowN(state))
   }
   console.log(`sums: ${sums.agreed} of ${sums.scalars} sums agree`)
+
+  const ops = new Tally()
+  const operands: u8[][] = [zeros(), one, two, offset(p, 0, false), offset(p, 1, false), offset(fromHex(HALF_P), 0, true)]
+  for (let bit: i32 = 0; bit < 256; bit++) {
+    operands.push(power(bit))
+    operands.push(offset(power(bit), 0, false))
+  }
+  for (let j: i32 = 0; j < 8; j++) {
+    operands.push(offset(p, 32 * j, false))
+  }
+  for (let b: i32 = 1; b < 256; b = b + 17) {
+    const repeated: u8[] = new Array<u8>(32)
+    for (let i: i32 = 0; i < 32; i++) {
+      repeated[i] = toU8(b)
+    }
+    operands.push(repeated)
+  }
+  const partners: u8[][] = [
+    zeros(),
+    one,
+    offset(p, 0, false),
+    offset(power(255), 0, false),
+    offset(power(64), 0, false),
+    power(255),
+    randomBelowN(state),
+  ]
+  for (let i: i32 = 0; i < toI32(operands.length); i++) {
+    for (let j: i32 = 0; j < toI32(partners.length) && i < toI32(operands.length); j++) {
+      const x: u8[] = operands[i]
+      const y: u8[] = partners[j]
+      agreeOps(hash, ops, `operand ${i}, partner ${j}`, x, y)
+      agreeOps(hash, ops, `partner ${j}, operand ${i}`, y, x)
+    }
+  }
+  for (let c: i32 = 0; c < 2000; c++) {
+    const x: u8[] = new Array<u8>(32)
+    const y: u8[] = new Array<u8>(32)
+    for (let i: i32 = 0; i < 32; i++) {
+      x[i] = toU8(nextWord(state) & toU64(0xff))
+      y[i] = toU8(nextWord(state) & toU64(0xff))
+    }
+    agreeOps(hash, ops, `random ${c}`, x, y)
+  }
+  console.log(`arithmetic: ${ops.agreed} of ${ops.scalars} field ops agree with the bit-serial reference`)
   console.log(`checksum: ${hash[0]}`)
   return 0
 }

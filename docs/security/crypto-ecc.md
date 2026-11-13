@@ -70,6 +70,25 @@ difference that wraps modulo 2^64, which is the borrow; `cmovznz` is
 `ctSelect(ctEq(arg1, 0), arg2, arg3)`, which answers `arg2` for a zero `arg1`,
 as fiat's does.
 
+**The 64-bit field port (ECC-8).** Field `mul`, `square`, `add` and `sub`
+were then ported again from `fiat-c/src/p256_64.c` at the same commit, onto
+four 64-bit limbs read from and stored to the same eight `u32` words (limb i
+is words 2i and 2i + 1), so the Montgomery R stays 2^256 and every other
+function, and the generated comb table, is unchanged. A second script parsed
+the four 64-bit C functions the same way and checked the Nish against them:
+every value read, and every store, matched — 182 values read and 4 stores for
+`mul` and for `square` (107 C statements each), 21 and 4 for `add` (17), 16
+and 4 for `sub` (13). It caught both changes it was shown: one constant
+altered by one bit, and one carry-in replaced by zero. Nish has no 128-bit
+integer, so the four 64-bit helpers stand in for fiat's: `mulx_u64`'s high
+word from four 32 × 32 products (`p256FiatMulxU64Hi`), `addcarryx_u64` and
+`subborrowx_u64`'s carry and borrow from the operands' and result's top bits
+(`(a & b) | ((a | b) & ~s)` and `(~a & b) | (~(a ^ b) & d)`, bit 63), and
+`cmovznz_u64` as `ctSelect` on 64 bits. These were read by hand and are
+checked by `tests/link/crypto_p256_inverse` ("arithmetic: 38296 of 38296 field
+ops agree with the bit-serial reference"), which a carry with its `a & b` term
+dropped fails.
+
 **The closest upstream for X25519.** `std/crypto/x25519.ts` says it was written
 from RFC 7748. The nearest well-known implementations are ref10's field code
 (SUPERCOP, public domain) and curve25519-donna. Both also use ten signed limbs
