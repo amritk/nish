@@ -5493,6 +5493,18 @@ const DECLARED = [
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
+  {
+    program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:sh` as a program named `exec:sh`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
+  {
+    program: "tests/link/sandbox_dep_exec_optin/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:env` as a program named `exec:env`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
 ]
 
 /**
