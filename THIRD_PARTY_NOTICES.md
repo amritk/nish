@@ -246,13 +246,14 @@ Adapted from BearSSL (https://www.bearssl.org/), src/hash/ghash_ctmul64.c bmul64
 
 [fiat-crypto](https://github.com/mit-plv/fiat-crypto), Copyright (c) 2015-2020
 the fiat-crypto authors (see the AUTHORS file), under the MIT licence (upstream
-also offers Apache-2.0 and BSD-1-Clause). The port reads `fiat-c/src/p256_32.c`
-and `fiat-c/src/p256_scalar_32.c` at commit
+also offers Apache-2.0 and BSD-1-Clause). The port reads `fiat-c/src/p256_64.c`
+(the field's multiply, square, add and subtract), `fiat-c/src/p256_32.c` and
+`fiat-c/src/p256_scalar_32.c` at commit
 `abe078c5149bc15bc368c27cc364fdef56470136`; the licence text is that commit's
 `LICENSE-MIT`, verbatim.
 
 ```notice
-Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
+Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_64.c, fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
 ```
 
 ### `std/crypto/LICENSE-fiat-crypto-p384`

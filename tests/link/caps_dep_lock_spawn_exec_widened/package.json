@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-lock-spawn-exec-widened",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_shell": [
+          "process.spawn=exec:sh"
+        ]
+      }
+    }
+  }
+}

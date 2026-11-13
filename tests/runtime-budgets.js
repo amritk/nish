@@ -715,6 +715,12 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * run with every signal blocked and the child is given the calling thread's mask
  * through spawn attributes, and a thread that cannot be started prints the refusal
  * line. Measured 4,409 against 4,199, leaving 199.
+ *
+ * Unchanged for `process.spawn=exec:<program>` (WP40 §2a): the marked identities
+ * carry which kind each is, and a spawn of a program granted `exec:` is started by
+ * the supervisor itself, without the filter, through the `posix_spawn` call the
+ * spawner now shares. Measured 4,507 against 4,409 on 2026-11-13 with clang 18.1.3
+ * on linux-x64. The ceiling stands, leaving 101.
  */
 const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
 /**
@@ -918,8 +924,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **110,984 bytes** (+8) by #1485's early probe: the connection's
  * `earlyProbeAcked`, the largest acknowledged packet its last early probe was
  * asked at, so that one probe goes per acknowledgement.
+ *
+ * Moved to **111,008 bytes** (+24) by the HTTP/3 clock (H3-5,
+ * `docs/security/http3.md`): the two times an `Http3Connection` measures its
+ * idle and head timeouts from, and the counts and mode that say whether a
+ * client made progress, filling padding the object already had.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110984
+export const HTTP3_SERVER_SLOT_BYTES = 111008
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

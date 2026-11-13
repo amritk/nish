@@ -50,7 +50,7 @@ import {
 } from "../net_http3/peer";
 
 /** The listener's entropy: 0x30, 0x31, … */
-const listenerEntropy = (): u8[] => {
+export const listenerEntropy = (): u8[] => {
   const out: u8[] = [];
   for (let k: i32 = 0; k < QUIC_LISTENER_ENTROPY_SIZE; k++) {
     out.push(toU8(0x30 + k));
