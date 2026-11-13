@@ -2,9 +2,9 @@
 //
 // `p256Sign` and `p256SignSha256Into` invert the nonce, and `p256Verify` its
 // public `s`, with `p256ScalarInverse`, Bernstein and Yang's safegcd in 20
-// batches of 30 divsteps; the Fermat ladder `a^(n - 2)` it replaced lives on in
-// `seam.ts.in` as the reference. This program requires the two to answer the same 32 bytes for
-// every scalar below, and prints how many did.
+// batches of 30 divsteps; the Fermat ladder `a^(n - 2)` it replaced lives on
+// in `seam.ts.in` as the reference. This program requires the two to answer
+// the same 32 bytes for every scalar below, and prints how many did.
 //
 // **The seam.** Neither inversion is exported, and this test adds no public
 // API to reach them. `tests/run.js` ("p256 inverse: ...") copies

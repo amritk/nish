@@ -1069,6 +1069,52 @@ now the largest piece of the signature after `k·G`: 552,948 Ir, 22.4% of it,
 still by Fermat. The other two are 64-bit limbs and the verify path, which
 keeps the variable-base window and did not move. X25519 is now the handshake's largest module, at 3,147,968 Ir.
 
+#### K5: P-256, the cached table for G and verify's inversion — the result
+
+Two changes landed together. The first is the signed all-bits-set comb for
+`k·G` (11 combs of 6 teeth, 352 points, 22 KiB, built on the first signature
+into `P256SignScratch`; ECC-7). The second has `p256Verify` invert its public
+`s` with the constant-time safegcd `p256ScalarInverse` in place of Fermat's
+`a^(n - 2)` ladder, which leaves `std/crypto/p256.ts` and survives only as the
+reference in the inverse test's seam (ECC-4). The bar was: sign faster, and
+verify not slower.
+
+**How it was measured.** On this branch's head and on `bf63d260` (`main`
+before the stage). Each was built by the same `build/nish` from a copy of
+`bench/p256.ts` importing its tree's own `p256.ts`, with a byte-identical copy
+of the `bf63d260` binary as the twin. Instructions are from callgrind,
+measured per call as the difference between two scales of one run. Every
+binary printed the pinned checksum, 1238268086. The machine is an
+`Intel(R) Xeon(R) Processor @ 2.30GHz`.
+
+| Workload | `bf63d260` Ir | Twin Ir | Comb only Ir | Head Ir | Change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Public key (`k·G`) | 1,778,164 | 1,778,164 | 1,277,626 | 1,277,626 | **−28.1%** |
+| Sign (`p256SignSha256`) | 1,917,782 | 1,917,782 | 1,417,255 | 1,417,268 | **−26.1%** |
+| Verify | 9,179,460 | 9,179,460 | 9,179,463 | 8,437,142 | **−8.1%** |
+
+The twin matches to the instruction, so the band is 0 Ir. The comb moves
+key generation and signing. The inversion moves verification by 742,318 Ir,
+which is Fermat's ~776k less safegcd's ~33.6k.
+
+**Wall clock** (`node bench/p256.mjs --self --binary <bf63d260>`, 9 rounds of
+3): at the minimum, head is 63.6 µs against 84.4 µs for the public key, 72.1
+against 91.6 for sign and 425.4 against 448.2 for verify. Head's own copy
+is within 0.9%, 0.5% and 3.1% at the minimum (+11.4% on sign's median, so
+the medians are noisy).
+
+**The handshake** (`node bench/tls-handshake.mjs --baseline bf63d260`, 16
+rounds of 600). Server CPU, min / median µs: head 983 / 1108, head's copy
+1000 / 1092, `bf63d260` 1000 / 1133, its copy 1017 / 1150. Head is 1.7% /
+2.3% below `bf63d260`, and the copies differ by 1.7% / 1.5%. The fall is
+within the band, so this page claims the handshake is not slower and nothing
+more. The handshake signs once and does not verify.
+
+**What is left.** The handshake's P-256 cost is now the signature's field
+inversion and the comb's additions. X25519 is still the largest module.
+Verification still computes `u1·G + u2·Q` in one public double
+multiplication (`p256DoubleMultPublic`), which does not use the comb.
+
 ## 6. Decisions for the owner
 
 | | Question | Recommendation |
