@@ -129,16 +129,14 @@ const sha512InChunks = (key: u8[], data: u8[], chunk: i32): string => {
   return hexOf(mac.digest());
 };
 
-/** Whether `HmacSha256.digestInto` at offset 0 writes the tag `digest` answers. */
-const sha256IntoMatches = (key: u8[], data: u8[]): boolean => {
+/** The tag `HmacSha256.digestInto` writes at offset 0, as hex. */
+const sha256IntoHex = (key: u8[], data: u8[]): string => {
   const from: i32 = 0;
-  const byDigest = new HmacSha256(key);
-  byDigest.update(data, from, toI32(data.length));
-  const byInto = new HmacSha256(key);
-  byInto.update(data, from, toI32(data.length));
+  const mac = new HmacSha256(key);
+  mac.update(data, from, toI32(data.length));
   const into: u8[] = new Array<u8>(32);
-  byInto.digestInto(into, from);
-  return hexOf(into) === hexOf(byDigest.digest());
+  mac.digestInto(into, from);
+  return hexOf(into);
 };
 
 /** A fresh 32-byte array that escapes, so it is allocated as a tag is. */
@@ -490,17 +488,19 @@ export const hmacChecks = (): i32 => {
   t.ok("and leaves both of HmacSha256's hashers zeroed", sha256Wiped(into256));
   t.ok("and leaves HmacSha256's inner-digest buffer zeroed", zeroBytes(into256.innerDigest));
   const noBytes: i64 = 0;
-  t.eqI64("HmacSha256.digestInto allocates nothing", digestIntoCost(key6, data7), noBytes);
-  t.eqI64("HmacSha256.digest allocates only its tag", digestCost(key6, data7), tagCost());
+  t.eqI64("HmacSha256.digestInto allocates nothing, with a 131-byte key", digestIntoCost(key6, data7), noBytes);
+  t.eqI64("HmacSha256.digest allocates only its tag, with a 131-byte key", digestCost(key6, data7), tagCost());
+  t.eqI64("and so does it with a key shorter than the block", digestCost(key2, data2), tagCost());
+  t.eqI64("and digestInto allocates nothing with one either", digestIntoCost(key2, data2), noBytes);
   t.ok(
-    "HmacSha256.digestInto matches digest on RFC 4231 test cases 1-7",
-    sha256IntoMatches(key1, data1) &&
-      sha256IntoMatches(key2, data2) &&
-      sha256IntoMatches(key3, data3) &&
-      sha256IntoMatches(key4, data4) &&
-      sha256IntoMatches(key5, data5) &&
-      sha256IntoMatches(key6, data6) &&
-      sha256IntoMatches(key6, data7)
+    "HmacSha256.digestInto writes RFC 4231 test cases 1-7's tags",
+    sha256IntoHex(key1, data1) === "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7" &&
+      sha256IntoHex(key2, data2) === "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843" &&
+      sha256IntoHex(key3, data3) === "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe" &&
+      sha256IntoHex(key4, data4) === "82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b" &&
+      sha256IntoHex(key5, data5).substring(0, 32) === "a3b6167473100ee06e0c796c2955552b" &&
+      sha256IntoHex(key6, data6) === "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54" &&
+      sha256IntoHex(key6, data7) === tag7Sha256
   );
   // A scratch keyed with a key longer than its block hashes the key in its
   // inner hasher first; starting that hasher again must not leave the key's

@@ -611,7 +611,7 @@ export class Sha256 {
     sha256Compress(this.state, this.schedule, block, 0)
     const state: u32[] = this.state
     const words: i32 = toI32(state.length)
-    for (let i: i32 = 0; i < words && 4 * i + 3 < SHA256_SIZE; i += 1) {
+    for (let i: i32 = 0; i < words; i += 1) {
       const word: u32 = state[i]
       const p: i32 = at + 4 * i
       out[p] = toU8(word >>> 24)

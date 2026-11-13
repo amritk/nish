@@ -264,6 +264,9 @@ export class HmacSha256 {
    * Keys the computation. A key longer than 64 bytes is replaced by its
    * SHA-256 (RFC 2104 §2), which is wiped once used (`hmacKeySha256`).
    *
+   * Besides the two hashers it allocates the 32-byte `innerDigest` buffer
+   * that every `digest` and `digestInto` reuses.
+   *
    * @param key The secret key; it is read, not kept, and the caller still
    *   wipes it.
    */

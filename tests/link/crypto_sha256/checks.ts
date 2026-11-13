@@ -16,6 +16,17 @@ import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256";
 
 const HEX_DIGITS: string = "0123456789abcdef";
 
+/** Arena bytes `Sha256.digestInto` takes, the hasher fed and its array made before the count starts. */
+const digestIntoCost = (data: u8[]): i64 => {
+  const from: i32 = 0;
+  const h: Sha256 = new Sha256();
+  h.update(data, from, toI32(data.length));
+  const out: u8[] = new Array<u8>(SHA256_SIZE);
+  const before: i64 = Arena.used();
+  h.digestInto(out, from);
+  return Arena.used() - before;
+};
+
 /** `bytes` as lowercase hex, two digits a byte, the way the vectors print them. */
 const hexOf = (bytes: u8[]): string => {
   const parts: string[] = [];
@@ -344,6 +355,8 @@ export const sha256Checks = (): i32 => {
     "55ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
   );
   t.eqI32("and leaves the byte after the window alone", toI32(window[33]), fill);
+  const noBytes: i64 = 0;
+  t.eqI64("digestInto allocates nothing", digestIntoCost(msg896), noBytes);
 
   // A digest is a fresh array each time, so writing into one cannot change another.
   const first: u8[] = sha256(empty);
