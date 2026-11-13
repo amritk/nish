@@ -599,9 +599,10 @@ export class Http1Config {
    * come, the slot gives both to pools the server's slots share, and takes
    * them again with the next byte. The memory they hold then follows the
    * connections mid-request rather than every keep-alive connection open,
-   * for two pool operations a request. Off by default.
+   * for two pool operations a request. On by default; false keeps each
+   * slot's buffers across the rest, about 1.9 KB more an idle connection.
    */
-  idleInput: boolean = false
+  idleInput: boolean = true
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */

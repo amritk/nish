@@ -840,18 +840,19 @@ export const HTTP1_SERVER_START_BYTES = 16896
  * Ceiling on what one idle keep-alive `Http1Server` connection holds in the arena on
  * the default `Http1Config` -- not a `.text` budget: `tests/run.js` links
  * `tests/link/net_http1_server/startup.ts`, which builds a connection as the server
- * builds a slot's, on its outputs and shared `Date`, serves it four GETs, parks it
- * and prints the bytes, after a first connection has served the same so that what
- * the pool keeps for every connection is not counted.
+ * builds a slot's, on its outputs, input and head pools and shared `Date`, serves it
+ * four GETs, parks it and prints the bytes, after a first connection has served the
+ * same so that what the pools keep for every connection is not counted.
  *
- * Measured **2,232 bytes** on 2026-11-13 with clang 18 on linux-x64, against 3,384
+ * Measured **904 bytes** on 2026-11-13 with clang 18 on linux-x64, against 3,384
  * on the base before the idle trims: a built connection no longer allocates a
- * `Date` it drops or spans and fields it replaces on the first request, and the
- * head it keeps to write again is sized to that head, not `H1_HEAD_KEEP`'s 1 KB.
- * The budget is the next 256-byte boundary above the measurement,
- * as every ceiling here was set.
+ * `Date` it drops or spans and fields it replaces on the first request, the head
+ * it keeps to write again is sized to that head, not `H1_HEAD_KEEP`'s 1 KB, and
+ * `Http1Config.idleInput`, now on by default, lends its input and head buffers to
+ * the pools while it rests (2,232 bytes with it off). The budget is the next
+ * 256-byte boundary above the measurement, as every ceiling here was set.
  */
-export const HTTP1_SERVER_IDLE_BYTES = 2304
+export const HTTP1_SERVER_IDLE_BYTES = 1024
 
 /**
  * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena

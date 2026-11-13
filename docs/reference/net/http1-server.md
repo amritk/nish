@@ -246,7 +246,7 @@ class Http1Config
 | `new Http1Config()` |  |
 | `chunkSize: i32` | The most body bytes one `H1_BODY` hands over, and how much is read from the socket at once. |
 | `headTimeout: i32` | Milliseconds a request head may take, from its first byte to its blank line, before `expire` closes the slot however steadily its bytes come. The idle timeout alone restarts on every byte, so a client that sends one byte of its head each `idleTimeout` would hold its slot for good (slowloris). |
-| `idleInput: boolean` | Lend a slot's input and head buffers back to the server between exchanges: once a response is sent and no byte of the next request has come, the slot gives both to pools the server's slots share, and takes them again with the next byte. The memory they hold then follows the connections mid-request rather than every keep-alive connection open, for two pool operations a request. Off by default. |
+| `idleInput: boolean` | Lend a slot's input and head buffers back to the server between exchanges: once a response is sent and no byte of the next request has come, the slot gives both to pools the server's slots share, and takes them again with the next byte. The memory they hold then follows the connections mid-request rather than every keep-alive connection open, for two pool operations a request. On by default; false keeps each slot's buffers across the rest, about 1.9 KB more an idle connection. |
 | `idleTimeout: i32` | Milliseconds without a byte read or written after which `expire` closes a slot. |
 | `lingerBytes: i32` | The most bytes a refused slot drains before it is closed whatever is left (RFC 9112 §9.6); 0 closes at once, without a lingering close. |
 | `lingerTimeout: i32` | Milliseconds `Http1Server` keeps reading, and throwing away, what a refused client still sends after its error response, before `expire` closes the slot (RFC 9112 §9.6). The server shuts its write side and drains rather than closing at once: a close with unread bytes resets the connection, and the reset can destroy the response before the client reads it. |
@@ -269,13 +269,13 @@ class Http1Connection
 
 | Member | |
 | --- | --- |
-| `new Http1Connection(config: Http1Config)` | A connection under `config`. A cap outside what the connection can work with panics. |
+| `new Http1Connection(config: Http1Config, date: HttpDate \| null = null)` | A connection under `config`. A cap outside what the connection can work with panics. |
 | `bufferLimit: i32` | The most input the connection buffers, unread: the cap `inputRoom` holds it to. |
 | `closeAfter: boolean` | The connection closes once this exchange is over. |
 | `data: u8[]` | `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. |
 | `dataLength: i32` | How many bytes `H1_BODY` or `H1_WS_MESSAGE` handed over, from `data[dataStart]`. |
 | `dataStart: i32` | Where the bytes `H1_BODY` or `H1_WS_MESSAGE` handed over start in `data`. |
-| `date: HttpDate` | The `Date` every final response carries. The connection makes its own; `Http1Server` and `Http1TlsServer` put theirs here, so that every slot of a pool shares one and the pool formats at most once a second. A program may put another, to share it or to pin its clock. |
+| `date: HttpDate` | The `Date` every final response carries: the constructor's, or one the connection makes when given none. `Http1Server` and `Http1TlsServer` give theirs, so that every slot of a pool shares one, formats at most once a second and makes no `Date` of its own. A program may put another, to share it or to pin its clock. |
 | `fd: i32` | The plain TCP socket the carrier sends `output` on, which `sendBody` writes to directly: `Http1Server.accept` sets it, and `restart` and `abort` put it back to -1. -1 for a connection with no such socket (a sans-IO carrier, `Http1TlsServer`'s TLS records), where `sendBody` copies as `write` does. |
 | `heads: Http1OutputPool \| null` | Where the parser's head buffer goes while the slot rests, beside `inputs`; null otherwise. |
 | `headSince: i64` | When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. |

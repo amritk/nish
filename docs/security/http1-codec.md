@@ -593,26 +593,30 @@ whose client stops reading holds one until it drains, then gives it back; fifty
 connections in a row leave the pool's buffers all free (`net_http1_server`).
 
 **Lent input, and what a lent buffer holds** (`net_http1_server`). With
-`Http1Config.idleInput` a slot gives its parser's input and head buffers to
-pools its server's slots share (`Http1Connection.park`, from `Http1Server.flush`
-and `Http1TlsServer.flush` and at `restart`) only while it rests: speaking
-HTTP, no request open, and `Http1Parser.resting()` (waiting for a request line,
-nothing fed and unread). A slot still reading a head, owing a response, holding
-pipelined bytes or upgraded keeps both, and `unpark` takes a buffer back in
-`feed` before any byte is copied in.
+`Http1Config.idleInput`, on by default since the idle trims, a slot gives its
+parser's input and head buffers to pools its server's slots share
+(`Http1Connection.park`, from `Http1Server.flush` and `Http1TlsServer.flush` and
+at `restart`) only while it rests: speaking HTTP, no request open, and
+`Http1Parser.resting()` (waiting for a request line, nothing fed and unread). A
+slot still reading a head, owing a response, holding pipelined bytes or upgraded
+keeps both, and `unpark` takes a buffer back in `feed` before any byte is copied
+in.
 
 A lent buffer is not cleared: it holds the bytes of the request it last
 carried, a password in a body included, until the next slot to take it
 overwrites them. Nothing reads them, since a parser reads only the window
 `[start, end)` it was fed and `park` resets that window to empty; the bytes
-stay in the process's memory as they did before the option, when each slot kept
-its own buffer with the same bytes in it.
+stay in the process's memory as they do with the option off, when each slot
+keeps its own buffer with the same bytes in it. Turning it on by default moves
+no byte a parser can read: it changes which slot's buffer the bytes sit in
+until they are overwritten, not whether they are.
 
 Tests: `two slots served one after the other share one input and one head
-buffer`, `a connection with a request open keeps them`, `so do they while a
-byte of the next request is unread`, `and once nothing is open or unread both
-go back`, `a pipelined pair on a slot that lent its buffers is answered in
-order`, and `without idleInput a resting slot keeps its input buffer`.
+buffer`, `a connection with a request open keeps them`, `so do they while a byte
+of the next request is unread`, `and once nothing is open or unread both go
+back`, `a pipelined pair on a slot that lent its buffers is answered in order`,
+`on the default config the slots lent their input and head buffers to the
+pools`, and `without idleInput a resting slot keeps its input buffer`.
 
 **A lent buffer is taken back by identity, and the layout moves only where
 fields sit** (`net_http1_server`, `_f64`, 2026-11-06, written against `main`

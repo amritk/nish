@@ -32,10 +32,10 @@
 //                                                nothing timed: prints the
 //                                                peak RSS in KiB (VmHWM) as
 //                                                `<ns>`
-//   main rss-default <passes> <connections> 0    the rss shape on the default
-//                                                config: no `idleInput`, so a
-//                                                parked connection keeps its
-//                                                input and head buffers
+//   main rss-kept <passes> <connections> 0       the rss shape with `idleInput`
+//                                                off, so a parked connection
+//                                                keeps its input and head
+//                                                buffers
 //
 // With `[evict]` MiB (default 0), the idle and direct shapes write one byte
 // of every cache line of an eviction ring that big between requests, a slice
@@ -468,8 +468,8 @@ const IDLE_FIRST_HEAD: i32 = 256
  * `i` is even, the other way round when it is odd.
  */
 const idle = (shape: string, requests: i32, count: i32, batches: i32, evictMib: i32): i32 => {
-  const measuring: boolean = shape === "rss" || shape === "rss-default"
-  const b: IdlePool = new IdlePool(count, shape === "direct", evictMib, shape !== "rss-default")
+  const measuring: boolean = shape === "rss" || shape === "rss-kept"
+  const b: IdlePool = new IdlePool(count, shape === "direct", evictMib, shape !== "rss-kept")
   const evicting: boolean = b.slice > 0
   // One untimed pass, as for the other shapes: every slot's connection has
   // served a request and parked, its buffers lent back to the pools, and the
@@ -741,7 +741,7 @@ export const main = (): i32 => {
   if (shape === "stages" || shape === "stages-loop") {
     return stages(requests, count, batches, shape === "stages")
   }
-  if (shape === "idle" || shape === "direct" || shape === "rss" || shape === "rss-default") {
+  if (shape === "idle" || shape === "direct" || shape === "rss" || shape === "rss-kept") {
     return idle(shape, requests, count, batches, evictMib)
   }
   if (shape === "hot") {

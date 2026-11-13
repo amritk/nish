@@ -4,7 +4,8 @@
 // holds this program's answer to: a pool of 16,384 slots on the default
 // `Http1Config`, built on no socket, then the one connection `connection(0)`
 // builds for a slot never accepted into, then a second connection built as
-// the server builds a slot's, on its outputs and `Date`, that serves four
+// the server builds a slot's, on its outputs, input and head pools and `Date`,
+// that serves four
 // keep-alive GETs and parks. Slot 0's connection serves the same requests
 // first, so what the pool and the `Date` keep for every connection is not
 // counted against the second. It prints `<the pool's bytes> <that
@@ -77,6 +78,10 @@ export const main = (): i32 => {
   const idleBefore: i64 = Arena.used()
   const conn: Http1Connection = new Http1Connection(config, server.date)
   conn.pool = server.outputs
+  if (config.idleInput) {
+    conn.inputs = server.inputs
+    conn.heads = server.heads
+  }
   for (let i: i32 = 0; i < 4; i += 1) {
     served = served && serve(conn, req, names, values, body)
   }

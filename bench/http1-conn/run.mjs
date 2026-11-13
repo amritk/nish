@@ -32,11 +32,11 @@
 //
 // With `--rss N` (default 5 when the idle shape runs or `--shape rss` asks
 // for the memory alone, 0 to skip) it also runs
-// the idle pool's `rss` and `rss-default` modes N times per build, at
+// the idle pool's `rss` and `rss-kept` modes N times per build, at
 // `--connections` and at 0 connections, each printing its own peak RSS
 // (VmHWM), and reports the difference divided by the connections: the peak
-// memory one idle keep-alive connection costs, with `idleInput` and on the
-// default config, after one request a slot and after `--passes` (default 4),
+// memory one idle keep-alive connection costs, with `idleInput` on (the
+// default) and off, after one request a slot and after `--passes` (default 4),
 // when each slot has kept its response head.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -239,9 +239,9 @@ for (let r = 0; r < rounds; r++) {
 }
 
 // The peak RSS of one rss-shape run in KiB, which it prints where a time goes.
-const peak = (exe, shape, passes, count) =>
+const peak = (exe, shape, served, count) =>
   Number(
-    bench(exe, [shape, String(passes), String(count), "0"])
+    bench(exe, [shape, String(served), String(count), "0"])
       .trim()
       .split(" ")[1]
   )
@@ -253,8 +253,8 @@ const passes = Number(flag("--passes", "4"))
 const rssRows = [
   ["idleInput, 1 request", "rss", 1],
   [`idleInput, ${passes} requests`, "rss", passes],
-  ["default, 1 request", "rss-default", 1],
-  [`default, ${passes} requests`, "rss-default", passes],
+  ["idleInput off, 1 request", "rss-kept", 1],
+  [`idleInput off, ${passes} requests`, "rss-kept", passes],
 ]
 // row -> label -> bytes per idle connection, one per run
 const rss = new Map(rssRows.map(([row]) => [row, new Map()]))
