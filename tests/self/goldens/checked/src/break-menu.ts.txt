@@ -2279,8 +2279,8 @@ function wallColour(row: i32): i32 -> @wallColour [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: rasterDim rasterHue
   stackSites=0 stackLocals=0
-  callee +0:46 rasterDim -> @rasterDim
-  callee +0:56 rasterHue -> @rasterHue
+  callee +0:3 rasterDim -> @rasterDim
+  callee +0:13 rasterHue -> @rasterHue
 function menuDrawWall(menu: BreakMenu, view: View, alpha: f64): void -> @menuDrawWall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via bevelBrick

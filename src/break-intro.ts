@@ -613,7 +613,10 @@ const introDrawWall = (intro: BreakIntro, view: View, alpha: f64, time: f64): vo
  * the missing brick with a glow while it drops.
  */
 const introDrawPieces = (intro: BreakIntro, view: View, alpha: f64): void => {
-  const scale: i32 = Math.max(toI32(Math.floor((COL_W * view.scale) / toF64(RASTER_GLYPH_ADVANCE) + 0.000001)), 1)
+  const scale: i32 = Math.max(
+    toI32(Math.floor((COL_W * view.scale) / toF64(RASTER_GLYPH_ADVANCE) + 0.000001)),
+    1
+  )
   const lift: f64 = (LINE_H - (toF64(RASTER_GLYPH_H) * toF64(scale)) / view.scale) / 2.0
   const n: i32 = toI32(intro.kinds.length)
   for (let i: i32 = 0; i < n; i++) {

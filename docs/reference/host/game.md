@@ -92,7 +92,7 @@ The frame's width, as `gameSetSize` set it.
 
 <scalar-card title="game​Write​Samples" icon="phosphor/regular/function" href="#gamewritesamples">
 
-Hand one sound's samples to the page: each is clipped to `-1..1` and written to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how many and at what rate.
+Hand one sound's samples to the page: each is clipped to `-1..1` (NaN is 0) and written to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how many and at what rate.
 
 </scalar-card>
 
@@ -273,9 +273,9 @@ the width in pixels, held to `0..GAME_MAX_WIDTH` even if the page wrote the word
 
 ### gameWriteSamples
 
-Hand one sound's samples to the page: each is clipped to `-1..1` and written
-to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how many and at what
-rate. Samples past `GAME_SAMPLE_LIMIT` are cut off.
+Hand one sound's samples to the page: each is clipped to `-1..1` (NaN is
+0) and written to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how
+many and at what rate. Samples past `GAME_SAMPLE_LIMIT` are cut off.
 
 ```ts
 function gameWriteSamples(

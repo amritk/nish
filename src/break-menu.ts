@@ -989,7 +989,16 @@ const loosen = (menu: BreakMenu, i: i32): void => {
   for (let k: i32 = 0; k < count; k++) {
     const vx: f64 = toF64(menuRandom(menu, -50, 50))
     const vy: f64 = toF64(menuRandom(menu, -80, 0))
-    rasterSpawnParticle(menu.sparks, menu.xs[i] + CELL_W / 2.0, menu.ys[i] + CELL_H / 2.0, vx, vy, 0.6, 1.5, colour)
+    rasterSpawnParticle(
+      menu.sparks,
+      menu.xs[i] + CELL_W / 2.0,
+      menu.ys[i] + CELL_H / 2.0,
+      vx,
+      vy,
+      0.6,
+      1.5,
+      colour
+    )
   }
 }
 
@@ -1035,7 +1044,8 @@ const itemsFade = (menu: BreakMenu, time: f64, alpha: f64): f64 => {
 }
 
 /** A wall row's face: the rainbow, dimmed well back so the menu reads over it; `break-intro.ts` lays the same wall. */
-export const wallColour = (row: i32): i32 => rasterDim(rasterHue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
+export const wallColour = (row: i32): i32 =>
+  rasterDim(rasterHue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
 
 /** The attract wall: every brick there, and returning ones growing from their centre. */
 const menuDrawWall = (menu: BreakMenu, view: View, alpha: f64): void => {

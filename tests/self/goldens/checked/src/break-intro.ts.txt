@@ -2103,14 +2103,14 @@ function introDrawPieces(intro: BreakIntro, view: View, alpha: f64): void -> @in
   pointer view: size=64 writesThrough=false captured=false passedTo=drawText#0 glow#0 bevelBrick#0
   stackSites=0 stackLocals=0
   local +0:9 scale: i32 (const)
-  local +1:9 lift: f64 (const)
-  local +2:9 n: i32 (const)
-  local +3:12 i: i32 (let)
-  local +4:11 y: f64 (const)
-  callee +4:20 lerp -> @lerp
-  local +8:11 x: f64 (const)
-  callee +8:20 lerp -> @lerp
-  callee +10:7 drawText -> @drawText
-  local +13:11 w: f64 (const)
-  callee +15:7 glow -> @glow
-  callee +17:5 bevelBrick -> @bevelBrick
+  local +4:9 lift: f64 (const)
+  local +5:9 n: i32 (const)
+  local +6:12 i: i32 (let)
+  local +7:11 y: f64 (const)
+  callee +7:20 lerp -> @lerp
+  local +11:11 x: f64 (const)
+  callee +11:20 lerp -> @lerp
+  callee +13:7 drawText -> @drawText
+  local +16:11 w: f64 (const)
+  callee +18:7 glow -> @glow
+  callee +20:5 bevelBrick -> @bevelBrick

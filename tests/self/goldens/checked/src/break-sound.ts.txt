@@ -1823,11 +1823,11 @@ function arpeggio(out: f64[], base: f64, a: i32, b: i32, c: i32, d: i32, each: f
   callee +1:43 synthSemitone -> @synthSemitone
   callee +1:67 synthSemitone -> @synthSemitone
   callee +2:3 synthTone -> @synthTone
-  callee +2:49 synthSemitone -> @synthSemitone
-  callee +2:73 synthSemitone -> @synthSemitone
-  callee +3:3 synthTone -> @synthTone
-  callee +3:49 synthSemitone -> @synthSemitone
-  callee +3:73 synthSemitone -> @synthSemitone
+  callee +7:5 synthSemitone -> @synthSemitone
+  callee +8:5 synthSemitone -> @synthSemitone
+  callee +13:3 synthTone -> @synthTone
+  callee +18:5 synthSemitone -> @synthSemitone
+  callee +19:5 synthSemitone -> @synthSemitone
 function soundSamples(id: i32): f64[] -> @soundSamples [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via synthTone

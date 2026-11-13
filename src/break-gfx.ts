@@ -184,9 +184,39 @@ export const gradient = (view: View, top: i32, bottom: i32): void => {
 export const fillLetterbox = (view: View, colour: i32): void => {
   const fb: Framebuffer = view.fb
   rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, 0, 0, fb.width, view.top, colour, RASTER_SOLID)
-  rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, 0, view.bottom, fb.width, fb.height, colour, RASTER_SOLID)
-  rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, 0, view.top, view.left, view.bottom, colour, RASTER_SOLID)
-  rasterRect(rasterFrame(fb.pixels), fb.width, fb.height, view.right, view.top, fb.width, view.bottom, colour, RASTER_SOLID)
+  rasterRect(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    0,
+    view.bottom,
+    fb.width,
+    fb.height,
+    colour,
+    RASTER_SOLID
+  )
+  rasterRect(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    0,
+    view.top,
+    view.left,
+    view.bottom,
+    colour,
+    RASTER_SOLID
+  )
+  rasterRect(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    view.right,
+    view.top,
+    fb.width,
+    view.bottom,
+    colour,
+    RASTER_SOLID
+  )
 }
 
 /** The pixel rectangle `x0..x1` × `y0..y1` (exclusive) filled with `colour`. */
@@ -248,7 +278,16 @@ export const disc = (view: View, cx: f64, cy: f64, r: f64, colour: i32): void =>
 /** `disc` blended over what is there by `alpha` (0..1). */
 export const discAlpha = (view: View, cx: f64, cy: f64, r: f64, colour: i32, alpha: f64): void => {
   const fb: Framebuffer = view.fb
-  rasterDisc(rasterFrame(fb.pixels), fb.width, fb.height, pixelX(view, cx), pixelY(view, cy), r * view.scale, colour, alpha)
+  rasterDisc(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    pixelX(view, cx),
+    pixelY(view, cy),
+    r * view.scale,
+    colour,
+    alpha
+  )
 }
 
 /**
@@ -258,7 +297,16 @@ export const discAlpha = (view: View, cx: f64, cy: f64, r: f64, colour: i32, alp
  */
 export const glow = (view: View, cx: f64, cy: f64, r: f64, colour: i32, strength: f64): void => {
   const fb: Framebuffer = view.fb
-  rasterGlow(rasterFrame(fb.pixels), fb.width, fb.height, pixelX(view, cx), pixelY(view, cy), r * view.scale, colour, strength)
+  rasterGlow(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    pixelX(view, cx),
+    pixelY(view, cy),
+    r * view.scale,
+    colour,
+    strength
+  )
 }
 
 /**
@@ -267,7 +315,18 @@ export const glow = (view: View, cx: f64, cy: f64, r: f64, colour: i32, strength
  */
 export const drawTrail = (view: View, trail: RasterTrail, r: f64, colour: i32, alpha: f64): void => {
   const fb: Framebuffer = view.fb
-  rasterTrail(rasterFrame(fb.pixels), fb.width, fb.height, trail, r, colour, alpha, view.scale, view.offsetX, view.offsetY)
+  rasterTrail(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    trail,
+    r,
+    colour,
+    alpha,
+    view.scale,
+    view.offsetX,
+    view.offsetY
+  )
 }
 
 // ---- Text ------------------------------------------------------------------
@@ -349,5 +408,14 @@ export const stepParticles = (pool: RasterParticles, gravity: f64, drag: f64): v
  */
 export const drawParticles = (view: View, pool: RasterParticles, alpha: f64): void => {
   const fb: Framebuffer = view.fb
-  rasterParticles(rasterFrame(fb.pixels), fb.width, fb.height, pool, alpha, view.scale, view.offsetX, view.offsetY)
+  rasterParticles(
+    rasterFrame(fb.pixels),
+    fb.width,
+    fb.height,
+    pool,
+    alpha,
+    view.scale,
+    view.offsetX,
+    view.offsetY
+  )
 }

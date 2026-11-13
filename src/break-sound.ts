@@ -28,7 +28,14 @@ import {
   SOUND_STEEL,
   SOUND_WALL,
 } from "./break-game"
-import { SYNTH_NOISE, SYNTH_SQUARE, SYNTH_TRIANGLE, synthSemitone, synthSilence, synthTone } from "../std/synth"
+import {
+  SYNTH_NOISE,
+  SYNTH_SQUARE,
+  SYNTH_TRIANGLE,
+  synthSemitone,
+  synthSilence,
+  synthTone,
+} from "../std/synth"
 
 /** The sample rate every sound is written at: plenty for square waves under 3 kHz. */
 const SAMPLE_RATE: i32 = 22050
@@ -103,8 +110,28 @@ const arpeggio = (
 ): void => {
   synthTone(out, SAMPLE_RATE, 0.0, each, synthSemitone(base, a), synthSemitone(base, a), wave, volume, 6.0)
   synthTone(out, SAMPLE_RATE, each, each, synthSemitone(base, b), synthSemitone(base, b), wave, volume, 6.0)
-  synthTone(out, SAMPLE_RATE, each * 2.0, each, synthSemitone(base, c), synthSemitone(base, c), wave, volume, 6.0)
-  synthTone(out, SAMPLE_RATE, each * 3.0, last, synthSemitone(base, d), synthSemitone(base, d), wave, volume, 4.0)
+  synthTone(
+    out,
+    SAMPLE_RATE,
+    each * 2.0,
+    each,
+    synthSemitone(base, c),
+    synthSemitone(base, c),
+    wave,
+    volume,
+    6.0
+  )
+  synthTone(
+    out,
+    SAMPLE_RATE,
+    each * 3.0,
+    last,
+    synthSemitone(base, d),
+    synthSemitone(base, d),
+    wave,
+    volume,
+    4.0
+  )
 }
 
 /** Sound `id`'s samples, each in -1..1 before clipping. */

@@ -74,9 +74,7 @@ import {
   fontScaleFor,
   viewFor,
 } from "./break-gfx"
-import {
-  rasterRgb,
-} from "../std/raster"
+import { rasterRgb } from "../std/raster"
 import { GAME_PLAYING, BreakGame, drawBreakGame, newBreakGame, stepBreakGame } from "./break-game"
 import {
   BreakIntro,

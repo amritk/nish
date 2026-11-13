@@ -228,9 +228,9 @@ export const gameReadInput = (input: StepInput, nowMs: f64): void => {
 export const gamePlaySound = (id: i32): boolean => ringPush(GAME_SOUNDS, id)
 
 /**
- * Hand one sound's samples to the page: each is clipped to `-1..1` and written
- * to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how many and at what
- * rate. Samples past `GAME_SAMPLE_LIMIT` are cut off.
+ * Hand one sound's samples to the page: each is clipped to `-1..1` (NaN is
+ * 0) and written to `GAME_SAMPLES` as an `f32`, and `GAME_INFO` records how
+ * many and at what rate. Samples past `GAME_SAMPLE_LIMIT` are cut off.
  *
  * @param samples - the sound, at `sampleRate` samples a second
  * @param sampleRate - the samples' rate in Hz
@@ -239,13 +239,14 @@ export const gamePlaySound = (id: i32): boolean => ringPush(GAME_SOUNDS, id)
 export const gameWriteSamples = (samples: f64[], sampleRate: i32): i32 => {
   const n: i32 = Math.min(toI32(samples.length), GAME_SAMPLE_LIMIT)
   for (let i: i32 = 0; i < n && i < samples.length; i++) {
-    let x: f64 = samples[i]
-    if (x > 1.0) {
+    const s: f64 = samples[i]
+    let x: f64 = 0.0
+    if (s > 1.0) {
       x = 1.0
-    } else if (x < -1.0) {
+    } else if (s < -1.0) {
       x = -1.0
-    } else if (x !== x) {
-      x = 0.0
+    } else if (s >= -1.0) {
+      x = s
     }
     GAME_SAMPLES[i] = toF32(x)
   }
