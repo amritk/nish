@@ -72,9 +72,11 @@ import {
   drawTextCentred,
   drawTextShadow,
   fontScaleFor,
-  gfxRgb,
   viewFor,
 } from "./break-gfx"
+import {
+  rasterRgb,
+} from "../std/raster"
 import { GAME_PLAYING, BreakGame, drawBreakGame, newBreakGame, stepBreakGame } from "./break-game"
 import {
   BreakIntro,
@@ -563,7 +565,7 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
   const view: View = d.view
   viewFor(view, fb, 0.0, 0.0)
   const scale: i32 = Math.max(fontScaleFor(view, 6.0), 1)
-  const shadow: i32 = gfxRgb(0, 0, 0)
+  const shadow: i32 = rasterRgb(0, 0, 0)
   // The stats lines are built afresh each frame while F3 has them on; off,
   // nothing is built. They are a diagnostic, so the strings are not cached.
   if (d.settings.stats) {
@@ -575,7 +577,7 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
       2.0,
       scale,
       `${stats.tier}fps ${directorWhole(stats.rttMs)}ms ${directorWhole(stats.bytesPerSec / 1000.0)}kB/s ${directorWhole(stats.frameCostMs)}ms drop ${stats.dropped}`,
-      gfxRgb(255, 255, 255),
+      rasterRgb(255, 255, 255),
       shadow
     )
     const fps: i32 = fpsChoice(s.fps)
@@ -585,13 +587,13 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
       11.0,
       scale,
       `${breakGraphicsLabel(stats.backend)} ${fb.width}x${fb.height} ${fps === 0 ? "auto" : `${fps}`}fps`,
-      gfxRgb(200, 200, 200),
+      rasterRgb(200, 200, 200),
       shadow
     )
   }
   if (d.toastSteps > 0 && d.toast !== "") {
     blendRect(view, 0.0, WORLD_H - 14.0, WORLD_W, 14.0, shadow, 0.7)
-    drawTextCentred(view, WORLD_W / 2.0, WORLD_H - 11.0, scale, d.toast, gfxRgb(255, 230, 120), shadow)
+    drawTextCentred(view, WORLD_W / 2.0, WORLD_H - 11.0, scale, d.toast, rasterRgb(255, 230, 120), shadow)
   }
 }
 
