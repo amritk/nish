@@ -203,6 +203,7 @@ shown).
 | [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
+| [`nish/input`](#nishinput) | `InputFrame` and `StepInput`: what one fixed step reads from its player, the events since the last step and the keys held down, with no terminal, I/O or clock; `inputDown` reads a key |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -2356,6 +2357,30 @@ export const main = (): i32 => {
   const out = new PixelBytes(0);
   kittyFrame(fb, rect, 1, out);
   console.log(`${out.length > 0}`); // true: out.text() is ready to write
+  return 0;
+};
+```
+
+## `nish/input`
+
+`nish/input` names what one fixed step of a program reads from its player: the
+`TermEvent`s since the last step and the `KeyState` of which keys are held. It
+is pure, with no capability, no I/O and no clock, so a step that takes an
+`InputFrame` compiles the same for a terminal, for `wasm32` behind a page, or
+for a test that scripts the keys. The events and key state are
+[`nish/term`](#nishterm)'s.
+
+A host owns one `StepInput` and refills it each step:
+
+```ts nish:ok
+import { KEY_CHAR, KeyState } from "nish/term";
+import { InputFrame, StepInput, inputDown } from "nish/input";
+
+const quits = (input: InputFrame): boolean => inputDown(input, KEY_CHAR, 113);
+
+export const main = (): i32 => {
+  const input = new StepInput(new KeyState());
+  console.log(quits(input));
   return 0;
 };
 ```

@@ -19,9 +19,8 @@
  *
  * The events and key state themselves (`TermEvent`, `KeyState` and the `KEY_`,
  * `EVENT_` and `ACTION_` constants) are `nish/term`'s, which is pure too.
- * `nish/term-io`'s `TermInput` implements `InputFrame`, so a terminal program
- * passes the input `runTerminal` hands it straight to a function that takes an
- * `InputFrame`.
+ * A host with no terminal fills a `StepInput`; a terminal program copies the
+ * events and key state `runTerminal` hands it into one.
  *
  * Private helpers share the importing program's flat symbol namespace, which
  * is why each one carries the module's name.
