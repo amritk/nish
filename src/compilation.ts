@@ -1862,7 +1862,8 @@ export class Compilation {
    * What the argument `arg` of grant entry `entry`, for capability `c`, is
    * resolved to, or null once it is refused (NL3045 to NL3047): a directory, against
    * the root package's directory `base`, to its real path; a program, found
-   * on `PATH` or as a path from `base`, to its real path; a host, checked to
+   * on `PATH` or as a path from `base`, to its real path, after an `exec:`
+   * prefix (`EXEC_GRANT`) is taken off; a host, checked to
    * be the numeric address `nish:net` takes, or a Unix socket's absolute path
    * for `unixConnect` and `unixListen`, as written.
    */
@@ -1888,9 +1889,13 @@ export class Compilation {
       return arg
     }
     if (c === capabilityIndex("process.spawn")) {
+      // `exec:` is read before the program is found, so a program whose name
+      // starts `exec:` is granted as a path (`./exec:x`), and `exec:` with
+      // nothing after it names no program.
+      const program = arg.startsWith(EXEC_GRANT) ? arg.slice(EXEC_GRANT.length) : arg
       let found: string | null = null
-      if (arg.length > 0) {
-        found = findProgram(arg, base)
+      if (program.length > 0) {
+        found = findProgram(program, base)
       }
       if (found === null) {
         this.sink.report(
@@ -2261,6 +2266,7 @@ export class Compilation {
       covered =
         relative ||
         texts.indexOf(`process.spawn=${literal.value}`) >= 0 ||
+        texts.indexOf(`process.spawn=${EXEC_GRANT}${literal.value}`) >= 0 ||
         (found !== null && values.indexOf(found) >= 0)
     } else if (!covered) {
       covered = !literal.value.startsWith("/") || beneathAny(normalizePath(literal.value), values)
@@ -3949,7 +3955,8 @@ export class Compilation {
    * `fs.read`, `fs.write` or `process.spawn`, and each of them is granted it
    * with arguments, `--sandbox` confines the program to those arguments — the
    * granted directories become its Landlock roots, the granted programs (and
-   * their interpreters, marked `//` unless granted too) its exec allowlist. A
+   * their interpreters, marked `//` unless granted too; a program granted
+   * `exec:`, marked `///`) its exec allowlist. A
    * reach the root package makes itself, an `ffi` call, or a scope given on
    * the command line leaves the capability as it was.
    */
@@ -3981,6 +3988,7 @@ export class Compilation {
         continue
       }
       const values: string[] = []
+      const execs: string[] = []
       let reached = false
       let scoped = true
       let p = 0
@@ -3996,11 +4004,15 @@ export class Compilation {
             while (
               j < this.grantArgOwners.length &&
               j < this.grantArgCaps.length &&
-              j < this.grantArgValues.length
+              j < this.grantArgValues.length &&
+              j < this.grantArgTexts.length
             ) {
               if (this.grantArgOwners[j] === g && this.grantArgCaps[j] === c) {
                 named = true
                 addOnce(values, this.grantArgValues[j])
+                if (this.grantArgTexts[j].startsWith(`process.spawn=${EXEC_GRANT}`)) {
+                  addOnce(execs, this.grantArgValues[j])
+                }
               }
               j = j + 1
             }
@@ -4016,8 +4028,12 @@ export class Compilation {
       }
       // An interpreter the grant does not name itself is written with a
       // second leading `/`, the same file to Landlock, which the runtime keeps
-      // out of a spawn's reach by identity (SBX-1). Grant values and
-      // interpreters are real paths, so no other entry starts `//`.
+      // out of a spawn's reach by identity (SBX-1). A program granted
+      // `exec:` (under any of its grants) is written with two more, `///`,
+      // which POSIX itself reads as one: the runtime starts it without the
+      // one-exec filter, so its subtree reaches the whole allowlist. Grant
+      // values and interpreters are real paths, so no other entry starts
+      // `//`, and an interpreter's third character is never `/`.
       const granted = values.length
       if (c === capabilityIndex("process.spawn")) {
         let k = 0
@@ -4031,7 +4047,14 @@ export class Compilation {
       }
       let v = 0
       while (v < values.length) {
-        cli.push(v < granted ? values[v] : `/${values[v]}`)
+        const value = values[v]
+        if (v >= granted) {
+          cli.push(`/${value}`)
+        } else if (execs.indexOf(value) >= 0) {
+          cli.push(`//${value}`)
+        } else {
+          cli.push(value)
+        }
         v = v + 1
       }
     }
@@ -4195,6 +4218,16 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
  * behind by every pass of `grantMask`'s loop (NL9011).
  */
 const normalizedGrant = (name: string, arg: string): string => `${name}=${normalizePath(arg)}`
+
+/**
+ * WP40 §2a: the prefix of a `process.spawn` grant's program that lets the
+ * program start others, `process.spawn=exec:<program>`. Under `--sandbox` a
+ * program granted without it gets exactly one exec, its own start
+ * (docs/wp37-os-sandbox.md §2a "One exec per spawn"); one granted with it,
+ * and everything it starts, may execute any file the exec allowlist holds,
+ * the loaders included, so it can run anything (docs/security/sandbox.md).
+ */
+const EXEC_GRANT: string = "exec:"
 
 /** Push `value` onto `list` unless it is there already. */
 const addOnce = (list: string[], value: string): void => {

@@ -3,4 +3,5 @@ edges: 792 of 792 scalars agree
 corpus: 10000 of 10000 scalars agree
 field: 1518 of 1518 elements agree, 2 as arithmetic gives
 sums: 87 of 87 sums agree
-checksum: 254665115
+arithmetic: 38296 of 38296 field ops agree with the bit-serial reference
+checksum: 2426640003
