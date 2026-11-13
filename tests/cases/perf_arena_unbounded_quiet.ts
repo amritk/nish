@@ -145,6 +145,49 @@ const scoped = (log: Log): i32 => {
   return total;
 };
 
+// A temporary built only on the pass that returns or breaks: every path from
+// it leaves the loop, so it is built at most once each time the loop runs.
+const finds = (log: Log): i32 => {
+  let k = 0;
+  while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    if (k === 2) {
+      const found = `found ${k}`;
+      return found.length;
+    }
+    if (k === 9) {
+      const gone = `gone ${k}`;
+      log.total = log.total + gone.length;
+      break;
+    }
+  }
+  return 0;
+};
+
+// A board that keeps the last title it is given.
+class Board {
+  title: string;
+  constructor() {
+    this.title = "";
+  }
+}
+
+// Stores its argument into the board, which is older than any loop that calls it.
+const pin = (board: Board, title: string): void => {
+  board.title = title;
+};
+
+// Each pass hands its title to `pin`, which keeps it: memory the program
+// still reaches, not a temporary the pass drops.
+const posts = (log: Log, board: Board): void => {
+  let k = 0;
+  while (more(log)) {
+    pin(board, `post ${k}`);
+    k = k + 1;
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -159,5 +202,10 @@ export const main = (): void => {
   fielded(log, new Batch(), [0]);
   log.left = 5;
   const k = scoped(log);
-  console.log(`${log.total} ${log.last.id} ${d} ${e} ${k}`);
+  log.left = 5;
+  const f = finds(log);
+  const board = new Board();
+  log.left = 2;
+  posts(log, board);
+  console.log(`${log.total} ${log.last.id} ${d} ${e} ${k} ${f} ${board.title}`);
 };

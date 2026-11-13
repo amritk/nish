@@ -232,7 +232,7 @@ const updateParam = (text: string): string => {
   while (taken) {
     {
       // Each candidate name is a temporary the pass drops.
-      using a = arena()
+      using _a = arena()
       taken = text.indexOf(`old${n}`) >= 0
     }
     if (taken) {

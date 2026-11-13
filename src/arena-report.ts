@@ -693,6 +693,10 @@ const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
   if (!site.accumulates || !site.around.unbounded || site.kind === "push") {
     return false
   }
+  const loop = site.around.loop
+  if (loop !== null && leavesLoop(walk.unit, site.node, loop)) {
+    return false
+  }
   const id = site.node.id
   const call = walk.calls[id]
   if (call === null) {
@@ -702,6 +706,118 @@ const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
   return (
     callee !== null && callee.netAllocates && callee.contained && call.flow === FLOW_LOCAL && !call.escapes
   )
+}
+
+/**
+ * True when every path from `node` to the end of `loop`'s pass leaves the
+ * loop: a `return`, a `throw`, or a `break` out of this loop or one around it.
+ * Such a site runs at most once each time the loop is entered, so nothing it
+ * allocates piles up pass after pass. A `continue`, or falling through to the
+ * next pass, does not leave. The climb answers false at a `switch`, a `try` or
+ * another loop between the site and `loop`, whose control it does not follow.
+ */
+const leavesLoop = (unit: AnalysisUnit, node: Node, loop: Node): boolean => {
+  let at = node
+  let parent = unit.parents.parentOf(at)
+  while (parent !== null && parent !== loop) {
+    const kind = parent.kind
+    if (kind === NodeKind.Return || kind === NodeKind.Throw) {
+      return true
+    }
+    if (isLoopKind(parent) || kind === NodeKind.Switch || kind === NodeKind.Try) {
+      return false
+    }
+    if (kind === NodeKind.Block) {
+      if (restLeaves(unit, parent.children, childIndex(parent, at) + 1, loop)) {
+        return true
+      }
+    } else if (kind === NodeKind.If && parent.children[0] === at && mustLeave(unit, parent, loop)) {
+      return true
+    }
+    at = parent
+    parent = unit.parents.parentOf(at)
+  }
+  return false
+}
+
+/** The position of `child` among `parent`'s children. */
+const childIndex = (parent: Node, child: Node): i32 => {
+  let i = 0
+  while (i < parent.children.length && parent.children[i] !== child) {
+    i = i + 1
+  }
+  return i
+}
+
+/** True when the statements of `list` from `from` on leave `loop` on every path before any can reach its next pass. */
+const restLeaves = (unit: AnalysisUnit, list: Node[], from: i32, loop: Node): boolean => {
+  let i = from
+  while (i < list.length) {
+    const statement = list[i]
+    if (mayContinue(statement, true)) {
+      return false
+    }
+    if (mustLeave(unit, statement, loop)) {
+      return true
+    }
+    i = i + 1
+  }
+  return false
+}
+
+/** True when every path through `statement` leaves `loop` and none reaches its next pass. */
+const mustLeave = (unit: AnalysisUnit, statement: Node, loop: Node): boolean => {
+  const kind = statement.kind
+  if (kind === NodeKind.Return || kind === NodeKind.Throw) {
+    return true
+  }
+  if (kind === NodeKind.Break) {
+    return statement.text === "" || labelsAround(unit, loop, statement.text)
+  }
+  if (kind === NodeKind.Block) {
+    return restLeaves(unit, statement.children, 0, loop)
+  }
+  if (kind === NodeKind.If) {
+    return (
+      !mayContinue(statement.children[0], true) &&
+      mustLeave(unit, statement.children[1], loop) &&
+      mustLeave(unit, statement.children[2], loop)
+    )
+  }
+  return false
+}
+
+/** True when a `label:` names `loop` or a statement around it, so `break label` leaves `loop`. */
+const labelsAround = (unit: AnalysisUnit, loop: Node, label: string): boolean => {
+  let at = unit.parents.parentOf(loop)
+  while (at !== null) {
+    if (at.kind === NodeKind.Labeled && at.text === label) {
+      return true
+    }
+    at = unit.parents.parentOf(at)
+  }
+  return false
+}
+
+/**
+ * True when `node` holds a `continue` that may start the next pass of the loop
+ * around it: an unlabelled one outside any loop of its own (`direct`), or any
+ * labelled one. A lifted arrow is a function of its own.
+ */
+const mayContinue = (node: Node, direct: boolean): boolean => {
+  if (node.kind === NodeKind.Continue) {
+    return direct || node.text !== ""
+  }
+  if (node.kind === NodeKind.Arrow || node.kind === NodeKind.FunctionDecl) {
+    return false
+  }
+  const inner = direct && !isLoopKind(node)
+  for (const child of node.children) {
+    if (mayContinue(child, inner)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** Count `site` under the loop it piles up around, or start that loop's entry. */

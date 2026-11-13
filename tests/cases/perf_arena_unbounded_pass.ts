@@ -142,6 +142,22 @@ const lent = (log: Log, other: i32[]): void => {
   }
 };
 
+// A temporary built on a pass that goes on with `continue`: the next pass can
+// build another, so they pile up the way the others do.
+const skips = (log: Log): void => {
+  let k = 0;
+  while (more(log)) {
+    log.last = new Entry(k);
+    k = k + 1;
+    if (k === 2) {
+      const skipped = `skipped ${k}`;
+      log.total = log.total + skipped.length;
+      continue;
+    }
+    log.total = log.total + 1;
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -161,5 +177,7 @@ export const main = (): void => {
   log.left = 2;
   accept(log);
   lent(log, [0]);
+  log.left = 3;
+  skips(log);
   console.log(`${log.total} ${log.last.id}`);
 };
