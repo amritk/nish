@@ -444,6 +444,23 @@ table.t-editor__table tbody tr:hover {
 .page-node:has(.nish-hero__inner) > .nish-hero {
   margin-top: 0;
 }
+/* The site loads site.js after it has painted the page, so the hero lands
+   on a page that is already on screen and pushes what is under it down: on a
+   phone, off the screen. Until site.js marks the host data-nish-ready, two
+   frames after filling it, the page under the hero is held hidden
+   (visibility, so it keeps its place in the layout): it moves while no one
+   can see it, then shows where it will stay. The hold is an animation that
+   ends by itself, so with site.js slow or missing the page shows after 1.2s,
+   as it did before. Once the host is ready the rule lets go, and each block
+   has its own animation back. */
+@keyframes nish-hold {
+  from {
+    visibility: hidden;
+  }
+}
+.page-node > [data-nish-hero]:not([data-nish-ready]) ~ * {
+  animation: nish-hold 1.2s step-end;
+}
 .nish-hero__inner {
   position: relative;
   isolation: isolate;
@@ -945,8 +962,12 @@ a.nish-hero__cta:hover {
   .nish-hero__stage {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* Stacked, the beams would keep their 3:2 viewBox and grow with the
+     width, to 353px of mostly empty height at 720px, pushing the page
+     under the hero further below the fold. */
   .nish-hero__flow {
-    min-height: 130px;
+    min-height: 0;
+    height: 130px;
   }
   .nish-hero__code {
     font-size: 11px;
@@ -1064,5 +1085,9 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+  /* Not motion: the hold under the landing page's hero (see nish-hold). */
+  .page-node > [data-nish-hero]:not([data-nish-ready]) ~ * {
+    animation: nish-hold 1.2s step-end !important;
   }
 }

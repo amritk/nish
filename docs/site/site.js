@@ -234,6 +234,13 @@
       host.classList.add("nish-hero")
       host.append(hero())
     }
+    // theme.css holds the page under an unready host hidden, so the hero's
+    // arrival moves nothing a reader can see. Ready waits two frames: the
+    // frame that lays the hero out still hides the page it pushed down, and
+    // the page shows where it will stay.
+    for (const host of document.querySelectorAll("[data-nish-hero]:not(:empty):not([data-nish-ready])")) {
+      requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
+    }
   }
 
   let queued = false
