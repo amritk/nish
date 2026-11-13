@@ -93,9 +93,10 @@
  *  client trickling its HEADERS, the slowloris of HTTP/3) with
  *  H3_EXCESSIVE_LOAD, as the program writes no timer of its own. A client
  *  that only acknowledges or sends PING keeps its QUIC connection alive but
- *  not its slot. The clock times a slot only once its HTTP/3 has started (the
- *  first `next` after an `h3` handshake); a slot the program runs another
- *  protocol on, such as `hq-interop`, is left to QUIC's idle timeout.
+ *  not its slot. The clock times a slot from the first `next` that finds the
+ *  handshake chose `h3`, whether or not the client has let this side's
+ *  streams open; a slot the program runs another protocol on, such as
+ *  `hq-interop`, is left to QUIC's idle timeout.
  *
  * **Caps, fixed at start-up**: the slots, and inside each the QUIC
  * configuration's streams and buffers and the `Http3Config`'s field section,

@@ -317,7 +317,11 @@ const H3_FLAG_LATE: i32 = 512
 const H3_STATE_OPEN: i32 = 0
 const H3_STATE_FAILED: i32 = 1
 
-/** What `clock` saw: no request in hand, a request short of its head, or every request past its head. */
+/**
+ * What `clock` saw: no request in hand, a request short of its head, or every request past its head;
+ * or OFF, HTTP/3 not yet chosen (no `next` since the handshake picked `h3`).
+ */
+const H3_CLOCK_OFF: i32 = -1
 const H3_CLOCK_IDLE: i32 = 0
 const H3_CLOCK_HEAD: i32 = 1
 const H3_CLOCK_BUSY: i32 = 2
@@ -601,10 +605,13 @@ export class Http3Connection {
   private againHead: i32 = 0
   private againCount: i32 = 0
   private waitCount: i32 = 0
-  /** The heads delivered, wrapping, and the count and `H3_CLOCK_*` mode `clock` last saw. */
+  /**
+   * The heads delivered, wrapping, and the count and `H3_CLOCK_*` mode `clock` last saw: -1, OFF,
+   * until `next` finds the handshake chose `h3`.
+   */
   private heads: i32 = 0
   private clockHeads: i32 = 0
-  private clockMode: i32 = 0
+  private clockMode: i32 = -1
   /** How many times `restart` ran: a layer above that keeps state per connection compares it to know when to forget its own. */
   generation: i32 = 0
   /** Whether the client's SETTINGS have arrived. */
@@ -774,7 +781,7 @@ export class Http3Connection {
     this.waitCount = 0
     this.heads = 0
     this.clockHeads = 0
-    this.clockMode = H3_CLOCK_IDLE
+    this.clockMode = H3_CLOCK_OFF
     this.generation = this.generation < 2147483647 ? this.generation + 1 : H3_ONE
     this.dataStart = 0
     this.dataLength = 0
@@ -822,17 +829,18 @@ export class Http3Connection {
    * request's head has waited `headTimeout`, and otherwise answers when to
    * look again. `Http3Server` calls it on every flush of the slot; a program
    * driving a connection itself calls it after each `next` and when the
-   * time it answered comes. It allocates nothing. The clock starts with
-   * HTTP/3, on the first `next` after the handshake chose `h3`: a connection
-   * the program runs another protocol on, and never asks for an event, is
-   * left to QUIC's own idle timeout.
+   * time it answered comes. It allocates nothing. The clock starts on the
+   * first `next` after the handshake chose `h3`, whether or not the client's
+   * MAX_STREAMS has let this side's own streams open yet: a connection the
+   * program runs another protocol on, and never asks for an event, is left
+   * to QUIC's own idle timeout.
    *
    * @param now The current millisecond on the caller's monotonic clock.
-   * @returns The millisecond the clock next needs a look, or -1 when it needs none: HTTP/3 has not
-   *   started, every request in hand is past its head, or the connection is closed (by this call too).
+   * @returns The millisecond the clock next needs a look, or -1 when it needs none: no `next` has
+   *   found `h3` chosen yet, every request in hand is past its head, or the connection is closed (by this call too).
    */
   clock(now: i64): i64 {
-    if (this.ownDecoder < 0 || this.quic.closed()) {
+    if (this.clockMode === H3_CLOCK_OFF || this.quic.closed()) {
       return -1
     }
     let mode: i32 = H3_CLOCK_BUSY
@@ -1056,6 +1064,12 @@ export class Http3Connection {
       if (this.quic.alpn !== H3_ALPN) {
         this.quic.fail(H3_NO_APPLICATION_PROTOCOL, toI64(0))
         return this.fail(H3_NO_APPLICATION_PROTOCOL)
+      }
+      // The clock runs from here, not from start() finishing: a client
+      // whose MAX_STREAMS keeps this side's unidirectional streams unopened
+      // is still served its requests, so it is still timed.
+      if (this.clockMode === H3_CLOCK_OFF) {
+        this.clockMode = H3_CLOCK_IDLE
       }
       this.start()
     }

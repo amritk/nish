@@ -100,4 +100,6 @@ PASS  past 1,000 ms, the idle client is closed with H3_NO_ERROR
 PASS  and the active client keeps its slot, every GET answered
 PASS  a client that chose hq-interop connects
 PASS  past idleTimeout, the clock of a connection never asked for an event neither closes it nor asks for a look
-http3 server: 102 passed, 0 failed, 0 skipped
+PASS  two clients allowing two unidirectional streams, each in a slot of its own
+PASS  past both timeouts, the starved trickler is closed with H3_EXCESSIVE_LOAD and the starved idle client with H3_NO_ERROR
+http3 server: 104 passed, 0 failed, 0 skipped

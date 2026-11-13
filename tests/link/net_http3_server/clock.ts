@@ -6,7 +6,10 @@
 // but is no progress of HTTP/3's.
 // The program writes no timer: the trickler loses its slot to
 // H3_EXCESSIVE_LOAD past the head timeout, the idle client to H3_NO_ERROR
-// past the idle one, and the active client keeps its slot throughout.
+// past the idle one, and the active client keeps its slot throughout. The
+// clock starts when HTTP/3 is chosen, not when this side's streams open, so
+// a client that never lets them open is timed as well; a connection the
+// program runs another protocol on is not.
 import { netLocalPort, udpBind } from "nish:net";
 import { Suite } from "nish/testing";
 import { H3_EXCESSIVE_LOAD, H3_NO_ERROR } from "nish/net/http3-frame";
@@ -139,8 +142,69 @@ const unstarted = (t: Suite): void => {
   );
 };
 
+/**
+ * A client that lets this side open fewer than its three unidirectional
+ * streams keeps HTTP/3's start unfinished, yet its requests are still
+ * served, so the clock still times it: an idle such client and a trickling
+ * one lose their slots at the timeouts as any other would.
+ */
+const starved = (t: Suite): void => {
+  const limits = new H3Limits();
+  const config = h3Config();
+  config.headTimeout = n32(300);
+  config.idleTimeout = n32(1000);
+  const fd: i32 = udpBind("127.0.0.1", n32(0), n32(0));
+  const port: i32 = netLocalPort(fd);
+  const server = new Http3Server(h3QuicConfig(limits), config, fd, n32(4), listenerEntropy());
+  const narrow = new H3Limits();
+  narrow.clientUniStreams = n64(2);
+  const slow: H3Peer = h3WireConnect(server, port, narrow);
+  const quiet: H3Peer = h3WireConnect(server, port, narrow);
+  if (!t.ok("two clients allowing two unidirectional streams, each in a slot of its own", server.busy() === n32(2))) {
+    return;
+  }
+  let now: i64 = slow.c.now > quiet.c.now ? slow.c.now : quiet.c.now;
+  for (const p of [slow, quiet]) {
+    sync(p, now);
+    p.open(n64(-1));
+    p.settle();
+    now = p.c.now;
+  }
+  const pad: string[] = ["x-pad"];
+  let fill: string = "";
+  for (let k: i32 = 0; k < 200; k++) {
+    fill = fill + "p";
+  }
+  const padding: string[] = [fill];
+  const head: u8[] = slow.headers("GET", "/hello", pad, padding);
+  const start: i64 = now;
+  let step: i32 = 0;
+  while (now - start < n64(1500) && step < 200) {
+    now = now + n64(20);
+    if (slow.closeCode < 0 && step < toI32(head.length)) {
+      sync(slow, now);
+      const one: u8[] = [head[step]];
+      slow.send(n64(0), one, false);
+      now = slow.c.now;
+    }
+    if (quiet.closeCode < 0) {
+      sync(quiet, now);
+      quiet.packet([toU8(1)]);
+      now = quiet.c.now;
+    }
+    step++;
+  }
+  t.eqStr(
+    "past both timeouts, the starved trickler is closed with H3_EXCESSIVE_LOAD and the starved idle client with H3_NO_ERROR",
+    `${slow.closeCode} ${quiet.closeCode} ${server.busy()}`,
+    `${H3_EXCESSIVE_LOAD} ${H3_NO_ERROR} 0`
+  );
+  server.stop();
+};
+
 /** Every check of this file. */
 export const clockChecks = (t: Suite): void => {
   clocked(t);
   unstarted(t);
+  starved(t);
 };
