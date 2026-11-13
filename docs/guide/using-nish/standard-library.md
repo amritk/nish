@@ -201,6 +201,7 @@ shown).
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
 | [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |
+| [`nish/release`](#nishrelease) | `releaseLatest` and `releaseCheckCached`: whether a newer release of a project on GitHub is out, asked at most once a day |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/input`](#nishinput) | `StepInput`: what one fixed step reads from its player, the events since the last step and the keys held down, with no terminal, I/O or clock; `isDown` reads a key |
@@ -2093,6 +2094,44 @@ generated yet, and nish's own command line does not use this module: `src/`
 can only use what a released compiler ships, so it moves onto
 `nish/cli-args` once a release carries it. The example under
 `examples/api-cli/` is a whole client.
+
+## `nish/release`
+
+`nish/release` tells a command-line tool whether a newer release of it is out
+on GitHub: the check behind `nish upgrade` and the compiler's update notice.
+
+```ts
+import { releaseCheckCached } from "nish/release";
+
+const newer: string | null = releaseCheckCached(
+  "https://github.com/owner/tool", "1.2.0",
+  "/home/me/.cache/tool/latest", 86400000, 2000);
+if (newer !== null) {
+  console.error(`tool ${newer} is available (you have 1.2.0)`);
+}
+```
+
+`releaseLatest(base, timeoutMs)` asks `<base>/releases/latest` once and reads
+the version from where it redirects, without following it and without a
+token. It answers null for anything but a redirect to exactly
+`<base>/releases/tag/v<version>`: a server that is down, slow, refuses, or
+sends you to a login page. `releaseCheckCached` keeps the answer in the file
+you name, so a second call within `maxAgeMs` asks nothing; it believes the file
+only when it is a regular file you own that nobody else can write, and treats
+one dated in the future as stale.
+
+`releaseIsNewer(candidate, current)` is true only when both are semantic
+versions and the candidate is strictly newer, so a bad answer never proposes a
+downgrade. `releaseValidVersion(v)` says whether a version may be put in a URL,
+by `install.sh`'s rule: a digit first, then only letters, digits, `.`, `-`
+and `+`. `releaseFetchInstaller(rawBase, version, path, timeoutMs)` writes a
+release tag's `install.sh` to a file for you to run with `sh`; nothing fetched
+is piped into a shell.
+
+The base must be `https://`, or `http://` to this machine for a test server.
+The module is native only: it reaches the network and reads file owners. What
+it defends against is in its
+[security record](../../security/release.md).
 
 ## `nish/term`
 
