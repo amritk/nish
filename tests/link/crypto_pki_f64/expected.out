@@ -166,3 +166,20 @@ pki hostnames (f64 mode): 41 passed, 0 failed, 0 skipped
 PASS  every code has a sentence of its own
 PASS  an unknown code has one too
 pki reasons (f64 mode): 2 passed, 0 failed, 0 skipped
+PASS  spki is the whole subjectPublicKeyInfo, ending with the key
+PASS  a store distrusts nothing by default
+PASS  a distrusted intermediate's key
+PASS  and every certificate of that key, under any extensions
+PASS  a distrusted root's key
+PASS  a distrusted leaf's key
+PASS  a leaf straight under a distrusted root
+PASS  a distrusted key off the path changes nothing
+PASS  nor does one only in the pool
+PASS  nor an intermediate sent but not on the path
+PASS  a leaf of the distrusted key, under another issuer
+PASS  the hash is of the subjectPublicKeyInfo, not the bare key
+PASS  a hash of 31 bytes is not added
+PASS  and distrusts nothing
+PASS  a hash of 32 bytes is added
+PASS  and is refused from then on
+pki distrust (f64 mode): 16 passed, 0 failed, 0 skipped

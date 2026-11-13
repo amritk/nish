@@ -8,6 +8,7 @@ import {
   PKI_ERR_BAD_SIGNATURE,
   PKI_ERR_BUDGET,
   PKI_ERR_CHAIN_TOO_LONG,
+  PKI_ERR_DISTRUSTED,
   PKI_ERR_EXPIRED,
   PKI_ERR_EXT_KEY_USAGE,
   PKI_ERR_HOSTNAME,
@@ -26,12 +27,14 @@ import {
   PKI_OK,
   PkiResult,
   PkiTrustStore,
+  pkiDistrustSpki,
   pkiMatchHostname,
   pkiReason,
   pkiTrustStore,
   pkiVerifyServer,
   pkiVerifySignature,
 } from "nish/crypto/pki"
+import { sha256 } from "nish/crypto/sha256"
 import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509"
 import { fromHex } from "../crypto_x25519/hex"
 import {
@@ -551,7 +554,7 @@ export const reasons = (mode: string): i32 => {
   const s = new Suite(`pki reasons${mode}`)
   const seen: string[] = []
   let distinct: boolean = true
-  for (let code: i32 = 0; code <= 16; code++) {
+  for (let code: i32 = 0; code <= 17; code++) {
     const r: string = pkiReason(code)
     if (r.length === 0 || seen.indexOf(r) >= 0) {
       distinct = false
@@ -560,5 +563,64 @@ export const reasons = (mode: string): i32 => {
   }
   s.ok("every code has a sentence of its own", distinct)
   s.ok("an unknown code has one too", pkiReason(99).length > 0)
+  return s.done()
+}
+
+/** A store of the two roots that distrusts the key of each certificate in `hexes`. */
+const distrusting = (hexes: string[]): PkiTrustStore => {
+  const st: PkiTrustStore = store()
+  for (const h of hexes) {
+    pkiDistrustSpki(st, sha256(cert(h).spki))
+  }
+  return st
+}
+
+/** The code for `hexes` and example.com under `st`. */
+const dverify = (hexes: string[], st: PkiTrustStore): i32 => pkiVerifyServer(ders(hexes), "example.com", NOW_MS, st).code
+
+/** Whether `whole` ends with `tail`. */
+const endsWith = (whole: u8[], tail: u8[]): boolean => {
+  const off: i32 = toI32(whole.length) - toI32(tail.length)
+  if (off < 0) {
+    return false
+  }
+  for (let i: i32 = 0; i < toI32(tail.length) && off + i < toI32(whole.length); i++) {
+    if (whole[off + i] !== tail[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+export const distrust = (mode: string): i32 => {
+  const s = new Suite(`pki distrust${mode}`)
+  const int: X509Certificate = cert(INT)
+  s.ok(
+    "spki is the whole subjectPublicKeyInfo, ending with the key",
+    toI32(int.spki.length) > toI32(int.publicKey.length) && int.spki[0] === toU8(0x30) && endsWith(int.spki, int.publicKey)
+  )
+  eqCode(s, "a store distrusts nothing by default", dverify([LEAF, INT], store()), PKI_OK)
+  eqCode(s, "a distrusted intermediate's key", dverify([LEAF, INT], distrusting([INT])), PKI_ERR_DISTRUSTED)
+  eqCode(
+    s,
+    "and every certificate of that key, under any extensions",
+    dverify([LEAF, INT_SERVER], distrusting([INT])),
+    PKI_ERR_DISTRUSTED
+  )
+  eqCode(s, "a distrusted root's key", dverify([LEAF, INT], distrusting([ROOT])), PKI_ERR_DISTRUSTED)
+  eqCode(s, "a distrusted leaf's key", dverify([LEAF, INT], distrusting([LEAF])), PKI_ERR_DISTRUSTED)
+  eqCode(s, "a leaf straight under a distrusted root", dverify([LEAF_ED], distrusting([EDROOT])), PKI_ERR_DISTRUSTED)
+  eqCode(s, "a distrusted key off the path changes nothing", dverify([LEAF, INT], distrusting([EDROOT])), PKI_OK)
+  eqCode(s, "nor does one only in the pool", dverify([LEAF, INT, OTHER], distrusting([OTHER])), PKI_OK)
+  eqCode(s, "nor an intermediate sent but not on the path", dverify([LEAF, INT, SUB], distrusting([SUB])), PKI_OK)
+  eqCode(s, "a leaf of the distrusted key, under another issuer", dverify([LEAF_SUB, SUB, INT], distrusting([LEAF])), PKI_ERR_DISTRUSTED)
+  const wide: PkiTrustStore = store()
+  pkiDistrustSpki(wide, sha256(int.publicKey))
+  eqCode(s, "the hash is of the subjectPublicKeyInfo, not the bare key", dverify([LEAF, INT], wide), PKI_OK)
+  const short: PkiTrustStore = store()
+  s.ok("a hash of 31 bytes is not added", !pkiDistrustSpki(short, sha256(int.spki).slice(0, 31)))
+  eqCode(s, "and distrusts nothing", dverify([LEAF, INT], short), PKI_OK)
+  s.ok("a hash of 32 bytes is added", pkiDistrustSpki(short, sha256(int.spki)))
+  eqCode(s, "and is refused from then on", dverify([LEAF, INT], short), PKI_ERR_DISTRUSTED)
   return s.done()
 }

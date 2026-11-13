@@ -38,7 +38,7 @@ Accepted and not counted:
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiNote`, `pkiLeafCode`, `pkiLeafProfileCode`, `pkiSubscriberKeyCode`, `pkiSerialSound`, `pkiSanDnsSound`, `pkiIssuerCode`, `pkiKeyIdsCode`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiRsaKeyCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiBytesEqual` |
+| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiDistrustSpki`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiIsDistrusted`, `pkiNote`, `pkiLeafCode`, `pkiLeafProfileCode`, `pkiSubscriberKeyCode`, `pkiSerialSound`, `pkiSanDnsSound`, `pkiIssuerCode`, `pkiKeyIdsCode`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiRsaKeyCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiBytesEqual` |
 | `std/crypto/pki-roots.ts` | `pkiLoadSystemRoots`, `pkiLoadRootsFor`, `pkiLoadRoots`, `pkiSystemBundles`, `pkiRootsDirEntry`, `PkiRoots`; `PkiRootsLoad`, `pkiRootsKeep`, `pkiRootsBlock`, `pkiRootsSplit`, `pkiRootsRegular`, `pkiRootsFile`, `pkiRootsDir`, `pkiRootsSplitDirs`, `pkiRootsIsDigit`, `pkiRootsIsHex` |
 
 Out of scope:
@@ -303,7 +303,8 @@ and it misses all of the following:
 - **Trust settings, never-trust among them.** A user or administrator can
   mark a root never-trusted or restrict it to some uses. Those settings live
   in the trust-settings domains and are not reflected in the file. A root the
-  machine's owner distrusted is still trusted here.
+  machine's owner distrusted is still trusted here, unless the program
+  distrusts its key itself (`pkiDistrustSpki`, PKI-17).
 - **Apple's partial distrust and per-root constraints.** Apple distrusts
   certain roots for certificates issued after a date, and constrains others
   to some names or uses. These rules are in the OS's trust evaluation, not in
@@ -334,7 +335,9 @@ leaf to a root of the store with these properties:
 - every issuer carries the key identifiers RFC 5280 asks of it, a root
   its authorityKeyIdentifier only;
 - the leaf names the host in its subjectAltName and keeps the CA/Browser
-  Forum's profile of a server's certificate.
+  Forum's profile of a server's certificate;
+- no certificate on it, leaf, intermediate or root, has a key the store
+  distrusts (`pkiDistrustSpki`; none by default).
 
 Each refusal has a reason code of its own (PKI-14). Each cost an attacker can
 raise has a named bound, and passing a bound is a refusal, never a slow
@@ -344,7 +347,8 @@ them, and PKI-26 is narrowed to one case. PKI-33 (Low, fixed) closes an
 excluded IPv4 subtree to the IPv4-mapped IPv6 form of its addresses. Open,
 and counted:
 
-- PKI-17 (Medium): no revocation;
+- PKI-17 (Medium): no revocation. A caller can distrust a key by the
+  SHA-256 of its subjectPublicKeyInfo, which mitigates it in part;
 - PKI-19 (Low): certificate policies are not processed;
 - PKI-20 (Low): Names are compared byte for byte, not folded as RFC 5280
   §7.1 says. This fails closed.
@@ -1005,6 +1009,37 @@ revoked is accepted until it expires. Closing this needs a stapled-OCSP
 check from the TLS stage, or a CRL set, such as CRLite, shipped with the
 roots. Until then a caller that must honour revocation checks the path it is
 given.
+
+**Mitigated in part** in this change, whose base is `187336a6`: a caller can
+distrust a key. `pkiDistrustSpki(store, hash)` adds the SHA-256 of a
+subjectPublicKeyInfo's DER, 32 bytes, to the store, and `pkiVerifyServer`
+then refuses with `PKI_ERR_DISTRUSTED` (17) a path that holds a certificate
+of that key: the leaf, checked after its own checks, or an issuer, checked
+first in `pkiIssuerCode` so a refused candidate ends its branch and the
+search goes on to any other path. The DER is the new
+`X509Certificate.spki`. Matching the key rather than a certificate or a
+Name covers a CA's cross-signs and reissues with one entry. The list is
+empty by default, and while it is empty no hash is taken, so a program that
+never calls it verifies as before. A hash of any other length is not
+added, and the call answers `false`. `tlsClientDistrustSpki(trust, hash)`
+in `nish/net/tls/verify` adds to a `TlsClientTrust`'s store, so every
+connection on that trust (`tlsConnectWith`, `tlsClientAuthenticate`)
+refuses it with `bad_certificate`. `fetch` takes the list as
+`HttpOptions.distrustSpkiSha256`, added in `httpClientLoadTrust`, and fails
+every https fetch with `HTTP_E_CERTIFICATE` when a hash there is not 32
+bytes, rather than skipping the entry. The postgres carrier builds its
+trust from a roots file alone (`pgCarrierTrust`), so it has no list yet.
+
+This stays open: the caller has to learn of the compromise and name the key,
+and nothing is learnt from CRLs, OCSP or CT. Tests: the `pki distrust`
+suite in `crypto_pki` and `crypto_pki_f64` (an intermediate's, a root's and
+a leaf's key refused; every certificate of a key; a key off the path, in the
+pool only or of a certificate not on the path changes nothing; the bare
+key's hash is not the SPKI's; a 31-byte hash is refused and adds nothing).
+With the check disabled, seven of its sixteen checks fail. In
+`net_http_fetch_tls`, `a chain to a trusted root whose key is distrusted is
+HTTP_E_CERTIFICATE`, `a distrusted key no certificate of the chain holds
+changes nothing` and `a key to distrust that is not 32 bytes fails the fetch`.
 
 #### PKI-19 (Low): certificate policies are not processed
 
