@@ -1,4 +1,4 @@
-// --deny-retention: NL9018, a function a loop runs that keeps an allocation on
+// --deny-retention: NL9019, a function a loop runs that keeps an allocation on
 // every call, is an error.
 const relabel = (n: i32): i32 => {
   let s = "none";

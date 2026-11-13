@@ -3216,7 +3216,7 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
   return false
 }
 
-// ---- The kept-memory diagnostic (NL9018) --------------------------------------------------
+// ---- The kept-memory diagnostic (NL9019) --------------------------------------------------
 //
 // The arena-loop warning speaks at the loop, about a callee whose memory piles
 // up there. This one speaks at the callee: a function that answers no memory
@@ -3694,7 +3694,7 @@ const collectPassCalls = (
 }
 
 /**
- * The NL9018 warnings of one module: each function `reached` names (see
+ * The NL9019 warnings of one module: each function `reached` names (see
  * `loopReachedFunctions`) that answers no memory, would take a scope of its
  * own but for an allocation it holds where this analysis does not prove it
  * dead (`leaksItself`), and so keeps what it allocates on every call. Reported
@@ -3778,7 +3778,7 @@ const keptOwnAllocation = (
 }
 
 /**
- * Whether NL9018 could warn in any of `units` at all: some function there may
+ * Whether NL9019 could warn in any of `units` at all: some function there may
  * keep an allocation of its own. When none can, the whole-program walk of
  * `loopReachedFunctions` is skipped; with elision off, nothing is kept.
  */
@@ -4176,7 +4176,7 @@ const loopUpdate = (loop: Node): Node | null =>
   loop.kind === NodeKind.For && loop.children.length > 2 ? loop.children[2] : null
 
 /** Where a loop's kept memory goes back: the nearest bracket around it, or the function's own end. */
-const keptUntil = (
+export const keptUntil = (
   unit: AnalysisUnit,
   f: FunctionFacts,
   isMain: boolean,
@@ -4198,7 +4198,7 @@ const keptUntil = (
 }
 
 /** Why a loop that allocates has no scope of its own, for `--explain-memory`. */
-const loopKeptReason = (unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string => {
+export const loopKeptReason = (unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string => {
   if (facts.noElision) {
     return NO_ELISION_REASON
   }

@@ -194,7 +194,7 @@ export class Options {
   denyPanics: boolean
   /**
    * `--deny-retention`: every arena-retention warning in the program's own
-   * modules (NL9002, NL9003, NL9011, NL9016) is an error instead
+   * modules (NL9002, NL9003, NL9011, NL9016, NL9018) is an error instead
    * (`Compilation.denyRetention`). Like `--deny-panics` it changes no byte of
    * the IR: it only decides whether the build is allowed to happen.
    */

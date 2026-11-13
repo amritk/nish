@@ -1,4 +1,4 @@
-// NL9018: a function a loop runs on every pass keeps an allocation each call,
+// NL9019: a function a loop runs on every pass keeps an allocation each call,
 // and the loop's passes release nothing (each grows `names`, an array older
 // than the pass), so what the calls keep grows with the loop. Three shapes keep
 // their allocation: a string `let` assigned again, a `Result` `let` assigned

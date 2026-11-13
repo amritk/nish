@@ -1,4 +1,4 @@
-// NL9018 reports each function below: each keeps an array of its own on
+// NL9019 reports each function below: each keeps an array of its own on
 // every call, and each sits behind a guard that is not a latch, so the work
 // runs on every pass of the loop in `main`, not once.
 

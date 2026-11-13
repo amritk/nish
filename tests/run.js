@@ -1886,6 +1886,11 @@ const DEALT_SECTIONS = {
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
   fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
+  unboundedPass: {
+    name: "NL9018 on a request loop (--json, the flag, the http1 servers and their RSS)",
+    selected: selects("nl9018", "unbounded_pass"),
+  },
+  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
   differential: { name: "the WP13 differential section", selected: selects("differential") },
   p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
   netStartup: { name: "the net servers' startup links", selected: true, tail: true },
@@ -5579,7 +5584,7 @@ if (!only || "performance".includes(only)) {
     passDrop.stderr
   )
 
-  // NL9018: a function that keeps an allocation on every call, run on every
+  // NL9019: a function that keeps an allocation on every call, run on every
   // pass of a loop that releases nothing. Each of the three is named at its
   // declaration with the line of the first allocation it holds; `fixed` keeps
   // nothing.
@@ -5614,7 +5619,7 @@ if (!only || "performance".includes(only)) {
   const latchNames = ["guarded", "whenReady", "untilDone", "capped", "mark", "stamp", "primed"]
   const latchFirst = [21, 33, 44, 54, 66, 77, 90]
   check(
-    "performance: a guard that is not a once-latch on a fixed receiver does not exempt a function from NL9018",
+    "performance: a guard that is not a once-latch on a fixed receiver does not exempt a function from NL9019",
     latch.status === 0 &&
       latchLines.length === 7 &&
       positions(latchLines) === "15:1,27:1,38:1,49:1,60:1,71:1,84:1" &&
@@ -5627,12 +5632,88 @@ if (!only || "performance".includes(only)) {
   )
 
   // A `let` result handed back after reassignment is the arena stage's own
-  // shape: it must stay clear of every retention rule, not only NL9018.
+  // shape: it must stay clear of every retention rule, not only NL9019.
   const reassign = compile("res_let_reassign", "res_let_reassign_report.ll", ["--json"])
   check(
-    "performance: res_let_reassign raises no NL9003, NL9016 or NL9018",
-    reassign.status === 0 && !/"code":"NL90(03|16|18)"/.test(reassign.stderr),
+    "performance: res_let_reassign raises no NL9003, NL9016, NL9018 or NL9019",
+    reassign.status === 0 && !/"code":"NL90(03|16|18|19)"/.test(reassign.stderr),
     reassign.stderr
+  )
+
+  // NL9018: a loop that nothing bounds -- a poll, `while (true)` -- keeps what
+  // each pass allocates, because each pass stores into a structure older than
+  // the loop and so gets no scope. The warning sits on the innermost loop that
+  // releases nothing (the counted `for` inside `rounds`, which nothing outside
+  // it bounds either), names the first site and counts the rest. A `while` that
+  // compares beside a call (`drain`), a `for...of` that pushes onto what it
+  // walks (`walk`), a condition that allocates (`probe`), a flag (`flag`), a
+  // top-level `||` (`accept`) and a walk whose body passes the array it walks
+  // to a call that pushes (`lent`), are unbounded too, and so is a pass that
+  // builds a temporary and then `continue`s (`skips`), even when the rest of
+  // the body breaks (`flagged`), from an `else` whose `if` breaks (`branches`)
+  // or by label (`labelled`). A `return` inside a `switch` still warns
+  // (`switched`): the leave walk stops at a `switch`. A walk also counts as
+  // unbounded when its array goes through a function reference (`passed`), is
+  // written by index (`stores`) or is given another name (`renames`). An
+  // unlabelled `break` from a loop inside a polled one ends only its own loop,
+  // so the polled loop runs it again: two levels (`nested`) and three, with the
+  // `break` in the middle loop (`deep`), both warn.
+  const unbounded = compile("perf_arena_unbounded_pass", "perf_arena_unbounded_pass_report.ll")
+  const unboundedLines = summaries(unbounded.stderr)
+  check(
+    "performance: a loop nothing bounds that keeps what each pass allocates warns once, naming the site and the arena block",
+    unbounded.status === 0 &&
+      unboundedLines.length === 19 &&
+      positions(unboundedLines) === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5" &&
+      unboundedLines[0].includes(
+        "this loop keeps what each pass allocates until the memory of `serve`'s caller is released, because the " +
+          "allocation on line 36 is stored into memory, where this analysis stops following it, and nothing bounds " +
+          "how many passes it runs, so the string built on line 34 piles up for as long as it runs. Move the " +
+          "per-pass work that builds it into a block inside the loop body that opens with `using a = arena()`, " +
+          "which the compiler refuses if anything allocated there could outlive the block"
+      ) &&
+      unboundedLines[1].includes("so the string built on line 50 piles up") &&
+      unboundedLines[2].includes("so the string built on line 62 and 1 more allocation pile up") &&
+      unboundedLines[3].includes("so the string built on line 75 piles up") &&
+      unboundedLines[4].includes("so the string built on line 85 piles up") &&
+      unboundedLines[5].includes("so the string built on line 97 piles up") &&
+      unboundedLines[6].includes("so the string built on line 106 piles up") &&
+      unboundedLines[7].includes("so the string built on line 118 piles up") &&
+      unboundedLines[8].includes("so the string built on line 135 piles up") &&
+      unboundedLines[9].includes("so the string built on line 153 piles up") &&
+      unboundedLines[10].includes("so the string built on line 169 piles up") &&
+      unboundedLines[11].includes("so the string built on line 187 piles up") &&
+      unboundedLines[12].includes("so the string built on line 199 piles up") &&
+      unboundedLines[13].includes("so the string built on line 212 piles up") &&
+      unboundedLines[14].includes("so the string built on line 229 piles up") &&
+      unboundedLines[15].includes("so the string built on line 243 piles up") &&
+      unboundedLines[16].includes("so the string built on line 255 piles up") &&
+      unboundedLines[17].includes("so the string built on line 273 piles up") &&
+      unboundedLines[18].includes("so the string built on line 287 piles up"),
+    unbounded.stderr
+  )
+  // Silent for the same temporary in a `using a = arena()` block, a counted
+  // `for`, ordering comparisons that call nothing (`while (i < n)`,
+  // `k < toI32(xs.length)`, `while (j >= 0 && j < n)`), walks whose
+  // body calls something that resizes some other array, of a local (`owned`) and
+  // of a field (`fielded`), a scoped pass, temporaries from which every path
+  // leaves the loop (`finds`), a temporary handed to a callee that keeps it
+  // (`posts`), a walk whose array goes to a call that only reads it (`reads`),
+  // temporaries left by an `if` with no `else`, by both arms of an `if` and by
+  // a labelled `break` (`leaves`), a labelled `break` out of a polled loop
+  // from a loop inside it (`exitsLabelled`), a `return` from such a loop
+  // (`exitsReturn`), an inner loop whose own passes are scoped (`innerScoped`),
+  // and a drop NL9016 already names, with its value on the target's line or the next:
+  // two warnings, both NL9016's.
+  const unboundedQuiet = compile("perf_arena_unbounded_quiet", "perf_arena_unbounded_quiet.ll")
+  const unboundedQuietLines = summaries(unboundedQuiet.stderr)
+  check(
+    "performance: NL9018 is silent for an arena block, a counted loop, a comparison that calls nothing, a walk whose body cannot extend what it walks, a scoped pass, a pass that leaves the loop or keeps what it builds, and a line NL9016 reports",
+    unboundedQuiet.status === 0 &&
+      unboundedQuietLines.length === 2 &&
+      positions(unboundedQuietLines) === "57:5,69:5" &&
+      unboundedQuietLines.every((l) => l.includes("`last` is given a new allocation on every pass")),
+    unboundedQuiet.stderr
   )
 
   // The arithmetic rules. These are not advice about speed: each one is a
@@ -5835,7 +5916,7 @@ if (!only || "performance".includes(only)) {
     // receiver (directly or through a helper that hands it on), a `getenv`
     // result only handed to a callee, and a template
     // handed on as an element of an array or object literal or joined in
-    // place: NL9018 is silent on each.
+    // place: NL9019 is silent on each.
     "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
@@ -11736,6 +11817,260 @@ if (dealtHere("fileServer")) {
         )
       }
     }
+  }
+}
+
+// ---- NL9018: an unbounded loop that keeps what each pass allocates ----------------
+// `perf_arena_unbounded_pass` pins the warning's text and positions in the
+// performance section; this one holds what a golden cannot say. The code a tool
+// reads (`--json`), that the flag silences it without moving a byte of the IR,
+// and the shape it was written for: a request loop on `std/net/http1-server`.
+// `tests/link/nl9018_server/leaky.ts` builds its reply text in the event loop
+// and warns; `flat.ts` builds it in a `using a = arena()` block and compiles
+// clean, refused nothing; `examples/file-server.ts`, which allocates nothing per
+// request in its own code, stays quiet.
+//
+// Then each server answers 2,000 requests on one keep-alive connection, one
+// at a time, and 20,000 more; its VmRSS is read from /proc after each batch.
+// Ten runs of each (Linux x64, `--profile speed`) read flat's at the same kB
+// after both batches and leaky's 1,252 kB higher after the second, every time.
+// The band is 256 kB, a fifth of what leaky gains, so flat must stay within it
+// and leaky must leave it: the second says the measure can see the pile the
+// warning names.
+if (dealtHere("unboundedPass")) {
+  const UNBOUNDED_RSS_BAND = 256
+  const srvDir = path.join(buildDir, "nl9018-server")
+  fs.rmSync(srvDir, { recursive: true, force: true })
+  fs.mkdirSync(srvDir, { recursive: true })
+  const nl9018Lines = (text) =>
+    text
+      .split("\n")
+      .filter(
+        (l) =>
+          /:\d+:\d+: performance: this loop keeps what each pass/.test(l) &&
+          l.includes("nothing bounds how many passes")
+      )
+  const caseCompile = (out, extra) =>
+    spawnSync(
+      NISH,
+      [path.join(casesDir, "perf_arena_unbounded_pass.ts"), "-o", path.join(srvDir, out), ...extra],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+
+  const plain = caseCompile("plain.ll", [])
+  const js = caseCompile("json.ll", ["--json"])
+  const objects = js.stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => {
+      try {
+        return JSON.parse(l)
+      } catch {
+        return null
+      }
+    })
+  check(
+    'nl9018: --json reports each of perf_arena_unbounded_pass\'s nineteen warnings with "code":"NL9018"',
+    js.status === 0 &&
+      objects.length === 19 &&
+      objects.every((o) => o !== null && o.code === "NL9018" && o.severity === "performance") &&
+      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5",
+    shown(js)
+  )
+  const off = caseCompile("off.ll", ["--no-warn-performance"])
+  check(
+    "nl9018: --no-warn-performance silences it and leaves the IR byte-identical",
+    plain.status === 0 &&
+      nl9018Lines(plain.stderr).length === 19 &&
+      off.status === 0 &&
+      !off.stderr.includes("performance:") &&
+      stripHeader(fs.readFileSync(path.join(srvDir, "off.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(srvDir, "plain.ll"), "utf8")),
+    `${plain.stderr}\n---\n${off.stderr}`
+  )
+
+  const serverDir = path.join(root, "tests", "link", "nl9018_server")
+  const build = (name, file, extra) => {
+    const out = path.join(srvDir, name)
+    fs.mkdirSync(out, { recursive: true })
+    return spawnSync(NISH, [file, "-o", out + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+    })
+  }
+  const leaky = build("leaky", path.join(serverDir, "leaky.ts"), [])
+  const leakyHits = nl9018Lines(leaky.stderr)
+  check(
+    "nl9018: a request loop on Http1Server that builds its reply text per request warns, at the event loop",
+    leaky.status === 0 &&
+      leakyHits.length === 1 &&
+      leakyHits[0].includes("leaky.ts:93:9: ") &&
+      leakyHits[0].includes("the string built on line 95 piles up") &&
+      leakyHits[0].includes("`using a = arena()`"),
+    shown(leaky)
+  )
+  const flat = build("flat", path.join(serverDir, "flat.ts"), [])
+  check(
+    "nl9018: the same loop with that work in a `using a = arena()` block compiles with no warning and no refusal",
+    flat.status === 0 && !flat.stderr.includes("performance:") && !flat.stderr.includes("error"),
+    shown(flat)
+  )
+  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
+  check(
+    "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
+    fileServer.status === 0 && nl9018Lines(fileServer.stderr).length === 0,
+    shown(fileServer)
+  )
+
+  if (process.platform !== "linux") {
+    skip("nl9018: VmRSS is read from /proc, which only Linux has")
+  } else if (!HAS_CLANG) {
+    skip("nl9018: clang not on PATH, so the servers cannot be linked")
+  } else {
+    // Answers `counts` batches of requests on one keep-alive connection, one
+    // request in flight at a time, and gives the server's VmRSS in kB after
+    // each batch, or an error. The server is killed whatever happens.
+    const rssAfter = (exe, counts) =>
+      new Promise((resolve) => {
+        const server = spawn(exe, [], { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        let settled = false
+        const finish = (r) => {
+          if (settled) return
+          settled = true
+          clearTimeout(deadline)
+          server.kill("SIGKILL")
+          resolve(r)
+        }
+        const deadline = setTimeout(() => finish({ error: "no answer within 60 s" }), 60_000)
+        const rss = () => {
+          try {
+            return Number(/VmRSS:\s+(\d+) kB/.exec(fs.readFileSync(`/proc/${server.pid}/status`, "utf8"))?.[1] ?? -1)
+          } catch {
+            // The server is gone; -1 makes the batch an error, not an uncaught throw.
+            return -1
+          }
+        }
+        server.on("error", (e) => finish({ error: String(e) }))
+        server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
+        server.stdout.on("data", (d) => {
+          if (out.includes("\n")) return
+          out += d
+          if (!out.includes("\n")) return
+          const socket = net.connect(Number(out.trim()), "127.0.0.1")
+          const request = "GET / HTTP/1.1\r\nHost: x\r\n\r\n"
+          const readings = []
+          let batch = 0
+          let left = counts[0]
+          let pending = Buffer.alloc(0)
+          socket.on("error", (e) => finish({ error: String(e) }))
+          socket.on("connect", () => socket.write(request))
+          socket.on("data", (chunk) => {
+            pending = Buffer.concat([pending, chunk])
+            for (;;) {
+              const end = pending.indexOf("\r\n\r\n")
+              if (end < 0) return
+              const head = pending.subarray(0, end).toString("latin1")
+              const length = Number(/Content-Length: (\d+)/i.exec(head)?.[1] ?? -1)
+              if (!head.startsWith("HTTP/1.1 200 ") || length < 0) {
+                finish({ error: `unexpected response head: ${head}` })
+                return
+              }
+              if (pending.length < end + 4 + length) return
+              pending = pending.subarray(end + 4 + length)
+              left--
+              if (left === 0) {
+                const kb = rss()
+                if (kb < 0) {
+                  finish({ error: "could not read the server's VmRSS from /proc" })
+                  return
+                }
+                readings.push(kb)
+                batch++
+                if (batch === counts.length) {
+                  finish({ readings })
+                  return
+                }
+                left = counts[batch]
+              }
+              socket.write(request)
+            }
+          })
+        })
+      })
+    const peaks = {}
+    for (const name of ["leaky", "flat"]) {
+      const exe = path.join(srvDir, name, "server")
+      const linked = build(`${name}-exe`, path.join(serverDir, `${name}.ts`), [
+        "--link",
+        exe,
+        "--profile",
+        "speed",
+        "--no-warn-performance",
+      ])
+      if (!check(`nl9018: ${name}.ts links`, linked.status === 0, shown(linked))) {
+        continue
+      }
+      const r = await rssAfter(exe, [2000, 20000])
+      if (
+        check(
+          `nl9018: ${name}.ts answers 22,000 requests`,
+          r.error === undefined && r.readings.every((kb) => kb > 0),
+          JSON.stringify(r)
+        )
+      ) {
+        peaks[name] = r.readings
+      }
+    }
+    if (peaks.flat !== undefined && peaks.leaky !== undefined) {
+      const grew = (name) => peaks[name][1] - peaks[name][0]
+      check(
+        `nl9018: the arena-block server's RSS stays within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
+        grew("flat") <= UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks.flat[0]} kB after 2,000 requests, ${peaks.flat[1]} kB after 20,000 more`
+      )
+      check(
+        `nl9018: the warned server's RSS grows past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
+        grew("leaky") > UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks.leaky[0]} kB after 2,000 requests, ${peaks.leaky[1]} kB after 20,000 more`
+      )
+    }
+  }
+}
+
+// ---- break-web: the game behind the docs hero terminal ---------------------------
+// docs/site/site.js imports docs/site/break/shell.mjs on the hero terminal's
+// first key, and the shell imports break.mjs when asked for the game;
+// examples/break-web/build.mjs builds that directory and it is committed.
+// tests/break-web/check.mjs runs the terminal, the shell and the page side
+// under Node with a fake DOM, plays the built module against break_core_wasm's
+// frame hashes, runs --check and its negatives, and prints a line per check.
+if (dealtHere("breakWeb")) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // The count is pinned, as game-page's is: a check that goes missing is caught.
+  const BREAK_WEB_CHECKS = 104
+  const lines = res.stdout.split("\n")
+  const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = lines.find((line) => line.startsWith("checks: "))
+  check(
+    "break-web: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${results.length}` && results.length === BREAK_WEB_CHECKS,
+    shown(res)
+  )
+  for (const line of results) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`break-web: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
   }
 }
 

@@ -105,6 +105,14 @@ needs it, or keep numbers across passes and build the string once after the
 loop. Building a string up with `s = s + t` in a loop is the same problem and
 has its own warning.
 
+A loop with nothing bounding its passes, `while (true)` or a server's poll
+loop, has one more: a temporary its pass builds and drops, when something in
+the pass stores into older memory and so keeps the compiler from releasing
+the pass. The warning (NL9018) asks you to build the temporary inside a block
+that opens with `using a = arena()`, which gives it back when the block ends;
+[Networking](../using-nish/networking.md#keeping-a-request-loops-memory-flat)
+shows it on a request loop.
+
 A function a loop calls on every pass can keep memory the same way. When a
 function assigns a `let` a second string, as `relabel` does below, the
 compiler cannot prove the first one dead when it returns, so the function
@@ -125,7 +133,7 @@ for (let i = 0; i < 1000000; i++) {
 }
 ```
 
-The warning (NL9018) names the function and the line it keeps. Give each
+The warning (NL9019) names the function and the line it keeps. Give each
 value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
 block with `using a = arena()` around the work. A loop whose passes are
 released already, because nothing a pass makes outlives it, takes back what

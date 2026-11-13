@@ -1,6 +1,6 @@
 import { getenv } from "nish:process";
 
-// NL9018 is silent on each function below: either the function keeps nothing
+// NL9019 is silent on each function below: either the function keeps nothing
 // past its call, or every loop that runs it releases what it keeps, or it runs
 // only behind a guard that does its work once.
 

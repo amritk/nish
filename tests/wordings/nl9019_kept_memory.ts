@@ -1,4 +1,4 @@
-// NL9018: a function a loop runs on every pass keeps an allocation each call
+// NL9019: a function a loop runs on every pass keeps an allocation each call
 // (a `let` given a second string), and the loop's passes release nothing.
 const relabel = (n: i32): i32 => {
   let s = "none";

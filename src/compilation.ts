@@ -86,7 +86,7 @@ import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
-import { arenaJson } from "./arena-report"
+import { arenaJson, unboundedPassFindings } from "./arena-report"
 import {
   allCapabilities,
   argumentCapabilities,
@@ -393,7 +393,12 @@ export class EmittedModule {
 
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
-  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016" || code === "NL9018"
+  code === "NL9002" ||
+  code === "NL9003" ||
+  code === "NL9011" ||
+  code === "NL9016" ||
+  code === "NL9018" ||
+  code === "NL9019"
 
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of
@@ -988,7 +993,13 @@ export class Compilation {
         continue
       }
       const target = found.path
-      if (readFileSyncOrNull(target) === null) {
+      let missing = false
+      {
+        // The file's text is read only to see that it is there; the pass drops it.
+        using _a = arena()
+        missing = readFileSyncOrNull(target) === null
+      }
+      if (missing) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
@@ -1292,7 +1303,8 @@ export class Compilation {
     let dir = normalizePath(from)
     let steps = 0
     let searching = true
-    while (searching) {
+    // `steps` never passes the limit: the pass that reaches it stops the walk.
+    while (searching && steps <= PACKAGE_WALK_LIMIT) {
       if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
         const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name])
         if (readFileSyncOrNull(joinPath([candidate, "package.json"])) !== null) {
@@ -1521,6 +1533,7 @@ export class Compilation {
     }
     this.factsSettled = true
     this.reportArenaLoops()
+    this.reportUnboundedPasses()
     this.denyRetention()
     this.checkParallel()
     this.keyEnumsBySymbol()
@@ -2565,17 +2578,18 @@ export class Compilation {
 
   /**
    * `--deny-retention`: each arena-retention warning in a module of the root
-   * package becomes an error. The five rules are the ones whose finding is
+   * package becomes an error. The six rules are the ones whose finding is
    * memory nothing can reach that stays allocated: quadratic string building
    * (NL9002), an allocation dropped by an assignment (NL9003), a loop over a
    * call that leaves its memory behind (NL9011), an allocation dropped on
-   * every pass (NL9016) and a function a loop runs that keeps an allocation
-   * on every call (NL9018). The error keeps the warning's text, which names the
+   * every pass (NL9016), a pass of an unbounded loop that keeps what it
+   * allocates (NL9018) and a function a loop runs that keeps an allocation on
+   * every call (NL9019). The error keeps the warning's text, which names the
    * rewrite, and its code, so a reader sees which rule refused the build. A
    * dependency's warnings stay warnings, as its panic sites stay outside the
    * no-panic scope: the program's author cannot change that code.
    *
-   * Run after `reportArenaLoops`, which finds NL9011 and NL9018 last, and the
+   * Run after `reportUnboundedPasses`, the last of the six to be found, and the
    * warning it restates is dropped so the line is said once.
    */
   denyRetention(): void {
@@ -3083,6 +3097,33 @@ export class Compilation {
           finding.node.end,
           finding.message
         )
+      }
+    }
+  }
+
+  /**
+   * NL9018: an unbounded loop in the program's own code whose passes keep
+   * what they allocate (`unboundedPassFindings`, arena-report.ts). Only the
+   * root package's modules, the scope of `--explain-memory`: a dependency's
+   * loop is not the program author's to rewrite. A site another retention
+   * warning already reports, at the expression or statement that holds it, is
+   * left to that warning, so this runs after every one of them is in.
+   */
+  reportUnboundedPasses(): void {
+    const facts = this.analyze()
+    for (const unit of this.analysisUnits) {
+      const source = unit.program.source
+      if (!this.inRootPackage(source)) {
+        continue
+      }
+      const named: i32[] = []
+      for (const warning of this.sink.warnings) {
+        if (warning.source === source && isRetentionCode(codeFor("performance", warning.text))) {
+          named.push(warning.start)
+        }
+      }
+      for (const finding of unboundedPassFindings(unit, this.table, facts, named)) {
+        this.sink.reportPerformance(source, finding.node.start, finding.node.end, finding.message)
       }
     }
   }
