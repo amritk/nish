@@ -45263,48 +45263,49 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: +0:7
   calls: GrantVerifier.constructor Relay.constructor Relay.shutdown Relay.watchSignals RelayIdentity.constructor RelayOptions.constructor RelayWatch.constructor RelayWatch.mark bindClient nish.httpFieldBytes nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_alloc_struct nish_arena_mark nish_arena_release nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_write nowMs random relayLoadPem relayMintIdentity relayNamed relayOptionsFromEnv relayParseArgs relayQuicConfig relayRenew relaySourceFrom serveUntilPoll wallMs writeCertOut
   stackSites=5 stackLocals=5
-  local -87:9 o: RelayOptions (const)
-  callee -87:13 new RelayOptions -> @RelayOptions.constructor
-  callee -86:3 relayOptionsFromEnv -> @relayOptionsFromEnv
-  callee -85:3 relayParseArgs -> @relayParseArgs
-  callee -75:9 relayNamed -> @relayNamed
-  local -67:9 source: RelaySource (const)
-  callee -67:31 relaySourceFrom -> @relaySourceFrom
-  local -58:9 id: RelayIdentity (const)
-  callee -58:14 new RelayIdentity -> @RelayIdentity.constructor
-  local -57:9 first: Secret<u8[]> | null (const)
-  callee -57:51 relayLoadPem -> @relayLoadPem
-  callee -57:78 relayMintIdentity -> @relayMintIdentity
-  callee -57:96 wallMs -> @wallMs
-  local -51:7 key: Secret<u8[]> (let)
-  callee -50:3 writeCertOut -> @writeCertOut
-  local -49:9 watch: RelayWatch (const)
-  callee -49:17 new RelayWatch -> @RelayWatch.constructor
-  callee -47:5 RelayWatch.mark -> @RelayWatch.mark
-  local -37:9 fd: i32 (const)
-  callee -37:19 bindClient -> @bindClient
-  callee -35:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  local -32:9 config: RelayConfig (const)
-  local -29:9 quicConfig: QuicServerConfig (const)
-  callee -29:22 relayQuicConfig -> @relayQuicConfig
-  callee -27:5 random -> @random
-  callee -26:5 random -> @random
-  local -24:9 relay: Relay (const)
-  callee -24:17 new Relay -> @Relay.constructor
-  callee -24:51 new GrantVerifier -> @GrantVerifier.constructor
-  callee -24:72 random -> @random
-  local -22:9 grantKey: Secret<u8[]> (const)
-  callee -22:34 secret<u8[]> -> @nish.secret$arr.u8
-  callee -22:41 httpFieldBytes -> @nish.httpFieldBytes
-  local -19:9 signals: i32 (const)
-  callee -16:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee -15:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee -12:3 Relay.watchSignals -> @Relay.watchSignals
-  callee -10:10 serveUntilPoll -> @serveUntilPoll
-  local -9:11 fresh: RelayIdentity (const)
-  callee -9:19 new RelayIdentity -> @RelayIdentity.constructor
-  local -8:11 next: Secret<u8[]> | null (const)
-  callee -8:39 relayRenew -> @relayRenew
+  local -89:9 o: RelayOptions (const)
+  callee -89:13 new RelayOptions -> @RelayOptions.constructor
+  callee -88:3 relayOptionsFromEnv -> @relayOptionsFromEnv
+  callee -87:3 relayParseArgs -> @relayParseArgs
+  callee -77:9 relayNamed -> @relayNamed
+  local -69:9 source: RelaySource (const)
+  callee -69:31 relaySourceFrom -> @relaySourceFrom
+  local -60:9 id: RelayIdentity (const)
+  callee -60:14 new RelayIdentity -> @RelayIdentity.constructor
+  local -59:9 first: Secret<u8[]> | null (const)
+  callee -59:51 relayLoadPem -> @relayLoadPem
+  callee -59:78 relayMintIdentity -> @relayMintIdentity
+  callee -59:96 wallMs -> @wallMs
+  local -53:7 key: Secret<u8[]> (let)
+  callee -52:3 writeCertOut -> @writeCertOut
+  local -51:9 watch: RelayWatch (const)
+  callee -51:17 new RelayWatch -> @RelayWatch.constructor
+  callee -49:5 RelayWatch.mark -> @RelayWatch.mark
+  local -39:9 fd: i32 (const)
+  callee -39:19 bindClient -> @bindClient
+  callee -37:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local -34:9 config: RelayConfig (const)
+  local -31:9 quicConfig: QuicServerConfig (const)
+  callee -31:22 relayQuicConfig -> @relayQuicConfig
+  callee -29:5 random -> @random
+  callee -28:5 random -> @random
+  local -26:9 relay: Relay (const)
+  callee -26:17 new Relay -> @Relay.constructor
+  callee -26:51 new GrantVerifier -> @GrantVerifier.constructor
+  callee -26:72 random -> @random
+  local -24:9 grantKey: Secret<u8[]> (const)
+  callee -24:34 secret<u8[]> -> @nish.secret$arr.u8
+  callee -24:41 httpFieldBytes -> @nish.httpFieldBytes
+  local -21:9 signals: i32 (const)
+  callee -18:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee -17:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee -14:3 Relay.watchSignals -> @Relay.watchSignals
+  callee -12:10 serveUntilPoll -> @serveUntilPoll
+  local -11:11 fresh: RelayIdentity (const)
+  callee -11:19 new RelayIdentity -> @RelayIdentity.constructor
+  local -10:11 next: Secret<u8[]> | null (const)
+  callee -10:39 relayRenew -> @relayRenew
+  local -5:15 a: i64 (const)
   callee +1:7 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   callee +4:7 writeCertOut -> @writeCertOut
   callee +8:3 Relay.shutdown -> @Relay.shutdown

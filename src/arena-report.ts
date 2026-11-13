@@ -13,7 +13,8 @@
 // program reads the report for (docs/LANGUAGE.md, "Arena placement").
 
 import { AnalysisUnit, CallSite, FactsTable, FunctionFacts, isCountedLoop, LoopScope } from "./attributes"
-import { builtinNameOf, dottedName } from "./emit-util"
+import { isBuiltinConversion } from "./bounds"
+import { builtinNameOf, dottedName, isAssignmentOperator, unwrapParens } from "./emit-util"
 import {
   ArenaFinding,
   FLOW_LEAKS,
@@ -349,14 +350,96 @@ const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
 }
 
 /**
- * True when `loop` is counted (`isCountedLoop`, the rule loop attributes and
- * NL9011 share): its pass count is fixed when it starts. Every other loop runs
- * for as long as the program decides at run time: `while (true)`, `for (;;)`,
- * `while (poll())`, `while (k < n && poll())`, a `for...of` whose body extends
- * what it walks.
+ * True when what `loop`'s own header reads bounds its passes, so NL9018 stays
+ * silent for it. A `for...of` is bounded when `isCountedLoop` counts it: its
+ * body cannot extend what it walks, and it does not re-read a map's entry
+ * count. A `while`, `do` or `for` is bounded when its condition, read as a
+ * top-level `&&` chain, has an ordering comparison among its conjuncts and
+ * reads nothing a pass could decide at run time beyond its locals, fields and
+ * constants (`readsOnly`). A call to any function of the program or of `std/`
+ * makes it unbounded: `while (poll())`, `while (k < n && poll())`. So do no
+ * condition at all, a top-level `||`, and a chain of equalities or flags. A
+ * comparison whose operand the body never moves still counts as a bound.
  */
-const boundedPasses = (walk: ArenaWalk, table: TypeTable, loop: Node): boolean =>
-  isCountedLoop(walk.unit, table, loop, walk.facts)
+const boundedPasses = (walk: ArenaWalk, table: TypeTable, loop: Node): boolean => {
+  if (loop.kind === NodeKind.ForOf) {
+    return isCountedLoop(walk.unit, table, loop, walk.facts)
+  }
+  // `while`: condition, body; `do`: body, condition; `for`: initializer, condition, ...
+  const condition = loop.kind === NodeKind.While ? loop.children[0] : loop.children[1]
+  if (condition.kind === NodeKind.Empty || !readsOnly(walk.unit.program, condition)) {
+    return false
+  }
+  return comparesInChain(condition)
+}
+
+/** True when `call` is a numeric conversion builtin, which reads nothing but its argument. */
+const isPureConversion = (program: CheckedProgram, call: Node): boolean =>
+  isBuiltinConversion(program, call, "toI32") ||
+  isBuiltinConversion(program, call, "toI64") ||
+  isBuiltinConversion(program, call, "toU8") ||
+  isBuiltinConversion(program, call, "toU16") ||
+  isBuiltinConversion(program, call, "toU32") ||
+  isBuiltinConversion(program, call, "toU64") ||
+  isBuiltinConversion(program, call, "toF32") ||
+  isBuiltinConversion(program, call, "toF64")
+
+/**
+ * True when `expr` reads only locals, fields (`.length` among them) and
+ * constants, through operators and the numeric conversions: no call of the
+ * program's or `std/`'s, no allocation, no element read, no assignment.
+ */
+const readsOnly = (program: CheckedProgram, expr: Node): boolean => {
+  const kind = expr.kind
+  if (
+    kind === NodeKind.Ident ||
+    kind === NodeKind.Number ||
+    kind === NodeKind.Bigint ||
+    kind === NodeKind.String ||
+    kind === NodeKind.True ||
+    kind === NodeKind.False ||
+    kind === NodeKind.Null ||
+    kind === NodeKind.This
+  ) {
+    return true
+  }
+  if (kind === NodeKind.Member || kind === NodeKind.Paren) {
+    return readsOnly(program, expr.children[0])
+  }
+  if (kind === NodeKind.Unary) {
+    return expr.text !== "++" && expr.text !== "--" && readsOnly(program, expr.children[0])
+  }
+  if (kind === NodeKind.Binary) {
+    return (
+      !isAssignmentOperator(expr.text) &&
+      readsOnly(program, expr.children[0]) &&
+      readsOnly(program, expr.children[1])
+    )
+  }
+  if (kind === NodeKind.Conditional) {
+    return (
+      readsOnly(program, expr.children[0]) &&
+      readsOnly(program, expr.children[1]) &&
+      readsOnly(program, expr.children[2])
+    )
+  }
+  if (kind === NodeKind.Call && isPureConversion(program, expr)) {
+    return readsOnly(program, expr.children[1].children[0])
+  }
+  return false
+}
+
+/** True when the top-level `&&` chain of `condition` has an ordering comparison (`<`, `<=`, `>`, `>=`) as a conjunct. */
+const comparesInChain = (condition: Node): boolean => {
+  const e = unwrapParens(condition)
+  if (e.kind !== NodeKind.Binary) {
+    return false
+  }
+  if (e.text === "&&") {
+    return comparesInChain(e.children[0]) || comparesInChain(e.children[1])
+  }
+  return e.text === "<" || e.text === "<=" || e.text === ">" || e.text === ">="
+}
 
 /** The scopes around a function's body: none. */
 const outsideLoops = (): Around => new Around(null, null, null, null, false)
@@ -422,10 +505,10 @@ export const arenaJson = (units: AnalysisUnit[], facts: FactsTable): string => {
 // ---- The unbounded-pass diagnostic (NL9018) -----------------------------------------------
 //
 // A performance warning read off the sites `--emit-arena` marks
-// `"accumulates":true`, so the warning and the audit file cannot disagree. Of
+// `"accumulates":true`; every site it names is one the audit file marks. Of
 // those, it keeps the ones nothing bounds: some loop between the site and the
-// scope that releases its memory has no count, collection or ordering
-// comparison bounding its passes (`boundedPasses`). That is the shape of a request loop that builds a
+// scope that releases its memory has nothing in its header bounding its passes
+// (`boundedPasses`). That is the shape of a request loop that builds a
 // temporary per request: the pile grows for as long as the program serves.
 
 /** One loop the warning names, and the sites it keeps that nothing bounds. */

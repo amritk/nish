@@ -7,8 +7,11 @@ import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import isCountedLoop from "./attributes" -> function @isCountedLoop
 import LoopScope from "./attributes" -> struct LoopScope
+import isBuiltinConversion from "./bounds" -> function @isBuiltinConversion
 import builtinNameOf from "./emit-util" -> function @builtinNameOf
 import dottedName from "./emit-util" -> function @dottedName
+import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
+import unwrapParens from "./emit-util" -> function @unwrapParens
 import ArenaFinding from "./escape" -> struct ArenaFinding
 import FLOW_LEAKS from "./escape" -> const FLOW_LEAKS
 import FLOW_LOCAL from "./escape" -> const FLOW_LOCAL
@@ -197,12 +200,55 @@ function growingAround(walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
   callee +2:10 new Around -> @Around.constructor
 function boundedPasses(walk: ArenaWalk, table: TypeTable, loop: Node): boolean -> @boundedPasses
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isCountedLoop
+  calls: comparesInChain isCountedLoop nish_panic_index readsOnly
   pointer walk: size=112 writesThrough=false captured=false
   pointer table: size=136 writesThrough=false captured=false passedTo=isCountedLoop#1
   pointer loop: size=40 writesThrough=false captured=false passedTo=isCountedLoop#2
   stackSites=0 stackLocals=0
-  callee +0:3 isCountedLoop -> @isCountedLoop
+  callee +0:12 isCountedLoop -> @isCountedLoop
+  local +3:9 condition: Node (const)
+  callee +4:45 readsOnly -> @readsOnly
+  callee +7:10 comparesInChain -> @comparesInChain
+function isPureConversion(program: CheckedProgram, call: Node): boolean -> @isPureConversion
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isBuiltinConversion
+  pointer program: size=888 writesThrough=false captured=false passedTo=isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1
+  stackSites=0 stackLocals=0
+  callee +0:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +1:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +2:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +3:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +4:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +5:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +6:3 isBuiltinConversion -> @isBuiltinConversion
+  callee +7:3 isBuiltinConversion -> @isBuiltinConversion
+function readsOnly(program: CheckedProgram, expr: Node): boolean -> @readsOnly
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isAssignmentOperator isPureConversion nish_panic_index nish_str_eq readsOnly
+  pointer program: size=888 writesThrough=false captured=false passedTo=readsOnly#0 readsOnly#0 readsOnly#0 readsOnly#0 readsOnly#0 readsOnly#0 readsOnly#0 isPureConversion#0 readsOnly#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=isPureConversion#1
+  stackSites=0 stackLocals=0
+  local +0:9 kind: NodeKind (const)
+  callee +14:12 readsOnly -> @readsOnly
+  callee +17:56 readsOnly -> @readsOnly
+  callee +21:8 isAssignmentOperator -> @isAssignmentOperator
+  callee +22:7 readsOnly -> @readsOnly
+  callee +23:7 readsOnly -> @readsOnly
+  callee +28:7 readsOnly -> @readsOnly
+  callee +29:7 readsOnly -> @readsOnly
+  callee +30:7 readsOnly -> @readsOnly
+  callee +33:33 isPureConversion -> @isPureConversion
+  callee +34:12 readsOnly -> @readsOnly
+function comparesInChain(condition: Node): boolean -> @comparesInChain
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: comparesInChain nish_panic_index nish_str_eq unwrapParens
+  pointer condition: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  stackSites=0 stackLocals=0
+  local +0:9 e: Node (const)
+  callee +0:13 unwrapParens -> @unwrapParens
+  callee +5:12 comparesInChain -> @comparesInChain
+  callee +5:46 comparesInChain -> @comparesInChain
 function outsideLoops(): Around -> @outsideLoops
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: Around.constructor nish_alloc_struct

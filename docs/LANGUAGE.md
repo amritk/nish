@@ -14543,13 +14543,23 @@ by the caller.
     into the server's memory, so the pass is refused its scope, and a reply
     string built in the handler stays allocated for as long as the server runs
     (`tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests;
-    the rewrite grew none). A loop counts as bounded only when it is counted,
-    by the rule that also decides a function's `willreturn`: a `for` over an
-    `i32` that steps toward a bound it compares against, or a `for...of` over
-    an array whose body cannot extend it. Every `while` and `do` is unbounded,
-    whatever its condition compares (`while (k < n && poll())`), and so is a
-    `for...of` whose body pushes onto what it walks, a walk of a map, and a
-    counted `for` inside an unbounded loop that releases nothing. There is at most one
+    the rewrite grew none). A loop is bounded, and NL9018 stays silent for
+    it, when either of these holds: it is a `while`, `do` or `for` whose
+    condition, taken as its top-level `&&` chain, has at least one conjunct
+    that is an order comparison (`<`, `<=`, `>`, `>=`), and that calls nothing
+    but the numeric conversions (`toI32` and its kin) and reads nothing but
+    locals, fields (`.length` among them) and constants; or it is a
+    `for...of` whose body cannot extend what it walks and that does not
+    re-read a map's entry count, the test that also decides a function's
+    `willreturn`. A call to any function of the program or of `std/` anywhere
+    in the condition makes the loop unbounded. So every other loop is
+    unbounded: `while (true)` and `for (;;)`, a flag with no comparison
+    (`while (running)`), equalities only (`while (a !== X && a !== Y)`), a
+    top-level `||` (`while (next >= 0 || next === FULL)`), a call in the
+    condition (`while (more(log))`, `while (k < n && poll())`), a `for...of`
+    that extends what it walks, and a bounded loop inside an unbounded one
+    that releases nothing. The rule has a known blind spot: a comparison loop
+    whose body never moves toward its bound still counts as bounded. There is at most one
     warning per loop, at the innermost loop whose pass releases nothing; it
     names the first site and its kind, how many more there are, where the
     memory goes back, why the pass has no scope, and the rewrite: move the
@@ -15467,7 +15477,7 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   listed on its own line — both, when both do — because it runs outside the
   bracket a pass takes whether or not the body has one; a `do...while`
   condition's line follows the lines of the loops in its body.
-- **A listed loop with no bound** — one that is not counted, by NL9018's rule — is
+- **A listed loop with no bound** — one that is not bounded, by NL9018's rule — is
   the loop NL9018 warns about when what its pass keeps is a temporary the
   pass drops; the report lists it either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or

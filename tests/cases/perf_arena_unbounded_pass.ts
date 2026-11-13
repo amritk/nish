@@ -99,6 +99,29 @@ const probe = (log: Log): void => {
   }
 };
 
+// A flag with no comparison: whatever sets it decides how many passes run.
+const flag = (log: Log): void => {
+  let running = true;
+  while (running) {
+    const note = `left ${log.left}`;
+    log.total = log.total + note.length;
+    log.last = new Entry(log.left);
+    running = more(log);
+  }
+};
+
+// A top-level `||`, an accept loop's shape: either side can keep it going,
+// whatever the other compares.
+const accept = (log: Log): void => {
+  let next = 0;
+  while (next >= 0 || next === -2) {
+    const peer = `peer ${next}`;
+    log.total = log.total + peer.length;
+    log.last = new Entry(next);
+    next = more(log) ? next + 1 : -1;
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -113,5 +136,9 @@ export const main = (): void => {
   walk(log, [7]);
   log.left = 2;
   probe(log);
+  log.left = 2;
+  flag(log);
+  log.left = 2;
+  accept(log);
   console.log(`${log.total} ${log.last.id}`);
 };
