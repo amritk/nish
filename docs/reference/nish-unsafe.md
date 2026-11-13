@@ -39,7 +39,7 @@ The errno the most recent `declare function` call on this thread left: a program
 
 <scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
-The `NUL`-terminated bytes at `p`, copied into a new string by `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses.
+The `NUL`-terminated bytes at `p`, copied into a new string by `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses, after a `NULL` test that panics with `ffi-null`.
 
 </scalar-card>
 
@@ -111,11 +111,11 @@ cannot call.
 <scalar-detail title="The no-panic scope">
 
 Under `--deny-panics` or `"nish".noPanic`,
-`uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
-sites, because the import has already said that an index out of range is
-the author's to rule out. `readStruct` is not: it tests its pointer and
+`uncheckedGet` and `uncheckedSet` are allowed `unchecked` sites, because
+the import has already said that an index out of range is the author's to
+rule out. `readCString` and `readStruct` are not: each tests its pointer and
 panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
-refuses it. The wrapping three are not sites at all: they are defined for
+refuses them. The wrapping three are not sites at all: they are defined for
 every pair.
 
 </scalar-detail>
@@ -146,7 +146,8 @@ The saved errno; 0 before any foreign call, and 0 after one that
 
 The `NUL`-terminated bytes at `p`, copied into a new string by
 `@nish.ffi.str`, the scan-and-copy a `string` result of a
-`declare function` uses. It reads and allocates, and is native only.
+`declare function` uses, after a `NULL` test that panics with
+`ffi-null`. It reads and allocates, and is native only.
 
 ```ts
 function readCString(p: CPtr): string
@@ -154,8 +155,8 @@ function readCString(p: CPtr): string
 
 <scalar-field name="p" type="CPtr" required>
 
-A pointer from a `declare function`. Undefined behaviour unless
-  it points at a live C string.
+A pointer from a `declare function`; `NULL` panics. Undefined
+  behaviour unless it points at a live C string.
 
 </scalar-field>
 

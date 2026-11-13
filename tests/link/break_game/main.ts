@@ -20,7 +20,7 @@ import {
   KeyState,
   TermEvent
 } from "../../../std/term"
-import { TermInput } from "../../../std/term-io"
+import { StepInput } from "../../../std/input"
 import { GLYPH_H, dim, gfxRgb } from "../../../src/break-gfx"
 import {
   BRICK_EXPLOSIVE,
@@ -129,27 +129,27 @@ const keyEvent = (key: i32, code: i32, action: i32): TermEvent => {
 }
 
 /** A step with no input. */
-const idle = (game: BreakGame, input: TermInput): i32 => {
+const idle = (game: BreakGame, input: StepInput): i32 => {
   input.events = []
   return stepBreakGame(game, input)
 }
 
 /** A step with one key pressed, as a fresh press: it never reaches the held keys, so a second tap is not a repeat. */
-const tap = (game: BreakGame, input: TermInput, key: i32, code: i32): i32 => {
+const tap = (game: BreakGame, input: StepInput, key: i32, code: i32): i32 => {
   input.events = [keyEvent(key, code, ACTION_PRESS)]
   return stepBreakGame(game, input)
 }
 
-const idleFor = (game: BreakGame, input: TermInput, steps: i32): void => {
+const idleFor = (game: BreakGame, input: StepInput, steps: i32): void => {
   for (let i: i32 = 0; i < steps; i++) {
     idle(game, input)
   }
 }
 
-const newInput = (): TermInput => new TermInput(new KeyState())
+const newInput = (): StepInput => new StepInput(new KeyState())
 
 /** A game on `level` past its intro, the ball still on the paddle. */
-const playing = (level: i32, input: TermInput): BreakGame => {
+const playing = (level: i32, input: StepInput): BreakGame => {
   const game = newBreakGame(level, toI64(7))
   tap(game, input, KEY_CHAR, 122)
   return game
@@ -202,7 +202,7 @@ const emptyWall = (game: BreakGame): void => {
 const asked = (game: BreakGame, id: i32): boolean => game.sounds.indexOf(id) >= 0
 
 /** Steps `game` up to `steps` times, stopping at the first step that asks for `id`; answers whether one did. */
-const heard = (game: BreakGame, input: TermInput, id: i32, steps: i32): boolean => {
+const heard = (game: BreakGame, input: StepInput, id: i32, steps: i32): boolean => {
   for (let i: i32 = 0; i < steps; i++) {
     idle(game, input)
     if (asked(game, id)) {

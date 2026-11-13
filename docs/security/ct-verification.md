@@ -555,8 +555,10 @@ What stays discipline, and why the model cannot read it:
 - **The `wipe` calls.** A wipe is a volatile store the model does not need to
   read for constant time; that it survives `-O2` is pinned by
   `tests/wipes/crypto.js`.
-- AEAD-4 ([crypto-aead.md](crypto-aead.md)): the vector registers and spills
-  the AES kernels leave behind, which no assembly check can wipe.
+- AEAD-4 ([crypto-aead.md](crypto-aead.md)): what the AES kernels leave in
+  registers is a wipe question, not a timing one. tests/run.js's "the AES
+  kernels clear their registers" reads the same `-O2` assembly for it: the
+  clear before every `ret`, and no vector spill outside a wiped buffer.
 - `--cpu` beyond `x86-64-v3` (WP38 S2): the check reads the baseline and
   `x86-64-v3` only.
 
@@ -745,8 +747,11 @@ first call, which reads the environment and the CPU but nothing secret. A build
 other than `clang -O2` for the baseline CPU or `x86-64-v3` (CT-16): the `speed`
 profile's `-O3` with LTO and the `debug` profile's `-O0` are not what was read,
 and `-O0` keeps every value on the stack. And what the register allocator
-spills: the stack model follows a spill and its reload, but a spill is a copy
-of a secret no wipe reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
+spills: the stack model follows a spill and its reload, but whether a spill
+leaves a secret behind is a wipe question. The AES kernels spill no vector
+register, and clear the ones they use before they return, which tests/run.js's
+"the AES kernels clear their registers" reads in this same assembly
+([crypto-aead.md](crypto-aead.md), AEAD-4).
 
 ## Properties verified
 

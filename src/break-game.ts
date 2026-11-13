@@ -31,7 +31,7 @@ import {
   KEY_SPACE,
   KEY_UP,
 } from "nish/term"
-import { TermInput } from "nish/term-io"
+import { StepInput } from "../std/input"
 import {
   GLYPH_ADVANCE,
   GLYPH_H,
@@ -690,7 +690,7 @@ export const brickY = (game: BreakGame, row: i32): f64 => BRICK_TOP + game.wallO
 // ---- Input ------------------------------------------------------------------
 
 /** Whether this step's events press `key` (for `KEY_CHAR`, the letter `code`, either case). */
-const pressed = (input: TermInput, key: i32, code: i32): boolean => {
+const pressed = (input: StepInput, key: i32, code: i32): boolean => {
   for (const ev of input.events) {
     if (ev.type !== EVENT_KEY || ev.action !== ACTION_PRESS || ev.key !== key) {
       continue
@@ -703,7 +703,7 @@ const pressed = (input: TermInput, key: i32, code: i32): boolean => {
 }
 
 /** Whether this step's events press any key at all. */
-const anyPress = (input: TermInput): boolean => {
+const anyPress = (input: StepInput): boolean => {
   for (const ev of input.events) {
     if (ev.type === EVENT_KEY && ev.action === ACTION_PRESS) {
       return true
@@ -713,11 +713,11 @@ const anyPress = (input: TermInput): boolean => {
 }
 
 /** Space or Enter: what confirms. */
-const confirmPressed = (input: TermInput): boolean =>
+const confirmPressed = (input: StepInput): boolean =>
   pressed(input, KEY_SPACE, 0) || pressed(input, KEY_ENTER, 0)
 
 /** -1 for left held, 1 for right, 0 for neither or both (`KeyState` folds a capital to its small letter). */
-const heldDirection = (input: TermInput): i32 => {
+const heldDirection = (input: StepInput): i32 => {
   const left: boolean = input.isDown(KEY_LEFT, 0) || input.isDown(KEY_CHAR, 97) || input.isDown(KEY_CHAR, 104)
   const right: boolean =
     input.isDown(KEY_RIGHT, 0) || input.isDown(KEY_CHAR, 100) || input.isDown(KEY_CHAR, 108)
@@ -734,7 +734,7 @@ const heldDirection = (input: TermInput): i32 => {
  * `input`, and answer a `GAME_*`: `GAME_PLAYING` until the last screen is
  * dismissed or the player quits, and that answer from then on.
  */
-export const stepBreakGame = (game: BreakGame, input: TermInput): i32 => {
+export const stepBreakGame = (game: BreakGame, input: StepInput): i32 => {
   if (game.sounds.length > 0) {
     game.sounds = []
   }
@@ -790,7 +790,7 @@ const remember = (game: BreakGame): void => {
   }
 }
 
-const stepPause = (game: BreakGame, input: TermInput): void => {
+const stepPause = (game: BreakGame, input: StepInput): void => {
   if (pressed(input, KEY_ESCAPE, 0) || pressed(input, KEY_CHAR, 113)) {
     game.result = GAME_QUIT
   } else if (pressed(input, KEY_CHAR, 112) || confirmPressed(input)) {
@@ -798,7 +798,7 @@ const stepPause = (game: BreakGame, input: TermInput): void => {
   }
 }
 
-const stepPlay = (game: BreakGame, input: TermInput): void => {
+const stepPlay = (game: BreakGame, input: StepInput): void => {
   if (pressed(input, KEY_CHAR, 112) || pressed(input, KEY_ESCAPE, 0) || pressed(input, KEY_CHAR, 113)) {
     game.pausedFrom = PHASE_PLAY
     game.phase = PHASE_PAUSE
@@ -1457,7 +1457,7 @@ export const tallied = (game: BreakGame): i32 => {
 }
 
 /** The bonuses count into the score, then hold; Space or Enter skips to the end; then the next level or victory. */
-const stepClear = (game: BreakGame, input: TermInput): void => {
+const stepClear = (game: BreakGame, input: StepInput): void => {
   if (confirmPressed(input)) {
     game.phaseTime = TALLY_STEPS + CLEAR_HOLD_STEPS
   }
@@ -1473,7 +1473,7 @@ const stepClear = (game: BreakGame, input: TermInput): void => {
 }
 
 /** Game over or victory: fireworks for a win, and after `DISMISS_STEPS` Space or Enter answers. */
-const stepLastScreen = (game: BreakGame, input: TermInput): void => {
+const stepLastScreen = (game: BreakGame, input: StepInput): void => {
   if (game.phase === PHASE_WON && game.phaseTime % 30 === 1) {
     const x: f64 = game.fxRng.nextF64() * 240.0 + 40.0
     const y: f64 = game.fxRng.nextF64() * 70.0 + 30.0

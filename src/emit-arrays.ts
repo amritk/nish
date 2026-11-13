@@ -1384,26 +1384,11 @@ export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolea
 }
 
 /**
- * `nish:simd`'s `loadU8x16(xs, i)` and `store(v, xs, i)` (WP38 S3): the
- * vector of elements `i` to `i + N - 1`, read or written in one access after
- * one bounds check for all of them — `i < len` and `i + N <= len`, the two
- * compares joined so a single branch reaches the panic, which reports `i`
- * against `len` as `xs[i]`'s does. Arguments are evaluated left to right.
- *
- * The access claims the lane's alignment, which is the element buffer's, and
- * never the vector's sixteen: an element can start anywhere. It carries no
- * TBAA tag, because it is a `<N x T>` covering elements tagged as `T`.
+ * The one check of a vector access of `count` elements from `idx`, which the
+ * bounds walk leaves out when it proved the access (`judgeVectorAccess` in
+ * `src/bounds.ts`). Code after it runs in the block where it passed.
  */
-export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): string => {
-  const args = expr.children[1].children
-  const value = store ? emitter.emitExpression(args[0]) : ""
-  const at = store ? 1 : 0
-  const vector = store ? emitter.typeOf(args[0]) : emitter.typeOf(expr)
-  const lane = emitter.table.refOf(vector)
-  const count = emitter.table.laneCount(vector)
-  emitter.declareType(ARRAY_TYPE)
-  const base = emitArrayBase(emitter, args[at])
-  const idx = emitIndex(emitter, args[at + 1])
+const emitVectorCheck = (emitter: Emitter, base: ArrayBase, idx: string, count: i32): void => {
   const fn = emitter.fn
   const len = baseLength(emitter, base)
   const end = fn.emitValue(`add i64 ${idx}, ${count}`)
@@ -1420,16 +1405,47 @@ export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): 
   fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${shown}, i64 ${len})`)
   fn.emit("unreachable")
   fn.placeBlock(okBlock)
+}
+
+/**
+ * `nish:simd`'s `loadU8x16(xs, i)` and `store(v, xs, i)` (WP38 S3): the
+ * vector of elements `i` to `i + N - 1`, read or written in one access after
+ * one bounds check for all of them — `i < len` and `i + N <= len`, the two
+ * compares joined so a single branch reaches the panic, which reports `i`
+ * against `len` as `xs[i]`'s does. Arguments are evaluated left to right.
+ *
+ * The access claims the lane's alignment, which is the element buffer's, and
+ * never the vector's sixteen: an element can start anywhere. It carries the
+ * metadata a scalar slot access of the lane type does (`valueSlotAccess`):
+ * once the check has passed, every byte it reaches is element data of `T`.
+ * TBAA compares tags and never sizes, so a `<N x T>` tagged `element T` is
+ * MayAlias with each `T` slot it covers and NoAlias with every header and
+ * class field.
+ */
+export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): string => {
+  const args = expr.children[1].children
+  const value = store ? emitter.emitExpression(args[0]) : ""
+  const at = store ? 1 : 0
+  const vector = store ? emitter.typeOf(args[0]) : emitter.typeOf(expr)
+  const lane = emitter.table.refOf(vector)
+  const count = emitter.table.laneCount(vector)
+  emitter.declareType(ARRAY_TYPE)
+  const base = emitArrayBase(emitter, args[at])
+  const idx = emitIndex(emitter, args[at + 1])
+  const fn = emitter.fn
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitVectorCheck(emitter, base, idx, count)
+  }
   const slot = elementPointer(emitter, base, lane, idx)
   const ty = emitter.llvm(vector)
   const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)
-  // Always stated: without it the access would claim the vector's sixteen.
-  const align = `, align ${emitter.table.alignOf(lane)}`
+  // The alignment is always stated: left out, the access would claim the vector's sixteen.
+  const attrs = `, align ${emitter.table.alignOf(lane)}${valueSlotAccess(emitter, lane)}`
   if (store) {
-    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${align}`)
+    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${attrs}`)
     return "void"
   }
-  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${align}`)
+  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${attrs}`)
 }
 
 /**

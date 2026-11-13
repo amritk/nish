@@ -576,10 +576,15 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "poll" ||
   name === "popen" ||
   name === "posix_memalign" ||
+  name === "posix_spawn" ||
   name === "posix_spawn_file_actions_adddup2" ||
   name === "posix_spawn_file_actions_addopen" ||
   name === "posix_spawn_file_actions_destroy" ||
   name === "posix_spawn_file_actions_init" ||
+  name === "posix_spawnattr_destroy" ||
+  name === "posix_spawnattr_init" ||
+  name === "posix_spawnattr_setflags" ||
+  name === "posix_spawnattr_setsigmask" ||
   name === "posix_spawnp" ||
   name === "pow" ||
   name === "powf" ||
@@ -803,6 +808,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "ungetc" ||
   name === "unlink" ||
   name === "unsetenv" ||
+  name === "unshare" ||
   name === "utime" ||
   name === "utimensat" ||
   name === "utimes" ||

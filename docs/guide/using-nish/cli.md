@@ -670,7 +670,10 @@ leaves the IR unchanged.
   same words. The flag takes no value, and `--compat=<anything>` is a usage
   error (exit 2). `nish run` and `--fix` take it too.
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
-  error, and `--emit-panics <file.json>` lists them all
+  error, and `--emit-panics <file.json>` lists them all. A call to
+  `readCString` or `readStruct` from `nish:unsafe` is refused there: each
+  tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
+  removes
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why
