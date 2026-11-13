@@ -5611,15 +5611,16 @@ if (!only || "performance".includes(only)) {
     unbounded.stderr
   )
   // Silent for the same temporary in a `using a = arena()` block, a counted
-  // `for`, a scoped pass, and a drop NL9016 already names: one warning, NL9016's.
+  // `for`, a scoped pass, and a drop NL9016 already names, with its value on the
+  // target's line or the next: two warnings, both NL9016's.
   const unboundedQuiet = compile("perf_arena_unbounded_quiet", "perf_arena_unbounded_quiet.ll")
   const unboundedQuietLines = summaries(unboundedQuiet.stderr)
   check(
     "performance: NL9018 is silent for an arena block, a counted loop, a scoped pass, and a line NL9016 reports",
     unboundedQuiet.status === 0 &&
-      unboundedQuietLines.length === 1 &&
-      positions(unboundedQuietLines) === "57:5" &&
-      unboundedQuietLines[0].includes("`last` is given a new allocation on every pass"),
+      unboundedQuietLines.length === 2 &&
+      positions(unboundedQuietLines) === "57:5,69:5" &&
+      unboundedQuietLines.every((l) => l.includes("`last` is given a new allocation on every pass")),
     unboundedQuiet.stderr
   )
 

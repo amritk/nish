@@ -264,11 +264,11 @@ function UnboundedLoop.constructor(this: UnboundedLoop, first: ArenaSite): void 
 function unboundedPassFindings(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, named: i32[]): ArenaFinding[] -> @unboundedPassFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckedProgram.enterInstance
-  calls: ArenaWalk.constructor CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn FunctionSig.foreign SourceFile.lineOf loopId namedAlready nish_array_grow noteUnbounded outsideLoops pilesUp unboundedFinding walkNode
-  pointer unit: size=16 writesThrough=true captured=true passedTo=ArenaWalk.constructor#1
+  calls: ArenaWalk.constructor CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn FunctionSig.foreign loopId namedAlready nish_array_grow noteUnbounded outsideLoops pilesUp reportedElsewhere unboundedFinding walkNode
+  pointer unit: size=16 writesThrough=true captured=true passedTo=ArenaWalk.constructor#1 reportedElsewhere#0
   pointer table: size=136 writesThrough=true captured=true passedTo=ArenaWalk.constructor#5
   pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 ArenaWalk.constructor#2
-  pointer named: size=0 writesThrough=false captured=false
+  pointer named: size=0 writesThrough=false captured=false passedTo=reportedElsewhere#2
   stackSites=2 stackLocals=2
   local +0:9 out: ArenaFinding[] (const)
   local +1:9 program: CheckedProgram (const)
@@ -290,7 +290,7 @@ function unboundedPassFindings(unit: AnalysisUnit, table: TypeTable, facts: Fact
   local +19:11 loops: UnboundedLoop[] (const)
   local +20:16 site: ArenaSite (const)
   callee +21:11 pilesUp -> @pilesUp
-  callee +21:48 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +21:35 reportedElsewhere -> @reportedElsewhere
   callee +22:9 noteUnbounded -> @noteUnbounded
   local +25:16 loop: UnboundedLoop (const)
   callee +27:12 namedAlready -> @namedAlready
@@ -322,6 +322,17 @@ function loopId(site: ArenaSite): i32 -> @loopId
   pointer site: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 loop: Node | null (const)
+function reportedElsewhere(unit: AnalysisUnit, node: Node, named: i32[]): boolean -> @reportedElsewhere
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: node
+  calls: ParentTable.parentOf
+  pointer unit: size=16 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=true captured=true
+  pointer named: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 at: Node | null (let)
+  local +2:11 kind: NodeKind (const)
+  callee +15:10 ParentTable.parentOf -> @ParentTable.parentOf
 function namedAlready(out: ArenaFinding[], id: i32): boolean -> @namedAlready
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer out: size=0 writesThrough=false captured=false

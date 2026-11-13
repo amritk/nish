@@ -3058,8 +3058,8 @@ export class Compilation {
    * what they allocate (`unboundedPassFindings`, arena-report.ts). Only the
    * root package's modules, the scope of `--explain-memory`: a dependency's
    * loop is not the program author's to rewrite. A site another retention
-   * warning already reports, on its line, is left to that warning, so this
-   * runs after every one of them is in.
+   * warning already reports, at the expression or statement that holds it, is
+   * left to that warning, so this runs after every one of them is in.
    */
   reportUnboundedPasses(): void {
     const facts = this.analyze()
@@ -3071,7 +3071,7 @@ export class Compilation {
       const named: i32[] = []
       for (const warning of this.sink.warnings) {
         if (warning.source === source && isRetentionCode(codeFor("performance", warning.text))) {
-          named.push(warning.line)
+          named.push(warning.start)
         }
       }
       for (const finding of unboundedPassFindings(unit, this.table, facts, named)) {

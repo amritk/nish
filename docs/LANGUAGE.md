@@ -14560,8 +14560,9 @@ by the caller.
     drops counts: an array a `push` grows, a value stored or passed on, and a
     call to a function that stores what it allocates are not. Not reported for
     a bounded loop, for the same temporary inside the block, for a loop whose
-    pass takes its scope, or on a line NL9002, NL9003, NL9011 or NL9016
-    already reports (`tests/cases/perf_arena_unbounded_quiet`). It reads the
+    pass takes its scope, or for a site NL9002, NL9003, NL9011 or NL9016
+    already reports, as the value of the assignment or the call that warning
+    sits on (`tests/cases/perf_arena_unbounded_quiet`). It reads the
     `"accumulates"` fact `--emit-arena` prints, then keeps only the temporaries
     a pass drops, and changes no byte of the IR.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal

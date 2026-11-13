@@ -630,12 +630,13 @@ by the caller.
     into the server's memory, so the pass is refused its scope, and a reply
     string built in the handler stays allocated for as long as the server runs
     (`tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests;
-    the rewrite grew none). A loop counts as bounded when it is a `for ... of`,
-    a counted loop, or one whose condition, or a conjunct of an `&&` in it,
-    compares with `<`, `<=`, `>` or `>=`: the pile then grows with the input,
-    not with the time the program runs. `while (true)`, `for (;;)`,
-    `while (poll())` and `while (event !== H1_NEED_MORE)` are unbounded, and so
-    is a counted `for` inside one that releases nothing. There is at most one
+    the rewrite grew none). A loop counts as bounded only when it is counted,
+    by the rule that also decides a function's `willreturn`: a `for` over an
+    `i32` that steps toward a bound it compares against, or a `for...of` over
+    an array whose body cannot extend it. Every `while` and `do` is unbounded,
+    whatever its condition compares (`while (k < n && poll())`), and so is a
+    `for...of` whose body pushes onto what it walks, a walk of a map, and a
+    counted `for` inside an unbounded loop that releases nothing. There is at most one
     warning per loop, at the innermost loop whose pass releases nothing; it
     names the first site and its kind, how many more there are, where the
     memory goes back, why the pass has no scope, and the rewrite: move the
@@ -646,10 +647,11 @@ by the caller.
     drops counts: an array a `push` grows, a value stored or passed on, and a
     call to a function that stores what it allocates are not. Not reported for
     a bounded loop, for the same temporary inside the block, for a loop whose
-    pass takes its scope, or on a line NL9002, NL9003, NL9011 or NL9016
-    already reports (`tests/cases/perf_arena_unbounded_quiet`). It reads the
-    facts `--emit-arena` prints, so the two cannot disagree, and changes no
-    byte of the IR.
+    pass takes its scope, or for a site NL9002, NL9003, NL9011 or NL9016
+    already reports, as the value of the assignment or the call that warning
+    sits on (`tests/cases/perf_arena_unbounded_quiet`). It reads the
+    `"accumulates"` fact `--emit-arena` prints, then keeps only the temporaries
+    a pass drops, and changes no byte of the IR.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -1552,6 +1554,9 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   listed on its own line — both, when both do — because it runs outside the
   bracket a pass takes whether or not the body has one; a `do...while`
   condition's line follows the lines of the loops in its body.
+- **A listed loop with no bound** — one that is not counted, by NL9018's rule — is
+  the loop NL9018 warns about when what its pass keeps is a temporary the
+  pass drops; the report lists it either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not, nor is a constructor,

@@ -442,8 +442,8 @@ class UnboundedLoop {
 /**
  * The NL9018 warnings of one module: one per loop whose pass releases nothing,
  * at that loop, for the accumulating sites inside it that nothing
- * bounds. A site on one of the lines in `named`, which another retention
- * warning of the module already reports, is left to that warning.
+ * bounds. `named` holds where the module's other retention warnings start; a
+ * site one of them already reports is left to that warning (`reportedElsewhere`).
  */
 export const unboundedPassFindings = (
   unit: AnalysisUnit,
@@ -472,7 +472,7 @@ export const unboundedPassFindings = (
     }
     const loops: UnboundedLoop[] = []
     for (const site of walk.sites) {
-      if (pilesUp(walk, site) && named.indexOf(program.source.lineOf(site.node.start)) < 0) {
+      if (pilesUp(walk, site) && !reportedElsewhere(unit, site.node, named)) {
         noteUnbounded(loops, site)
       }
     }
@@ -527,6 +527,35 @@ const noteUnbounded = (loops: UnboundedLoop[], site: ArenaSite): void => {
 const loopId = (site: ArenaSite): i32 => {
   const loop = site.around.loop
   return loop === null ? -1 : loop.id
+}
+
+/**
+ * True when another retention warning starts where `node` or an expression or
+ * statement holding it starts: NL9002, NL9003 and NL9016 sit on the target of
+ * the assignment whose value the site is, NL9011 on the call. The climb stops
+ * at the loop or block around the site, so a site that merely shares a line
+ * with a warning is still reported, and one written on the line after its
+ * assignment's target is not reported twice.
+ */
+const reportedElsewhere = (unit: AnalysisUnit, node: Node, named: i32[]): boolean => {
+  let at: Node | null = node
+  while (at !== null) {
+    const kind = at.kind
+    if (
+      kind === NodeKind.Block ||
+      kind === NodeKind.While ||
+      kind === NodeKind.Do ||
+      kind === NodeKind.For ||
+      kind === NodeKind.ForOf
+    ) {
+      return false
+    }
+    if (named.indexOf(at.start) >= 0) {
+      return true
+    }
+    at = unit.parents.parentOf(at)
+  }
+  return false
 }
 
 const namedAlready = (out: ArenaFinding[], id: i32): boolean => {

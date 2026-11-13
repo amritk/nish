@@ -60,6 +60,20 @@ const dropped = (log: Log): i32 => {
   return last.length;
 };
 
+// The same drop with its value on the line after its target: still NL9016's
+// alone, because the site is the value of the assignment NL9016 sits on.
+const droppedSplit = (log: Log): i32 => {
+  let last = "";
+  let k = 0;
+  while (more(log)) {
+    last =
+      `cell ${k}`;
+    log.last = new Entry(k);
+    k = k + 1;
+  }
+  return last.length;
+};
+
 // Nothing a pass allocates outlives it, so each pass gets a scope.
 const scoped = (log: Log): i32 => {
   let total = 0;
@@ -79,7 +93,9 @@ export const main = (): void => {
   counted(log, 3);
   log.left = 4;
   const d = dropped(log);
+  log.left = 2;
+  const e = droppedSplit(log);
   log.left = 5;
   const k = scoped(log);
-  console.log(`${log.total} ${log.last.id} ${d} ${k}`);
+  console.log(`${log.total} ${log.last.id} ${d} ${e} ${k}`);
 };
