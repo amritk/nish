@@ -1267,6 +1267,13 @@ export class ConstInfo {
   storageElem: i32
   /** The storage's LLVM global, `@<symbol>` for the header and `@<symbol>.data` for the elements; `Compilation.nameStorage` sets it. */
   storageSymbol: string
+  /**
+   * WP55: root storage, module storage whose element is `C | null` for a
+   * class `C` (`docs/wp55-persistent-root.md`). Each element is a root: on a
+   * wasm build the runtime keeps what it reaches between export calls and
+   * releases the rest (`nish_root_keep`). Set by `checkStorage`.
+   */
+  root: boolean
 
   constructor(name: string, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -1274,6 +1281,7 @@ export class ConstInfo {
     this.storage = false
     this.storageElem = -1
     this.storageSymbol = ""
+    this.root = false
     this.intValue = toI64(0)
     this.floatValue = 0.0
     this.textValue = ""

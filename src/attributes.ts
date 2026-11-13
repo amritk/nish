@@ -4072,8 +4072,11 @@ const collectStatedFacts = (
     facts.arenaNodes = memory.arenaNodes
     facts.arenaFlows = memory.arenaFlows
     facts.escapeSite = memory.escapeSite
-    // The half of `contained` that needs no fixpoint; the other is added after it.
-    facts.contained = rootsHoldNoPointer(program, table, sig)
+    // The half of `contained` that needs no fixpoint; the other is added after
+    // it. Root storage (WP55) is a module constant whose elements hold
+    // pointers, which any function can store through, so where a program has
+    // one only the escape half proves anything.
+    facts.contained = !opts.holdsRoots && rootsHoldNoPointer(program, table, sig)
   }
   // A `returned` or `leaked` allocation is still an allocation.
   if (facts.returnsAllocation || facts.allocLeaks) {

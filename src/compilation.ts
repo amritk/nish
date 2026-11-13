@@ -208,6 +208,7 @@ import {
   voidTaskResultMessage,
   destinationEdits,
   threadsModuleName,
+  isThreadsModule,
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
@@ -1413,6 +1414,9 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.recheckStorage()
     }
+    this.rejectRootWithArenas()
+    this.rejectRootInShim()
+    this.rejectRootInWasiLoader()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -3153,6 +3157,86 @@ export class Compilation {
   }
 
   /**
+   * WP55 §4.2: root storage in a program that also loads `nish/threads` or
+   * `nish:region`, each of which allocates from an arena of its own that a
+   * root could be left pointing into once it is freed.
+   */
+  rejectRootWithArenas(): void {
+    let arenas = false
+    for (const unit of this.modules) {
+      if (unit.checker.program.regionLibrary || isThreadsModule(unit.checker.program)) {
+        arenas = true
+      }
+    }
+    if (!arenas) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a program that loads \`nish/threads\` or \`nish:region\`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a build that writes a native shim
+   * (`--emit-napi`, `--emit-napi-async`, `--emit-header`). The shim releases
+   * the arena after every call that passes a string or an array
+   * (`src/interop-napi.ts`), which frees what a root reaches, and only a page
+   * module's loader keeps it instead.
+   */
+  rejectRootInShim(): void {
+    const opts = this.opts
+    if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0 && opts.emitHeader.length === 0) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a build that writes a native shim (\`--emit-napi\`, \`--emit-napi-async\` or \`--emit-header\`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a WASI build that writes a loader
+   * (`--emit-dts`). The loader releases the arena after every call, and only
+   * a page module (`buildsPageModule`) emits the `nish_root_keep` a loader
+   * calls in its place, so what a root reaches would be freed.
+   */
+  rejectRootInWasiLoader(): void {
+    const opts = this.opts
+    if (opts.emitDts.length === 0 || !isWasmBuild(opts) || buildsPageModule(opts)) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a WASI build that writes a loader (\`--emit-dts\`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (\`--target wasm32\`) or as an \`--emit-dts\` compile for the host`
+          )
+        }
+      }
+    }
+  }
+
+  /**
    * WP18 G5 + WP21 section 9c: the struct-name rule, one pass later.
    *
    * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
@@ -3382,6 +3466,39 @@ export class Compilation {
       }
     }
     return this.hasStorage()
+  }
+
+  /** WP55: whether any module declares root storage, whatever the target. */
+  holdsRoots(): boolean {
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  /**
+   * WP55: every root storage's symbol, in module order, when the build makes
+   * a page module, whose loader keeps what the roots reach between calls; a
+   * native build's arena is never released across calls, so it keeps nothing.
+   */
+  rootSymbols(): string[] {
+    const out: string[] = []
+    if (!buildsPageModule(this.opts)) {
+      return out
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const info of program.constantList) {
+        if (info.root && info.origin === program.source) {
+          out.push(info.storageSymbol)
+        }
+      }
+    }
+    return out
   }
 
   /**
@@ -3803,6 +3920,7 @@ export class Compilation {
         unit.checker.program.capturesErrno = true
       }
     }
+    this.opts.holdsRoots = this.holdsRoots()
     const facts = analyzeFunctions(units, this.table, this.opts, this.runtime)
     this.analysisUnits = units
     this.facts = facts
@@ -4040,6 +4158,7 @@ export class Compilation {
       this.narrowSandbox(facts)
     }
     this.opts.panicSites = this.guardsPanics()
+    this.opts.rootSymbols = this.rootSymbols()
     const units = this.analysisUnits
     const stems = this.outputStems()
     const copies: AnalysisUnit[] = this.libraryUnits(units)
