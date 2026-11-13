@@ -144,22 +144,58 @@ called `nish_arena_release(mark)`, after the result is decoded, as before.
 2. If the kept region is at most `2 × live + 64 KiB`, where `live` is the size
    the last compaction kept, nothing is released: the call's allocations stay.
    This is the cheap path, taken by most calls.
-3. Otherwise it **compacts**: it traces from every root slot, recording each
-   reachable block in the kept region (start, size) and each pointer slot that
-   holds a pointer into it. A pointer outside the kept region — a string
-   literal, module storage — is left as it is and not followed. Blocks are
-   sorted and overlapping blocks merged into extents, so aliasing, cycles and a
-   pointer into the middle of a block are all one extent. Extents are copied,
-   in address order, into scratch above `off`, each keeping its address modulo
-   8; every recorded slot is rewritten by a binary search over the extents;
-   the scratch is moved down to `floor`; `off` is set past it; `live` becomes
-   its size.
+3. Otherwise it **compacts**: it traces from every root slot with a work list
+   (no recursion, so a list as long as the run does not run out of stack),
+   recording each reachable block in the kept region (start, size) and each
+   pointer slot that holds a pointer into it. A pointer outside the kept
+   region — a string constant, memory below `floor` — is followed, so what it
+   reaches is traced too, but it is never moved. Blocks are sorted and
+   overlapping blocks merged into extents, so aliasing, cycles and a pointer
+   into the middle of a block are all one extent. Every recorded slot is
+   rewritten, once, by a binary search over the extents; then the extents
+   slide down in place, in address order, with `memmove` — each one's new
+   place is at or below its old one and above every earlier extent's, so a
+   forward move never overwrites what is still to move. `off` is set past the
+   last; `live` becomes the kept size.
+
+The trace's bookkeeping lives in **scratch** above `off`: the block list, the
+slot list, the work list and a seen set (an open-addressing hash of
+(object, descriptor) pairs, so one address traced as two types is traced as
+both), each a vector that doubles as it grows, and then the extent list. A
+vector that grows gives its old copy back to a short free list, and the work
+list and the seen set go back to it once the trace ends, so the extent list
+and later growth reuse them; scratch is never copied into the heap and is
+forgotten when the keep returns.
 
 Memory is then bounded by `2 × live + 64 KiB` of kept region, plus one call's
-temporaries, plus the compaction's scratch (one copy of the live graph and its
-slot list). `memory.buffer` grows to that high-water mark and stays there; the
-amortised cost of a call is at most what it allocated, since a compaction that
-copies `live` bytes comes only after at least `live + 64 KiB` were allocated.
+temporaries, plus the scratch, which grows with the number of blocks and
+pointer slots the roots reach, not their bytes. At its worst — every vector
+just doubled, its old copy not yet reused, the seen set a quarter full — the
+scratch is about 220 bytes an object (an array is two blocks, its header and
+its data) and 32 bytes a pointer slot. `memory.buffer` grows to that
+high-water mark and stays there, so the peak is at most
+
+    static data + 3 × live + 64 KiB + one call's allocations
+                + 220 B × objects + 32 B × pointer slots
+
+Measured (`tests/persist/drive.mjs`, chain): a list of 200,000 nodes, each 8
+bytes once compacted, is 1.6 MB of live data; the kept heap after the last
+call is 2,213,360 bytes, the static data and the nodes pushed since the last
+compaction at the 16 bytes each was allocated, and linear memory peaks at
+14,090,240 bytes, 8.8× the live data. The break director, with fewer and
+larger blocks, has a kept heap of 3.26 MB in 3.34 MB of memory; the kept heap
+is the arena's offset after a keep (the static data, what the roots reach and
+what has been kept since the last compaction), not the live graph alone. The
+bound is loose for most graphs, but it is the safe default: the peak grows
+with the live graph, so a measurement holds only for a graph as large as the
+one measured. To size `--memory` below it, run the module once without
+`--memory` through the largest session or graph the program will reach, read
+the peak `memory.buffer.byteLength`, and give `--memory` about 1.5× that.
+
+The amortised cost of a call is at most twice what it allocated. A compaction
+comes only after at least `live + 64 KiB` was allocated since the last one,
+and it moves what is live now: at most the last `live` plus what those calls
+kept, so at most twice what they allocated.
 
 ### 4.1 Why nothing else points into the kept region
 
@@ -190,10 +226,19 @@ alone, which is sound because a store through a root is an escape.
   and nothing is moved. Root storage makes a module guarded, as module storage
   does.
 - **`nish_reset_arena`.** Resetting the arena empties every root slot first.
-- **Native builds.** A native program's arena is not released across calls to
-  its exports, so root storage is ordinary module storage holding a pointer:
-  the graph lives in the thread's arena, and no trace runs. `nish_root_keep` is
-  emitted only for wasm.
+- **Native builds.** A native program never releases its arena across calls
+  to its own functions, so root storage is ordinary module storage holding a
+  pointer: the graph lives in the thread's arena, and no trace runs.
+  `nish_root_keep` is emitted only for wasm. A build that writes a native
+  shim (`--emit-napi`, `--emit-napi-async`, `--emit-header`) is different:
+  the shim marks the arena before a call that passes a string or an array
+  and releases it after, which would free what a root reaches. Root storage
+  is refused there (NL2769) rather than traced. So is a `--profile wasi`
+  build with `--emit-dts` (NL2770): its loader releases the arena after
+  every call, and it is not a page module, so no `nish_root_keep` is emitted
+  for it to call instead. A freestanding `--target wasm32` build without
+  `--emit-dts` emits the keep but writes no loader: its host's own loader
+  must call `nish_root_keep(mark)` in place of `nish_arena_release(mark)`.
 - **`--emit-ts`.** Root storage is an `Array` of objects filled with `null`; the
   JS heap keeps the graph.
 - **`--deterministic`.** A compaction depends only on the bytes allocated, not
@@ -211,6 +256,8 @@ alone, which is sound because a store through a root is an escape.
 | root storage whose class reaches a type §3.1 does not trace | NL2766 |
 | `export` of root storage | NL2767 |
 | root storage in a program that loads `nish/threads` or `nish:region` (§4.2) | NL2768 |
+| root storage in a build that writes a native shim: `--emit-napi`, `--emit-napi-async` or `--emit-header` (§4.2) | NL2769 |
+| root storage in a `--profile wasi` build with `--emit-dts`, whose loader releases the arena (§4.2) | NL2770 |
 | the element of root storage something other than `C \| null` for a class `C` (`C` alone, an interface, a record) | NL2686, as today |
 
 ## 6. Proof

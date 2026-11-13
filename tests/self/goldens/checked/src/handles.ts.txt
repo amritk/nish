@@ -8,30 +8,6 @@ import StringSet from "./map" -> struct StringSet
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
 import FLAG_USING from "./nodes" -> const FLAG_USING
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_THIS from "./nodes" -> const N_THIS
-import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
-import N_TYPE_FUNCTION from "./nodes" -> const N_TYPE_FUNCTION
-import N_TYPE_LITERAL from "./nodes" -> const N_TYPE_LITERAL
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_OPERATOR from "./nodes" -> const N_TYPE_OPERATOR
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_READONLY from "./nodes" -> const N_TYPE_READONLY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
@@ -127,8 +103,8 @@ function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructI
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
-  pointer program: size=800 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   local +0:9 bare: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -139,17 +115,17 @@ function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructI
 function openedHandle(program: CheckedProgram, table: TypeTable, init: Node): StructInfo | null -> @openedHandle [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: handleOf nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false passedTo=handleOf#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=handleOf#1
+  pointer program: size=888 writesThrough=false captured=false passedTo=handleOf#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=handleOf#1
   pointer init: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:25 handleOf -> @handleOf
+  callee +0:32 handleOf -> @handleOf
 function rejectHandleArgument(ctx: CheckContext, type: i32, at: Node): boolean -> @rejectHandleArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: type
   calls: CheckContext.error handleOf handleTypeMessage
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
@@ -181,7 +157,7 @@ function isThisField(expr: Node): boolean -> @isThisField
   stackSites=0 stackLocals=0
   local +0:9 at: Node (const)
   callee +0:14 unwrapParens -> @unwrapParens
-  callee +1:34 unwrapParens -> @unwrapParens
+  callee +1:41 unwrapParens -> @unwrapParens
 function closeStatement(stmt: Node): Node | null -> @closeStatement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapParens
@@ -223,15 +199,15 @@ function disposeCall(body: Node): Node | null -> @disposeCall
 function functionNamed(program: CheckedProgram, name: string): FunctionSig | null -> @functionNamed
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 sig: FunctionSig (const)
 function checkDispose(program: CheckedProgram, table: TypeTable, info: StructInfo, out: HandleFinding[]): HandleClose | null -> @checkDispose
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: HandleClose.constructor HandleFinding.constructor StructInfo.field TypeTable.assignable TypeTable.stripNull TypeTable.typeName closeArityMessage closeTypeMessage closeUnknownMessage disposeCall disposeMethod disposeShapeMessage functionNamed nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noDisposeMessage
-  pointer program: size=800 writesThrough=false captured=false passedTo=functionNamed#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.assignable#0 TypeTable.typeName#0 TypeTable.typeName#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=functionNamed#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.assignable#0 TypeTable.typeName#0 TypeTable.typeName#0
   pointer info: size=176 writesThrough=true captured=true passedTo=StructInfo.field#0 HandleClose.constructor#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -277,7 +253,7 @@ function borrowingParam(parents: Node[]): boolean -> @borrowingParam
   local +0:9 owner: Node (const)
   local +1:9 generic: boolean (const)
   callee +8:24 closedClass -> @closedClass
-function isTypeNode(kind: i32): boolean -> @isTypeNode
+function isTypeNode(kind: NodeKind): boolean -> @isTypeNode
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function walkTypes(program: CheckedProgram, node: Node, parents: Node[], out: HandleFinding[]): void -> @walkTypes
@@ -285,7 +261,7 @@ function walkTypes(program: CheckedProgram, node: Node, parents: Node[], out: Ha
   sharedWrite: +0:9
   escaping: node
   calls: CheckedProgram.struct HandleFinding.constructor borrowingParam handleTypeMessage nish_alloc_struct nish_array_grow nish_panic_index walkTypes
-  pointer program: size=800 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 walkTypes#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 walkTypes#0
   pointer node: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
   pointer parents: size=0 writesThrough=true captured=false passedTo=borrowingParam#0 walkTypes#2
   pointer out: size=0 writesThrough=true captured=false passedTo=walkTypes#3
@@ -301,8 +277,8 @@ function HandleWalk.constructor(this: HandleWalk, program: CheckedProgram, table
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: closes out program table
   pointer this: size=72 writesThrough=true captured=false
-  pointer program: size=800 writesThrough=true captured=true
-  pointer table: size=112 writesThrough=true captured=true
+  pointer program: size=888 writesThrough=true captured=true
+  pointer table: size=136 writesThrough=true captured=true
   pointer closes: size=0 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -462,8 +438,8 @@ function walkValues(walk: HandleWalk, node: Node, depth: i32): void -> @walkValu
   callee +2:25 new HandleFinding -> @HandleFinding.constructor
   callee +2:51 handleWriteMessage -> @handleWriteMessage
   callee +5:9 checkFieldRead -> @checkFieldRead
-  callee +11:32 isDerived -> @isDerived
-  callee +11:48 sourceLocal -> @sourceLocal
+  callee +11:39 isDerived -> @isDerived
+  callee +11:55 sourceLocal -> @sourceLocal
   callee +12:5 checkDerivedUse -> @checkDerivedUse
   local +16:11 info: StructInfo | null (const)
   callee +16:18 handleOf -> @handleOf
@@ -482,8 +458,8 @@ function handleFindings(program: CheckedProgram, table: TypeTable): HandleFindin
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn HandleWalk.constructor StringSet.add StringSet.constructor StringSet.has checkDispose nish_array_grow nish_str_concat nish_str_from_i32 walkTypes walkValues
-  pointer program: size=800 writesThrough=true captured=true passedTo=checkDispose#0 walkTypes#0 CheckedProgram.enterInstance#0 HandleWalk.constructor#1 CheckedProgram.leaveInstance#0
-  pointer table: size=112 writesThrough=true captured=true passedTo=checkDispose#1 HandleWalk.constructor#2
+  pointer program: size=888 writesThrough=true captured=true passedTo=checkDispose#0 walkTypes#0 CheckedProgram.enterInstance#0 HandleWalk.constructor#1 CheckedProgram.leaveInstance#0
+  pointer table: size=136 writesThrough=true captured=true passedTo=checkDispose#1 HandleWalk.constructor#2
   stackSites=3 stackLocals=2
   local -9:9 found: HandleFinding[] (const)
   local -8:7 any: boolean (let)

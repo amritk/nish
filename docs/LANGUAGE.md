@@ -1271,10 +1271,13 @@ gives up on: it keeps the checker's widened state.
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
 union is refused, and so is a union-holding field of any class or interface
-the compilation declares, exported or not, under any sidecar flag
-(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
-lays out every class and interface of the program, a private one too
-(`reject_union_private_field`). The message is
+the compilation declares, exported or not, under a flag that lays the classes
+out as C structs (`--emit-header`, `--emit-napi`, `--emit-napi-async`): a
+header lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). A build with `--emit-dts` alone describes no
+class, so there a union field of a class only the module reads — root
+storage's graph among them — is accepted; a union in an exported function's
+parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions
@@ -2137,6 +2140,22 @@ define void @nish_root_keep(i64 %mark) {
   loads `nish/threads` or `nish:region` is
   `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
   (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
+- **No WASI loader.** A `--profile wasi` build with `--emit-dts` writes a
+  loader that releases the arena after every call, and only a page module
+  emits the `nish_root_keep` a loader calls instead, so root storage there is
+  `` Root storage `X` cannot be kept in a WASI build that writes a loader (`--emit-dts`): … ``
+  (NL2770, `tests/wordings/nl2770_root_storage_wasi_dts`).
+- **A freestanding module without a loader** (`--target wasm32` and no
+  `--emit-dts`) still emits `nish_root_keep(mark)`; the host that calls its
+  exports writes its own loader, and must call `nish_root_keep(mark)` where it
+  would call `nish_arena_release(mark)`, or what a root reaches is freed.
 - **Every function may store through a root**, so a program with root
   storage does not prove a parameter-only allocation stays in its caller's
   scope from the signature alone; the compiler's other proofs are unchanged.
@@ -14222,7 +14241,15 @@ where its memory lives and when it is reused.
    pushed, assigned to another variable (`let q = p` included), held by a
    reassigned `let`, or passed to a callee that captures it
    (`tests/cases/mem_stack_escape`). A site inside a loop gets one slot,
-   reused every iteration (`tests/cases/mem_stack_loop`). Stack arrays are
+   reused every iteration (`tests/cases/mem_stack_loop`). A `Result` is the
+   exception to "held by a reassigned `let`": an `Ok`/`Err`, or a call
+   returning a by-value `Result`, assigned to a `let` of the same function
+   goes where that `let` goes, so a `let r = Ok(n)` assigned again keeps its
+   function's arena scope. Outside a loop each such site is its own alloca;
+   inside one it is arena memory the scope gives back. A `let` assigned from
+   itself (`r = c ? r : Ok(0)`) keeps the arena answer
+   (`tests/cases/res_let_reassign`, whose 100000 calls leave `Arena.used()`
+   unchanged). Stack arrays are
    capped at 4096 bytes of data; a later `push` moves the elements to the
    arena and the header stays valid. The slot's type spells the length out,
    and the length is read from the literal that made the site stackable in the
@@ -14555,7 +14582,9 @@ by the caller.
     nothing and has no rewrite — that function still loses its arena scope and
     still retains its memory, silently, unless it earns the scope through its
     callees ([Memory model](#memory-model), item 2), which is a known gap
-    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
+    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out") —
+    a `let` holding a `Result` is no longer in it ([Memory model](#memory-model),
+    item 1); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; when the value being dropped may already be reachable from

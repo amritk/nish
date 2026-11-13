@@ -98,47 +98,7 @@ import {
 } from "./emit-util"
 import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
-import {
-  FLAG_CONST,
-  FLAG_OBJECT_SPREAD,
-  N_ARRAY,
-  N_BINARY,
-  N_BLOCK,
-  N_ARROW,
-  N_CALL,
-  N_CONDITIONAL,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_PARAM,
-  N_IF,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_TRY,
-  N_SPREAD,
-  N_STRING,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_THIS,
-  N_THROW,
-  N_UNARY,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { FLAG_CONST, FLAG_OBJECT_SPREAD, Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import {
   CaptureTarget,
@@ -1220,7 +1180,7 @@ const argumentUse = (callee: FunctionSig, index: i32): ParamUse => {
   return result
 }
 
-/** The position of `node` in its `N_LIST` parent, which is the argument index. */
+/** The position of `node` in its `NodeKind.List` parent, which is the argument index. */
 const indexInList = (list: Node, node: Node): i32 => {
   let i = 0
   while (i < list.children.length) {
@@ -1247,18 +1207,18 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     if (parent === null) {
       return use(USE_ESCAPE)
     }
-    if (parent.kind === N_PAREN) {
+    if (parent.kind === NodeKind.Paren) {
       node = parent
       continue
     }
-    if (parent.kind === N_CONDITIONAL) {
+    if (parent.kind === NodeKind.Conditional) {
       if (parent.children[0] === node) {
         return use(USE_NONE)
       }
       node = parent
       continue
     }
-    if (parent.kind === N_TEMPLATE) {
+    if (parent.kind === NodeKind.Template) {
       // A concatenating template copies its holes and the runtime keeps
       // nothing; only the single-hole passthrough hands the value on.
       if (!isStringPassthrough(program, parent)) {
@@ -1267,7 +1227,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       node = parent
       continue
     }
-    if (parent.kind === N_INDEX && parent.children[0] === node) {
+    if (parent.kind === NodeKind.Index && parent.children[0] === node) {
       if (yieldsInteriorPointer(unit, table, parent)) {
         node = parent
         interior = true
@@ -1275,24 +1235,24 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       }
       return classifyElementUse(unit, parent)
     }
-    if (parent.kind === N_MEMBER) {
+    if (parent.kind === NodeKind.Member) {
       return classifyMemberUse(unit, table, parent)
     }
-    if (parent.kind === N_LIST) {
+    if (parent.kind === NodeKind.List) {
       return classifyArgumentUse(unit, table, parent, node)
     }
     // `{ ...s }` copies each of `s`'s fields into the literal's object
     // (`emitSpreadCopy`): the source is read, and nothing keeps it.
-    if (parent.kind === N_SPREAD && (parent.flags & FLAG_OBJECT_SPREAD) !== 0) {
+    if (parent.kind === NodeKind.Spread && (parent.flags & FLAG_OBJECT_SPREAD) !== 0) {
       return use(USE_READ)
     }
-    if (parent.kind === N_CALL) {
+    if (parent.kind === NodeKind.Call) {
       return use(USE_NONE) // the callee position of `p(...)`, which the checker refuses anyway
     }
-    if (parent.kind === N_NEW) {
+    if (parent.kind === NodeKind.New) {
       return use(USE_ESCAPE) // the constructed name, not an argument
     }
-    if (parent.kind === N_BINARY) {
+    if (parent.kind === NodeKind.Binary) {
       // WP32: `a ?? d` hands on whichever operand it answers, as a ternary does.
       if (parent.text === "??") {
         node = parent
@@ -1306,7 +1266,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
         // WP15 §2a: `xs[i] = p` into an inline-element array copies `p`'s bytes
         // into the slot, exactly as `push` does; nothing keeps the pointer.
         const target = unwrapParens(parent.children[0])
-        if (target.kind === N_INDEX && storesInlineElements(program, table, target.children[0])) {
+        if (target.kind === NodeKind.Index && storesInlineElements(program, table, target.children[0])) {
           return use(USE_READ)
         }
         return use(USE_ESCAPE)
@@ -1315,10 +1275,10 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     }
     // An element of an array literal whose elements are inline is copied into
     // the fresh block the literal allocates, so the value is read, not kept.
-    if (parent.kind === N_ARRAY && storesInlineElements(program, table, parent)) {
+    if (parent.kind === NodeKind.Array && storesInlineElements(program, table, parent)) {
       return use(USE_READ)
     }
-    if (parent.kind === N_FOR_OF) {
+    if (parent.kind === NodeKind.ForOf) {
       // WP32: a walk of a `Set` itself hands it to the table's walk methods,
       // `walkOpen` first, whose stores into the table are the walk's only
       // writes; `m.keys()` reaches here as the receiver of that call instead.
@@ -1344,19 +1304,19 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
       )
     }
     // `const p = xs[i]`: the local holds the slot, and is what uses it.
-    if (interior && parent.kind === N_VAR_DECL && parent.children[2] === node) {
+    if (interior && parent.kind === NodeKind.VarDecl && parent.children[2] === node) {
       return classifyElementHolder(unit, table, program.nodeLocals[parent.id], enclosingBlock(unit, parent))
     }
-    if (parent.kind === N_UNARY) {
+    if (parent.kind === NodeKind.Unary) {
       return use(USE_NONE)
     }
-    if (parent.kind === N_EXPR_STMT || parent.kind === N_THROW) {
+    if (parent.kind === NodeKind.ExprStmt || parent.kind === NodeKind.Throw) {
       return use(USE_NONE)
     }
-    if (parent.kind === N_IF || parent.kind === N_WHILE || parent.kind === N_DO) {
+    if (parent.kind === NodeKind.If || parent.kind === NodeKind.While || parent.kind === NodeKind.Do) {
       return use(USE_NONE)
     }
-    if (parent.kind === N_FOR) {
+    if (parent.kind === NodeKind.For) {
       return use(USE_NONE)
     }
     return use(USE_ESCAPE) // return, variable initializer, array/object literal element, ...
@@ -1367,7 +1327,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
 const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse => {
   const program = unit.program
   const above = unit.parents.parentOf(access)
-  if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+  if (above !== null && above.kind === NodeKind.Call && above.children[0] === access) {
     const callee = program.nodeCallees[above.id]
     if (callee !== null) {
       return argumentUse(callee, 0)
@@ -1397,14 +1357,14 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
   // same store is only a read of `p`.
   if (
     above !== null &&
-    above.kind === N_INDEX &&
+    above.kind === NodeKind.Index &&
     above.children[0] === access &&
     isInlineField(program, table, access)
   ) {
     const store = unit.parents.parentOf(above)
     if (
       isAssignmentTarget(store, above) ||
-      (store !== null && store.kind === N_UNARY && (store.text === "++" || store.text === "--"))
+      (store !== null && store.kind === NodeKind.Unary && (store.text === "++" || store.text === "--"))
     ) {
       return use(USE_WRITE)
     }
@@ -1461,7 +1421,7 @@ const spawnsShared = (program: CheckedProgram, table: TypeTable, node: Node): bo
 const isSpawnedTask = (unit: AnalysisUnit, call: Node): boolean => {
   let node = call
   let parent = unit.parents.parentOf(node)
-  while (parent !== null && parent.kind === N_PAREN) {
+  while (parent !== null && parent.kind === NodeKind.Paren) {
     node = parent
     parent = unit.parents.parentOf(node)
   }
@@ -1469,7 +1429,9 @@ const isSpawnedTask = (unit: AnalysisUnit, call: Node): boolean => {
     return false
   }
   const spawn = unit.parents.parentOf(parent)
-  return spawn !== null && spawn.kind === N_CALL && unit.program.nodeBuiltins[spawn.id] === "async.spawn"
+  return (
+    spawn !== null && spawn.kind === NodeKind.Call && unit.program.nodeBuiltins[spawn.id] === "async.spawn"
+  )
 }
 
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */
@@ -1479,7 +1441,7 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
   if (owner === null) {
     return use(USE_ESCAPE)
   }
-  if (owner.kind === N_CALL) {
+  if (owner.kind === NodeKind.Call) {
     const index = indexInList(list, node)
     if (index < 0) {
       return use(USE_ESCAPE)
@@ -1539,7 +1501,7 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE)
   }
-  if (owner.kind === N_NEW) {
+  if (owner.kind === NodeKind.New) {
     // `new C(...)` has two lists: type arguments and value arguments.
     if (owner.children[2] !== list) {
       return use(USE_ESCAPE)
@@ -1574,11 +1536,11 @@ export const yieldsInteriorPointer = (unit: AnalysisUnit, table: TypeTable, acce
   }
   let node = access
   let parent = unit.parents.parentOf(node)
-  while (parent !== null && parent.kind === N_PAREN) {
+  while (parent !== null && parent.kind === NodeKind.Paren) {
     node = parent
     parent = unit.parents.parentOf(node)
   }
-  return parent !== null && parent.kind !== N_MEMBER && !isAssignmentTarget(parent, node)
+  return parent !== null && parent.kind !== NodeKind.Member && !isAssignmentTarget(parent, node)
 }
 
 /**
@@ -1604,11 +1566,11 @@ const classifyElementHolder = (
   for (const ref of refs) {
     let node = ref
     let parent = unit.parents.parentOf(node)
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       node = parent
       parent = unit.parents.parentOf(node)
     }
-    if (parent === null || parent.kind !== N_MEMBER) {
+    if (parent === null || parent.kind !== NodeKind.Member) {
       return use(USE_ESCAPE)
     }
     const found = classifyMemberUse(unit, table, parent)
@@ -1623,10 +1585,10 @@ const classifyElementHolder = (
 
 /** Every identifier under `node` that names `local`, skipping lifted arrow bodies. */
 const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[]): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const named = program.nodeLocals[node.id]
     if (named !== null && named === local) {
       out.push(node)
@@ -1644,14 +1606,14 @@ const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Nod
  * whatever runs it, so it is not private (`FactCollector.notePrivateArray`).
  */
 const namedInArrow = (program: CheckedProgram, node: Node, local: Local, inside: boolean): boolean => {
-  if (inside && node.kind === N_IDENT) {
+  if (inside && node.kind === NodeKind.Ident) {
     // A data-parallel arrow's capture names the local it was made from (WP29).
     const named = sourceLocal(program.nodeLocals[node.id])
     if (named !== null && named === local) {
       return true
     }
   }
-  const deeper = inside || node.kind === N_ARROW
+  const deeper = inside || node.kind === NodeKind.Arrow
   for (const child of node.children) {
     if (namedInArrow(program, child, local, deeper)) {
       return true
@@ -1667,10 +1629,10 @@ const namedInArrow = (program: CheckedProgram, node: Node, local: Local, inside:
 export const pushedOnto = (unit: AnalysisUnit, table: TypeTable, expr: Node): Local | null => {
   const program = unit.program
   let list = unit.parents.parentOf(expr)
-  while (list !== null && list.kind === N_PAREN) {
+  while (list !== null && list.kind === NodeKind.Paren) {
     list = unit.parents.parentOf(list)
   }
-  if (list === null || list.kind !== N_LIST) {
+  if (list === null || list.kind !== NodeKind.List) {
     return null
   }
   const call = unit.parents.parentOf(list)
@@ -1678,7 +1640,7 @@ export const pushedOnto = (unit: AnalysisUnit, table: TypeTable, expr: Node): Lo
     return null
   }
   const receiver = unwrapParens(call.children[0].children[0])
-  return receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
+  return receiver.kind === NodeKind.Ident ? program.nodeLocals[receiver.id] : null
 }
 
 /** `v` is a local of this function that `decl` binds to its own array literal or `new Array`. */
@@ -1687,7 +1649,7 @@ export const isFreshArrayLocal = (table: TypeTable, v: Local, decl: Node | null)
     return false
   }
   const init = unwrapParens(decl.children[2])
-  return init.kind === N_ARRAY || init.kind === N_NEW
+  return init.kind === NodeKind.Array || init.kind === NodeKind.New
 }
 
 /**
@@ -1718,7 +1680,7 @@ export const isJoinedParts = (
   // `parts` reads it when the call runs, later than the join may release it.
   let body: Node = decl
   let above = unit.parents.parentOf(body)
-  while (above !== null && above.kind !== N_ARROW && above.kind !== N_FUNCTION) {
+  while (above !== null && above.kind !== NodeKind.Arrow && above.kind !== NodeKind.FunctionDecl) {
     body = above
     above = unit.parents.parentOf(body)
   }
@@ -1737,11 +1699,11 @@ export const isJoinedParts = (
 const isPartsUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): boolean => {
   const program = unit.program
   const access = unit.parents.parentOf(ref)
-  if (access === null || access.kind !== N_MEMBER || access.children[0] !== ref) {
+  if (access === null || access.kind !== NodeKind.Member || access.children[0] !== ref) {
     return false
   }
   const above = unit.parents.parentOf(access)
-  if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+  if (above !== null && above.kind === NodeKind.Call && above.children[0] === access) {
     return isPushCall(program, table, above) || isJoinCall(program, table, above)
   }
   // `parts.length = n` is refused for every array, so a `length` here is a read.
@@ -1760,10 +1722,10 @@ const gatherDeclarations = (
   names: StringMap,
   buckets: Node[][]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  const declared: Local | null = node.kind === N_VAR_DECL ? program.nodeLocals[node.id] : null
+  const declared: Local | null = node.kind === NodeKind.VarDecl ? program.nodeLocals[node.id] : null
   if (declared !== null) {
     let at = names.get(declared.name, -1)
     if (at < 0) {
@@ -1799,7 +1761,7 @@ const returnedParameter = (callee: FunctionSig): i32 => {
   }
   const returned: Node[] = []
   const bound: string[] = []
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     returnsAndBindings(body, returned, bound)
   } else {
     returned.push(body)
@@ -1807,10 +1769,11 @@ const returnedParameter = (callee: FunctionSig): i32 => {
   let at = -1
   for (const r of returned) {
     const e = unwrapParens(r)
-    if (e.kind === N_NEW || e.kind === N_ARRAY || e.kind === N_OBJECT) {
+    if (e.kind === NodeKind.New || e.kind === NodeKind.Array || e.kind === NodeKind.Object) {
       continue
     }
-    const index = e.kind === N_IDENT && bound.indexOf(e.text) < 0 ? callee.paramNames.indexOf(e.text) : -1
+    const index =
+      e.kind === NodeKind.Ident && bound.indexOf(e.text) < 0 ? callee.paramNames.indexOf(e.text) : -1
     if (index < 0 || index >= callee.writtenArity() || (at >= 0 && at !== index)) {
       return -1
     }
@@ -1825,16 +1788,16 @@ const returnedParameter = (callee: FunctionSig): i32 => {
  * `bound`, so a name that shadows a parameter is never taken for it.
  */
 const returnsAndBindings = (node: Node, returned: Node[], bound: string[]): void => {
-  if (node.kind === N_RETURN) {
+  if (node.kind === NodeKind.Return) {
     returned.push(node.children[0])
   }
-  if (node.kind === N_VAR_DECL || node.kind === N_PARAM) {
+  if (node.kind === NodeKind.VarDecl || node.kind === NodeKind.Param) {
     bound.push(node.children[0].text)
   }
-  if (node.kind === N_TRY && node.children[1].kind === N_IDENT) {
+  if (node.kind === NodeKind.Try && node.children[1].kind === NodeKind.Ident) {
     bound.push(node.children[1].text)
   }
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   for (const child of node.children) {
@@ -1845,7 +1808,7 @@ const returnsAndBindings = (node: Node, returned: Node[], bound: string[]): void
 /** The block a declaration's scope ends with, or null when it is not in one. */
 const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
   let node: Node | null = unit.parents.parentOf(decl)
-  while (node !== null && node.kind !== N_BLOCK) {
+  while (node !== null && node.kind !== NodeKind.Block) {
     node = unit.parents.parentOf(node)
   }
   return node
@@ -1866,14 +1829,14 @@ const classifyElementUse = (unit: AnalysisUnit, access: Node): ParamUse => {
       return use(USE_READ)
     }
     if (
-      parent.kind === N_PAREN ||
-      (parent.kind === N_INDEX && parent.children[0] === node) ||
-      (parent.kind === N_BINARY && parent.text === "??") // WP32: as a ternary's arm
+      parent.kind === NodeKind.Paren ||
+      (parent.kind === NodeKind.Index && parent.children[0] === node) ||
+      (parent.kind === NodeKind.Binary && parent.text === "??") // WP32: as a ternary's arm
     ) {
       node = parent
       continue
     }
-    if (parent.kind === N_CONDITIONAL) {
+    if (parent.kind === NodeKind.Conditional) {
       if (parent.children[0] === node) {
         return use(USE_READ)
       }
@@ -1883,24 +1846,24 @@ const classifyElementUse = (unit: AnalysisUnit, access: Node): ParamUse => {
     if (isAssignmentTarget(parent, node)) {
       return use(USE_WRITE)
     }
-    if (parent.kind === N_MEMBER) {
+    if (parent.kind === NodeKind.Member) {
       const above = unit.parents.parentOf(parent)
-      const called = above !== null && above.kind === N_CALL && above.children[0] === parent
+      const called = above !== null && above.kind === NodeKind.Call && above.children[0] === parent
       return use(called || isAssignmentTarget(above, parent) ? USE_WRITE : USE_READ)
     }
-    if (parent.kind === N_LIST) {
+    if (parent.kind === NodeKind.List) {
       const owner = unit.parents.parentOf(parent)
-      if (owner !== null && owner.kind === N_CALL) {
+      if (owner !== null && owner.kind === NodeKind.Call) {
         // The constructor or function may store through the element; builtins are nocapture.
         return use(program.nodeCallees[owner.id] !== null ? USE_WRITE : USE_READ)
       }
-      if (owner !== null && owner.kind === N_NEW) {
+      if (owner !== null && owner.kind === NodeKind.New) {
         return use(USE_WRITE)
       }
       return use(USE_READ)
     }
-    if (parent.kind === N_CALL || parent.kind === N_NEW) {
-      return use(parent.kind === N_NEW ? USE_WRITE : USE_READ)
+    if (parent.kind === NodeKind.Call || parent.kind === NodeKind.New) {
+      return use(parent.kind === NodeKind.New ? USE_WRITE : USE_READ)
     }
     return use(USE_READ)
   }
@@ -1924,7 +1887,7 @@ const isStringPassthrough = (program: CheckedProgram, template: Node): boolean =
     return false
   }
   const parts = templateParts(template)
-  if (parts.length !== 1 || parts[0].kind === N_TEMPLATE_TEXT) {
+  if (parts.length !== 1 || parts[0].kind === NodeKind.TemplateText) {
     return false
   }
   return program.nodeTypes[parts[0].id] === T_STRING
@@ -2064,7 +2027,7 @@ class FactCollector {
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
   paramRef(node: Node): string {
-    if (node.kind !== N_IDENT && node.kind !== N_THIS) {
+    if (node.kind !== NodeKind.Ident && node.kind !== NodeKind.This) {
       return ""
     }
     const local = this.unit.program.nodeLocals[node.id]
@@ -2229,12 +2192,12 @@ class FactCollector {
    */
   handsStringElement(ref: Node): boolean {
     const access = this.unit.parents.parentOf(ref)
-    if (access === null || access.kind !== N_INDEX || access.children[0] !== ref) {
+    if (access === null || access.kind !== NodeKind.Index || access.children[0] !== ref) {
       return false
     }
     const list = this.unit.parents.parentOf(access)
     const type = this.unit.program.nodeTypes[access.id]
-    return list !== null && list.kind === N_LIST && type === T_STRING
+    return list !== null && list.kind === NodeKind.List && type === T_STRING
   }
 
   /**
@@ -2270,7 +2233,7 @@ class FactCollector {
     if (this.facts.isStackSite(e)) {
       return true
     }
-    if (e.kind !== N_IDENT) {
+    if (e.kind !== NodeKind.Ident) {
       return false
     }
     const local = this.unit.program.nodeLocals[e.id]
@@ -2292,7 +2255,7 @@ class FactCollector {
    * store through `this.inner` may reach an object that came from outside.
    */
   initialisesThis(receiver: Node): boolean {
-    return this.facts.freshThis && unwrapParens(receiver).kind === N_THIS
+    return this.facts.freshThis && unwrapParens(receiver).kind === NodeKind.This
   }
 
   /** A store into `receiver`'s array: shared unless the array is this function's own stack object or private array. */
@@ -2359,18 +2322,18 @@ class FactCollector {
   }
 
   pathFrom(e: Node, depth: i32): MemPath {
-    if (e.kind === N_PAREN) {
+    if (e.kind === NodeKind.Paren) {
       return this.pathFrom(e.children[0], depth)
     }
-    if (e.kind === N_MEMBER) {
+    if (e.kind === NodeKind.Member) {
       const base = this.pathFrom(e.children[0], depth)
       return new MemPath(base.kind, base.name, `${base.steps}.${e.text}`)
     }
-    if (e.kind === N_INDEX) {
+    if (e.kind === NodeKind.Index) {
       const base = this.pathFrom(e.children[0], depth)
       return new MemPath(base.kind, base.name, `${base.steps}[]`)
     }
-    if (e.kind === N_THIS) {
+    if (e.kind === NodeKind.This) {
       if (this.facts.freshThis) {
         return new MemPath(ROOT_OWN, "this", "")
       }
@@ -2378,11 +2341,11 @@ class FactCollector {
         ? new MemPath(ROOT_NONE, "", "")
         : new MemPath(ROOT_PARAM, "this", "")
     }
-    if (e.kind === N_CALL) {
+    if (e.kind === NodeKind.Call) {
       const read = this.readBackPath(e, depth)
       return read === null ? this.returnedPath(e, depth) : read
     }
-    if (e.kind !== N_IDENT) {
+    if (e.kind !== NodeKind.Ident) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
     const pointer = this.pointerParamOf(e)
@@ -2430,13 +2393,13 @@ class FactCollector {
     }
     // A `for...of` head is a `const` statement of one declaration.
     let loop = this.unit.parents.parentOf(decl)
-    while (loop !== null && (loop.kind === N_LIST || loop.kind === N_VAR)) {
+    while (loop !== null && (loop.kind === NodeKind.List || loop.kind === NodeKind.Var)) {
       loop = this.unit.parents.parentOf(loop)
     }
-    if (loop !== null && loop.kind === N_FOR_OF) {
+    if (loop !== null && loop.kind === NodeKind.ForOf) {
       return this.elementPath(loop.children[1], depth + 1)
     }
-    if (decl.children[2].kind === N_EMPTY) {
+    if (decl.children[2].kind === NodeKind.Empty) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
     return this.pathFrom(decl.children[2], depth + 1)
@@ -2524,7 +2487,7 @@ class FactCollector {
     if (init === null) {
       return ""
     }
-    const fresh = init.kind === N_NEW || init.kind === N_ARRAY || init.kind === N_OBJECT
+    const fresh = init.kind === NodeKind.New || init.kind === NodeKind.Array || init.kind === NodeKind.Object
     if (!fresh && !this.isWipedFreshSecret(local, init)) {
       return ""
     }
@@ -2552,7 +2515,7 @@ class FactCollector {
    */
   isWipedFreshSecret(local: Local, init: Node): boolean {
     const program = this.unit.program
-    if (init.kind !== N_CALL || secretRoleOf(program.nodeCallees[init.id]) !== SECRET_MAKE) {
+    if (init.kind !== NodeKind.Call || secretRoleOf(program.nodeCallees[init.id]) !== SECRET_MAKE) {
       return false
     }
     const args = init.children[1].children
@@ -2560,7 +2523,7 @@ class FactCollector {
       return false
     }
     const value = unwrapParens(args[0])
-    if (value.kind !== N_NEW && value.kind !== N_ARRAY && value.kind !== N_OBJECT) {
+    if (value.kind !== NodeKind.New && value.kind !== NodeKind.Array && value.kind !== NodeKind.Object) {
       return false
     }
     const body = this.sig.body()
@@ -2572,13 +2535,13 @@ class FactCollector {
     for (const ref of refs) {
       let at = ref
       let list = this.unit.parents.parentOf(at)
-      while (list !== null && list.kind === N_PAREN) {
+      while (list !== null && list.kind === NodeKind.Paren) {
         at = list
         list = this.unit.parents.parentOf(at)
       }
-      if (list !== null && list.kind === N_LIST) {
+      if (list !== null && list.kind === NodeKind.List) {
         const call = this.unit.parents.parentOf(list)
-        if (call !== null && call.kind === N_CALL && call.children[1] === list) {
+        if (call !== null && call.kind === NodeKind.Call && call.children[1] === list) {
           if (secretRoleOf(program.nodeCallees[call.id]) === SECRET_WIPE) {
             return true
           }
@@ -2592,19 +2555,19 @@ class FactCollector {
   noteFreshInit(key: string, init: Node): void {
     const program = this.unit.program
     const type = program.nodeTypes[init.id]
-    if (init.kind === N_ARRAY) {
+    if (init.kind === NodeKind.Array) {
       for (const element of init.children) {
         this.noteStore(key, "[]", element)
       }
       return
     }
-    if (init.kind === N_OBJECT) {
-      // An N_PROPERTY keeps its key in `text` and its value, a name for the
+    if (init.kind === NodeKind.Object) {
+      // A NodeKind.Property keeps its key in `text` and its value, a name for the
       // shorthand `{ k }` included, in its one child.
       for (const property of init.children) {
-        if (property.kind === N_PROPERTY && property.children.length > 0) {
+        if (property.kind === NodeKind.Property && property.children.length > 0) {
           this.noteStore(key, `.${property.text}`, property.children[0])
-        } else if (property.kind === N_SPREAD) {
+        } else if (property.kind === NodeKind.Spread) {
           // `...s` stores each field it copies with what `s` reaches, the
           // root a written-out `f: s.f` would name.
           const copy = program.nodeSpreadCopies[property.id]
@@ -2707,13 +2670,13 @@ class FactCollector {
     if (type >= 0 && this.isPlainValue(type)) {
       return
     }
-    if (v.kind === N_NULL) {
+    if (v.kind === NodeKind.Null) {
       return
     }
-    if (v.kind === N_NEW && type >= 0 && table.isArray(type)) {
+    if (v.kind === NodeKind.New && type >= 0 && table.isArray(type)) {
       return
     }
-    if (v.kind === N_NEW && type >= 0 && table.isStruct(type)) {
+    if (v.kind === NodeKind.New && type >= 0 && table.isStruct(type)) {
       const ctor = constructorOf(program, table, intrinsicType(program, v))
       if (ctor !== null) {
         desc.ctors.push(ctor.name)
@@ -2723,28 +2686,28 @@ class FactCollector {
       }
       return
     }
-    if (v.kind === N_ARRAY) {
+    if (v.kind === NodeKind.Array) {
       for (const element of v.children) {
         this.describe(element, desc)
       }
       return
     }
     // Either arm of a `?:`, either side of a `??`: what one of them may be.
-    if (v.kind === N_CONDITIONAL) {
+    if (v.kind === NodeKind.Conditional) {
       this.describe(v.children[1], desc)
       this.describe(v.children[2], desc)
       return
     }
-    if (v.kind === N_BINARY && v.text === "??") {
+    if (v.kind === NodeKind.Binary && v.text === "??") {
       this.describe(v.children[0], desc)
       this.describe(v.children[1], desc)
       return
     }
-    if (v.kind === N_OBJECT) {
+    if (v.kind === NodeKind.Object) {
       for (const property of v.children) {
-        if (property.kind === N_PROPERTY && property.children.length > 0) {
+        if (property.kind === NodeKind.Property && property.children.length > 0) {
           this.describe(property.children[0], desc)
-        } else if (property.kind === N_SPREAD) {
+        } else if (property.kind === NodeKind.Spread) {
           this.describe(property.children[0], desc) // its fields reach what the source reaches
         } else {
           desc.unknown = true
@@ -2767,9 +2730,9 @@ class FactCollector {
    * a field or an element, or a `push` or `fill` onto an array one reaches.
    */
   noteOwnStore(node: Node): void {
-    if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       const target = unwrapParens(node.children[0])
-      if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+      if (target.kind === NodeKind.Member || target.kind === NodeKind.Index) {
         this.noteSlotStore(this.pathOf(target), node.children[1])
       }
       return
@@ -2805,33 +2768,33 @@ class FactCollector {
    * `for...of`: what its loop variable names is judged where that is used.
    */
   noteEscape(node: Node): void {
-    if (node.kind === N_PAREN) {
+    if (node.kind === NodeKind.Paren) {
       return // what it wraps is judged where the parentheses stand
     }
     const program = this.unit.program
     let at = node
     let parent = this.unit.parents.parentOf(at)
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       at = parent
       parent = this.unit.parents.parentOf(at)
     }
     if (
       parent !== null &&
-      (parent.kind === N_MEMBER || parent.kind === N_INDEX) &&
+      (parent.kind === NodeKind.Member || parent.kind === NodeKind.Index) &&
       parent.children[0] === at
     ) {
       return // part of a longer path, `(t).mid` included, which is judged where it ends
     }
-    if (parent !== null && parent.kind === N_VAR_DECL && parent.children[0] === at) {
+    if (parent !== null && parent.kind === NodeKind.VarDecl && parent.children[0] === at) {
       return // the name a declaration binds
     }
     if (this.isPlainValue(program.nodeTypes[node.id])) {
       return
     }
-    if (node.kind === N_THIS && !this.facts.freshThis) {
+    if (node.kind === NodeKind.This && !this.facts.freshThis) {
       return
     }
-    if (node.kind === N_IDENT) {
+    if (node.kind === NodeKind.Ident) {
       const local: Local | null = program.nodeLocals[node.id]
       if (local === null || local.storage === STORAGE_PARAM) {
         return
@@ -2851,31 +2814,35 @@ class FactCollector {
   /** Whether `at`, a path expression under `parent`, stands where the analysis follows it (`noteEscape`). */
   followsUse(parent: Node, at: Node): boolean {
     const program = this.unit.program
-    if (parent.kind === N_BINARY) {
+    if (parent.kind === NodeKind.Binary) {
       if (isAssignmentOperator(parent.text)) {
         return parent.children[0] === at
       }
       return parent.text !== "??"
     }
-    if (parent.kind === N_UNARY || parent.kind === N_RETURN || parent.kind === N_EXPR_STMT) {
+    if (
+      parent.kind === NodeKind.Unary ||
+      parent.kind === NodeKind.Return ||
+      parent.kind === NodeKind.ExprStmt
+    ) {
       return true
     }
-    if (parent.kind === N_CALL) {
+    if (parent.kind === NodeKind.Call) {
       return parent.children[0] === at
     }
-    if (parent.kind === N_FOR_OF) {
+    if (parent.kind === NodeKind.ForOf) {
       // The walk only reads it; what the loop variable names is judged where it is used.
       return parent.children[1] === at
     }
-    if (parent.kind === N_VAR_DECL && parent.children[2] === at) {
+    if (parent.kind === NodeKind.VarDecl && parent.children[2] === at) {
       const bound: Local | null = program.nodeLocals[parent.id]
       return bound !== null && !bound.mutable
     }
-    if (parent.kind === N_LIST) {
+    if (parent.kind === NodeKind.List) {
       const call = this.unit.parents.parentOf(parent)
       if (
         call === null ||
-        (call.kind !== N_CALL && call.kind !== N_NEW) ||
+        (call.kind !== NodeKind.Call && call.kind !== NodeKind.New) ||
         program.nodeCallees[call.id] === null
       ) {
         return false
@@ -2896,7 +2863,7 @@ class FactCollector {
 
   /** The private array `e` names (`FunctionFacts.privateArrays`), or null. */
   privateArrayOf(e: Node): PrivateArray | null {
-    const local: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    const local: Local | null = e.kind === NodeKind.Ident ? this.unit.program.nodeLocals[e.id] : null
     if (local !== null) {
       for (const owned of this.facts.privateArrays) {
         if (owned.local === local) {
@@ -2923,10 +2890,10 @@ class FactCollector {
    * asks whether that callee keeps it.
    */
   findPrivateArrays(node: Node): void {
-    if (node.kind === N_ARROW) {
+    if (node.kind === NodeKind.Arrow) {
       return
     }
-    if (node.kind === N_VAR && (node.flags & FLAG_CONST) !== 0) {
+    if (node.kind === NodeKind.Var && (node.flags & FLAG_CONST) !== 0) {
       for (const decl of node.children[0].children) {
         const local = this.unit.program.nodeLocals[decl.id]
         if (local !== null) {
@@ -2954,11 +2921,15 @@ class FactCollector {
       if (parent === null) {
         return false
       }
-      if (parent.kind === N_RETURN) {
+      if (parent.kind === NodeKind.Return) {
         return true
       }
-      const arm = parent.kind === N_CONDITIONAL && parent.children[0] !== node
-      if (parent.kind !== N_PAREN && !arm && !(parent.kind === N_BINARY && parent.text === "??")) {
+      const arm = parent.kind === NodeKind.Conditional && parent.children[0] !== node
+      if (
+        parent.kind !== NodeKind.Paren &&
+        !arm &&
+        !(parent.kind === NodeKind.Binary && parent.text === "??")
+      ) {
         return false
       }
       node = parent
@@ -3010,7 +2981,7 @@ class FactCollector {
     // call's own is held by that object (`ArgEdge.heldBy`), as any argument is.
     for (const ref of sites) {
       const call = this.callAround(ref)
-      if (call !== null && call.kind === N_NEW) {
+      if (call !== null && call.kind === NodeKind.New) {
         this.holdArray(key, this.heldByOf(call))
       }
     }
@@ -3019,10 +2990,10 @@ class FactCollector {
   /** The call or `new` `ref` is an argument of, through parentheses and the arms of a `?:`, or null. */
   callAround(ref: Node): Node | null {
     let at: Node | null = this.unit.parents.parentOf(ref)
-    while (at !== null && (at.kind === N_PAREN || at.kind === N_CONDITIONAL)) {
+    while (at !== null && (at.kind === NodeKind.Paren || at.kind === NodeKind.Conditional)) {
       at = this.unit.parents.parentOf(at)
     }
-    if (at === null || at.kind !== N_LIST) {
+    if (at === null || at.kind !== NodeKind.List) {
       return null
     }
     return this.unit.parents.parentOf(at)
@@ -3049,7 +3020,7 @@ class FactCollector {
    * the walk's business (`findPrivateArrays`) and is left out.
    */
   noteArguments(call: Node, callee: FunctionSig): void {
-    if (call.kind === N_NEW) {
+    if (call.kind === NodeKind.New) {
       const first = this.facts.argEdges.length
       this.noteArgumentList(callee, call.children[2].children, 1)
       const holder = this.heldByOf(call)
@@ -3077,11 +3048,11 @@ class FactCollector {
   heldByOf(call: Node): string {
     let at = call
     let parent = this.unit.parents.parentOf(at)
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       at = parent
       parent = this.unit.parents.parentOf(at)
     }
-    if (parent === null || parent.kind !== N_VAR_DECL || parent.children[2] !== at) {
+    if (parent === null || parent.kind !== NodeKind.VarDecl || parent.children[2] !== at) {
       return ""
     }
     const local: Local | null = this.unit.program.nodeLocals[parent.id]
@@ -3122,27 +3093,32 @@ class FactCollector {
     // function named as an argument is a value this function holds. What an
     // arrow given to an ordinary function parameter captures escapes; a
     // data-parallel form's or a task's captures stay read-only inside the call.
-    if (node.kind === N_ARROW) {
+    if (node.kind === NodeKind.Arrow) {
       const lifted = program.nodeCallees[node.id]
       if (lifted !== null && lifted.capturesForCall) {
         this.noteCaptures(node, lifted)
       }
       return
     }
-    if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
+    if (
+      node.kind === NodeKind.For ||
+      node.kind === NodeKind.While ||
+      node.kind === NodeKind.Do ||
+      node.kind === NodeKind.ForOf
+    ) {
       this.facts.hasLoops = true
       if (!isCountedLoop(this.unit, this.table, node, this.known)) {
         this.facts.loopsBounded = false
       }
     }
-    if (node.kind === N_THROW) {
+    if (node.kind === NodeKind.Throw) {
       this.facts.hasTrap = true
     }
     const ownSites = this.facts.panicSites.length
     // WP32 S5: a fused lookup, and a `nish/map` call, call the table's
     // pieces rather than what they were checked as (`fusedCalleesOf`).
     const fused: FunctionSig[] | null =
-      node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null
+      node.kind === NodeKind.Call ? fusedCalleesOf(program, this.table, node) : null
     if (fused !== null) {
       const receiver = tableReceiver(program, node)
       for (const sig of fused) {
@@ -3151,7 +3127,7 @@ class FactCollector {
         this.noteWholeReach(sig.name, receiver)
       }
       this.noteTableStores(node, receiver)
-    } else if (node.kind === N_CALL) {
+    } else if (node.kind === NodeKind.Call) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
         this.addCallee(callee, node)
@@ -3174,7 +3150,7 @@ class FactCollector {
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.
-    if (node.kind === N_FOR_OF) {
+    if (node.kind === NodeKind.ForOf) {
       const read = program.nodeCallees[node.id]
       if (read !== null && isChannelReader(read)) {
         // WP29 P3: a loop over a `Channel` is the emitter's, a receive per pass
@@ -3206,13 +3182,13 @@ class FactCollector {
     this.collectNamespacePropertyFacts(node)
     this.collectIdentifierBuiltinFacts(node)
     const ownEnd = this.facts.panicSites.length
-    if (node.kind === N_FOR_OF) {
+    if (node.kind === NodeKind.ForOf) {
       this.orderSites(ownSites, ownEnd)
     }
     for (const child of node.children) {
       this.visit(child)
     }
-    if (node.kind !== N_FOR_OF) {
+    if (node.kind !== NodeKind.ForOf) {
       this.orderSites(ownSites, ownEnd)
     }
   }
@@ -3347,7 +3323,7 @@ class FactCollector {
       ) {
         let held = unwrapParens(buffer)
         this.noteSlotWrite(call, held)
-        while (held.kind === N_MEMBER) {
+        while (held.kind === NodeKind.Member) {
           held = unwrapParens(held.children[0])
           this.noteSlotWrite(call, held)
         }
@@ -3433,7 +3409,7 @@ class FactCollector {
       return
     }
     const args = node.children[1].children
-    const constant = args.length === 1 && (args[0].kind === N_STRING || isNumericLiteral(args[0]))
+    const constant = args.length === 1 && (args[0].kind === NodeKind.String || isNumericLiteral(args[0]))
     if (constant && (name === "panic" || name === "process.exit")) {
       return
     }
@@ -3454,8 +3430,8 @@ class FactCollector {
     const program = this.unit.program
     const table = this.table
     if (
-      node.kind === N_CALL &&
-      node.children[0].kind === N_MEMBER &&
+      node.kind === NodeKind.Call &&
+      node.children[0].kind === NodeKind.Member &&
       !receiverIsValue(program, node.children[0].children[0])
     ) {
       const name = dottedName(node.children[0])
@@ -3471,7 +3447,7 @@ class FactCollector {
       this.noteWrittenArguments(node)
       return
     }
-    if (node.kind === N_BINARY && program.nodeTypes[node.children[0].id] === T_STRING) {
+    if (node.kind === NodeKind.Binary && program.nodeTypes[node.children[0].id] === T_STRING) {
       const op = node.text
       if (op === "+") {
         this.facts.callees.add("nish_str_concat")
@@ -3480,7 +3456,7 @@ class FactCollector {
       }
       return
     }
-    if (node.kind === N_CALL && isStringMethodCall(program, node)) {
+    if (node.kind === NodeKind.Call && isStringMethodCall(program, node)) {
       // The byte methods all read the string's bytes; `substring` and `slice`
       // also allocate, and `slice` and an unproven `charCodeAt` can reach a panic.
       this.facts.readsMemory = true
@@ -3493,7 +3469,7 @@ class FactCollector {
       }
       return
     }
-    if (node.kind === N_MEMBER && program.nodeTypes[node.children[0].id] === T_STRING) {
+    if (node.kind === NodeKind.Member && program.nodeTypes[node.children[0].id] === T_STRING) {
       this.facts.readsMemory = true // `.length` loads the header through the string pointer
       return
     }
@@ -3503,7 +3479,7 @@ class FactCollector {
         this.facts.callees.add("nish_str_concat")
       }
       for (const part of parts) {
-        if (part.kind !== N_TEMPLATE_TEXT) {
+        if (part.kind !== NodeKind.TemplateText) {
           const callee = stringifyCallee(program.nodeTypes[part.id])
           if (callee.length > 0) {
             this.facts.callees.add(callee)
@@ -3523,7 +3499,7 @@ class FactCollector {
   collectClassFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
-    if (node.kind === N_SPREAD && (node.flags & FLAG_OBJECT_SPREAD) !== 0) {
+    if (node.kind === NodeKind.Spread && (node.flags & FLAG_OBJECT_SPREAD) !== 0) {
       // `{ ...s }` loads each field it copies off `s`, the reads a written-out
       // `f: s.f` makes; with no record of what it copies, it reads anyway.
       const copy = program.nodeSpreadCopies[node.id]
@@ -3532,7 +3508,7 @@ class FactCollector {
       }
       return
     }
-    if (node.kind === N_MEMBER) {
+    if (node.kind === NodeKind.Member) {
       const receiver = node.children[0]
       const type = program.nodeTypes[receiver.id]
       if (type < 0) {
@@ -3546,7 +3522,7 @@ class FactCollector {
         return
       }
       const above = this.unit.parents.parentOf(node)
-      if (above !== null && above.kind === N_CALL && above.children[0] === node) {
+      if (above !== null && above.kind === NodeKind.Call && above.children[0] === node) {
         return // the call itself is reported through `nodeCallees`
       }
       if (this.isStackOwned(receiver)) {
@@ -3567,7 +3543,7 @@ class FactCollector {
       }
       return
     }
-    if (node.kind === N_NEW) {
+    if (node.kind === NodeKind.New) {
       const type = intrinsicType(program, node)
       if (type < 0 || !table.isStruct(type)) {
         return
@@ -3585,7 +3561,7 @@ class FactCollector {
       this.noteHandleClose(node)
       return
     }
-    if (node.kind === N_OBJECT && !this.facts.isStackSite(node)) {
+    if (node.kind === NodeKind.Object && !this.facts.isStackSite(node)) {
       this.facts.effect = EFFECT_WRITE
       this.facts.callees.add("nish_alloc_struct")
     }
@@ -3602,7 +3578,7 @@ class FactCollector {
   collectResultFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
-    if (node.kind === N_CALL) {
+    if (node.kind === NodeKind.Call) {
       // WP17: a call that answers a `Result` in a register hands back no
       // memory, so the *caller* builds the object the rest of the lowering
       // reads. That is an allocation of this function — an own alloca when the
@@ -3637,7 +3613,7 @@ class FactCollector {
           panicTailCallees(tail)
           this.addCallees(tail)
           const args = node.children[1].children
-          if (this.facts.worldVia.length === 0 && (args.length === 0 || args[0].kind !== N_STRING)) {
+          if (this.facts.worldVia.length === 0 && (args.length === 0 || args[0].kind !== NodeKind.String)) {
             this.facts.worldVia = "`expect` with a computed message"
           }
         }
@@ -3654,13 +3630,13 @@ class FactCollector {
       this.facts.effect = EFFECT_WRITE
       return
     }
-    if (node.kind === N_MEMBER) {
+    if (node.kind === NodeKind.Member) {
       const receiver = node.children[0]
       if (!table.isResult(program.nodeTypes[receiver.id])) {
         return
       }
       const above = this.unit.parents.parentOf(node)
-      if (above !== null && above.kind === N_CALL && above.children[0] === node) {
+      if (above !== null && above.kind === NodeKind.Call && above.children[0] === node) {
         return // the method call above
       }
       if (this.isStackOwned(receiver)) {
@@ -3674,7 +3650,7 @@ class FactCollector {
   collectArrayFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
-    if (node.kind === N_INDEX && this.isArrayValued(node.children[0])) {
+    if (node.kind === NodeKind.Index && this.isArrayValued(node.children[0])) {
       this.facts.readsMemory = true
       // Mirrors `emitBoundsCheck` exactly, proof and all: an access the checker
       // proved in range emits no call, so listing `nish_panic_index` here would
@@ -3686,21 +3662,21 @@ class FactCollector {
       this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
       return
     }
-    if (node.kind === N_MEMBER && this.isArrayValued(node.children[0])) {
+    if (node.kind === NodeKind.Member && this.isArrayValued(node.children[0])) {
       this.facts.readsMemory = true // `.length`
       return
     }
-    if (node.kind === N_FOR_OF) {
+    if (node.kind === NodeKind.ForOf) {
       this.facts.readsMemory = true
       return
     }
-    if (node.kind === N_ARRAY || (node.kind === N_NEW && this.isArrayValued(node))) {
+    if (node.kind === NodeKind.Array || (node.kind === NodeKind.New && this.isArrayValued(node))) {
       if (!this.facts.isStackSite(node)) {
         this.facts.effect = EFFECT_WRITE
       }
       // Mirrors `emitNewArray`: a length it checks can panic, which costs the
       // function `willreturn` exactly where the check is in its IR.
-      if (node.kind === N_NEW) {
+      if (node.kind === NodeKind.New) {
         const length = node.children[2].children[0]
         if (newArrayLengthChecked(length, program.nodeTypes[length.id], this.opts.numberMode, table)) {
           const tail: string[] = []
@@ -3719,7 +3695,11 @@ class FactCollector {
       this.collectMethodFacts(node, method)
       return
     }
-    if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
+    if (
+      node.kind === NodeKind.Binary &&
+      isAssignmentOperator(node.text) &&
+      node.children[0].kind === NodeKind.Index
+    ) {
       this.facts.effect = EFFECT_WRITE
       if (!isGuardedAccess(program, table, node.children[0])) {
         this.noteArrayWrite(node, node.children[0].children[0]) // a guarded one is R6's, as above
@@ -3800,7 +3780,7 @@ class FactCollector {
 
   /** An integer division may call the noreturn panic, unless its divisor is proven. */
   collectDivisionFacts(node: Node): void {
-    if (node.kind !== N_BINARY) {
+    if (node.kind !== NodeKind.Binary) {
       return
     }
     const op = node.text
@@ -3876,12 +3856,12 @@ class FactCollector {
    */
   collectNamespacePropertyFacts(node: Node): void {
     let name = ""
-    if (node.kind === N_MEMBER) {
+    if (node.kind === NodeKind.Member) {
       if (receiverIsValue(this.unit.program, node.children[0])) {
         return
       }
       name = dottedName(node)
-    } else if (node.kind === N_IDENT) {
+    } else if (node.kind === NodeKind.Ident) {
       // The same property, reached through `import { argv } from
       // "nish:process"`. An attribute that depended on which spelling a
       // program used would be a miscompile waiting for the other one.
@@ -3919,7 +3899,7 @@ class FactCollector {
 
   /** WP7: `toI32`, `parseInt`, `readFileSync` and the rest, called by plain identifier. */
   collectIdentifierBuiltinFacts(node: Node): void {
-    if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT) {
+    if (node.kind !== NodeKind.Call || node.children[0].kind !== NodeKind.Ident) {
       return
     }
     if (this.unit.program.nodeCallees[node.id] !== null) {
@@ -5189,7 +5169,7 @@ const collectRound = (
  * `mayResize` in `src/emit-arrays.ts`, which the fixpoint narrows.
  */
 const callsAnything = (node: Node): boolean => {
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     return true
   }
   for (const child of node.children) {
@@ -6638,7 +6618,7 @@ const isCountedLoop = (
   known: FactsTable | null
 ): boolean => {
   const program = unit.program
-  if (loop.kind === N_FOR_OF) {
+  if (loop.kind === NodeKind.ForOf) {
     // WP32: a walk re-reads the entry count every pass, and a body that sets
     // a new key extends it forever, as JavaScript's does; it is never counted.
     if (program.nodeCallees[loop.id] !== null) {
@@ -6646,13 +6626,13 @@ const isCountedLoop = (
     }
     return !bodyMayExtend(unit.program, table, loop.children[2], known)
   }
-  if (loop.kind !== N_FOR) {
+  if (loop.kind !== NodeKind.For) {
     return false
   }
   const init = loop.children[0]
   const condition = loop.children[1]
   const step = loop.children[2]
-  if (init.kind !== N_VAR || condition.kind === N_EMPTY || step.kind === N_EMPTY) {
+  if (init.kind !== NodeKind.Var || condition.kind === NodeKind.Empty || step.kind === NodeKind.Empty) {
     return false
   }
   const declarations = init.children[0]
@@ -6665,7 +6645,7 @@ const isCountedLoop = (
   }
 
   const cond = unwrapParens(condition)
-  if (cond.kind !== N_BINARY || !isName(cond.children[0], iv.name)) {
+  if (cond.kind !== NodeKind.Binary || !isName(cond.children[0], iv.name)) {
     return false
   }
   const cmp = cond.text
@@ -6673,7 +6653,7 @@ const isCountedLoop = (
   const downward = cmp === ">" || cmp === ">="
   const inclusive = cmp === "<=" || cmp === ">="
   const bound = unwrapParens(cond.children[1])
-  if (bound.kind !== N_IDENT && bound.kind !== N_NUMBER) {
+  if (bound.kind !== NodeKind.Ident && bound.kind !== NodeKind.Number) {
     return false
   }
 
@@ -6685,7 +6665,7 @@ const isCountedLoop = (
     return false
   }
 
-  if (bound.kind === N_IDENT) {
+  if (bound.kind === NodeKind.Ident) {
     if (absOf(delta) !== 1 || inclusive) {
       return false
     }
@@ -6701,7 +6681,7 @@ const isCountedLoop = (
   // Downward from a non-negative literal bound: `bound - |step| >= -INT32_MAX`, so no wrap.
 
   const guarded: string[] = [iv.name]
-  if (bound.kind === N_IDENT) {
+  if (bound.kind === NodeKind.Ident) {
     guarded.push(bound.text)
   }
   return !bodyDisturbs(loop.children[3], guarded)
@@ -6711,12 +6691,12 @@ const absOf = (value: i32): i32 => (value < 0 ? -value : value)
 
 const isName = (expr: Node, name: string): boolean => {
   const e = unwrapParens(expr)
-  return e.kind === N_IDENT && e.text === name
+  return e.kind === NodeKind.Ident && e.text === name
 }
 
 /** Signed step of `i++`, `++i`, `i--`, `--i`, `i += c`, `i -= c`; 0 for anything else. */
 export const stepOf = (expr: Node, name: string): i32 => {
-  if (expr.kind === N_UNARY && isName(expr.children[0], name)) {
+  if (expr.kind === NodeKind.Unary && isName(expr.children[0], name)) {
     if (expr.text === "++") {
       return 1
     }
@@ -6725,9 +6705,9 @@ export const stepOf = (expr: Node, name: string): i32 => {
     }
     return 0
   }
-  if (expr.kind === N_BINARY && isName(expr.children[0], name)) {
+  if (expr.kind === NodeKind.Binary && isName(expr.children[0], name)) {
     const rhs = unwrapParens(expr.children[1])
-    if (rhs.kind !== N_NUMBER) {
+    if (rhs.kind !== NodeKind.Number) {
       return 0
     }
     if (expr.text === "+=") {
@@ -6758,12 +6738,12 @@ const bodyMayExtend = (
   body: Node,
   known: FactsTable | null
 ): boolean => {
-  if (body.kind === N_THROW || isResizeCall(program, table, body)) {
+  if (body.kind === NodeKind.Throw || isResizeCall(program, table, body)) {
     return true
   }
   // A `new` holds its class's constructor (CG-11), and a class with none
   // stores constants only.
-  if (body.kind === N_CALL || body.kind === N_NEW) {
+  if (body.kind === NodeKind.Call || body.kind === NodeKind.New) {
     const callee = program.nodeCallees[body.id]
     // An unresolved callee is a builtin, and no builtin but `push`, `pop`
     // and `spawnPiped` reaches a user array's header; those are above.
@@ -6819,7 +6799,7 @@ export const hostWindowProven = (
 ): boolean => {
   const at = call.children[1].children[index + 1]
   return (
-    at.kind === N_NUMBER &&
+    at.kind === NodeKind.Number &&
     at.text === "0" &&
     foreignBufferCountProven(program, table, call, index, index + 2, known, "toU32")
   )
@@ -6866,17 +6846,21 @@ export const foreignBufferCountProven = (
   }
   const args = call.children[1].children
   const buffer = args[index]
-  const local: Local | null = buffer.kind === N_IDENT ? program.nodeLocals[buffer.id] : null
+  const local: Local | null = buffer.kind === NodeKind.Ident ? program.nodeLocals[buffer.id] : null
   if (
     local === null ||
     local.mutable ||
-    args[count].kind !== N_CALL ||
+    args[count].kind !== NodeKind.Call ||
     !isBuiltinConversion(program, args[count], conversion)
   ) {
     return false
   }
   const access = args[count].children[1].children[0]
-  if (access.kind !== N_MEMBER || access.text !== "length" || access.children[0].kind !== N_IDENT) {
+  if (
+    access.kind !== NodeKind.Member ||
+    access.text !== "length" ||
+    access.children[0].kind !== NodeKind.Ident
+  ) {
     return false
   }
   const counted = program.nodeLocals[access.children[0].id]
@@ -6905,7 +6889,11 @@ export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: No
   if (method === "push" || method === "pop") {
     return true
   }
-  if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT || program.nodeCallees[node.id] !== null) {
+  if (
+    node.kind !== NodeKind.Call ||
+    node.children[0].kind !== NodeKind.Ident ||
+    program.nodeCallees[node.id] !== null
+  ) {
     return false
   }
   const name = builtinNameOf(program, node)
@@ -6914,21 +6902,21 @@ export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: No
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */
 const bodyDisturbs = (body: Node, names: string[]): boolean => {
-  if (body.kind === N_THROW) {
+  if (body.kind === NodeKind.Throw) {
     return true
   }
   if (
-    body.kind === N_BINARY &&
+    body.kind === NodeKind.Binary &&
     isAssignmentOperator(body.text) &&
-    body.children[0].kind === N_IDENT &&
+    body.children[0].kind === NodeKind.Ident &&
     names.indexOf(body.children[0].text) >= 0
   ) {
     return true
   }
   if (
-    body.kind === N_UNARY &&
+    body.kind === NodeKind.Unary &&
     (body.text === "++" || body.text === "--") &&
-    body.children[0].kind === N_IDENT &&
+    body.children[0].kind === NodeKind.Ident &&
     names.indexOf(body.children[0].text) >= 0
   ) {
     return true
@@ -7128,4 +7116,5 @@ export const returnAttributes = (
 
 /** A numeric literal, negated or not: `process.exit(1)`, `process.exit(-1)`. */
 const isNumericLiteral = (node: Node): boolean =>
-  node.kind === N_NUMBER || (node.kind === N_UNARY && node.text === "-" && node.children[0].kind === N_NUMBER)
+  node.kind === NodeKind.Number ||
+  (node.kind === NodeKind.Unary && node.text === "-" && node.children[0].kind === NodeKind.Number)

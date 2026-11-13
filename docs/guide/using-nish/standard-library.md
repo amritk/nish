@@ -201,6 +201,7 @@ shown).
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
 | [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |
+| [`nish/release`](#nishrelease) | `releaseLatest` and `releaseCheckCached`: whether a newer release of a project on GitHub is out, asked at most once a day |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/input`](#nishinput) | `StepInput`: what one fixed step reads from its player, the events since the last step and the keys held down, with no terminal, I/O or clock; `isDown` reads a key |
@@ -2094,6 +2095,44 @@ can only use what a released compiler ships, so it moves onto
 `nish/cli-args` once a release carries it. The example under
 `examples/api-cli/` is a whole client.
 
+## `nish/release`
+
+`nish/release` tells a command-line tool whether a newer release of it is out
+on GitHub: the check behind `nish upgrade` and the compiler's update notice.
+
+```ts
+import { releaseCheckCached } from "nish/release";
+
+const newer: string | null = releaseCheckCached(
+  "https://github.com/owner/tool", "1.2.0",
+  "/home/me/.cache/tool/latest", 86400000, 2000);
+if (newer !== null) {
+  console.error(`tool ${newer} is available (you have 1.2.0)`);
+}
+```
+
+`releaseLatest(base, timeoutMs)` asks `<base>/releases/latest` once and reads
+the version from where it redirects, without following it and without a
+token. It answers null for anything but a redirect to exactly
+`<base>/releases/tag/v<version>`: a server that is down, slow, refuses, or
+sends you to a login page. `releaseCheckCached` keeps the answer in the file
+you name, so a second call within `maxAgeMs` asks nothing; it believes the file
+only when it is a regular file you own that nobody else can write, and treats
+one dated in the future as stale.
+
+`releaseIsNewer(candidate, current)` is true only when both are semantic
+versions and the candidate is strictly newer, so a bad answer never proposes a
+downgrade. `releaseValidVersion(v)` says whether a version may be put in a URL,
+by `install.sh`'s rule: a digit first, then only letters, digits, `.`, `-`
+and `+`. `releaseFetchInstaller(rawBase, version, path, timeoutMs)` writes a
+release tag's `install.sh` to a file for you to run with `sh`; nothing fetched
+is piped into a shell.
+
+The base must be `https://`, or `http://` to this machine for a test server.
+The module is native only: it reaches the network and reads file owners. What
+it defends against is in its
+[security record](../../security/release.md).
+
 ## `nish/term`
 
 `nish/term` is for a program that draws the whole terminal, many times a
@@ -2842,9 +2881,9 @@ test vectors. A byte string is a `u8[]`.
 
 | Module | Main exports |
 | --- | --- |
-| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
+| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
-| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
+| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes (`HmacSha256.digestInto(out, at)` writes the tag into your array and allocates nothing), and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, `bcryptHashN`/`bcryptVerifyN` for up to six at once at a width `bcryptCalibrate` picks, and `bcryptHash4`/`bcryptVerify4` for up to four: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
@@ -2959,11 +2998,23 @@ does and keeps no hold on `buf`, so the array is yours again once it returns.
 as a ring's `peek`, is handed over as it is. A chunked or compressed response, an `Http1TlsServer` slot, and a write still
 held back are copied as `write` copies them.
 
-Set `Http1Config.idleInput` and a slot lends its input and head buffers back
-too, whenever it has answered a request and holds no byte of the next: a server
-holding tens of thousands of keep-alive connections that each send a request
-now and then keeps those buffers only for the connections mid-request, for two
-pool operations a request. It is off by default. An `Http1Server` builds a
+A response with a `Content-Length` is finished once `write` or `sendBody` has
+taken its last byte, and one with no body (`Content-Length: 0`, a `HEAD`, a 204
+or a 304) once `respond` has queued its head: the next request on a keep-alive
+connection is answered whether or not you call `conn.end()`. A chunked body
+needs `end()`, which writes its last chunk, and so does a chunked response to
+an HTTP/1.0 client, which is sent unframed: without it the connection waits
+and the next request is never answered. Calling `end()` on any response stays
+correct; it answers 0 once the length is met and `H1_INVALID` while bytes are
+still owed.
+
+A slot lends its input and head buffers back too, whenever it has answered a
+request and holds no byte of the next: a server holding tens of thousands of
+keep-alive connections that each send a request now and then keeps those
+buffers only for the connections mid-request, for two pool operations a
+request, and an idle connection holds about 1.2 KB. That is
+`Http1Config.idleInput`, on by default; set it to `false` and each slot keeps
+its own buffers while it rests, about 1.9 KB more a connection. An `Http1Server` builds a
 slot's connection on the first accept into it and keeps it for the next, so a
 pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.

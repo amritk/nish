@@ -82,7 +82,7 @@
     "test:nish": "build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
     "test:cli": "build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
     "test:node": "node tests/differential/unmodified.js",
-    "lint": "node scripts/check-filenames.mjs && biome check .",
+    "lint": "node scripts/check-filenames.mjs && node scripts/check-install-scripts.mjs && biome check .",
     "lint:fix": "biome check --write .",
     "lint:dead": "knip --no-progress",
     "format": "biome format --write .",

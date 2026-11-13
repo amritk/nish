@@ -47,6 +47,34 @@ This prints `1290000`. It builds 100,000 strings, but each one dies with its
 call to `describe`, so the program reuses the same few bytes of arena
 throughout.
 
+A `Result` held in a `let` that you assign again does not cost a function its
+bracket. The `Ok` and the `Err` below live on `pick`'s stack frame, so calling
+it in a loop leaves the arena where it was:
+
+```ts nish:ok
+const pick = (n: i32): i32 => {
+  let r: Result<i32, string> = Ok(n);
+  if (n % 3 === 0 && r.isOk()) {
+    r = Err("three");
+  }
+  return r.unwrapOr(-1);
+};
+
+export const main = (): i32 => {
+  const before = Arena.used();
+  let total = 0;
+  for (let i = 0; i < 100000; i++) {
+    total = total + pick(i % 10);
+  }
+  const flat = Arena.used() === before;
+  console.log(`${total} ${flat}`);
+  return 0;
+};
+```
+
+This prints `230000 true`. A `let` assigned from itself, such as
+`r = n > 5 ? r : Ok(0)`, is the exception: its values stay in the arena.
+
 None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 

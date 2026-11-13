@@ -250,4 +250,8 @@ parameter or return loses `nonnull` and `dereferenceable` and keeps `align 8`
   and handed a new allocation on every pass, is no longer silent: NL9016
   reports it whatever the local was declared holding, because the value each
   pass drops is the previous pass's own and keeping numbers across passes is a
-  rewrite that can be named.
+  rewrite that can be named. A `let` holding a `Result` is out of this gap: an
+  `Ok`/`Err` (or a by-value `Result` call) assigned to a `let` of the frame
+  follows the `let`, and outside a loop gets its own alloca
+  (`tests/cases/res_let_reassign`); a `let` assigned from itself is still
+  refused.

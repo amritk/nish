@@ -72,7 +72,7 @@ import {
   SECRET_SPECIFIER,
   unsafeModule,
 } from "./nish-modules"
-import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
@@ -1407,6 +1407,8 @@ export class Compilation {
       unit.checker.recheckStorage()
     }
     this.rejectRootWithArenas()
+    this.rejectRootInShim()
+    this.rejectRootInWasiLoader()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -3152,6 +3154,57 @@ export class Compilation {
   }
 
   /**
+   * WP55 §4.2: root storage in a build that writes a native shim
+   * (`--emit-napi`, `--emit-napi-async`, `--emit-header`). The shim releases
+   * the arena after every call that passes a string or an array
+   * (`src/interop-napi.ts`), which frees what a root reaches, and only a page
+   * module's loader keeps it instead.
+   */
+  rejectRootInShim(): void {
+    const opts = this.opts
+    if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0 && opts.emitHeader.length === 0) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a build that writes a native shim (\`--emit-napi\`, \`--emit-napi-async\` or \`--emit-header\`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a WASI build that writes a loader
+   * (`--emit-dts`). The loader releases the arena after every call, and only
+   * a page module (`buildsPageModule`) emits the `nish_root_keep` a loader
+   * calls in its place, so what a root reaches would be freed.
+   */
+  rejectRootInWasiLoader(): void {
+    const opts = this.opts
+    if (opts.emitDts.length === 0 || !isWasmBuild(opts) || buildsPageModule(opts)) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a WASI build that writes a loader (\`--emit-dts\`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (\`--target wasm32\`) or as an \`--emit-dts\` compile for the host`
+          )
+        }
+      }
+    }
+  }
+
+  /**
    * WP18 G5 + WP21 section 9c: the struct-name rule, one pass later.
    *
    * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
@@ -4328,7 +4381,7 @@ const reservedPrefixText = (name: string): string => {
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 
 /** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
 const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0
@@ -4372,7 +4425,7 @@ const clashMessage = (
   const owner = sig.owner
   if (owner !== null) {
     const member =
-      sig.decl.kind === N_CONSTRUCTOR
+      sig.decl.kind === NodeKind.Constructor
         ? "is declared with a constructor"
         : `declares method \`${sig.decl.children[0].text}\``
     const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`

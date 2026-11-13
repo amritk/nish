@@ -4,14 +4,6 @@ entry: src/emit-ts-strings.ts src/emit-ts-edits.ts src/bounds.ts src/annotations
 import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
 import isOptionalChain from "./emit-util" -> function @isOptionalChain
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_STRING from "./nodes" -> const N_STRING
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import StringBuilder from "./strings" -> struct StringBuilder
 import T_STRING from "./types" -> const T_STRING

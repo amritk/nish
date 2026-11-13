@@ -4,30 +4,6 @@ entry: src/hygiene.ts src/context.ts src/diagnostics.ts std/cli.ts src/codes.ts 
 import CheckContext from "./context" -> struct CheckContext
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import FLAG_USING from "./nodes" -> const FLAG_USING
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_AS from "./nodes" -> const N_AS
-import N_BIGINT from "./nodes" -> const N_BIGINT
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FOR from "./nodes" -> const N_FOR
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_STRING from "./nodes" -> const N_STRING
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_THIS from "./nodes" -> const N_THIS
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_VAR from "./nodes" -> const N_VAR
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import Local from "./symbols" -> struct Local
@@ -52,7 +28,7 @@ function checkHygiene(ctx: CheckContext, body: Node): void -> @checkHygiene [exp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectDeclared
   calls: collectDeclared markUse reportUnread walkHygiene
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=reportUnread#0 walkHygiene#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=reportUnread#0 walkHygiene#0
   pointer body: size=40 writesThrough=true captured=true passedTo=collectDeclared#1 markUse#1 walkHygiene#1
   stackSites=1 stackLocals=1
   local +0:9 declared: Declared[] (const)
@@ -66,7 +42,7 @@ function holdFinding(ctx: CheckContext, node: Node, message: string): void -> @h
   sharedWrite: +0:3
   escaping: message
   calls: Diagnostic.constructor StringSet.add StringSet.has nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer ctx: size=336 writesThrough=false captured=false
+  pointer ctx: size=344 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:9 key: string (const)
@@ -77,7 +53,7 @@ function collectDeclared(program: CheckedProgram, node: Node, inVar: boolean, ou
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: Declared.constructor collectDeclared nish_alloc_struct nish_array_grow nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false passedTo=collectDeclared#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=collectDeclared#0
   pointer node: size=40 writesThrough=true captured=true passedTo=Declared.constructor#1
   pointer out: size=0 writesThrough=true captured=false passedTo=collectDeclared#3
   stackSites=0 stackLocals=0
@@ -109,7 +85,7 @@ function markUse(program: CheckedProgram, node: Node, declared: Declared[], valu
   sharedWrite: +0:7
   escaping: valueUsed
   calls: declaredIndex isStepOperator isStoreOperator markUse nish_panic_index nish_panic_overflow nish_str_eq
-  pointer program: size=800 writesThrough=false captured=false passedTo=markUse#0 markUse#0 markUse#0 markUse#0 markUse#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=markUse#0 markUse#0 markUse#0 markUse#0 markUse#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isStepOperator#0
   pointer declared: size=0 writesThrough=true captured=false passedTo=declaredIndex#0 markUse#2 markUse#2 markUse#2 declaredIndex#0 markUse#2 markUse#2
   stackSites=0 stackLocals=0
@@ -121,8 +97,8 @@ function markUse(program: CheckedProgram, node: Node, declared: Declared[], valu
   callee +15:7 markUse -> @markUse
   callee +21:5 markUse -> @markUse
   local +24:9 stores: boolean (const)
-  callee +24:45 isStoreOperator -> @isStoreOperator
-  callee +24:76 isStepOperator -> @isStepOperator
+  callee +24:52 isStoreOperator -> @isStoreOperator
+  callee +24:83 isStepOperator -> @isStepOperator
   local +26:11 at: i32 (const)
   callee +26:16 declaredIndex -> @declaredIndex
   callee +35:7 markUse -> @markUse
@@ -132,7 +108,7 @@ function reportUnread(ctx: CheckContext, d: Declared): void -> @reportUnread
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: TypeTable.isResult holdFinding nish_panic_index nish_str_at nish_str_concat
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdFinding#0
   pointer d: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -143,19 +119,19 @@ function walkHygiene(ctx: CheckContext, node: Node): void -> @walkHygiene
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: checkRepeatedCondition checkSameOperands checkUnsignedZero holdFinding hygieneUnwrap isPure nish_panic_index nish_str_concat nish_str_eq walkHygiene
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 checkRepeatedCondition#0 checkSameOperands#0 checkUnsignedZero#0 walkHygiene#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdFinding#0 checkRepeatedCondition#0 checkSameOperands#0 checkUnsignedZero#0 walkHygiene#0
   pointer node: size=40 writesThrough=false captured=false passedTo=checkRepeatedCondition#1 checkSameOperands#1 checkUnsignedZero#1
   stackSites=0 stackLocals=0
   local +0:11 expr: Node (const)
   callee +0:18 hygieneUnwrap -> @hygieneUnwrap
-  callee +1:34 isPure -> @isPure
+  callee +1:41 isPure -> @isPure
   local +2:13 hint: string (const)
-  callee +4:7 holdFinding -> @holdFinding
-  callee +13:5 checkRepeatedCondition -> @checkRepeatedCondition
-  callee +16:5 checkSameOperands -> @checkSameOperands
-  callee +17:5 checkUnsignedZero -> @checkUnsignedZero
-  local +19:14 child: Node (const)
-  callee +20:5 walkHygiene -> @walkHygiene
+  callee +6:7 holdFinding -> @holdFinding
+  callee +15:5 checkRepeatedCondition -> @checkRepeatedCondition
+  callee +18:5 checkSameOperands -> @checkSameOperands
+  callee +19:5 checkUnsignedZero -> @checkUnsignedZero
+  local +21:14 child: Node (const)
+  callee +22:5 walkHygiene -> @walkHygiene
 function hygieneUnwrap(node: Node): Node -> @hygieneUnwrap
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node
@@ -178,7 +154,7 @@ function isPure(node: Node): boolean -> @isPure
 function sameValue(program: CheckedProgram, a: Node, b: Node): boolean -> @sameValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: hygieneUnwrap isPure mentionsVariable sameShape
-  pointer program: size=800 writesThrough=false captured=false passedTo=sameShape#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=sameShape#0
   pointer a: size=40 writesThrough=true captured=true passedTo=isPure#0 mentionsVariable#0 hygieneUnwrap#0
   pointer b: size=40 writesThrough=true captured=true passedTo=isPure#0 hygieneUnwrap#0
   stackSites=0 stackLocals=0
@@ -198,7 +174,7 @@ function mentionsVariable(node: Node): boolean -> @mentionsVariable
 function sameShape(program: CheckedProgram, a: Node, b: Node): boolean -> @sameShape
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: hygieneUnwrap nish_panic_index nish_str_eq sameShape sourceLocal
-  pointer program: size=800 writesThrough=false captured=false passedTo=sameShape#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=sameShape#0
   pointer a: size=40 writesThrough=true captured=true passedTo=hygieneUnwrap#0
   pointer b: size=40 writesThrough=true captured=true passedTo=hygieneUnwrap#0
   stackSites=0 stackLocals=0
@@ -215,7 +191,7 @@ function sameShape(program: CheckedProgram, a: Node, b: Node): boolean -> @sameS
 function isFloating(ctx: CheckContext, node: Node): boolean -> @isFloating
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isVector nish_panic_index
-  pointer ctx: size=336 writesThrough=false captured=false
+  pointer ctx: size=344 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -224,7 +200,7 @@ function checkSameOperands(ctx: CheckContext, node: Node): void -> @checkSameOpe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: CheckContext.textOf holdFinding isFloating nish_panic_index nish_str_concat nish_str_eq sameValue
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0 isFloating#0 holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0 isFloating#0 holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=holdFinding#1 CheckContext.textOf#1 holdFinding#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
@@ -246,12 +222,12 @@ function checkRepeatedCondition(ctx: CheckContext, node: Node): void -> @checkRe
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: CheckContext.textOf holdFinding nish_panic_index nish_str_concat sameValue
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 condition: Node (const)
   local +4:7 next: Node (let)
-  callee +5:33 sameValue -> @sameValue
+  callee +5:40 sameValue -> @sameValue
   local +11:9 repeated: Node (const)
   callee +12:3 holdFinding -> @holdFinding
   callee +15:10 CheckContext.textOf -> @CheckContext.textOf
@@ -266,7 +242,7 @@ function checkUnsignedZero(ctx: CheckContext, node: Node): void -> @checkUnsigne
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: CheckContext.textOf TypeTable.typeName holdFinding isUnsigned isZero nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=holdFinding#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)

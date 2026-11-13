@@ -18,12 +18,23 @@ target triple = "wasm32-unknown-unknown"
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #0
+declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define void @nish_root_keep(i64 %mark) {
   call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define void @nish_reset_arena() {
+  call void @nish_runtime_root_reset(i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define void @nish_free_arena() {
+  call void @nish_runtime_root_reset(i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
   ret void
 }
 

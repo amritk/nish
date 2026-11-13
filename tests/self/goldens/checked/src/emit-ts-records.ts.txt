@@ -6,22 +6,6 @@ import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
 import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_BIGINT from "./nodes" -> const N_BIGINT
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_SPREAD from "./nodes" -> const N_SPREAD
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
@@ -37,12 +21,12 @@ const COPY_SPREAD: i32 = 1
 const COPY_AT_RUN: i32 = 2
 function inlineRecord(program: CheckedProgram, type: i32): boolean -> @inlineRecord
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 info: StructInfo (const)
 function hasInlineRecords(program: CheckedProgram): boolean -> @hasInlineRecords
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 info: StructInfo (const)
 function recordReference(walk: Walk, type: i32): boolean -> @recordReference
@@ -208,7 +192,7 @@ function recordCallRow(walk: Walk, node: Node, operands: Operands): string | nul
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
   local +1:9 arrayMethod: string (const)
-  callee +1:49 arrayMethodOfLocal -> @arrayMethodOfLocal
+  callee +1:56 arrayMethodOfLocal -> @arrayMethodOfLocal
   callee +3:12 arrayMethodRow -> @arrayMethodRow
   local +8:9 args: Node[] (const)
   local +9:9 method: string (const)
@@ -318,7 +302,7 @@ function storageRow(walk: Walk, node: Node, text: string): string -> @storageRow
   local +1:9 typeArgs: Node[] (const)
   callee +3:27 Walk.spanOf -> @Walk.spanOf
   local +5:9 element: string (const)
-  callee +5:45 typedArrayWidth -> @typedArrayWidth
+  callee +5:52 typedArrayWidth -> @typedArrayWidth
   callee +9:3 StringSet.add -> @StringSet.add
 function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @newRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true

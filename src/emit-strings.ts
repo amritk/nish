@@ -26,7 +26,7 @@ import { emitFfiNullTest, emitPanicTail, panicTailCallees } from "./emit-builtin
 import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
-import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FunctionSig } from "./program"
 import { irEscape } from "./strings"
 import { isFloat, isForeignBuffer, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
@@ -118,7 +118,7 @@ export const emitTemplate = (emitter: Emitter, expr: Node): string => {
   let first = true
   for (const part of parts) {
     const value =
-      part.kind === N_TEMPLATE_TEXT ? emitter.stringConstant(part.text) : emitToString(emitter, part)
+      part.kind === NodeKind.TemplateText ? emitter.stringConstant(part.text) : emitToString(emitter, part)
     acc = first ? value : emitConcat(emitter, acc, value)
     first = false
   }
@@ -497,7 +497,10 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
  */
 export const foreignStringIsNulFree = (arg: Node): boolean => {
   const inner = unwrapBoundsParens(arg)
-  return inner.kind === N_NULL || (inner.kind === N_STRING && inner.text.indexOf(String.fromCharCode(0)) < 0)
+  return (
+    inner.kind === NodeKind.Null ||
+    (inner.kind === NodeKind.String && inner.text.indexOf(String.fromCharCode(0)) < 0)
+  )
 }
 
 /** The runtime symbols a checked string argument to C calls, for the attribute pass. */
@@ -527,7 +530,7 @@ export const emitForeignString = (
   index: i32
 ): string => {
   const fn = emitter.fn
-  if (unwrapBoundsParens(arg).kind === N_NULL) {
+  if (unwrapBoundsParens(arg).kind === NodeKind.Null) {
     return "null"
   }
   if (foreignStringIsNulFree(arg)) {

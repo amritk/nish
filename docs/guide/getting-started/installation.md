@@ -85,7 +85,8 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 
 The script installs into `~/.nish`. It ends by printing the `export PATH=…`
 line to add to your shell profile; run that line in your shell too, or open a
-new terminal. To upgrade later, run the same command again.
+new terminal. To upgrade later, run `nish upgrade`
+([Staying up to date](../using-nish/cli.md#staying-up-to-date-nish-upgrade)).
 
 Ending the command with `| sh -s -- --help` instead of `| sh` lists the
 script's other options: another directory, and uninstalling.
@@ -107,6 +108,9 @@ version per project in `package.json`, and run it as `npx nish`.
 Releases up to 0.18.0 were published as `@amritk/nish`; if you installed that,
 uninstall it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
 
+`nish upgrade` does not replace a compiler npm installed: it prints the
+`npm install -g nish@<version>` line to run instead.
+
 </scalar-tab>
 
 </scalar-tabs>
@@ -127,7 +131,15 @@ one the release lists; the attestation shows where that release came from.
 
 When the [GitHub CLI](https://cli.github.com) (`gh`) is installed and signed
 in, the install script checks the attestation too, and refuses to install if
-it does not verify. Without `gh` it skips that check and says so. To check a
+it does not verify. Without `gh` it skips that check and says so, unless you
+set `NISH_REQUIRE_ATTESTATION=1`, which makes it refuse to install anything it
+cannot check:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | NISH_REQUIRE_ATTESTATION=1 sh
+```
+
+To check a
 tarball you downloaded yourself, with its version and platform filled in
 (for example `nish-0.37.0-x86_64-linux.tar.gz` and `refs/tags/v0.37.0`):
 

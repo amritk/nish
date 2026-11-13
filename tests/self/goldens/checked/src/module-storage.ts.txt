@@ -7,19 +7,6 @@ import dottedName from "./emit-util" -> function @dottedName
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import storesInlineElements from "./emit-util" -> function @storesInlineElements
 import unwrapParens from "./emit-util" -> function @unwrapParens
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import isCollectionStruct from "./generics" -> function @isCollectionStruct
 import CheckedProgram from "./program" -> struct CheckedProgram
@@ -67,7 +54,7 @@ function checkStorage(ctx: CheckContext, info: ConstInfo): Node | null -> @check
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: TypeTable.typeName checkStorageElement nish_panic_index nish_str_concat rootClass storageLengthShaped storageNewNode storageReport
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=storageReport#0 checkStorageElement#0 storageReport#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=storageReport#0 checkStorageElement#0 storageReport#0
   pointer info: size=96 writesThrough=true captured=false passedTo=storageReport#1 checkStorageElement#1 storageLengthShaped#0 storageReport#1
   stackSites=0 stackLocals=0
   local -6:9 expr: Node (const)
@@ -88,7 +75,7 @@ function acceptStorageLength(ctx: CheckContext, info: ConstInfo, lengthNode: Nod
   sharedWrite: +0:3
   escaping: value
   calls: elementStride nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 storageReport
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
   pointer info: size=96 writesThrough=true captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
   pointer lengthNode: size=40 writesThrough=false captured=false passedTo=storageReport#2 storageReport#2 storageReport#2
   stackSites=0 stackLocals=0
@@ -102,7 +89,7 @@ function storageReport(ctx: CheckContext, info: ConstInfo, node: Node, message: 
   sharedWrite: via DiagnosticSink.report
   escaping: message
   calls: DiagnosticSink.report
-  pointer ctx: size=336 writesThrough=false captured=false
+  pointer ctx: size=344 writesThrough=false captured=false
   pointer info: size=96 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -125,7 +112,7 @@ function checkStorageElement(ctx: CheckContext, info: ConstInfo, at: Node, elem:
   sharedWrite: via storageFaultReport
   escaping: elem spelled
   calls: TypeTable.typeName inlineElementStruct nish_panic_index nish_str_concat storageElementFault storageFaultReport storageRecord
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=storageElementFault#0 storageFaultReport#0 storageFaultReport#0 storageElementFault#0 storageFaultReport#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=storageElementFault#0 storageFaultReport#0 storageFaultReport#0 storageElementFault#0 storageFaultReport#0
   pointer info: size=96 writesThrough=false captured=false passedTo=storageElementFault#1 storageFaultReport#1 storageFaultReport#1 storageElementFault#1 storageFaultReport#1
   pointer at: size=40 writesThrough=false captured=false passedTo=storageFaultReport#2 storageFaultReport#2 storageFaultReport#2
   stackSites=0 stackLocals=0
@@ -151,8 +138,8 @@ function storageRecord(program: CheckedProgram, table: TypeTable, elem: i32): St
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: inlineElementStruct
-  pointer program: size=800 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=inlineElementStruct#1
+  pointer program: size=888 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=inlineElementStruct#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +0:16 inlineElementStruct -> @inlineElementStruct
@@ -161,7 +148,7 @@ function recheckStorage(ctx: CheckContext, info: ConstInfo): void -> @recheckSto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkRootClosure
   calls: TypeTable.typeName checkRootClosure nish_panic_index storageElementFault storageFaultReport storageNewNode storageRecord
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=checkRootClosure#0 storageElementFault#0 storageFaultReport#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=checkRootClosure#0 storageElementFault#0 storageFaultReport#0
   pointer info: size=96 writesThrough=false captured=false passedTo=checkRootClosure#1 storageElementFault#1 storageFaultReport#1
   stackSites=0 stackLocals=0
   local +0:9 scope: CheckedProgram | null (const)
@@ -174,12 +161,12 @@ function recheckStorage(ctx: CheckContext, info: ConstInfo): void -> @recheckSto
   local +13:9 at: Node (const)
   callee +14:3 storageFaultReport -> @storageFaultReport
   callee +14:49 TypeTable.typeName -> @TypeTable.typeName
-function rootClass(program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null -> @rootClass [exported]
+function rootClass(program: CheckedProgram | null, table: TypeTable, elem: i32): StructInfo | null -> @rootClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: CheckedProgram.struct TypeTable.isNullable TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
-  pointer program: size=800 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:40 TypeTable.isNullable -> @TypeTable.isNullable
   local +3:9 inner: i32 (const)
@@ -192,7 +179,7 @@ function checkRootClosure(ctx: CheckContext, info: ConstInfo): void -> @checkRoo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storageReport
   calls: TypeTable.nameOf TypeTable.stripNull nish_str_concat nish_str_eq rootFault storageReport
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=rootFault#0 storageReport#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=rootFault#0 storageReport#0
   pointer info: size=96 writesThrough=false captured=false passedTo=storageReport#1
   stackSites=1 stackLocals=1
   local +0:9 scope: CheckedProgram | null (const)
@@ -208,8 +195,8 @@ function rootFault(ctx: CheckContext, scope: CheckedProgram, seen: boolean[], ty
   sharedWrite: +0:5
   escaping: path type
   calls: CheckedProgram.struct TypeTable.isArray TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isFnRef TypeTable.isHostHandle TypeTable.isNullable TypeTable.isRanged TypeTable.isSecret TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.nameOf TypeTable.refOf TypeTable.stripNull TypeTable.typeName TypeTable.variantsOf isCollectionStruct isNumeric nish_array_grow nish_panic_index nish_str_concat nish_str_eq rootFault
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=rootFault#0 rootFault#0 rootFault#0 rootFault#0
-  pointer scope: size=800 writesThrough=false captured=false passedTo=rootFault#1 rootFault#1 rootFault#1 CheckedProgram.struct#0 rootFault#1
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=rootFault#0 rootFault#0 rootFault#0 rootFault#0
+  pointer scope: size=888 writesThrough=false captured=false passedTo=rootFault#1 rootFault#1 rootFault#1 CheckedProgram.struct#0 rootFault#1
   pointer seen: size=0 writesThrough=true captured=false passedTo=rootFault#2 rootFault#2 rootFault#2 rootFault#2
   stackSites=0 stackLocals=0
   local -5:9 table: TypeTable (const)
@@ -246,7 +233,7 @@ function storageElementFault(ctx: CheckContext, info: ConstInfo, elem: i32): i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isHostHandle TypeTable.isRanged isNumeric storageZeroIsMember
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=storageZeroIsMember#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=storageZeroIsMember#0
   pointer info: size=96 writesThrough=false captured=false passedTo=storageZeroIsMember#1
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -260,7 +247,7 @@ function storageFaultReport(ctx: CheckContext, info: ConstInfo, at: Node, fault:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storageReport
   calls: nish_str_concat storageReport
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
   pointer info: size=96 writesThrough=false captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
   pointer at: size=40 writesThrough=false captured=false passedTo=storageReport#2 storageReport#2 storageReport#2
   stackSites=0 stackLocals=0
@@ -271,7 +258,7 @@ function storageZeroIsMember(ctx: CheckContext, info: ConstInfo, elem: i32): boo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: TypeTable.isEnumMemberType TypeTable.isRanged TypeTable.memberValue TypeTable.rangeHi TypeTable.rangeLo
-  pointer ctx: size=336 writesThrough=false captured=false
+  pointer ctx: size=344 writesThrough=false captured=false
   pointer info: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -286,7 +273,7 @@ function storageZeroIsMember(ctx: CheckContext, info: ConstInfo, elem: i32): boo
 function storageNamed(ctx: CheckContext, expr: Node): ConstInfo | null -> @storageNamed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapParens
-  pointer ctx: size=336 writesThrough=false captured=false
+  pointer ctx: size=344 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -295,7 +282,7 @@ function storageNamed(ctx: CheckContext, expr: Node): ConstInfo | null -> @stora
 function storageElementOf(ctx: CheckContext, expr: Node): ConstInfo | null -> @storageElementOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index storageNamed unwrapParens
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=storageNamed#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=storageNamed#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -304,7 +291,7 @@ function storageElementOf(ctx: CheckContext, expr: Node): ConstInfo | null -> @s
 function storageHoldsRecords(ctx: CheckContext, info: ConstInfo): boolean -> @storageHoldsRecords
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isStruct
-  pointer ctx: size=336 writesThrough=false captured=false
+  pointer ctx: size=344 writesThrough=false captured=false
   pointer info: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 TypeTable.isStruct -> @TypeTable.isStruct
@@ -312,7 +299,7 @@ function checkStorageUses(ctx: CheckContext, node: Node): void -> @checkStorageU
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error checkStorageAssignment checkStorageCall checkStorageUses isAssignmentOperator nish_panic_index nish_str_concat nish_str_eq refuseElementValue refuseMethod storageElementOf storageHoldsRecords storageNamed unwrapParens
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=storageNamed#0 CheckContext.error#0 storageNamed#0 checkStorageUses#0 storageHoldsRecords#0 refuseElementValue#0 storageNamed#0 refuseMethod#0 storageElementOf#0 checkStorageUses#0 checkStorageCall#0 checkStorageAssignment#0 storageNamed#0 storageHoldsRecords#0 CheckContext.error#0 checkStorageUses#0 checkStorageUses#0 checkStorageUses#0 checkStorageUses#0 checkStorageUses#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=storageNamed#0 CheckContext.error#0 storageNamed#0 checkStorageUses#0 storageHoldsRecords#0 refuseElementValue#0 storageNamed#0 refuseMethod#0 storageElementOf#0 checkStorageUses#0 checkStorageCall#0 checkStorageAssignment#0 storageNamed#0 storageHoldsRecords#0 CheckContext.error#0 checkStorageUses#0 checkStorageUses#0 checkStorageUses#0 checkStorageUses#0 checkStorageUses#0
   pointer node: size=40 writesThrough=true captured=true passedTo=storageNamed#1 CheckContext.error#1 refuseElementValue#2 refuseMethod#2 checkStorageCall#1 checkStorageAssignment#1
   stackSites=0 stackLocals=0
   local +0:13 info: ConstInfo | null (const)
@@ -346,7 +333,7 @@ function refuseStorageLength(ctx: CheckContext, target: Node): boolean -> @refus
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseMethod
   calls: nish_panic_index refuseMethod storageNamed
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=storageNamed#0 refuseMethod#0
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=storageNamed#0 refuseMethod#0
   pointer target: size=40 writesThrough=false captured=false passedTo=refuseMethod#2
   stackSites=0 stackLocals=0
   local +0:9 info: ConstInfo | null (const)
@@ -356,7 +343,7 @@ function refuseElementValue(ctx: CheckContext, info: ConstInfo, node: Node): voi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=96 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -365,7 +352,7 @@ function refuseMethod(ctx: CheckContext, info: ConstInfo, node: Node, method: st
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=96 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -374,40 +361,40 @@ function checkStorageCall(ctx: CheckContext, call: Node): void -> @checkStorageC
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseMethod
   calls: CheckContext.error checkStorageUses lendsStorage nish_panic_index nish_str_concat nish_str_eq refuseMethod rewrittenArrayMethod storageElementOf storageHoldsRecords storageNamed storesInlineElements unwrapParens
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=storageNamed#0 refuseMethod#0 storageNamed#0 refuseMethod#0 checkStorageUses#0 checkStorageUses#0 lendsStorage#0 storageElementOf#0 storageHoldsRecords#0 checkStorageUses#0 CheckContext.error#0 checkStorageUses#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=storageNamed#0 refuseMethod#0 storageNamed#0 refuseMethod#0 checkStorageUses#0 checkStorageUses#0 lendsStorage#0 storageElementOf#0 storageHoldsRecords#0 checkStorageUses#0 CheckContext.error#0 checkStorageUses#0
   pointer call: size=40 writesThrough=false captured=false passedTo=lendsStorage#1
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
   local +1:9 args: Node (const)
   local +2:7 pushesCopy: boolean (let)
   local +3:9 method: string (const)
-  callee +3:72 rewrittenArrayMethod -> @rewrittenArrayMethod
-  local +7:11 sorted: ConstInfo | null (const)
-  callee +7:20 storageNamed -> @storageNamed
-  callee +9:7 refuseMethod -> @refuseMethod
-  local +14:11 info: ConstInfo | null (const)
-  callee +14:18 storageNamed -> @storageNamed
-  callee +16:7 refuseMethod -> @refuseMethod
-  local +17:18 arg: Node (const)
-  callee +18:9 checkStorageUses -> @checkStorageUses
-  callee +23:44 storesInlineElements -> @storesInlineElements
-  callee +25:3 checkStorageUses -> @checkStorageUses
-  local +26:12 i: i32 (let)
-  local +27:11 arg: Node (const)
-  callee +28:9 lendsStorage -> @lendsStorage
-  local +31:11 info: ConstInfo | null (const)
-  callee +31:18 storageElementOf -> @storageElementOf
-  callee +32:26 storageHoldsRecords -> @storageHoldsRecords
-  callee +33:7 checkStorageUses -> @checkStorageUses
-  callee +33:29 unwrapParens -> @unwrapParens
-  callee +35:9 CheckContext.error -> @CheckContext.error
-  callee +42:5 checkStorageUses -> @checkStorageUses
+  callee +4:66 rewrittenArrayMethod -> @rewrittenArrayMethod
+  local +8:11 sorted: ConstInfo | null (const)
+  callee +8:20 storageNamed -> @storageNamed
+  callee +10:7 refuseMethod -> @refuseMethod
+  local +15:11 info: ConstInfo | null (const)
+  callee +15:18 storageNamed -> @storageNamed
+  callee +17:7 refuseMethod -> @refuseMethod
+  local +18:18 arg: Node (const)
+  callee +19:9 checkStorageUses -> @checkStorageUses
+  callee +24:44 storesInlineElements -> @storesInlineElements
+  callee +26:3 checkStorageUses -> @checkStorageUses
+  local +27:12 i: i32 (let)
+  local +28:11 arg: Node (const)
+  callee +29:9 lendsStorage -> @lendsStorage
+  local +32:11 info: ConstInfo | null (const)
+  callee +32:18 storageElementOf -> @storageElementOf
+  callee +33:26 storageHoldsRecords -> @storageHoldsRecords
+  callee +34:7 checkStorageUses -> @checkStorageUses
+  callee +34:29 unwrapParens -> @unwrapParens
+  callee +36:9 CheckContext.error -> @CheckContext.error
+  callee +43:5 checkStorageUses -> @checkStorageUses
 function lendsStorage(ctx: CheckContext, call: Node, i: i32, arg: Node): boolean -> @lendsStorage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lendableParameter
   escaping: i
   calls: CheckContext.error isHostWindow lendableParameter lentParamStays nish_panic_index nish_str_concat storageHoldsRecords storageNamed unwrapParens
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=storageNamed#0 storageHoldsRecords#0 lendableParameter#0 lentParamStays#0 CheckContext.error#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=storageNamed#0 storageHoldsRecords#0 lendableParameter#0 lentParamStays#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -428,7 +415,7 @@ function lendableParameter(ctx: CheckContext, sig: FunctionSig, at: i32): boolea
   sharedWrite: via parameterSpelling
   escaping: at
   calls: TypeTable.isArray TypeTable.refOf nish_panic_index nish_str_eq parameterSpelling
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=parameterSpelling#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=parameterSpelling#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=parameterSpelling#1
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -461,7 +448,7 @@ function lentParamStays(ctx: CheckContext, sig: FunctionSig, name: string): bool
   sharedWrite: via LendQueue.add
   escaping: name
   calls: LendQueue.add LendQueue.constructor lentUsesStay
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=lentUsesStay#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=lentUsesStay#0
   pointer sig: size=200 writesThrough=true captured=true passedTo=LendQueue.add#1
   stackSites=1 stackLocals=1
   local +0:9 queue: LendQueue (const)
@@ -475,7 +462,7 @@ function lentUsesStay(ctx: CheckContext, sig: FunctionSig, name: string, node: N
   sharedWrite: via lentUseStays
   escaping: name
   calls: lentUseStays lentUsesStay nish_str_eq
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=lentUseStays#0 lentUsesStay#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=lentUseStays#0 lentUsesStay#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=lentUseStays#1 lentUsesStay#1
   pointer node: size=40 writesThrough=false captured=false passedTo=lentUseStays#2 lentUsesStay#4
   pointer parent: size=40 writesThrough=false captured=false passedTo=lentUseStays#3 lentUsesStay#5
@@ -490,7 +477,7 @@ function lentUseStays(ctx: CheckContext, sig: FunctionSig, use: Node, parent: No
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lentOnStays
   calls: copiesBytes lendInPlaceMethod lendSafeMethod lengthWritten lentOnStays nish_panic_index nish_str_eq rewrittenArrayMethod
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=lentOnStays#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=lentOnStays#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=lentOnStays#1
   pointer use: size=40 writesThrough=false captured=false passedTo=copiesBytes#2 lentOnStays#3
   pointer parent: size=40 writesThrough=false captured=false passedTo=lengthWritten#0 copiesBytes#1
@@ -501,13 +488,13 @@ function lentUseStays(ctx: CheckContext, sig: FunctionSig, use: Node, parent: No
   callee +0:15 lengthWritten -> @lengthWritten
   callee +2:9 lendSafeMethod -> @lendSafeMethod
   callee +7:7 lendInPlaceMethod -> @lendInPlaceMethod
-  local +19:11 callee: Node (const)
-  local +20:11 method: string (const)
-  callee +21:63 rewrittenArrayMethod -> @rewrittenArrayMethod
-  callee +24:9 lendSafeMethod -> @lendSafeMethod
-  callee +24:36 lendInPlaceMethod -> @lendInPlaceMethod
-  callee +28:12 copiesBytes -> @copiesBytes
-  callee +28:47 lentOnStays -> @lentOnStays
+  local +24:11 callee: Node (const)
+  local +25:11 method: string (const)
+  callee +26:70 rewrittenArrayMethod -> @rewrittenArrayMethod
+  callee +29:9 lendSafeMethod -> @lendSafeMethod
+  callee +30:10 lendInPlaceMethod -> @lendInPlaceMethod
+  callee +34:12 copiesBytes -> @copiesBytes
+  callee +34:47 lentOnStays -> @lentOnStays
 function lengthWritten(member: Node, grand: Node | null): boolean -> @lengthWritten
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAssignmentOperator nish_panic_index nish_str_eq
@@ -544,7 +531,7 @@ function homeContext(ctx: CheckContext, sig: FunctionSig): CheckContext | null -
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: ctx
   calls: FunctionSig.definedIn
-  pointer ctx: size=336 writesThrough=true captured=true
+  pointer ctx: size=344 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:7 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -554,7 +541,7 @@ function lentOnStays(ctx: CheckContext, sig: FunctionSig, call: Node, use: Node,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lendableParameter
   calls: CheckContext.signature LendQueue.add homeContext isHostWindow lendCalleeShadowed lendableParameter nish_panic_index
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=homeContext#0 lendableParameter#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=homeContext#0 lendableParameter#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=homeContext#1
   pointer call: size=40 writesThrough=false captured=false
   pointer use: size=40 writesThrough=false captured=false
@@ -563,7 +550,7 @@ function lentOnStays(ctx: CheckContext, sig: FunctionSig, call: Node, use: Node,
   local +0:9 callee: Node (const)
   local +1:9 home: CheckContext | null (const)
   callee +1:16 homeContext -> @homeContext
-  callee +2:51 lendCalleeShadowed -> @lendCalleeShadowed
+  callee +2:58 lendCalleeShadowed -> @lendCalleeShadowed
   local +8:9 next: FunctionSig | null (const)
   callee +8:16 CheckContext.signature -> @CheckContext.signature
   local +12:9 at: i32 (const)
@@ -575,7 +562,7 @@ function checkStorageAssignment(ctx: CheckContext, node: Node): void -> @checkSt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkStorageUses
   calls: checkStorageUses nish_panic_index nish_str_eq storageElementOf storageHoldsRecords storageNamed storesInlineElements unwrapParens
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=storageNamed#0 checkStorageUses#0 storageElementOf#0 checkStorageUses#0 checkStorageUses#0 storageElementOf#0 storageHoldsRecords#0 checkStorageUses#0 checkStorageUses#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=storageNamed#0 checkStorageUses#0 storageElementOf#0 checkStorageUses#0 checkStorageUses#0 storageElementOf#0 storageHoldsRecords#0 checkStorageUses#0 checkStorageUses#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 lhs: Node (const)
@@ -587,12 +574,12 @@ function checkStorageAssignment(ctx: CheckContext, node: Node): void -> @checkSt
   local +10:9 target: ConstInfo | null (const)
   callee +10:18 storageElementOf -> @storageElementOf
   local +11:9 inlineTarget: boolean (const)
-  callee +11:48 storesInlineElements -> @storesInlineElements
-  callee +14:5 checkStorageUses -> @checkStorageUses
-  callee +16:5 checkStorageUses -> @checkStorageUses
-  local +18:9 source: ConstInfo | null (const)
-  callee +18:18 storageElementOf -> @storageElementOf
-  callee +21:5 storageHoldsRecords -> @storageHoldsRecords
-  callee +26:5 checkStorageUses -> @checkStorageUses
-  callee +26:27 unwrapParens -> @unwrapParens
-  callee +29:3 checkStorageUses -> @checkStorageUses
+  callee +12:36 storesInlineElements -> @storesInlineElements
+  callee +15:5 checkStorageUses -> @checkStorageUses
+  callee +17:5 checkStorageUses -> @checkStorageUses
+  local +19:9 source: ConstInfo | null (const)
+  callee +19:18 storageElementOf -> @storageElementOf
+  callee +22:5 storageHoldsRecords -> @storageHoldsRecords
+  callee +27:5 checkStorageUses -> @checkStorageUses
+  callee +27:27 unwrapParens -> @unwrapParens
+  callee +30:3 checkStorageUses -> @checkStorageUses

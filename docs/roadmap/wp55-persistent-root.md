@@ -12,6 +12,6 @@ Nothing scheduled. Any unchecked item is deferred; the note says what would reop
 
 ## Not planned
 
-A generational keep, a root reachable from a page, and the types root storage refuses to trace (`Map`, `Set`, function references, handles).
+A generational keep, a root reachable from a page, and the types root storage refuses to trace (`Map`, `Set`, an implemented interface, `Secret`, `CPtr`, handles and C structs, NL2766).
 
 [All work packages](index.md)

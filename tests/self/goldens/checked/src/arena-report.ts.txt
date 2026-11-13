@@ -14,18 +14,6 @@ import isArenaUsing from "./escape" -> function @isArenaUsing
 import isLoopKind from "./escape" -> function @isLoopKind
 import loopScopeOf from "./escape" -> function @loopScopeOf
 import reclaimsReturnedString from "./escape" -> function @reclaimsReturnedString
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_CALL from "./nodes" -> const N_CALL
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_NEW from "./nodes" -> const N_NEW
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
@@ -63,7 +51,7 @@ function ArenaWalk.constructor(this: ArenaWalk, program: CheckedProgram, facts: 
   escaping: f facts program sig
   calls: nish_panic nish_panic_index reclaimsReturnedString
   pointer this: size=96 writesThrough=true captured=false
-  pointer program: size=800 writesThrough=true captured=true
+  pointer program: size=888 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
   pointer sig: size=200 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
   pointer f: size=432 writesThrough=true captured=true
@@ -96,12 +84,12 @@ function siteKind(node: Node): string -> @siteKind
 function builtinName(program: CheckedProgram, node: Node): string -> @builtinName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: builtinNameOf dottedName nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false passedTo=builtinNameOf#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=builtinNameOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=builtinNameOf#1
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
-  callee +4:36 builtinNameOf -> @builtinNameOf
-  callee +4:67 dottedName -> @dottedName
+  callee +4:43 builtinNameOf -> @builtinNameOf
+  callee +4:74 dottedName -> @dottedName
 function visitSite(walk: ArenaWalk, node: Node, scope: i32, growing: boolean): void -> @visitSite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -139,7 +127,7 @@ function walkNode(walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
   escaping: growing scope
   calls: isArenaUsing isLoopKind loopScopeOf visitSite walkNode
   pointer walk: size=96 writesThrough=false captured=false passedTo=visitSite#0 walkNode#0 walkNode#0 walkNode#0
-  pointer program: size=800 writesThrough=false captured=false passedTo=isArenaUsing#0 walkNode#1 walkNode#1 walkNode#1
+  pointer program: size=888 writesThrough=false captured=false passedTo=isArenaUsing#0 walkNode#1 walkNode#1 walkNode#1
   pointer node: size=40 writesThrough=true captured=true passedTo=visitSite#1 isLoopKind#0 loopScopeOf#1
   stackSites=0 stackLocals=0
   callee +0:3 visitSite -> @visitSite
@@ -151,7 +139,7 @@ function walkNode(walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
   local +4:7 innerGrowing: boolean (let)
   local +5:7 i: i32 (let)
   local +7:11 child: Node (const)
-  callee +8:34 isArenaUsing -> @isArenaUsing
+  callee +8:41 isArenaUsing -> @isArenaUsing
   local +13:11 once: boolean (const)
   callee +15:7 walkNode -> @walkNode
   callee +23:7 walkNode -> @walkNode

@@ -60,27 +60,7 @@ import { numericLiteralValue } from "./constants"
 import { CheckContext } from "./context"
 import { intrinsicType, isAssignmentOperator } from "./emit-util"
 import { StringMap } from "./map"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_OBJECT,
-  N_PAREN,
-  N_RETURN,
-  N_SPREAD,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   FieldInfo,
@@ -236,7 +216,7 @@ class InlineWalk {
 /** The expression inside any parentheses. */
 const unwrap = (expr: Node): Node => {
   let e = expr
-  while (e.kind === N_PAREN) {
+  while (e.kind === NodeKind.Paren) {
     e = e.children[0]
   }
   return e
@@ -271,7 +251,7 @@ const mayInline = (
  */
 const constantLength = (program: CheckedProgram, expr: Node): i32 => {
   const e = unwrap(expr)
-  if (e.kind === N_NUMBER) {
+  if (e.kind === NodeKind.Number) {
     const n: f64 = numericLiteralValue(e.text)
     if (n !== Math.floor(n) || n < 0.0 || n > 1048576.0) {
       return -1
@@ -303,7 +283,7 @@ const programOf = (walk: InlineWalk, sig: FunctionSig): CheckedProgram | null =>
 /** The parameter of `sig` that `expr` names, or -1. */
 const paramIndex = (program: CheckedProgram, sig: FunctionSig, expr: Node): i32 => {
   const e = unwrap(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return -1
   }
   const local = program.nodeLocals[e.id]
@@ -325,10 +305,10 @@ const allocationOf = (
   expr: Node
 ): FreshReturn | null => {
   const e = unwrap(expr)
-  if (e.kind === N_ARRAY) {
+  if (e.kind === NodeKind.Array) {
     return new FreshReturn(-1, e.children.length)
   }
-  if (e.kind !== N_NEW || !table.isArray(program.nodeTypes[e.id])) {
+  if (e.kind !== NodeKind.New || !table.isArray(program.nodeTypes[e.id])) {
     return null
   }
   const args = e.children[2].children
@@ -345,7 +325,7 @@ const allocationOf = (
 
 /** The declaration of `local` inside `node`, or `null`. */
 const declarationOf = (program: CheckedProgram, node: Node, local: Local): Node | null => {
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const declared = program.nodeLocals[node.id]
     if (declared !== null && declared === local) {
       return node
@@ -372,18 +352,18 @@ const onlyIndexed = (
   grand: Node | null,
   local: Local
 ): boolean => {
-  const named: Local | null = node.kind === N_IDENT ? program.nodeLocals[node.id] : null
+  const named: Local | null = node.kind === NodeKind.Ident ? program.nodeLocals[node.id] : null
   if (named !== null && named === local) {
     if (parent === null) {
       return false
     }
-    if (parent.kind === N_INDEX && parent.children[0] === node) {
+    if (parent.kind === NodeKind.Index && parent.children[0] === node) {
       return true
     }
-    if (parent.kind === N_MEMBER && parent.text === "length") {
+    if (parent.kind === NodeKind.Member && parent.text === "length") {
       return !isWrite(grand, parent)
     }
-    return parent.kind === N_RETURN
+    return parent.kind === NodeKind.Return
   }
   for (const child of node.children) {
     if (!onlyIndexed(program, child, node, parent, local)) {
@@ -398,15 +378,15 @@ const isWrite = (parent: Node | null, node: Node): boolean => {
   if (parent === null) {
     return false
   }
-  if (parent.kind === N_UNARY) {
+  if (parent.kind === NodeKind.Unary) {
     return parent.text === "++" || parent.text === "--"
   }
-  return parent.kind === N_BINARY && parent.children[0] === node && isAssignmentOperator(parent.text)
+  return parent.kind === NodeKind.Binary && parent.children[0] === node && isAssignmentOperator(parent.text)
 }
 
 /** Every `return` in `node`, which holds no arrow (`freshReturnOf` checked). */
 const collectReturns = (node: Node, out: Node[]): void => {
-  if (node.kind === N_RETURN) {
+  if (node.kind === NodeKind.Return) {
     out.push(node)
   }
   for (const child of node.children) {
@@ -416,7 +396,7 @@ const collectReturns = (node: Node, out: Node[]): void => {
 
 /** Whether an arrow is written anywhere in `node`. */
 const holdsArrow = (node: Node): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return true
   }
   for (const child of node.children) {
@@ -440,7 +420,7 @@ const returnedOf = (
   value: Node
 ): FreshReturn | null => {
   const e = unwrap(value)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return allocationOf(program, table, sig, e)
   }
   const local = program.nodeLocals[e.id]
@@ -448,7 +428,7 @@ const returnedOf = (
     return null
   }
   const decl = declarationOf(program, body, local)
-  if (decl === null || decl.children[2].kind === N_EMPTY) {
+  if (decl === null || decl.children[2].kind === NodeKind.Empty) {
     return null
   }
   const made = allocationOf(program, table, sig, decl.children[2])
@@ -486,11 +466,11 @@ const freshReturnOf = (walk: InlineWalk, sig: FunctionSig): FreshReturn | null =
     return null
   }
   const values: Node[] = []
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     const returns: Node[] = []
     collectReturns(body, returns)
     for (const r of returns) {
-      if (r.children.length === 0 || r.children[0].kind === N_EMPTY) {
+      if (r.children.length === 0 || r.children[0].kind === NodeKind.Empty) {
         return null
       }
       values.push(r.children[0])
@@ -525,17 +505,17 @@ const sized = (n: i32): i32 => (n < 0 ? UNSIZED : n)
  */
 const inlineAssignedLength = (walk: InlineWalk, program: CheckedProgram, expr: Node): i32 => {
   const e = unwrap(expr)
-  if (e.kind === N_ARRAY) {
+  if (e.kind === NodeKind.Array) {
     return e.children.length
   }
-  if (e.kind === N_NEW) {
+  if (e.kind === NodeKind.New) {
     if (!walk.table.isArray(program.nodeTypes[e.id])) {
       return -1
     }
     const args = e.children[2].children
     return args.length === 1 ? sized(constantLength(program, args[0])) : -1
   }
-  if (e.kind !== N_CALL) {
+  if (e.kind !== NodeKind.Call) {
     return -1
   }
   const callee = program.nodeCallees[e.id]
@@ -566,13 +546,13 @@ const judgeUse = (
     c.ok = false
     return
   }
-  if (parent.kind === N_INDEX && parent.children[0] === node) {
+  if (parent.kind === NodeKind.Index && parent.children[0] === node) {
     // An element read or write. What runs after `x.f` was evaluated -- the
     // index, and the value a store writes -- must not assign the field.
     laterCalls(walk, program, parent.children[1], c.later)
     if (
       grand !== null &&
-      grand.kind === N_BINARY &&
+      grand.kind === NodeKind.Binary &&
       grand.children[0] === parent &&
       isAssignmentOperator(grand.text)
     ) {
@@ -580,14 +560,14 @@ const judgeUse = (
     }
     return
   }
-  if (parent.kind === N_MEMBER && parent.text === "length") {
+  if (parent.kind === NodeKind.Member && parent.text === "length") {
     if (isWrite(grand, parent)) {
       c.ok = false
     }
     return
   }
-  const statement = grand !== null && grand.kind === N_EXPR_STMT
-  if (parent.kind === N_BINARY && parent.text === "=" && parent.children[0] === node && statement) {
+  const statement = grand !== null && grand.kind === NodeKind.ExprStmt
+  if (parent.kind === NodeKind.Binary && parent.text === "=" && parent.children[0] === node && statement) {
     const n = inlineAssignedLength(walk, program, parent.children[1])
     if (n === -1) {
       c.ok = false
@@ -611,11 +591,11 @@ const judgeUse = (
  * field of a class.
  */
 const calleeOf = (walk: InlineWalk, program: CheckedProgram, node: Node): string => {
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     const callee = program.nodeCallees[node.id]
     return callee === null ? "" : callee.name
   }
-  if (node.kind !== N_NEW) {
+  if (node.kind !== NodeKind.New) {
     return ""
   }
   // The class named, not an interface it converts to, as `emitNew` asks.
@@ -721,7 +701,7 @@ const spoilLiteral = (walk: InlineWalk, program: CheckedProgram, node: Node, typ
   const type = program.nodeTypes[node.id]
   const t = type < 0 ? -1 : walk.table.stripNull(type)
   for (const prop of node.children) {
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       spoilSpread(walk, program, prop, typed)
       continue
     }
@@ -752,15 +732,15 @@ const visitInline = (
   grand: Node | null,
   typed: boolean
 ): void => {
-  const inside = typed && node.kind !== N_ARROW
+  const inside = typed && node.kind !== NodeKind.Arrow
   const callee = calleeOf(walk, program, node)
   if (callee.length > 0) {
     walk.call(callee)
   }
-  if (node.kind === N_OBJECT) {
+  if (node.kind === NodeKind.Object) {
     spoilLiteral(walk, program, node, inside)
   }
-  if (node.kind === N_MEMBER && walk.names.has(node.text)) {
+  if (node.kind === NodeKind.Member && walk.names.has(node.text)) {
     const receiver = program.nodeTypes[node.children[0].id]
     if (!inside || receiver < 0) {
       walk.spoilName(node.text)

@@ -43,5 +43,5 @@ function main(): i32 -> @nish_main [exported entry]
   local +0:9 fd: i32 (const)
   local +5:9 slot: Slot (const)
   callee +6:9 parked -> @parked
-  callee +8:9 nap -> @nap
-  callee +9:9 quiet -> @quiet
+  callee +8:9 quiet -> @quiet
+  callee +9:9 nap -> @nap

@@ -243,10 +243,17 @@ export const rootTable = (emitter: Emitter, traces: RootTraces, info: ConstInfo,
   if (symbols.length === 0 || symbols[0] !== info.storageSymbol) {
     return
   }
-  // The first root's module hands every table to the runtime.
+  // The first root's module hands every table to the runtime. A table this
+  // module writes itself is defined here; only another module's is external.
   const refs: string[] = []
   for (const symbol of symbols) {
-    if (symbol !== info.storageSymbol) {
+    let own = false
+    for (const c of emitter.program.constantList) {
+      if (c.root && c.origin === emitter.program.source && c.storageSymbol === symbol) {
+        own = true
+      }
+    }
+    if (!own) {
       emitter.declareGlobal(`@${symbol}.root = external constant %nish.root`)
     }
     refs.push(`%nish.root* @${symbol}.root`)
@@ -258,4 +265,17 @@ export const rootTable = (emitter: Emitter, traces: RootTraces, info: ConstInfo,
   call void ${keep}(i64 %mark, i8* bitcast ([${n} x %nish.root*]* @nish.roots to i8*), i32 ${n})
   ret void
 }`)
+  // Emptying the arena empties every root first (WP55 §4.2): a root left
+  // pointing at a released block would be traced into whatever lands there.
+  // The runtime compiles its own pair only without NISH_WASM_ROOTS, which
+  // scripts/build.sh sets for IR that defines these, so a module without root
+  // storage links none of the keep.
+  const reset = emitter.useRuntime("nish_runtime_root_reset")
+  for (const name of ["nish_reset_arena", "nish_free_arena"]) {
+    emitter.definesRuntime.add(name)
+    emitter.module.addRawDefinition(`define void @${name}() {
+  call void ${reset}(i8* bitcast ([${n} x %nish.root*]* @nish.roots to i8*), i32 ${n})
+  ret void
+}`)
+  }
 }

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 926
+export const RULE_COUNT: i32 = 928
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -83,6 +83,8 @@ const diagnosticRules = (): string[] => [
   "NL2684",
   "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
   "NL2515",
+  "` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module",
+  "NL2769",
   "`, a `let` of the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so it may read only a `const` or a parameter of that function, whose value is the one the arrow is handed; bind the value to a `const` before the call",
   "NL2585",
   ": its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`",
@@ -115,6 +117,8 @@ const diagnosticRules = (): string[] => [
   "NL2393",
   "The arrow reads `this`: an arrow argument may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the arrow needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
   "NL2590",
+  "` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host",
+  "NL2770",
   "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` (`const self = this`, `const k = this.k`)",
   "NL2507",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",

@@ -1194,15 +1194,14 @@ export const serverChecks = (): i32 => {
     lb.secure.next(ZERO) === H1_ERROR && (lb.secure.flush(ZERO) & 16) !== 0 && lb.secure.fd(ZERO) === -1 && lb.secure.connection(toI32(9)) === lb.secure.connection(ZERO)
   );
   t.eqStr("with nothing gone wrong in the loop", lb.failure, "");
-  t.ok("without idleInput a resting slot keeps its input buffer", lb.plain.connection(ZERO).parser.buf.length > 0 && lb.plain.inputs.made === 0);
+  t.ok("on the default config the slots lent their input and head buffers to the pools", lb.plain.inputs.made > 0 && lb.plain.heads.made > 0);
   lb.shutdown();
 
-  // With idleInput, a slot that has answered its request and has no byte of
+  // With idleInput, the default, a slot that has answered its request and has no byte of
   // the next lends its input and head buffers to the server's pools, and the
   // next request takes them back: the pools grow to the slots mid-request,
   // not to the connections open.
   const lendConfig: Http1Config = testConfig();
-  lendConfig.idleInput = true;
   const ll = new H1Loop(lendConfig, tcpConfig([H1_ALPN]), 4, ZERO, ZERO);
   ll.plain.date.pin(PINNED_MS);
   const l1: i32 = ll.connect(false);
@@ -1274,6 +1273,23 @@ export const serverChecks = (): i32 => {
   t.ok("and closes on a close", wsEvent(ll, l3, ld) === WS_CLOSE && ll.awaitEnd(l3));
   t.eqStr("with nothing gone wrong in that loop", ll.failure, "");
   ll.shutdown();
+
+  // With idleInput off, a resting slot keeps its own buffers and the pools
+  // make none.
+  const keepConfig: Http1Config = testConfig();
+  keepConfig.idleInput = false;
+  const lk = new H1Loop(keepConfig, tcpConfig([H1_ALPN]), 4, ZERO, ZERO);
+  lk.plain.date.pin(PINNED_MS);
+  const k1: i32 = lk.connect(false);
+  lk.send(k1, ascii(get));
+  const restOff = lk.response(k1, false);
+  lk.settle();
+  t.ok(
+    "without idleInput a resting slot keeps its input buffer",
+    restOff.status === 200 && lk.plain.connection(ZERO).parser.buf.length > 0 && lk.plain.inputs.made === 0 && lk.plain.heads.made === 0
+  );
+  t.eqStr("with nothing gone wrong in the loop that keeps them", lk.failure, "");
+  lk.shutdown();
 
   // --- 7. The connection alone ---------------------------------------------------------------------
   const config: Http1Config = testConfig();

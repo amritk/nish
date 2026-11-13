@@ -111,15 +111,15 @@ void *nish_alloc_struct(uint64_t size) {
   return nish_arena_grow(size);
 }
 
-#ifdef NISH_WASM_HOST
-static void nish_roots_clear(void);
-#else
-#define nish_roots_clear() ((void)0)
+/* A module with root storage defines both itself (src/emit-root.ts), emptying
+   every root first through nish_runtime_root_reset; scripts/build.sh compiles
+   it with NISH_WASM_ROOTS, which leaves these two out and takes the root keep
+   below in. The wasm profile exports every function, so the root keep is
+   compiled into no other module. */
+#ifndef NISH_WASM_ROOTS
+void nish_reset_arena(void) { nish_arena.off = 0; }
+void nish_free_arena(void) { nish_arena.off = 0; } /* memory cannot be returned */
 #endif
-/* Emptying the arena empties every root first (WP55 §4.2): a root left
-   pointing at a released block would be traced into whatever lands there. */
-void nish_reset_arena(void) { nish_roots_clear(); nish_arena.off = 0; }
-void nish_free_arena(void) { nish_roots_clear(); nish_arena.off = 0; } /* memory cannot be returned */
 uint64_t nish_arena_used(void) { return nish_arena.off; }
 uint64_t nish_arena_mark(void) { return nish_arena.buf ? (uint64_t)(uintptr_t)(nish_arena.buf + nish_arena.off) : 0; }
 void nish_arena_release(uint64_t mark) { nish_arena.off = mark ? mark - (uintptr_t)nish_arena.buf : 0; }
@@ -160,7 +160,7 @@ void nish_array_grow(nish_array *a, uint64_t elem_size) {
   a->cap = cap;
 }
 
-#ifdef NISH_WASM_HOST
+#ifdef NISH_WASM_ROOTS
 /* ---- Root storage (docs/wp55-persistent-root.md §4): keep what the roots
  * reach between export calls, release the rest.
  *
@@ -204,6 +204,14 @@ typedef struct nish_root {
   const nish_trace *desc;
 } nish_root;
 
+/* The two layouts above are what src/emit-root.ts writes as wasm32 IR: three
+ * `i32`s and two 4-byte pointers, and a pointer, an `i32` and a pointer. A
+ * target with another pointer size would read every descriptor at the wrong
+ * offsets, so the build refuses it here rather than tracing garbage. */
+_Static_assert(sizeof(void *) == 4, "root descriptors are emitted for wasm32's 4-byte pointers");
+_Static_assert(sizeof(nish_trace) == 20, "%nish.trace layout is ABI: src/emit-root.ts");
+_Static_assert(sizeof(nish_root) == 12, "%nish.root layout is ABI: src/emit-root.ts");
+
 static const nish_root *const *nish_roots;
 static int32_t nish_root_count;
 static uint64_t nish_root_floor = (uint64_t)-1;
@@ -237,15 +245,47 @@ static void *nish_scratch(uint64_t size) {
   return p;
 }
 
-/* A growable vector of 32-bit words in scratch; a grown vector leaves its
-   old copy behind, which costs at most what the vector holds. */
+/* Chunks of scratch the trace is done with: the copy a vector or the seen set
+   grew out of, and, once the trace ends, the work list and the seen set. A
+   request takes the smallest chunk it fits and leaves the rest of it free;
+   only what none fits bumps `nish_scratch_top`. Without this the old copies
+   alone added the live slot and block lists over again. */
+#define NISH_SCRATCH_FREE 64
+static struct { uintptr_t at; uint64_t size; } nish_scratch_free[NISH_SCRATCH_FREE];
+static uint32_t nish_scratch_nfree;
+
+static void nish_scratch_give(void *p, uint64_t size) {
+  size &= ~(uint64_t)7;
+  if (!p || !size || nish_scratch_nfree == NISH_SCRATCH_FREE) return;
+  nish_scratch_free[nish_scratch_nfree].at = (uintptr_t)p;
+  nish_scratch_free[nish_scratch_nfree].size = size;
+  nish_scratch_nfree++;
+}
+
+static void *nish_scratch_take(uint64_t size) {
+  size = (size + 7) & ~(uint64_t)7;
+  uint32_t best = NISH_SCRATCH_FREE;
+  for (uint32_t i = 0; i < nish_scratch_nfree; i++)
+    if (nish_scratch_free[i].size >= size && (best == NISH_SCRATCH_FREE || nish_scratch_free[i].size < nish_scratch_free[best].size))
+      best = i;
+  if (best == NISH_SCRATCH_FREE) return nish_scratch(size);
+  void *p = (void *)nish_scratch_free[best].at;
+  nish_scratch_free[best].at += (uintptr_t)size;
+  nish_scratch_free[best].size -= size;
+  if (!nish_scratch_free[best].size) nish_scratch_free[best] = nish_scratch_free[--nish_scratch_nfree];
+  return p;
+}
+
+/* A growable vector of 32-bit words in scratch; a grown vector gives its old
+   copy back to the free chunks. */
 typedef struct { uint32_t *at; uint32_t len; uint32_t cap; } nish_words;
 
 static void nish_words_push(nish_words *v, uint32_t a, uint32_t b) {
   if (v->len + 2 > v->cap) {
     uint32_t cap = v->cap ? v->cap * 2 : 256;
-    uint32_t *at = (uint32_t *)nish_scratch((uint64_t)cap * 4);
+    uint32_t *at = (uint32_t *)nish_scratch_take((uint64_t)cap * 4);
     if (v->len) __builtin_memcpy(at, v->at, (uintptr_t)v->len * 4);
+    nish_scratch_give(v->at, (uint64_t)v->cap * 4);
     v->at = at;
     v->cap = cap;
   }
@@ -275,11 +315,12 @@ static int nish_seen_add(uint32_t p, uint32_t d) {
     uint32_t *old = nish_tr.seen;
     uint32_t old_cap = nish_tr.seen_cap;
     nish_tr.seen_cap = old_cap ? old_cap * 2 : 1024;
-    nish_tr.seen = (uint32_t *)nish_scratch((uint64_t)nish_tr.seen_cap * 8);
+    nish_tr.seen = (uint32_t *)nish_scratch_take((uint64_t)nish_tr.seen_cap * 8);
     __builtin_memset(nish_tr.seen, 0, (uintptr_t)nish_tr.seen_cap * 8);
     nish_tr.seen_len = 0;
     for (uint32_t i = 0; i < old_cap; i++)
       if (old[2 * i]) nish_seen_add(old[2 * i], old[2 * i + 1]);
+    nish_scratch_give(old, (uint64_t)old_cap * 8);
   }
   uint32_t mask = nish_tr.seen_cap - 1;
   for (uint32_t i = nish_seen_hash(p, d) & mask;; i = (i + 1) & mask) {
@@ -407,6 +448,7 @@ static void nish_root_compact(void) {
   nish_tr.work.len = nish_tr.work.cap = 0;
   nish_tr.seen = 0;
   nish_tr.seen_cap = nish_tr.seen_len = 0;
+  nish_scratch_nfree = 0;
   for (int32_t r = 0; r < nish_root_count; r++) {
     const nish_root *root = nish_roots[r];
     for (int32_t i = 0; i < root->count; i++) nish_slot(&root->slots[i], root->desc);
@@ -416,12 +458,14 @@ static void nish_root_compact(void) {
     nish_visit((char *)(uintptr_t)nish_tr.work.at[nish_tr.work.len],
                (const nish_trace *)(uintptr_t)nish_tr.work.at[nish_tr.work.len + 1]);
   }
-  /* Blocks into extents (start, end, new start), in place: an extent takes
-     three words where its first block took two, so it is written over the
-     block list from a copy. */
+  /* Blocks into extents (start, end, new start). An extent takes three words
+     where a block took two, so the extents go in a chunk of their own, which
+     may be the work list or the seen set the trace no longer needs. */
   uint32_t nb = nish_tr.blocks.len / 2;
   nish_sort_pairs(nish_tr.blocks.at, nb);
-  uint32_t *ext = (uint32_t *)nish_scratch((uint64_t)nb * 12 + 12);
+  nish_scratch_give(nish_tr.work.at, (uint64_t)nish_tr.work.cap * 4);
+  nish_scratch_give(nish_tr.seen, (uint64_t)nish_tr.seen_cap * 8);
+  uint32_t *ext = (uint32_t *)nish_scratch_take((uint64_t)nb * 12 + 12);
   uint32_t ne = 0, to = (uint32_t)nish_tr.lo;
   for (uint32_t i = 0; i < nb; i++) {
     uint32_t start = nish_tr.blocks.at[2 * i], end = nish_tr.blocks.at[2 * i + 1];
@@ -458,6 +502,16 @@ static void nish_root_compact(void) {
   nish_arena.off = (uint64_t)((uintptr_t)to - (uintptr_t)nish_arena.buf);
 }
 
+/* Root storage's nish_reset_arena and nish_free_arena (WP55 §4.2): a root
+   left pointing at a released block would be traced into whatever lands
+   there, so every root is emptied before the arena. */
+void nish_runtime_root_reset(const nish_root *const *roots, int32_t count) {
+  nish_roots = roots;
+  nish_root_count = count;
+  nish_roots_clear();
+  nish_arena.off = 0;
+}
+
 /* After an export call that began at `mark`: keep what `roots` reach. */
 void nish_runtime_root_keep(uint64_t mark, const nish_root *const *roots, int32_t count) {
   nish_roots = roots;
@@ -468,7 +522,7 @@ void nish_runtime_root_keep(uint64_t mark, const nish_root *const *roots, int32_
   if (nish_arena.off - nish_root_floor <= 2 * nish_root_live + NISH_PAGE) return;
   nish_root_compact();
 }
-#endif
+#endif /* NISH_WASM_ROOTS */
 
 /* ---- Panics: `unreachable`, which the host sees as a RuntimeError; under
  * wasm-host the page hears of each first (NISH_DIE above). */

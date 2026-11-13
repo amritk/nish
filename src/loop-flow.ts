@@ -39,48 +39,7 @@ import { CheckContext, LoopFlow } from "./context"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { enumMembersOf, heldMembers, holdKept, narrowToVariants, writesLeft } from "./expressions"
 import { internalErrorFor } from "./ice"
-import {
-  FLAG_CONST,
-  N_ARROW,
-  N_AS,
-  N_BINARY,
-  N_BINDING_PATTERN,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CLASS,
-  N_CONSTRUCTOR,
-  N_CONDITIONAL,
-  N_CONTINUE,
-  N_DO,
-  N_DEFAULT,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FALSE,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LABELED,
-  N_MEMBER,
-  N_METHOD,
-  N_NULL,
-  N_PAREN,
-  N_RETURN,
-  N_SWITCH,
-  N_THIS,
-  N_THROW,
-  N_TRUE,
-  N_TRY,
-  N_UNARY,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  N_WITH,
-  Node,
-} from "./nodes"
+import { FLAG_CONST, Node, NodeKind } from "./nodes"
 import { StructInfo } from "./program"
 import { Scope } from "./symbols"
 
@@ -126,15 +85,20 @@ const flowAddName = (names: string[], name: string): void => {
 /** The variable a write through `target` lands in: `h` for `h.k[0] = v`. */
 const flowRootName = (target: Node): string => {
   let node = target
-  while (node.kind === N_PAREN || node.kind === N_AS || node.kind === N_MEMBER || node.kind === N_INDEX) {
+  while (
+    node.kind === NodeKind.Paren ||
+    node.kind === NodeKind.As ||
+    node.kind === NodeKind.Member ||
+    node.kind === NodeKind.Index
+  ) {
     node = node.children[0]
   }
-  return node.kind === N_IDENT ? node.text : ""
+  return node.kind === NodeKind.Ident ? node.text : ""
 }
 
 /** Every name `node` mentions, which a nested function may write. */
 const flowNamesIn = (node: Node, scan: FlowScan): void => {
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     flowAddName(scan.disq, node.text)
   }
   for (const child of node.children) {
@@ -144,52 +108,61 @@ const flowNamesIn = (node: Node, scan: FlowScan): void => {
 
 const flowScanNode = (node: Node, top: boolean, scan: FlowScan): void => {
   const kind = node.kind
-  if (kind === N_TRY || kind === N_WITH || kind === N_LABELED || kind === N_BINDING_PATTERN) {
+  if (
+    kind === NodeKind.Try ||
+    kind === NodeKind.With ||
+    kind === NodeKind.Labeled ||
+    kind === NodeKind.BindingPattern
+  ) {
     scan.bail = true
     return
   }
-  if ((kind === N_BREAK || kind === N_CONTINUE) && node.text !== "") {
+  if ((kind === NodeKind.Break || kind === NodeKind.Continue) && node.text !== "") {
     scan.bail = true
     return
   }
   if (
-    kind === N_FUNCTION ||
-    kind === N_ARROW ||
-    kind === N_METHOD ||
-    kind === N_CONSTRUCTOR ||
-    kind === N_CLASS
+    kind === NodeKind.FunctionDecl ||
+    kind === NodeKind.Arrow ||
+    kind === NodeKind.Method ||
+    kind === NodeKind.Constructor ||
+    kind === NodeKind.Class
   ) {
     flowNamesIn(node, scan)
     return
   }
-  if (kind === N_IDENT) {
+  if (kind === NodeKind.Ident) {
     flowAddName(scan.mentioned, node.text)
   }
-  if (kind === N_VAR_DECL && node.children.length > 0) {
+  if (kind === NodeKind.VarDecl && node.children.length > 0) {
     const name = node.children[0].text
     if (scan.declared.indexOf(name) >= 0) {
       flowAddName(scan.redeclared, name)
     }
     flowAddName(scan.declared, name)
   }
-  if (kind === N_VAR && (node.flags & FLAG_CONST) !== 0 && node.children.length > 0) {
+  if (kind === NodeKind.Var && (node.flags & FLAG_CONST) !== 0 && node.children.length > 0) {
     for (const decl of node.children[0].children) {
-      if (decl.kind === N_VAR_DECL && decl.children.length > 2 && decl.children[2].kind !== N_EMPTY) {
+      if (
+        decl.kind === NodeKind.VarDecl &&
+        decl.children.length > 2 &&
+        decl.children[2].kind !== NodeKind.Empty
+      ) {
         scan.consts.push(decl)
       }
     }
   }
-  if (kind === N_BINARY && writesLeft(node.text)) {
+  if (kind === NodeKind.Binary && writesLeft(node.text)) {
     const target = node.children[0]
     // A statement-level `x = e` is one the pass reads; any other write is not.
-    if (!top || node.text !== "=" || target.kind !== N_IDENT) {
+    if (!top || node.text !== "=" || target.kind !== NodeKind.Ident) {
       const root = flowRootName(target)
       if (root !== "") {
         flowAddName(scan.disq, root)
       }
     }
   }
-  if (kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  if (kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     const root = flowRootName(node.children[0])
     if (root !== "") {
       flowAddName(scan.disq, root)
@@ -199,7 +172,7 @@ const flowScanNode = (node: Node, top: boolean, scan: FlowScan): void => {
   for (const child of node.children) {
     // A statement's own expression, and a `for`'s initializer and update, may
     // assign a tracked variable; an assignment anywhere else in an expression may not.
-    flowScanNode(child, kind === N_EXPR_STMT || (kind === N_FOR && (i === 0 || i === 2)), scan)
+    flowScanNode(child, kind === NodeKind.ExprStmt || (kind === NodeKind.For && (i === 0 || i === 2)), scan)
     i = i + 1
   }
 }
@@ -407,11 +380,15 @@ const flowImpose = (ctx: CheckContext, f: LoopFlow, scope: Scope, s: i32[]): voi
 /** The enum `node` names a member of, `Kind` in `Kind.A`, when nothing in the loop shadows it; or -1. */
 const flowConstEnum = (ctx: CheckContext, f: LoopFlow, node: Node): i32 => {
   const bare = unwrapParens(node)
-  if (bare.kind !== N_MEMBER || isOptionalChain(bare)) {
+  if (bare.kind !== NodeKind.Member || isOptionalChain(bare)) {
     return -1
   }
   const owner = bare.children[0]
-  if (owner.kind !== N_IDENT || f.scope.lookup(owner.text) !== null || f.declared.indexOf(owner.text) >= 0) {
+  if (
+    owner.kind !== NodeKind.Ident ||
+    f.scope.lookup(owner.text) !== null ||
+    f.declared.indexOf(owner.text) >= 0
+  ) {
     return -1
   }
   const info = ctx.program.enumNamed(owner.text)
@@ -512,7 +489,7 @@ const flowConstDecl = (f: LoopFlow, name: string): Node | null => {
 /** What a test reads through `(e)` and an assignment, as the checker's `testedRead`. */
 const flowTestedRead = (node: Node): Node => {
   let read = unwrapParens(node)
-  while (read.kind === N_BINARY && read.text === "=") {
+  while (read.kind === NodeKind.Binary && read.text === "=") {
     read = unwrapParens(read.children[0])
   }
   return read
@@ -539,11 +516,11 @@ const flowStructOf = (ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): S
   }
   const bare = unwrapParens(node)
   let type = -1
-  if (bare.kind === N_THIS || bare.kind === N_IDENT) {
-    const name = bare.kind === N_THIS ? "this" : bare.text
+  if (bare.kind === NodeKind.This || bare.kind === NodeKind.Ident) {
+    const name = bare.kind === NodeKind.This ? "this" : bare.text
     const local = f.scope.lookup(name)
     type = local === null || f.declared.indexOf(name) >= 0 ? -1 : local.type
-  } else if (bare.kind === N_MEMBER && !isOptionalChain(bare)) {
+  } else if (bare.kind === NodeKind.Member && !isOptionalChain(bare)) {
     const owner = flowStructOf(ctx, f, bare.children[0], depth + 1)
     if (owner !== null) {
       const field = owner.field(bare.text)
@@ -578,16 +555,16 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
   if (flowConstEnum(ctx, f, bare) === want) {
     return flowDomainBit(f, k, flowConstValue(ctx, bare))
   }
-  if (bare.kind === N_CONDITIONAL) {
+  if (bare.kind === NodeKind.Conditional) {
     const cond = bare.children[0]
     const whenTrue = flowKnown(ctx, f, k, bare.children[1], flowCond(ctx, f, cond, s, true), depth + 1)
     const whenFalse = flowKnown(ctx, f, k, bare.children[2], flowCond(ctx, f, cond, s, false), depth + 1)
     return whenTrue !== 0 && whenFalse !== 0 ? whenTrue | whenFalse : 0
   }
-  if (bare.kind === N_BINARY && bare.text === "=") {
+  if (bare.kind === NodeKind.Binary && bare.text === "=") {
     return flowKnown(ctx, f, k, bare.children[1], s, depth + 1)
   }
-  if (bare.kind === N_IDENT) {
+  if (bare.kind === NodeKind.Ident) {
     const name = bare.text
     const j = flowIndex(f, name)
     if (j >= 0) {
@@ -609,7 +586,7 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
     }
     return 0
   }
-  if (bare.kind === N_CALL && bare.children[0].kind === N_IDENT) {
+  if (bare.kind === NodeKind.Call && bare.children[0].kind === NodeKind.Ident) {
     const name = bare.children[0].text
     if (f.scope.lookup(name) !== null || f.declared.indexOf(name) >= 0) {
       return 0
@@ -624,7 +601,11 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
     }
     return 0
   }
-  if (bare.kind === N_CALL && bare.children[0].kind === N_MEMBER && !isOptionalChain(bare.children[0])) {
+  if (
+    bare.kind === NodeKind.Call &&
+    bare.children[0].kind === NodeKind.Member &&
+    !isOptionalChain(bare.children[0])
+  ) {
     const access = bare.children[0]
     const info = flowStructOf(ctx, f, access.children[0], 0)
     if (info === null) {
@@ -633,10 +614,10 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
     const method = info.method(access.text)
     return method === null ? 0 : flowMemberBit(ctx, f, k, method.returnType)
   }
-  if (bare.kind !== N_MEMBER || isOptionalChain(bare)) {
+  if (bare.kind !== NodeKind.Member || isOptionalChain(bare)) {
     return 0
   }
-  if (bare.children[0].kind === N_IDENT) {
+  if (bare.children[0].kind === NodeKind.Ident) {
     const j = flowIndex(f, bare.children[0].text)
     if (j >= 0 && j < s.length && !f.enums[j] && (s[j] & FLOW_NULL) === 0 && s[j] !== f.full[j]) {
       const base = ctx.table.stripNull(f.locals[j].type)
@@ -694,7 +675,7 @@ const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
   while (side < 2) {
     const read = unwrapParens(test.children[side])
     const other = unwrapParens(test.children[1 - side])
-    if (read.kind === N_IDENT && other.kind === N_NULL) {
+    if (read.kind === NodeKind.Ident && other.kind === NodeKind.Null) {
       const k = flowIndex(f, read.text)
       if (k >= 0 && k < s.length && !f.enums[k]) {
         // `u !== null` leaves the variants; `u === null` leaves what held.
@@ -706,9 +687,9 @@ const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
   side = 0
   while (side < 2) {
     const read = unwrapParens(test.children[side])
-    if (read.kind === N_MEMBER && !isOptionalChain(read)) {
+    if (read.kind === NodeKind.Member && !isOptionalChain(read)) {
       const receiver = flowTestedRead(read.children[0])
-      if (receiver.kind === N_IDENT) {
+      if (receiver.kind === NodeKind.Ident) {
         if (f.declared.indexOf(receiver.text) >= 0) {
           return s
         }
@@ -730,7 +711,7 @@ const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
   side = 0
   while (side < 2) {
     const read = flowTestedRead(test.children[side])
-    if (read.kind === N_IDENT) {
+    if (read.kind === NodeKind.Ident) {
       if (f.declared.indexOf(read.text) >= 0) {
         return s
       }
@@ -743,7 +724,7 @@ const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
         return flowNarrowTo(ctx, f, k, test.children[1 - side], s, same)
       }
     } else if (
-      (read.kind === N_MEMBER || read.kind === N_INDEX || read.kind === N_THIS) &&
+      (read.kind === NodeKind.Member || read.kind === NodeKind.Index || read.kind === NodeKind.This) &&
       flowConstEnum(ctx, f, read) < 0
     ) {
       // A path is a variable of the checker's own, which it may narrow instead.
@@ -759,19 +740,19 @@ const flowCond = (ctx: CheckContext, f: LoopFlow, cond: Node, s: i32[], whenTrue
   if (flowDead(s)) {
     return s
   }
-  if (cond.kind === N_PAREN) {
+  if (cond.kind === NodeKind.Paren) {
     return flowCond(ctx, f, cond.children[0], s, whenTrue)
   }
-  if (cond.kind === N_UNARY && cond.text === "!") {
+  if (cond.kind === NodeKind.Unary && cond.text === "!") {
     return flowCond(ctx, f, cond.children[0], s, !whenTrue)
   }
-  if (cond.kind === N_TRUE) {
+  if (cond.kind === NodeKind.True) {
     return whenTrue ? s : []
   }
-  if (cond.kind === N_FALSE) {
+  if (cond.kind === NodeKind.False) {
     return whenTrue ? [] : s
   }
-  if (cond.kind !== N_BINARY) {
+  if (cond.kind !== NodeKind.Binary) {
     return s
   }
   const op = cond.text
@@ -810,10 +791,15 @@ const flowExec = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] =
     return s
   }
   const kind = node.kind
-  if (kind === N_EMPTY || kind === N_VAR || kind === N_FUNCTION || kind === N_CLASS) {
+  if (
+    kind === NodeKind.Empty ||
+    kind === NodeKind.Var ||
+    kind === NodeKind.FunctionDecl ||
+    kind === NodeKind.Class
+  ) {
     return s
   }
-  if (kind === N_BLOCK) {
+  if (kind === NodeKind.Block) {
     let state = s
     let i = 0
     while (i < node.children.length) {
@@ -827,9 +813,9 @@ const flowExec = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] =
     }
     return state
   }
-  if (kind === N_EXPR_STMT) {
+  if (kind === NodeKind.ExprStmt) {
     const expr = node.children[0]
-    if (expr.kind === N_BINARY && expr.text === "=" && expr.children[0].kind === N_IDENT) {
+    if (expr.kind === NodeKind.Binary && expr.text === "=" && expr.children[0].kind === NodeKind.Ident) {
       const k = flowIndex(f, expr.children[0].text)
       if (k >= 0) {
         const bits = f.enums[k] ? flowValueBits(ctx, f, k, expr.children[1], s) : f.full[k]
@@ -838,22 +824,22 @@ const flowExec = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] =
     }
     return s
   }
-  if (kind === N_RETURN || kind === N_THROW) {
+  if (kind === NodeKind.Return || kind === NodeKind.Throw) {
     return []
   }
-  if (kind === N_BREAK) {
+  if (kind === NodeKind.Break) {
     f.breaks = flowJoin(f, f.breaks, s)
     return []
   }
-  if (kind === N_CONTINUE) {
+  if (kind === NodeKind.Continue) {
     f.conts = flowJoin(f, f.conts, s)
     return []
   }
-  if (kind === N_IF) {
+  if (kind === NodeKind.If) {
     const cond = node.children[0]
     const thenEnd = flowExec(ctx, f, node.children[1], flowCond(ctx, f, cond, s, true))
     const elseStart = flowCond(ctx, f, cond, s, false)
-    if (node.children[2].kind === N_EMPTY) {
+    if (node.children[2].kind === NodeKind.Empty) {
       if (flowDead(thenEnd)) {
         return elseStart
       }
@@ -871,10 +857,10 @@ const flowExec = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] =
     }
     return flowJoin(f, thenEnd, elseEnd)
   }
-  if (kind === N_WHILE || kind === N_DO || kind === N_FOR || kind === N_FOR_OF) {
+  if (kind === NodeKind.While || kind === NodeKind.Do || kind === NodeKind.For || kind === NodeKind.ForOf) {
     return flowNested(ctx, f, node, s)
   }
-  if (kind === N_SWITCH) {
+  if (kind === NodeKind.Switch) {
     return flowSwitch(ctx, f, node, s)
   }
   f.status = "bail"
@@ -887,11 +873,11 @@ const flowExec = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] =
  */
 const flowSubject = (ctx: CheckContext, f: LoopFlow, subject: Node, s: i32[]): i32 => {
   const bare = unwrapParens(subject)
-  if (bare.kind === N_IDENT) {
+  if (bare.kind === NodeKind.Ident) {
     const k = flowIndex(f, bare.text)
     return k >= 0 && f.enums[k] ? k : -1
   }
-  if (bare.kind === N_MEMBER && !isOptionalChain(bare) && bare.children[0].kind === N_IDENT) {
+  if (bare.kind === NodeKind.Member && !isOptionalChain(bare) && bare.children[0].kind === NodeKind.Ident) {
     const k = flowIndex(f, bare.children[0].text)
     if (k >= 0 && k < s.length && !f.enums[k] && (s[k] & FLOW_NULL) === 0) {
       return bare.text === ctx.table.tagNameOf(ctx.table.stripNull(f.locals[k].type)) ? k : -1
@@ -930,7 +916,7 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
   let labelled = 0
   if (k >= 0) {
     for (const clause of clauses) {
-      if (clause.kind !== N_DEFAULT) {
+      if (clause.kind !== NodeKind.Default) {
         const bits = flowLabelBits(ctx, f, k, clause.children[0])
         if (bits >= 0) {
           labelled = labelled | bits
@@ -946,7 +932,7 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
   let i = 0
   while (i < clauses.length) {
     const clause = clauses[i]
-    if (clause.kind === N_DEFAULT) {
+    if (clause.kind === NodeKind.Default) {
       hasDefault = true
       groupDefault = true
     } else if (k >= 0) {
@@ -957,7 +943,7 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
         groupKnown = false
       }
     }
-    const body = clause.kind === N_DEFAULT ? clause.children[0] : clause.children[1]
+    const body = clause.kind === NodeKind.Default ? clause.children[0] : clause.children[1]
     if (body.children.length > 0 || i === clauses.length - 1) {
       let state = s
       if (k >= 0 && k < s.length && groupDefault) {
@@ -1033,12 +1019,12 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
   let body = stmt.children[1]
   if (f.kind === "for") {
     const init = stmt.children[0]
-    if (init.kind === N_EXPR_STMT || (init.kind !== N_VAR && init.kind !== N_EMPTY)) {
-      start = flowExec(ctx, f, init.kind === N_EXPR_STMT ? init : flowStatementOf(init), before)
+    if (init.kind === NodeKind.ExprStmt || (init.kind !== NodeKind.Var && init.kind !== NodeKind.Empty)) {
+      start = flowExec(ctx, f, init.kind === NodeKind.ExprStmt ? init : flowStatementOf(init), before)
     }
     cond = stmt.children[1]
     body = stmt.children[3]
-    if (stmt.children[2].kind !== N_EMPTY) {
+    if (stmt.children[2].kind !== NodeKind.Empty) {
       update = flowStatementOf(stmt.children[2])
     }
   } else if (f.kind === "while") {
@@ -1059,7 +1045,7 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
     f.breaks = unreached
     f.conts = unreached
     let bodyStart = entry
-    if (f.kind !== "do" && cond !== null && cond.kind !== N_EMPTY) {
+    if (f.kind !== "do" && cond !== null && cond.kind !== NodeKind.Empty) {
       bodyStart = flowCond(ctx, f, cond, entry, true)
     }
     const end = flowExec(ctx, f, body, bodyStart)
@@ -1080,7 +1066,7 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
         f.after = flowJoin(f, cond === null ? [] : flowCond(ctx, f, cond, join, false), f.breaks)
       } else if (f.kind === "for-of") {
         f.after = flowJoin(f, entry, f.breaks)
-      } else if (cond === null || cond.kind === N_EMPTY) {
+      } else if (cond === null || cond.kind === NodeKind.Empty) {
         f.after = flowCopy(f.breaks)
       } else {
         f.after = flowJoin(f, flowCond(ctx, f, cond, entry, false), f.breaks)
@@ -1094,13 +1080,13 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
 
 /** The name `flowBegin`'s caller gives a loop of `node`'s kind. */
 const flowKindOf = (node: Node): string => {
-  if (node.kind === N_WHILE) {
+  if (node.kind === NodeKind.While) {
     return "while"
   }
-  if (node.kind === N_DO) {
+  if (node.kind === NodeKind.Do) {
     return "do"
   }
-  if (node.kind === N_FOR) {
+  if (node.kind === NodeKind.For) {
     return "for"
   }
   return "for-of"
@@ -1108,7 +1094,7 @@ const flowKindOf = (node: Node): string => {
 
 /** A `for` initializer that is a bare expression, as the statement it stands for. */
 const flowStatementOf = (expr: Node): Node => {
-  const stmt = new Node(N_EXPR_STMT, expr.start, expr.end)
+  const stmt = new Node(NodeKind.ExprStmt, expr.start, expr.end)
   stmt.children.push(expr)
   return stmt
 }
@@ -1253,7 +1239,8 @@ export const flowDoCondition = (ctx: CheckContext, f: LoopFlow, scope: Scope): v
   flowImpose(ctx, f, scope, flowMeet(f.join, f.widened))
 }
 
-const flowForUpdated = (f: LoopFlow): boolean => f.kind === "for" && f.stmt.children[2].kind !== N_EMPTY
+const flowForUpdated = (f: LoopFlow): boolean =>
+  f.kind === "for" && f.stmt.children[2].kind !== NodeKind.Empty
 
 /**
  * A `for`'s update, about to be read in `scope` once the body is checked:

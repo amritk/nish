@@ -62,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 52 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 53 modules.
 
 </scalar-card>
 
@@ -241,6 +241,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/url`](net/url.md) | The request target's path and query, split and percent-decoded in place, and its query string read as key/value pairs; and whole URLs, parsed into their parts and references resolved against them. |
 | [`nish/net/websocket`](net/websocket.md) | RFC 6455 WebSocket framing and both sides of the opening handshake, sans-IO: bytes in, events and bytes out. |
 | [`nish/net/webtransport`](net/webtransport.md) | WebTransport over HTTP/3, server side, as draft-ietf-webtrans-http3-02 has it and as Chrome and the `wtransport` 0.7 crate negotiate it: sessions made by an extended CONNECT (RFC 9220) with `:protocol` `webtransport`, HTTP datagrams (RFC 9297) carrying the session's quarter stream ID, the session's unidirectional and bidirectional streams, and CLOSE_WEBTRANSPORT_SESSION and DRAIN_WEBTRANSPORT_SESSION on the CONNECT stream's capsules. |
+| [`nish/release`](release.md) | What the newest release of a project on GitHub is, whether it is newer than the one running, and a small cache so a program asks at most once a day. |
 
 ### Cryptography
 

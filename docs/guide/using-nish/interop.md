@@ -501,7 +501,22 @@ After each export call, the loader keeps what the roots reach and frees the
 rest of what the call allocated. Once the kept objects take more than twice
 the room they need (and 64 KiB), the runtime moves them together and rewrites
 every pointer to them, so memory stays bounded however long the page runs:
-200,000 calls to `push` above leave a 1.6 MB list in about 20 MB of memory.
+200,000 calls to `push` above build a list of 1.6 MB (8 bytes a node), and
+memory peaks at about 14 MB, 8.8 times that.
+
+The moving needs room of its own, so a graph of many small objects needs
+several times its size. At worst the peak is
+
+    static data + 3 × live + 64 KiB + one call's allocations
+                + 220 B × objects + 32 B × pointer slots
+
+where an array counts as two objects (its header and its data). That bound
+is loose but safe, so use it when you cannot measure. The peak grows with the
+live graph, so a measurement holds only for a graph as large as the one
+measured: run the module once without `--memory` through the largest session
+the program will reach (the longest game, the biggest level), read the largest
+`memory.buffer.byteLength` it reaches, and give `--memory` about 1.5 times
+that.
 
 - What a root reaches must be numbers, booleans, enums, strings, arrays,
   classes and unions of classes. A `Map`, a `Set`, an interface or a C type
@@ -510,8 +525,16 @@ every pointer to them, so memory stays bounded however long the page runs:
   so the page reads them through exported functions (NL2767).
 - A program that loads `nish/threads` or `nish:region` cannot have root
   storage (NL2768).
-- A native build keeps root storage like any module storage, with nothing
-  to free between calls.
+- A native program keeps root storage like any module storage, with nothing
+  to free between calls. A build that writes a native shim (`--emit-napi`,
+  `--emit-napi-async`, `--emit-header`) cannot: the shim frees what a call
+  allocated when the call passes a string or an array (NL2769). Nor can a
+  `--profile wasi` build with `--emit-dts`, whose loader frees everything a
+  call allocated (NL2770).
+- A `--target wasm32` build without `--emit-dts` writes no loader. If your
+  own host calls its exports, call `nish_root_keep(mark)` after each call
+  where you would call `nish_arena_release(mark)`; releasing frees what the
+  roots reach.
 
 The rules and the IR: [LANGUAGE.md → Root storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#root-storage-an-object-graph-kept-between-calls).
 

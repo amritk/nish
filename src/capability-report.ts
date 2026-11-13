@@ -34,7 +34,7 @@ import { StringMap } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { isStdModule } from "./std-modules"
 import { dirname, relativePath, resolvePath } from "./paths"
-import { N_ARRAY, N_CALL, N_IDENT, N_STRING, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { SourceFile } from "./diagnostics"
 import { CheckedProgram, FunctionSig } from "./program"
 import { siteReportEntry, sitesOf } from "./panics"
@@ -450,8 +450,8 @@ export const literalReaches = (compilation: Compilation, reach: DependencyReach)
           k = k - 1
         }
         if (
-          node.kind === N_CALL &&
-          node.children[0].kind === N_IDENT &&
+          node.kind === NodeKind.Call &&
+          node.children[0].kind === NodeKind.Ident &&
           program.nodeCallees[node.id] === null
         ) {
           const name = builtinNameOf(program, node)
@@ -464,9 +464,11 @@ export const literalReaches = (compilation: Compilation, reach: DependencyReach)
               let literal = given[a]
               if (c === capabilityIndex("process.spawn")) {
                 literal =
-                  literal.kind === N_ARRAY && literal.children.length > 0 ? literal.children[0] : literal
+                  literal.kind === NodeKind.Array && literal.children.length > 0
+                    ? literal.children[0]
+                    : literal
               }
-              if (literal.kind === N_STRING) {
+              if (literal.kind === NodeKind.String) {
                 out.push(new LiteralReach(c, literal.text, name, m, literal))
               }
             }

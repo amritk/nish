@@ -16,7 +16,10 @@
 //      an argument the callee writes through (`fill(xs)`): copy the arena
 //      bytes back into the caller's typed array, so the wasm and N-API builds
 //      agree (N-API borrows the buffer, so writes land directly);
-//   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
+//   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing;
+//      a program with root storage calls `nish_root_keep(mark)` there
+//      instead, which keeps what a root reaches and releases the rest
+//      (WP55 §4).
 // `memory.buffer` is re-read after every module call because `memory.grow`
 // detaches the previous ArrayBuffer. A string result is decoded out of the
 // arena (`stringOut`) before step 5; a string argument is refused, and the
@@ -965,7 +968,9 @@ const panicLoader = (hosts: boolean): string[] => {
  * allocated in the arena is given back after the result has been read
  * (`keepsRoots`: all but what root storage reaches, WP55 §4); and
  * anything but a refused argument that escapes the call (a panic, a trap, or
- * an exception out of a host function) leaves the module dead.
+ * an exception out of a host function) leaves the module dead. A release or
+ * keep that fails after the export returned also kills the module, keeps the
+ * panic kind it recorded, and throws in place of the export's result.
  */
 const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
   const lines: string[] = []
@@ -1005,9 +1010,22 @@ const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
     // WP55 §4: with root storage, what the roots reach outlives the call.
     lines.push(keepsRoots ? "          raw.nish_root_keep(mark);" : "          raw.nish_arena_release(mark);")
     lines.push("        } catch (e) {")
-    lines.push(
-      '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
-    )
+    if (keepsRoots) {
+      // A panic inside the keep (its scratch outgrowing memory is "memory")
+      // has recorded its own kind through the panic import; only a bare trap
+      // has not. A release cannot panic, so its loader keeps the plain form.
+      lines.push("          if (state.dead === null) {")
+      lines.push(
+        '            state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      )
+      lines.push("          }")
+    } else {
+      lines.push(
+        '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      )
+    }
+    // Thrown from `finally`, this replaces the call's result: the module is
+    // dead, and the caller hears it from this call rather than the next.
     lines.push("          throw e;")
     lines.push("        }")
     lines.push("      }")

@@ -22,7 +22,7 @@
 // by identity — a function has a handful of locals, and `===` on a class value
 // is the identity the maps were there for. The upward walks read `src/
 // parents.ts` instead of `node.parent`, and an argument's parent is the
-// `N_LIST` that holds it, which `attributes.ts` handles for both of us.
+// `NodeKind.List` that holds it, which `attributes.ts` handles for both of us.
 
 import {
   classifyUse,
@@ -58,41 +58,7 @@ import {
   unwrapParens,
   unwrapStringPassthrough,
 } from "./emit-util"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CASE,
-  N_CONDITIONAL,
-  N_DEFAULT,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  FLAG_USING,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LABELED,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_NULL,
-  N_OBJECT,
-  N_PAREN,
-  N_RETURN,
-  N_STRING,
-  N_SWITCH,
-  N_THIS,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { FLAG_USING, Node, NodeKind } from "./nodes"
 import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
@@ -178,7 +144,7 @@ const answersFreshElements = (name: string): boolean => name === "readdirSync"
  */
 const isListingCall = (program: CheckedProgram, facts: FactsTable, expr: Node): boolean => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_CALL) {
+  if (e.kind !== NodeKind.Call) {
     return false
   }
   const callee = program.nodeCallees[e.id]
@@ -331,11 +297,20 @@ class Outcome {
    * this frame, whose own outcome it takes instead.
    */
   escapes: boolean
+  /**
+   * Stable but for a `let` on the path being assigned again: whatever the
+   * local holds when it is read, nothing else keeps a pointer to it. A
+   * `Result` site with this and a `local` flow outside every loop may be
+   * its own alloca (`decide`), because each site then runs once a call and
+   * the slot it fills is never written again while the local can name it.
+   */
+  settled: boolean
 
   constructor(flow: i32, stable: boolean, escapes: boolean) {
     this.flow = flow
     this.stable = stable
     this.escapes = escapes
+    this.settled = stable
   }
 }
 
@@ -488,14 +463,14 @@ class EscapeAnalysis {
     // but the locals it captures. An arrow given to an ordinary function
     // parameter may store those anywhere; a data-parallel form's or a task's
     // keeps them read-only and inside the call, by that form's rules.
-    if (node.kind === N_ARROW) {
+    if (node.kind === NodeKind.Arrow) {
       const lifted = program.nodeCallees[node.id]
       if (lifted !== null && lifted.capturesForCall) {
         this.noteCaptures(node, lifted)
       }
       return
     }
-    if (node.kind === N_IDENT) {
+    if (node.kind === NodeKind.Ident) {
       const local = program.nodeLocals[node.id]
       // WP17: a by-value `Result` parameter owns its object, so its uses are
       // walked like a local's: the same alias chain decides alloca or arena.
@@ -506,20 +481,20 @@ class EscapeAnalysis {
       ) {
         this.addRef(local, node)
       }
-    } else if (node.kind === N_VAR_DECL) {
+    } else if (node.kind === NodeKind.VarDecl) {
       this.declarations.push(node)
-    } else if (node.kind === N_NEW) {
+    } else if (node.kind === NodeKind.New) {
       this.visitNew(node)
-    } else if (node.kind === N_OBJECT) {
+    } else if (node.kind === NodeKind.Object) {
       this.sites.push(new Site(node, true))
-    } else if (node.kind === N_ARRAY) {
+    } else if (node.kind === NodeKind.Array) {
       const type = program.nodeTypes[node.id]
       const stackable =
         type >= 0 &&
         this.table.isArray(type) &&
         node.children.length * this.elementSize(this.table.refOf(type)) <= STACK_ARRAY_BYTES
       this.sites.push(new Site(node, stackable))
-    } else if (node.kind === N_BINARY) {
+    } else if (node.kind === NodeKind.Binary) {
       if (node.text === "+" && program.nodeTypes[node.children[0].id] === T_STRING) {
         this.sites.push(new Site(node, false))
       }
@@ -527,7 +502,7 @@ class EscapeAnalysis {
       if (unwrapStringPassthrough(program, node) === node) {
         this.sites.push(new Site(node, false))
       }
-    } else if (node.kind === N_CALL) {
+    } else if (node.kind === NodeKind.Call) {
       this.visitCall(node)
     }
     for (const child of node.children) {
@@ -622,7 +597,7 @@ class EscapeAnalysis {
       return
     }
     const target = call.children[0]
-    if (target.kind === N_IDENT) {
+    if (target.kind === NodeKind.Ident) {
       // `Ok(v)` / `Err(e)` bump one fixed-size struct, so they are stackable
       // exactly as `new C(...)` is.
       if (isResultConstructorCall(program, this.table, call)) {
@@ -696,9 +671,9 @@ class EscapeAnalysis {
       }
       // WP32: `a ?? d` is one of its operands, as a ternary is one of its arms.
       if (
-        parent.kind === N_PAREN ||
-        (parent.kind === N_CONDITIONAL && parent.children[0] !== node) ||
-        (parent.kind === N_BINARY && parent.text === "??")
+        parent.kind === NodeKind.Paren ||
+        (parent.kind === NodeKind.Conditional && parent.children[0] !== node) ||
+        (parent.kind === NodeKind.Binary && parent.text === "??")
       ) {
         node = parent
         continue
@@ -707,7 +682,7 @@ class EscapeAnalysis {
       // array, so it goes wherever the element goes (`yieldsInteriorPointer`),
       // and the variable of a `for...of` over such an array holds each slot.
       if (
-        parent.kind === N_INDEX &&
+        parent.kind === NodeKind.Index &&
         parent.children[0] === node &&
         (this.listing || yieldsInteriorPointer(this.unit, this.table, parent))
       ) {
@@ -715,7 +690,7 @@ class EscapeAnalysis {
         continue
       }
       if (
-        parent.kind === N_FOR_OF &&
+        parent.kind === NodeKind.ForOf &&
         parent.children[1] === node &&
         (this.listing || storesInlineElements(this.unit.program, this.table, node))
       ) {
@@ -724,17 +699,20 @@ class EscapeAnalysis {
           false
         )
       }
-      if (parent.kind === N_VAR_DECL && parent.children[2] === node) {
+      if (parent.kind === NodeKind.VarDecl && parent.children[2] === node) {
         return new FlowTarget(this.unit.program.nodeLocals[parent.id], false)
       }
-      if (parent.kind === N_RETURN) {
+      if (parent.kind === NodeKind.Return) {
         return new FlowTarget(null, true)
       }
       // A concise arrow body is the one `return` it means, so what it builds
       // is returned rather than local. The parser normalises the arrow into an
-      // N_FUNCTION whose body slot holds the expression itself, which is the
+      // NodeKind.FunctionDecl whose body slot holds the expression itself, which is the
       // only place a body is not a block: a method's never is.
-      if ((parent.kind === N_FUNCTION || parent.kind === N_ARROW) && parent.children[3] === node) {
+      if (
+        (parent.kind === NodeKind.FunctionDecl || parent.kind === NodeKind.Arrow) &&
+        parent.children[3] === node
+      ) {
         return new FlowTarget(null, true)
       }
       const neither = new FlowTarget(null, false)
@@ -818,10 +796,10 @@ class EscapeAnalysis {
         return null
       }
       if (
-        parent.kind === N_PAREN ||
-        (parent.kind === N_CONDITIONAL && parent.children[0] !== node) ||
-        (parent.kind === N_BINARY && parent.text === "??") ||
-        (parent.kind === N_INDEX &&
+        parent.kind === NodeKind.Paren ||
+        (parent.kind === NodeKind.Conditional && parent.children[0] !== node) ||
+        (parent.kind === NodeKind.Binary && parent.text === "??") ||
+        (parent.kind === NodeKind.Index &&
           parent.children[0] === node &&
           (this.listing || yieldsInteriorPointer(this.unit, this.table, parent)))
       ) {
@@ -829,10 +807,10 @@ class EscapeAnalysis {
         continue
       }
       if (
-        parent.kind !== N_BINARY ||
+        parent.kind !== NodeKind.Binary ||
         parent.children[1] !== node ||
         !isAssignmentOperator(parent.text) ||
-        parent.children[0].kind !== N_IDENT
+        parent.children[0].kind !== NodeKind.Ident
       ) {
         return null
       }
@@ -867,8 +845,24 @@ class EscapeAnalysis {
       return carried
     }
     const target = this.assignedLocal(expr)
-    const escapes = target === null ? true : this.localOutcome(target, visiting).escapes
-    return new Outcome(FLOW_LEAKS, true, escapes)
+    if (target === null) {
+      return new Outcome(FLOW_LEAKS, true, true)
+    }
+    // `visiting` keeps every local entered for this site, not just the path,
+    // so one in it without a memo is still being decided: a cycle back into
+    // it (`r = c ? r : Ok(0)`) gets a placeholder, not the local's outcome.
+    const pending = this.memoised(target) === null && holdsLocal(visiting, target)
+    const held = this.localOutcome(target, visiting)
+    // A `Result` assigned to a `let` of this frame goes where the `let` goes:
+    // its flow and whether it is settled are the local's, and it is never
+    // `stable`, so the slot rule for `const` still refuses it. A cycle keeps
+    // the old answer.
+    if (!this.listing && !pending && this.table.isResult(this.table.stripNull(target.type))) {
+      const followed = new Outcome(held.flow, false, held.escapes)
+      followed.settled = held.settled
+      return followed
+    }
+    return new Outcome(FLOW_LEAKS, true, held.escapes)
   }
 
   /**
@@ -923,6 +917,7 @@ class EscapeAnalysis {
   captureOutcome(v: Local): Outcome | null {
     let flow = FLOW_LOCAL
     let stable = true
+    let settled = true
     let escapes = false
     let i = 0
     while (i < this.captured.length && i < this.captureTargets.length) {
@@ -941,11 +936,14 @@ class EscapeAnalysis {
         }
         flow = worse(flow, step.flow)
         stable = stable && step.stable
+        settled = settled && step.settled
         escapes = escapes || step.escapes
       }
       i = i + 1
     }
-    return new Outcome(flow, stable, escapes)
+    const outcome = new Outcome(flow, stable, escapes)
+    outcome.settled = settled
+    return outcome
   }
 
   /**
@@ -987,7 +985,7 @@ class EscapeAnalysis {
   /** `receiver` names a local of this function bound to its own array literal or `new Array`, or null. */
   freshArrayLocal(receiver: Node): Local | null {
     const e = unwrapParens(receiver)
-    const v: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    const v: Local | null = e.kind === NodeKind.Ident ? this.unit.program.nodeLocals[e.id] : null
     return v !== null && isFreshArrayLocal(this.table, v, this.declarationOf(v)) ? v : null
   }
 
@@ -1019,7 +1017,7 @@ class EscapeAnalysis {
     const program = this.unit.program
     let node = expr
     let parent = this.unit.parents.parentOf(node)
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       node = parent
       parent = this.unit.parents.parentOf(node)
     }
@@ -1030,19 +1028,19 @@ class EscapeAnalysis {
     // An assignment's value is its right-hand side, so `h.f = (xs[0] = v)`
     // stores `v` twice: only a store standing as its own statement is carried.
     // A push answers the new length, a number, wherever it stands.
-    if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === node) {
+    if (parent.kind === NodeKind.Binary && parent.text === "=" && parent.children[1] === node) {
       const target = unwrapParens(parent.children[0])
-      if (target.kind === N_INDEX && this.standsAlone(parent)) {
+      if (target.kind === NodeKind.Index && this.standsAlone(parent)) {
         receiver = target.children[0]
       }
-    } else if (parent.kind === N_LIST) {
+    } else if (parent.kind === NodeKind.List) {
       const call = this.unit.parents.parentOf(parent)
       if (call !== null && isPushCall(program, this.table, call) && call.children[1] === parent) {
         receiver = call.children[0].children[0]
       }
     }
     const v: Local | null = receiver === null ? null : this.freshArrayLocal(receiver)
-    if (receiver !== null && v === null && parent.kind === N_BINARY) {
+    if (receiver !== null && v === null && parent.kind === NodeKind.Binary) {
       return this.storedIntoChunkDst(parent, receiver)
     }
     // Only a string is carried. A string is one flat block, so the caller
@@ -1081,7 +1079,7 @@ class EscapeAnalysis {
   storedIntoChunkDst(store: Node, receiver: Node): Outcome | null {
     const at = chunkDstIndex(this.sig)
     const e = unwrapParens(receiver)
-    const v: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    const v: Local | null = e.kind === NodeKind.Ident ? this.unit.program.nodeLocals[e.id] : null
     if (
       at < 0 ||
       at >= this.sig.paramNames.length ||
@@ -1126,7 +1124,7 @@ class EscapeAnalysis {
         continue
       }
       const arg = unwrapParens(args.children[g.fillsParam])
-      const v: Local | null = arg.kind === N_IDENT ? program.nodeLocals[arg.id] : null
+      const v: Local | null = arg.kind === NodeKind.Ident ? program.nodeLocals[arg.id] : null
       if (v !== null && v.storage === STORAGE_PARAM && this.forwardsFill(v)) {
         const at = this.sig.paramNames.indexOf(v.name)
         if (at >= 0 && (this.result.fillsParam < 0 || this.result.fillsParam === at)) {
@@ -1157,7 +1155,7 @@ class EscapeAnalysis {
   isFillArgument(ref: Node): boolean {
     let node = ref
     let list = this.unit.parents.parentOf(node)
-    while (list !== null && list.kind === N_PAREN) {
+    while (list !== null && list.kind === NodeKind.Paren) {
       node = list
       list = this.unit.parents.parentOf(node)
     }
@@ -1165,8 +1163,8 @@ class EscapeAnalysis {
     if (
       list === null ||
       call === null ||
-      list.kind !== N_LIST ||
-      call.kind !== N_CALL ||
+      list.kind !== NodeKind.List ||
+      call.kind !== NodeKind.Call ||
       call.children[1] !== list
     ) {
       return false
@@ -1196,7 +1194,10 @@ class EscapeAnalysis {
     for (const ref of refs) {
       const access = this.unit.parents.parentOf(ref)
       const length =
-        access !== null && access.kind === N_MEMBER && access.children[0] === ref && access.text === "length"
+        access !== null &&
+        access.kind === NodeKind.Member &&
+        access.children[0] === ref &&
+        access.text === "length"
       if (!length && !this.isFillArgument(ref)) {
         return false
       }
@@ -1230,11 +1231,11 @@ class EscapeAnalysis {
   standsAlone(node: Node): boolean {
     let at = node
     let parent = this.unit.parents.parentOf(at)
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       at = parent
       parent = this.unit.parents.parentOf(at)
     }
-    return parent !== null && parent.kind === N_EXPR_STMT
+    return parent !== null && parent.kind === NodeKind.ExprStmt
   }
 
   /** `ref` is `xs[i] = v`, `xs.push(v)`, `xs.length`, a tested `xs[i]`, or `return xs`, and nothing else. */
@@ -1244,11 +1245,11 @@ class EscapeAnalysis {
     if (access === null) {
       return false
     }
-    if (access.kind === N_INDEX && access.children[0] === ref) {
+    if (access.kind === NodeKind.Index && access.children[0] === ref) {
       const above = this.unit.parents.parentOf(access)
       if (
         above !== null &&
-        above.kind === N_BINARY &&
+        above.kind === NodeKind.Binary &&
         above.children[0] === access &&
         isAssignmentOperator(above.text)
       ) {
@@ -1257,9 +1258,9 @@ class EscapeAnalysis {
       }
       return classifyUse(this.unit, this.table, access).kind === USE_NONE
     }
-    if (access.kind === N_MEMBER && access.children[0] === ref) {
+    if (access.kind === NodeKind.Member && access.children[0] === ref) {
       const above = this.unit.parents.parentOf(access)
-      if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+      if (above !== null && above.kind === NodeKind.Call && above.children[0] === access) {
         return isPushCall(program, this.table, above)
       }
       // An assignment to `length` is refused for every array, so this is a read.
@@ -1267,14 +1268,15 @@ class EscapeAnalysis {
     }
     let node = ref
     let parent: Node | null = access
-    while (parent !== null && parent.kind === N_PAREN) {
+    while (parent !== null && parent.kind === NodeKind.Paren) {
       node = parent
       parent = this.unit.parents.parentOf(node)
     }
     return (
       parent !== null &&
-      (parent.kind === N_RETURN ||
-        ((parent.kind === N_FUNCTION || parent.kind === N_ARROW) && parent.children[3] === node))
+      (parent.kind === NodeKind.Return ||
+        ((parent.kind === NodeKind.FunctionDecl || parent.kind === NodeKind.Arrow) &&
+          parent.children[3] === node))
     )
   }
 
@@ -1293,15 +1295,15 @@ class EscapeAnalysis {
     }
     let node = expr
     let access = this.unit.parents.parentOf(node)
-    while (access !== null && access.kind === N_PAREN) {
+    while (access !== null && access.kind === NodeKind.Paren) {
       node = access
       access = this.unit.parents.parentOf(node)
     }
-    if (access === null || access.kind !== N_MEMBER || access.children[0] !== node) {
+    if (access === null || access.kind !== NodeKind.Member || access.children[0] !== node) {
       return true
     }
     const above = this.unit.parents.parentOf(access)
-    if (above !== null && above.kind === N_CALL && above.children[0] === access) {
+    if (above !== null && above.kind === NodeKind.Call && above.children[0] === access) {
       const method = arrayMethodName(program, this.table, above)
       return method !== "join" && method !== "indexOf" && method !== "push"
     }
@@ -1365,12 +1367,13 @@ class EscapeAnalysis {
     visiting.push(v)
     let flow = captures.flow
     let stable = captures.stable
+    let settled = captures.settled
     let escapes = captures.escapes
     for (const ref of this.refsOf(v)) {
       const parent = this.unit.parents.parentOf(ref)
       if (
         parent !== null &&
-        parent.kind === N_BINARY &&
+        parent.kind === NodeKind.Binary &&
         parent.children[0] === ref &&
         isAssignmentOperator(parent.text)
       ) {
@@ -1382,9 +1385,11 @@ class EscapeAnalysis {
       const step = this.valueOutcome(ref, visiting)
       flow = worse(flow, step.flow)
       stable = stable && step.stable
+      settled = settled && step.settled
       escapes = escapes || step.escapes
     }
     const outcome = new Outcome(flow, stable, escapes)
+    outcome.settled = settled
     this.outcomeLocals.push(v)
     this.outcomeValues.push(outcome)
     return outcome
@@ -1469,7 +1474,7 @@ class EscapeAnalysis {
       const parent = this.unit.parents.parentOf(ref)
       const rebinds =
         parent !== null &&
-        parent.kind === N_BINARY &&
+        parent.kind === NodeKind.Binary &&
         parent.children[0] === ref &&
         isAssignmentOperator(parent.text)
       if (!rebinds) {
@@ -1490,6 +1495,31 @@ class EscapeAnalysis {
   }
 
   // ---- Decisions ----------------------------------------------------------------------
+
+  /** `Ok(v)`, `Err(e)`, or a call answering a by-value `Result`. */
+  isResultSite(node: Node): boolean {
+    if (node.kind !== NodeKind.Call) {
+      return false
+    }
+    const program = this.unit.program
+    const callee = program.nodeCallees[node.id]
+    if (callee !== null) {
+      return this.table.resultByValue(callee.returnType)
+    }
+    return isResultConstructorCall(program, this.table, node)
+  }
+
+  /** Whether `node` can run more than once a call: a loop of this function encloses it. */
+  inLoop(node: Node): boolean {
+    let at = this.unit.parents.parentOf(node)
+    while (at !== null && at.kind !== NodeKind.Arrow && at.kind !== NodeKind.FunctionDecl) {
+      if (isLoopKind(at)) {
+        return true
+      }
+      at = this.unit.parents.parentOf(at)
+    }
+    return false
+  }
 
   decide(): void {
     for (const site of this.sites) {
@@ -1521,7 +1551,7 @@ class EscapeAnalysis {
       // A `new` object is also handed to its constructor as `this`; a
       // constructor that captures it makes the object escape however the
       // local is used afterwards.
-      if (site.node.kind === N_NEW) {
+      if (site.node.kind === NodeKind.New) {
         const ctor = constructorOf(this.unit.program, this.table, intrinsicType(this.unit.program, site.node))
         if (ctor !== null && this.calleeCaptures(ctor, 0)) {
           flow = FLOW_LEAKS
@@ -1537,6 +1567,18 @@ class EscapeAnalysis {
         continue
       }
       if (site.stackable && this.opts.stackAlloc && flow === FLOW_LOCAL && outcome.stable) {
+        this.result.stackSites[site.node.id] = true
+        continue
+      }
+      if (
+        site.stackable &&
+        this.opts.stackAlloc &&
+        flow === FLOW_LOCAL &&
+        !escapes &&
+        outcome.settled &&
+        this.isResultSite(site.node) &&
+        !this.inLoop(site.node)
+      ) {
         this.result.stackSites[site.node.id] = true
         continue
       }
@@ -1589,12 +1631,12 @@ class EscapeAnalysis {
     // is declaration order, so an alias sees its source decided first.
     for (const decl of this.declarations) {
       const v = this.unit.program.nodeLocals[decl.id]
-      if (v === null || decl.children[2].kind === N_EMPTY) {
+      if (v === null || decl.children[2].kind === NodeKind.Empty) {
         continue
       }
       const init = unwrapParens(decl.children[2])
       let holds = this.result.stackSites[init.id]
-      if (!holds && init.kind === N_IDENT) {
+      if (!holds && init.kind === NodeKind.Ident) {
         const alias = this.unit.program.nodeLocals[init.id]
         holds = alias !== null && this.holdsStackObject(alias)
       }
@@ -1611,7 +1653,7 @@ class EscapeAnalysis {
       const push = this.pushes[k]
       const receiver = unwrapParens(this.pushReceivers[k])
       let v: Local | null = null
-      if (receiver.kind === N_IDENT) {
+      if (receiver.kind === NodeKind.Ident) {
         v = this.unit.program.nodeLocals[receiver.id]
       }
       let owned = false
@@ -1656,7 +1698,7 @@ class EscapeAnalysis {
   /** `v` was initialised by an allocation site of this function, directly or through an alias. */
   ownsSite(v: Local): boolean {
     const decl = this.declarationOf(v)
-    if (decl === null || decl.children[2].kind === N_EMPTY) {
+    if (decl === null || decl.children[2].kind === NodeKind.Empty) {
       return false
     }
     const init = unwrapParens(decl.children[2])
@@ -1665,7 +1707,7 @@ class EscapeAnalysis {
         return true
       }
     }
-    if (init.kind !== N_IDENT) {
+    if (init.kind !== NodeKind.Ident) {
       return false
     }
     const alias = this.unit.program.nodeLocals[init.id]
@@ -1873,7 +1915,7 @@ const holdsNoPointerSlot = (program: CheckedProgram, table: TypeTable, type: i32
 
 /** Every identifier under `node` that names `local`, arrow bodies included. */
 const identRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[]): void => {
-  const named: Local | null = node.kind === N_IDENT ? program.nodeLocals[node.id] : null
+  const named: Local | null = node.kind === NodeKind.Ident ? program.nodeLocals[node.id] : null
   if (named !== null && named === local) {
     out.push(node)
   }
@@ -1884,7 +1926,7 @@ const identRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[
 
 /** Every reference to the parameter called `name` in `node`. */
 const paramRefs = (program: CheckedProgram, node: Node, name: string, out: Node[]): void => {
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const local = program.nodeLocals[node.id]
     if (local !== null && local.storage === STORAGE_PARAM && local.name === name) {
       out.push(node)
@@ -1898,7 +1940,7 @@ const paramRefs = (program: CheckedProgram, node: Node, name: string, out: Node[
 /** `node` writes an arrow or a function inside it. */
 const namesNestedFunction = (node: Node): boolean => {
   for (const child of node.children) {
-    if (child.kind === N_ARROW || child.kind === N_FUNCTION || namesNestedFunction(child)) {
+    if (child.kind === NodeKind.Arrow || child.kind === NodeKind.FunctionDecl || namesNestedFunction(child)) {
       return true
     }
   }
@@ -2079,7 +2121,7 @@ class PassWalk {
     if (isListingCall(this.unit.program, this.facts, e)) {
       return true
     }
-    const local: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    const local: Local | null = e.kind === NodeKind.Ident ? this.unit.program.nodeLocals[e.id] : null
     return local !== null && holdsLocal(this.listingLocals, local)
   }
 
@@ -2124,10 +2166,10 @@ class PassWalk {
     if (type >= 0 && isScalarArgument(this.table, type)) {
       return true
     }
-    if (e.kind === N_NULL || e.kind === N_STRING || e.kind === N_THIS) {
+    if (e.kind === NodeKind.Null || e.kind === NodeKind.String || e.kind === NodeKind.This) {
       return true
     }
-    if (e.kind === N_IDENT) {
+    if (e.kind === NodeKind.Ident) {
       const local = program.nodeLocals[e.id]
       if (local === null || !this.declaredInPass(local)) {
         return true
@@ -2142,24 +2184,24 @@ class PassWalk {
       }
       return false
     }
-    if (e.kind === N_MEMBER) {
+    if (e.kind === NodeKind.Member) {
       return true
     }
-    if (e.kind === N_INDEX) {
+    if (e.kind === NodeKind.Index) {
       // An element of a listing's element (`rows[i][j]`) is as new as the listing.
       const holder = unwrapParens(e.children[0])
-      if (this.isPassListing(holder) || (holder.kind === N_INDEX && !this.isOld(holder))) {
+      if (this.isPassListing(holder) || (holder.kind === NodeKind.Index && !this.isOld(holder))) {
         return false
       }
       return !storesInlineElements(program, this.table, e.children[0]) || this.isOld(e.children[0])
     }
-    if (e.kind === N_CONDITIONAL) {
+    if (e.kind === NodeKind.Conditional) {
       return this.isOld(e.children[1]) && this.isOld(e.children[2])
     }
     // WP32: `m.get(k) ?? d` is a value read out of the map, or `d`. A
     // `T | null` on the left is either operand, as a ternary's arms are: a
     // fresh object there is as new as it would be on its own.
-    if (e.kind === N_BINARY && e.text === "??") {
+    if (e.kind === NodeKind.Binary && e.text === "??") {
       if (!coalescesMaybe(program, this.table, e)) {
         return this.isOld(e.children[0]) && this.isOld(e.children[1])
       }
@@ -2167,7 +2209,7 @@ class PassWalk {
     }
     // A call that answers a `Result` in a register (WP17) is boxed by this
     // function, in the pass, however little its callee allocates (#899).
-    if (e.kind === N_CALL && !this.answersInRegister(e)) {
+    if (e.kind === NodeKind.Call && !this.answersInRegister(e)) {
       const callee = program.nodeCallees[e.id]
       const g: FunctionFacts | null = callee === null ? null : this.facts.get(callee.name)
       return g !== null && !g.allocates
@@ -2178,7 +2220,7 @@ class PassWalk {
   /** `expr` calls a function that answers a `Result` in a register, which the caller boxes (WP17). */
   answersInRegister(expr: Node): boolean {
     const e = unwrapParens(expr)
-    const callee: FunctionSig | null = e.kind === N_CALL ? this.unit.program.nodeCallees[e.id] : null
+    const callee: FunctionSig | null = e.kind === NodeKind.Call ? this.unit.program.nodeCallees[e.id] : null
     return callee !== null && this.table.resultByValue(callee.returnType)
   }
 
@@ -2201,9 +2243,10 @@ class PassWalk {
     // pass allocated would be released before the task reads it. A scope the
     // block's own `using` declares ahead of its last `arena()` joins after
     // that release as well, and is held to the pass's rule.
-    if (isSpawnEntry(callee) && node.children[0].kind === N_MEMBER) {
+    if (isSpawnEntry(callee) && node.children[0].kind === NodeKind.Member) {
       const receiver = unwrapParens(node.children[0].children[0])
-      const local: Local | null = receiver.kind === N_IDENT ? this.unit.program.nodeLocals[receiver.id] : null
+      const local: Local | null =
+        receiver.kind === NodeKind.Ident ? this.unit.program.nodeLocals[receiver.id] : null
       if (local === null || !this.declaredInPass(local)) {
         const args = node.children[1].children
         let handsNew = this.block && (local === null || !holdsLocal(this.outer, local))
@@ -2213,7 +2256,7 @@ class PassWalk {
           i = i + 1
         }
         if (handsNew) {
-          this.refuse(BLOCK_SPAWN, node, receiver.kind === N_IDENT ? receiver.text : "")
+          this.refuse(BLOCK_SPAWN, node, receiver.kind === NodeKind.Ident ? receiver.text : "")
         }
       }
     }
@@ -2226,11 +2269,11 @@ class PassWalk {
   visitPush(call: Node, grown: Node): void {
     const program = this.unit.program
     const receiver = unwrapParens(grown)
-    const local: Local | null = receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
+    const local: Local | null = receiver.kind === NodeKind.Ident ? program.nodeLocals[receiver.id] : null
     if (local !== null && !local.mutable && this.declaredInPass(local) && this.freshArray(local)) {
       return
     }
-    this.refuse(LOOP_OUTER_PUSH, call, receiver.kind === N_IDENT ? receiver.text : "")
+    this.refuse(LOOP_OUTER_PUSH, call, receiver.kind === NodeKind.Ident ? receiver.text : "")
   }
 
   /** The body declares `local` with a fresh array: a literal or `new Array`. */
@@ -2239,10 +2282,11 @@ class PassWalk {
   }
 
   initialiserIsFresh(node: Node, local: Local): boolean {
-    const declared: Local | null = node.kind === N_VAR_DECL ? this.unit.program.nodeLocals[node.id] : null
+    const declared: Local | null =
+      node.kind === NodeKind.VarDecl ? this.unit.program.nodeLocals[node.id] : null
     if (declared !== null && declared === local) {
       const init = unwrapParens(node.children[2])
-      return init.kind === N_ARRAY || init.kind === N_NEW
+      return init.kind === NodeKind.Array || init.kind === NodeKind.New
     }
     for (const child of node.children) {
       if (this.initialiserIsFresh(child, local)) {
@@ -2259,10 +2303,10 @@ class PassWalk {
    */
   visit(node: Node): void {
     const program = this.unit.program
-    if (node.kind === N_ARROW) {
+    if (node.kind === NodeKind.Arrow) {
       return
     }
-    if (node.kind === N_VAR_DECL) {
+    if (node.kind === NodeKind.VarDecl) {
       const local = program.nodeLocals[node.id]
       if (local !== null) {
         this.locals.push(local)
@@ -2270,14 +2314,14 @@ class PassWalk {
           this.listingLocals.push(local)
         }
       }
-    } else if (node.kind === N_FOR_OF) {
+    } else if (node.kind === NodeKind.ForOf) {
       const variable = program.nodeLocals[node.children[0].children[0].children[0].id]
       if (variable !== null && !variable.mutable) {
         this.elementLocals.push(variable)
         this.elementSources.push(node.children[1])
       }
     }
-    if (node.kind === N_CALL) {
+    if (node.kind === NodeKind.Call) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
         this.visitCallee(callee, node)
@@ -2294,14 +2338,14 @@ class PassWalk {
           this.refuse(LOOP_RETURN, node, "")
         }
       }
-    } else if (node.kind === N_NEW) {
+    } else if (node.kind === NodeKind.New) {
       const ctor = constructorOf(program, this.table, intrinsicType(program, node))
       if (ctor !== null) {
         this.visitCallee(ctor, node)
       }
-    } else if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    } else if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       const target = unwrapParens(node.children[0])
-      const local: Local | null = target.kind === N_IDENT ? program.nodeLocals[target.id] : null
+      const local: Local | null = target.kind === NodeKind.Ident ? program.nodeLocals[target.id] : null
       if (
         local !== null &&
         !this.declaredInPass(local) &&
@@ -2313,16 +2357,16 @@ class PassWalk {
       if (local !== null && this.declaredInPass(local) && this.isPassListing(node.children[1])) {
         this.listingLocals.push(local)
       }
-      if (this.block && (target.kind === N_MEMBER || target.kind === N_INDEX)) {
+      if (this.block && (target.kind === NodeKind.Member || target.kind === NodeKind.Index)) {
         const type = program.nodeTypes[target.id]
         if (
           !(type >= 0 && isScalarArgument(this.table, type)) &&
           (node.text !== "=" || !this.isOld(node.children[1]))
         ) {
-          this.refuse(target.kind === N_MEMBER ? BLOCK_FIELD : BLOCK_ELEMENT, node, "")
+          this.refuse(target.kind === NodeKind.Member ? BLOCK_FIELD : BLOCK_ELEMENT, node, "")
         }
       }
-    } else if (node.kind === N_RETURN) {
+    } else if (node.kind === NodeKind.Return) {
       const value = node.children[0]
       // A block hands back nothing through a `void` call. A function that
       // answers a `Result` in a register packs every `return` value before
@@ -2330,7 +2374,7 @@ class PassWalk {
       // `c ? f() : g()` or `a ?? f()` from a pass, as from a block. The
       // caller's box `isOld` counts as new is read out before the release.
       const handsNothing = this.returnsByValue || (this.block && program.nodeTypes[value.id] === T_VOID)
-      if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
+      if (value.kind !== NodeKind.Empty && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")
       }
@@ -2343,20 +2387,23 @@ class PassWalk {
 
 /** The statement a loop runs on every pass. */
 const loopBody = (loop: Node): Node => {
-  if (loop.kind === N_WHILE) {
+  if (loop.kind === NodeKind.While) {
     return loop.children[1]
   }
-  if (loop.kind === N_DO) {
+  if (loop.kind === NodeKind.Do) {
     return loop.children[0]
   }
-  return loop.kind === N_FOR ? loop.children[3] : loop.children[2]
+  return loop.kind === NodeKind.For ? loop.children[3] : loop.children[2]
 }
 
 const within = (outer: Node, node: Node): boolean => node.start >= outer.start && node.end <= outer.end
 
 /** A `for`, `for...of`, `while` or `do...while`: a statement that can have a pass scope. */
 export const isLoopKind = (node: Node): boolean =>
-  node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
+  node.kind === NodeKind.For ||
+  node.kind === NodeKind.ForOf ||
+  node.kind === NodeKind.While ||
+  node.kind === NodeKind.Do
 
 /**
  * Decide the per-pass scope of every loop in `sig`, into `f.loopScopes`, once
@@ -2397,17 +2444,17 @@ const collectLoopScopes = (
     f.loopScopes.push(scope)
     collectLoopScopes(unit, table, f, facts, returnsByValue, scope.body)
   } else if (
-    kind === N_BLOCK ||
-    kind === N_LABELED ||
-    kind === N_LIST ||
-    kind === N_SWITCH ||
-    kind === N_CASE ||
-    kind === N_DEFAULT
+    kind === NodeKind.Block ||
+    kind === NodeKind.Labeled ||
+    kind === NodeKind.List ||
+    kind === NodeKind.Switch ||
+    kind === NodeKind.Case ||
+    kind === NodeKind.Default
   ) {
     for (const child of node.children) {
       collectLoopScopes(unit, table, f, facts, returnsByValue, child)
     }
-  } else if (kind === N_IF) {
+  } else if (kind === NodeKind.If) {
     collectLoopScopes(unit, table, f, facts, returnsByValue, node.children[1])
     collectLoopScopes(unit, table, f, facts, returnsByValue, node.children[2])
   }
@@ -2483,10 +2530,10 @@ const leavesMemory = (program: CheckedProgram, table: TypeTable, facts: FactsTab
 
 /** The function `node` itself runs: a call's callee, or a `new`'s constructor; null for anything else. */
 const calleeAt = (program: CheckedProgram, table: TypeTable, node: Node): FunctionSig | null => {
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     return program.nodeCallees[node.id]
   }
-  if (node.kind === N_NEW) {
+  if (node.kind === NodeKind.New) {
     return constructorOf(program, table, intrinsicType(program, node))
   }
   return null
@@ -2499,7 +2546,7 @@ const callsLeaveMemory = (
   facts: FactsTable,
   node: Node
 ): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return false
   }
   if (leavesMemory(program, table, facts, node)) {
@@ -2519,7 +2566,7 @@ const callsLeaveMemory = (
  * allocating. An arrow's body is another function's.
  */
 const callsUnseen = (program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return false
   }
   const callee = calleeAt(program, table, node)
@@ -2560,7 +2607,7 @@ const callsUnseen = (program: CheckedProgram, table: TypeTable, facts: FactsTabl
 
 /** Whether `stmt` is a `using` declaration that opens an arena: one of its initialisers is `arena()`. */
 export const isArenaUsing = (program: CheckedProgram, stmt: Node): boolean => {
-  if (stmt.kind !== N_VAR || (stmt.flags & FLAG_USING) === 0) {
+  if (stmt.kind !== NodeKind.Var || (stmt.flags & FLAG_USING) === 0) {
     return false
   }
   for (const decl of stmt.children[0].children) {
@@ -2635,16 +2682,16 @@ const decideArenaBlock = (
 const initialisesUsing = (unit: AnalysisUnit, node: Node): boolean => {
   let at = node
   let parent = unit.parents.parentOf(at)
-  while (parent !== null && parent.kind === N_PAREN) {
+  while (parent !== null && parent.kind === NodeKind.Paren) {
     at = parent
     parent = unit.parents.parentOf(at)
   }
-  if (parent === null || parent.kind !== N_VAR_DECL || parent.children[2] !== at) {
+  if (parent === null || parent.kind !== NodeKind.VarDecl || parent.children[2] !== at) {
     return false
   }
   const list = unit.parents.parentOf(parent)
   const stmt: Node | null = list === null ? null : unit.parents.parentOf(list)
-  return stmt !== null && stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0
+  return stmt !== null && stmt.kind === NodeKind.Var && (stmt.flags & FLAG_USING) !== 0
 }
 
 /**
@@ -2665,7 +2712,7 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
   if (at === null || why === LOOP_NOTHING) {
     return ""
   }
-  const value = at.kind === N_BINARY ? sourceText(unit, at.children[1]) : sourceText(unit, at)
+  const value = at.kind === NodeKind.Binary ? sourceText(unit, at.children[1]) : sourceText(unit, at)
   const inside = `${value} may be allocated inside ${block}`
   if (why === LOOP_OUTER_LOCAL) {
     return (
@@ -2702,8 +2749,8 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
     )
   }
   if (why === LOOP_RETURN) {
-    const how = at.kind === N_RETURN ? "`return`" : "`orReturn()`"
-    const handed = at.kind === N_RETURN ? sourceText(unit, at.children[0]) : value
+    const how = at.kind === NodeKind.Return ? "`return`" : "`orReturn()`"
+    const handed = at.kind === NodeKind.Return ? sourceText(unit, at.children[0]) : value
     return (
       `${handed} may be allocated inside ${block} and is handed back by ${how}: the block releases what it ` +
       "allocated before the function returns, so the caller would be handed freed memory"
@@ -2717,7 +2764,7 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
     // loop that pushes arrays would; one that answers numbers or strings is
     // followed (`storedIntoChunkDst`) and may stay in the block. A `spawn`
     // that stores its task's array gets the plain message.
-    const callee: FunctionSig | null = at.kind === N_CALL ? unit.program.nodeCallees[at.id] : null
+    const callee: FunctionSig | null = at.kind === NodeKind.Call ? unit.program.nodeCallees[at.id] : null
     if (callee !== null && isMapEntry(callee)) {
       return (
         stores +
@@ -2755,10 +2802,10 @@ const findArenaBlocks = (
   node: Node,
   out: ArenaFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_BLOCK) {
+  if (node.kind === NodeKind.Block) {
     let i = 0
     while (i < node.children.length) {
       const stmt = node.children[i]
@@ -2889,10 +2936,10 @@ const findArenaLoops = (
   head: boolean,
   out: ArenaFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (loop !== null && !reclaimed && !loop.handsBack && node.kind === N_CALL) {
+  if (loop !== null && !reclaimed && !loop.handsBack && node.kind === NodeKind.Call) {
     const callee = unit.program.nodeCallees[node.id]
     const g: FunctionFacts | null = callee === null ? null : facts.get(callee.name)
     const why = head
@@ -2923,9 +2970,9 @@ const findArenaLoops = (
   let i = 0
   while (i < node.children.length) {
     const child = node.children[i]
-    released = released || (node.kind === N_BLOCK && isArenaUsing(unit.program, child))
+    released = released || (node.kind === NodeKind.Block && isArenaUsing(unit.program, child))
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
-    const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1)
+    const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
     if (scope === null || once) {
       findArenaLoops(unit, facts, f, reason, child, loop, released, head, out)
     } else if (child === scope.body) {
@@ -3272,7 +3319,7 @@ const collectReleased = (
   starts: i32[],
   ends: i32[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   const isLoop = isLoopKind(node)
@@ -3281,7 +3328,7 @@ const collectReleased = (
     if (scope !== null && scope.scoped && child === scope.body) {
       starts.push(child.start)
       ends.push(child.end)
-    } else if (node.kind === N_BLOCK && isArenaUsing(unit.program, child)) {
+    } else if (node.kind === NodeKind.Block && isArenaUsing(unit.program, child)) {
       starts.push(child.start)
       ends.push(node.end)
       return
@@ -3312,7 +3359,7 @@ const firstLeavingCall = (
   starts: i32[],
   ends: i32[]
 ): Node | null => {
-  if (node.kind === N_ARROW || inReleased(node, starts, ends)) {
+  if (node.kind === NodeKind.Arrow || inReleased(node, starts, ends)) {
     return null
   }
   if (leavesMemory(program, table, facts, node)) {
@@ -3404,7 +3451,7 @@ const explainLoops = (
   block: Node | null,
   out: MemoryReport
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   const isLoop = isLoopKind(node)
@@ -3446,7 +3493,7 @@ const explainLoops = (
         )
       }
       if (conditionKeeps && condition !== null) {
-        if (node.kind === N_DO) {
+        if (node.kind === NodeKind.Do) {
           lateCondition = condition
         } else {
           out.notes.push(headNote(condition, "condition", until))
@@ -3462,7 +3509,7 @@ const explainLoops = (
   }
   let held = block
   for (const child of node.children) {
-    if (node.kind === N_BLOCK && isArenaUsing(unit.program, child)) {
+    if (node.kind === NodeKind.Block && isArenaUsing(unit.program, child)) {
       held = child
     }
     let childPass = pass
@@ -3486,10 +3533,10 @@ const headNote = (head: Node, part: string, until: string): ArenaFinding =>
 /** The node of `loop` that is tested before or after every pass, or null for a `for...of`. */
 const loopCondition = (loop: Node): Node | null => {
   switch (loop.kind) {
-    case N_WHILE:
+    case NodeKind.While:
       return loop.children.length > 0 ? loop.children[0] : null
-    case N_DO:
-    case N_FOR:
+    case NodeKind.Do:
+    case NodeKind.For:
       return loop.children.length > 1 ? loop.children[1] : null
     default:
       return null
@@ -3498,7 +3545,7 @@ const loopCondition = (loop: Node): Node | null => {
 
 /** The node of a `for` that runs after every pass, or null. */
 const loopUpdate = (loop: Node): Node | null =>
-  loop.kind === N_FOR && loop.children.length > 2 ? loop.children[2] : null
+  loop.kind === NodeKind.For && loop.children.length > 2 ? loop.children[2] : null
 
 /** Where a loop's kept memory goes back: the nearest bracket around it, or the function's own end. */
 const keptUntil = (

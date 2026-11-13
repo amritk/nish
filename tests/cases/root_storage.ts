@@ -1,7 +1,8 @@
 // WP55: root storage -- module storage whose element is `C | null` -- holds
 // one object graph that every call reaches. Natively the arena is never handed
 // back between calls, so the graph simply stays; this pins the reads and
-// writes through the root that a page module keeps by compaction.
+// writes through the root. A page module's compaction is pinned by
+// tests/persist (tests/run.js, "persist").
 
 class Ball {
   id: i32

@@ -47,18 +47,7 @@ import { emitStringLength, emitStringMethodCall, guardKeep } from "./emit-string
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { isGuardedAccess } from "./parallel"
-import {
-  N_FALSE,
-  N_IDENT,
-  N_MEMBER,
-  N_NULL,
-  N_SPREAD,
-  N_STRING,
-  N_TEMPLATE,
-  N_TRUE,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
@@ -141,26 +130,26 @@ export const initializerConstant = (emitter: Emitter, field: FieldInfo): string 
   if (init === null) {
     process.exit(internalErrorFor("emitter: a field initializer that is not there", emitter.opts.json))
   }
-  const negated = init.kind === N_UNARY
+  const negated = init.kind === NodeKind.Unary
   const literal = negated ? init.children[0] : init
-  if (literal.kind === N_TRUE) {
+  if (literal.kind === NodeKind.True) {
     return "true"
   }
-  if (literal.kind === N_FALSE) {
+  if (literal.kind === NodeKind.False) {
     return "false"
   }
-  if (literal.kind === N_NULL) {
+  if (literal.kind === NodeKind.Null) {
     // A nullable function reference is an `i32` tag whose `null` is 0 (WP51 stage 2).
     return emitter.table.isFnRef(emitter.table.stripNull(field.type)) ? "0" : "null"
   }
-  if (literal.kind === N_STRING) {
+  if (literal.kind === NodeKind.String) {
     return emitter.stringConstant(literal.text)
   }
-  if (literal.kind === N_TEMPLATE) {
+  if (literal.kind === NodeKind.Template) {
     // A template with no holes is a string literal; its one text part is the value.
     return emitter.stringConstant(literal.children.length > 0 ? literal.children[0].text : "")
   }
-  if (literal.kind === N_MEMBER) {
+  if (literal.kind === NodeKind.Member) {
     return `${field.initializerValue}` // `Kind.Array`, folded by the checker
   }
   if (isFloat(field.type)) {
@@ -244,7 +233,7 @@ const emitSpreadCopy = (emitter: Emitter, info: StructInfo, obj: string, spread:
   } else {
     const sourceInfo = structInfoOf(emitter, copy.source)
     const value = spread.children[0]
-    const named = value.kind === N_IDENT
+    const named = value.kind === NodeKind.Ident
     const once = named ? "" : emitter.emitExpression(value)
     for (const name of copy.fields) {
       const from = sourceInfo.field(name)
@@ -268,7 +257,7 @@ export const emitObjectLiteral = (emitter: Emitter, expr: Node): string => {
   const info = structInfoOf(emitter, emitter.typeOf(expr))
   const obj = allocate(emitter, info, expr)
   for (const prop of expr.children) {
-    if (prop.kind === N_SPREAD) {
+    if (prop.kind === NodeKind.Spread) {
       emitSpreadCopy(emitter, info, obj, prop)
       continue
     }
