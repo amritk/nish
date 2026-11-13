@@ -38,6 +38,7 @@ import Node from "./nodes" -> struct Node
 import literalLength from "./emit-arrays" -> function @literalLength
 import isResultConstructorCall from "./emit-result" -> function @isResultConstructorCall
 import resultMethodName from "./emit-result" -> function @resultMethodName
+import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
@@ -206,6 +207,17 @@ struct ArenaFinding (class) size=16 align=8 exported
   field node: Node index=0 offset=0
   field message: string index=1 offset=8
   constructor -> @ArenaFinding.constructor
+struct Reach (class) size=56 align=8
+  field reached: StringSet index=0 offset=0
+  field fixed: StringMap index=1 offset=8
+  field work: string[] index=2 offset=16
+  field latches: Latches index=3 offset=24
+  field homes: StringMap index=4 offset=32
+  field sigs: FunctionSig[] index=5 offset=40
+  field programs: CheckedProgram[] index=6 offset=48
+  constructor -> @Reach.constructor
+  method add -> @Reach.add
+  method call -> @Reach.call
 struct Latches (class) size=16 align=8
   field names: string[] index=0 offset=0
   field params: i32[] index=1 offset=8
@@ -1749,43 +1761,88 @@ function holdsFacts(list: FunctionFacts[], f: FunctionFacts): boolean -> @holdsF
 function loopReachedFunctions(units: AnalysisUnit[], table: TypeTable, facts: FactsTable): StringSet -> @loopReachedFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via CheckedProgram.enterInstance
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn Latches.constructor StringSet.add StringSet.at StringSet.constructor StringSet.size collectPassCalls latchParameter nish_alloc_struct nish_array_grow
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn Reach.add Reach.constructor StringMap.add StringMap.get StringSet.at StringSet.constructor StringSet.has StringSet.size collectPassCalls collectReachedCalls latchParameter nish_array_grow nish_panic_index
   pointer units: size=0 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=latchParameter#1 collectPassCalls#1
+  pointer table: size=136 writesThrough=false captured=false passedTo=latchParameter#1 collectPassCalls#1 collectReachedCalls#1
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
   stackSites=2 stackLocals=2
-  local +0:9 reached: StringSet (const)
-  callee +0:19 new StringSet -> @StringSet.constructor
-  local +1:9 work: string[] (const)
-  local +2:9 latches: Latches (const)
-  callee +2:19 new Latches -> @Latches.constructor
-  local +3:14 unit: AnalysisUnit (const)
-  local +4:16 sig: FunctionSig (const)
-  local +5:13 body: Node | null (const)
-  callee +5:20 FunctionSig.body -> @FunctionSig.body
-  callee +6:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +7:15 at: i32 (const)
-  callee +7:20 latchParameter -> @latchParameter
-  local +15:14 unit: AnalysisUnit (const)
-  local +16:11 program: CheckedProgram (const)
-  local +17:16 sig: FunctionSig (const)
-  local +18:13 f: FunctionFacts | null (const)
-  callee +18:17 FactsTable.get -> @FactsTable.get
-  local +19:13 body: Node | null (const)
-  callee +19:20 FunctionSig.body -> @FunctionSig.body
-  callee +20:12 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +23:13 instance: Instantiation | null (const)
-  callee +25:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee +27:7 collectPassCalls -> @collectPassCalls
-  callee +29:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +34:7 i: i32 (let)
-  local +36:11 g: FunctionFacts | null (const)
-  callee +36:15 FactsTable.get -> @FactsTable.get
-  local +38:11 c: i32 (let)
-  callee +39:18 StringSet.size -> @StringSet.size
-  local +40:15 name: string (const)
-  callee +40:22 StringSet.at -> @StringSet.at
-  callee +41:13 StringSet.add -> @StringSet.add
+  local +0:9 reach: Reach (const)
+  callee +0:17 new Reach -> @Reach.constructor
+  local +1:14 unit: AnalysisUnit (const)
+  local +2:16 sig: FunctionSig (const)
+  local +3:13 body: Node | null (const)
+  callee +3:20 FunctionSig.body -> @FunctionSig.body
+  callee +4:11 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +5:15 at: i32 (const)
+  callee +5:20 latchParameter -> @latchParameter
+  local +13:14 unit: AnalysisUnit (const)
+  local +14:11 program: CheckedProgram (const)
+  local +15:16 sig: FunctionSig (const)
+  local +16:13 f: FunctionFacts | null (const)
+  callee +16:17 FactsTable.get -> @FactsTable.get
+  local +17:13 body: Node | null (const)
+  callee +17:20 FunctionSig.body -> @FunctionSig.body
+  callee +18:12 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +21:11 StringMap.add -> @StringMap.add
+  local +25:13 instance: Instantiation | null (const)
+  callee +27:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee +29:7 collectPassCalls -> @collectPassCalls
+  callee +31:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +38:7 i: i32 (let)
+  local +40:11 name: string (const)
+  local +41:11 g: FunctionFacts | null (const)
+  callee +41:15 FactsTable.get -> @FactsTable.get
+  local +43:13 seen: StringSet (const)
+  callee +43:20 new StringSet -> @StringSet.constructor
+  local +44:13 home: i32 (const)
+  callee +44:20 StringMap.get -> @StringMap.get
+  local +45:13 sig: FunctionSig | null (const)
+  local +46:13 body: Node | null (const)
+  callee +46:55 FunctionSig.body -> @FunctionSig.body
+  local +48:15 program: CheckedProgram (const)
+  local +49:15 instance: Instantiation | null (const)
+  callee +51:11 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee +53:9 collectReachedCalls -> @collectReachedCalls
+  callee +53:62 StringMap.get -> @StringMap.get
+  callee +55:11 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +58:11 c: i32 (let)
+  callee +59:18 StringSet.size -> @StringSet.size
+  local +60:15 callee: string (const)
+  callee +60:24 StringSet.at -> @StringSet.at
+  callee +61:14 StringSet.has -> @StringSet.has
+  callee +62:11 Reach.add -> @Reach.add
+function Reach.constructor(this: Reach): void -> @Reach.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: Latches.constructor StringMap.constructor StringSet.constructor nish_alloc_struct
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:20 new StringSet -> @StringSet.constructor
+  callee +1:18 new StringMap -> @StringMap.constructor
+  callee +3:20 new Latches -> @Latches.constructor
+  callee +4:18 new StringMap -> @StringMap.constructor
+function Reach.add(this: Reach, name: string, mask: i32): void -> @Reach.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: mask name
+  calls: StringMap.get StringMap.set StringSet.add nish_array_grow
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee -2:9 StringSet.add -> @StringSet.add
+  callee -1:7 StringMap.set -> @StringMap.set
+  local +3:11 old: i32 (const)
+  callee +3:17 StringMap.get -> @StringMap.get
+  callee +5:7 StringMap.set -> @StringMap.set
+function Reach.call(this: Reach, callee: FunctionSig, mask: i32): void -> @Reach.call [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Reach.add
+  escaping: mask
+  calls: Latches.paramOf Reach.add
+  pointer this: size=56 writesThrough=false captured=false passedTo=Reach.add#0
+  pointer callee: size=200 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 at: i32 (const)
+  callee +0:16 Latches.paramOf -> @Latches.paramOf
+  callee +4:5 Reach.add -> @Reach.add
 function Latches.constructor(this: Latches): void -> @Latches.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=16 writesThrough=true captured=false
@@ -1870,12 +1927,11 @@ function onlyLatchingStores(program: CheckedProgram, table: TypeTable, node: Nod
   callee +13:39 fieldPath -> @fieldPath
   local +16:14 child: Node (const)
   callee +17:10 onlyLatchingStores -> @onlyLatchingStores
-function sameEveryPass(call: Node, callee: FunctionSig, at: i32, loop: Node): boolean -> @sameEveryPass
+function passedRoot(call: Node, callee: FunctionSig, at: i32): Node | null -> @passedRoot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: loopBindsName nish_panic_index nish_panic_overflow unwrapParens
+  calls: nish_panic_index nish_panic_overflow unwrapParens
   pointer call: size=40 writesThrough=false captured=false
   pointer callee: size=200 writesThrough=false captured=false
-  pointer loop: size=40 writesThrough=false captured=false passedTo=loopBindsName#0
   stackSites=0 stackLocals=0
   local +0:7 arg: Node | null (let)
   local +2:11 target: Node (const)
@@ -1885,7 +1941,54 @@ function sameEveryPass(call: Node, callee: FunctionSig, at: i32, loop: Node): bo
   local +9:7 root: Node | null (let)
   callee +9:49 unwrapParens -> @unwrapParens
   callee +11:12 unwrapParens -> @unwrapParens
-  callee +16:75 loopBindsName -> @loopBindsName
+function passMask(call: Node, callee: FunctionSig, loop: Node): i32 -> @passMask
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: loopBindsName passedRoot
+  pointer call: size=40 writesThrough=false captured=false passedTo=passedRoot#0
+  pointer callee: size=200 writesThrough=false captured=false passedTo=passedRoot#1
+  pointer loop: size=40 writesThrough=false captured=false passedTo=loopBindsName#0
+  stackSites=0 stackLocals=0
+  local +0:7 mask: i32 (let)
+  local +1:7 at: i32 (let)
+  local +3:11 root: Node | null (const)
+  callee +3:18 passedRoot -> @passedRoot
+  callee +4:59 loopBindsName -> @loopBindsName
+function reachedMask(call: Node, callee: FunctionSig, sig: FunctionSig, body: Node, mask: i32): i32 -> @reachedMask
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: loopBindsName nish_str_eq passedRoot
+  pointer call: size=40 writesThrough=false captured=false passedTo=passedRoot#0
+  pointer callee: size=200 writesThrough=false captured=false passedTo=passedRoot#1
+  pointer sig: size=200 writesThrough=false captured=false
+  pointer body: size=40 writesThrough=false captured=false passedTo=loopBindsName#0
+  stackSites=0 stackLocals=0
+  local +0:7 out: i32 (let)
+  local +1:7 at: i32 (let)
+  local +3:11 root: Node | null (const)
+  callee +3:18 passedRoot -> @passedRoot
+  local +4:9 p: i32 (let)
+  local +6:13 name: string (const)
+  local +7:13 same: boolean (const)
+  callee +8:67 loopBindsName -> @loopBindsName
+function collectReachedCalls(program: CheckedProgram, table: TypeTable, sig: FunctionSig, body: Node, node: Node, mask: i32, seen: StringSet, reach: Reach): void -> @collectReachedCalls
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
+  escaping: mask
+  calls: Reach.call StringSet.add calleeAt collectReachedCalls reachedMask
+  pointer program: size=888 writesThrough=false captured=false passedTo=calleeAt#0 collectReachedCalls#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=calleeAt#1 collectReachedCalls#1
+  pointer sig: size=200 writesThrough=false captured=false passedTo=reachedMask#2 collectReachedCalls#2
+  pointer body: size=40 writesThrough=false captured=false passedTo=reachedMask#3 collectReachedCalls#3
+  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2 reachedMask#0
+  pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 collectReachedCalls#6
+  pointer reach: size=56 writesThrough=false captured=false passedTo=Reach.call#0 collectReachedCalls#7
+  stackSites=0 stackLocals=0
+  local +0:9 callee: FunctionSig | null (const)
+  callee +0:18 calleeAt -> @calleeAt
+  callee +2:5 StringSet.add -> @StringSet.add
+  callee +3:5 Reach.call -> @Reach.call
+  callee +3:24 reachedMask -> @reachedMask
+  local +5:14 child: Node (const)
+  callee +6:5 collectReachedCalls -> @collectReachedCalls
 function loopBindsName(node: Node, name: string): boolean -> @loopBindsName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -1903,39 +2006,34 @@ function endsInReturn(stmt: Node): boolean -> @endsInReturn
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 endsInReturn -> @endsInReturn
-function collectPassCalls(program: CheckedProgram, table: TypeTable, f: FunctionFacts, node: Node, loop: Node | null, released: boolean, latches: Latches, reached: StringSet, work: string[]): void -> @collectPassCalls
+function collectPassCalls(program: CheckedProgram, table: TypeTable, f: FunctionFacts, node: Node, loop: Node | null, released: boolean, reach: Reach): void -> @collectPassCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: via Reach.call
   escaping: released
-  calls: Latches.paramOf StringSet.add calleeAt collectPassCalls isArenaUsing isLoopKind loopScopeOf nish_array_grow sameEveryPass
+  calls: Reach.call calleeAt collectPassCalls isArenaUsing isLoopKind loopScopeOf passMask
   pointer program: size=888 writesThrough=false captured=false passedTo=calleeAt#0 isArenaUsing#0 collectPassCalls#0
   pointer table: size=136 writesThrough=false captured=false passedTo=calleeAt#1 collectPassCalls#1
   pointer f: size=432 writesThrough=false captured=false passedTo=loopScopeOf#0 collectPassCalls#2
-  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2 sameEveryPass#0 isLoopKind#0 loopScopeOf#1 collectPassCalls#4
-  pointer loop: size=40 writesThrough=false captured=false passedTo=sameEveryPass#3 collectPassCalls#4
-  pointer latches: size=16 writesThrough=false captured=false passedTo=Latches.paramOf#0 collectPassCalls#6
-  pointer reached: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 collectPassCalls#7
-  pointer work: size=0 writesThrough=true captured=false passedTo=collectPassCalls#8
+  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2 passMask#0 isLoopKind#0 loopScopeOf#1 collectPassCalls#4
+  pointer loop: size=40 writesThrough=false captured=false passedTo=passMask#2 collectPassCalls#4
+  pointer reach: size=56 writesThrough=false captured=false passedTo=Reach.call#0 collectPassCalls#6
   stackSites=0 stackLocals=0
-  local -4:11 callee: FunctionSig | null (const)
-  callee -4:20 calleeAt -> @calleeAt
-  local -3:11 at: i32 (const)
-  callee -3:39 Latches.paramOf -> @Latches.paramOf
-  local -2:11 once: boolean (const)
-  callee -2:48 sameEveryPass -> @sameEveryPass
-  callee -1:37 StringSet.add -> @StringSet.add
-  local +3:9 isLoop: boolean (const)
-  callee +3:18 isLoopKind -> @isLoopKind
-  local +4:9 scope: LoopScope | null (const)
-  callee +4:44 loopScopeOf -> @loopScopeOf
-  local +5:7 free: boolean (let)
-  local +6:7 i: i32 (let)
-  local +8:11 child: Node (const)
-  callee +9:53 isArenaUsing -> @isArenaUsing
-  local +11:11 once: boolean (const)
-  local +12:11 pass: boolean (const)
-  local +14:11 scoped: boolean (const)
-  callee +15:5 collectPassCalls -> @collectPassCalls
+  local +0:11 callee: FunctionSig | null (const)
+  callee +0:20 calleeAt -> @calleeAt
+  callee +2:7 Reach.call -> @Reach.call
+  callee +2:26 passMask -> @passMask
+  local +5:9 isLoop: boolean (const)
+  callee +5:18 isLoopKind -> @isLoopKind
+  local +6:9 scope: LoopScope | null (const)
+  callee +6:44 loopScopeOf -> @loopScopeOf
+  local +7:7 free: boolean (let)
+  local +8:7 i: i32 (let)
+  local +10:11 child: Node (const)
+  callee +11:53 isArenaUsing -> @isArenaUsing
+  local +13:11 once: boolean (const)
+  local +14:11 pass: boolean (const)
+  local +16:11 scoped: boolean (const)
+  callee +17:5 collectPassCalls -> @collectPassCalls
 function keptMemoryFindings(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, reached: StringSet): ArenaFinding[] -> @keptMemoryFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckedProgram.enterInstance

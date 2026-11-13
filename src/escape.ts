@@ -61,7 +61,7 @@ import {
 import { FLAG_CONST, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
 import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
-import { StringSet } from "./map"
+import { StringMap, StringSet } from "./map"
 import { Options } from "./options"
 import {
   CaptureTarget,
@@ -3232,26 +3232,26 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
  * to the pass, and the pass keeps it. Every module and every instantiation is
  * walked, with its own side tables installed, because a loop that calls a
  * function parameter calls the argument inside the instantiation. A latched
- * function (`latchParameter`) a pass calls directly, on the same object on
- * every pass, is left out with all it reaches: its work runs once, not on
- * every pass.
+ * function (`latchParameter`) called on the same object on every pass is left
+ * out with all it reaches: its work runs once, not on every pass. The same
+ * object is followed down the calls (`Reach.fixed`), so a latched function a
+ * reached callee runs on the parameter the loop handed it unchanged stays out,
+ * and one it runs on an object made each pass does not.
  */
 export const loopReachedFunctions = (
   units: AnalysisUnit[],
   table: TypeTable,
   facts: FactsTable
 ): StringSet => {
-  const reached = new StringSet()
-  const work: string[] = []
-  const latches = new Latches()
+  const reach = new Reach()
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       const body = sig.body()
       if (sig.definedIn(unit.program.source) && body !== null && sig.instance === null) {
         const at = latchParameter(unit.program, table, sig, body)
         if (at >= 0) {
-          latches.names.push(sig.name)
-          latches.params.push(at)
+          reach.latches.names.push(sig.name)
+          reach.latches.params.push(at)
         }
       }
     }
@@ -3264,33 +3264,100 @@ export const loopReachedFunctions = (
       if (!sig.definedIn(program.source) || f === null || body === null) {
         continue
       }
+      if (reach.homes.add(sig.name, reach.sigs.length)) {
+        reach.sigs.push(sig)
+        reach.programs.push(program)
+      }
       const instance = sig.instance
       if (instance !== null) {
         program.enterInstance(instance)
       }
-      collectPassCalls(program, table, f, body, null, false, latches, reached, work)
+      collectPassCalls(program, table, f, body, null, false, reach)
       if (instance !== null) {
         program.leaveInstance()
       }
     }
   }
   // A callee with a scope of its own releases what its callees keep for it.
+  // A function is walked again when the set of parameters fixed on every pass
+  // shrinks, because a latched call it skipped may no longer be one.
   let i = 0
-  while (i < work.length) {
-    const g = facts.get(work[i])
+  while (i < reach.work.length) {
+    const name = reach.work[i]
+    const g = facts.get(name)
     if (g !== null && !g.arenaScope) {
+      const seen = new StringSet()
+      const home = reach.homes.get(name, -1)
+      const sig: FunctionSig | null = home < 0 ? null : reach.sigs[home]
+      const body: Node | null = sig === null ? null : sig.body()
+      if (sig !== null && body !== null) {
+        const program = reach.programs[home]
+        const instance = sig.instance
+        if (instance !== null) {
+          program.enterInstance(instance)
+        }
+        collectReachedCalls(program, table, sig, body, body, reach.fixed.get(name, 0), seen, reach)
+        if (instance !== null) {
+          program.leaveInstance()
+        }
+      }
       let c = 0
       while (c < g.callees.size()) {
-        const name = g.callees.at(c)
-        if (reached.add(name)) {
-          work.push(name)
+        const callee = g.callees.at(c)
+        if (!seen.has(callee)) {
+          reach.add(callee, 0)
         }
         c = c + 1
       }
     }
     i = i + 1
   }
-  return reached
+  return reach.reached
+}
+
+/**
+ * The walk's state: the functions reached, and for each the parameters (a bit
+ * per index in `paramNames`, the first 31) every call that reaches it passes
+ * the same object on every pass.
+ */
+class Reach {
+  reached: StringSet
+  fixed: StringMap
+  work: string[]
+  latches: Latches
+  homes: StringMap
+  sigs: FunctionSig[]
+  programs: CheckedProgram[]
+  constructor() {
+    this.reached = new StringSet()
+    this.fixed = new StringMap()
+    this.work = []
+    this.latches = new Latches()
+    this.homes = new StringMap()
+    this.sigs = []
+    this.programs = []
+  }
+  /** Reach `name` by a call whose fixed parameters are `mask`; queued again when its fixed set shrinks. */
+  add(name: string, mask: i32): void {
+    if (this.reached.add(name)) {
+      this.fixed.set(name, mask)
+      this.work.push(name)
+      return
+    }
+    const old = this.fixed.get(name, 0)
+    if ((old & mask) !== old) {
+      this.fixed.set(name, old & mask)
+      this.work.push(name)
+    }
+  }
+  /** Reach the callee of `call` unless it is latched on a parameter `mask` holds fixed. */
+  call(callee: FunctionSig, mask: i32): void {
+    const at = this.latches.paramOf(callee.name)
+    if (at >= 0 && at < 31 && (mask & (1 << at)) !== 0) {
+      return
+    }
+    this.add(callee.name, mask)
+  }
 }
 
 /** The latched functions, each with the parameter its latch is on (`latchParameter`). */
@@ -3457,12 +3524,11 @@ const onlyLatchingStores = (
 }
 
 /**
- * Whether the argument a call `call` passes as parameter `at` of `callee` is
- * the same object on every pass of `loop`: it is `this`, or a path off a name
- * the loop neither declares nor assigns (`run.sound`, but not the `item` of
- * `for (const item of items)`).
+ * What a call `call` passes as parameter `at` of `callee` (the receiver for a
+ * member's `this`), followed through fields to its root: `this`, a name, or
+ * null for anything else.
  */
-const sameEveryPass = (call: Node, callee: FunctionSig, at: i32, loop: Node): boolean => {
+const passedRoot = (call: Node, callee: FunctionSig, at: i32): Node | null => {
   let arg: Node | null = null
   if (callee.owner !== null && at === 0) {
     const target = unwrapParens(call.children[0])
@@ -3476,10 +3542,73 @@ const sameEveryPass = (call: Node, callee: FunctionSig, at: i32, loop: Node): bo
   while (root !== null && root.kind === NodeKind.Member) {
     root = unwrapParens(root.children[0])
   }
-  if (root === null) {
-    return false
+  return root !== null && (root.kind === NodeKind.This || root.kind === NodeKind.Ident) ? root : null
+}
+
+/**
+ * The parameters of `callee` a call `call` on a pass of `loop` passes the same
+ * object on every pass: `this`, or a path off a name the loop neither declares
+ * nor assigns (`run.sound`, but not the `item` of `for (const item of items)`).
+ */
+const passMask = (call: Node, callee: FunctionSig, loop: Node): i32 => {
+  let mask = 0
+  let at = 0
+  while (at < callee.paramNames.length && at < 31) {
+    const root = passedRoot(call, callee, at)
+    if (root !== null && (root.kind === NodeKind.This || !loopBindsName(loop, root.text))) {
+      mask = mask | (1 << at)
+    }
+    at = at + 1
   }
-  return root.kind === NodeKind.This || (root.kind === NodeKind.Ident && !loopBindsName(loop, root.text))
+  return mask
+}
+
+/**
+ * The parameters of `callee` a call `call` inside reached function `sig`
+ * passes the same object on every pass: one rooted at a parameter of `sig`
+ * that `mask` holds fixed and `body` never assigns.
+ */
+const reachedMask = (call: Node, callee: FunctionSig, sig: FunctionSig, body: Node, mask: i32): i32 => {
+  let out = 0
+  let at = 0
+  while (at < callee.paramNames.length && at < 31) {
+    const root = passedRoot(call, callee, at)
+    let p = 0
+    while (root !== null && p < sig.paramNames.length && p < 31) {
+      const name = sig.paramNames[p]
+      const same = root.kind === NodeKind.This ? name === "this" : name === root.text
+      if (same && (mask & (1 << p)) !== 0 && (name === "this" || !loopBindsName(body, name))) {
+        out = out | (1 << at)
+      }
+      p = p + 1
+    }
+    at = at + 1
+  }
+  return out
+}
+
+/** Each call or `new` under `node` in reached function `sig`, reached with the parameters it keeps fixed. */
+const collectReachedCalls = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  body: Node,
+  node: Node,
+  mask: i32,
+  seen: StringSet,
+  reach: Reach
+): void => {
+  if (node.kind === NodeKind.Arrow) {
+    return
+  }
+  const callee = calleeAt(program, table, node)
+  if (callee !== null) {
+    seen.add(callee.name)
+    reach.call(callee, reachedMask(node, callee, sig, body, mask))
+  }
+  for (const child of node.children) {
+    collectReachedCalls(program, table, sig, body, child, mask, seen, reach)
+  }
 }
 
 /** Whether `node` declares or assigns the name `name` anywhere under it. */
@@ -3528,19 +3657,15 @@ const collectPassCalls = (
   node: Node,
   loop: Node | null,
   released: boolean,
-  latches: Latches,
-  reached: StringSet,
-  work: string[]
+  reach: Reach
 ): void => {
   if (node.kind === NodeKind.Arrow) {
     return
   }
   if (loop !== null && !released) {
     const callee = calleeAt(program, table, node)
-    const at = callee === null ? -1 : latches.paramOf(callee.name)
-    const once = callee !== null && at >= 0 && sameEveryPass(node, callee, at, loop)
-    if (callee !== null && !once && reached.add(callee.name)) {
-      work.push(callee.name)
+    if (callee !== null) {
+      reach.call(callee, passMask(node, callee, loop))
     }
   }
   const isLoop = isLoopKind(node)
@@ -3562,9 +3687,7 @@ const collectPassCalls = (
       child,
       loop === null && pass ? node : loop,
       pass ? released || scoped : free,
-      latches,
-      reached,
-      work
+      reach
     )
     i = i + 1
   }

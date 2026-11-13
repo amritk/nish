@@ -78,6 +78,20 @@ const stamp = (item: State): i32 => {
   return xs.length;
 };
 
+// The same latch again, reached through a helper that hands on an object
+// made every pass. The helper answers a string, so it takes no scope that
+// would release what `primed` keeps.
+const primed = (item: State): i32 => {
+  if (item.seen) {
+    return 0;
+  }
+  item.seen = true;
+  const xs: string[] = [];
+  xs.push(`${item.n}`);
+  return xs.length;
+};
+const primeVia = (item: State): string => `${primed(item)}`;
+
 export const main = (): void => {
   const s = new State();
   const items: State[] = [];
@@ -88,7 +102,7 @@ export const main = (): void => {
   const names: string[] = [];
   for (let i = 0; i < 1000; i++) {
     s.n = i;
-    names.push(`${guarded(s) + whenReady(s) + untilDone(s) + capped(s) + stamp(cur)}`);
+    names.push(`${guarded(s) + whenReady(s) + untilDone(s) + capped(s) + stamp(cur)}${primeVia(cur)}`);
     cur = new State();
   }
   let marked = 0;

@@ -5606,17 +5606,18 @@ if (!only || "performance".includes(only)) {
   // a field it then sets and never clears, called on the same object every
   // pass, is quiet; a re-entrancy guard that clears its flag, a negated or
   // compound condition, a counter, a per-item flag and a fresh receiver each
-  // pass all still keep memory every pass and warn. This is also the control
+  // pass, directly or through a helper that hands it on, all still keep
+  // memory every pass and warn. This is also the control
   // that fails if the reach walk stops finding loop calls at all.
   const latch = compile("perf_kept_memory_latch", "perf_kept_memory_latch_report.ll")
   const latchLines = summaries(latch.stderr)
-  const latchNames = ["guarded", "whenReady", "untilDone", "capped", "mark", "stamp"]
-  const latchFirst = [21, 33, 44, 54, 66, 77]
+  const latchNames = ["guarded", "whenReady", "untilDone", "capped", "mark", "stamp", "primed"]
+  const latchFirst = [21, 33, 44, 54, 66, 77, 90]
   check(
     "performance: a guard that is not a once-latch on a fixed receiver does not exempt a function from NL9018",
     latch.status === 0 &&
-      latchLines.length === 6 &&
-      positions(latchLines) === "15:1,27:1,38:1,49:1,60:1,71:1" &&
+      latchLines.length === 7 &&
+      positions(latchLines) === "15:1,27:1,38:1,49:1,60:1,71:1,84:1" &&
       latchLines.every(
         (l, i) =>
           l.includes(`\`${latchNames[i]}\` keeps an allocation on every call`) &&
@@ -5831,7 +5832,8 @@ if (!only || "performance".includes(only)) {
     // A function that keeps nothing past its call, one whose arena block
     // releases it, one run only where each pass, block or scoped caller
     // releases it, one run only behind a once-guard or a cache on a fixed
-    // receiver, a `getenv` result only handed to a callee, and a template
+    // receiver (directly or through a helper that hands it on), a `getenv`
+    // result only handed to a callee, and a template
     // handed on as an element of an array or object literal or joined in
     // place: NL9018 is silent on each.
     "perf_kept_memory_quiet",

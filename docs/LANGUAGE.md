@@ -14678,7 +14678,9 @@ by the caller.
     literal, or for the `!== null` form a value whose type is not nullable),
     so only the first call does the work: a once-guard or a cache
     (`tests/cases/perf_kept_memory_quiet`). The same object is `this` or a
-    name the loop neither declares nor assigns. A negated or compound
+    name the loop neither declares nor assigns, or, for a call inside a
+    function the loop reaches, a parameter that function never assigns and
+    every call reaching it passes the same object. A negated or compound
     condition, a counter, a guard that is cleared again, or a fresh object
     each pass is not a latch and still warns
     (`tests/cases/perf_kept_memory_latch`).

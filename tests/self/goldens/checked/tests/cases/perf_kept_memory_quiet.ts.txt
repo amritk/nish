@@ -10,6 +10,8 @@ struct Style (class) size=8 align=8
   method get -> @Style.get
 struct Pair (interface) size=8 align=8
   field k: string index=0 offset=0
+struct Once (class) size=1 align=1
+  field done: boolean index=0 offset=0 initialized
 function relabel(n: i32): i32 -> @relabel
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
@@ -98,30 +100,46 @@ function joined(n: i32): i32 -> @joined
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_str_from_i32
   stackSites=1 stackLocals=0
+function warmOnce(o: Once): i32 -> @warmOnce
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: nish_array_grow
+  pointer o: size=1 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local +1:9 xs: string[] (const)
+function warmVia(o: Once): string -> @warmVia
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via warmOnce
+  calls: nish_str_from_i32 warmOnce
+  pointer o: size=1 writesThrough=true captured=false passedTo=warmOnce#0
+  stackSites=0 stackLocals=0
+  callee +0:41 warmOnce -> @warmOnce
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via scoped
-  calls: Style.get envSaysNo fixed joined listed nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 outer paired pick prepare relabel scoped
-  stackSites=3 stackLocals=3
+  calls: Style.get envSaysNo fixed joined listed nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 outer paired pick prepare relabel scoped warmVia
+  stackSites=4 stackLocals=4
   local +0:9 setup: Setup (const)
   local +1:9 style: Style (const)
-  local +2:9 names: string[] (const)
-  local +4:12 i: i32 (let)
-  callee +5:19 fixed -> @fixed
-  callee +5:30 scoped -> @scoped
-  callee +5:42 pick -> @pick
-  callee +5:52 outer -> @outer
-  callee +5:63 listed -> @listed
-  callee +5:75 paired -> @paired
-  callee +5:87 joined -> @joined
-  callee +6:5 prepare -> @prepare
-  callee +7:19 Style.get -> @Style.get
-  callee +7:34 envSaysNo -> @envSaysNo
-  local +11:7 total: i32 (let)
-  local +12:12 i: i32 (let)
-  callee +13:21 relabel -> @relabel
-  local +16:12 i: i32 (let)
-  local +17:9 n: i32 (let)
-  local +19:13 a: i64 (const)
-  callee +20:11 relabel -> @relabel
-  callee +24:73 relabel -> @relabel
+  local +2:9 once: Once (const)
+  local +3:9 names: string[] (const)
+  local +5:12 i: i32 (let)
+  callee +6:19 fixed -> @fixed
+  callee +6:30 scoped -> @scoped
+  callee +6:42 pick -> @pick
+  callee +6:52 outer -> @outer
+  callee +6:63 listed -> @listed
+  callee +6:75 paired -> @paired
+  callee +6:87 joined -> @joined
+  callee +6:99 warmVia -> @warmVia
+  callee +7:5 prepare -> @prepare
+  callee +8:19 Style.get -> @Style.get
+  callee +8:34 envSaysNo -> @envSaysNo
+  local +12:7 total: i32 (let)
+  local +13:12 i: i32 (let)
+  callee +14:21 relabel -> @relabel
+  local +17:12 i: i32 (let)
+  local +18:9 n: i32 (let)
+  local +20:13 a: i64 (const)
+  callee +21:11 relabel -> @relabel
+  callee +25:73 relabel -> @relabel

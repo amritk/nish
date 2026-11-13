@@ -101,13 +101,32 @@ const paired = (n: i32): i32 => keyLength({ k: `${n}` });
 // A literal that is only read: `join` copies its elements into a new string.
 const joined = (n: i32): i32 => ["a", `${n}`].join(",").length;
 
+class Once {
+  done: boolean = false;
+}
+
+// Latched, and reached only through a helper that hands on, unchanged, the
+// object its loop passes on every pass. The helper answers a string, so it
+// takes no scope that would release what `warmOnce` keeps.
+const warmOnce = (o: Once): i32 => {
+  if (o.done) {
+    return 0;
+  }
+  o.done = true;
+  const xs: string[] = [];
+  xs.push(`${o.done}`);
+  return xs.length;
+};
+const warmVia = (o: Once): string => `${warmOnce(o)}`;
+
 export const main = (): void => {
   const setup = new Setup();
   const style = new Style();
+  const once = new Once();
   const names: string[] = [];
   // Passes that grow an older array: only functions that keep nothing run here.
   for (let i = 0; i < 1000; i++) {
-    names.push(`${fixed(i) + scoped(i) + pick(i) + outer(i) + listed(i) + paired(i) + joined(i)}`);
+    names.push(`${fixed(i) + scoped(i) + pick(i) + outer(i) + listed(i) + paired(i) + joined(i)}${warmVia(once)}`);
     prepare(setup);
     names.push(`${style.get(i)}${envSaysNo("NISH_KEPT_MEMORY_UNSET") ? 1 : 0}`);
   }

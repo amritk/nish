@@ -50,10 +50,24 @@ function stamp(item: State): i32 -> @stamp
   pointer item: size=12 writesThrough=true captured=false
   stackSites=1 stackLocals=1
   local +1:9 xs: string[] (const)
+function primed(item: State): i32 -> @primed
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: nish_array_grow nish_str_from_i32
+  pointer item: size=12 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local +1:9 xs: string[] (const)
+function primeVia(item: State): string -> @primeVia
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via primed
+  calls: nish_str_from_i32 primed
+  pointer item: size=12 writesThrough=true captured=false passedTo=primed#0
+  stackSites=0 stackLocals=0
+  callee +0:46 primed -> @primed
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via stamp
-  calls: capped guarded mark nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 stamp untilDone whenReady
+  calls: capped guarded mark nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 primeVia stamp untilDone whenReady
   stackSites=3 stackLocals=3
   local +0:9 s: State (const)
   local +1:9 items: State[] (const)
@@ -66,6 +80,7 @@ function main(): void -> @nish_main [exported entry]
   callee +9:47 untilDone -> @untilDone
   callee +9:62 capped -> @capped
   callee +9:74 stamp -> @stamp
+  callee +9:87 primeVia -> @primeVia
   local +12:7 marked: i32 (let)
   local +13:14 item: State (const)
   callee +14:23 mark -> @mark
