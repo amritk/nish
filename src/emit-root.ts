@@ -192,9 +192,11 @@ const writeTrace = (emitter: Emitter, traces: RootTraces, type: i32, name: strin
     const variants = table.variantsOf(type)
     const tags = table.tagsOf(type)
     let k = 0
-    while (k < variants.length) {
-      at.push(`i32 ${table.memberValue(tags[k])}`)
-      to.push(traceOf(emitter, traces, variants[k], false))
+    while (k < variants.length && k < tags.length) {
+      const variant = variants[k]
+      const tag = tags[k]
+      at.push(`i32 ${table.memberValue(tag)}`)
+      to.push(traceOf(emitter, traces, variant, false))
       k = k + 1
     }
     count = variants.length
