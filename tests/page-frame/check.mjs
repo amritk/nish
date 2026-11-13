@@ -1,13 +1,14 @@
 // Runs runtime/page-frame.mjs under Node against the fakes in fakes.mjs and
-// prints one `ok <name>` or `not ok <name>: <detail>` line per check; the
-// `page-frame` section of tests/run.js turns each line into a check of its own.
+// prints one `ok <name>` or `not ok <name>\t<detail>` line per check, then
+// `checks: <n>`; the `page-frame` section of tests/run.js turns each line into
+// a check of its own and compares the count, so a run cut short is caught.
 
 import { createPresenter, runFixedStep } from "../../runtime/page-frame.mjs";
 import { installClock, World } from "./fakes.mjs";
 
 const results = [];
 const check = (name, ok, detail) => {
-  results.push(ok ? `ok ${name}` : `not ok ${name}: ${detail === undefined ? "" : detail}`);
+  results.push(ok ? `ok ${name}` : `not ok ${name}\t${detail === undefined ? "" : detail}`);
 };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -126,6 +127,144 @@ for (const [name, settings, reason] of refusals) {
 }
 
 {
+  const world = new World({ programLinks: false });
+  const { presenter, falls } = await open(world, "webgl2");
+  check(
+    "refusal recorded: a WebGL 2 program that does not link",
+    same(reasons(presenter), [["webgl2", "the WebGL 2 program did not link: fake link log"]]),
+    JSON.stringify(reasons(presenter))
+  );
+  check(
+    "refusal after a WebGL 2 context: Canvas 2D on a fresh canvas",
+    presenter.backend === "canvas2d" &&
+      same(falls, [["webgl2", "canvas2d", "the WebGL 2 program did not link: fake link log"]]) &&
+      world.current !== world.canvas &&
+      presenter.canvas === world.current,
+    JSON.stringify(falls)
+  );
+}
+
+{
+  const world = new World({ glLostAtStart: true });
+  const { presenter } = await open(world, "webgl2");
+  check(
+    "refusal recorded: a WebGL 2 context lost before it was used",
+    presenter.backend === "canvas2d" &&
+      same(reasons(presenter), [["webgl2", "the WebGL 2 context was lost before it was used"]]),
+    JSON.stringify(reasons(presenter))
+  );
+}
+
+for (const [name, settings, cause] of [
+  ["configure throwing", { configureFails: true }, "fake configure error"],
+  ["createShaderModule throwing", { shaderModuleFails: true }, "fake shader module error"],
+]) {
+  const world = new World(settings);
+  const { presenter } = await open(world);
+  check(
+    `refusal recorded: ${name}`,
+    same(reasons(presenter), [["webgpu", `the WebGPU pipeline did not build: ${cause}`]]),
+    JSON.stringify(reasons(presenter))
+  );
+  check(
+    `refusal falls to WebGL 2 on a fresh canvas: ${name}`,
+    presenter.backend === "webgl2" && world.current !== world.canvas && world.device.destroyed,
+    presenter.backend
+  );
+}
+
+{
+  const world = new World({ offscreen2d: false });
+  world.install();
+  let error = null;
+  try {
+    await createPresenter(world.canvas, { prefer: "canvas2d" });
+  } catch (e) {
+    error = e;
+  }
+  const message = error === null ? "" : error.message;
+  check(
+    "refusal recorded: the framebuffer-sized canvas refusing a 2D context",
+    message === 'nish/page/frame: no backend could present: canvas2d: the framebuffer-sized canvas answered null to getContext("2d")',
+    message
+  );
+}
+
+for (const [name, lose, reason] of [
+  ["device lost", (device) => device.loseNow("unknown", "fake loss"), "WebGPU device lost (unknown): fake loss"],
+  ["uncaptured error", (device) => device.raise("fake early error"), "uncaptured WebGPU error: fake early error"],
+]) {
+  // The device ends while its pipeline is still building: the tier is never
+  // taken, and WebGL 2 builds instead.
+  const world = new World({ pipelineGated: true });
+  world.install();
+  const falls = [];
+  const made = createPresenter(world.canvas, { onFallback: (from, to, why) => falls.push([from, to, why]) });
+  await settle();
+  lose(world.device);
+  world.finishPipeline();
+  const presenter = await made;
+  check(
+    `${name} while the pipeline builds: falls to WebGL 2 with the reason`,
+    presenter.backend === "webgl2" &&
+      same(reasons(presenter), [["webgpu", reason]]) &&
+      same(falls, [["webgpu", "webgl2", reason]]),
+    JSON.stringify([presenter.backend, falls])
+  );
+  check(
+    `${name} while the pipeline builds: the device is released`,
+    world.device.destroyed && world.device.listenerCount() === 0
+  );
+}
+
+{
+  // A throwing onFallback is reported, and the fallback still happens.
+  const world = new World({ gpu: false, contexts: [] });
+  world.install();
+  const reported = [];
+  globalThis.reportError = (e) => reported.push(e.message);
+  let error = null;
+  let calls = 0;
+  try {
+    await createPresenter(world.canvas, {
+      onFallback: () => {
+        calls++;
+        throw new Error("fake callback error");
+      },
+    });
+  } catch (e) {
+    error = e;
+  }
+  delete globalThis.reportError;
+  check(
+    "onFallback throwing: every tier is still tried and the rejection names each reason",
+    calls === 2 &&
+      error !== null &&
+      error.message.includes("webgpu: navigator.gpu is missing") &&
+      error.message.includes('canvas2d: getContext("2d") answered null'),
+    error === null ? "resolved" : error.message
+  );
+  check(
+    "onFallback throwing: the error goes to reportError",
+    same(reported, ["fake callback error", "fake callback error"]),
+    JSON.stringify(reported)
+  );
+}
+
+{
+  const world = new World({ gpu: false });
+  world.install();
+  globalThis.reportError = () => undefined;
+  const presenter = await createPresenter(world.canvas, {
+    onFallback: () => {
+      throw new Error("fake callback error");
+    },
+  });
+  delete globalThis.reportError;
+  check("onFallback throwing: the next tier builds", presenter.backend === "webgl2", presenter.backend);
+}
+
+{
   const world = new World({ gpu: false, contexts: [] });
   world.install();
   let error = null;
@@ -201,6 +340,17 @@ const pattern = Int32Array.of(
       write.size.height === 2,
     JSON.stringify(write.layout)
   );
+  // bgra8unorm reads each texel's bytes as B, G, R, A.
+  const gpuBytes = new Uint8Array(write.data.buffer, write.data.byteOffset, 32);
+  const gpuTexels = [];
+  for (let i = 0; i < 8; i++) {
+    gpuTexels.push((gpuBytes[i * 4 + 2] << 16) | (gpuBytes[i * 4 + 1] << 8) | gpuBytes[i * 4]);
+  }
+  check(
+    "webgpu: each texel, read as bgra8unorm, is its word's colour",
+    same(gpuTexels, Array.from(pattern)),
+    gpuTexels.map((t) => t.toString(16)).join(" ")
+  );
   const pass = device.passes[0];
   const viewport = pass.calls.find((c) => c[0] === "setViewport");
   check("webgpu: letterboxed to the framebuffer's aspect", same(viewport, ["setViewport", 0, 50, 400, 200, 0, 1]), JSON.stringify(viewport));
@@ -256,6 +406,18 @@ const pattern = Int32Array.of(
       bytes.length === 32 &&
       uploads[2][9] === bytes
   );
+  // An RGBA texel sampled with `.bgr` gives (b, g, r) as the red, green and blue out.
+  const glTexels = [];
+  for (let i = 0; i < 8; i++) {
+    const [r, g, b] = [bytes[i * 4], bytes[i * 4 + 1], bytes[i * 4 + 2]];
+    glTexels.push((b << 16) | (g << 8) | r);
+  }
+  check(
+    "webgl2: each texel, sampled as .bgr, is its word's colour",
+    same(glTexels, Array.from(pattern)),
+    glTexels.map((t) => t.toString(16)).join(" ")
+  );
+  check("webgl2: the fragment shader is highp", gl.sources.some((s) => s.includes("precision highp float;")));
   check(
     "webgl2: the fragment shader swizzles .bgr and forces alpha to 1",
     gl.sources.some((s) => s.includes("texture(frame, uv).bgr, 1.0"))
@@ -415,6 +577,7 @@ const pattern = Int32Array.of(
 {
   const world = new World({ gpu: false, contexts: ["webgl2"] });
   const { presenter } = await open(world);
+  const gl = world.current.context;
   world.current.dispatch("webglcontextlost", { preventDefault: () => undefined });
   check(
     "every tier lost at runtime: present draws nothing and attempts say why",
@@ -422,6 +585,7 @@ const pattern = Int32Array.of(
       presenter.attempts.length === 3 &&
       presenter.attempts[2].reason === 'getContext("2d") answered null'
   );
+  const glCalls = gl.calls.length;
   let threw = false;
   try {
     presenter.present(pattern, 4, 2);
@@ -429,6 +593,11 @@ const pattern = Int32Array.of(
     threw = true;
   }
   check("every tier lost at runtime: present does not throw", !threw);
+  check(
+    "every tier lost at runtime: present draws nothing",
+    gl.calls.length === glCalls && world.canvases.every((c) => c.mode !== "2d"),
+    JSON.stringify(gl.calls.slice(glCalls))
+  );
 }
 
 {
@@ -554,6 +723,28 @@ const loop = (settings, times) => {
 }
 
 {
+  const clock = installClock();
+  let steps = 0;
+  let renders = 0;
+  let running = null;
+  running = runFixedStep({
+    stepsPerSecond: 100,
+    step: () => {
+      steps++;
+      running.stop();
+    },
+    render: () => renders++,
+  });
+  clock.tick(0);
+  clock.tick(50);
+  check(
+    "loop: a step that stops the loop ends the frame: no more steps, no render",
+    steps === 1 && renders === 1 && clock.pending === null,
+    JSON.stringify({ steps, renders })
+  );
+}
+
+{
   installClock();
   const thrown = (settings) => {
     try {
@@ -571,4 +762,5 @@ const loop = (settings, times) => {
   );
 }
 
+results.push(`checks: ${results.length}`);
 console.log(results.join("\n"));

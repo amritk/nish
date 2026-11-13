@@ -34802,13 +34802,22 @@ if (!only || "page-frame".includes(only)) {
     cwd: root,
     encoding: "utf8",
   })
-  const lines = res.stdout.split("\n").filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
-  check("page-frame: the checks ran to the end", res.status === 0 && lines.length >= 60, shown(res))
+  // Each line is `ok <name>` or `not ok <name>\t<detail>`, and the last
+  // `checks: <n>`: a run that stopped early prints fewer lines than it counts,
+  // or no count at all.
+  const out = res.stdout.split("\n")
+  const lines = out.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = out.find((line) => line.startsWith("checks: "))
+  check(
+    "page-frame: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${lines.length}` && lines.length >= 100,
+    shown(res)
+  )
   for (const line of lines) {
     const ok = line.startsWith("ok ")
     const rest = ok ? line.slice(3) : line.slice(7)
-    const colon = ok ? -1 : rest.indexOf(": ")
-    check(`page-frame: ${colon < 0 ? rest : rest.slice(0, colon)}`, ok, colon < 0 ? "" : rest.slice(colon + 2))
+    const tab = rest.indexOf("\t")
+    check(`page-frame: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
   }
 
   // The declarations type-check, with the DOM types, against a page using every export.

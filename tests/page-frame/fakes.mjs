@@ -127,7 +127,7 @@ const makeGl = (world, canvas) => {
   const gl = {
     ...GL,
     canvas,
-    lost: false,
+    lost: world.glLostAtStart,
     calls: [],
     sources: [],
     params: [],
@@ -148,8 +148,8 @@ const makeGl = (world, canvas) => {
     createProgram: () => ({}),
     attachShader: () => undefined,
     linkProgram: () => undefined,
-    getProgramParameter: () => true,
-    getProgramInfoLog: () => "",
+    getProgramParameter: () => world.programLinks,
+    getProgramInfoLog: () => "fake link log",
     createTexture: () => ({}),
     bindTexture: () => undefined,
     texParameteri: (target, name, value) => {
@@ -186,6 +186,9 @@ const makeGpuContext = (world) => {
   const context = {
     configured: null,
     configure: (config) => {
+      if (world.configureFails) {
+        throw new Error("fake configure error");
+      }
       context.configured = config;
     },
     unconfigure: () => {
@@ -233,13 +236,26 @@ const makeDevice = (world) => {
       device.destroyed = true;
       resolveLost({ reason: "destroyed", message: "the device was destroyed" });
     },
-    createShaderModule: (descriptor) => ({ code: descriptor.code }),
+    createShaderModule: (descriptor) => {
+      if (world.shaderModuleFails) {
+        throw new Error("fake shader module error");
+      }
+      return { code: descriptor.code };
+    },
     createRenderPipelineAsync: (descriptor) => {
       if (world.pipelineFails) {
         return Promise.reject(new Error("fake pipeline error"));
       }
       world.pipeline = descriptor;
-      return Promise.resolve({ getBindGroupLayout: () => ({}) });
+      const pipeline = { getBindGroupLayout: () => ({}) };
+      if (world.pipelineGated) {
+        // The test resolves it with `world.finishPipeline()`, after doing what
+        // it wants done while the pipeline builds.
+        return new Promise((resolve) => {
+          world.finishPipeline = () => resolve(pipeline);
+        });
+      }
+      return Promise.resolve(pipeline);
     },
     createSampler: (descriptor) => {
       world.sampler = descriptor;
@@ -299,8 +315,14 @@ const makeDevice = (world) => {
  * A browser to run the presenter in. Its fields say which steps refuse:
  * `gpu: false` hides `navigator.gpu`, `adapter: null` answers no adapter,
  * `adapter: "throw"` rejects, `deviceFails` rejects `requestDevice`,
- * `pipelineFails` rejects the pipeline, and `contexts` lists the context types
- * a canvas will hand out.
+ * `configureFails` and `shaderModuleFails` throw from `configure` and
+ * `createShaderModule`, `pipelineFails` rejects the pipeline, `pipelineGated`
+ * holds it until `world.finishPipeline()`, `glCompiles: false` and
+ * `programLinks: false` fail the WebGL 2 shader and program,
+ * `glLostAtStart` hands out a WebGL 2 context already lost,
+ * `offscreen2d: false` makes the framebuffer-sized canvas refuse a 2D
+ * context, and `contexts` lists the context types the page's canvas will hand
+ * out.
  */
 export class World {
   constructor(settings) {
@@ -309,7 +331,14 @@ export class World {
     this.adapter = s.adapter === undefined ? "ok" : s.adapter;
     this.deviceFails = s.deviceFails === true;
     this.pipelineFails = s.pipelineFails === true;
+    this.pipelineGated = s.pipelineGated === true;
+    this.finishPipeline = null;
+    this.configureFails = s.configureFails === true;
+    this.shaderModuleFails = s.shaderModuleFails === true;
     this.glCompiles = s.glCompiles !== false;
+    this.programLinks = s.programLinks !== false;
+    this.glLostAtStart = s.glLostAtStart === true;
+    this.offscreen2d = s.offscreen2d !== false;
     this.contexts = new Set(s.contexts || ["webgpu", "webgl2", "2d"]);
     this.count = { createTexture: 0, createBindGroup: 0, createImageData: 0, texImage2D: 0, glDeleted: 0 };
     this.requests = { adapter: 0, device: 0 };
@@ -321,7 +350,8 @@ export class World {
         if (tag !== "canvas") {
           throw new Error(`the presenter made a <${tag}>`);
         }
-        // The framebuffer-sized canvas is offscreen: it always gives a 2D context.
+        // The framebuffer-sized canvas is offscreen: it gives a 2D context
+        // unless `offscreen2d` is false.
         const canvas = new FakeCanvas(this, { offscreen: "yes" });
         canvas.offscreen = true;
         return canvas;
@@ -335,7 +365,7 @@ export class World {
 
   makeContext(canvas, type, options) {
     if (canvas.offscreen === true) {
-      return type === "2d" ? make2d(this, canvas) : null;
+      return type === "2d" && this.offscreen2d ? make2d(this, canvas) : null;
     }
     if (!this.contexts.has(type)) {
       return null;

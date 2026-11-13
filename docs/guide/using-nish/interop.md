@@ -204,8 +204,9 @@ plain JavaScript with no imports and no build step. It has two exports:
   Canvas 2D, and keeps the first that works. Its `present(pixels, width,
   height)` uploads the pixels and draws them scaled with nearest-neighbour
   sampling, letterboxed in black to keep their aspect. Pass the module's own
-  view: the presenter reads it in place and copies nothing first. After the
-  first frame at a size, a frame allocates nothing.
+  view: the presenter reads it in place and copies nothing first. It keeps
+  its textures, buffers and descriptors from frame to frame, making them
+  again only when the framebuffer's size changes.
 - **`runFixedStep({ stepsPerSecond, step, render })`** calls `step` at a
   fixed rate and `render(alpha, frameMs)` on every animation frame, so a
   120 Hz or 240 Hz display gets that many renders even when the program

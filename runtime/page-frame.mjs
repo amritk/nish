@@ -61,7 +61,7 @@ void main() {
  * (BB, GG, RR, 00): `.bgr` puts the channels back, and alpha is forced to 1.
  */
 const GLSL_FRAGMENT = `#version 300 es
-precision mediump float;
+precision highp float;
 uniform sampler2D frame;
 in vec2 uv;
 out vec4 color;
@@ -121,9 +121,37 @@ const buildWebGpu = async (state) => {
   } catch (error) {
     refuse(`requestDevice rejected: ${messageOf(error)}`);
   }
+  // A lost device or an error nothing captured ends the tier. Both are
+  // listened for from the moment the device exists: until the presenter has
+  // taken the tier, the first is kept in `ended` and the presenter reads it
+  // (`tier.ended`) before it does; after, the presenter drops the tier for the
+  // next one. A loss this tier caused itself (`release`, or a refusal below)
+  // arrives once the presenter has moved on, and `lose` ignores a tier that
+  // is no longer current.
+  let ended = null;
+  let tier = null;
+  const end = (reason) => {
+    if (ended === null) {
+      ended = reason;
+    }
+    if (tier !== null) {
+      state.lose(tier, reason);
+    }
+  };
+  const onError = (event) => {
+    end(`uncaptured WebGPU error: ${messageOf(event.error)}`);
+  };
+  device.addEventListener("uncapturederror", onError);
+  device.lost.then((info) => {
+    end(`WebGPU device lost (${info.reason}): ${info.message}`);
+  });
+  const drop = () => {
+    device.removeEventListener("uncapturederror", onError);
+    device.destroy();
+  };
   const context = state.canvas.getContext("webgpu");
   if (context === null) {
-    device.destroy();
+    drop();
     refuse('getContext("webgpu") answered null');
   }
   state.touched = true;
@@ -139,7 +167,7 @@ const buildWebGpu = async (state) => {
       primitive: { topology: "triangle-list" },
     });
   } catch (error) {
-    device.destroy();
+    drop();
     refuse(`the WebGPU pipeline did not build: ${messageOf(error)}`);
   }
   const sampler = device.createSampler({ magFilter: "nearest", minFilter: "nearest" });
@@ -162,8 +190,9 @@ const buildWebGpu = async (state) => {
   const submitted = [null];
   const box = { x: 0, y: 0, w: 0, h: 0 };
 
-  const tier = {
+  tier = {
     backend: "webgpu",
+    ended: () => ended,
     present: (pixels, width, height) => {
       if (width !== size.width || height !== size.height) {
         if (texture !== null) {
@@ -200,17 +229,6 @@ const buildWebGpu = async (state) => {
       device.destroy();
     },
   };
-  // A lost device or an error nothing captured ends the tier: the presenter
-  // drops it for the next one. A loss this tier caused itself (`release`)
-  // arrives after the presenter has moved on, and `lose` ignores a tier that
-  // is no longer current.
-  const onError = (event) => {
-    state.lose(tier, `uncaptured WebGPU error: ${messageOf(event.error)}`);
-  };
-  device.addEventListener("uncapturederror", onError);
-  device.lost.then((info) => {
-    state.lose(tier, `WebGPU device lost (${info.reason}): ${info.message}`);
-  });
   return tier;
 };
 
@@ -420,9 +438,20 @@ export const createPresenter = async (canvas, options) => {
     }
   };
 
+  // A callback that throws is reported, not let through: the fallback it
+  // was told about still has to happen.
   const fellBack = (from, to, reason) => {
-    if (onFallback !== undefined) {
+    if (onFallback === undefined) {
+      return;
+    }
+    try {
       onFallback(from, to, reason);
+    } catch (error) {
+      if (typeof globalThis.reportError === "function") {
+        globalThis.reportError(error);
+      } else {
+        console.error(error);
+      }
     }
   };
 
@@ -443,6 +472,13 @@ export const createPresenter = async (canvas, options) => {
     }
     const backend = TIERS[at];
     const accept = (tier) => {
+      // A device lost or erring while its pipeline built (or in the moment
+      // before this ran) has already ended the tier.
+      const ended = tier.ended === undefined ? null : tier.ended();
+      if (ended !== null) {
+        tier.release();
+        return decline(new Error(ended));
+      }
       current = tier;
       shown = backend;
       return tier;
@@ -577,7 +613,7 @@ export const runFixedStep = (options) => {
       frameMs = elapsed > LONGEST_FRAME_MS ? LONGEST_FRAME_MS : elapsed;
       accumulator += frameMs;
       let steps = 0;
-      while (accumulator >= interval && steps < maxSteps) {
+      while (!stopped && accumulator >= interval && steps < maxSteps) {
         step();
         accumulator -= interval;
         steps++;
@@ -587,6 +623,10 @@ export const runFixedStep = (options) => {
       }
     }
     last = now;
+    // A step may have stopped the loop: the frame then renders nothing.
+    if (stopped) {
+      return;
+    }
     if (windowStart < 0) {
       windowStart = now;
     } else {

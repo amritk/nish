@@ -21,7 +21,8 @@ export interface PresenterOptions {
   readonly prefer?: Backend;
   /**
    * Called each time a tier is given up for the next one, when the presenter
-   * is created or later, on a lost device or context.
+   * is created or later, on a lost device or context. An error it throws is
+   * passed to `reportError` and the fallback goes on.
    *
    * @param from - the tier given up
    * @param to - the tier tried next
