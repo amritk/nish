@@ -14650,26 +14650,38 @@ by the caller.
   - **a function that keeps memory on every call** (NL9018) — a function
     that keeps an allocation of its own past the call (a local assigned more
     than once, or an array of its own; a value it only hands to a function's
-    parameter does not count), so that it has no arena scope of its own, and that a loop runs on every pass
+    parameter does not count, nor does one it only places in an array or
+    object literal that is itself handed to a parameter or to `spawnSync`, or
+    only reads in place, as in `[a, b].join(",")`), so that it has no arena
+    scope of its own, and that a loop runs on every pass
     while the pass releases nothing — directly, or through callees that have
     no scope of their own either. Every pass adds the allocation the call kept,
     and nothing releases it while the loop runs. Reported once, at the
     function's declaration, naming the line of the first allocation it holds;
     the hints are a `const` per value, a block that opens with
     [`using a = arena()`](#using-a--arena) around the work, or a region for
-    what must outlive the call (`tests/cases/perf_kept_memory`). Not reported
+    what must outlive the call (`tests/cases/perf_kept_memory`). The rule
+    counts passes, not their number: a short fixed loop such as
+    `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
     when the function returns a value that is not a number, a boolean, an enum
     or nothing, because then its caller owns the memory; when it manages the
     arena itself, feeds tasks, or fills a parameter; when every loop that
     runs it releases what it kept — a pass with a scope of its own, a call
     inside a `using a = arena()` block, or a caller between the loop and the
-    function whose own scope releases it on return; or when it is run only
-    through a latched function, one with an `if (<field>) { … return }`
-    guard among its top-level statements (no `else`, the field read directly
-    or through a `const`) and a later top-level assignment to that field, so
-    a call after the first that sets it returns at the guard: a once-guard or
-    a cache
-    (`tests/cases/perf_kept_memory_quiet`).
+    function whose own scope releases it on return; or when the loop calls it
+    through a once-latch on the same object every pass. A once-latch is a
+    function whose top-level statements hold an `if (<field>) { … return }`
+    guard with no `else`, its condition the field of a parameter alone or
+    `<field> !== null`, read directly or through a `const`; a later top-level
+    assignment to that field; and no other store to it anywhere in the body
+    than one that keeps the guard true (`true`, a `new` object or an array
+    literal, or for the `!== null` form a value whose type is not nullable),
+    so only the first call does the work: a once-guard or a cache
+    (`tests/cases/perf_kept_memory_quiet`). The same object is `this` or a
+    name the loop neither declares nor assigns. A negated or compound
+    condition, a counter, a guard that is cleared again, or a fresh object
+    each pass is not a latch and still warns
+    (`tests/cases/perf_kept_memory_latch`).
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the

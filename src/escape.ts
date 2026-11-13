@@ -58,7 +58,7 @@ import {
   unwrapParens,
   unwrapStringPassthrough,
 } from "./emit-util"
-import { FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
+import { FLAG_CONST, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
 import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
@@ -3172,9 +3172,39 @@ const ownLeakNode = (
   return first
 }
 
-/** Whether `node`, in `unit` when there is one, is an argument to a function. */
-const handedOn = (unit: AnalysisUnit | null, table: TypeTable, node: Node): boolean =>
-  unit !== null && classifyUse(unit, table, node).kind === USE_ARGUMENT
+/**
+ * Whether `node`, in `unit` when there is one, is handed on rather than kept:
+ * an argument to a function, or to `spawnSync`, which is done with it when it
+ * returns. An element of an array or object literal is handed on with the
+ * literal, and so is one of a literal that is only read (`[a, b].join(",")`).
+ */
+const handedOn = (unit: AnalysisUnit | null, table: TypeTable, node: Node): boolean => {
+  if (unit === null) {
+    return false
+  }
+  let value = node
+  let parent = unit.parents.parentOf(value)
+  while (
+    parent !== null &&
+    (parent.kind === NodeKind.Paren ||
+      parent.kind === NodeKind.Array ||
+      parent.kind === NodeKind.Object ||
+      parent.kind === NodeKind.Property)
+  ) {
+    value = parent
+    parent = unit.parents.parentOf(value)
+  }
+  const found = classifyUse(unit, table, value).kind
+  if (found === USE_ARGUMENT || (value !== node && (found === USE_NONE || found === USE_READ))) {
+    return true
+  }
+  const call: Node | null = parent === null ? null : unit.parents.parentOf(parent)
+  if (parent === null || parent.kind !== NodeKind.List || call === null || call.kind !== NodeKind.Call) {
+    return false
+  }
+  const name = unit.program.nodeCallees[call.id] === null ? builtinNameOf(unit.program, call) : ""
+  return name === "spawnSync" || name === "spawnSyncTo"
+}
 
 /** Whether `list` holds `f`. */
 const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
@@ -3202,8 +3232,9 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
  * to the pass, and the pass keeps it. Every module and every instantiation is
  * walked, with its own side tables installed, because a loop that calls a
  * function parameter calls the argument inside the instantiation. A latched
- * function (`isLatched`) and all it reaches are left out: its work runs once,
- * not on every pass.
+ * function (`latchParameter`) a pass calls directly, on the same object on
+ * every pass, is left out with all it reaches: its work runs once, not on
+ * every pass.
  */
 export const loopReachedFunctions = (
   units: AnalysisUnit[],
@@ -3212,14 +3243,16 @@ export const loopReachedFunctions = (
 ): StringSet => {
   const reached = new StringSet()
   const work: string[] = []
-  // Marked reached up front, so neither a pass nor a callee walk enters one.
-  const latched = new StringSet()
+  const latches = new Latches()
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       const body = sig.body()
-      if (sig.definedIn(unit.program.source) && body !== null && isLatched(body)) {
-        latched.add(sig.name)
-        reached.add(sig.name)
+      if (sig.definedIn(unit.program.source) && body !== null && sig.instance === null) {
+        const at = latchParameter(unit.program, table, sig, body)
+        if (at >= 0) {
+          latches.names.push(sig.name)
+          latches.params.push(at)
+        }
       }
     }
   }
@@ -3235,7 +3268,7 @@ export const loopReachedFunctions = (
       if (instance !== null) {
         program.enterInstance(instance)
       }
-      collectPassCalls(program, table, f, body, false, false, reached, work)
+      collectPassCalls(program, table, f, body, null, false, latches, reached, work)
       if (instance !== null) {
         program.leaveInstance()
       }
@@ -3257,34 +3290,54 @@ export const loopReachedFunctions = (
     }
     i = i + 1
   }
-  const out = new StringSet()
-  let k = 0
-  while (k < reached.size()) {
-    const name = reached.at(k)
-    if (!latched.has(name)) {
-      out.add(name)
-    }
-    k = k + 1
+  return reached
+}
+
+/** The latched functions, each with the parameter its latch is on (`latchParameter`). */
+class Latches {
+  names: string[]
+  params: i32[]
+  constructor() {
+    this.names = []
+    this.params = []
   }
-  return out
+  /** The parameter `name`'s latch is on, or -1 when it has none. */
+  paramOf(name: string): i32 {
+    let i = 0
+    while (i < this.names.length) {
+      if (this.names[i] === name) {
+        return this.params[i]
+      }
+      i = i + 1
+    }
+    return -1
+  }
 }
 
 /**
- * Whether `body` is latched: it returns early when a field path it reads
- * (`s.prepared`, or `this.style` through a `const` that holds it) says so,
- * and assigns that path itself further down. The first call sets the latch,
- * as a once-guard or a cache does, and every later one returns at the guard,
- * so what the body does after it runs once, not once per call.
+ * The parameter, by its index in `sig.paramNames` (`this` is a member's
+ * first), whose field latches `body`, or -1 when nothing does. Latched is
+ * this shape among the top-level statements: an `if` with no `else` whose
+ * branch ends in a `return`, on the field alone (`if (s.prepared)`, or
+ * `if (known !== null)` for `const known = this.style`), then an assignment
+ * of the field that keeps that condition true (`true`, or for `!== null` a
+ * value that cannot be `null`), and no other store into the field anywhere.
+ * The first call on an object sets the latch, as a once-guard or a cache
+ * does, and every later call on the same object returns at the guard. A
+ * re-entrancy guard is not one: it stores `false` back.
  */
-const isLatched = (body: Node): boolean => {
+const latchParameter = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, body: Node): i32 => {
   if (body.kind !== NodeKind.Block) {
-    return false
+    return -1
   }
   // Pairs of a `const`'s name and the field path it was initialised from.
   const aliases: string[] = []
-  const guards: string[] = []
+  // The guard's field path, and whether the guard is `!== null` rather than truthiness.
+  let guard = ""
+  let nonNull = false
+  let set = false
   for (const stmt of body.children) {
-    if (stmt.kind === NodeKind.Var) {
+    if (stmt.kind === NodeKind.Var && (stmt.flags & FLAG_CONST) !== 0) {
       for (const decl of stmt.children[0].children) {
         const path = fieldPath(decl.children[2])
         if (path !== "") {
@@ -3293,19 +3346,40 @@ const isLatched = (body: Node): boolean => {
         }
       }
     } else if (
+      guard === "" &&
       stmt.kind === NodeKind.If &&
       stmt.children[2].kind === NodeKind.Empty &&
       endsInReturn(stmt.children[1])
     ) {
-      collectGuardPaths(stmt.children[0], aliases, guards)
-    } else if (stmt.kind === NodeKind.ExprStmt && guards.length > 0) {
+      const cond = unwrapParens(stmt.children[0])
+      let read = cond
+      if (cond.kind === NodeKind.Binary && cond.text === "!==" && isNullLiteral(cond.children[1])) {
+        read = cond.children[0]
+        nonNull = true
+      } else if (cond.kind === NodeKind.Binary && cond.text === "!==" && isNullLiteral(cond.children[0])) {
+        read = cond.children[1]
+        nonNull = true
+      }
+      guard = guardPath(read, aliases)
+    } else if (guard !== "" && stmt.kind === NodeKind.ExprStmt) {
       const e = unwrapParens(stmt.children[0])
-      if (e.kind === NodeKind.Binary && e.text === "=" && holdsString(guards, fieldPath(e.children[0]))) {
-        return true
+      if (e.kind === NodeKind.Binary && e.text === "=" && fieldPath(e.children[0]) === guard) {
+        set = true
       }
     }
   }
-  return false
+  if (!set || !onlyLatchingStores(program, table, body, guard, nonNull)) {
+    return -1
+  }
+  const root = guard.substring(0, guard.indexOf("."))
+  let i = 0
+  while (i < sig.paramNames.length) {
+    if (sig.paramNames[i] === root) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
 }
 
 /** The field path `node` reads, as `s.prepared` or `this.style`; `""` for anything else. */
@@ -3325,29 +3399,109 @@ const fieldPath = (node: Node): string => {
   return base === "" ? "" : `${base}.${read.text}`
 }
 
-/** Each field path `cond` reads, directly or through a name `aliases` pairs with one. */
-const collectGuardPaths = (cond: Node, aliases: string[], out: string[]): void => {
-  const path = fieldPath(cond)
-  if (path !== "") {
-    out.push(path)
-    return
+/** The field path `read` is, itself or as a name `aliases` pairs with one; `""` for anything else. */
+const guardPath = (read: Node, aliases: string[]): string => {
+  const node = unwrapParens(read)
+  if (node.kind !== NodeKind.Ident) {
+    return fieldPath(node)
   }
-  if (cond.kind === NodeKind.Ident) {
-    let i = 0
-    while (i + 1 < aliases.length) {
-      if (aliases[i] === cond.text) {
-        out.push(aliases[i + 1])
-      }
-      i = i + 2
+  let i = 0
+  while (i + 1 < aliases.length) {
+    if (aliases[i] === node.text) {
+      return aliases[i + 1]
     }
-    return
+    i = i + 2
   }
-  if (cond.kind === NodeKind.Arrow) {
-    return
+  return ""
+}
+
+/** Whether `node` is the literal `null`. */
+const isNullLiteral = (node: Node): boolean => unwrapParens(node).kind === NodeKind.Null
+
+/**
+ * Whether every store under `node` into the field path `guard` keeps the
+ * guard true: a plain `=` of `true`, of a fresh object or array, or for a
+ * `!== null` guard of anything whose type cannot be `null`.
+ */
+const onlyLatchingStores = (
+  program: CheckedProgram,
+  table: TypeTable,
+  node: Node,
+  guard: string,
+  nonNull: boolean
+): boolean => {
+  if (
+    node.kind === NodeKind.Binary &&
+    isAssignmentOperator(node.text) &&
+    fieldPath(node.children[0]) === guard
+  ) {
+    if (node.text !== "=") {
+      return false
+    }
+    const value = unwrapParens(node.children[1])
+    const fresh = value.kind === NodeKind.True || value.kind === NodeKind.New || value.kind === NodeKind.Array
+    const type = program.nodeTypes[value.id]
+    if (!fresh && !(nonNull && value.kind !== NodeKind.Null && type >= 0 && !table.isNullable(type))) {
+      return false
+    }
   }
-  for (const child of cond.children) {
-    collectGuardPaths(child, aliases, out)
+  if (node.kind === NodeKind.Unary && fieldPath(node.children[0]) === guard) {
+    return false
   }
+  for (const child of node.children) {
+    if (!onlyLatchingStores(program, table, child, guard, nonNull)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Whether the argument a call `call` passes as parameter `at` of `callee` is
+ * the same object on every pass of `loop`: it is `this`, or a path off a name
+ * the loop neither declares nor assigns (`run.sound`, but not the `item` of
+ * `for (const item of items)`).
+ */
+const sameEveryPass = (call: Node, callee: FunctionSig, at: i32, loop: Node): boolean => {
+  let arg: Node | null = null
+  if (callee.owner !== null && at === 0) {
+    const target = unwrapParens(call.children[0])
+    arg = target.kind === NodeKind.Member ? target.children[0] : null
+  } else if (call.kind === NodeKind.Call) {
+    const index = at - (callee.owner !== null ? 1 : 0)
+    const args = call.children[1]
+    arg = index < args.children.length ? args.children[index] : null
+  }
+  let root: Node | null = arg === null ? null : unwrapParens(arg)
+  while (root !== null && root.kind === NodeKind.Member) {
+    root = unwrapParens(root.children[0])
+  }
+  if (root === null) {
+    return false
+  }
+  return root.kind === NodeKind.This || (root.kind === NodeKind.Ident && !loopBindsName(loop, root.text))
+}
+
+/** Whether `node` declares or assigns the name `name` anywhere under it. */
+const loopBindsName = (node: Node, name: string): boolean => {
+  if (node.kind === NodeKind.VarDecl && node.children[0].text === name) {
+    return true
+  }
+  if (
+    (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) ||
+    (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--"))
+  ) {
+    const target = unwrapParens(node.children[0])
+    if (target.kind === NodeKind.Ident && target.text === name) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (loopBindsName(child, name)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** Whether `stmt` always ends in a `return`: one, or a block whose last statement is one. */
@@ -3362,16 +3516,6 @@ const endsInReturn = (stmt: Node): boolean => {
   )
 }
 
-/** Whether `list` holds `text`. */
-const holdsString = (list: string[], text: string): boolean => {
-  for (const item of list) {
-    if (item === text) {
-      return true
-    }
-  }
-  return false
-}
-
 /**
  * Each function a call or `new` under `node` runs, when it runs on a pass
  * that releases nothing: `inLoop` says a loop encloses `node`, `released` that
@@ -3382,17 +3526,20 @@ const collectPassCalls = (
   table: TypeTable,
   f: FunctionFacts,
   node: Node,
-  inLoop: boolean,
+  loop: Node | null,
   released: boolean,
+  latches: Latches,
   reached: StringSet,
   work: string[]
 ): void => {
   if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (inLoop && !released) {
+  if (loop !== null && !released) {
     const callee = calleeAt(program, table, node)
-    if (callee !== null && reached.add(callee.name)) {
+    const at = callee === null ? -1 : latches.paramOf(callee.name)
+    const once = callee !== null && at >= 0 && sameEveryPass(node, callee, at, loop)
+    if (callee !== null && !once && reached.add(callee.name)) {
       work.push(callee.name)
     }
   }
@@ -3413,8 +3560,9 @@ const collectPassCalls = (
       table,
       f,
       child,
-      inLoop || pass,
+      loop === null && pass ? node : loop,
       pass ? released || scoped : free,
+      latches,
       reached,
       work
     )

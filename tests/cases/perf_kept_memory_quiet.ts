@@ -86,13 +86,28 @@ const saysNo = (value: string | null): boolean => value !== null && isNo(value);
 // The string `getenv` answers is handed to `saysNo`, which only reads it.
 const envSaysNo = (name: string): boolean => saysNo(getenv(name));
 
+// An array literal handed to a function, an element at a time, and the
+// function only reads it.
+const argc = (argv: string[]): i32 => argv.length;
+const listed = (n: i32): i32 => argc(["x", `${n}`]);
+
+// An object literal handed to a function the same way.
+interface Pair {
+  k: string;
+}
+const keyLength = (p: Pair): i32 => p.k.length;
+const paired = (n: i32): i32 => keyLength({ k: `${n}` });
+
+// A literal that is only read: `join` copies its elements into a new string.
+const joined = (n: i32): i32 => ["a", `${n}`].join(",").length;
+
 export const main = (): void => {
   const setup = new Setup();
   const style = new Style();
   const names: string[] = [];
   // Passes that grow an older array: only functions that keep nothing run here.
   for (let i = 0; i < 1000; i++) {
-    names.push(`${fixed(i) + scoped(i) + pick(i) + outer(i)}`);
+    names.push(`${fixed(i) + scoped(i) + pick(i) + outer(i) + listed(i) + paired(i) + joined(i)}`);
     prepare(setup);
     names.push(`${style.get(i)}${envSaysNo("NISH_KEPT_MEMORY_UNSET") ? 1 : 0}`);
   }

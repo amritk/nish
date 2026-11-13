@@ -5602,6 +5602,38 @@ if (!only || "performance".includes(only)) {
     kept.stderr
   )
 
+  // The once-guard exemption is narrow. Only a function that returns early on
+  // a field it then sets and never clears, called on the same object every
+  // pass, is quiet; a re-entrancy guard that clears its flag, a negated or
+  // compound condition, a counter, a per-item flag and a fresh receiver each
+  // pass all still keep memory every pass and warn. This is also the control
+  // that fails if the reach walk stops finding loop calls at all.
+  const latch = compile("perf_kept_memory_latch", "perf_kept_memory_latch_report.ll")
+  const latchLines = summaries(latch.stderr)
+  const latchNames = ["guarded", "whenReady", "untilDone", "capped", "mark", "stamp"]
+  const latchFirst = [21, 33, 44, 54, 66, 77]
+  check(
+    "performance: a guard that is not a once-latch on a fixed receiver does not exempt a function from NL9018",
+    latch.status === 0 &&
+      latchLines.length === 6 &&
+      positions(latchLines) === "15:1,27:1,38:1,49:1,60:1,71:1" &&
+      latchLines.every(
+        (l, i) =>
+          l.includes(`\`${latchNames[i]}\` keeps an allocation on every call`) &&
+          l.includes(`the first allocation it holds is on line ${latchFirst[i]},`)
+      ),
+    latch.stderr
+  )
+
+  // A `let` result handed back after reassignment is the arena stage's own
+  // shape: it must stay clear of every retention rule, not only NL9018.
+  const reassign = compile("res_let_reassign", "res_let_reassign_report.ll", ["--json"])
+  check(
+    "performance: res_let_reassign raises no NL9003, NL9016 or NL9018",
+    reassign.status === 0 && !/"code":"NL90(03|16|18)"/.test(reassign.stderr),
+    reassign.stderr
+  )
+
   // The arithmetic rules. These are not advice about speed: each one is a
   // program that does not compute what it was written to compute, and the
   // message has to name the rewrite all the same.
@@ -5798,8 +5830,10 @@ if (!only || "performance".includes(only)) {
     "perf_arena_pass_quiet",
     // A function that keeps nothing past its call, one whose arena block
     // releases it, one run only where each pass, block or scoped caller
-    // releases it, one run only behind a once-guard or a cache, and a
-    // `getenv` result only handed to a callee: NL9018 is silent on each.
+    // releases it, one run only behind a once-guard or a cache on a fixed
+    // receiver, a `getenv` result only handed to a callee, and a template
+    // handed on as an element of an array or object literal or joined in
+    // place: NL9018 is silent on each.
     "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",

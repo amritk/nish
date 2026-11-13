@@ -130,8 +130,12 @@ value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
 block with `using a = arena()` around the work. A loop whose passes are
 released already, because nothing a pass makes outlives it, takes back what
 the call kept, so that one does not warn; nor does a function run only behind
-a once-guard or a cache (`if (this.ready) { return }` followed later by
-`this.ready = true`), since only its first call does the work.
+a once-guard or a cache on the same object every pass (`if (this.ready) { return }`
+followed later by `this.ready = true`, and no store that clears it), since only
+its first call does the work. A re-entrancy guard that resets its flag, a
+counter, or a guard on a fresh object each pass still warns. The warning counts
+passes, not how many there are, so a short fixed loop warns like an unbounded
+one.
 
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:
