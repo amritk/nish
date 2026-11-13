@@ -42,7 +42,7 @@ stages:
       - id: web-build
         content: Write examples/break-web/build.mjs to build into docs/site/break/ with an inputs manifest, and a --check mode that fails when a source the bundle was built from has changed since — see Docs break
       - id: web-trigger
-        content: Make the hero terminal in docs/site/site.js accept typed input and open the game in an overlay on `nish break`, loading the bundle only then, with Escape and a close control to leave — see Docs break
+        content: Make the hero terminal in docs/site/site.js accept typed input and open the game in an overlay on `nish break`, the whole game (page code, presenter, loader and wasm) arriving only then through one async dynamic import, with Escape and a close control to leave — see Docs break
       - id: web-tests
         content: Add a break-web section to tests/run.js that runs the page logic under Node for a scripted session and holds its framebuffer hash to the native tests/link/break_core run, both --deterministic — see Docs break
       - id: web-rule
@@ -136,12 +136,20 @@ function runFixedStep(options: { stepsPerSecond: number; maxStepsPerFrame?: numb
   - **Settings.** They persist in `localStorage`.
 - **Trigger.**
   - `site.js` makes the hero terminal focusable. After its animation, a caret waits, and typing `nish break` then Enter opens a full-viewport overlay holding the canvas.
-  - The bundle is imported only then, so nothing is fetched for readers who never type it.
+  - **Lazy, async, and small for everyone else.** `site.js` gains only the hero-terminal input handler: a few hundred bytes, with no game code, no presenter and no wasm loader. Everything else comes in through a single dynamic `import()` of `docs/site/break/break.mjs`, issued only on `nish break` + Enter:
+    - the overlay;
+    - the page host;
+    - `nish/page/frame`;
+    - the generated loader.
+
+    That module fetches the `.wasm` as its own file with `WebAssembly.instantiateStreaming`, falling back to `fetch` plus `instantiate` when the server's MIME type is wrong. It does not use `loadSync`, inlined base64 bytes, a `<link rel=preload>` or a prefetch. Readers who never type the command download nothing extra.
+  - A loading line shows in the hero terminal while the import is in flight. A failed load prints an error line there and leaves the page usable.
   - Escape on the title, or the close control, removes the overlay and stops the loop.
   - The guide markdown is not touched.
 - **Tests and build.**
   - The `break-web` section builds the bundle into `build/`. It runs `page.ts`'s loop under Node with a fake presenter for a scripted session, the way `examples/wasm-arena/node-run.mjs` does, and compares the framebuffer hash at fixed steps to the native `tests/link/break_core` binary built `--deterministic`.
   - It also runs `build.mjs --check` against the committed bundle.
+  - It asserts that `site.js` reaches the game only through one dynamic `import()`: no static import, no preload and no reference to the `.wasm`. It also asserts that the gzipped growth of `site.js` stays under 1 KB against a baseline recorded in the test. The PR body gives the before and after sizes of `site.js` and the size of the lazy bundle.
   - Record in the PR body the Playwright run against `docs/site/` served locally: all three tiers, the measured per-frame cost of `draw` plus `present` at 960×540, and a screenshot.
 
 ## Out of scope
