@@ -2234,7 +2234,7 @@ Reading the rounds:
     - at 4,096 (the first run), 803,969 to 843,333 against 1,001,300 to 1,165,994.
   - At 1,024 the re-run's async rounds (1,082,711 to 1,269,161) overlap the low explicit ones (1,041,614 and 1,216,946), but the median is 28.7% below on a 21.9% band.
   - The first run's −3.4% at 1,024 came from a bimodal `entry-copy`: one round of 1,033,572 against 1,449,359 and 1,505,458. At 256 the bimodal contestant was `entry`, with 2,128,329 against 1,503,842 and 1,597,130.
-  - Before, the explicit pair was bimodal at 256 and 1,024 in both runs, so those two cells cannot be judged on the before side. The async medians there were 20% to 34% below the explicit ones in both runs.
+  - Before, the explicit pair was bimodal at 256 and 1,024 in both runs, so those two cells cannot be judged on the before side. The async medians there were 16% to 34% below the explicit ones across the four readings.
 - **`/json`:**
   - The first run after #1621 had a bimodal explicit pair at 32, 64, 128, 256 and 512. Each had one round far from the other two:
     - low rounds of 126,214 (`entry`, 32), 128,290 (`entry`, 64) and 161,738 (`entry`, 512);
