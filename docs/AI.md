@@ -918,8 +918,9 @@ export const main = (): i32 => {
   read `this` (bind `const self = this`), or read a function-typed parameter
   of its function. An arrow inside another arrow, or given to a method, a
   constructor, `expose` or `exposeWith`, captures nothing; the callbacks of
-  the array methods `sort`, `map`, `filter`, `some`, `every` and `findIndex`
-  are the exception, and capture as an arrow argument does.
+  the array methods `sort`, `map`, `filter`, `some`, `every`, `findIndex` and
+  `forEach`, and of `Map` and `Set` `forEach`, are the exception, and capture
+  as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.

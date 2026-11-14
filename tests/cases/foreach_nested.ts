@@ -1,8 +1,8 @@
 // A `forEach` inside the callback of another `forEach` on the same receiver.
 // The inner call goes through a top-level function, since an arrow inside
-// another arrow reads only its own parameters. Each `Map` walk opens and closes
-// its own count of live walks, so the nested ones finish and a `delete` after
-// them still compacts the table. All agree with Node.
+// another arrow reads only its own parameters. After the nested `Map` walks
+// finish, a `delete` and a `set` still take effect: the next walk visits `b`
+// then `c`, and the size is 2. All agree with Node.
 
 const row = (xs: i32[], x: i32): void => {
   xs.forEach((y) => console.log(`${x}*${y}`))

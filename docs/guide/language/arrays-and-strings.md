@@ -105,8 +105,8 @@ memory.
 ### `map`, `filter` and `slice`
 
 `map`, `filter`, `forEach`, `some`, `every` and `findIndex` take a callback,
-which gets the element, or the element and its index, as in TypeScript. `slice` copies a
-range into a new array.
+which gets the element, or the element and its index, as in TypeScript.
+`slice` copies a range into a new array.
 
 ```ts nish:ok
 export const main = (): i32 => {
@@ -171,9 +171,12 @@ export const main = (): i32 => {
 
 `xs.forEach(f)` walks the array as that `for...of` loop does, with `f` written
 in as its body, except that it stops at the length the array had when the call
-began, as Node does, so an element `f` pushes is not visited. It answers nothing (`void`), and `f` follows the callback rule above, so it may
-call, print and `push` onto an array it can see, but not assign a local of the
-function around it. To add up, write the loop; the compiler says so:
+began, as Node does, so an element `f` pushes is not visited. It answers
+nothing (`void`), and `f` follows the callback rule above, so it may call,
+print and `push` onto an array it can see, but not assign a local of the
+function around it. To add up, write the `for...of` loop of `sum` above: a
+`forEach` callback that assigns a total is refused (NL2586), and the message
+says to use `for...of`.
 
 ```ts nish:ok
 export const main = (): i32 => {

@@ -175,8 +175,9 @@ This prints `ada`, `grace`, `total 121`, `x` and `y`, one to a line.
 
 There is no `entries()`, because Nish has no destructuring to take a
 `[key, value]` pair apart; `ages.forEach((age, name) => ...)` hands you both
-instead (see [forEach](#foreach)). Walking a `Map` directly would mean walking its entries, so it is
-refused with the rewrite: walk `keys()` and call `get`, or walk `values()`.
+instead (see [forEach](#foreach)). Walking a `Map` directly would mean walking
+its entries, so it is refused with the rewrite: walk `keys()` and call `get`,
+or walk `values()`.
 
 ```ts nish:err NL2375
 export const main = (): i32 => {

@@ -5820,8 +5820,9 @@ where `for...of` rewinds the arena once per pass, and the cursor's `i + 1` is
 a checked add. Measured on a `walk` function whose receiver is built from
 `process.argv`, so nothing folds, `opt -O2` leaves 92 instructions for
 `m.forEach((v, k) => ...)` against 112 for `for (const k of m.keys())` with
-`m.get(k)`, which calls `Map.probe` per entry, and 78 for `s.forEach` against
-89 for `for (const x of s)`.
+`m.get(k) ?? 0`, a gap made of that loop's `Map.probe` call, the nullish
+branch of its `?? 0` and its arena rewind on every pass, and 78 for
+`s.forEach` against 89 for `for (const x of s)`, a gap made of the rewind.
 
 `xs.forEach(f)` on an array is the `std/array.ts` template `forEach`, a loop
 with an `i32` index that stops at the length the array had when the call

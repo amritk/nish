@@ -12301,11 +12301,13 @@ concise body such as `(x) => console.log(x)` or `(x) => ys.push(x)` is a
 statement, and what it computes is dropped. It compiles to a counted loop over
 the array with the callback inlined into its body, as `for...of` does, but the
 loop stops at the length the array had when the call began, as Node does,
-where `for...of` reads the length on every pass; under `opt -O2` the two loops
-are the same size (`arr_foreach`, `foreach_nested`). An arrow argument never
-assigns a name of the function it is written in (NL2586), and a `forEach`
-callback is no exception, so a running total is a `for...of` loop, whose body
-may assign it; the refusal says so (`reject_foreach_capture_sum`):
+where `for...of` reads the length on every pass. With a callback that does not
+resize the array, `opt -O2` leaves the same instruction count for both: 18 on
+the `walk` function measured in
+[IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration). An arrow argument
+never assigns a name of the function it is written in (NL2586), and a
+`forEach` callback is no exception, so a running total is a `for...of` loop,
+whose body may assign it; the refusal says so (`reject_foreach_capture_sum`):
 `for (const x of xs) { sum += x }`.
 
 The callback takes the element, or the element and its index, as TypeScript
@@ -12481,8 +12483,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
-  passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`,
+  `forEach`, `slice`, passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -12790,13 +12792,16 @@ export const main = (): i32 => {
   `for...of` over the table, below: the same insertion order, an entry set
   during the walk visited and one deleted before the walk reaches it not, and
   `clear` ending it (`map_foreach`, `set_foreach`). It allocates nothing and
-  looks no key up, where `for (const k of m.keys())` with `m.get(k)` probes
-  once per key. JavaScript passes a `Map`'s callback the map as a third
-  argument, and a `Set`'s callback the element twice and the set third; Nish
-  refuses a callback written with more than two parameters on a `Map`
-  (NL2771, `reject_map_foreach_third_param`) or more than one on a `Set`
-  (NL2772, `reject_set_foreach_second_param`), since the receiver is the one
-  the call already names. The callback follows the array callbacks' rules
+  looks no key up, where `for (const k of m.keys())` with `m.get(k) ?? 0`
+  calls `Map.probe` and takes the nullish branch once per key, and rewinds
+  the arena on every pass: under `opt -O2`, 92 instructions against 112 for
+  a `Map` and 78 against 89 for a `Set`
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration)). JavaScript passes
+  a `Map`'s callback the map as a third argument, and a `Set`'s callback the
+  element twice and the set third; Nish refuses a callback written with more
+  than two parameters on a `Map` (NL2771, `reject_map_foreach_third_param`)
+  or more than one on a `Set` (NL2772, `reject_set_foreach_second_param`),
+  since the receiver is the one the call already names. The callback follows the array callbacks' rules
   above: a top-level function or an arrow written at the call
   (`reject_map_foreach`), at least one parameter, an answer of `void`, no
   assignment to a name of the function around it (NL2586), and `m.forEach`
