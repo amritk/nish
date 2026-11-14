@@ -152,7 +152,9 @@ every spawn opens its resolved `argv[0]` `O_PATH`, refuses a file with a
 recorded identity, and execs the open file through `/proc/self/fd/N`. The
 file checked is the file run, so no rename between the check and the
 `execve` can put the loader in its place. An interpreter the grant names as
-well is listed once, unmarked, and stays spawnable.
+well is listed once, unmarked, and stays spawnable. That check covers the
+program the Nish code names; what the program it starts may execute is the
+next subsection.
 
 With an exec list, EXECUTE leaves the rule on `/` and each listed file gets a
 `path_beneath` rule of its own, opened `O_PATH` (a file, so `O_DIRECTORY` is
@@ -161,6 +163,178 @@ scope that is not one). `process.spawn` keeps READ_FILE and IOCTL_DEV on `/`,
 so only which programs run is narrowed. A `net=<host>` grant has no run-time
 half: seccomp sees a pointer to the address and cannot read it
 ([security/capabilities.md](security/capabilities.md), CAPS-19).
+
+#### One exec per spawn
+
+Landlock's EXECUTE on the loader belongs to the whole process tree: the
+kernel needs it each time a granted program starts, and a child inherits the
+domain as it is. The spawn-target check above is the runtime's own, and a
+granted program is not the runtime. One that executes a path from its
+arguments (`find -exec`, `env`, `xargs`, `nice`, `timeout`, `nohup`) could
+name the loader, and the loader runs any file `process.spawn`'s READ_FILE on
+`/` lets it map. So under an exec allowlist a spawn's child completes
+exactly one `execve`, the granted program's own start, and the kernel
+refuses every later one in its subtree:
+
+1. `nish_spawn_start` (`runtime/runtime-os.c`) hands the whole spawn to
+   `nish_spawn_sandboxed`, the hook `nish_sandbox` sets whenever the build
+   has an exec allowlist (marked entry or not). Without `--sandbox` the hook
+   is null and the spawn is the one `posix_spawnp` call it was.
+2. The hook (`nish_sb_spawn_once`, `runtime/runtime-sandbox.c`) starts a
+   **supervisor** thread and joins it. The supervisor calls
+   `unshare(CLONE_FILES)`, so it works in a private copy of the descriptor
+   table. Before it makes any descriptor it checks that each source the
+   file actions `dup2` from is open in that copy, and refuses the spawn
+   (`EBADF`) otherwise. It then makes its pipe, opens and identity-checks
+   the target, and starts a **spawner** thread, which shares that private
+   table. Every descriptor made here is moved to `base + n + 3` or above
+   (`nish_sb_lift`), where `base` onward are the `n` numbers the actions
+   write. **Both threads run with every signal blocked**: the hook blocks
+   them all on the calling thread around the `pthread_create` (a new thread
+   inherits its creator's mask) and restores the caller's mask straight
+   after, so a signal sent to the process is delivered to a thread of the
+   program's own. A handler run on a helper would act in the private table:
+   `signalFd`'s handler writes its wake pipe by descriptor number, and there
+   that number can be the listener or the spawn's pipe.
+3. The spawner installs a second seccomp filter on itself, with
+   `SECCOMP_FILTER_FLAG_NEW_LISTENER`: `execve` and `execveat` answer
+   `SECCOMP_RET_USER_NOTIF`, a `seccomp` call that asks for a listener
+   answers `EBUSY`, everything else is allowed (after the same architecture
+   and x32 checks as the process's filter). It then calls `posix_spawn` on
+   the `/proc/self/fd/N` name with the caller's file actions and, through
+   `POSIX_SPAWN_SETSIGMASK`, the calling thread's saved signal mask (not the
+   spawner's all-blocked one), so the child
+   inherits the filter and a copy of the private table. The listener is
+   moved above the actions' numbers like the rest, before the spawn.
+4. The supervisor polls the listener and the spawner's pipe together. The
+   first notification is the child's own `execve`: it answers
+   `SECCOMP_USER_NOTIF_FLAG_CONTINUE` and closes the listener. A filter whose
+   listener is closed answers `ENOSYS`, so from then on no task in that
+   child's subtree can exec, whatever path it names. If the pipe speaks first,
+   the child died before its exec (a redirect that could not be opened) and
+   the spawn returns `posix_spawn`'s error; nothing waits on a notification
+   that will not come.
+5. Both threads end with the spawn and the private table goes with them:
+   the listener, the pipe and the supervisor's copy of the target descriptor
+   were never in the table the program's other threads see.
+
+The filter is a thread's and its descendants', never the process's: a filter
+cannot be removed, so it is installed on a thread that ends, without TSYNC.
+The spawn builtins all start their child in `nish_spawn_start`, so `spawn`,
+`spawnSync`, `spawnSyncTo`, `spawnWithFds`, `spawnPiped` and
+`spawnPipedWithin` are held alike.
+
+**Why two threads and not one.** With one helper the listener must be handed
+to the calling thread through the process's shared descriptor table, and the
+target descriptor is checked there too. Another Nish thread can `fileClose`
+any number and `fileOpen` a path onto it, so a descriptor in the shared table
+is not the file that was checked by the time the child execs it by number.
+A thread that has unshared its table cannot hand a descriptor back, so the
+supervisor is a thread of its own inside the private table.
+
+**Why the hold's descriptors sit above the file actions.** File actions are
+numbers. `nish_spawn_start` builds `dup2(source, base + k)` for each
+descriptor a builtin passes and opens onto 1 and 2, and the child runs them
+in its copy of the private table. `pipe2`, the listener and the target's
+`open` each take the lowest free number, which is a source that another
+thread closed after the builtin read it, or 0, 1 or 2 in a program that
+closed them: the child would be handed the listener in place of a file. So
+the rule is about every descriptor the hold makes, in three parts. A source
+is checked open in the private table before anything is made there, so an
+open source is the caller's and stays that; a closed one refuses the spawn.
+Everything made is moved to `base + n + 3` or above before a child exists,
+past the sources' targets and past 0, 1 and 2. And both pipe ends are moved
+before either is tested, so the refusal line (a `write` to 2) cannot land in
+a pipe end sitting there. Nothing is closed afterwards: the table ends with
+the threads.
+
+**A private table without `unshare(2)`.** Docker's default seccomp profile
+answers `unshare` with `EPERM` unless the container holds `CAP_SYS_ADMIN`,
+so there the hold refuses every spawn (Fallbacks, below). The kernel gives
+a private table another way: a raw `clone` without `CLONE_FILES`, which
+that profile allows when no namespace flag is set. It is sound in
+principle and it is not cheap. The clone child is a process, not a thread
+of this one, so it cannot use `pthread_create` or rely on libc's state; it
+would make the listener and call `posix_spawn` itself in a single-threaded
+copy, need `CLONE_PARENT` for the granted program to remain the Nish
+program's child for `waitPid`, and report through a pipe the parent made in
+the shared table, which is the exposure the private table exists to remove.
+That is a second design, not a fallback, and it is not built or measured
+here; the refusal is. A raw `clone`
+child in place of the spawner was weighed: it would have to redo
+`posix_spawn`'s file actions, its signal resets and its exec-error report,
+which libc already gets right.
+
+**Why the filter refuses a second listener.** When two filters both answer
+USER_NOTIF the kernel takes the newest, and its "continue" lets the call
+through without asking the older one. A granted program that installs a
+listener of its own (a `nish --sandbox` build with an exec allowlist is one)
+would answer its own children's execs. Refusing the listener makes such a
+program's spawns fail closed, as they do under any launcher whose seccomp
+chain already holds a listener (the kernel's own `EBUSY`).
+
+**What "continue" trusts.** After "continue" the kernel reads the path again
+from the child's memory, which until the exec is this process's memory (the
+child is a `vfork`). The path is the spawner's `/proc/self/fd/N` buffer;
+Nish code is memory-safe and `narrowSandbox` makes no exec allowlist for a
+program that reaches `ffi`, so nothing in the process can rewrite it. `N` is
+read in the child's own copy of the private table.
+
+**Fallbacks.** There is one: the spawn is refused, in strict and best-effort
+alike, with one line on stderr (`nish: --sandbox: cannot hold a spawned
+program to one exec, so the spawn is refused (<errno>)`) and the negative
+errno as the builtin's answer. That covers a kernel without the listener
+flag (`EINVAL`, before Linux 5.0), a launcher whose filters already hold a
+listener (`EBUSY`), a kernel that has the listener but not "continue"
+(before 5.5: the answer is refused, so the supervisor answers the same
+notification with the error `ENOSYS`, which fails the child's exec and
+answers the builtin `-ENOSYS`, and
+kills and reaps the child if that answer is refused too, answering `-ECHILD`; closing the
+listener alone would not do, the child holding a copy until its exec
+commits), and a launcher that denies `unshare` or `pipe2`: Docker's
+default seccomp profile is one (`unshare` is `EPERM` without
+`CAP_SYS_ADMIN`), so a default `docker run` refuses every spawn under an
+exec allowlist. A program with no exec allowlist installs nothing.
+
+**What it costs.** A granted program cannot start a second program, granted
+or not: `find -exec`, `xargs`, `git`'s helpers and every non-builtin command
+of a granted `#!` script answer `ENOSYS`. A dependency that needs such a
+program is granted it as `process.spawn=exec:<program>` (below), or granted
+`process.spawn` whole, which makes no exec allowlist. Each spawn also costs
+two short-lived threads and a copy of the descriptor table.
+
+**`exec:`, the opt-out for one program.** A grant
+`process.spawn=exec:<program>` lists the program with three leading
+slashes (`///usr/bin/make`): the same file to Landlock, and a mark no
+other entry carries. `narrowSandbox` reads the prefix before it resolves the
+program, so `exec:` with nothing after it is NL3046, and a program granted
+both ways is written once, marked `///`. `nish_sandbox` records the mark's
+identity beside the interpreters' (`nish_sb_keep_marks`, one table of 16, a
+build over it refusing every spawn), and a spawn whose opened target has
+that identity is started by the supervisor itself (`nish_sb_start`), with
+no spawner thread, filter or listener: the private table, the identity
+check, the `/proc/self/fd/N` exec and the descriptor rules above all still
+apply. A file marked as an interpreter and as `exec:` is refused. What the
+program's subtree may then exec is everything Landlock's EXECUTE allows,
+the loader included, so the grant reaches any binary `process.spawn`'s
+READ_FILE does; the record says to grant it only to a dependency that may
+run anything ([security/sandbox.md](security/sandbox.md#limits)). A program
+granted without `exec:` stays held and cannot borrow the reach by starting
+the `exec:` one, and a build with no `exec:` grant emits and does what it
+did before.
+
+The directions weighed, and what each leaves open:
+
+| Direction | Verdict | Leaves open |
+| --- | --- | --- |
+| One exec per spawn, by a closed listener (chosen) | Closes exec in the subtree with kernel-held state | A granted program cannot start a second program, granted or not; an interpreter the grant names still runs in its own process the code it is handed (`python3 -c`), though a shell is left its builtins; needs seccomp user notification and `unshare(CLONE_FILES)`, which Docker's default profile denies |
+| `execveat(dirfd == N, AT_EMPTY_PATH)` allowed by number | Ruled out | `dirfd` is ignored for an absolute pathname, which seccomp cannot read, so the rule admits any path |
+| Allow `execve` by the caller's instruction pointer | Ruled out | Probabilistic: any address is mappable after the exec, and with ASLR off a shared libc sits at one address in both images |
+| A second Landlock layer in the child | Ruled out | The layer must still grant EXECUTE on the loader for the program's own start, and is inherited as is |
+| Refuse grants of programs known to exec | Not enforcement | A list of names is never complete (`find`, `xargs`, `env` are examples, not the set) |
+| Statically linked programs only | Too narrow | Almost no distribution program qualifies; a `#!` script never does |
+| A supervisor that answers every exec by path | Not chosen | Would let a subtree exec other granted programs, at the cost of a permanent supervisor thread reading another process's memory |
+| Namespaces | Ruled out here | Refused on CI's runners, so it could not be the tested enforcement |
 
 ## 3. The wrapper
 
@@ -617,7 +791,10 @@ compiles extra copies of `runtime-sandbox.c` with
 `-DNISH_SANDBOX_SIMULATE_ABI=<n>`, which makes the ABI probe answer `n`, for
 0, 1 and 2, and links the strict and best-effort fixtures against each. The define is not in
 `build.sh`'s flags, so no shipped runtime can carry it, and no binary reads it
-at run time.
+at run time. `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=<n>` is the same kind of
+knob for the one-exec hold: 1 makes the "continue" answer fail as it does
+before Linux 5.5, 2 the error answer after it as well; the two are told
+apart by the builtin's answer, `-ENOSYS` (-38) and `-ECHILD` (-10).
 
 **Budget rows.** `runtime-os.c` measures 1,530 of its 1,536 bytes of `.text*`
 (`RUNTIME_OS_TEXT_BUDGET`, `tests/runtime-budgets.js:86`; measured at

@@ -81,10 +81,25 @@ export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CO
  * `package.json` disagree, which is the check that keeps a `npm version` bump
  * from going stale here.
  */
-export const VERSION: string = "0.38.0"
+export const VERSION: string = "0.39.0"
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
 export const RUNTIME_HEADER: string = "nish.h"
 
 /** Include guard on a generated header: `NISH_ADD_H` for `build/add.h`. */
 export const HEADER_GUARD_PREFIX: string = "NISH"
+
+/**
+ * The project's repository: `nish upgrade` and the update notice ask its
+ * `/releases/latest` for the newest release (`src/upgrade.ts`).
+ */
+export const REPOSITORY: string = "https://github.com/amritk/nish"
+
+/** Where a release tag's files are served raw: `nish upgrade` fetches `install.sh` from `<this>/v<version>/`. */
+export const RAW_REPOSITORY: string = "https://raw.githubusercontent.com/amritk/nish"
+
+/** The npm package `npm install -g` names: what `nish upgrade` tells an npm install to run. */
+export const NPM_PACKAGE: string = "nish"
+
+/** The start of a prebuilt compiler's npm package directory, `/node_modules/@amritk/nish-<asset>`. */
+export const NPM_PLATFORM_DIR: string = "/node_modules/@amritk/nish-"

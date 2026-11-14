@@ -151,7 +151,7 @@ export const tagOf = (m: Dot | Box): Kind => m.kind;
 The message of an error contains:
 
 ```text
-…--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
+…--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi
 ```
 
 ## NL4011
@@ -159,7 +159,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+…--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement
 ```
 
 ## NL4012
@@ -220,7 +220,7 @@ The message of an error contains:
 …--emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native
 ```
 
-**Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
+**Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (tests/emit-ts/async)
 
 ## NL4017
 

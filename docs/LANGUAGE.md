@@ -865,13 +865,25 @@ field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
 spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
 and a `Map`'s value is any of those: `Map<string, Shape>`,
 `Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
+A union is also a type argument: a generic class's (`Box<Shape>`,
+`Box<Box<Shape>>`, `Stack<Shape>`, `union_generic_class`), a generic
+function's or method's type parameter bound to one by its arguments
+(`union_generic_call`), either side of a `Result`, `Result<Shape, E>` and
+`Result<T, Shape>` (`union_result`), and `nish/map`'s `getOrInsert` and
+`reserve` on a `Map<K, Shape>` (`union_map_helpers`). The instance is
+monomorphised as for any other type argument, so `Box<Shape>` is laid out as
+a class with a `Shape` field would be, and a `T` slot holds the union's one
+pointer.
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
 converts to the union wherever the union is expected: an argument, a
 `return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
 arm or a `??` default whose other side is the union
-(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+(`tests/cases/union_forms`), and the same places where a generic's `T` is
+the union: a constructor's or a generic call's argument, `Ok(new Circle())`
+in a function that returns `Result<Shape, E>` (`union_generic_class`,
+`union_generic_call`, `union_result`). Equality on two unions compares the pointers, as
 on any object.
 
 **Reading.** The tag is the one member a union has until a test of the tag
@@ -1125,22 +1137,26 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
-  function or method whose type parameter would bind to a union, and
-  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
-  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_result_ok`,
-  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
-  its value as it is, the way an array stores an element of a union, and
-  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
-  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
-  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
-  and is NL2533 as any generic call is. A union is not a
-  `Map` or `Set` key, which is the key rule's refusal
-  (`reject_union_map_key`, `reject_union_set`).
+- **A union is a type argument, but not a key.** `Box<Shape>`, a generic
+  function or method whose type parameter binds to a union, `Result<Shape, E>`
+  / `Result<T, Shape>` and `nish/map`'s helpers on a `Map<K, Shape>` are
+  accepted (above), as in `tsc`. Three things stay refused, each under its own
+  rule: a union is not a `Map` or `Set` key, which is the key rule's refusal
+  (NL2353, `reject_union_map_key`, `reject_union_set`); a generic class is
+  not a variant (NL2522, `reject_union_generic_variant`); and a store of a
+  bare variant into a generic instance's union field, `b.value = new
+  Square()` on a `Box<Shape>`, is NL2534 as into any union field
+  (`reject_union_generic_field_store`). A union does not meet a constraint
+  (`<T extends HasKind>`, NL2328, `reject_union_generic_constraint`), and an instance
+  over a union is not key material for `nish:secret`
+  (NL2428, `reject_union_generic_secret`), nor a class typed JSON writes
+  (NL2486, `reject_union_generic_json`), nor something a C header or N-API bridge
+  spells (`reject_union_generic_export`, `reject_union_result_export`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
   or array literal of two variants is the existing same-type refusal
-  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`; so is
+  one a generic call would bind `T` to, `first([new Square(), new Circle()])`,
+  `reject_union_generic_inferred`), an arrow
   returning one needs its annotation (`reject_union_arrow_result`), and a
   local initialised from the tag without an annotation, `const k = s.kind`
   or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
@@ -1271,10 +1287,13 @@ gives up on: it keeps the checker's widened state.
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
 union is refused, and so is a union-holding field of any class or interface
-the compilation declares, exported or not, under any sidecar flag
-(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
-lays out every class and interface of the program, a private one too
-(`reject_union_private_field`). The message is
+the compilation declares, exported or not, under a flag that lays the classes
+out as C structs (`--emit-header`, `--emit-napi`, `--emit-napi-async`): a
+header lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). A build with `--emit-dts` alone describes no
+class, so there a union field of a class only the module reads — root
+storage's graph among them — is accepted; a union in an exported function's
+parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions
@@ -1979,7 +1998,8 @@ export const step = (): void => {
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of
-  these. A string, an array, a class, a `Map` or a `| null` is
+  these. A string, an array, a class, a `Map` or a `| null` (but `C | null`
+  for a class `C`, which is [root storage](#root-storage-an-object-graph-kept-between-calls)) is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
   (NL2686, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
@@ -2060,6 +2080,101 @@ export const step = (): void => {
   build's; a page reads them from `layout` and never spells one. A local
   `f32[]` is still a plain JavaScript array there: only module storage is a
   view.
+
+#### Root storage: an object graph kept between calls
+
+**Module storage whose element is `C | null` for a class `C` is root
+storage**: each slot holds one object, and everything that object reaches —
+its fields, their arrays and strings, the objects they hold — outlives the
+call that built it (`tests/cases/root_storage`,
+`docs/wp55-persistent-root.md`). It is how a wasm module keeps a game, a
+document or any class instance across `init`, `step` and `draw`.
+
+```ts
+class World {
+  balls: Ball[]
+  tick: i32 = 0
+  constructor() {
+    this.balls = []
+  }
+}
+
+const world = new Array<World | null>(1)
+
+export const init = (): void => {
+  world[0] = new World()
+}
+
+export const step = (): void => {
+  const w = world[0]
+  if (w !== null) {
+    w.tick = w.tick + 1
+  }
+}
+```
+
+On a page module each root is a record of its data, its length and the
+descriptor of its class, gathered into one table the keep walks
+(`tests/cases/root_storage_page`, whose root is `head`, a list of `Node`):
+
+```llvm
+%nish.root = type { i8*, i32, i8* }
+@nish_storage_0_head.root = constant %nish.root { i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*), i32 1, i8* bitcast (%nish.trace* @nish.trace.0 to i8*) }
+@nish.roots = internal constant [1 x %nish.root*] [%nish.root* @nish_storage_0_head.root]
+
+define void @nish_root_keep(i64 %mark) {
+  call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+```
+
+- **Natively it is module storage and nothing more.** A native program never
+  hands its arena back between calls, so the graph simply stays.
+- **On a page module the loader keeps the graph and releases the rest.**
+  Where the loader of a program without root storage releases each export
+  call's arena, this one calls `nish_root_keep`. The runtime traces what the
+  roots reach from descriptors the compiler writes (`%nish.trace`, one per
+  class, string and array type the roots reach;
+  `tests/cases/root_storage_page`), slides it down over the garbage, rewrites
+  every pointer to it, and frees what is left. It does so only once the kept
+  region passes twice the live bytes and 64 KiB, so a call that changes a
+  little copies nothing, and memory stays bounded however long the page runs
+  (`node tests/run.js persist`: 100,000 steps with memory flat).
+- **What a root reaches is traceable.** A number, a `boolean`, an enum, a
+  string, an array, a class or a discriminated union of classes. Anything
+  else — a `Map`, a `Set`, an interface a class implements, a `Region`, a
+  `Secret`, a `CPtr`, a handle class or a C struct layout — is
+  `` Root storage `X` cannot keep C.f (T): the runtime moves what a root reaches between calls, … ``
+  (NL2766, `tests/wordings/nl2766_root_storage_map`).
+- **It is not exported**: the objects move, so a page has no layout to read.
+  `export const world = new Array<World | null>(1)` is
+  `` Root storage `X` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead ``
+  (NL2767, `tests/wordings/nl2767_root_storage_export`), and `layout` leaves
+  root storage out.
+- **No threads, no regions.** Each allocates from an arena of its own, which
+  a root could be left pointing into, so root storage in a program that
+  loads `nish/threads` or `nish:region` is
+  `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
+  (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
+- **No WASI loader.** A `--profile wasi` build with `--emit-dts` writes a
+  loader that releases the arena after every call, and only a page module
+  emits the `nish_root_keep` a loader calls instead, so root storage there is
+  `` Root storage `X` cannot be kept in a WASI build that writes a loader (`--emit-dts`): … ``
+  (NL2770, `tests/wordings/nl2770_root_storage_wasi_dts`).
+- **A freestanding module without a loader** (`--target wasm32` and no
+  `--emit-dts`) still emits `nish_root_keep(mark)`; the host that calls its
+  exports writes its own loader, and must call `nish_root_keep(mark)` where it
+  would call `nish_arena_release(mark)`, or what a root reaches is freed.
+- **Every function may store through a root**, so a program with root
+  storage does not prove a parameter-only allocation stays in its caller's
+  scope from the signature alone; the compiler's other proofs are unchanged.
 
 ### Type aliases
 
@@ -2846,7 +2961,9 @@ and their `.ll` goldens are byte-identical files.
   second namespace: the whole-program attribute analysis is keyed by symbol
   name, so two functions sharing one would be emitted with each other's
   attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag.
+  does not depend on the flag. A proposal to qualify a private function's
+  symbol by its module when it would clash is
+  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
 
 ### `main`
 
@@ -6484,28 +6601,39 @@ function owned(s: string): string {
 ```llvm
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %copy.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %copy.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
 ```
 
 - **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
   for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
   pointer that is dangling, already freed, or to a buffer with no NUL is
   undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
-  So the call is an `unchecked` [panic site](#panic-sites) that is allowed
-  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
-  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
-  which is `ffi`.
-- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  It is an `unsafe` call to `--deny unsafe`, and the `CPtr` it reads came from
+  a `declare function`, which is `ffi`.
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](#panic-sites) kind, as
+  [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)'s does:
+  `` `readCString` read a NULL pointer ``, exit 1
+  (`tests/cases/panics_ffi_read_cstring_null`). The parameter is `CPtr`, so
   an unnarrowed pointer is
   `` `readCString` expects an argument of type CPtr, got CPtr | null ``
-  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
-  compiler trusts is the declaration: a `declare function` whose result is
-  declared `CPtr` gets no check after the call, so a C function that may
-  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
-  through. Declare such a result `CPtr | null`.
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
+  `declare function` declared to answer `CPtr` may still answer `NULL`, so
+  the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
+  above. No proof removes the test, so `--deny-panics` refuses a call in its
+  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
   constructor and released with its owner, and refused inside a `using a =
@@ -9016,8 +9144,8 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
-| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
-| `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `readCString(p: CPtr): string` | a NULL test that panics `ffi-null`, then a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates; may panic | `ffi_owned_string`, `panics_ffi_read_cstring_null`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
+| `readStruct(p: CPtr): T` | a NULL test that panics `ffi-null`, then `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates; may panic | `ffi_struct_read`, `panics_ffi_read_struct_null`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
 | `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
@@ -9071,10 +9199,11 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
-  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
-  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
-  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
+  its pointer for `NULL`, an `ffi-null` site no proof removes
+  (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
+  refuses a call to either in its scope. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -9136,9 +9265,15 @@ check for the whole vector, `i < len` and `i + N <= len`.
 
 - *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
   the element's address bitcast to `<N x T>*` and one `load` aligned to the
-  lane.
-- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
-  `simd_access_oob_negative`; `reject_simd_lane_type`.
+  lane, with the `!alias.scope`, `!noalias` and `!tbaa` of a scalar element
+  access of the lane type. The check is left out where the bounds proof
+  (`src/bounds.ts`, `judgeVectorAccess`) already knows every lane is in range:
+  `i` non-negative under a guard such as `i <= n - N` or `i + N - 1 < n` on the
+  array's length, or a literal index into an array of known length. A guard one
+  lane short proves nothing, and the access keeps its check.
+- *Tests:* `simd_access`, `simd_access_proven`, `simd_access_alias`,
+  `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`,
+  `simd_access_oob_guard`; `reject_simd_lane_type`.
 
 **`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
 It is a statement.
@@ -13649,6 +13784,25 @@ without one grants the capability whole, as before:
   `process.spawn=<program>` grant allows, null when none is named:
   `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
   The four-operand call in "The sandbox" below predates it.
+- `process.spawn=exec:<program>` grants the program as `process.spawn=<program>`
+  does, and lets it start others: under `--sandbox` a granted program is held
+  to its own start (no program it starts may exec again), and an `exec:` one
+  is not, so its subtree may run anything the allowlist's EXECUTE reaches, its
+  loaders included. The prefix is read before the program is resolved:
+  `process.spawn=exec:` with no program is NL3046
+  (`caps_dep_manifest_spawn_exec_refused`); the literal check treats
+  `exec:<program>` as `<program>` (`caps_dep_arg_spawn_exec_too_narrow`,
+  `caps_dep_spawn_exec_granted`); a program granted both ways is `exec:`; and
+  the lockfile records the prefix, so adding it is NL2593
+  (`caps_dep_lock_spawn_exec_widened`). The program is
+  listed with three leading slashes, the same file to the kernel. For
+  `tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`, on an
+  x86_64 glibc machine (illustrative: the paths, the loader and the length
+  are the machine's; `tests/run.js` pins only the `///` entry for `env`):
+
+  ```llvm
+  @.sandbox.exec = private unnamed_addr constant [78 x i8] c"///usr/bin/env\00/usr/bin/true\00//usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"
+  ```
 
 ##### The capability lockfile
 
@@ -14105,7 +14259,15 @@ where its memory lives and when it is reused.
    pushed, assigned to another variable (`let q = p` included), held by a
    reassigned `let`, or passed to a callee that captures it
    (`tests/cases/mem_stack_escape`). A site inside a loop gets one slot,
-   reused every iteration (`tests/cases/mem_stack_loop`). Stack arrays are
+   reused every iteration (`tests/cases/mem_stack_loop`). A `Result` is the
+   exception to "held by a reassigned `let`": an `Ok`/`Err`, or a call
+   returning a by-value `Result`, assigned to a `let` of the same function
+   goes where that `let` goes, so a `let r = Ok(n)` assigned again keeps its
+   function's arena scope. Outside a loop each such site is its own alloca;
+   inside one it is arena memory the scope gives back. A `let` assigned from
+   itself (`r = c ? r : Ok(0)`) keeps the arena answer
+   (`tests/cases/res_let_reassign`, whose 100000 calls leave `Arena.used()`
+   unchanged). Stack arrays are
    capped at 4096 bytes of data; a later `push` moves the elements to the
    arena and the header stays valid. The slot's type spells the length out,
    and the length is read from the literal that made the site stackable in the
@@ -14403,7 +14565,7 @@ by the caller.
   checked when one of its instantiations is finished, and the padding rule below
   is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  The thirteen below each name the rewrite; the class also holds NL9012, a
+  The fourteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
   ([Data parallelism](#data-parallelism-nishthreads)), and the retired NL9014
   and NL9015, which noted the removed `--unchecked-indexing` and `--wrapping`:
@@ -14438,7 +14600,9 @@ by the caller.
     nothing and has no rewrite — that function still loses its arena scope and
     still retains its memory, silently, unless it earns the scope through its
     callees ([Memory model](#memory-model), item 2), which is a known gap
-    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
+    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out") —
+    a `let` holding a `Result` is no longer in it ([Memory model](#memory-model),
+    item 1); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; when the value being dropped may already be reachable from
@@ -14446,7 +14610,8 @@ by the caller.
     enclosing loop, or one that finishes before the assignment starts, leaves
     the old value reachable and the `const` rewrite inapplicable (a capture is
     the value passed to a call or a constructor, either arm of a conditional
-    included, a method called on it unless it is a string or an array, a
+    included, a method called on it unless it is a string, an array or a
+    `Result`, whose methods hand back a flag or the payload and never the box, a
     `return`, an element of an array or object literal, or the right-hand side
     of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
@@ -14461,7 +14626,10 @@ by the caller.
     `last = \`item ${i}\`` peaked at 392 MB where the rewrite peaks at 11 MB.
     The hints are a `const` inside the loop when only the pass reads the value,
     or numbers kept across passes and the value built once after the loop
-    (`tests/cases/perf_arena_pass_drop`). Reported whatever the local was
+    (`tests/cases/perf_arena_pass_drop`). An `Ok(...)` or `Err(...)` inside
+    a loop is such an allocation unless its `Result` is passed by value, so a
+    `let r` given a new one on every pass is reported, and so is one assigned
+    over another inside the pass (NL9003). Reported whatever the local was
     declared holding and whatever the function returns, since the dropped
     values are this assignment's own; a line the rule above already reports is
     its alone. Not reported for an assignment inside a branch, which may run
@@ -14497,6 +14665,133 @@ by the caller.
     when the result is returned, stored, pushed or passed on; or in a loop
     whose pass can `return` what it allocated, which no bracket could
     release, so there is no rewrite to name.
+  - **a pass of an unbounded loop that keeps what it allocates** (NL9018) —
+    an allocation that `--emit-arena` marks `"accumulates":true`, where some
+    loop between it and its release has nothing bounding how many passes it
+    runs. `"accumulates"` means the allocation runs on every pass of a loop
+    that releases nothing per pass, and nothing reaches it once the pass ends.
+
+    That is the shape of a request loop on `Http1Server`. Its pass calls
+    `accept` or `respond`, which store into the server's memory, so the pass
+    is refused its scope. A reply string built in the handler then stays
+    allocated for as long as the server runs:
+    `tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests,
+    and the rewrite grew none.
+
+    A loop is bounded, and NL9018 stays silent for it, when one of these
+    holds:
+
+    - It is a `while`, `do` or `for` whose condition has an order comparison
+      (`<`, `<=`, `>`, `>=`) as a conjunct of its top-level `&&` chain. The
+      condition must call nothing but the numeric conversions (`toI32` and
+      its kin), and read nothing but locals, fields (`.length` among them)
+      and constants. A call to any function of the program or of `std/`
+      anywhere in the condition makes the loop unbounded.
+    - It is a `for...of` whose body cannot extend the collection it walks:
+      an array or a map, named by a local or a field path such as
+      `log.items`. The body extends it only through the same walked
+      expression, by one of these:
+      - adding to it: `push`, `unshift`, `splice`, `set` or `add` on it, or
+        a write through `walked[k]`;
+      - `++` or `--` on it, or spreading it;
+      - passing it to a call or a `new` whose callee may resize an array,
+        or that goes through a function reference;
+      - assigning it, or storing it in a variable, field, array or object.
+
+      Any other use leaves the walk bounded, and so does a call in the body
+      that resizes some other array.
+
+    Every other loop is unbounded:
+    - `while (true)` and `for (;;)`;
+    - a flag with no comparison (`while (running)`);
+    - equalities only (`while (a !== X && a !== Y)`);
+    - a top-level `||` (`while (next >= 0 || next === FULL)`);
+    - a call in the condition (`while (more(log))`,
+      `while (k < n && poll())`);
+    - a `for...of` whose body extends what it walks, as above;
+    - a bounded loop inside an unbounded one that releases nothing.
+
+    The rule has known blind spots. A comparison loop whose body never
+    moves toward its bound still counts as bounded. So does a `for...of`
+    whose collection grows by a way the rule does not follow: through an
+    alias (`const a = q; for (const x of q) a.push(x)`), through a method
+    that grows `this.items` while it is walked, or when the walked
+    expression is not a local, `this` or a field path (a call result or an
+    index expression).
+
+    There is at most one warning per loop, at the innermost loop whose pass
+    releases nothing. It names:
+    - the first site and its kind, and how many more there are;
+    - where the memory goes back;
+    - why the pass has no scope;
+    - the rewrite.
+
+    The rewrite moves the per-pass work that builds the temporary into a
+    block inside the loop body that opens with
+    [`using a = arena()`](#using-a--arena). The compiler refuses that block
+    (NL2416 and its family) if anything allocated there could outlive it
+    (`tests/cases/perf_arena_unbounded_pass`).
+
+    Only a temporary the pass drops counts. These do not: an array a `push`
+    grows, a value stored or passed on, and a call to a function that stores
+    what it allocates. A temporary handed to a callee that keeps it is passed
+    on, so it is not counted. A temporary from which every path leaves the
+    loop, by `return`, `throw` or a `break` out of it, is built at most once
+    each time the loop runs, so it is not counted either. Inside nested
+    loops it has to leave every unbounded loop out to where its memory is
+    released, not only the innermost: an unlabelled `break` ends only its
+    own loop, so a temporary that breaks out of a `for...of` inside a
+    `while (poll())` still counts, while a `return` or a `break` to a label
+    on the outer loop leaves both. The walk that proves it gives up at a
+    `switch`, a `try` or a nested loop, so a temporary that a `return`
+    inside a `switch` leaves with still counts.
+
+    Not reported for:
+    - a bounded loop;
+    - the same temporary inside the block;
+    - a loop whose pass takes its scope;
+    - a site NL9002, NL9003, NL9011 or NL9016 already reports, as the value
+      of the assignment or the call that warning sits on
+      (`tests/cases/perf_arena_unbounded_quiet`).
+
+    It reads the `"accumulates"` fact `--emit-arena` prints, then keeps only
+    the temporaries a pass drops, and changes no byte of the IR.
+  - **a function that keeps memory on every call** (NL9019) — a function
+    that keeps an allocation of its own past the call (a local assigned more
+    than once, or an array of its own; a value it only hands to a function's
+    parameter does not count, nor does one it only places in an array or
+    object literal that is itself handed to a parameter or to `spawnSync`, or
+    only reads in place, as in `[a, b].join(",")`), so that it has no arena
+    scope of its own, and that a loop pass which releases nothing calls
+    directly. Every pass adds the allocation the call kept, and nothing
+    releases it while the loop runs. Reported once, at the function's
+    declaration, naming the line of the first allocation it holds; the hints
+    are a `const` per value, a block that opens with
+    [`using a = arena()`](#using-a--arena) around the work, or a region for
+    what must outlive the call (`tests/cases/perf_kept_memory`). The rule
+    counts passes, not their number: a short fixed loop such as
+    `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
+    when the function returns a value that is not a number, a boolean, an enum
+    or nothing, because then its caller owns the memory; when it manages the
+    arena itself, feeds tasks, or fills a parameter; when it is a
+    constructor reached by `new`; or when every loop that calls it releases
+    what it kept — a pass with a scope of its own, or a call inside a
+    `using a = arena()` block. A loop nested in such a block, or in a pass of
+    an outer loop that has a scope of its own, counts as released, because
+    the memory goes back when that block or pass ends: a block around a loop
+    that never ends silences the warning without bounding the growth. Only a loop's direct callees are
+    judged, each on its own allocations: memory kept deeper in the chain,
+    behind a direct callee that answers memory, is not this warning's, and
+    [`--explain-memory`](#explaining-kept-memory) lists it
+    (`tests/cases/perf_kept_memory_quiet`). No call is excused for the object
+    it receives: a function that does its work once, behind a guard on a
+    field (`if (s.ready) return; s.ready = true`), still warns when it keeps
+    an array of its own, because the rule does not prove which object reaches
+    it on each pass; open a block with `using a = arena()` around that work
+    (`tests/cases/perf_kept_memory_direct`). A value handed to a callee's
+    parameter is not counted as kept even when the callee stores it into
+    something older (`add(list, makeItem())`): this rule does not report
+    that retention.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -15101,12 +15396,16 @@ holds a NUL byte, which C would read as the end of the string:
 is `NULL`:
 `` `name` returned NULL for a `string` result; declare it `string | null` ``;
 or the pointer of a [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)
-call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``
+call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``;
+or the pointer of a
+[`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) call that is
+`NULL`: `` `readCString` read a NULL pointer ``
 
 - *What proves it away:* nothing: a result declared `string | null` reads
   `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`); the
-  `readStruct` test stays at every call
-  (`tests/cases/panics_ffi_read_struct_null`)
+  `readStruct` and `readCString` tests stay at every call
+  (`tests/cases/panics_ffi_read_struct_null`,
+  `tests/cases/panics_ffi_read_cstring_null`)
 
 **`ffi-length`**: a call to a
 [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is
@@ -15136,12 +15435,11 @@ through further calls
 
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
-behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated (`readStruct` tests its pointer for `NULL`, so it is an
-`ffi-null` site below)
+behaviour (`readCString` and `readStruct` test their pointer for `NULL`, so
+each is an `ffi-null` site above)
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
-  author's word that the index is in range, or that the pointer is, not a
+  author's word that the index is in range, not a
   proof, and the `nish:unsafe` import its module must write is the opt-in to
   that word, so it is listed with `"allowed": true` and, like `oom`, never
   makes a function one that may panic (`tests/cases/deny_panics_unsafe`)
@@ -15272,7 +15570,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Four performance warnings are exactly that finding, and
+killed. Six performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
@@ -15282,19 +15580,24 @@ modules:
 | NL9003, an allocation dropped by an assignment | the value the local held |
 | NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
 | NL9016, an allocation dropped on every pass | the value each pass replaced |
+| NL9018, a pass of an unbounded loop that keeps what it allocates | the temporary each pass built, for as long as the loop runs |
+| NL9019, a function that keeps memory on every call | what each call a loop makes keeps |
 
 - **The error keeps the warning.** Its text is the warning's, after the code of
   the rule that found it, so it names the same rewrite:
   `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
   (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
-  `reject_deny_retention_loop`, `reject_deny_retention_concat`). The warning it
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`,
+  `reject_deny_retention_unbounded_pass`, `reject_deny_retention_kept`, and for
+  a `Result` assigned over another, `reject_deny_retention_result_drop` and
+  `reject_deny_retention_result_reassign`). The warning it
   restates is not printed as well, and `--no-warn-performance` does not
   silence the error.
 - **The program's own modules only.** A module of the root package is held to
   it; a dependency's warnings stay warnings, as its panic sites stay outside
   the [no-panic scope](#the-no-panic-scope), because the program's author
   cannot change that code (`tests/link/deny_retention_dependency`).
-- **What it does not promise.** The four warnings are conservative in the
+- **What it does not promise.** The five warnings are conservative in the
   direction of silence: each fires only where the compiler can name the memory
   and the rewrite, so a program it accepts can still retain memory in a shape
   no rule recognises ([wp6-memory.md](wp6-memory.md), "Left out"). Nor does it
@@ -15395,6 +15698,9 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   listed on its own line — both, when both do — because it runs outside the
   bracket a pass takes whether or not the body has one; a `do...while`
   condition's line follows the lines of the loops in its body.
+- **A listed loop with no bound** — one that is not bounded, by NL9018's rule — is
+  the loop NL9018 warns about when what its pass keeps is a temporary the
+  pass drops; the report lists it either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not, nor is a constructor,

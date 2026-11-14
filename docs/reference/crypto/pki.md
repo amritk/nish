@@ -9,6 +9,7 @@ import {
   PKI_ERR_BAD_SIGNATURE,
   PKI_ERR_BUDGET,
   PKI_ERR_CHAIN_TOO_LONG,
+  PKI_ERR_DISTRUSTED,
   PKI_ERR_EXPIRED,
   PKI_ERR_EXT_KEY_USAGE,
   PKI_ERR_HOSTNAME,
@@ -33,6 +34,7 @@ import {
   PKI_OK,
   PkiResult,
   PkiTrustStore,
+  pkiDistrustSpki,
   pkiMatchHostname,
   pkiReason,
   pkiTrustStore,
@@ -68,6 +70,12 @@ export const main = (): i32 => {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="pki​Distrust​Spki" icon="phosphor/regular/function" href="#pkidistrustspki">
+
+Distrusts a key in `store`: from now on, `pkiVerifyServer` refuses with `PKI_ERR_DISTRUSTED` a path that holds any certificate, the leaf, an intermediate or a root, whose subjectPublicKeyInfo DER hashes to `spkiSha256` under SHA-256.
+
+</scalar-card>
 
 <scalar-card title="pki​Match​Hostname" icon="phosphor/regular/function" href="#pkimatchhostname">
 
@@ -160,6 +168,42 @@ Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
 ## Functions
+
+### pkiDistrustSpki
+
+Distrusts a key in `store`: from now on, `pkiVerifyServer` refuses with
+`PKI_ERR_DISTRUSTED` a path that holds any certificate, the leaf, an
+intermediate or a root, whose subjectPublicKeyInfo DER hashes to
+`spkiSha256` under SHA-256. A certificate's DER is `X509Certificate.spki`;
+`sha256` of `nish/crypto/sha256` hashes it. The key is refused whatever
+name or certificate carries it, so one entry covers a CA's cross-signs and
+reissues. A store distrusts nothing until this is called.
+
+```ts
+function pkiDistrustSpki(
+  store: PkiTrustStore,
+  spkiSha256: u8[],
+): boolean
+```
+
+<scalar-field name="store" type="PkiTrustStore" required>
+
+The store to add the hash to.
+
+</scalar-field>
+
+<scalar-field name="spkiSha256" type="u8[]" required>
+
+The SHA-256 of the subjectPublicKeyInfo DER, 32 bytes.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+Whether the hash was added: false, and nothing added, unless it is
+  32 bytes long.
+
+</scalar-field>
 
 ### pkiMatchHostname
 
@@ -257,7 +301,8 @@ by certificate in the order sent, one that does not parse is
 `PKI_ERR_MALFORMED` and one with more than `PKI_MAX_NAMES` names or
 `PKI_MAX_SUBTREES` subtrees is `PKI_ERR_BUDGET`; then the leaf's own checks,
 in turn its validity, an unknown critical extension, being a CA, its key
-usage, its extended key usage and the host name; then the path search,
+usage, its extended key usage and the host name; then whether its key is
+distrusted (`pkiDistrustSpki`); then the path search,
 whose reason the module's header ranks, or `PKI_ERR_BUDGET` when it ran out
 of signatures or name comparisons; and last, once a path is found, the
 leaf's profile.
@@ -460,6 +505,15 @@ The chain asks for more work than one call does: signatures, names or subtrees.
 `PKI_ERR_CHAIN_TOO_LONG: i32`
 
 The chain or a path is longer than its bound.
+
+</scalar-card>
+
+<scalar-card title="17" icon="phosphor/regular/hash">
+
+`PKI_ERR_DISTRUSTED: i32`
+
+A certificate on the path has a key the caller distrusts: the SHA-256 of
+its subjectPublicKeyInfo is one `pkiDistrustSpki` added to the store.
 
 </scalar-card>
 

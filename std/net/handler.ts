@@ -1252,6 +1252,21 @@ export class HttpHandler {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
   write(r: HttpRequest, buf: u8[], off: i32, len: i32): i32 {
+    const put: i32 = this.put(r, buf, off, len)
+    if (put === HANDLER_SENT) {
+      this.drive(r.slot)
+    }
+    return put
+  }
+
+  /**
+   * `write` without its pass over the connection: the bytes are in the
+   * carrier's output or pending on the request, and nothing is sent or
+   * re-armed. The caller owes the slot a `drive` — `write` gives it at once,
+   * `sendFields` leaves it to the `end` that follows, so a whole answer takes
+   * one pass instead of two.
+   */
+  private put(r: HttpRequest, buf: u8[], off: i32, len: i32): i32 {
     if (r.state !== HANDLER_STREAMING) {
       panic(`HttpHandler.write: the response is not started (state ${r.state})`)
     }
@@ -1284,7 +1299,6 @@ export class HttpHandler {
     if (taken < len) {
       this.keep(r, buf, off + taken, len - taken)
     }
-    this.drive(r.slot)
     return HANDLER_SENT
   }
 
@@ -1380,7 +1394,8 @@ export class HttpHandler {
       return HANDLER_DROPPED
     }
     if (len > 0 && status !== 204 && status !== 304) {
-      this.write(r, body, off, len)
+      // No pass between the body and the end: `end` drives the slot once.
+      this.put(r, body, off, len)
     }
     return this.end(r)
   }

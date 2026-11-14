@@ -141,51 +141,12 @@ import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
-import {
-  FLAG_CONST,
-  FLAG_USING,
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CASE,
-  N_CLASS,
-  N_CONDITIONAL,
-  N_CONTINUE,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LABELED,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_PARAM,
-  N_PAREN,
-  N_RETURN,
-  N_SPREAD,
-  N_STRING,
-  N_SWITCH,
-  N_THIS,
-  N_THROW,
-  N_TRY,
-  N_UNARY,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringMap } from "./map"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
 import { Options } from "./options"
 import { isAsciiText } from "./strings"
+import { isSimdExport, simdSuffix, simdTypeLane } from "./nish-modules"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import {
   DeclaredRange,
@@ -929,7 +890,7 @@ const intersect = (a: State, b: State): State => {
 
 export const unwrapBoundsParens = (expr: Node): Node => {
   let inner = expr
-  while (inner.kind === N_PAREN) {
+  while (inner.kind === NodeKind.Paren) {
     inner = inner.children[0]
   }
   return inner
@@ -938,7 +899,7 @@ export const unwrapBoundsParens = (expr: Node): Node => {
 /** The local a bare identifier names, or `null` for every other expression. */
 const localOf = (program: CheckedProgram, expr: Node): Local | null => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return null
   }
   return program.nodeLocals[e.id]
@@ -993,7 +954,7 @@ export class PathHolder {
  */
 const pathHolder = (walk: BoundsWalk, expr: Node): Local | null => {
   let e = unwrapBoundsParens(expr)
-  while (e.kind === N_MEMBER) {
+  while (e.kind === NodeKind.Member) {
     e = unwrapBoundsParens(e.children[0])
   }
   const fields: string[] = []
@@ -1082,11 +1043,11 @@ const declaredPathType = (ctx: CheckContext, expr: Node, fields: string[], links
   const program = ctx.program
   const table = ctx.table
   const e = unwrapBoundsParens(expr)
-  if (e.kind === N_IDENT || e.kind === N_THIS) {
+  if (e.kind === NodeKind.Ident || e.kind === NodeKind.This) {
     const root = program.nodeLocals[e.id]
     return root === null ? -1 : root.type
   }
-  if (e.kind !== N_MEMBER) {
+  if (e.kind !== NodeKind.Member) {
     return -1
   }
   const below = declaredPathType(ctx, e.children[0], fields, links)
@@ -1216,7 +1177,7 @@ export class Offset {
  */
 export const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_BINARY || e.text !== "+" || !checksOverflow(ctx.program, ctx.table, e)) {
+  if (e.kind !== NodeKind.Binary || e.text !== "+" || !checksOverflow(ctx.program, ctx.table, e)) {
     return null
   }
   const left = indexLocal(ctx, e.children[0])
@@ -1228,6 +1189,31 @@ export const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
     return new Offset(right, literalValue(e.children[0]))
   }
   return null
+}
+
+/** The two sides of `e - c`, with `c` a literal of 1 or more. */
+class MinusLiteral {
+  base: Node
+  c: i32
+
+  constructor(base: Node, c: i32) {
+    this.base = base
+    this.c = c
+  }
+}
+
+/**
+ * `e - c` with `c` a literal of 1 or more, where the difference is exact: a
+ * signed subtraction is checked or proven, as `offsetIndex`'s sum is, so a
+ * bound below it is one `c` below `e`.
+ */
+const minusLiteral = (ctx: CheckContext, expr: Node): MinusLiteral | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== NodeKind.Binary || e.text !== "-" || !checksOverflow(ctx.program, ctx.table, e)) {
+    return null
+  }
+  const c = literalValue(e.children[1])
+  return c >= 1 ? new MinusLiteral(e.children[0], c) : null
 }
 
 /**
@@ -1245,7 +1231,7 @@ const isBuiltinToI32 = (program: CheckedProgram, call: Node): boolean =>
 export const isBuiltinConversion = (program: CheckedProgram, call: Node, name: string): boolean => {
   const callee = call.children[0]
   return (
-    callee.kind === N_IDENT &&
+    callee.kind === NodeKind.Ident &&
     callee.text === name &&
     program.nodeCallees[call.id] === null &&
     program.nodeBuiltins[call.id] === "" &&
@@ -1263,7 +1249,7 @@ export const isBuiltinConversion = (program: CheckedProgram, call: Node, name: s
  */
 const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_CALL || !isBuiltinToI32(walk.ctx.program, e)) {
+  if (e.kind !== NodeKind.Call || !isBuiltinToI32(walk.ctx.program, e)) {
     return null
   }
   const declared = walk.ctx.table.declaredRange(walk.ctx.program.nodeTypes[e.children[1].children[0].id])
@@ -1282,7 +1268,7 @@ const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
  * argument keeps the conversion's own range, as before.
  */
 const identityConversionOf = (program: CheckedProgram, table: TypeTable, e: Node, type: i32): Node | null => {
-  if (e.kind !== N_CALL) {
+  if (e.kind !== NodeKind.Call) {
     return null
   }
   const own =
@@ -1294,7 +1280,7 @@ const identityConversionOf = (program: CheckedProgram, table: TypeTable, e: Node
     return null
   }
   const arg = e.children[1].children[0]
-  if (arg.kind !== N_BINARY || arg.text !== "/") {
+  if (arg.kind !== NodeKind.Binary || arg.text !== "/") {
     return null
   }
   const argType = program.nodeTypes[arg.id]
@@ -1318,10 +1304,10 @@ const identityConversionOf = (program: CheckedProgram, table: TypeTable, e: Node
  */
 const lengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
   let e = unwrapBoundsParens(expr)
-  if (e.kind === N_CALL && isBuiltinToI32(walk.ctx.program, e)) {
+  if (e.kind === NodeKind.Call && isBuiltinToI32(walk.ctx.program, e)) {
     e = unwrapBoundsParens(e.children[1].children[0])
   }
-  if (e.kind !== N_MEMBER || e.text !== "length") {
+  if (e.kind !== NodeKind.Member || e.text !== "length") {
     return null
   }
   return holderOf(walk, e.children[0])
@@ -1337,7 +1323,7 @@ const lengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
  */
 const unsignedIndexOf = (ctx: CheckContext, expr: Node): Local | null => {
   let e = unwrapBoundsParens(expr)
-  if (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toU32")) {
+  if (e.kind === NodeKind.Call && isBuiltinConversion(ctx.program, e, "toU32")) {
     e = e.children[1].children[0]
   }
   const v = localOf(ctx.program, e)
@@ -1359,7 +1345,7 @@ const unsignedIndexOf = (ctx: CheckContext, expr: Node): Local | null => {
  */
 const unsignedLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_CALL || !isBuiltinConversion(walk.ctx.program, e, "toU32")) {
+  if (e.kind !== NodeKind.Call || !isBuiltinConversion(walk.ctx.program, e, "toU32")) {
     return null
   }
   return lengthOf(walk, e.children[1].children[0])
@@ -1373,7 +1359,7 @@ const unsignedLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
  */
 const literalValue = (expr: Node): i32 => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_NUMBER) {
+  if (e.kind !== NodeKind.Number) {
     return -1
   }
   const written = e.text
@@ -1406,7 +1392,7 @@ const literalValue = (expr: Node): i32 => {
 /** `-1` as written: a minus sign before the literal `1`. */
 const isMinusOne = (expr: Node): boolean => {
   const e = unwrapBoundsParens(expr)
-  return e.kind === N_UNARY && e.text === "-" && literalValue(e.children[0]) === 1
+  return e.kind === NodeKind.Unary && e.text === "-" && literalValue(e.children[0]) === 1
 }
 
 /**
@@ -1420,13 +1406,13 @@ const declaredValueRange = (ctx: CheckContext, expr: Node): DeclaredRange | null
   if (n >= 0) {
     return new DeclaredRange(toI64(n), toI64(n))
   }
-  if (e.kind === N_UNARY && e.text === "-") {
+  if (e.kind === NodeKind.Unary && e.text === "-") {
     const negated = literalValue(e.children[0])
     if (negated >= 0) {
       return new DeclaredRange(toI64(-negated), toI64(-negated))
     }
   }
-  if (e.kind === N_IDENT) {
+  if (e.kind === NodeKind.Ident) {
     const constant = ctx.program.nodeConstants[e.id]
     if (constant !== null && constant.folded && isInteger(constant.type)) {
       return new DeclaredRange(constant.intValue, constant.intValue)
@@ -1510,7 +1496,7 @@ const noteProof = (walk: BoundsWalk, node: Node): void => {
 /** `xs.pop()` on an array receiver, which panics on an empty array (`emitPop`). */
 const isArrayPop = (ctx: CheckContext, call: Node): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
-  if (callee.kind !== N_MEMBER || callee.text !== "pop" || call.children[1].children.length > 0) {
+  if (callee.kind !== NodeKind.Member || callee.text !== "pop" || call.children[1].children.length > 0) {
     return false
   }
   return ctx.table.isArray(ctx.program.nodeTypes[callee.children[0].id])
@@ -1541,7 +1527,7 @@ const judgePop = (walk: BoundsWalk, state: State, call: Node): void => {
  */
 const anyLiteral = (expr: Node): i64 => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_NUMBER) {
+  if (e.kind !== NodeKind.Number) {
     return toI64(-1)
   }
   return parseIntegerLiteral(e.text)
@@ -1550,7 +1536,7 @@ const anyLiteral = (expr: Node): i64 => {
 /** The local `v` when `expr` is `v * v` at `i32`, the shape a loop bounded by a square root is written in. */
 const squaredLocal = (ctx: CheckContext, expr: Node): Local | null => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_BINARY || e.text !== "*") {
+  if (e.kind !== NodeKind.Binary || e.text !== "*") {
     return null
   }
   const a = indexLocal(ctx, e.children[0])
@@ -1614,6 +1600,24 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
       const bound = (strict ? hiConst : hiConst + 1) - loOffset.c
       if (bound >= 1) {
         out.push(new Fact(FACT_MAX_INDEX, loOffset.v, null, bound))
+      }
+    }
+  }
+  // `i < w.length - c` and `i <= n - c`, with `n` a hoisted length: the guard
+  // of a loop that reads `c` elements at once from `i`, as a vector access
+  // does. The difference is exact (`checksOverflow`), so `i + c` is at most
+  // the length, and `i` reaches `c - 1` past itself (`c` for a strict compare).
+  const hiMinus = minusLiteral(ctx, hi)
+  if (loVar !== null && hiMinus !== null) {
+    const reach = strict ? hiMinus.c : hiMinus.c - 1
+    const length = lengthOf(walk, hiMinus.base)
+    if (length !== null) {
+      out.push(new Fact(FACT_BELOW, loVar, length, reach))
+    }
+    const n = indexLocal(ctx, hiMinus.base)
+    if (n !== null) {
+      for (const above of holdersAbove(state, n)) {
+        out.push(new Fact(FACT_BELOW, loVar, above, knownBelow(state, n, above) ? reach + 1 : reach))
       }
     }
   }
@@ -1765,11 +1769,11 @@ const factsFrom = (whenTrue: Fact[], whenFalse: Fact[]): ConditionFacts => {
  */
 const conditionFacts = (walk: BoundsWalk, state: State, cond: Node): ConditionFacts => {
   const expr = unwrapBoundsParens(cond)
-  if (expr.kind === N_UNARY && expr.text === "!") {
+  if (expr.kind === NodeKind.Unary && expr.text === "!") {
     const inner = conditionFacts(walk, state, expr.children[0])
     return factsFrom(inner.whenFalse, inner.whenTrue)
   }
-  if (expr.kind !== N_BINARY) {
+  if (expr.kind !== NodeKind.Binary) {
     return new ConditionFacts()
   }
   const op = expr.text
@@ -1890,7 +1894,7 @@ const concatFacts = (a: Fact[], b: Fact[]): Fact[] => {
  */
 const isIncrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
   const e = unwrapBoundsParens(rhs)
-  if (e.kind !== N_BINARY || e.text !== "+") {
+  if (e.kind !== NodeKind.Binary || e.text !== "+") {
     return false
   }
   const left = localOf(program, e.children[0])
@@ -1910,7 +1914,7 @@ const isIncrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
  */
 const isDecrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
   const e = unwrapBoundsParens(rhs)
-  if (e.kind !== N_BINARY || e.text !== "-") {
+  if (e.kind !== NodeKind.Binary || e.text !== "-") {
     return false
   }
   const left = localOf(program, e.children[0])
@@ -1979,7 +1983,7 @@ const impliesNonNegative = (walk: BoundsWalk, state: State, expr: Node): boolean
   if (v !== null) {
     return isIndexType(ctx.table, v.type) && knownNonNegative(state, v)
   }
-  if (e.kind !== N_BINARY || e.text !== "+") {
+  if (e.kind !== NodeKind.Binary || e.text !== "+") {
     return false
   }
   return impliesNonNegative(walk, state, e.children[0]) && impliesNonNegative(walk, state, e.children[1])
@@ -2033,7 +2037,7 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
     return out
   }
   rangeFacts(walk, state, v, e, out)
-  if (e.kind === N_BINARY && e.text === "-") {
+  if (e.kind === NodeKind.Binary && e.text === "-") {
     const c = literalValue(e.children[1])
     const w = indexLocal(ctx, e.children[0])
     if (c >= 0 && w !== null && ctx.table.baseOf(w.type) === ctx.table.baseOf(v.type)) {
@@ -2062,8 +2066,8 @@ const rangeFacts = (walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact
   const ctx = walk.ctx
   const base = ctx.table.baseOf(v.type)
   const computed =
-    e.kind === N_BINARY ||
-    (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toI64")) ||
+    e.kind === NodeKind.Binary ||
+    (e.kind === NodeKind.Call && isBuiltinConversion(ctx.program, e, "toI64")) ||
     identityConversionOf(ctx.program, ctx.table, e, base) !== null
   if ((base !== T_I32 && base !== T_I64) || !computed) {
     return
@@ -2086,17 +2090,17 @@ const rangeFacts = (walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact
  * (`returnedLength`).
  */
 const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]): Fact[] => {
-  if (ctx.table.isArray(v.type) && e.kind === N_ARRAY) {
+  if (ctx.table.isArray(v.type) && e.kind === NodeKind.Array) {
     out.push(new Fact(FACT_MIN_LENGTH, v, null, e.children.length))
     return out
   }
-  if (ctx.table.isArray(v.type) && e.kind === N_NEW && e.children[2].children.length === 1) {
+  if (ctx.table.isArray(v.type) && e.kind === NodeKind.New && e.children[2].children.length === 1) {
     const size = literalValue(e.children[2].children[0])
     if (size >= 0) {
       out.push(new Fact(FACT_MIN_LENGTH, v, null, size))
     }
   }
-  if (ctx.table.isArray(v.type) && e.kind === N_CALL) {
+  if (ctx.table.isArray(v.type) && e.kind === NodeKind.Call) {
     const returned = returnedLength(ctx, e)
     if (returned >= 0) {
       out.push(new Fact(FACT_MIN_LENGTH, v, null, returned))
@@ -2137,7 +2141,7 @@ const initialiserArrayFacts = (ctx: CheckContext, v: Local, e: Node, out: Fact[]
 // The length the call gives is the least over the returns.
 
 /** Whether `n` is the identifier `name`, as written. */
-const isNamed = (n: Node, name: string): boolean => n.kind === N_IDENT && n.text === name
+const isNamed = (n: Node, name: string): boolean => n.kind === NodeKind.Ident && n.text === name
 
 /**
  * The `return` statements of `body`, into `out`; false when the body holds
@@ -2145,10 +2149,15 @@ const isNamed = (n: Node, name: string): boolean => n.kind === N_IDENT && n.text
  * class — or a `try`, whose `finally` runs after a `return`.
  */
 const gatherReturns = (n: Node, out: Node[]): boolean => {
-  if (n.kind === N_ARROW || n.kind === N_FUNCTION || n.kind === N_CLASS || n.kind === N_TRY) {
+  if (
+    n.kind === NodeKind.Arrow ||
+    n.kind === NodeKind.FunctionDecl ||
+    n.kind === NodeKind.Class ||
+    n.kind === NodeKind.Try
+  ) {
     return false
   }
-  if (n.kind === N_RETURN) {
+  if (n.kind === NodeKind.Return) {
     out.push(n)
   }
   for (const child of n.children) {
@@ -2162,7 +2171,7 @@ const gatherReturns = (n: Node, out: Node[]): boolean => {
 /** How many times `body` declares `name`: a `let`, `const`, `for` head or parameter. */
 const declarationsOf = (n: Node, name: string): i32 => {
   let count = 0
-  if ((n.kind === N_VAR_DECL || n.kind === N_PARAM) && isNamed(n.children[0], name)) {
+  if ((n.kind === NodeKind.VarDecl || n.kind === NodeKind.Param) && isNamed(n.children[0], name)) {
     count = count + 1
   }
   for (const child of n.children) {
@@ -2173,11 +2182,15 @@ const declarationsOf = (n: Node, name: string): i32 => {
 
 /** Whether anything in `n` assigns `name` or steps it. */
 const writesName = (n: Node, name: string): boolean => {
-  if (n.kind === N_BINARY && isBoundsAssignment(n.text) && isNamed(unwrapBoundsParens(n.children[0]), name)) {
+  if (
+    n.kind === NodeKind.Binary &&
+    isBoundsAssignment(n.text) &&
+    isNamed(unwrapBoundsParens(n.children[0]), name)
+  ) {
     return true
   }
   if (
-    n.kind === N_UNARY &&
+    n.kind === NodeKind.Unary &&
     (n.text === "++" || n.text === "--") &&
     isNamed(unwrapBoundsParens(n.children[0]), name)
   ) {
@@ -2238,30 +2251,30 @@ class KeepScan {
  * method's or a builtin's argument — is one this rule does not follow.
  */
 const usesKeepLength = (scan: KeepScan, n: Node, name: string, returnable: boolean): boolean => {
-  if (n.kind === N_INDEX && isNamed(n.children[0], name)) {
+  if (n.kind === NodeKind.Index && isNamed(n.children[0], name)) {
     return usesKeepLength(scan, n.children[1], name, returnable)
   }
-  if (n.kind === N_MEMBER && n.text === "length" && isNamed(n.children[0], name)) {
+  if (n.kind === NodeKind.Member && n.text === "length" && isNamed(n.children[0], name)) {
     return true
   }
-  if (n.kind === N_BINARY && isBoundsAssignment(n.text)) {
+  if (n.kind === NodeKind.Binary && isBoundsAssignment(n.text)) {
     const target = unwrapBoundsParens(n.children[0])
-    if (target.kind === N_MEMBER && isNamed(target.children[0], name)) {
+    if (target.kind === NodeKind.Member && isNamed(target.children[0], name)) {
       return false
     }
   }
-  if (n.kind === N_UNARY && (n.text === "++" || n.text === "--")) {
+  if (n.kind === NodeKind.Unary && (n.text === "++" || n.text === "--")) {
     const target = unwrapBoundsParens(n.children[0])
-    if (target.kind === N_MEMBER && isNamed(target.children[0], name)) {
+    if (target.kind === NodeKind.Member && isNamed(target.children[0], name)) {
       return false
     }
   }
-  if (n.kind === N_CALL) {
+  if (n.kind === NodeKind.Call) {
     const target = n.children[0]
-    if (target.kind === N_MEMBER && target.text === "push" && isNamed(target.children[0], name)) {
+    if (target.kind === NodeKind.Member && target.text === "push" && isNamed(target.children[0], name)) {
       return usesKeepLength(scan, n.children[1], name, returnable)
     }
-    if (target.kind === N_IDENT) {
+    if (target.kind === NodeKind.Ident) {
       const args = n.children[1].children
       let k = 0
       while (k < args.length) {
@@ -2277,10 +2290,10 @@ const usesKeepLength = (scan: KeepScan, n: Node, name: string, returnable: boole
       return true
     }
   }
-  if (n.kind === N_RETURN && n.children.length > 0 && isNamed(n.children[0], name)) {
+  if (n.kind === NodeKind.Return && n.children.length > 0 && isNamed(n.children[0], name)) {
     return returnable
   }
-  if (n.kind === N_VAR_DECL && isNamed(n.children[0], name)) {
+  if (n.kind === NodeKind.VarDecl && isNamed(n.children[0], name)) {
     return usesKeepLength(scan, n.children[2], name, returnable)
   }
   if (isNamed(n, name)) {
@@ -2334,7 +2347,7 @@ const keepsParameter = (ctx: CheckContext, sig: FunctionSig, k: i32, trail: Keep
     return sig.keepsLength[k] === 1
   }
   const body = sig.body()
-  if (body === null || body.kind !== N_BLOCK) {
+  if (body === null || body.kind !== NodeKind.Block) {
     return false
   }
   const key = `${sig.name}#${k}`
@@ -2367,7 +2380,11 @@ const keepsParameter = (ctx: CheckContext, sig: FunctionSig, k: i32, trail: Keep
 /** How many statements under `n` are `return name`. */
 const returnsOfName = (n: Node, name: string): i32 => {
   let count = 0
-  if (n.kind === N_RETURN && n.children.length > 0 && isNamed(unwrapBoundsParens(n.children[0]), name)) {
+  if (
+    n.kind === NodeKind.Return &&
+    n.children.length > 0 &&
+    isNamed(unwrapBoundsParens(n.children[0]), name)
+  ) {
     count = 1
   }
   for (const child of n.children) {
@@ -2382,12 +2399,12 @@ const returnsOfName = (n: Node, name: string): i32 => {
  * one hands back the array the declaration built. `null` otherwise.
  */
 const soleConstInitialiser = (body: Node, name: string, returns: i32): Node | null => {
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     const statements = body.children
     let k = 0
     while (k < statements.length) {
       const s = statements[k]
-      if (s.kind === N_VAR && (s.flags & FLAG_CONST) !== 0 && (s.flags & FLAG_USING) === 0) {
+      if (s.kind === NodeKind.Var && (s.flags & FLAG_CONST) !== 0 && (s.flags & FLAG_USING) === 0) {
         for (const d of s.children[0].children) {
           if (isNamed(d.children[0], name)) {
             let after = 0
@@ -2422,7 +2439,7 @@ const sizeAtCall = (ctx: CheckContext, sig: FunctionSig, body: Node, size: Node,
   if (n >= 0) {
     return n
   }
-  if (e.kind !== N_IDENT || declarationsOf(body, e.text) > 0) {
+  if (e.kind !== NodeKind.Ident || declarationsOf(body, e.text) > 0) {
     return -1
   }
   let k = 0
@@ -2462,15 +2479,19 @@ const sizeAtCall = (ctx: CheckContext, sig: FunctionSig, body: Node, size: Node,
 /** The length of the fresh array `value`, written in `sig`'s body, has at `call`; -1 when it is not one. */
 const builtLength = (ctx: CheckContext, sig: FunctionSig, body: Node, value: Node, call: Node): i32 => {
   const e = unwrapBoundsParens(value)
-  if (e.kind === N_ARRAY) {
+  if (e.kind === NodeKind.Array) {
     for (const element of e.children) {
-      if (element.kind === N_SPREAD) {
+      if (element.kind === NodeKind.Spread) {
         return -1
       }
     }
     return e.children.length
   }
-  if (e.kind !== N_NEW || e.children[0].kind !== N_IDENT || e.children[2].children.length !== 1) {
+  if (
+    e.kind !== NodeKind.New ||
+    e.children[0].kind !== NodeKind.Ident ||
+    e.children[2].children.length !== 1
+  ) {
     return -1
   }
   const name = e.children[0].text
@@ -2487,7 +2508,7 @@ const builtLength = (ctx: CheckContext, sig: FunctionSig, body: Node, value: Nod
  */
 const returnedLength = (ctx: CheckContext, value: Node): i32 => {
   const call = unwrapBoundsParens(value)
-  if (call.kind !== N_CALL || !ctx.table.isArray(ctx.program.nodeTypes[call.id])) {
+  if (call.kind !== NodeKind.Call || !ctx.table.isArray(ctx.program.nodeTypes[call.id])) {
     return -1
   }
   const sig = ctx.program.nodeCallees[call.id]
@@ -2495,7 +2516,7 @@ const returnedLength = (ctx: CheckContext, value: Node): i32 => {
     return -1
   }
   const body = sig.body()
-  if (body === null || body.kind !== N_BLOCK) {
+  if (body === null || body.kind !== NodeKind.Block) {
     return -1
   }
   const returns: Node[] = []
@@ -2509,7 +2530,7 @@ const returnedLength = (ctx: CheckContext, value: Node): i32 => {
       return -1
     }
     const returned = unwrapBoundsParens(r.children[0])
-    if (returned.kind === N_IDENT) {
+    if (returned.kind === NodeKind.Ident) {
       if (name !== "" && returned.text !== name) {
         return -1
       }
@@ -2681,7 +2702,7 @@ export class BoundsWalk {
 /** `s.charCodeAt(i)` on a string receiver, which lowers to the same check `a[i]` does. */
 const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
-  if (callee.kind !== N_MEMBER || callee.text !== "charCodeAt") {
+  if (callee.kind !== NodeKind.Member || callee.text !== "charCodeAt") {
     return false
   }
   if (call.children[1].children.length !== 1) {
@@ -2699,7 +2720,7 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
  */
 const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
   const callee = unwrapBoundsParens(call.children[0])
-  if (callee.kind !== N_MEMBER || call.children[1].children.length !== 1) {
+  if (callee.kind !== NodeKind.Member || call.children[1].children.length !== 1) {
     return ""
   }
   if (callee.text !== "unwrapOr" && callee.text !== "expect") {
@@ -2720,7 +2741,96 @@ const lazyResultMethod = (ctx: CheckContext, call: Node): string => {
  * The walk and the loop-effect scan both ask this, so they cannot disagree.
  */
 export const callsNothing = (ctx: CheckContext, call: Node): boolean =>
-  isCharCodeAt(ctx, call) || isBuiltinToI32(ctx.program, call) || isUncheckedElementCall(ctx.program, call)
+  isCharCodeAt(ctx, call) ||
+  isBuiltinToI32(ctx.program, call) ||
+  isUncheckedElementCall(ctx.program, call) ||
+  isSimdCall(ctx.program, call)
+
+/**
+ * A `nish:simd` call: a constructor, a splat, a lane operation, a load or a
+ * store. Every one lowers inline and calls nothing but the `noreturn` index
+ * panic (`identifierBuiltinCalleesNamed`), and none can reach a length or a
+ * local. A load reads elements and a store writes them, and no fact here
+ * describes an element's value. Without this, the `extract` or `bitmask` that
+ * reads a vector just loaded would drop the facts that proved the load.
+ */
+const isSimdCall = (program: CheckedProgram, call: Node): boolean =>
+  call.kind === NodeKind.Call &&
+  program.nodeCallees[call.id] === null &&
+  isSimdExport(program.nodeBuiltins[call.id])
+
+/**
+ * The lane count of `nish:simd`'s `load…(xs, i)` or `store(v, xs, i)`, the
+ * calls `emitVectorAccess` lowers to one checked vector load or store, or 0
+ * for any other call. They are reachable only by import, so the checker's
+ * record of the imported name is the whole test (`isVectorAccess` in
+ * `src/emit-arrays.ts`).
+ */
+const vectorAccessLanes = (ctx: CheckContext, call: Node): i32 => {
+  const args = call.children[1].children
+  if (call.kind !== NodeKind.Call || args.length < 2) {
+    return 0
+  }
+  const name = ctx.program.nodeBuiltins[call.id]
+  if (name === "store" && args.length === 3) {
+    return ctx.table.laneCount(ctx.program.nodeTypes[args[0].id])
+  }
+  if (simdTypeLane(simdSuffix(name, "load")).length > 0) {
+    return ctx.table.laneCount(ctx.program.nodeTypes[call.id])
+  }
+  return 0
+}
+
+/**
+ * A vector access of `lanes` elements from `i` checks `0 <= i` and
+ * `i + lanes <= xs.length` at once, so it is proven by `i`'s floor and a
+ * `below` fact that reaches `lanes - 1` past `i`, and it leaves both behind
+ * when its check passes. The index is a local, `i + c` or a literal, the
+ * shapes `judge` reads for one element.
+ */
+const judgeVectorAccess = (walk: BoundsWalk, state: State, call: Node, lanes: i32): void => {
+  const args = call.children[1].children
+  const holder = holderOf(walk, args[args.length - 2])
+  if (holder === null) {
+    return
+  }
+  const index = args[args.length - 1]
+  const last = lanes - 1
+  const constant = literalValue(index)
+  if (constant >= 0) {
+    // Past `INT_MAX` the access cannot pass its check, and the sum is no
+    // length: it keeps its check and leaves nothing behind.
+    if (toI64(constant) + toI64(lanes) > I32_MAX) {
+      return
+    }
+    if (knownMinLength(state, holder, constant + lanes)) {
+      noteProof(walk, call)
+    }
+    addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, constant + lanes))
+    return
+  }
+  // A passed `w[i + c]` says nothing about `i >= 0`, as in `recordPassedCheck`.
+  const offset = offsetIndex(walk.ctx, index)
+  if (offset !== null) {
+    if (toI64(offset.c) + toI64(last) > I32_MAX) {
+      return
+    }
+    if (knownNonNegative(state, offset.v) && belowReach(state, offset.v, holder) >= offset.c + last) {
+      noteProof(walk, call)
+    }
+    addFact(state, new Fact(FACT_BELOW, offset.v, holder, offset.c + last))
+    return
+  }
+  const i = indexLocal(walk.ctx, index)
+  if (i === null) {
+    return
+  }
+  if (knownNonNegative(state, i) && belowReach(state, i, holder) >= last) {
+    noteProof(walk, call)
+  }
+  addFact(state, new Fact(FACT_NON_NEGATIVE, i, null, 0))
+  addFact(state, new Fact(FACT_BELOW, i, holder, last))
+}
 
 /**
  * `uncheckedGet(xs, i)` or `uncheckedSet(xs, i, v)` from `nish:unsafe`, by the
@@ -2733,7 +2843,7 @@ export const callsNothing = (ctx: CheckContext, call: Node): boolean =>
 const isUncheckedElementCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
   if (
-    callee.kind !== N_IDENT ||
+    callee.kind !== NodeKind.Ident ||
     program.nodeCallees[call.id] !== null ||
     call.children[1].children.length === 0
   ) {
@@ -2840,7 +2950,7 @@ const isSliceCall = (ctx: CheckContext, call: Node): boolean => isStringRangeCal
 /** A call of the string method `name` with the one or two bounds the checker accepts. */
 const isStringRangeCall = (ctx: CheckContext, call: Node, name: string): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
-  if (callee.kind !== N_MEMBER || callee.text !== name) {
+  if (callee.kind !== NodeKind.Member || callee.text !== name) {
     return false
   }
   const count = call.children[1].children.length
@@ -3025,10 +3135,10 @@ const provesLiteralSlice = (walk: BoundsWalk, state: State, receiver: Node, boun
 /** The length of the ASCII string `expr` spells out, through a `const` or a module constant, or -1. */
 const asciiLiteralLength = (walk: BoundsWalk, expr: Node): i32 => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind === N_STRING) {
+  if (e.kind === NodeKind.String) {
     return isAsciiText(e.text) ? e.text.length : -1
   }
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return -1
   }
   const constant = walk.ctx.program.nodeConstants[e.id]
@@ -3100,8 +3210,8 @@ const asciiLiteralLength = (walk: BoundsWalk, expr: Node): i32 => {
  * not make anyone pay for.
  */
 const writesLocal = (program: CheckedProgram, node: Node, v: Local): boolean => {
-  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
-  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || steps) {
+  const steps = node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")
+  if ((node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) || steps) {
     const target = localOf(program, node.children[0])
     if (target !== null && target === v) {
       return true
@@ -3153,10 +3263,10 @@ const provesByRange = (walk: BoundsWalk, state: State, holder: Local, index: Nod
 
 /** Whether `node` assigns, increments or decrements anything, anywhere inside it. */
 const writesSomething = (node: Node): boolean => {
-  if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
+  if (node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) {
     return true
   }
-  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     return true
   }
   for (const child of node.children) {
@@ -3211,7 +3321,7 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
   let e = expr
   while (true) {
     judgeRange(walk, state, e)
-    if (e.kind !== N_PAREN) {
+    if (e.kind !== NodeKind.Paren) {
       return
     }
     e = e.children[0]
@@ -3261,22 +3371,22 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
 
   // WP29: an arrow argument is a function of its own, proved when it was
   // lifted; it runs in the callee, not here, and reads nothing of this body's.
-  if (e.kind === N_ARROW) {
+  if (e.kind === NodeKind.Arrow) {
     return
   }
 
-  if (e.kind === N_INDEX) {
+  if (e.kind === NodeKind.Index) {
     walkExpression(walk, state, e.children[0])
     walkExpression(walk, state, e.children[1])
     judge(walk, state, e, e.children[0], e.children[1], true)
     return
   }
 
-  if (e.kind === N_CALL) {
+  if (e.kind === NodeKind.Call) {
     const callee = unwrapBoundsParens(e.children[0])
-    if (callee.kind === N_MEMBER) {
+    if (callee.kind === NodeKind.Member) {
       walkExpression(walk, state, callee.children[0])
-    } else if (callee.kind !== N_IDENT) {
+    } else if (callee.kind !== NodeKind.Ident) {
       walkExpression(walk, state, callee)
     }
     const lazy = lazyResultMethod(ctx, e)
@@ -3325,6 +3435,10 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
+    const lanes = vectorAccessLanes(ctx, e)
+    if (lanes > 0) {
+      judgeVectorAccess(walk, state, e, lanes)
+    }
     if (isArrayPop(ctx, e)) {
       judgePop(walk, state, e)
     }
@@ -3343,7 +3457,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     return
   }
 
-  if (e.kind === N_NEW) {
+  if (e.kind === NodeKind.New) {
     const target = ctx.program.nodeCallees[e.id]
     let at = 0
     for (const arg of e.children[2].children) {
@@ -3354,12 +3468,12 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     return
   }
 
-  if (e.kind === N_BINARY) {
+  if (e.kind === NodeKind.Binary) {
     walkBinary(walk, state, e)
     return
   }
 
-  if (e.kind === N_CONDITIONAL) {
+  if (e.kind === NodeKind.Conditional) {
     walkExpression(walk, state, e.children[0])
     const facts = conditionFacts(walk, state, e.children[0])
     const whenTrue = cloneState(state)
@@ -3372,7 +3486,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     return
   }
 
-  if (e.kind === N_UNARY) {
+  if (e.kind === NodeKind.Unary) {
     const operand = e.children[0]
     walkExpression(walk, state, operand)
     // `-x`, `x++` and `x--` are judged on the value read, before the step.
@@ -3381,7 +3495,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
       return
     }
     const field = unwrapBoundsParens(operand)
-    if (field.kind === N_MEMBER) {
+    if (field.kind === NodeKind.Member) {
       forgetPathsThrough(walk, state, field.text)
       return
     }
@@ -3418,8 +3532,8 @@ const I32_MIN: i64 = -2147483648
  * emitter (the reason `isBoundsAssignment` gives).
  */
 const storesBackRange = (ctx: CheckContext, node: Node): boolean => {
-  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
-  const compound = node.kind === N_BINARY && node.text !== "=" && isBoundsAssignment(node.text)
+  const steps = node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")
+  const compound = node.kind === NodeKind.Binary && node.text !== "=" && isBoundsAssignment(node.text)
   return (steps || compound) && ctx.table.isRanged(ctx.program.nodeTypes[node.children[0].id])
 }
 
@@ -3695,10 +3809,10 @@ const freshLength = (walk: BoundsWalk, value: Node): i32 => {
   if (!ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
     return -1
   }
-  if (e.kind === N_NEW && e.children[2].children.length === 1) {
+  if (e.kind === NodeKind.New && e.children[2].children.length === 1) {
     return literalValue(e.children[2].children[0])
   }
-  if (e.kind !== N_ARRAY) {
+  if (e.kind !== NodeKind.Array) {
     return -1
   }
   const effects = new Effects()
@@ -3727,7 +3841,7 @@ const storedLength = (walk: BoundsWalk, target: Node, value: Node): i32 => {
     return fresh
   }
   const receiver = unwrapBoundsParens(target.children[0])
-  if (receiver.kind !== N_THIS) {
+  if (receiver.kind !== NodeKind.This) {
     const root = localOf(walk.ctx.program, receiver)
     if (root === null || root.mutable) {
       return -1
@@ -3782,7 +3896,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   }
 
   const target = unwrapBoundsParens(left)
-  if (target.kind === N_INDEX) {
+  if (target.kind === NodeKind.Index) {
     walkExpression(walk, state, target.children[0])
     walkExpression(walk, state, target.children[1])
     if (op !== "=") {
@@ -3821,7 +3935,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     return
   }
 
-  if (target.kind === N_MEMBER) {
+  if (target.kind === NodeKind.Member) {
     // `recv.f = v` evaluates the receiver, and every check inside it, before
     // `v` (`emitFieldAssignment`), so the receiver is walked first: walking it
     // second judged `g.hs[i]` in `g.hs[i].n = (i = 0)` against the new `i`.
@@ -4008,7 +4122,7 @@ class Effects {
 const noteMask = (node: Node, v: Local, effects: Effects): void => {
   const value = unwrapBoundsParens(node.children[1])
   const literal =
-    node.text === "=" && value.kind === N_BINARY && value.text === "&"
+    node.text === "=" && value.kind === NodeKind.Binary && value.text === "&"
       ? anyLiteral(value.children[1])
       : toI64(-1)
   const top = literal >= toI64(0) && literal < I32_MAX ? toI32(literal) : -1
@@ -4042,10 +4156,10 @@ const contains = (list: Local[], v: Local): boolean => {
 /** What a write to `target` does to paths: a field name it stores, or a whole record. */
 const noteStoredField = (ctx: CheckContext, target: Node, effects: Effects): void => {
   const t = unwrapBoundsParens(target)
-  if (t.kind === N_MEMBER && effects.fields.indexOf(t.text) < 0) {
+  if (t.kind === NodeKind.Member && effects.fields.indexOf(t.text) < 0) {
     effects.fields.push(t.text)
   }
-  if (t.kind === N_INDEX) {
+  if (t.kind === NodeKind.Index) {
     const stored = recordStoreType(ctx.program, ctx.table, t)
     if (stored !== NO_RECORD && effects.records.indexOf(stored) < 0) {
       effects.records.push(stored)
@@ -4057,10 +4171,10 @@ const collectEffects = (walk: BoundsWalk, node: Node, effects: Effects): void =>
   const ctx = walk.ctx
   const stepped = effects.stepped
   const clobbered = effects.clobbered
-  if (node.kind === N_NEW || (node.kind === N_CALL && !callsNothing(ctx, node))) {
+  if (node.kind === NodeKind.New || (node.kind === NodeKind.Call && !callsNothing(ctx, node))) {
     noteCallEffects(walk, node, effects)
   }
-  if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
+  if (node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) {
     noteStoredField(ctx, node.children[0], effects)
     const v = localOf(ctx.program, node.children[0])
     if (v !== null) {
@@ -4080,7 +4194,7 @@ const collectEffects = (walk: BoundsWalk, node: Node, effects: Effects): void =>
       }
     }
   }
-  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     noteStoredField(ctx, node.children[0], effects)
     const v = localOf(ctx.program, node.children[0])
     if (v !== null) {
@@ -4212,7 +4326,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_BLOCK) {
+  if (stmt.kind === NodeKind.Block) {
     for (const inner of stmt.children) {
       if (walkBoundsStatement(walk, state, inner)) {
         return true
@@ -4221,14 +4335,14 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_VAR) {
+  if (stmt.kind === NodeKind.Var) {
     for (const decl of stmt.children[0].children) {
       walkDeclaration(walk, state, decl)
     }
     return false
   }
 
-  if (stmt.kind === N_EXPR_STMT) {
+  if (stmt.kind === NodeKind.ExprStmt) {
     // `panic(…)` and `process.exit(…)` end the path as a `return` does, so a
     // guard ending in one proves the access after it. The answer is the
     // checker's own `terminatesControlFlow`, the test `checkStatement` uses
@@ -4237,7 +4351,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return terminatesControlFlow(walk.ctx, stmt.children[0])
   }
 
-  if (stmt.kind === N_IF) {
+  if (stmt.kind === NodeKind.If) {
     walkExpression(walk, state, stmt.children[0])
     const facts = conditionFacts(walk, state, stmt.children[0])
     const thenState = cloneState(state)
@@ -4245,7 +4359,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const thenExits = walkBoundsStatement(walk, thenState, stmt.children[1])
     const elseState = cloneState(state)
     addFacts(elseState, facts.whenFalse)
-    const hasElse = stmt.children[2].kind !== N_EMPTY
+    const hasElse = stmt.children[2].kind !== NodeKind.Empty
     const elseExits = hasElse ? walkBoundsStatement(walk, elseState, stmt.children[2]) : false
     if (thenExits && elseExits) {
       return true
@@ -4260,9 +4374,9 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_LABELED) {
+  if (stmt.kind === NodeKind.Labeled) {
     const target = stmt.children[0]
-    if (target.kind !== N_BLOCK) {
+    if (target.kind !== NodeKind.Block) {
       walk.label = stmt.text
       return walkBoundsStatement(walk, state, target)
     }
@@ -4283,7 +4397,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_WHILE) {
+  if (stmt.kind === NodeKind.While) {
     const label = takeLabel(walk)
     forgetAcross(walk, state, stmt)
     walk.loops = walk.loops + 1
@@ -4307,7 +4421,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_DO) {
+  if (stmt.kind === NodeKind.Do) {
     const label = takeLabel(walk)
     forgetAcross(walk, state, stmt)
     walk.loops = walk.loops + 1
@@ -4330,16 +4444,16 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_FOR) {
+  if (stmt.kind === NodeKind.For) {
     const label = takeLabel(walk)
     // The initializer runs once, before the loop, so it is walked in the outer
     // state and its facts are what `forgetAcross` then prunes.
     const init = stmt.children[0]
-    if (init.kind === N_VAR) {
+    if (init.kind === NodeKind.Var) {
       for (const decl of init.children[0].children) {
         walkDeclaration(walk, state, decl)
       }
-    } else if (init.kind !== N_EMPTY) {
+    } else if (init.kind !== NodeKind.Empty) {
       walkExpression(walk, state, init)
     }
     const accumulated = accumulatorFacts(walk, state, stmt)
@@ -4347,11 +4461,11 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     addFacts(state, accumulated)
     walk.loops = walk.loops + 1
     const cond = stmt.children[1]
-    if (cond.kind !== N_EMPTY) {
+    if (cond.kind !== NodeKind.Empty) {
       walkExpression(walk, state, cond)
     }
     const body = cloneState(state)
-    if (cond.kind !== N_EMPTY) {
+    if (cond.kind !== NodeKind.Empty) {
       addFacts(body, conditionFacts(walk, state, cond).whenTrue)
     }
     const outer = walk.continues
@@ -4365,14 +4479,14 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     breakJoin(walk, state)
     walk.continues = outer
     walk.breaks = outerBreaks
-    if (stmt.children[2].kind !== N_EMPTY) {
+    if (stmt.children[2].kind !== NodeKind.Empty) {
       walkExpression(walk, update, stmt.children[2])
     }
     walk.loops = walk.loops - 1
     return false
   }
 
-  if (stmt.kind === N_FOR_OF) {
+  if (stmt.kind === NodeKind.ForOf) {
     const label = takeLabel(walk)
     walkExpression(walk, state, stmt.children[1])
     forgetAcross(walk, state, stmt)
@@ -4393,15 +4507,15 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
-  if (stmt.kind === N_RETURN) {
-    if (stmt.children[0].kind !== N_EMPTY) {
+  if (stmt.kind === NodeKind.Return) {
+    if (stmt.children[0].kind !== NodeKind.Empty) {
       noteReturn(walk, state, stmt.children[0])
       walkExpression(walk, state, stmt.children[0])
     }
     return true
   }
 
-  if (stmt.kind === N_CONTINUE) {
+  if (stmt.kind === NodeKind.Continue) {
     const at = labelTarget(walk, stmt.text)
     if (at < 0) {
       walk.continues.push(cloneState(state))
@@ -4411,7 +4525,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return true
   }
 
-  if (stmt.kind === N_BREAK) {
+  if (stmt.kind === NodeKind.Break) {
     const at = labelTarget(walk, stmt.text)
     if (at < 0) {
       walk.breaks.push(cloneState(state))
@@ -4421,12 +4535,12 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return true
   }
 
-  if (stmt.kind === N_THROW) {
+  if (stmt.kind === NodeKind.Throw) {
     walkExpression(walk, state, stmt.children[0])
     return true
   }
 
-  if (stmt.kind === N_SWITCH) {
+  if (stmt.kind === NodeKind.Switch) {
     const label = takeLabel(walk)
     walkExpression(walk, state, stmt.children[0])
     // A clause can be entered from the discriminant or fallen into from the
@@ -4441,7 +4555,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     openLabel(walk, label, walk.breaks)
     for (const clause of stmt.children[1].children) {
       const clauseState = cloneState(state)
-      const body = clause.kind === N_CASE ? clause.children[1] : clause.children[0]
+      const body = clause.kind === NodeKind.Case ? clause.children[1] : clause.children[0]
       for (const inner of body.children) {
         if (walkBoundsStatement(walk, clauseState, inner)) {
           break
@@ -4463,7 +4577,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
 
 const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
   const init = decl.children[2]
-  if (init.kind !== N_EMPTY) {
+  if (init.kind !== NodeKind.Empty) {
     walkExpression(walk, state, init)
   }
   const v = walk.ctx.program.nodeLocals[decl.id]
@@ -4471,7 +4585,7 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
     return
   }
   let facts: Fact[] = []
-  if (init.kind !== N_EMPTY) {
+  if (init.kind !== NodeKind.Empty) {
     facts = initialiserFacts(walk, state, v, init)
   }
   forgetLocal(walk, state, v)
@@ -4506,7 +4620,7 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
     return walk
   }
   const state = new State(ctx.table)
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     walkBoundsStatement(walk, state, body)
   } else {
     walkExpression(walk, state, body)
@@ -4523,22 +4637,22 @@ export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
  * for more than the walk judges, never less.
  */
 const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
-  if (node.kind === N_INDEX || rangeEntryOf(ctx, node) >= 0) {
+  if (node.kind === NodeKind.Index || rangeEntryOf(ctx, node) >= 0) {
     return true
   }
   if (checksOverflow(ctx.program, ctx.table, node)) {
     return true
   }
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     const callee = unwrapBoundsParens(node.children[0])
-    const name = callee.kind === N_MEMBER ? callee.text : ""
+    const name = callee.kind === NodeKind.Member ? callee.text : ""
     if (name === "charCodeAt" || name === "substring" || name === "pop") {
       return true
     }
   }
   // A division is judged for its divisor (`judgeDivision`), whatever its type.
   if (
-    node.kind === N_BINARY &&
+    node.kind === NodeKind.Binary &&
     (node.text === "/" || node.text === "%" || node.text === "/=" || node.text === "%=")
   ) {
     return true
@@ -4607,15 +4721,15 @@ class Interval {
  */
 const checkedArithmeticType = (program: CheckedProgram, table: TypeTable, node: Node): i32 => {
   const op = node.text
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     if (op !== "+" && op !== "-" && op !== "*" && op !== "+=" && op !== "-=" && op !== "*=") {
       return -1
     }
-  } else if (node.kind === N_UNARY) {
+  } else if (node.kind === NodeKind.Unary) {
     if (op !== "-" && op !== "++" && op !== "--") {
       return -1
     }
-    if (op === "-" && unwrapBoundsParens(node.children[0]).kind === N_NUMBER) {
+    if (op === "-" && unwrapBoundsParens(node.children[0]).kind === NodeKind.Number) {
       return -1
     }
   } else {
@@ -4695,7 +4809,7 @@ const productRange = (a: Interval, b: Interval): Interval | null => {
 /** The arithmetic operator a node applies: `+`, `-` or `*`, with `++` / `--` as `+` / `-` and unary `-` as `neg`. */
 const arithmeticOperator = (node: Node): string => {
   const op = node.text
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     if (op === "++") {
       return "+"
     }
@@ -4820,13 +4934,13 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   if (literal >= toI64(0)) {
     return new Interval(literal, literal)
   }
-  if (e.kind === N_UNARY && e.text === "-") {
+  if (e.kind === NodeKind.Unary && e.text === "-") {
     const negated = anyLiteral(e.children[0])
     if (negated >= toI64(0)) {
       return new Interval(-negated, -negated)
     }
   }
-  if (e.kind === N_IDENT) {
+  if (e.kind === NodeKind.Ident) {
     const constant = ctx.program.nodeConstants[e.id]
     if (constant !== null) {
       if (constant.folded && ctx.table.baseOf(constant.type) === type) {
@@ -4860,14 +4974,18 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   }
   if (
     checkedArithmeticType(ctx.program, ctx.table, e) === type &&
-    e.kind === N_BINARY &&
+    e.kind === NodeKind.Binary &&
     e.text.length === 1
   ) {
     const a = valueRange(walk, state, e.children[0], type)
     const b = valueRange(walk, state, e.children[1], type)
     return combinedRange(e.text, a, b, type)
   }
-  if (e.kind === N_UNARY && e.text === "-" && checkedArithmeticType(ctx.program, ctx.table, e) === type) {
+  if (
+    e.kind === NodeKind.Unary &&
+    e.text === "-" &&
+    checkedArithmeticType(ctx.program, ctx.table, e) === type
+  ) {
     const a = valueRange(walk, state, e.children[0], type)
     return combinedRange("neg", a, a, type)
   }
@@ -4875,7 +4993,7 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   if (counted !== null) {
     return counted
   }
-  if (e.kind === N_CALL) {
+  if (e.kind === NodeKind.Call) {
     const returned = callRange(walk, state, e, type)
     if (returned !== null) {
       return returned
@@ -4898,15 +5016,15 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
  * named `Math` is not this, which `nodeCallees` and the receiver's type say.
  */
 const bitCountRange = (program: CheckedProgram, e: Node, type: i32): Interval | null => {
-  if (type !== T_I32 || e.kind !== N_CALL || program.nodeCallees[e.id] !== null) {
+  if (type !== T_I32 || e.kind !== NodeKind.Call || program.nodeCallees[e.id] !== null) {
     return null
   }
   const callee = e.children[0]
-  if (callee.kind !== N_MEMBER || callee.text !== "clz32") {
+  if (callee.kind !== NodeKind.Member || callee.text !== "clz32") {
     return null
   }
   const receiver = callee.children[0]
-  if (receiver.kind !== N_IDENT || receiver.text !== "Math" || program.nodeTypes[receiver.id] >= 0) {
+  if (receiver.kind !== NodeKind.Ident || receiver.text !== "Math" || program.nodeTypes[receiver.id] >= 0) {
     return null
   }
   return new Interval(toI64(0), toI64(32))
@@ -4920,11 +5038,11 @@ const bitCountRange = (program: CheckedProgram, e: Node, type: i32): Interval | 
  * (`isResultConstructorCall` in src/emit-result.ts asks the same).
  */
 const resultConstructor = (program: CheckedProgram, table: TypeTable, call: Node): string => {
-  if (call.kind !== N_CALL || program.nodeCallees[call.id] !== null) {
+  if (call.kind !== NodeKind.Call || program.nodeCallees[call.id] !== null) {
     return ""
   }
   const callee = call.children[0]
-  if (callee.kind !== N_IDENT || (callee.text !== "Ok" && callee.text !== "Err")) {
+  if (callee.kind !== NodeKind.Ident || (callee.text !== "Ok" && callee.text !== "Err")) {
     return ""
   }
   return table.isResult(program.nodeTypes[call.id]) ? callee.text : ""
@@ -4937,11 +5055,12 @@ const resultConstructor = (program: CheckedProgram, table: TypeTable, call: Node
  * assigned, so the value is the payload the caller passed.
  */
 const payloadParameter = (walk: BoundsWalk, e: Node): i32 => {
-  if (e.kind !== N_MEMBER || e.text !== "value") {
+  if (e.kind !== NodeKind.Member || e.text !== "value") {
     return -1
   }
   const receiver = unwrapBoundsParens(e.children[0])
-  const local: Local | null = receiver.kind === N_IDENT ? walk.ctx.program.nodeLocals[receiver.id] : null
+  const local: Local | null =
+    receiver.kind === NodeKind.Ident ? walk.ctx.program.nodeLocals[receiver.id] : null
   if (local === null || local.storage !== STORAGE_PARAM || !walk.ctx.table.isResult(local.type)) {
     return -1
   }
@@ -4992,7 +5111,7 @@ const gatherReturn = (walk: BoundsWalk, state: State, expr: Node): void => {
     let range: Interval | null = null
     if (made === "Ok" && e.children[1].children.length === 1) {
       range = valueRange(walk, state, e.children[1].children[0], payload)
-    } else if (e.kind === N_CALL) {
+    } else if (e.kind === NodeKind.Call) {
       range = calledPayload(walk, e, payload)
     }
     keepGathering(walk, summary, range, payload)
@@ -5104,7 +5223,7 @@ const payloadRange = (walk: BoundsWalk, state: State, arg: Node, type: i32): Int
   if (resultConstructor(ctx.program, ctx.table, e) === "Ok" && e.children[1].children.length === 1) {
     return valueRange(walk, state, e.children[1].children[0], type)
   }
-  const passed: Interval | null = e.kind === N_CALL ? calledPayload(walk, e, type) : null
+  const passed: Interval | null = e.kind === NodeKind.Call ? calledPayload(walk, e, type) : null
   return passed !== null ? passed : new Interval(typeMin(type), typeMax(type))
 }
 
@@ -5117,7 +5236,7 @@ const payloadRange = (walk: BoundsWalk, state: State, arg: Node, type: i32): Int
  */
 const maskedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interval | null => {
   const ctx = walk.ctx
-  if (e.kind !== N_BINARY || ctx.program.nodeTypes[e.id] < 0) {
+  if (e.kind !== NodeKind.Binary || ctx.program.nodeTypes[e.id] < 0) {
     return null
   }
   if (ctx.table.baseOf(ctx.program.nodeTypes[e.id]) !== type) {
@@ -5181,7 +5300,7 @@ const maskedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interv
 const passBound = (walk: BoundsWalk, state: State, loop: Node, effects: Effects): i64 => {
   const ctx = walk.ctx
   const cond = unwrapBoundsParens(loop.children[1])
-  if (cond.kind !== N_BINARY || (cond.text !== "<" && cond.text !== "<=")) {
+  if (cond.kind !== NodeKind.Binary || (cond.text !== "<" && cond.text !== "<=")) {
     return toI64(-1)
   }
   const i = indexLocal(ctx, cond.children[0])
@@ -5220,10 +5339,10 @@ const isLocalNamed = (program: CheckedProgram, expr: Node, v: Local): boolean =>
 /** Whether `update` is `i++`, `++i`, `i += c` or `i = i + c` with `c >= 1`. */
 const stepsByOne = (ctx: CheckContext, update: Node, i: Local): boolean => {
   const e = unwrapBoundsParens(update)
-  if (e.kind === N_UNARY && e.text === "++") {
+  if (e.kind === NodeKind.Unary && e.text === "++") {
     return isLocalNamed(ctx.program, e.children[0], i)
   }
-  if (e.kind !== N_BINARY || !isLocalNamed(ctx.program, e.children[0], i)) {
+  if (e.kind !== NodeKind.Binary || !isLocalNamed(ctx.program, e.children[0], i)) {
     return false
   }
   if (e.text === "+=") {
@@ -5276,8 +5395,8 @@ const STEP_LIMIT: i64 = 2147483648
  */
 const collectSteps = (walk: BoundsWalk, node: Node, list: Accumulator[], nested: boolean): void => {
   const ctx = walk.ctx
-  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
-  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || steps) {
+  const steps = node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")
+  if ((node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) || steps) {
     const v = localOf(ctx.program, node.children[0])
     if (v !== null) {
       const a = accumulatorOf(list, v)
@@ -5291,8 +5410,12 @@ const collectSteps = (walk: BoundsWalk, node: Node, list: Accumulator[], nested:
     }
   }
   const inner =
-    nested || node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF
-  if (node.kind === N_ARROW) {
+    nested ||
+    node.kind === NodeKind.For ||
+    node.kind === NodeKind.While ||
+    node.kind === NodeKind.Do ||
+    node.kind === NodeKind.ForOf
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   for (const child of node.children) {
@@ -5305,7 +5428,7 @@ const collectSteps = (walk: BoundsWalk, node: Node, list: Accumulator[], nested:
 /** The range one write adds to `v`, or `null` when it is not a step of a state-free size. */
 const stepRange = (walk: BoundsWalk, node: Node, v: Local): Interval | null => {
   const one = toI64(1)
-  if (node.kind === N_UNARY) {
+  if (node.kind === NodeKind.Unary) {
     return node.text === "++" ? new Interval(one, one) : new Interval(-one, -one)
   }
   let delta: Node | null = null
@@ -5314,7 +5437,7 @@ const stepRange = (walk: BoundsWalk, node: Node, v: Local): Interval | null => {
   if (node.text === "+=" || node.text === "-=") {
     delta = node.children[1]
     negate = node.text === "-="
-  } else if (node.text === "=" && rhs.kind === N_BINARY && (rhs.text === "+" || rhs.text === "-")) {
+  } else if (node.text === "=" && rhs.kind === NodeKind.Binary && (rhs.text === "+" || rhs.text === "-")) {
     if (isLocalNamed(walk.ctx.program, rhs.children[0], v)) {
       delta = rhs.children[1]
       negate = rhs.text === "-"
@@ -5345,7 +5468,7 @@ const stepRange = (walk: BoundsWalk, node: Node, v: Local): Interval | null => {
  */
 const accumulatorFacts = (walk: BoundsWalk, state: State, loop: Node): Fact[] => {
   const out: Fact[] = []
-  if (loop.children[1].kind === N_EMPTY) {
+  if (loop.children[1].kind === NodeKind.Empty) {
     return out
   }
   const effects = new Effects()
@@ -5387,7 +5510,7 @@ const accumulatorFacts = (walk: BoundsWalk, state: State, loop: Node): Fact[] =>
  */
 const widenedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interval | null => {
   const program = walk.ctx.program
-  if (type !== T_I64 || e.kind !== N_CALL || !isBuiltinConversion(program, e, "toI64")) {
+  if (type !== T_I64 || e.kind !== NodeKind.Call || !isBuiltinConversion(program, e, "toI64")) {
     return null
   }
   const x = e.children[1].children[0]
@@ -5404,8 +5527,8 @@ const widenedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Inter
 
 /** Whether evaluating `node` assigns, increments or decrements any local. */
 const writesAnyLocal = (program: CheckedProgram, node: Node): boolean => {
-  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
-  if ((node.kind === N_BINARY && isBoundsAssignment(node.text)) || steps) {
+  const steps = node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")
+  if ((node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) || steps) {
     if (localOf(program, node.children[0]) !== null) {
       return true
     }
@@ -5619,10 +5742,10 @@ export class RangeTables {
  */
 export const isOpenAccess = (ctx: CheckContext, node: Node): boolean => {
   const program = ctx.program
-  if (node.kind === N_INDEX) {
+  if (node.kind === NodeKind.Index) {
     return !program.nodeProvenIndex[node.id] && couldProve(ctx, node.children[0], node.children[1])
   }
-  if (node.kind !== N_CALL) {
+  if (node.kind !== NodeKind.Call) {
     return false
   }
   const callee = unwrapBoundsParens(node.children[0])
@@ -5670,7 +5793,7 @@ const inertOperands = (program: CheckedProgram, args: Node[]): boolean => {
 }
 
 /**
- * What `call` (an `N_CALL` or an `N_NEW`) may do, or `null` for "anything a
+ * What `call` (a `NodeKind.Call` or a `NodeKind.New`) may do, or `null` for "anything a
  * call can". A user function answers with its summary. A builtin, or a `new`
  * with no constructor, can reach memory only through what it is handed —
  * there is no function value to call back through, and the one mutable
@@ -5698,19 +5821,21 @@ export const isInertBuiltin = (program: CheckedProgram, call: Node): boolean => 
   if (program.nodeCallees[call.id] !== null) {
     return false
   }
-  if (call.kind === N_NEW) {
+  if (call.kind === NodeKind.New) {
     return inertOperands(program, call.children[2].children)
   }
   const target = unwrapBoundsParens(call.children[0])
-  if (target.kind === N_MEMBER) {
+  if (target.kind === NodeKind.Member) {
     const receiver = unwrapBoundsParens(target.children[0])
     const type = program.nodeTypes[receiver.id]
     const namespace =
-      receiver.kind === N_IDENT && program.nodeLocals[receiver.id] === null && receiver.text !== "Arena"
+      receiver.kind === NodeKind.Ident &&
+      program.nodeLocals[receiver.id] === null &&
+      receiver.text !== "Arena"
     if (!inertType(type) && !(type < 0 && namespace)) {
       return false
     }
-  } else if (target.kind !== N_IDENT) {
+  } else if (target.kind !== NodeKind.Ident) {
     return false
   }
   return inertOperands(program, call.children[1].children)
@@ -6038,7 +6163,7 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
   const args: Node[] = []
   const target = unwrapBoundsParens(call.children[0])
   if (callee.role === ROLE_METHOD) {
-    if (target.kind !== N_MEMBER) {
+    if (target.kind !== NodeKind.Member) {
       return out
     }
     args.push(target.children[0])
@@ -6135,7 +6260,7 @@ const arithmeticSiteFacts = (
 ): void => {
   const ctx = walk.ctx
   const e = unwrapBoundsParens(arg)
-  if (e.kind !== N_BINARY || ctx.table.baseOf(type) !== T_I32) {
+  if (e.kind !== NodeKind.Binary || ctx.table.baseOf(type) !== T_I32) {
     return
   }
   if (ctx.program.nodeTypes[e.id] !== type || writesAnyLocal(ctx.program, e)) {
@@ -6156,13 +6281,13 @@ const arithmeticSiteFacts = (
  * this answers `false` for.
  */
 const mayWrite = (ctx: CheckContext, node: Node): boolean => {
-  if (node.kind === N_NEW || (node.kind === N_CALL && !callsNothing(ctx, node))) {
+  if (node.kind === NodeKind.New || (node.kind === NodeKind.Call && !callsNothing(ctx, node))) {
     return true
   }
-  if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
+  if (node.kind === NodeKind.Binary && isBoundsAssignment(node.text)) {
     return true
   }
-  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     return true
   }
   for (const child of node.children) {
@@ -6194,13 +6319,13 @@ const laterEffects = (walk: BoundsWalk, args: Node[], k: i32): Effects => {
 const argumentRoot = (walk: BoundsWalk, arg: Node, fields: string[], links: i32[]): Local | null => {
   const program = walk.ctx.program
   let e = unwrapBoundsParens(arg)
-  if (e.kind === N_MEMBER && declaredPathType(walk.ctx, e, fields, links) < 0) {
+  if (e.kind === NodeKind.Member && declaredPathType(walk.ctx, e, fields, links) < 0) {
     return null
   }
-  while (e.kind === N_MEMBER) {
+  while (e.kind === NodeKind.Member) {
     e = unwrapBoundsParens(e.children[0])
   }
-  if (e.kind !== N_IDENT && e.kind !== N_THIS) {
+  if (e.kind !== NodeKind.Ident && e.kind !== NodeKind.This) {
     return null
   }
   return program.nodeLocals[e.id]
@@ -6308,11 +6433,11 @@ const findParameters = (
   out: (Local | null)[],
   left: i32
 ): i32 => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return left
   }
   let empty = left
-  if (node.kind === N_IDENT || node.kind === N_THIS) {
+  if (node.kind === NodeKind.Ident || node.kind === NodeKind.This) {
     const local = program.nodeLocals[node.id]
     if (local !== null && local.storage === STORAGE_PARAM) {
       const k = names.indexOf(local.name)
@@ -6410,7 +6535,7 @@ export const proveSliceBounds = (
   walk.record = false
   walk.sliceClamps = proved
   const state = new State(table)
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     walkBoundsStatement(walk, state, body)
   } else {
     walkExpression(walk, state, body)
@@ -6455,7 +6580,7 @@ export const walkWithRanges = (
   if (entering !== null && !entering.isEmpty()) {
     seedEntry(walk, state, params, entering)
   }
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     walkBoundsStatement(walk, state, body)
   } else {
     // An arrow written as an expression returns it.

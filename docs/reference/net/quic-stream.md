@@ -386,7 +386,7 @@ class QuicStream
 | `sendState: i32` | The send side's state (RFC 9000 §3.1), a `QUIC_SEND_*` constant. |
 | `stopCode: i64` | The peer's STOP_SENDING error code, or -1. |
 | `at(offset: i64): i32` | The buffer index of stream offset `offset`. |
-| `room(): i64` | How many more bytes the send buffer takes. |
+| `room(): i64` | How many more bytes the send buffer takes. The buffer is the stream's `maxStreamData` and is the memory bound of its send side: bytes stay in it until the peer acknowledges them, so one lost packet holds back everything written after it until its resend is acknowledged (quic.ts probes early meanwhile, so a peer whose address changes is still seen). |
 
 ### QuicStreamPools
 

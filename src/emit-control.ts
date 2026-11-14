@@ -27,7 +27,7 @@ import {
 import { unwrapParens } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
-import { FLAG_POSTFIX, N_BLOCK, N_CASE, N_EMPTY, N_TRUE, N_VAR, Node } from "./nodes"
+import { FLAG_POSTFIX, Node, NodeKind } from "./nodes"
 import { SWITCH_COVERED } from "./program"
 import { isFloat } from "./types"
 
@@ -51,7 +51,8 @@ const fallThrough = (emitter: Emitter, target: IRBlock): boolean => {
 }
 
 /** A condition the compiler can see is always taken: `while (true)`, or none at all. */
-const isAlwaysTrue = (cond: Node): boolean => cond.kind === N_EMPTY || unwrapParens(cond).kind === N_TRUE
+const isAlwaysTrue = (cond: Node): boolean =>
+  cond.kind === NodeKind.Empty || unwrapParens(cond).kind === NodeKind.True
 
 /** Emit a loop body with `loop` on the stack so `break`/`continue` find their targets. */
 const emitLoopBody = (emitter: Emitter, body: Node, loop: LoopTarget): void => {
@@ -64,7 +65,7 @@ const emitLoopBody = (emitter: Emitter, body: Node, loop: LoopTarget): void => {
 
 export const emitIf = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn
-  const hasElse = stmt.children[2].kind !== N_EMPTY
+  const hasElse = stmt.children[2].kind !== NodeKind.Empty
   const thenBlock = fn.newBlock("if.then")
   const elseBlock = hasElse ? fn.newBlock("if.else") : thenBlock
   const endBlock = fn.newBlock("if.end")
@@ -150,8 +151,8 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
   const initializer = stmt.children[0]
   const condition = stmt.children[1]
   const incrementor = stmt.children[2]
-  const hasCond = condition.kind !== N_EMPTY
-  const hasInc = incrementor.kind !== N_EMPTY
+  const hasCond = condition.kind !== NodeKind.Empty
+  const hasInc = incrementor.kind !== NodeKind.Empty
   let condBlock: IRBlock | null = null
   if (hasCond) {
     condBlock = fn.newBlock("for.cond")
@@ -164,9 +165,9 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
   const endBlock = fn.newBlock("for.end")
   const head = condBlock === null ? bodyBlock : condBlock
 
-  if (initializer.kind === N_VAR) {
+  if (initializer.kind === NodeKind.Var) {
     emitter.emitVariableDeclarations(initializer.children[0])
-  } else if (initializer.kind !== N_EMPTY) {
+  } else if (initializer.kind !== NodeKind.Empty) {
     emitter.emitExpression(initializer)
   }
   openHeaderScope(emitter, stmt)
@@ -215,7 +216,7 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   const bodies: (IRBlock | null)[] = []
   for (const clause of clauses) {
     if (clauseBody(clause).children.length > 0) {
-      bodies.push(fn.newBlock(clause.kind === N_CASE ? "sw.case" : "sw.default"))
+      bodies.push(fn.newBlock(clause.kind === NodeKind.Case ? "sw.case" : "sw.default"))
     } else {
       bodies.push(null)
     }
@@ -227,7 +228,7 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   let defaultIndex = -1
   let i = 0
   while (i < clauses.length) {
-    if (clauses[i].kind !== N_CASE && defaultIndex < 0) {
+    if (clauses[i].kind !== NodeKind.Case && defaultIndex < 0) {
       defaultIndex = i
     }
     i = i + 1
@@ -235,7 +236,7 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   const table: string[] = []
   i = 0
   while (i < clauses.length) {
-    if (clauses[i].kind === N_CASE) {
+    if (clauses[i].kind === NodeKind.Case) {
       const value = emitter.program.nodeCaseValues[clauses[i].id]
       table.push(`    ${type} ${value}, label %${targetOf(bodies, endBlock, i).label}`)
     }
@@ -289,7 +290,8 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
 }
 
 /** The `BLOCK` of a clause: after the label for a `case`, the only child for a `default`. */
-const clauseBody = (clause: Node): Node => (clause.kind === N_CASE ? clause.children[1] : clause.children[0])
+const clauseBody = (clause: Node): Node =>
+  clause.kind === NodeKind.Case ? clause.children[1] : clause.children[0]
 
 /** Where a label jumps: its own body, or the first one below it that exists. */
 const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRBlock => {
@@ -314,7 +316,7 @@ export const emitLabeled = (emitter: Emitter, stmt: Node): void => {
   const body = stmt.children[0]
   emitter.labelNames.push(stmt.text)
   emitter.labelDepths.push(emitter.loops.length)
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     const endBlock = fn.newBlock("label.end")
     const target = new LoopTarget(endBlock, null)
     target.labelOnly = true

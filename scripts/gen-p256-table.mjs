@@ -6,18 +6,18 @@
  *   node scripts/gen-p256-table.mjs --check   exit 1 if the table there differs by a byte
  *
  * The table is the region of `p256.ts` between the `gen-p256-table:begin` and
- * `gen-p256-table:end` lines: `p256BaseTable`, which answers 16 sub-tables of
- * 15 affine points each. Sub-table `c`, entry `j` (1 to 15), is
- *
- *     (j_0 + j_1 2^64 + j_2 2^128 + j_3 2^192) 2^(4c) G
- *
- * where `j_b` is bit `b` of `j`, so a 4-tooth comb whose teeth are 64 bits
- * apart, one sub-table per 4-bit offset of the comb. `p256BaseMult` reads the
- * scalar's bits `i`, `i + 64`, `i + 128` and `i + 192` as one digit and adds
- * the entry it names; 4 rows of 16 such additions, with a doubling between
- * rows, are the whole multiplication. Each entry is X then Y, eight 32-bit
- * limbs each, least significant first, in the Montgomery domain (x 2^256 mod
- * p) that fiat's arithmetic works in: 3,840 limbs, 15 KiB.
+ * `gen-p256-table:end` lines: the comb's shape, the recoding's two constants
+ * and `p256BaseTable`, a signed all-bits-set comb (Hamburg, "Fast and compact
+ * elliptic-curve cryptography", 2012). The scalar k is recoded to
+ * m = (k + 2^BITS - 1) / 2 mod n, so that 2m - (2^BITS - 1) = k and every bit
+ * of m stands for +1 (set) or -1 (clear) times its power of two. Comb `c`
+ * reads `TEETH` bits of m `SPACING` apart; its top tooth picks the sign and
+ * the others the entry, so `2^(TEETH - 1)` entries per comb cover every
+ * digit, none of them the identity. Each entry is X then Y, eight 32-bit limbs
+ * each, least significant first, in the Montgomery domain (x 2^256 mod p)
+ * that fiat's arithmetic works in. The default shape, 11 combs of 6 teeth 4
+ * apart, is 352 entries, 5,632 limbs, 22 KiB, and 44 additions with 3
+ * doublings per multiplication.
  *
  * Computed here with BigInt from SEC 2 §2.4.2's p, b and G, by the textbook
  * affine formulas: the table is public, so nothing here needs to be constant
@@ -39,10 +39,30 @@ const G = {
   y: 0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5n,
 }
 
-/** The comb's shape: teeth 64 bits apart, one sub-table per 4-bit offset. */
-const TEETH = 4
-const SPACING = 64
-const SUBTABLES = 16
+/**
+ * The comb's shape: `TEETH` teeth `SPACING` bits apart in each of `COMBS`
+ * combs, which together cover `TEETH * SPACING * COMBS` bit positions, at
+ * least the scalar's 256. `P256_COMB` (`teeth,spacing,combs`) overrides it, to
+ * measure another shape; the checked-in table is the default.
+ */
+const [TEETH, SPACING, COMBS] = (process.env.P256_COMB ?? "6,4,11").split(",").map(Number)
+const BITS = TEETH * SPACING * COMBS
+if (!(TEETH >= 2 && SPACING >= 1 && COMBS >= 1 && BITS >= 256)) {
+  console.error(`gen-p256-table: ${COMBS} combs of ${TEETH} teeth ${SPACING} apart do not cover 256 bits`)
+  process.exit(1)
+}
+if (BITS >= 512) {
+  // p256BaseDigit masks a column's word with `(limb >> 3) - 1`, which reads
+  // limb 8 and up of the 16-limb recoded scalar as zero and assumes limb < 16.
+  console.error(
+    `gen-p256-table: ${COMBS} combs of ${TEETH} teeth ${SPACING} apart span ${BITS} bits; p256BaseDigit reads below 512`
+  )
+  process.exit(1)
+}
+const ENTRIES = 1 << (TEETH - 1)
+
+/** The group order n (SEC 2 §2.4.2). */
+const N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n
 
 const mod = (a) => ((a % P) + P) % P
 
@@ -105,29 +125,66 @@ const montgomeryLimbs = (a) => {
   return limbs
 }
 
+const negate = (p) => ({ x: p.x, y: mod(-p.y) })
+
 const limbs = []
-// The teeth of sub-table c, 2^(4c + 64b) G for b = 0 to 3: sub-table 0's from
-// G, each later one's four doublings past the one before.
+// The teeth of comb c, 2^(c TEETH SPACING + j SPACING) G for j = 0 to
+// TEETH - 1: comb 0's from G, each later comb's TEETH SPACING doublings past
+// the one before.
 let teeth = []
-for (let b = 0; b < TEETH; b++) {
-  teeth.push(shift(G, SPACING * b))
+for (let j = 0; j < TEETH; j++) {
+  teeth.push(shift(G, SPACING * j))
 }
-for (let c = 0; c < SUBTABLES; c++) {
+for (let c = 0; c < COMBS; c++) {
   if (c > 0) {
-    teeth = teeth.map((t) => shift(t, 4))
+    teeth = teeth.map((t) => shift(t, TEETH * SPACING))
   }
-  for (let j = 1; j < 1 << TEETH; j++) {
-    let point = null
-    for (let b = 0; b < TEETH; b++) {
-      if ((j >> b) & 1) {
-        point = add(point, teeth[b])
-      }
+  for (let u = 0; u < ENTRIES; u++) {
+    // The top tooth always counts +1; tooth j below it +1 when bit j of u is
+    // set and -1 when it is clear.
+    let point = teeth[TEETH - 1]
+    for (let j = 0; j < TEETH - 1; j++) {
+      point = add(point, (u >> j) & 1 ? teeth[j] : negate(teeth[j]))
     }
     if (point === null || !onCurve(point)) {
-      throw new Error(`gen-p256-table: sub-table ${c}, entry ${j} is not a point of the curve`)
+      throw new Error(`gen-p256-table: comb ${c}, entry ${u} is not a point of the curve`)
     }
     limbs.push(...montgomeryLimbs(point.x), ...montgomeryLimbs(point.y))
   }
+}
+
+/** `a^e mod n`. */
+const powN = (a, exponent) => {
+  let result = 1n
+  let base = a % N
+  for (let e = exponent; e > 0n; e >>= 1n) {
+    if (e & 1n) {
+      result = (result * base) % N
+    }
+    base = (base * base) % N
+  }
+  return result
+}
+
+// The recoding's two constants: 2^BITS - 1 mod n, which the scalar is moved
+// by, and 2^-1 R mod n, which a scalar Montgomery multiply (a b R^-1) halves
+// by. Both are public, functions of n and the shape alone.
+const R = 1n << 256n
+const OFFSET = ((1n << BigInt(BITS)) - 1n) % N
+const HALF = (powN(2n, N - 2n) * R) % N
+if ((((2n * HALF) % N) * powN(R, N - 2n)) % N !== 1n) {
+  throw new Error("gen-p256-table: 2^-1 R mod n does not halve")
+}
+
+/** The lines of a function that writes the eight limbs of `a`, least significant first, into `out`. */
+const setter = (name, doc, a) => {
+  const out = [doc, `const ${name} = (out: u32[]): void => {`, "  p256SetLimbs(", "    out,"]
+  for (let i = 0n; i < 8n; i++) {
+    const limb = `0x${((a >> (32n * i)) & 0xffffffffn).toString(16).padStart(8, "0")}`
+    out.push(`    ${limb}${i < 7n ? "," : ""}`)
+  }
+  out.push("  )", "}")
+  return out
 }
 
 // Biome's layout for an array of numbers at two spaces of indent and 110 columns.
@@ -142,11 +199,30 @@ const BEGIN = "// gen-p256-table:begin"
 const END = "// gen-p256-table:end"
 const region = [
   `${BEGIN} -- generated by scripts/gen-p256-table.mjs; edit that, not this.`,
+  "/** The fixed-base comb's shape: teeth per comb, bits between teeth, combs, and entries per comb. */",
+  `const P256_COMB_TEETH: i32 = ${TEETH}`,
+  `const P256_COMB_SPACING: i32 = ${SPACING}`,
+  `const P256_COMBS: i32 = ${COMBS}`,
+  `const P256_COMB_ENTRIES: i32 = ${ENTRIES}`,
+  "",
+  ...setter(
+    "p256BaseOffset",
+    `/** \`2^${BITS} - 1 mod n\`, plain: the recoding adds it before it halves (ECC-7). */`,
+    OFFSET
+  ),
+  "",
+  ...setter(
+    "p256BaseHalf",
+    "/** `2^-1 R mod n`: a scalar Montgomery multiply by it halves mod n (ECC-7). */",
+    HALF
+  ),
+  "",
   "/**",
-  " * The fixed-base comb table `p256BaseMult` reads: sub-table `c` (0 to 15),",
-  " * entry `j` (1 to 15) at limb `(15c + j - 1) * 16`, is the affine point",
-  " * (j_0 + j_1 2^64 + j_2 2^128 + j_3 2^192) 2^(4c) G, `j_b` bit `b` of `j`, as",
-  " * X then Y in the Montgomery domain. Public: a function of G alone.",
+  ` * The signed comb table \`p256BaseMult\` reads: comb \`c\` (0 to ${COMBS - 1}), entry \`u\``,
+  ` * (0 to ${ENTRIES - 1}) at limb \`(${ENTRIES}c + u) * 16\`, is the affine point`,
+  ` * (2^${(TEETH - 1) * SPACING} + the sum over j < ${TEETH - 1} of (2u_j - 1) 2^(${SPACING}j)) 2^(${TEETH * SPACING}c) G,`,
+  " * `u_j` bit `j` of `u`, as X then Y in the Montgomery domain. Public: a",
+  " * function of G alone.",
   " */",
   "const p256BaseTable = (): u32[] => [",
   ...lines,

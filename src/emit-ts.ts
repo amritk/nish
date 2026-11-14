@@ -42,22 +42,7 @@ import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { scriptMain } from "./script"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
-import {
-  FLAG_ASYNC,
-  FLAG_EXPORTED,
-  FLAG_SCRIPT,
-  N_CLASS,
-  N_ENUM,
-  N_EXPORT_ASSIGNMENT,
-  N_EXPORT_DECLARATION,
-  N_FUNCTION,
-  N_IMPORT,
-  N_IMPORT_EQUALS,
-  N_INTERFACE,
-  N_MODULE_CONST,
-  N_TYPE_ALIAS,
-  Node,
-} from "./nodes"
+import { FLAG_ASYNC, FLAG_EXPORTED, FLAG_SCRIPT, Node, NodeKind } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, joinPath, normalizePath, relativePath, resolvePath } from "./paths"
 import { isMathModule } from "./std-modules"
@@ -185,20 +170,20 @@ const isModule = (file: Node): boolean => {
   for (const stmt of file.children) {
     const kind = stmt.kind
     if (
-      kind === N_IMPORT ||
-      kind === N_IMPORT_EQUALS ||
-      kind === N_EXPORT_ASSIGNMENT ||
-      kind === N_EXPORT_DECLARATION
+      kind === NodeKind.Import ||
+      kind === NodeKind.ImportEquals ||
+      kind === NodeKind.ExportAssignment ||
+      kind === NodeKind.ExportDeclaration
     ) {
       return true
     }
     const declares =
-      kind === N_FUNCTION ||
-      kind === N_CLASS ||
-      kind === N_INTERFACE ||
-      kind === N_MODULE_CONST ||
-      kind === N_TYPE_ALIAS ||
-      kind === N_ENUM
+      kind === NodeKind.FunctionDecl ||
+      kind === NodeKind.Class ||
+      kind === NodeKind.Interface ||
+      kind === NodeKind.ModuleConst ||
+      kind === NodeKind.TypeAlias ||
+      kind === NodeKind.Enum
     // The `main` a script's top-level code is moved into (`src/script.ts`) is
     // exported in the tree but not in the text.
     if (declares && (stmt.flags & FLAG_EXPORTED) !== 0 && (stmt.flags & FLAG_SCRIPT) === 0) {
@@ -436,7 +421,7 @@ const emitModules = (compilation: Compilation): EmittedProgram => {
       anyAsync = true
     }
     for (const stmt of unit.file.children) {
-      if (stmt.kind !== N_IMPORT) {
+      if (stmt.kind !== NodeKind.Import) {
         continue
       }
       if (stmt.text === NET_SPECIFIER) {

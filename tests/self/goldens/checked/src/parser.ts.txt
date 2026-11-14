@@ -7,8 +7,6 @@ import Lexer from "./lexer" -> struct Lexer
 import withoutSeparators from "./lexer" -> function @withoutSeparators
 import StringMap from "./map" -> struct StringMap
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
-import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
-import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
 import FLAG_ANGLE from "./nodes" -> const FLAG_ANGLE
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
@@ -19,14 +17,12 @@ import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_CONSTRUCT from "./nodes" -> const FLAG_CONSTRUCT
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
 import FLAG_DEFER from "./nodes" -> const FLAG_DEFER
-import FLAG_SIGNATURE from "./nodes" -> const FLAG_SIGNATURE
-import FLAG_FOR_IN from "./nodes" -> const FLAG_FOR_IN
-import FLAG_USING from "./nodes" -> const FLAG_USING
-import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
+import FLAG_FOR_IN from "./nodes" -> const FLAG_FOR_IN
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
 import FLAG_GENERATOR from "./nodes" -> const FLAG_GENERATOR
+import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_POSTFIX from "./nodes" -> const FLAG_POSTFIX
 import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
@@ -34,88 +30,13 @@ import FLAG_PROPERTY from "./nodes" -> const FLAG_PROPERTY
 import FLAG_READONLY from "./nodes" -> const FLAG_READONLY
 import FLAG_REST from "./nodes" -> const FLAG_REST
 import FLAG_SATISFIES from "./nodes" -> const FLAG_SATISFIES
+import FLAG_SIGNATURE from "./nodes" -> const FLAG_SIGNATURE
+import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_STATIC_FIRST from "./nodes" -> const FLAG_STATIC_FIRST
 import FLAG_TYPE_ONLY from "./nodes" -> const FLAG_TYPE_ONLY
-import N_ARRAY from "./nodes" -> const N_ARRAY
-import N_AS from "./nodes" -> const N_AS
-import N_ARROW from "./nodes" -> const N_ARROW
-import N_BIGINT from "./nodes" -> const N_BIGINT
-import N_BINARY from "./nodes" -> const N_BINARY
-import N_BINDING_PATTERN from "./nodes" -> const N_BINDING_PATTERN
-import N_BLOCK from "./nodes" -> const N_BLOCK
-import N_BREAK from "./nodes" -> const N_BREAK
-import N_CALL from "./nodes" -> const N_CALL
-import N_CASE from "./nodes" -> const N_CASE
-import N_CLASS from "./nodes" -> const N_CLASS
-import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
-import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
-import N_CONTINUE from "./nodes" -> const N_CONTINUE
-import N_DECORATOR from "./nodes" -> const N_DECORATOR
-import N_DEFAULT from "./nodes" -> const N_DEFAULT
-import N_DO from "./nodes" -> const N_DO
-import N_EMPTY from "./nodes" -> const N_EMPTY
-import N_ERROR from "./nodes" -> const N_ERROR
-import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
-import N_FALSE from "./nodes" -> const N_FALSE
-import N_FIELD from "./nodes" -> const N_FIELD
-import N_FOR from "./nodes" -> const N_FOR
-import N_FOR_OF from "./nodes" -> const N_FOR_OF
-import N_FUNCTION from "./nodes" -> const N_FUNCTION
-import N_IDENT from "./nodes" -> const N_IDENT
-import N_IF from "./nodes" -> const N_IF
-import N_IMPORT from "./nodes" -> const N_IMPORT
-import N_IMPORT_EQUALS from "./nodes" -> const N_IMPORT_EQUALS
-import N_IMPORT_SPEC from "./nodes" -> const N_IMPORT_SPEC
-import N_INDEX from "./nodes" -> const N_INDEX
-import N_INDEX_SIGNATURE from "./nodes" -> const N_INDEX_SIGNATURE
-import N_INTERFACE from "./nodes" -> const N_INTERFACE
-import N_LABELED from "./nodes" -> const N_LABELED
-import N_LIST from "./nodes" -> const N_LIST
-import N_MEMBER from "./nodes" -> const N_MEMBER
-import N_METHOD from "./nodes" -> const N_METHOD
-import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
-import N_NAMESPACE from "./nodes" -> const N_NAMESPACE
-import N_NAMESPACE_EXPORT from "./nodes" -> const N_NAMESPACE_EXPORT
-import N_NEW from "./nodes" -> const N_NEW
-import N_NULL from "./nodes" -> const N_NULL
-import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
-import N_PARAM from "./nodes" -> const N_PARAM
-import N_PAREN from "./nodes" -> const N_PAREN
-import N_PROPERTY from "./nodes" -> const N_PROPERTY
-import N_REGEX from "./nodes" -> const N_REGEX
-import N_RETURN from "./nodes" -> const N_RETURN
-import N_SOURCE_FILE from "./nodes" -> const N_SOURCE_FILE
-import N_SPREAD from "./nodes" -> const N_SPREAD
-import N_SUPER from "./nodes" -> const N_SUPER
-import N_STRING from "./nodes" -> const N_STRING
-import N_SWITCH from "./nodes" -> const N_SWITCH
-import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_THIS from "./nodes" -> const N_THIS
-import N_THROW from "./nodes" -> const N_THROW
-import N_TRUE from "./nodes" -> const N_TRUE
-import N_TRY from "./nodes" -> const N_TRY
-import N_UNARY from "./nodes" -> const N_UNARY
-import N_ENUM from "./nodes" -> const N_ENUM
-import N_EXPORT_ASSIGNMENT from "./nodes" -> const N_EXPORT_ASSIGNMENT
-import N_EXPORT_DECLARATION from "./nodes" -> const N_EXPORT_DECLARATION
-import N_ENUM_MEMBER from "./nodes" -> const N_ENUM_MEMBER
-import N_TYPE_ALIAS from "./nodes" -> const N_TYPE_ALIAS
-import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
-import N_TYPE_FUNCTION from "./nodes" -> const N_TYPE_FUNCTION
-import N_TYPE_LITERAL from "./nodes" -> const N_TYPE_LITERAL
-import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
-import N_TYPE_OPERATOR from "./nodes" -> const N_TYPE_OPERATOR
-import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
-import N_TYPE_READONLY from "./nodes" -> const N_TYPE_READONLY
-import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
-import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
-import N_VAR from "./nodes" -> const N_VAR
-import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
-import N_WHILE from "./nodes" -> const N_WHILE
-import N_WITH from "./nodes" -> const N_WITH
+import FLAG_USING from "./nodes" -> const FLAG_USING
+import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import Node from "./nodes" -> struct Node
 import TOK_AMP from "./tokens" -> const TOK_AMP
 import TOK_AMP_ASSIGN from "./tokens" -> const TOK_AMP_ASSIGN
@@ -462,7 +383,7 @@ function Parser.report(this: Parser, message: string, start: i32, end: i32): voi
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:27 new Diagnostic -> @Diagnostic.constructor
-function Parser.node(this: Parser, kind: i32, start: i32, end: i32): Node -> @Parser.node [exported method]
+function Parser.node(this: Parser, kind: NodeKind, start: i32, end: i32): Node -> @Parser.node [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
   escaping: end kind start
@@ -1528,12 +1449,12 @@ function Parser.parseParameter(this: Parser, typed: boolean): Node -> @Parser.pa
   callee +16:25 Parser.parseBindingName -> @Parser.parseBindingName
   callee +17:9 Parser.eat -> @Parser.eat
   local +20:11 refused: boolean (const)
-  callee +20:90 Parser.at -> @Parser.at
-  callee +21:9 Parser.at -> @Parser.at
-  callee +22:27 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
-  callee +24:27 Parser.empty -> @Parser.empty
-  callee +26:9 Parser.eat -> @Parser.eat
-  callee +27:27 Parser.parseExpression -> @Parser.parseExpression
+  callee +21:82 Parser.at -> @Parser.at
+  callee +22:9 Parser.at -> @Parser.at
+  callee +23:27 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
+  callee +25:27 Parser.empty -> @Parser.empty
+  callee +27:9 Parser.eat -> @Parser.eat
+  callee +28:27 Parser.parseExpression -> @Parser.parseExpression
 function Parser.parameterModifierAhead(this: Parser): boolean -> @Parser.parameterModifierAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
@@ -2557,7 +2478,7 @@ function Parser.parseFor(this: Parser, start: i32): Node -> @Parser.parseFor [ex
   callee +18:25 Parser.at -> @Parser.at
   callee +18:50 Parser.empty -> @Parser.empty
   callee +18:65 Parser.parseSequence -> @Parser.parseSequence
-  callee +20:41 Parser.atForOfKeyword -> @Parser.atForOfKeyword
+  callee +20:48 Parser.atForOfKeyword -> @Parser.atForOfKeyword
   callee +21:14 Parser.parseForOfRest -> @Parser.parseForOfRest
   callee +23:12 Parser.parseForRest -> @Parser.parseForRest
 function Parser.bindingAhead(this: Parser): boolean -> @Parser.bindingAhead [exported method]
@@ -2691,7 +2612,7 @@ function Parser.parseThrow(this: Parser, start: i32): Node -> @Parser.parseThrow
   callee -1:18 Parser.node -> @Parser.node
   callee +0:24 Parser.parseSequence -> @Parser.parseSequence
   callee +1:5 Parser.expectSemicolon -> @Parser.expectSemicolon
-function Parser.parseJump(this: Parser, start: i32, kind: i32): Node -> @Parser.parseJump [exported method]
+function Parser.parseJump(this: Parser, start: i32, kind: NodeKind): Node -> @Parser.parseJump [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
   escaping: kind start

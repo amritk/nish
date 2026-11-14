@@ -89,6 +89,7 @@ import {
   HTTP1_REFUSED,
   HTTP1_UPGRADE,
   HTTP1_FIRST_INPUT,
+  http1ChunkExtValid,
   http1HexValue,
   http1IsFieldText,
   http1IsOws,
@@ -1428,8 +1429,8 @@ const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
 }
 
 /**
- * Reads a chunk-size line (RFC 9112 §7.1): 1*HEXDIG, then optional
- * whitespace and a `;` extension that is read past but not interpreted. Sets
+ * Reads a chunk-size line (RFC 9112 §7.1): 1*HEXDIG, then the chunk
+ * extensions `http1ChunkExtValid` reads, parsed but not interpreted. Sets
  * `left` and answers `HTTP1_NEED_MORE`, or the refusal.
  */
 const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
@@ -1474,6 +1475,9 @@ const http1ClientChunkSize = (p: Http1ResponseParser): i32 => {
       if (!http1IsValueByte(toI32(buf[k]))) {
         return http1ClientFail(p, HTTP1_E_CHUNK, "a control character in a chunk extension")
       }
+    }
+    if (!http1ChunkExtValid(buf, digitsEnd, b)) {
+      return http1ClientFail(p, HTTP1_E_CHUNK, "a malformed chunk extension")
     }
   }
   if (over) {

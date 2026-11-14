@@ -1308,10 +1308,17 @@ const AREAS = [
   },
   {
     title: "Terminal and CLI",
-    about: "Terminal output and input, and command-line parsing",
+    about: "Terminal output and input, a step's input with no terminal, and command-line parsing",
     key: "/terminal/..",
     icon: "terminal-window",
-    names: ["term*", "cli*"],
+    names: ["term*", "input", "cli*"],
+  },
+  {
+    title: "Graphics and sound",
+    about: "Drawing into a frame of pixels and making short sounds",
+    key: "/graphics/..",
+    icon: "paint-brush",
+    names: ["raster", "synth"],
   },
   {
     title: "Concurrency",
@@ -1332,7 +1339,7 @@ const AREAS = [
     about: "DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server",
     key: "/net",
     icon: "globe",
-    names: ["net"],
+    names: ["net", "release"],
   },
   {
     title: "Cryptography",

@@ -10,6 +10,10 @@ PASS  a certificate for another name is HTTP_E_CERTIFICATE
 PASS  a chain to a root the client does not trust is HTTP_E_CERTIFICATE
 PASS  and so is a good server under roots that are not its own
 PASS  the system roots do not trust the test's root
+PASS  a chain to a trusted root whose key is distrusted is HTTP_E_CERTIFICATE
+PASS  a distrusted key no certificate of the chain holds changes nothing
+PASS  a key to distrust that is not 32 bytes fails the fetch
+PASS  and the error says the hash is not one
 PASS  with no root certificate to trust, https is HTTP_E_CERTIFICATE
 PASS  and the error says there was no root to trust
 PASS  and no connection was opened for it
@@ -31,4 +35,4 @@ PASS  and the tunnelled connection is reused
 PASS  through a tunnel the origin is sent no Proxy-Authorization, not even the caller's
 PASS  and the CONNECT carries the proxy URL's user and password
 PASS  an alert the proxy sends in the same segment as its 200 is read by TLS, not lost
-http fetch tls: 33 passed, 0 failed, 0 skipped
+http fetch tls: 37 passed, 0 failed, 0 skipped

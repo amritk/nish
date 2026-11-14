@@ -446,10 +446,11 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # own command line instead of using `common`; it is empty on every ordinary
 # build, hence the bash 3.2 expansion spelling explained below.
 #
-# -pthread is for runtime-parallel.c, the translation unit that divides a range
+# -pthread is here for runtime-parallel.c, the translation unit that divides a range
 # of work across threads: it is compiled in either configuration and only spawns
-# under this macro, so this is the build where the flag has to be on the command
-# line. On a current glibc the library half is already inside libc and the link
+# under this macro, so this is the build where it needs the flag on the command
+# line. (Every Linux build has the flag already, for runtime-sandbox.c; see
+# where `common` gets its hardening flags below.) On a current glibc the library half is already inside libc and the link
 # would succeed without it; passing it is what makes that an implementation
 # detail rather than something the build depends on.
 #
@@ -492,6 +493,22 @@ case "$(uname -s)" in
   Darwin) ;;
   *)
     common+=(-fstack-clash-protection)
+    # runtime-sandbox.c runs each spawn under an exec allowlist on threads of
+    # its own, and a glibc before 2.34 keeps pthread_create outside libc. The
+    # flag is on every build rather than the sandboxed ones because this
+    # script cannot tell them apart: an input may be an object file, where
+    # the call of `nish_sandbox` is not there to be read. A build without
+    # `--sandbox` is the binary it was: on glibc 2.34 and later the flag adds
+    # nothing to the link (measured on 2.39: `arena_placement` and
+    # `caps_process_spawn` at debug, speed and size are byte for byte the
+    # same with and without it). Before 2.34 it names libpthread to the
+    # linker, and a build without `--sandbox` can then carry a DT_NEEDED on
+    # libpthread.so.0 that it did not have: the debug profile always (its link
+    # line has no --as-needed), speed and size wherever the linker still sees
+    # the runtime's reference to pthread_create. That is one more library of
+    # the same glibc loaded at start, and not measured: no machine the tests
+    # run on has such a glibc.
+    common+=(-pthread)
     # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
     common+=(-Wl,-z,relro,-z,now -Wl,-z,noexecstack) ;;
 esac
@@ -872,12 +889,27 @@ case "$profile" in
         esac
       done
     fi
+    # Root storage (WP55): a module with root storage defines its own
+    # `nish_reset_arena`, which empties every root through the runtime's
+    # nish_runtime_root_reset. Its IR links runtime-wasm.c, compiled with
+    # NISH_WASM_ROOTS, which takes in the root keep and leaves the arena resets
+    # to the IR. The definition is the trigger: a bare `declare` of the keep
+    # (every `--runtime-decls` module has one) or a string spelling a name is
+    # not. Without it the module links the bytes it always did: the wasm
+    # profile exports every function it compiles.
+    roots_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        *.ll) if grep -qE '^define void @nish_reset_arena\(' "$i"; then roots_wanted=1; round_wanted=1; fi ;;
+      esac
+    done
     if [ "$round_wanted" = 1 ] && [ "$wasm_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-wasm.c")
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
     wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory -ffp-contract=off)
+    if [ "$roots_wanted" = 1 ]; then wasm_compile+=(-DNISH_WASM_ROOTS); fi
     if [ "$profile" = wasm ]; then
       "$CC" "${wasm_compile[@]}" \
         ${tls[@]+"${tls[@]}"} \

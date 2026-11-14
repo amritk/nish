@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -28,6 +28,14 @@
     "./page": {
       "types": "./runtime/page.d.ts",
       "default": "./runtime/page.mjs"
+    },
+    "./page/frame": {
+      "types": "./runtime/page-frame.d.ts",
+      "default": "./runtime/page-frame.mjs"
+    },
+    "./page/game": {
+      "types": "./runtime/page-game.d.ts",
+      "default": "./runtime/page-game.mjs"
     },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
@@ -74,7 +82,7 @@
     "test:nish": "build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
     "test:cli": "build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
     "test:node": "node tests/differential/unmodified.js",
-    "lint": "node scripts/check-filenames.mjs && biome check .",
+    "lint": "node scripts/check-filenames.mjs && node scripts/check-install-scripts.mjs && biome check .",
     "lint:fix": "biome check --write .",
     "lint:dead": "knip --no-progress",
     "format": "biome format --write .",

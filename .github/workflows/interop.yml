@@ -98,6 +98,8 @@ on:
 
 permissions:
   contents: read
+  # gh attestation verify, for the seed scripts/fetch-seed.sh checks.
+  attestations: read
 
 concurrency:
   group: interop-${{ github.ref }}
@@ -671,7 +673,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.23.4
+          node-version: 26.13.1
 
       # The runner image ships these; the action makes sure, through the cache.
       # wasm-host links need no WASI sysroot.
@@ -703,6 +705,9 @@ jobs:
       # --profile wasm-host, its loader, page.js) and the native replay.
       - name: Build the compiler and examples/wasm-arena
         timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: |
           bash scripts/fetch-seed.sh
           build/seed/bin/nish src/compile.ts --link build/nish

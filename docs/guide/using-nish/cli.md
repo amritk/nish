@@ -14,6 +14,7 @@ page, generated from the same source.
 usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
        nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
+       nish upgrade [<version>] [--check]     install a newer release
        nish -v, --version | -h, --help
 ```
 
@@ -349,8 +350,8 @@ Seven kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
-app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
-app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi
+app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
 app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
 app.ts:12:15: error: --emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type
@@ -581,6 +582,66 @@ first) in the installed package, and the flags an agent's loop needs —
 variables is set for some other reason. If the package's `docs/AI.md` cannot
 be found, the section names it without a path.
 
+## Staying up to date: `nish upgrade`
+
+`nish upgrade` installs the latest release when it is newer than the compiler
+you are running, and does nothing when it is not:
+
+```bash
+nish upgrade            # the latest release, if it is newer
+nish upgrade 0.40.0     # a version you name, newer or older
+nish upgrade --check    # print the version you have and the latest; install nothing
+```
+
+`--check` prints two lines, `current 0.39.0` and `latest  0.40.0`, and exits
+0, or 3 when the latest cannot be found: no network, GitHub refusing or slow
+to answer (it waits at most two seconds).
+
+How it installs depends on how you installed:
+
+- **With the install script** (`~/.nish` or your `--dir`): it fetches the
+  release's own `install.sh`, from that release's tag and never `main`, into a
+  private file, and runs it as `sh install.sh <version> --dir <your install>`.
+  The script checks the download and swaps the new compiler in only once it
+  runs, as [Installation](../getting-started/installation.md) describes. With no
+  version named it never installs an older release, or the same one; a
+  version you name that is older is installed, with a line saying it is a
+  downgrade.
+- **With npm**: npm owns the files, so it prints the command to run,
+  `npm install -g nish@<version>`, and exits 2 without changing anything.
+- **From a checkout**: it refuses with exit 2. Pull and rebuild instead.
+
+A version must be a semantic version, such as `0.40.0` or `1.0.0-rc.1`:
+three numbers with no leading zeros, then an optional `-prerelease` and
+`+build`. Anything else, such as `1.2` or `1.0.0/../x`, is a usage error
+(exit 2) before anything is fetched.
+
+### The update notice
+
+When a newer release is out, a command run on a terminal that exits 0 or 1
+(a compile, `nish --version`, `nish --help`, `--describe` and the like) ends
+with one line on stderr:
+
+```
+nish 0.40.0 is available (you have 0.39.0); run `nish upgrade`
+```
+
+It never changes stdout or the exit code. Finding out costs nothing you wait
+for: the answer comes from a cache under `~/.cache/nish/release` (or
+`$XDG_CACHE_HOME`), and when that is missing or more than a day old a check
+runs in the background, so GitHub is asked at most once a day. The line is
+never shown:
+
+- when stderr is not a terminal (piped, redirected, or under a script),
+- with `--json`,
+- in `nish run`, whose stderr is your program's,
+- in CI (`CI` set to anything but empty, `0` or `false`),
+- with `NISH_NO_UPDATE_CHECK=1`, which also stops the check itself.
+
+A cache another user could have written is ignored and replaced, so nobody
+else chooses what the line says. What the check trusts is in the
+[security record](../../security/release.md).
+
 ## Exit codes
 
 | Code | Meaning |
@@ -588,7 +649,7 @@ be found, the section names it without a path.
 | 0 | success |
 | 1 | the program was rejected: a compile error, or an input file that does not exist |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
-| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written) |
+| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed |
 | 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own
@@ -670,7 +731,10 @@ leaves the IR unchanged.
   same words. The flag takes no value, and `--compat=<anything>` is a usage
   error (exit 2). `nish run` and `--fix` take it too.
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
-  error, and `--emit-panics <file.json>` lists them all
+  error, and `--emit-panics <file.json>` lists them all. A call to
+  `readCString` or `readStruct` from `nish:unsafe` is refused there: each
+  tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
+  removes
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why

@@ -230,12 +230,16 @@ After the first connection in a slot, a connection keeps nothing at all
 
 The connection has no clock: `receive`, `takeDatagram` and
 `handleTimer` take the caller's monotonic time in milliseconds, and
-`deadline()` says when `handleTimer` is next due. Five things run on it. The
+`deadline()` says when `handleTimer` is next due. Six things run on it. The
 idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
 `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR` or three probe
 timeouts; once it passes with nothing received, the connection closes
 silently (`QUIC_STATE_TIMED_OUT`) and wipes its keys. Loss recovery's timer
 declares packets lost by the time threshold or fires the probe timeout.
+While a stream's send buffer is full behind bytes in flight, an early
+ACK-eliciting probe goes half a round trip after the last ACK-eliciting
+packet, so a client whose NAT rebinds while nothing else is sent still
+answers from its new port (QUIC-12).
 
 After a key update the previous read keys are kept for a probe timeout
 (`recovery.probeTimeout()`), for packets the network reordered, before the
@@ -551,6 +555,7 @@ class QuicConnection
 | `datagramsIn: QuicDatagramQueue` | DATAGRAM payloads the client sent, waiting to be read; its `dropped` counts those that found it full. |
 | `datagramsOut: QuicDatagramQueue` | DATAGRAM payloads waiting to be sent, and those the client sent waiting to be read. |
 | `dropped: i32` | Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. |
+| `earlyProbeAcked: i64` | The Application Data space's largest acknowledged packet number when the last early probe was asked for (`earlyProbeAt`), so one goes per acknowledgment that moves it; -2 before any. |
 | `earlyResends: i32` | Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). |
 | `ecnMarking: boolean` | Whether the carrier sends with the ECN bits of `datagramEcn`; the carrier sets it, and `reset` keeps it. |
 | `readonly ephemeral: Secret<u8[]>` | The x25519 private key `begin` takes from the entropy, until the handshake hands it to `TlsServer`. |
@@ -606,8 +611,8 @@ class QuicConnection
 | `close(code: i64): void` | Closes the connection from the application, with its own error `code` (CONNECTION_CLOSE 0x1d; RFC 9000 §10.2). The next `takeDatagram` answers the close, and nothing after it. Closing twice, or after the client closed, does nothing. |
 | `closed(): boolean` | Whether the connection has closed, either way. |
 | `datagramSize(): i32` | The largest datagram the server sends now: `pathMtu`, or 1200 while a new path is being validated. |
-| `deadline(): i64` | When `handleTimer` is next due, in the caller's milliseconds: the idle timeout, loss recovery's timer (a time-threshold loss or the probe timeout), the end of a key update's probe timeout, or, while a path is validated, its PATH_CHALLENGE's resend or the end of its validation, whichever comes first; once the connection has closed, the end of its closing or draining period, when its keys are wiped. -1 when nothing is timed: before the first packet, while a closed connection's own close has not gone out (`takeDatagram` sends it), once a closed connection's keys are wiped, and with no idle timeout, nothing in flight, no update pending and no path being validated. |
-| `handleTimer(now: i64): void` | Runs whatever is due by `now`, the caller's monotonic time in milliseconds; call it at `deadline()`, or any time. Past the idle timeout the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1): no CONNECTION_CLOSE, every key wiped. Past the closing or draining period of a connection that closed, every key is wiped (§10.2). Past a key update's probe timeout the previous read keys are wiped and the next generation's derived (RFC 9001 §6.5).<br><br>Past loss recovery's timer, packets lost by the time threshold have their frames queued again, or a probe timeout queues every space's packets in flight and asks for a probe (RFC 9002 §6.1.2, §6.2.4): `takeDatagram` then sends it. `receive` and `takeDatagram` run it themselves. Time never runs backwards here: an earlier `now` than one already given counts as that one. |
+| `deadline(): i64` | When `handleTimer` is next due, in the caller's milliseconds: the idle timeout, loss recovery's timer (a time-threshold loss or the probe timeout), an early probe while a stream's send buffer is full behind bytes in flight, the end of a key update's probe timeout, or, while a path is validated, its PATH_CHALLENGE's resend or the end of its validation, whichever comes first; once the connection has closed, the end of its closing or draining period, when its keys are wiped. -1 when nothing is timed: before the first packet, while a closed connection's own close has not gone out (`takeDatagram` sends it), once a closed connection's keys are wiped, and with no idle timeout, nothing in flight, no update pending and no path being validated. |
+| `handleTimer(now: i64): void` | Runs whatever is due by `now`, the caller's monotonic time in milliseconds; call it at `deadline()`, or any time. Past the idle timeout the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1): no CONNECTION_CLOSE, every key wiped. Past the closing or draining period of a connection that closed, every key is wiped (§10.2). Past a key update's probe timeout the previous read keys are wiped and the next generation's derived (RFC 9001 §6.5).<br><br>Past loss recovery's timer, packets lost by the time threshold have their frames queued again, or a probe timeout queues every space's packets in flight and asks for a probe (RFC 9002 §6.1.2, §6.2.4): `takeDatagram` then sends it. Past the early probe's time, while a stream's send buffer is full behind bytes in flight, a probe is asked for the same way, so the client answers from wherever its NAT now sends it. `receive` and `takeDatagram` run it themselves. Time never runs backwards here: an earlier `now` than one already given counts as that one. |
 | `idleDeadline(): i64` | When the idle timeout passes, or -1 when there is none or the timer has not started. |
 | `maxDatagramPayload(): i32` | The largest DATAGRAM payload `sendDatagram` takes now: what fits the client's `max_datagram_frame_size` with the frame's type and Length, and a 1-RTT packet of `datagramSize()` with the longest packet number; 0 when the client takes none, or the server sends none. It grows when path MTU discovery validates a larger datagram, and shrinks again on a fall back to 1200, which drops a queued payload that no longer fits. |
 | `nextStreamEvent(): i64` | The ID of the next stream with something new for the application — the client opened it, it has bytes or its FIN to read, it was reset or stopped, or it has room to write again after a short write — or -1 when there is none. Each stream comes up once however much happened; read and write it until it has nothing more to say. |
@@ -675,7 +680,7 @@ interface QuicServerConfig
 | `maxData: i64` | `initial_max_data`: the connection's receive window, 0 to 2^62 − 1, raised as the application reads. |
 | `maxDatagramFrameSize: i64` | RFC 9221's `max_datagram_frame_size`: the largest DATAGRAM frame the server takes, 0 (none, and the parameter is not sent) to 1500. The server sends DATAGRAM frames only when it takes them too. |
 | `maxIdleTimeout: i64` | `max_idle_timeout` in milliseconds: 0 for none, at most 2^62 − 1. The connection times out after the smaller of this and the client's, and never sooner than `QUIC_CONN_IDLE_FLOOR`. |
-| `maxStreamData: i64` | `initial_max_stream_data_bidi_remote` (and `_uni`, and `_bidi_local` when the server opens streams): each stream's receive window and the size of its buffer each way, 1 to 1 MiB. |
+| `maxStreamData: i64` | `initial_max_stream_data_bidi_remote` (and `_uni`, and `_bidi_local` when the server opens streams): each stream's receive window and the size of its buffer each way, 1 to 1 MiB. The send buffer holds what the client has not acknowledged, so it bounds a stream's send-side memory and its bytes in flight: behind one lost packet a stream sends nothing new until the resend is acknowledged, and the connection sends an early ACK-eliciting probe meanwhile so a client's NAT rebinding is still seen. |
 | `maxStreamsBidi: i64` | `initial_max_streams_bidi`: how many bidirectional streams the client may have open at once, 0 to 1024. |
 | `maxStreamsUni: i64` | `initial_max_streams_uni`: how many unidirectional streams the client may have open at once, 0 to 1024. |
 | `retry: boolean` | Whether `nish/net/quic-listener` answers a client's first Initial with a Retry (§8.1.2). |

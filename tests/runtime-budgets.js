@@ -198,6 +198,10 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * through this file, so they are here rather than in a unit of their own. The budget is the
  * next 256-byte boundary, leaving 183. The 480 bytes are the same before and after
  * `spawnPipedWithin` (5,338 from 4,858 without it).
+ *
+ * The file measures **5,761 bytes** on 2026-11-12, same toolchain: 5,791 after the
+ * exec grant's identity check (#1447), then 30 given back when a spawn under an exec
+ * allowlist was handed whole to `runtime-sandbox.c`. The ceiling stands, leaving 127.
  */
 const RUNTIME_OS_TEXT_BUDGET = 5888
 /**
@@ -556,8 +560,14 @@ const RUNTIME_SIMD_TEXT_BUDGET = 2560
  * raised one. Apart, a program that searches text carries no AES and one that speaks
  * TLS no byte search. The budget is the next 256-byte boundary above the measurement,
  * as every ceiling here was set.
+ *
+ * Measured **2,709 bytes** on 2026-11-13 with the same clang, after AEAD-4
+ * (docs/security/crypto-aead.md): `nish_aes_clear`, 95 bytes out of line, zeroes the
+ * vector and caller-saved general registers as each kernel tail-calls it, and GHASH
+ * packs its middle operands to end a spill (1,155). Inlined into the four kernels
+ * the clear measured 2,977. The row is in docs/wp7-runtime.md.
  */
-const RUNTIME_AES_TEXT_BUDGET = 2560
+const RUNTIME_AES_TEXT_BUDGET = 2816
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sha256.c`
  * -- the SHA-256 block on the CPU's SHA instructions: `nish_sha256_hw`, its CPU
@@ -689,8 +699,30 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * Measured 3,143 against 2,558 before it on 2026-11-11 with clang 18.1.3 on
  * linux-x64. Here rather than in `runtime-os.c`, whose spawn reaches it through a
  * pointer only `nish_sandbox` sets, so a build without `--sandbox` links none of it.
+ *
+ * Raised to 4,096, the next 256-byte boundary, for SBX-1's second part (WP37): the
+ * one exec a spawn under an exec allowlist is held to, which is two threads, a
+ * seccomp filter with a user-notification listener and the loop that answers it.
+ * Measured 4,067 against 3,143 before it on 2026-11-12 with clang 18.1.3 on
+ * linux-x64; `runtime-os.c` gave back 30 bytes (5,761 from 5,791), its spawn now
+ * handed over whole.
+ *
+ * Raised to 4,352, the next 256-byte boundary, the same day: a spawn whose exec the
+ * supervisor cannot answer "continue" has its exec failed, or the child killed and
+ * reaped, so that the spawn answers its refusal. Measured 4,199 against 4,067.
+ *
+ * Raised to 4,608, the next 256-byte boundary, the same day: both threads of a spawn
+ * run with every signal blocked and the child is given the calling thread's mask
+ * through spawn attributes, and a thread that cannot be started prints the refusal
+ * line. Measured 4,409 against 4,199, leaving 199.
+ *
+ * Unchanged for `process.spawn=exec:<program>` (WP40 §2a): the marked identities
+ * carry which kind each is, and a spawn of a program granted `exec:` is started by
+ * the supervisor itself, without the filter, through the `posix_spawn` call the
+ * spawner now shares. Measured 4,507 against 4,409 on 2026-11-13 with clang 18.1.3
+ * on linux-x64. The ceiling stands, leaving 101.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 3328
+const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`
@@ -762,8 +794,15 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1792
  * and taking a task off the ready queue when it finishes queued (ASYNC-18). Measured
  * **3,797 bytes** against 2,627 on 2026-11-09 with clang 18.1.3 on linux-x64; the next
  * 256-byte boundary.
+ *
+ * Raised to 4,096 by recycling (stage 6, ASYNC-20): `nish_async_done` rewinds a finished
+ * task's region and the node keeps it, with the per-chunk and total bounds on what is
+ * kept and the count of kept bytes, in place of `nish_region_free` and a new region per
+ * spawn. Measured **3,910 bytes** against 3,797 on 2026-11-12 with clang 18.1.3 on
+ * linux-x64 (3,921 with `-DNISH_THREADS=1`, where the arena it rewinds is thread-local);
+ * the next 256-byte boundary. `runtime-region.c` did not move.
  */
-const RUNTIME_ASYNC_TEXT_BUDGET = 3840
+const RUNTIME_ASYNC_TEXT_BUDGET = 4096
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
@@ -790,12 +829,30 @@ const RUNTIME_SQLITE_TEXT_BUDGET = 2048
  * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
  * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
  * connection built. Each connection is built on the first accept into its slot,
- * 3,976 bytes on the same defaults. Built eagerly, as every slot was before, a
+ * 752 bytes on the same defaults (2026-11-13). Built eagerly, as every slot was before, a
  * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
  * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
  * next 256-byte boundary above the measurement, as every ceiling here was set.
  */
 export const HTTP1_SERVER_START_BYTES = 16896
+
+/**
+ * Ceiling on what one idle keep-alive `Http1Server` connection holds in the arena on
+ * the default `Http1Config` -- not a `.text` budget: `tests/run.js` links
+ * `tests/link/net_http1_server/startup.ts`, which builds a connection as the server
+ * builds a slot's, on its outputs, input and head pools and shared `Date`, serves it
+ * four GETs, parks it and prints the bytes, after a first connection has served the
+ * same so that what the pools keep for every connection is not counted.
+ *
+ * Measured **904 bytes** on 2026-11-13 with clang 18 on linux-x64, against 3,384
+ * on the base before the idle trims: a built connection no longer allocates a
+ * `Date` it drops or spans and fields it replaces on the first request, the head
+ * it keeps to write again is sized to that head, not `H1_HEAD_KEEP`'s 1 KB, and
+ * `Http1Config.idleInput`, now on by default, lends its input and head buffers to
+ * the pools while it rests (2,232 bytes with it off). The budget is the next
+ * 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+export const HTTP1_SERVER_IDLE_BYTES = 1024
 
 /**
  * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena
@@ -882,12 +939,25 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * connection's path MTU, its limit, the search's bounds, the probe in flight and
  * its counters, and recovery's datagram size.
  *
- * Moved to **111,048 bytes** (+72) by CUBIC (RFC 9438): recovery's controller
+ * Moved to **110,984 bytes** (+8) by #1485's early probe: the connection's
+ * `earlyProbeAcked`, the largest acknowledged packet its last early probe was
+ * asked at, so that one probe goes per acknowledgement.
+ *
+ * Moved to **111,008 bytes** (+24) by the HTTP/3 clock (H3-5,
+ * `docs/security/http3.md`): the two times an `Http3Connection` measures its
+ * idle and head timeouts from, and the counts and mode that say whether a
+ * client made progress, filling padding the object already had.
+ *
+ * Moved to **111,016 bytes** (+8) by the reset budget (H3-9,
+ * `docs/security/http3.md`): the `resetCredit` an `Http3Connection` charges each
+ * request reset against, which the clock's fields had left no padding for.
+ *
+ * Moved to **111,088 bytes** (+72) by CUBIC (RFC 9438): recovery's controller
  * choice and its eight CUBIC fields (the window before the last reduction, K,
  * the epoch start, the Reno-friendly estimate and its carry, the step carry,
  * the prior window and the idle start).
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111048
+export const HTTP3_SERVER_SLOT_BYTES = 111088
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
@@ -1053,6 +1123,11 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * visibility, and an exported symbol survives `--gc-sections`, so the four stubs
  * are in every module that links runtime-wasm.c. Keeping them out of a program
  * that never calls them is a change to scripts/build.sh's link line.
+ *
+ * The game-page stage moved the same two digests again, for the same reason:
+ * runtime-wasm.c defines nish_arena_keep, the call-site reclaim's keep, as the
+ * identity, so string code reached from wasm (nish/term) links
+ * (docs/wp6-memory.md §2a), and `--export-all` keeps it in every module.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
@@ -1066,13 +1141,13 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
     loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "96d30c5e34923c2c601a84c2840b24900592957e2c5936d97b40502b574f9576",
+    wasm: "bb48e976a4bf87d39260add7b57da65f45387a1b822e144d902ae94417a4b004",
     host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
   },
   {
     src: "examples/results.ts",
     dts: "44fe9b7f259835e31570e83ddf00a31462e83032e733f378b75d6936ed2ca542",
-    loader: "a5c2128be043ae6cf8ed54608ed205d904d7db5dbd238c7fd82fd0d0413630d3",
+    loader: "700569e5007824aafbe0d99b42639db6f2280b65488a575edeb21d26da05aee6",
     wasm: "5040e616dfcf06673d5de62b5926e840734aaf550d2c0e1d8d7b1d1319c211a3",
     host: "4a93551c63373e264d34dd074f3f1e9da4a1ff10b8ed0225087bc7b24e9c0c22",
   },
@@ -1082,7 +1157,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/label.ts",
     dts: "2908a99c7f6fbfdb2f974459751e1ef424fc31651f3d90905199af43572f7458",
     loader: "8c8c983e487e7fce8d39053ce902bf0ad83851e4263f5f177de7438bb25c755b",
-    wasm: "217f03032659ab60e8b67dfaaa0e14625a2f67cedbac18acb3b6178f9c149692",
+    wasm: "ea55629e5d04c0ce90835fc3879b71844a78cfc5a9ca2805b813292c602da76f",
     host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",
   },
 ]

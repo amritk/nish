@@ -101,7 +101,7 @@ Design rules that every WP must respect:
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
-  | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
+  | `runtime-aes.c` | 2,709 (2026-11-13) | 2,816 |
   | `runtime-sha256.c` | 495 (2026-10-30) | 512 |
   | `runtime-chacha20.c` | 3,771 (2026-11-03) | 3,840 |
   | `runtime-term.c` | 1,825 (2026-10-24) | 2,048 |
@@ -283,6 +283,8 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |
 | 52 | Fast rebuilds for `nish run` | [wp52](wp52-run-rebuilds.md) |
 | 53 | Buffers and handles across `declare function` | [wp53](wp53-ffi-buffers-handles.md) |
+| 56 | Generators whose memory stays flat: a string builder, and a scope per file | [wp56](wp56-flat-memory-generators.md) |
+| 57 | Module-scoped names: a private function's symbol qualified by its module when it would clash | [wp57](wp57-module-scoped-names.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
