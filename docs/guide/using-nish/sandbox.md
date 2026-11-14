@@ -133,12 +133,49 @@ Only `fs.read` and `fs.write` take a scope, only in `--allow`, and only with
 `--sandbox`, the one thing that enforces it; each of the others is refused
 with exit status 2. A directory with a comma in its name cannot be named.
 
+## Granting a dependency its capabilities
+
+A package you install under `node_modules` may read files, write them,
+start programs, reach the network, call C or use `nish:unsafe` only when
+your own `package.json` says it may. Those six, `fs.read`, `fs.write`,
+`process.spawn`, `net`, `ffi` and `unsafe`, are the **gated**
+capabilities. Without a grant, the build stops in the dependency's source,
+naming the package, the capability and the chain of calls that reaches it:
+
+```text
+node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+```
+
+Grant each one by the package's name, under `nish.capabilities.dependencies`
+in the `package.json` nearest above your entry file. A package that reads
+files, runs tools, writes files and opens pull requests needs all of this:
+
+```json
+{
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "@amritk/vector": ["fs.read", "fs.write", "process.spawn", "net", "unsafe"]
+      }
+    }
+  }
+}
+```
+
+Only your own `package.json` grants. A dependency's `package.json` cannot
+grant itself anything, and neither can `--allow` on the command line. Every
+other capability, such as `clock` or `env`, needs no grant. The
+[`package.json` reference](../../reference/config/package-json.md) lists
+every field Nish reads, with each error a mistake in it gets, and
+[`nish-capabilities.lock.json`](../../reference/config/capabilities-lock.md)
+records what each dependency reaches, so an upgrade that reaches something
+new stops the build.
+
 ## Narrowing what a dependency is granted
 
-A dependency under `node_modules` needs your `package.json` to grant it
-`fs.read`, `fs.write`, `net`, `process.spawn`, `ffi` or `unsafe` (see
-[A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities)).
-The grant can name what it is for, after an `=`: a directory for `fs.read`
+The specification's rules are in
+[A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities).
+A grant can name what it is for, after an `=`: a directory for `fs.read`
 and `fs.write`, a program for `process.spawn`, an IP address (or a Unix
 socket's absolute path, such as `net=/run/app.sock`) for `net`.
 

@@ -851,6 +851,10 @@ const JSON_SLASH_T: i32 = 116
 const JSON_DIGIT_ZERO: i32 = 48
 const JSON_MINUS: i32 = 45
 const JSON_DECIMAL_BASE: i32 = 10
+/** The most decimal digits an `i64` has: `-9223372036854775808` has nineteen. */
+const JSON_I64_DIGITS: i32 = 19
+/** The most decimal digits an `i32` has: `-2147483648` has ten. */
+const JSON_I32_DIGITS: i32 = 10
 const JSON_LOWER_A: i32 = 97
 
 /**
@@ -1173,6 +1177,48 @@ export class JsonWriter {
     if (jsonWriterPutString(this, name) && jsonWriterPutByte(this, JSON_COLON)) {
       this.afterKey = true
     }
+  }
+
+  /**
+   * `key(name)` from a key already quoted: when the writer is minified, in an
+   * object, owes a key and has room for all of it, the comma and `quoted` go
+   * in as one copy; any other way, `key(name)` runs, so the bytes and
+   * `failed` are always the ones `key(name)` leaves.
+   *
+   * @internal Called by the code `jsonEncode` writes for a class (src/emit-json.ts).
+   * @param name - the key, unquoted.
+   * @param quoted - `name` quoted and escaped as `key` escapes it, then a colon.
+   */
+  keyQuoted(name: string, quoted: string): void {
+    const buf: u8[] = this.buf
+    const cap: i32 = toI32(buf.length)
+    const sep: i32 = this.sep
+    const n: i32 = toI32(quoted.length)
+    const at: i32 = this.end
+    if (
+      this.failed !== JSON_WRITE_OK ||
+      sep < JSON_WRITER_SEP_NONE ||
+      sep > JSON_WRITER_SEP_COMMA ||
+      this.afterKey ||
+      !jsonWriterInObject(this) ||
+      at < 0 ||
+      at > cap - sep - n
+    ) {
+      this.key(name)
+      return
+    }
+    if (sep === JSON_WRITER_SEP_COMMA && at < cap) {
+      buf[at] = toU8(JSON_COMMA)
+    }
+    let j: i32 = at + sep
+    let k: i32 = 0
+    while (k < n && j >= 0 && j < cap) {
+      buf[j] = toU8(quoted.charCodeAt(k))
+      j += 1
+      k += 1
+    }
+    this.end = j
+    this.afterKey = true
   }
 
   /**
@@ -1856,13 +1902,18 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
  * step the same under Node, where `/` does not truncate.
  */
 const jsonWriterPutDigits = (w: JsonWriter, v: i32, suffix: i32): boolean => {
+  // Counted against powers of ten on `-|v|`, as `jsonWriterPutDigits64` counts.
+  const negative: i32 = v < 0 ? v : -v
   let digits: i32 = 1
-  let rest: i32 = v
-  while (rest <= -JSON_DECIMAL_BASE || rest >= JSON_DECIMAL_BASE) {
-    rest = (rest - (rest % JSON_DECIMAL_BASE)) / JSON_DECIMAL_BASE
+  let bound: i32 = -JSON_DECIMAL_BASE
+  while (digits < JSON_I32_DIGITS && negative <= bound) {
     digits += 1
+    if (digits < JSON_I32_DIGITS) {
+      bound = bound * JSON_DECIMAL_BASE
+    }
   }
   const sign: i32 = v < 0 ? 1 : 0
+  let rest: i32 = v
   const extra: i32 = suffix >= 0 ? 1 : 0
   const buf: u8[] = w.buf
   const at: i32 = w.end
@@ -1877,7 +1928,6 @@ const jsonWriterPutDigits = (w: JsonWriter, v: i32, suffix: i32): boolean => {
   if (extra === 1 && at + width - 1 < toI32(buf.length) && at + width - 1 >= 0) {
     buf[at + width - 1] = toU8(JSON_DIGIT_ZERO + suffix)
   }
-  rest = v
   for (let k: i32 = at + sign + digits - 1; k >= at + sign && k >= 0 && k < toI32(buf.length); k -= 1) {
     const digit: i32 = rest % JSON_DECIMAL_BASE
     buf[k] = toU8(JSON_DIGIT_ZERO + (digit < 0 ? -digit : digit))
@@ -1891,14 +1941,20 @@ const jsonWriterPutDigits = (w: JsonWriter, v: i32, suffix: i32): boolean => {
 const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
   // Built with `toI64`: under Node an `i64` is a BigInt, and a bare `10` would
   // stay a number that `%` and `/` refuse to mix with one.
+  // The digits are counted against powers of ten on `-|v|`, which every `i64`
+  // has, so the count costs a compare and a multiply per digit, not a divide.
   const ten: i64 = toI64(10)
+  const negative: i64 = v < 0 ? v : -v
   let digits: i32 = 1
-  let rest: i64 = v
-  while (rest <= -ten || rest >= ten) {
-    rest = rest / ten
+  let bound: i64 = -ten
+  while (digits < JSON_I64_DIGITS && negative <= bound) {
     digits += 1
+    if (digits < JSON_I64_DIGITS) {
+      bound = bound * ten
+    }
   }
   const sign: i32 = v < 0 ? 1 : 0
+  let rest: i64 = v
   const buf: u8[] = w.buf
   const at: i32 = w.end
   const width: i32 = sign + digits
@@ -1909,7 +1965,6 @@ const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
   if (sign === 1) {
     buf[at] = toU8(JSON_MINUS)
   }
-  rest = v
   for (let k: i32 = at + width - 1; k >= at + sign && k >= 0 && k < toI32(buf.length); k -= 1) {
     const digit: i32 = toI32(rest % ten)
     buf[k] = toU8(JSON_DIGIT_ZERO + (digit < 0 ? -digit : digit))
