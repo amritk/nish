@@ -23,7 +23,7 @@ function charNode(emitter: Emitter): string -> @charNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: Emitter.metadata nish_str_concat
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.metadata#0 Emitter.metadata#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.metadata#0 Emitter.metadata#0
   stackSites=0 stackLocals=0
   local -3:9 cache: TbaaCache (const)
   local -1:11 root: string (const)
@@ -34,7 +34,7 @@ function typeName(emitter: Emitter, type: i32): string -> @typeName
   sharedWrite: via Emitter.llvm
   escaping: type
   calls: Emitter.llvm nish_str_at
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.llvm#0
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
@@ -43,7 +43,7 @@ function scalarNode(emitter: Emitter, type: i32): string -> @scalarNode
   sharedWrite: +0:5
   escaping: type
   calls: Emitter.metadata charNode nish_array_grow nish_panic_index nish_str_concat typeName
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.metadata#0 typeName#0 charNode#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.metadata#0 typeName#0 charNode#0
   stackSites=0 stackLocals=0
   local -2:9 scalars: string[] (const)
   callee +3:21 Emitter.metadata -> @Emitter.metadata
@@ -54,7 +54,7 @@ function structNode(emitter: Emitter, info: StructInfo): string -> @structNode
   sharedWrite: +0:5
   escaping: info
   calls: StringMap.get StringMap.set buildStructNode nish_array_grow nish_panic_index
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=buildStructNode#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=buildStructNode#0
   pointer info: size=176 writesThrough=true captured=true passedTo=buildStructNode#1
   stackSites=0 stackLocals=0
   local -8:9 cache: TbaaCache (const)
@@ -67,7 +67,7 @@ function buildStructNode(emitter: Emitter, info: StructInfo): string -> @buildSt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via scalarNode
   calls: Emitter.metadata FieldInfo.inline nish_str_concat nish_str_from_i32 scalarNode
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=scalarNode#0 Emitter.metadata#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=scalarNode#0 Emitter.metadata#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 members: string (let)
@@ -80,7 +80,7 @@ function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structNode
   calls: Emitter.metadata nish_str_concat nish_str_from_i32 scalarNode structNode
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=structNode#0 scalarNode#0 Emitter.metadata#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=structNode#0 scalarNode#0 Emitter.metadata#0
   pointer info: size=176 writesThrough=true captured=true passedTo=structNode#1
   pointer field: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -94,7 +94,7 @@ function elementTbaa(emitter: Emitter, elem: i32): string -> @elementTbaa [expor
   sharedWrite: via Emitter.metadata
   escaping: elem
   calls: Emitter.metadata charNode nish_str_concat typeName
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.metadata#0 typeName#0 charNode#0 Emitter.metadata#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.metadata#0 typeName#0 charNode#0 Emitter.metadata#0
   stackSites=0 stackLocals=0
   local +0:9 node: string (const)
   callee +0:16 Emitter.metadata -> @Emitter.metadata
@@ -105,7 +105,7 @@ function headerTbaa(emitter: Emitter, index: i32): string -> @headerTbaa [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via charNode
   calls: Emitter.metadata charNode nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=charNode#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=charNode#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
   stackSites=0 stackLocals=0
   local +0:9 omni: string (const)
   callee +0:16 charNode -> @charNode
@@ -121,7 +121,7 @@ function sliceTbaa(emitter: Emitter, index: i32): string -> @sliceTbaa [exported
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via charNode
   calls: Emitter.metadata charNode nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=charNode#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=charNode#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
   stackSites=0 stackLocals=0
   local +0:9 omni: string (const)
   callee +0:16 charNode -> @charNode

@@ -33,6 +33,32 @@ function looped(n: i32): i32 -> @looped
   local +0:7 t: i32 (let)
   local +1:12 i: i32 (let)
   callee +4:14 looped -> @looped
+function lessSelf(n: i32): i32 -> @lessSelf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: lessSelf nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee +0:10 lessSelf -> @lessSelf
+function selfLess(n: i32): i32 -> @selfLess
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow selfLess
+  stackSites=0 stackLocals=0
+  callee +0:14 selfLess -> @selfLess
+function twice(n: i32): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function callAfter(n: i32): i32 -> @callAfter
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: callAfter nish_panic_overflow twice
+  stackSites=0 stackLocals=0
+  callee +0:10 callAfter -> @callAfter
+  callee +0:29 twice -> @twice
+function digits(n: i32): i32 -> @digits
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: digits nish_arena_mark nish_arena_release nish_panic_overflow nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:9 s: string (const)
+  callee +1:21 digits -> @digits
 function Counter.constructor(this: Counter, step: i32): void -> @Counter.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: step
@@ -47,7 +73,7 @@ function Counter.total(this: Counter, n: i32): i32 -> @Counter.total [method]
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Counter.constructor Counter.total afterLocal looped nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 noBase product wide
+  calls: Counter.constructor Counter.total afterLocal callAfter digits lessSelf looped nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 noBase product selfLess wide
   stackSites=1 stackLocals=1
   local +0:9 c: Counter (const)
   callee +0:13 new Counter -> @Counter.constructor
@@ -58,3 +84,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee +3:49 wide -> @wide
   callee +3:60 looped -> @looped
   callee +3:73 Counter.total -> @Counter.total
+  callee +4:18 lessSelf -> @lessSelf
+  callee +4:33 selfLess -> @selfLess
+  callee +4:48 callAfter -> @callAfter
+  callee +4:64 digits -> @digits

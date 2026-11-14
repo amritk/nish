@@ -4,7 +4,6 @@ entry: src/accumulate.ts src/context.ts src/diagnostics.ts std/cli.ts src/codes.
 import CheckContext from "./context" -> struct CheckContext
 import isGenericFunction from "./generics" -> function @isGenericFunction
 import hasSpread from "./members" -> function @hasSpread
-import FLAG_DEFER from "./nodes" -> const FLAG_DEFER
 import FLAG_GENERATOR from "./nodes" -> const FLAG_GENERATOR
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_USING from "./nodes" -> const FLAG_USING
