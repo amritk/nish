@@ -53,7 +53,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -177,7 +177,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.reduce(f)`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice) `` | a `for` loop; `map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
 | `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `x.toFixed(2)`, `s.split(sep, limit)` | `` Unknown method `toFixed` on f64 `` | `toFixed(x, 2)` and `splitLimit(s, sep, limit)` from `nish/text` |
@@ -218,7 +218,7 @@ rejects. This table is the highest-value part of the page.
 | `total += xs[i]` in a loop, with `i` from somewhere the compiler cannot bound | it compiles, with an `NL9007` performance warning: `` `i` is not proven to be in range for `xs` here, so this access keeps its bounds check `` | a guard before the statement, `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`, which proves both ends in either number mode; `nish --fix` inserts it where it changes nothing the program does |
 | `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
 | `JSON.parse`, `RegExp`, `/re/` literals, `Promise` | unknown / forbidden | none of these are built in: `regexCompile(pattern, flags)` from `nish/regex` for a pattern, `jsonDecode` from `nish/json-typed` for JSON; restructure around `Promise` |
-| `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
+| `for (const [k, v] of m)`, `m.entries()`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, `forEach`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
 | `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
 
@@ -918,8 +918,9 @@ export const main = (): i32 => {
   read `this` (bind `const self = this`), or read a function-typed parameter
   of its function. An arrow inside another arrow, or given to a method, a
   constructor, `expose` or `exposeWith`, captures nothing; the callbacks of
-  the array methods `sort`, `map`, `filter`, `some`, `every` and `findIndex`
-  are the exception, and capture as an arrow argument does.
+  the array methods `sort`, `map`, `filter`, `some`, `every`, `findIndex` and
+  `forEach`, and of `Map` and `Set` `forEach`, are the exception, and capture
+  as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -2737,7 +2738,9 @@ order, SameValueZero keys (`-0` is `+0`, `NaN` finds `NaN`). What they have is
 exactly `size` (a read-only `number`), `get(k)`, `set(k, v)` / `add(x)` (both
 answer the receiver, so they chain), `has(k)`, `delete(k)` (answers whether it
 was there) and `clear()`, and `keys()` / `values()` as the iterable of a
-`for...of` and nowhere else. `entries` and `forEach` are refused by name.
+`for...of` and nowhere else, and `forEach(f)`: `m.forEach((value, key) => ...)`
+and `s.forEach((x) => ...)` compile to that `for...of` walk with `f` inlined,
+and answer `void`. `entries` is refused by name.
 
 ```ts nish:ok-body
 const seen = new Set<string>();
@@ -3080,7 +3083,7 @@ the module (NL4015).
 
 ## Recipes for what is missing
 
-**Iterate and accumulate** — there is no `reduce` or `forEach` (`map`, `filter`, `some`, `every`, `findIndex` and `slice` work); fold in a loop:
+**Iterate and accumulate** — there is no `reduce` (`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, but a callback may not assign a local of its caller); fold in a loop:
 
 ```ts nish:ok-body
 const xs: i32[] = [1, 2, 3];

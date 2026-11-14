@@ -40,6 +40,10 @@ import {
   arrayMethodLocal,
   arrayMethodTemplate,
   arrayMethodTemplateCount,
+  collectionForEachLocal,
+  FOR_EACH_ELEMENT,
+  FOR_EACH_ENTRY,
+  FOR_EACH_VALUE,
   isSortModule,
   SORT_LOCAL,
 } from "./std-modules"
@@ -49,7 +53,7 @@ import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
 const ARRAY_METHODS: string =
-  "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice"
+  "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice"
 
 /**
  * `[a, b]`. An empty literal takes its type from context, since there is
@@ -547,8 +551,8 @@ const callbackArity = (ctx: CheckContext, arg: Node, scope: Scope): i32 => {
 }
 
 /**
- * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)` and
- * `xs.findIndex(f)`: a call of `std/array.ts`'s template of that name, or of
+ * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
+ * and `xs.forEach(f)`: a call of `std/array.ts`'s template of that name, or of
  * its `<name>Indexed` twin when `f` takes the index too, so each callback is
  * an instantiation that calls it directly. JavaScript passes a third
  * argument, the array; Nish passes none, and a callback that asks for it is
@@ -577,6 +581,43 @@ const checkCallbackMethod = (ctx: CheckContext, call: Node, access: Node, args: 
     arrayMethodLocal(arrayMethodTemplate(name, pick)),
     scope
   )
+}
+
+/**
+ * `m.forEach(f)` on a `Map` and `s.forEach(f)` on a `Set`: a call of
+ * `std/collections.ts`'s `forEachEntry` when a `Map`'s callback takes the key
+ * too, `forEachValue` when it takes only the value, and `forEachElement` for a
+ * `Set`, each the table walk a `for...of` makes, with the callback called
+ * directly. JavaScript's later arguments are the key (a `Set` passes its
+ * element twice) and then the receiver, which the call already names: a
+ * callback that asks for more than Nish passes is refused.
+ */
+export const checkCollectionForEach = (
+  ctx: CheckContext,
+  call: Node,
+  access: Node,
+  args: Node,
+  isMap: boolean,
+  scope: Scope
+): i32 => {
+  if (!checkBuiltinArity(ctx, call, "forEach", args, 1)) {
+    return T_ERROR
+  }
+  const arity = callbackArity(ctx, args.children[0], scope)
+  if (arity > (isMap ? 2 : 1)) {
+    ctx.error(
+      args.children[0],
+      isMap
+        ? `The callback of \`forEach\` on a \`Map\` takes ${arity} parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead`
+        : `The callback of \`forEach\` on a \`Set\` takes ${arity} parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names`
+    )
+    return T_ERROR
+  }
+  let template = FOR_EACH_ELEMENT
+  if (isMap) {
+    template = arity === 2 ? FOR_EACH_ENTRY : FOR_EACH_VALUE
+  }
+  return checkAsTemplateCall(ctx, call, access, args, collectionForEachLocal(template), scope)
 }
 
 /**

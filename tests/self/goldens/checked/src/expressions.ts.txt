@@ -809,13 +809,14 @@ function refuseOuterWrite(ctx: CheckContext, target: Node): i32 -> @refuseOuterW
   stackSites=0 stackLocals=0
   local +0:9 mode: i32 (const)
   callee +0:16 CheckContext.arrowMode -> @CheckContext.arrowMode
-  local +1:7 message: string (let)
-  callee +1:17 noCaptureMessage -> @noCaptureMessage
-  callee +3:15 taskCaptureWriteMessage -> @taskCaptureWriteMessage
-  callee +5:15 captureWriteMessage -> @captureWriteMessage
-  callee +5:48 captureWriteRemedy -> @captureWriteRemedy
-  callee +7:15 callCaptureWriteMessage -> @callCaptureWriteMessage
-  callee +9:3 refuseOnce -> @refuseOnce
+  local +1:9 arrow: FunctionSig | null (const)
+  local +2:7 message: string (let)
+  callee +2:17 noCaptureMessage -> @noCaptureMessage
+  callee +4:15 taskCaptureWriteMessage -> @taskCaptureWriteMessage
+  callee +6:15 captureWriteMessage -> @captureWriteMessage
+  callee +6:48 captureWriteRemedy -> @captureWriteRemedy
+  callee +8:15 callCaptureWriteMessage -> @callCaptureWriteMessage
+  callee +10:3 refuseOnce -> @refuseOnce
 function checkThis(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkThis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

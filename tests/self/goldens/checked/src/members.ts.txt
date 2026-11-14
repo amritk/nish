@@ -4,6 +4,7 @@ entry: src/members.ts src/arrays.ts src/secret.ts src/attributes.ts src/emit-sec
 import ARRAY_LEVEL from "./arrays" -> const ARRAY_LEVEL
 import checkArrayMethod from "./arrays" -> function @checkArrayMethod
 import checkArrayProperty from "./arrays" -> function @checkArrayProperty
+import checkCollectionForEach from "./arrays" -> function @checkCollectionForEach
 import checkNewArray from "./arrays" -> function @checkNewArray
 import MAP_LEVEL from "./arrays" -> const MAP_LEVEL
 import peelSpelling from "./arrays" -> function @peelSpelling
@@ -279,52 +280,56 @@ function exposeMethod(ctx: CheckContext, method: FunctionSig): void -> @exposeMe
 function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections Node.constructor StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.isArray TypeTable.isFnRef TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.refOf TypeTable.typeName checkArrayMethod checkExpression checkGenericCall checkMapGet checkMethodArguments checkReferenceCall checkResultMethod checkStringMethod checkWalkIterable exposeMethod isChannelSend isCollectionStruct isWalkIterable linkReceiver nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nullableHint nullableReference opaqueReferenceMessage recordRegionCall recordUpdateFusion refuseCollectionMember refuseNullableCall refuseParameterMember refuseSecretMember simdCompareMessage spawnFormFor structOf toStringFix unionMemberMessage
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 CheckContext.errorAtProperty#0 unionMemberMessage#0 checkStringMethod#0 checkResultMethod#0 CheckContext.errorAtProperty#0 checkArrayMethod#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorFix#0 toStringFix#0 structOf#0 isWalkIterable#0 checkWalkIterable#0 refuseCollectionMember#0 checkMapGet#0 checkGenericCall#0 exposeMethod#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 checkMethodArguments#0 exposeMethod#0 recordUpdateFusion#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=checkStringMethod#1 checkResultMethod#1 checkArrayMethod#1 CheckContext.errorType#1 toStringFix#1 isWalkIterable#2 checkWalkIterable#1 checkMapGet#1 checkGenericCall#1 checkReferenceCall#1 checkMethodArguments#1 recordRegionCall#1 recordUpdateFusion#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 refuseParameterMember#6 checkStringMethod#4 checkResultMethod#5 checkArrayMethod#5 checkWalkIterable#5 checkMapGet#4 checkGenericCall#3 checkExpression#2 checkReferenceCall#4 checkMethodArguments#5
+  calls: CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections Node.constructor StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.isArray TypeTable.isFnRef TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.refOf TypeTable.typeName checkArrayMethod checkCollectionForEach checkExpression checkGenericCall checkMapGet checkMethodArguments checkReferenceCall checkResultMethod checkStringMethod checkWalkIterable exposeMethod isChannelSend isCollectionStruct isMapOwner isWalkIterable linkReceiver nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nullableHint nullableReference opaqueReferenceMessage recordRegionCall recordUpdateFusion refuseCollectionMember refuseNullableCall refuseParameterMember refuseSecretMember simdCompareMessage spawnFormFor structOf toStringFix unionMemberMessage
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 CheckContext.errorAtProperty#0 unionMemberMessage#0 checkStringMethod#0 checkResultMethod#0 CheckContext.errorAtProperty#0 checkArrayMethod#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorFix#0 toStringFix#0 structOf#0 isWalkIterable#0 checkWalkIterable#0 checkCollectionForEach#0 refuseCollectionMember#0 checkMapGet#0 checkGenericCall#0 exposeMethod#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 checkMethodArguments#0 exposeMethod#0 recordUpdateFusion#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=checkStringMethod#1 checkResultMethod#1 checkArrayMethod#1 CheckContext.errorType#1 toStringFix#1 isWalkIterable#2 checkWalkIterable#1 checkCollectionForEach#1 checkMapGet#1 checkGenericCall#1 checkReferenceCall#1 checkMethodArguments#1 recordRegionCall#1 recordUpdateFusion#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 refuseParameterMember#6 checkStringMethod#4 checkResultMethod#5 checkArrayMethod#5 checkWalkIterable#5 checkCollectionForEach#5 checkMapGet#4 checkGenericCall#3 checkExpression#2 checkReferenceCall#4 checkMethodArguments#5
   stackSites=1 stackLocals=1
-  local -110:9 access: Node (const)
-  local -109:9 receiverExpr: Node (const)
-  local -108:9 receiver: i32 (const)
-  callee -108:20 linkReceiver -> @linkReceiver
-  callee -108:60 checkExpression -> @checkExpression
-  local -104:9 args: Node (const)
-  callee -103:7 refuseSecretMember -> @refuseSecretMember
-  callee -100:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee -98:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -96:46 TypeTable.typeName -> @TypeTable.typeName
-  callee -96:81 nullableHint -> @nullableHint
-  callee -92:7 refuseParameterMember -> @refuseParameterMember
-  callee -89:7 TypeTable.isUnion -> @TypeTable.isUnion
-  callee -88:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -88:33 unionMemberMessage -> @unionMemberMessage
-  callee -84:12 checkStringMethod -> @checkStringMethod
-  callee -82:7 TypeTable.isResult -> @TypeTable.isResult
-  callee -81:12 checkResultMethod -> @checkResultMethod
-  callee -79:7 TypeTable.isArray -> @TypeTable.isArray
-  callee -77:38 TypeTable.isVector -> @TypeTable.isVector
-  callee -77:57 TypeTable.refOf -> @TypeTable.refOf
-  callee -76:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -74:9 simdCompareMessage -> @simdCompareMessage
-  callee -74:39 TypeTable.typeName -> @TypeTable.typeName
-  callee -74:58 TypeTable.refOf -> @TypeTable.refOf
-  callee -70:12 checkArrayMethod -> @checkArrayMethod
-  callee -68:7 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -67:12 CheckContext.errorType -> @CheckContext.errorType
-  callee -67:32 opaqueReferenceMessage -> @opaqueReferenceMessage
-  callee -67:55 CheckContext.textOf -> @CheckContext.textOf
-  callee -65:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local -62:11 name: Node (const)
-  callee -62:18 new Node -> @Node.constructor
-  local -61:11 message: string (const)
-  callee -61:61 TypeTable.typeName -> @TypeTable.typeName
-  callee -60:5 CheckContext.errorFix -> @CheckContext.errorFix
-  callee -60:33 toStringFix -> @toStringFix
-  local -57:9 info: StructInfo | null (const)
-  callee -57:16 structOf -> @structOf
-  callee -53:7 isWalkIterable -> @isWalkIterable
-  callee -52:12 checkWalkIterable -> @checkWalkIterable
+  local -113:9 access: Node (const)
+  local -112:9 receiverExpr: Node (const)
+  local -111:9 receiver: i32 (const)
+  callee -111:20 linkReceiver -> @linkReceiver
+  callee -111:60 checkExpression -> @checkExpression
+  local -107:9 args: Node (const)
+  callee -106:7 refuseSecretMember -> @refuseSecretMember
+  callee -103:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee -101:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -99:46 TypeTable.typeName -> @TypeTable.typeName
+  callee -99:81 nullableHint -> @nullableHint
+  callee -95:7 refuseParameterMember -> @refuseParameterMember
+  callee -92:7 TypeTable.isUnion -> @TypeTable.isUnion
+  callee -91:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -91:33 unionMemberMessage -> @unionMemberMessage
+  callee -87:12 checkStringMethod -> @checkStringMethod
+  callee -85:7 TypeTable.isResult -> @TypeTable.isResult
+  callee -84:12 checkResultMethod -> @checkResultMethod
+  callee -82:7 TypeTable.isArray -> @TypeTable.isArray
+  callee -80:38 TypeTable.isVector -> @TypeTable.isVector
+  callee -80:57 TypeTable.refOf -> @TypeTable.refOf
+  callee -79:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -77:9 simdCompareMessage -> @simdCompareMessage
+  callee -77:39 TypeTable.typeName -> @TypeTable.typeName
+  callee -77:58 TypeTable.refOf -> @TypeTable.refOf
+  callee -73:12 checkArrayMethod -> @checkArrayMethod
+  callee -71:7 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -70:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -70:32 opaqueReferenceMessage -> @opaqueReferenceMessage
+  callee -70:55 CheckContext.textOf -> @CheckContext.textOf
+  callee -68:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local -65:11 name: Node (const)
+  callee -65:18 new Node -> @Node.constructor
+  local -64:11 message: string (const)
+  callee -64:61 TypeTable.typeName -> @TypeTable.typeName
+  callee -63:5 CheckContext.errorFix -> @CheckContext.errorFix
+  callee -63:33 toStringFix -> @toStringFix
+  local -60:9 info: StructInfo | null (const)
+  callee -60:16 structOf -> @structOf
+  callee -56:7 isWalkIterable -> @isWalkIterable
+  callee -55:12 checkWalkIterable -> @checkWalkIterable
+  callee -53:36 isCollectionStruct -> @isCollectionStruct
+  callee -53:65 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  callee -52:12 checkCollectionForEach -> @checkCollectionForEach
+  callee -52:60 isMapOwner -> @isMapOwner
   callee -50:7 refuseCollectionMember -> @refuseCollectionMember
   callee -47:32 isCollectionStruct -> @isCollectionStruct
   callee -47:61 CheckedProgram.isCollections -> @CheckedProgram.isCollections

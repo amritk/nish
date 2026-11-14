@@ -251,7 +251,7 @@ export const isSortModule = (packageName: string, name: string): boolean =>
 
 /**
  * `nish/array`: the loops `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`,
- * `xs.every(f)`, `xs.findIndex(f)` and `xs.slice(a, b)` compile to. Like
+ * `xs.every(f)`, `xs.findIndex(f)`, `xs.forEach(f)` and `xs.slice(a, b)` compile to. Like
  * `nish/sort` a call of one of those methods is what loads it (the checker's
  * `importArrayMethods`), and the call is checked as one to its template,
  * instantiated per callback; a program may import the templates by name too.
@@ -265,6 +265,7 @@ const isArrayMethod = (name: string): boolean =>
   name === "some" ||
   name === "every" ||
   name === "findIndex" ||
+  name === "forEach" ||
   name === "slice"
 
 /**
@@ -302,6 +303,9 @@ export const arrayMethodTemplate = (name: string, k: i32): string => {
   if (name === "some") {
     return "someIndexed"
   }
+  if (name === "forEach") {
+    return "forEachIndexed"
+  }
   return name === "every" ? "everyIndexed" : "findIndexIndexed"
 }
 
@@ -323,8 +327,35 @@ export const isArrayMethodLocal = (local: string): boolean => local.startsWith(A
  * written as (`sort` for `SORT_LOCAL`, `map` for `Array.prototype.mapIndexed`),
  * or `""` when `local` is no such name.
  */
-export const rewrittenArrayMethod = (local: string): string =>
-  local === SORT_LOCAL ? "sort" : arrayMethodOfLocal(local)
+export const rewrittenArrayMethod = (local: string): string => {
+  if (local === SORT_LOCAL) {
+    return "sort"
+  }
+  return isCollectionForEachLocal(local) ? "forEach" : arrayMethodOfLocal(local)
+}
+
+/**
+ * The `nish/collections` templates a `.forEach(...)` call may become:
+ * `forEachEntry` for a `Map` callback of a value and a key, `forEachValue` for
+ * one of a value alone, and `forEachElement` for a `Set`.
+ */
+export const FOR_EACH_ENTRY: string = "forEachEntry"
+export const FOR_EACH_VALUE: string = "forEachValue"
+export const FOR_EACH_ELEMENT: string = "forEachElement"
+
+/**
+ * The local name a `nish/collections` `forEach` template is imported under
+ * (`importArrayMethods`): dotted, like `arrayMethodLocal`'s, so no declaration
+ * can take it.
+ */
+export const collectionForEachLocal = (template: string): string =>
+  template === FOR_EACH_ELEMENT ? `Set.prototype.${template}` : `Map.prototype.${template}`
+
+/** Whether an import under `local` is one the checker gave a module for a `Map` or `Set` `forEach` call. */
+export const isCollectionForEachLocal = (local: string): boolean =>
+  local === "Map.prototype.forEachEntry" ||
+  local === "Map.prototype.forEachValue" ||
+  local === "Set.prototype.forEachElement"
 
 /** The suffix of a template for a callback of two parameters (`mapIndexed`). */
 const INDEXED_SUFFIX: string = "Indexed"
