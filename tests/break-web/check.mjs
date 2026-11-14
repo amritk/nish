@@ -623,11 +623,19 @@ const fakeGame = () => {
   }
 }
 const overlays = (document) => [...document.body.all()].filter((n) => n.className === "nish-break")
-/** The overlay's button named `label`. */
-const buttonIn = (overlay, label) =>
-  overlay?.children.find((c) => c instanceof Node && c.tag === "button" && c.attributes["aria-label"] === label)
-const closeIn = (overlay) => buttonIn(overlay, "Close the game")
-const menuIn = (overlay) => buttonIn(overlay, "Game menu")
+/** The overlay's element of class `name`. */
+const partOf = (overlay, name) => overlay?.find(name) ?? undefined
+const menuIn = (overlay) => partOf(overlay, "nish-break__menu")
+const scrimIn = (overlay) => partOf(overlay, "nish-break__scrim")
+const resumeIn = (overlay) => partOf(overlay, "nish-break__resume")
+const quitIn = (overlay) => partOf(overlay, "nish-break__quit")
+const canvasIn = (overlay) => overlay?.querySelector("canvas") ?? undefined
+const panelOf = (overlay) => partOf(overlay, "nish-break__panel")
+/** Quits the game as a player does with no keyboard: the menu button, then Quit. */
+const quitBy = (overlay) => {
+  menuIn(overlay)?.dispatch("click", event("click"))
+  quitIn(overlay)?.dispatch("click", event("click"))
+}
 
 {
   const { document } = makeDocument()
@@ -640,33 +648,58 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
   const run = first.runs[0]
   check("the overlay is a modal dialog", overlay?.attributes.role === "dialog" && overlay?.attributes["aria-modal"] === "true",
     JSON.stringify(overlay?.attributes))
-  const canvas = overlay.children.find((c) => c instanceof Node && c.tag === "canvas")
-  const close = closeIn(overlay)
+  const canvas = canvasIn(overlay)
   const menu = menuIn(overlay)
-  check("once the game runs, its screen has focus", document.activeElement === canvas && close.focused === 1 && canvas.focused === 1,
-    `${document.activeElement?.tag} ${close.focused} ${canvas.focused}`)
-  check("the overlay has a menu button, named, between the screen and the close control",
-    menu !== undefined && menu.attributes.type === "button" && menu.className === "nish-break__menu" &&
-      overlay.children.indexOf(canvas) < overlay.children.indexOf(menu) && overlay.children.indexOf(menu) < overlay.children.indexOf(close),
-    JSON.stringify(menu?.attributes))
+  const scrim = scrimIn(overlay)
+  const resume = resumeIn(overlay)
+  const quit = quitIn(overlay)
+  check("once the game runs, its screen has focus", document.activeElement === canvas && menu.focused === 1 && canvas.focused === 1,
+    `${document.activeElement?.tag} ${menu.focused} ${canvas.focused}`)
+  const buttons = [...overlay.all()].filter((n) => n.tag === "button")
+  check("the overlay has one button, the menu's, named, and no close control of its own",
+    menu !== undefined && menu.attributes.type === "button" && menu.attributes["aria-label"] === "Game menu" &&
+      menu.attributes["aria-expanded"] === "false" && buttons.filter((b) => b.attributes.role !== "menuitem").length === 1,
+    buttons.map((b) => JSON.stringify(b.attributes)).join(" "))
+  check("its menu is hidden, and holds Resume and Quit as menu items",
+    scrim.hidden === true && resume?.textContent === "Resume" && quit?.textContent === "Quit" &&
+      resume.attributes.role === "menuitem" && quit.attributes.role === "menuitem",
+    `${scrim.hidden} ${resume?.textContent} ${quit?.textContent}`)
   const fromCanvas = press(overlay, "Tab", { target: canvas })
   const fromMenu = press(overlay, "Tab", { target: menu })
-  const fromClose = press(overlay, "Tab", { target: close })
-  check("Tab goes from the game to its menu button, the close control, and back",
-    fromCanvas.prevented && fromMenu.prevented && fromClose.prevented && menu.focused === 1 && close.focused === 2 &&
-      canvas.focused === 2, `${menu.focused} ${close.focused} ${canvas.focused}`)
+  check("Tab goes from the game to its menu button and back",
+    fromCanvas.prevented && fromMenu.prevented && menu.focused === 2 && canvas.focused === 2, `${menu.focused} ${canvas.focused}`)
   press(overlay, "Tab", { target: canvas, shiftKey: true })
-  press(overlay, "Tab", { target: close, shiftKey: true })
-  check("Shift+Tab goes round the other way", close.focused === 3 && menu.focused === 2, `${close.focused} ${menu.focused}`)
+  check("Shift+Tab goes round the other way", menu.focused === 3, menu.focused)
   check("touch is the page's, not nish/page/game's arrow zones", run.options.touch === false, run.options.touch)
+  menu.dispatch("click", event("click"))
+  check("the menu button opens the menu, on its first item",
+    scrim.hidden === false && menu.attributes["aria-expanded"] === "true" && document.activeElement === resume,
+    `${scrim.hidden} ${document.activeElement?.className}`)
+  const tabInMenu = press(overlay, "Tab", { target: resume })
+  const downInMenu = press(overlay, "ArrowDown", { target: quit })
+  check("Tab and the arrows go round the open menu's items",
+    tabInMenu.prevented && downInMenu.prevented && quit.focused === 1 && resume.focused === 2, `${quit.focused} ${resume.focused}`)
+  const escInMenu = press(overlay, "Escape", { target: resume })
+  check("Escape in the menu closes it, and gives the keys back to the game",
+    escInMenu.prevented && scrim.hidden === true && document.activeElement === canvas && overlays(document).length === 1,
+    `${scrim.hidden} ${document.activeElement?.tag}`)
+  menu.dispatch("click", event("click"))
+  resume.dispatch("click", event("click"))
+  check("Resume closes the menu too", scrim.hidden === true && document.activeElement === canvas, `${scrim.hidden}`)
+  menu.dispatch("click", event("click"))
+  scrim.dispatch("click", event("click", { target: panelOf(overlay) }))
+  const stillOpen = scrim.hidden === false
+  scrim.dispatch("click", event("click", { target: scrim }))
+  check("a press on the dimmed game around the menu closes it, and one on the menu does not",
+    stillOpen && scrim.hidden === true, `${stillOpen} ${scrim.hidden}`)
   // A renderer that falls back may put a fresh canvas in the first one's place.
   const swapped = new Node("canvas")
+  const stage = canvas.parent
   canvas.remove()
-  overlay.children.unshift(swapped)
-  swapped.parent = overlay
-  press(overlay, "Tab", { target: close })
-  check("Tab from the close control reaches the canvas the game draws on now", swapped.focused === 1 && canvas.focused === 2,
-    `${swapped.focused} ${canvas.focused}`)
+  stage.children.unshift(swapped)
+  swapped.parent = stage
+  press(overlay, "Tab", { target: menu })
+  check("Tab from the menu button reaches the canvas the game draws on now", swapped.focused === 1, swapped.focused)
   const escOnCanvas = press(overlay, "Escape", { target: swapped })
   check("Escape on the game's screen is the game's", !escOnCanvas.prevented && overlays(document).length === 1)
   const wheel = event("wheel")
@@ -674,7 +707,7 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
   const touch = event("touchmove")
   overlay.dispatch("touchmove", touch)
   check("a wheel or a drag over the game does not scroll the page", wheel.prevented && touch.prevented)
-  // The module asks to quit: Escape on its title.
+  // The module asks to quit: Quit on its title.
   const game = await run.options.loader.load(new Uint8Array(), {})
   game.step(0)
   check("quitting removes the overlay, stops the game and hands focus back",
@@ -683,34 +716,34 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
   const third = openFake(document)
   await third.started
   const thirdOverlay = overlays(document)[0]
-  const escOnClose = press(thirdOverlay, "Escape", { target: closeIn(thirdOverlay) })
+  const escOnMenu = press(thirdOverlay, "Escape", { target: menuIn(thirdOverlay) })
   check("Escape off the game's screen closes it and hands focus back",
-    escOnClose.prevented && overlays(document).length === 0 && third.runs[0].options.signal.aborted && third.focus.focused === 1,
+    escOnMenu.prevented && overlays(document).length === 0 && third.runs[0].options.signal.aborted && third.focus.focused === 1,
     `${overlays(document).length} ${third.focus.focused}`)
   const again = openFake(document)
   await again.started
   check("opening again after a quit starts a fresh game", again.started !== first.started && again.runs.length === 1 &&
     overlays(document).length === 1 && !again.runs[0].options.signal.aborted, overlays(document).length)
-  closeIn(overlays(document)[0])?.dispatch("click", event("click"))
-  check("the close control removes the overlay, stops the game and hands focus back",
+  quitBy(overlays(document)[0])
+  check("Quit in the menu removes the overlay, stops the game and hands focus back",
     overlays(document).length === 0 && again.runs[0].options.signal.aborted && again.focus.focused === 1,
     `${overlays(document).length} ${again.focus.focused}`)
 }
 
 {
-  // While the game loads, focus is in the overlay already: on its close control, where Escape closes.
+  // While the game loads, focus is in the overlay already: on its menu button, where Escape closes.
   const { document } = makeDocument()
   let begin = null
   const loading = openFake(document, { start: () => new Promise((resolve) => (begin = resolve)) })
   const [overlay] = overlays(document)
-  const close = closeIn(overlay)
-  check("the overlay takes focus as it opens, on its close control until the game runs", document.activeElement === close,
+  const menu = menuIn(overlay)
+  check("the overlay takes focus as it opens, on its menu button until the game runs", document.activeElement === menu,
     document.activeElement?.tag)
   const esc = press(overlay, "Escape", { target: document.activeElement })
   begin?.()
   await loading.started
   check("Escape while the game loads closes it and hands focus back",
-    esc.prevented && overlays(document).length === 0 && loading.focus.focused === 1 && document.activeElement !== close,
+    esc.prevented && overlays(document).length === 0 && loading.focus.focused === 1 && document.activeElement !== menu,
     `${overlays(document).length} ${loading.focus.focused}`)
 }
 
@@ -738,7 +771,7 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
     }
   }
   check("a localStorage that throws when read does not stop the game opening", error === null, error)
-  closeIn(overlays(document)[0])?.dispatch("click", event("click"))
+  quitBy(overlays(document)[0])
 }
 
 {
@@ -760,25 +793,54 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
 }
 
 {
-  // Touch on the overlay, as BREAK_LINK words for the module.
+  // Where the canvas goes in the stage: the frame's shape, with a 44 px bar for the menu button.
+  const round = (box) => [box.left, box.top, box.width, box.height].map((v) => Math.round(v * 100) / 100)
+  const cases = [
+    // A phone in portrait, touched (412 by 780 less an 8 px margin): 9:16 under a bar on top.
+    [round(page.frameBox(396, 764, true)), [0, 52, 396, 704]],
+    // A 1280 by 720 window: 16:9 beside a bar on the right, as wide as it leaves.
+    [round(page.frameBox(1264, 704, false)), [0, 8.88, 1220, 686.25]],
+    // A phone in landscape: the bar beside, the frame the full height.
+    [round(page.frameBox(828, 380, false)), [54.22, 0, 675.56, 380]],
+    [round(page.frameBox(20, 20, true)), [10, 32, 0, 0]],
+  ]
+  const wrong = cases.filter(([got, want]) => JSON.stringify(got) !== JSON.stringify(want))
+  // The menu button's corner, the stage's top right BAR square, is outside the frame in each.
+  const clear = [
+    [396, 764, true],
+    [1264, 704, false],
+    [828, 380, false],
+    [390, 600, true],
+    [1000, 1000, false],
+  ].every(([w, h, turned]) => {
+    const box = page.frameBox(w, h, turned)
+    return box.top >= 44 - 1e-9 || box.left + box.width <= w - 44 + 1e-9
+  })
+  check("frameBox fits the frame's shape in the stage beside the menu button's bar, never under the button",
+    wrong.length === 0 && clear, JSON.stringify(wrong))
+}
+
+{
+  // A pointer on the overlay, as BREAK_LINK words for the module.
   const { document } = makeDocument()
   const opened = openFake(document)
   await opened.started
   const [overlay] = overlays(document)
-  const canvas = overlay.children.find((c) => c instanceof Node && c.tag === "canvas")
+  const canvas = canvasIn(overlay)
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 960, height: 540 })
   const menu = menuIn(overlay)
-  const ignored = event("click")
-  menu.dispatch("click", ignored)
-  const game = await opened.runs[0].options.loader.load(new Uint8Array(), {})
-  const link = game.views().storage.BREAK_LINK
+  const resume = resumeIn(overlay)
   const [AIM, AIM_Y, TAPS, TAP_X, TAP_Y, MENU, TOUCH] = [10, 11, 12, 13, 14, 15, 16]
   const pointer = (type, fields) => {
-    const made = event(type, { pointerType: "touch", pointerId: 1, target: canvas, timeStamp: 0, ...fields })
+    const made = event(type, { pointerType: "touch", pointerId: 1, button: 0, target: canvas, timeStamp: 0, ...fields })
     overlay.dispatch(type, made)
     return made
   }
-  check("before the module loads, the menu button and touch write nothing", link[MENU] === 0 && link[AIM] === 0, `${link[MENU]}`)
+  pointer("pointerdown", { clientX: 480, clientY: 300, timeStamp: 10 })
+  pointer("pointerup", { clientX: 480, clientY: 300, timeStamp: 20 })
+  const game = await opened.runs[0].options.loader.load(new Uint8Array(), {})
+  const link = game.views().storage.BREAK_LINK
+  check("before the module loads, a tap writes nothing", link[TAPS] === 0 && link[AIM] === 0, `${link[TAPS]}`)
   const down = pointer("pointerdown", { clientX: 480, clientY: 300 })
   check("a finger held on the screen aims at the frame pixel under it, and the screen is touched",
     down.prevented && link[AIM] === 241 && link[AIM_Y] === 150 && link[TOUCH] === 1, `${link[AIM]} ${link[AIM_Y]} ${link[TOUCH]}`)
@@ -800,18 +862,50 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
   check("a long touch, or one the browser cancels, is no tap", link[TAPS] === 1 && link[AIM] === 0, `${link[TAPS]} ${link[AIM]}`)
   pointer("pointerdown", { target: menu, clientX: 900, clientY: 20, timeStamp: 5000 })
   pointer("pointerup", { target: menu, clientX: 900, clientY: 20, timeStamp: 5050 })
-  check("a touch on the overlay's buttons neither aims nor taps", link[TAPS] === 1 && link[AIM] === 0, `${link[TAPS]} ${link[AIM]}`)
-  const before = canvas.focused
-  const pressing = event("mousedown")
-  menu.dispatch("mousedown", pressing)
+  check("a touch on the overlay's menu button neither aims nor taps", link[TAPS] === 1 && link[AIM] === 0, `${link[TAPS]} ${link[AIM]}`)
+  const mouseDown = pointer("pointerdown", { pointerType: "mouse", pointerId: 7, clientX: 200, clientY: 100, timeStamp: 6000 })
+  pointer("pointermove", { pointerType: "mouse", pointerId: 7, clientX: 202, clientY: 100, timeStamp: 6005 })
+  pointer("pointerup", { pointerType: "mouse", pointerId: 7, clientX: 202, clientY: 100, timeStamp: 6010 })
+  check("a mouse click taps as a finger does, never aims, keeps its default and tells the module the screen is pointed at",
+    link[TAPS] === 2 && link[TAP_X] === 101 && link[TAP_Y] === 50 && link[TOUCH] === 0 && link[AIM] === 0 && !mouseDown.prevented,
+    `${link[TAPS]} ${link[TAP_X]} ${link[TAP_Y]} ${link[TOUCH]} ${link[AIM]}`)
+  pointer("pointerdown", { pointerType: "mouse", pointerId: 7, button: 2, clientX: 200, clientY: 100, timeStamp: 7000 })
+  pointer("pointerup", { pointerType: "mouse", pointerId: 7, button: 2, clientX: 200, clientY: 100, timeStamp: 7010 })
+  check("a mouse's other buttons do not tap", link[TAPS] === 2, link[TAPS])
+  let steps = 0
+  let menuOpen = false
+  const draws = []
+  const counted = await page
+    .linkLoader(
+      {
+        load: async () => ({
+          ...fakeGame(),
+          step: () => (steps += 1),
+          draw: (alpha, frameMs) => draws.push([alpha, frameMs]),
+        }),
+      },
+      null,
+      () => {},
+      () => {},
+      null,
+      null,
+      () => menuOpen
+    )
+    .load(new Uint8Array(), {})
+  counted.step(0)
+  counted.draw(0.25, 16)
+  menuOpen = true
+  counted.step(8)
+  counted.draw(0.75, 16)
+  check("while the menu is open no step runs, and each frame redraws the last with no time passing",
+    steps === 1 && JSON.stringify(draws) === "[[0.25,16],[0.25,0]]", `${steps} ${JSON.stringify(draws)}`)
   menu.dispatch("click", event("click"))
-  check("the menu button counts a press for the module, and keeps the keys on the game's screen",
-    link[MENU] === 1 && pressing.prevented && canvas.focused === before + 1, `${link[MENU]} ${canvas.focused - before}`)
-  pointer("pointerdown", { pointerType: "mouse", clientX: 100, clientY: 50, timeStamp: 6000 })
-  pointer("pointerup", { pointerType: "mouse", clientX: 100, clientY: 50, timeStamp: 6010 })
-  check("a mouse neither aims nor taps, and tells the module the screen is pointed at",
-    link[TOUCH] === 0 && link[AIM] === 0 && link[TAPS] === 1, `${link[TOUCH]} ${link[AIM]} ${link[TAPS]}`)
-  closeIn(overlay)?.dispatch("click", event("click"))
+  pointer("pointerdown", { target: canvas, clientX: 100, clientY: 50, timeStamp: 8000 })
+  pointer("pointerup", { target: canvas, clientX: 100, clientY: 50, timeStamp: 8010 })
+  check("while the menu is open a press on the game neither aims nor taps",
+    link[TAPS] === 2 && link[AIM] === 0 && link[MENU] === 0, `${link[TAPS]} ${link[AIM]} ${link[MENU]}`)
+  resume.dispatch("click", event("click"))
+  quitBy(overlay)
 }
 
 {
@@ -828,14 +922,13 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
   const from = new Node("div")
   from.isConnected = true
   from.getBoundingClientRect = () => ({ top: 400, right: 700, bottom: 520, left: 100 })
-  const closeOf = () => closeIn(overlays(document)[0])
   const terminalBox = "inset(400px 100px 80px 100px round 12px)"
   const grown = openFake(document, { from })
   check("opened from the terminal, the overlay grows out of the terminal's box to the whole screen",
     animations.length === 1 && animations[0].frames[0].clipPath === terminalBox && animations[0].frames[1].clipPath === "inset(0 round 0)",
     JSON.stringify(animations.map((a) => a.frames)))
   await grown.started
-  closeOf().dispatch("click", event("click"))
+  quitBy(overlays(document)[0])
   const shrinking = overlays(document)[0]
   check("closed, it hands focus back at once and shrinks into the terminal, letting the pointer through",
     animations.length === 2 && animations[1].frames[1].clipPath === terminalBox && grown.focus.focused === 1 &&
@@ -846,13 +939,13 @@ const menuIn = (overlay) => buttonIn(overlay, "Game menu")
   reduced = true
   const still = openFake(document, { from })
   await still.started
-  closeOf().dispatch("click", event("click"))
+  quitBy(overlays(document)[0])
   check("under reduced motion it opens and closes without moving", animations.length === 2 && overlays(document).length === 0)
   reduced = false
   from.isConnected = false
   const gone = openFake(document, { from })
   await gone.started
-  closeOf().dispatch("click", event("click"))
+  quitBy(overlays(document)[0])
   check("with the terminal gone from the page it opens and closes without moving",
     animations.length === 2 && overlays(document).length === 0)
   delete Node.prototype.animate

@@ -32,7 +32,9 @@ specified.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions. [WP33: The round trip to TypeScript](wp33-round-trip.md)'s R6 is that mode, so it waits here too.
 - [WP57: Module-scoped names](wp57-module-scoped-names.md): whether two exported functions of one package may share a name, and what that does to the C surface (S2).
+- [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md): how module storage crosses into the hidden memory, how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` (S3).
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
+- [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
 
 ## In progress and proposed
 
@@ -47,8 +49,10 @@ specified.
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
-| [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 5 |
+| [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
+| [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
+| [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md) | Proposed | 0 of 4 |
 
 ## Landed
 
@@ -82,7 +86,7 @@ specified.
 | [WP30: Bytes across the interop boundary](wp30-bytes-interop.md) | Landed | 1 of 3 |
 | [WP31: Ranged integers](wp31-ranged-integers.md) | Landed | 1 of 4 |
 | [WP32: `Map` and `Set`](wp32-map.md) | Landed | 2 of 2 |
-| [WP34: The network stack](wp34-network-stack.md) | Landed | 16 of 16 |
+| [WP34: The network stack](wp34-network-stack.md) | Landed | 24 of 24 |
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
 | [WP38: SIMD](wp38-simd.md) | Landed | 10 of 10 |

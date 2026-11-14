@@ -18,7 +18,7 @@
 // first of them, which hands each the number its row answered. Whether
 // batching /db reads across requests complies with TFB's rules is unresolved,
 // for this entry and db-server.ts alike (bench/techempower/README.md, "Reads
-// are batched across requests"); it is the owner's call before any
+// are batched across requests"); it is settled before any
 // submission. The first
 // cached query reads the whole table, and every cached query answers from that
 // copy; one task reads it while the others that need it wait, and a read that

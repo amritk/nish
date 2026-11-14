@@ -830,8 +830,10 @@ import quicEncodeTransportParametersInto from "nish/net/quic-conn-params" -> fun
 import quicParseTransportParametersInto from "nish/net/quic-conn-params" -> function @nish.quicParseTransportParametersInto
 import QuicAckRanges from "nish/net/quic-conn-ack" -> struct QuicAckRanges
 import QUIC_RECOVERY_APPLICATION_CAPACITY from "nish/net/quic-recovery" -> const QUIC_RECOVERY_APPLICATION_CAPACITY
+import QUIC_RECOVERY_CUBIC from "nish/net/quic-recovery" -> const QUIC_RECOVERY_CUBIC
 import QUIC_RECOVERY_GRANULARITY from "nish/net/quic-recovery" -> const QUIC_RECOVERY_GRANULARITY
 import QUIC_RECOVERY_HANDSHAKE_CAPACITY from "nish/net/quic-recovery" -> const QUIC_RECOVERY_HANDSHAKE_CAPACITY
+import QUIC_RECOVERY_NEWRENO from "nish/net/quic-recovery" -> const QUIC_RECOVERY_NEWRENO
 import QUIC_RECOVERY_TIMEOUT_LOSS from "nish/net/quic-recovery" -> const QUIC_RECOVERY_TIMEOUT_LOSS
 import QUIC_RECOVERY_TIMEOUT_PTO from "nish/net/quic-recovery" -> const QUIC_RECOVERY_TIMEOUT_PTO
 import QuicRecovery from "nish/net/quic-recovery" -> struct QuicRecovery
@@ -927,7 +929,7 @@ const QUIC_CONN_ALERT_UNEXPECTED: i64 = 10
 const QUIC_CONN_SENT_HANDSHAKE_DONE: i32 = 1
 const QUIC_CONN_CONTROL_NEW_CID: i32 = 1
 const QUIC_CONN_CONTROL_RETIRE: i32 = 2
-struct QuicServerConfig (interface) size=120 align=8 exported
+struct QuicServerConfig (interface) size=128 align=8 exported
   field certificateChain: u8[][] index=0 offset=0
   field alpn: string[] index=1 offset=8
   field signatureScheme: i32 index=2 offset=16
@@ -945,6 +947,7 @@ struct QuicServerConfig (interface) size=120 align=8 exported
   field retryTokenKey: u8[] index=14 offset=104
   field workerIndex: i32 index=15 offset=112
   field workerCount: i32 index=16 offset=116
+  field congestion: i32 index=17 offset=120
 struct QuicStreamData (class) size=24 align=8 exported
   field streamId: i64 index=0 offset=0 initialized
   field data: u8[] index=1 offset=8
@@ -1268,13 +1271,13 @@ struct QuicConnection (class) size=760 align=8 exported
 function quicWorkerCheck(config: QuicServerConfig): void -> @nish.quicWorkerCheck [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer config: size=120 writesThrough=false captured=false
+  pointer config: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 k: i32 (const)
   local +1:9 n: i32 (const)
 function quicWorkerByte(config: QuicServerConfig): i32 -> @nish.quicWorkerByte [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer config: size=120 writesThrough=false captured=false
+  pointer config: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicStreamData.constructor(this: QuicStreamData, streamId: i64, data: u8[], fin: boolean): void -> @nish.QuicStreamData.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -1647,7 +1650,7 @@ function quicWorkerMark(config: QuicServerConfig, cid: u8[]): void -> @nish.quic
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.quicWorkerByte
-  pointer config: size=120 writesThrough=false captured=false passedTo=nish.quicWorkerByte#0
+  pointer config: size=128 writesThrough=false captured=false passedTo=nish.quicWorkerByte#0
   pointer cid: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:9 k: i32 (const)
@@ -1655,7 +1658,7 @@ function quicWorkerMark(config: QuicServerConfig, cid: u8[]): void -> @nish.quic
 function quicConnConfigFits(config: QuicServerConfig): boolean -> @nish.quicConnConfigFits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer config: size=120 writesThrough=false captured=false
+  pointer config: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnection.constructor(this: QuicConnection, config: QuicServerConfig, entropy: u8[]): void -> @nish.QuicConnection.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
@@ -1663,7 +1666,7 @@ function QuicConnection.constructor(this: QuicConnection, config: QuicServerConf
   escaping: config
   calls: nish.HkdfScratch.constructor nish.QuicCidTable.constructor nish.QuicConnReassembly.constructor nish.QuicConnSpace.constructor nish.QuicConnection.begin nish.QuicDatagramQueue.constructor nish.QuicFrame.constructor nish.QuicHeader.constructor nish.QuicPacket.constructor nish.QuicRecovery.constructor nish.QuicStreams.constructor nish.QuicTransportParameters.constructor nish.quicConnConfigFits nish.quicConnForgetSkips nish.secret$arr.u8 nish_alloc_struct nish_panic
   pointer this: size=760 writesThrough=true captured=false passedTo=nish.QuicConnection.begin#0
-  pointer config: size=120 writesThrough=true captured=true passedTo=nish.quicConnConfigFits#0
+  pointer config: size=128 writesThrough=true captured=true passedTo=nish.quicConnConfigFits#0
   pointer entropy: size=0 writesThrough=true captured=false passedTo=nish.QuicConnection.begin#1
   stackSites=0 stackLocals=0
   callee +0:22 secret<u8[]> -> @nish.secret$arr.u8
@@ -1672,33 +1675,33 @@ function QuicConnection.constructor(this: QuicConnection, config: QuicServerConf
   callee +7:24 new QuicConnSpace -> @nish.QuicConnSpace.constructor
   callee +8:17 new QuicCidTable -> @nish.QuicCidTable.constructor
   callee +14:21 new QuicRecovery -> @nish.QuicRecovery.constructor
-  callee +15:30 new QuicTransportParameters -> @nish.QuicTransportParameters.constructor
-  local +19:11 fits: boolean (const)
-  callee +19:27 quicConnConfigFits -> @nish.quicConnConfigFits
-  local +20:11 streams: i64 (const)
-  local +21:11 uni: i64 (const)
-  local +22:11 local: i64 (const)
-  local +23:11 buffer: i32 (const)
-  callee +24:20 new QuicStreams -> @nish.QuicStreams.constructor
-  local +26:11 datagrams: i32 (const)
-  callee +27:25 new QuicDatagramQueue -> @nish.QuicDatagramQueue.constructor
-  callee +28:24 new QuicDatagramQueue -> @nish.QuicDatagramQueue.constructor
-  callee +32:21 new QuicConnReassembly -> @nish.QuicConnReassembly.constructor
-  callee +40:18 new QuicFrame -> @nish.QuicFrame.constructor
-  callee +41:19 new QuicHeader -> @nish.QuicHeader.constructor
-  callee +42:19 new QuicPacket -> @nish.QuicPacket.constructor
-  callee +46:28 new QuicTransportParameters -> @nish.QuicTransportParameters.constructor
-  callee +48:29 new QuicTransportParameters -> @nish.QuicTransportParameters.constructor
-  local +49:11 extra: u8[] (const)
-  callee +58:16 new HkdfScratch -> @nish.HkdfScratch.constructor
-  callee +61:26 secret<u8[]> -> @nish.secret$arr.u8
-  callee +62:30 secret<u8[]> -> @nish.secret$arr.u8
-  callee +63:27 secret<u8[]> -> @nish.secret$arr.u8
-  callee +64:26 secret<u8[]> -> @nish.secret$arr.u8
-  callee +65:30 secret<u8[]> -> @nish.secret$arr.u8
-  callee +66:27 secret<u8[]> -> @nish.secret$arr.u8
-  callee +70:5 quicConnForgetSkips -> @nish.quicConnForgetSkips
-  callee +71:5 QuicConnection.begin -> @nish.QuicConnection.begin
+  callee +17:30 new QuicTransportParameters -> @nish.QuicTransportParameters.constructor
+  local +21:11 fits: boolean (const)
+  callee +21:27 quicConnConfigFits -> @nish.quicConnConfigFits
+  local +22:11 streams: i64 (const)
+  local +23:11 uni: i64 (const)
+  local +24:11 local: i64 (const)
+  local +25:11 buffer: i32 (const)
+  callee +26:20 new QuicStreams -> @nish.QuicStreams.constructor
+  local +28:11 datagrams: i32 (const)
+  callee +29:25 new QuicDatagramQueue -> @nish.QuicDatagramQueue.constructor
+  callee +30:24 new QuicDatagramQueue -> @nish.QuicDatagramQueue.constructor
+  callee +34:21 new QuicConnReassembly -> @nish.QuicConnReassembly.constructor
+  callee +42:18 new QuicFrame -> @nish.QuicFrame.constructor
+  callee +43:19 new QuicHeader -> @nish.QuicHeader.constructor
+  callee +44:19 new QuicPacket -> @nish.QuicPacket.constructor
+  callee +48:28 new QuicTransportParameters -> @nish.QuicTransportParameters.constructor
+  callee +50:29 new QuicTransportParameters -> @nish.QuicTransportParameters.constructor
+  local +51:11 extra: u8[] (const)
+  callee +60:16 new HkdfScratch -> @nish.HkdfScratch.constructor
+  callee +63:26 secret<u8[]> -> @nish.secret$arr.u8
+  callee +64:30 secret<u8[]> -> @nish.secret$arr.u8
+  callee +65:27 secret<u8[]> -> @nish.secret$arr.u8
+  callee +66:26 secret<u8[]> -> @nish.secret$arr.u8
+  callee +67:30 secret<u8[]> -> @nish.secret$arr.u8
+  callee +68:27 secret<u8[]> -> @nish.secret$arr.u8
+  callee +72:5 quicConnForgetSkips -> @nish.quicConnForgetSkips
+  callee +73:5 QuicConnection.begin -> @nish.QuicConnection.begin
 function QuicConnection.reset(this: QuicConnection, entropy: u8[]): void -> @nish.QuicConnection.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -9018,6 +9021,11 @@ const QUIC_RECOVERY_ECN_CAPABLE: i32 = 2 [exported]
 const QUIC_RECOVERY_ECN_FAILED: i32 = 3 [exported]
 const QUIC_RECOVERY_MICROS: i64 = 1000
 const QUIC_RECOVERY_PACER_WINDOW: i64 = 4294967296
+const QUIC_RECOVERY_NEWRENO: i32 = 0 [exported]
+const QUIC_RECOVERY_CUBIC: i32 = 1 [exported]
+const QUIC_RECOVERY_DEFAULT: i32 = 1 [exported]
+const QUIC_RECOVERY_CUBIC_SPAN: i64 = 40000
+const QUIC_RECOVERY_CUBIC_SCALE: i64 = 5000000000
 struct QuicSentPackets (class) size=152 align=8 exported
   field pn: i64[] index=0 offset=0
   field timeSent: i64[] index=1 offset=8
@@ -9063,7 +9071,7 @@ struct QuicSentPackets (class) size=152 align=8 exported
   method markLost -> @nish.QuicSentPackets.markLost
   method clear -> @nish.QuicSentPackets.clear
   method reset -> @nish.QuicSentPackets.reset
-struct QuicRecovery (class) size=160 align=8 exported
+struct QuicRecovery (class) size=232 align=8 exported
   field spaces: QuicSentPackets[] index=0 offset=0
   field latestRtt: i64 index=1 offset=8 initialized
   field smoothedRtt: i64 index=2 offset=16 initialized
@@ -9074,21 +9082,30 @@ struct QuicRecovery (class) size=160 align=8 exported
   field congestionWindow: i64 index=7 offset=56 initialized
   field ssthresh: i64 index=8 offset=64 initialized
   field recoveryStart: i64 index=9 offset=72 initialized
-  field pacerBudget: i64 index=10 offset=80 initialized
-  field pacerTime: i64 index=11 offset=88 initialized
-  field pacerRtt: i64 index=12 offset=96 initialized
-  field micros: i64 index=13 offset=104 initialized
-  field ptoCount: i32 index=14 offset=112 initialized
-  field timeoutSpace: i32 index=15 offset=116 initialized
-  field datagramSize: i64 index=16 offset=120 initialized
-  field congestionEvents: i32 index=17 offset=128 initialized
-  field persistentCongestions: i32 index=18 offset=132 initialized
-  field ecnCongestionEvents: i32 index=19 offset=136 initialized
-  field ecnState: i32 index=20 offset=140 initialized
-  field ecnTestSent: i32 index=21 offset=144 initialized
-  field ecnTestRecorded: i32 index=22 offset=148 initialized
-  field ecnTestLost: i32 index=23 offset=152 initialized
-  field handshakeConfirmed: boolean index=24 offset=156 initialized
+  field controller: i32 index=10 offset=80 initialized
+  field cubicMax: i64 index=11 offset=88 initialized
+  field cubicK: i64 index=12 offset=96 initialized
+  field cubicEpoch: i64 index=13 offset=104 initialized
+  field cubicEst: i64 index=14 offset=112 initialized
+  field cubicEstCarry: i64 index=15 offset=120 initialized
+  field cubicCarry: i64 index=16 offset=128 initialized
+  field cubicPrior: i64 index=17 offset=136 initialized
+  field cubicIdle: i64 index=18 offset=144 initialized
+  field pacerBudget: i64 index=19 offset=152 initialized
+  field pacerTime: i64 index=20 offset=160 initialized
+  field pacerRtt: i64 index=21 offset=168 initialized
+  field micros: i64 index=22 offset=176 initialized
+  field ptoCount: i32 index=23 offset=184 initialized
+  field timeoutSpace: i32 index=24 offset=188 initialized
+  field datagramSize: i64 index=25 offset=192 initialized
+  field congestionEvents: i32 index=26 offset=200 initialized
+  field persistentCongestions: i32 index=27 offset=204 initialized
+  field ecnCongestionEvents: i32 index=28 offset=208 initialized
+  field ecnState: i32 index=29 offset=212 initialized
+  field ecnTestSent: i32 index=30 offset=216 initialized
+  field ecnTestRecorded: i32 index=31 offset=220 initialized
+  field ecnTestLost: i32 index=32 offset=224 initialized
+  field handshakeConfirmed: boolean index=33 offset=228 initialized
   constructor -> @nish.QuicRecovery.constructor
   method reset -> @nish.QuicRecovery.reset
   method resetPath -> @nish.QuicRecovery.resetPath
@@ -9118,6 +9135,10 @@ struct QuicRecovery (class) size=160 align=8 exported
   method inRecovery -> @nish.QuicRecovery.inRecovery
   method congestionEvent -> @nish.QuicRecovery.congestionEvent
   method packetAcked -> @nish.QuicRecovery.packetAcked
+  method cubicAcked -> @nish.QuicRecovery.cubicAcked
+  method cubicWindow -> @nish.QuicRecovery.cubicWindow
+  method cubicSpan -> @nish.QuicRecovery.cubicSpan
+  method cubicInUse -> @nish.QuicRecovery.cubicInUse
   method probeTimeout -> @nish.QuicRecovery.probeTimeout
   method ptoBase -> @nish.QuicRecovery.ptoBase
   method ptoTime -> @nish.QuicRecovery.ptoTime
@@ -9137,6 +9158,17 @@ function quicRecoveryMax(a: i64, b: i64): i64 -> @nish.quicRecoveryMax
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   stackSites=0 stackLocals=0
+function quicRecoveryCubicClamp(x: i64): i64 -> @nish.quicRecoveryCubicClamp
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  stackSites=0 stackLocals=0
+function quicRecoveryCbrt(x: i64): i64 -> @nish.quicRecoveryCbrt [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 lo: i64 (let)
+  local +1:7 hi: i64 (let)
+  local +10:11 mid: i64 (const)
 function QuicSentPackets.constructor(this: QuicSentPackets, capacity: i32): void -> @nish.QuicSentPackets.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: capacity
@@ -9283,7 +9315,7 @@ function quicRecoveryInRanges(ranges: i64[], count: i32, pn: i64): boolean -> @n
 function QuicRecovery.constructor(this: QuicRecovery): void -> @nish.QuicRecovery.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.QuicRecovery.reset nish.QuicSentPackets.constructor nish_alloc_struct
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.reset#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.reset#0
   stackSites=0 stackLocals=0
   callee +0:7 new QuicSentPackets -> @nish.QuicSentPackets.constructor
   callee +1:7 new QuicSentPackets -> @nish.QuicSentPackets.constructor
@@ -9293,7 +9325,7 @@ function QuicRecovery.reset(this: QuicRecovery): void -> @nish.QuicRecovery.rese
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicRecovery.resetPath nish.QuicRecovery.restartEcn nish.QuicSentPackets.reset
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.resetPath#0 nish.QuicRecovery.restartEcn#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.resetPath#0 nish.QuicRecovery.restartEcn#0
   stackSites=0 stackLocals=0
   local -4:16 sp: QuicSentPackets (const)
   callee -3:7 QuicSentPackets.reset -> @nish.QuicSentPackets.reset
@@ -9302,12 +9334,12 @@ function QuicRecovery.reset(this: QuicRecovery): void -> @nish.QuicRecovery.rese
 function QuicRecovery.resetPath(this: QuicRecovery): void -> @nish.QuicRecovery.resetPath [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicRecovery.initialWindow(this: QuicRecovery): i64 -> @nish.QuicRecovery.initialWindow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.quicRecoveryMax nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 ten: i64 (const)
   local +1:11 floor: i64 (const)
@@ -9315,14 +9347,14 @@ function QuicRecovery.initialWindow(this: QuicRecovery): i64 -> @nish.QuicRecove
 function QuicRecovery.minimumWindow(this: QuicRecovery): i64 -> @nish.QuicRecovery.minimumWindow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicRecovery.setDatagramSize(this: QuicRecovery, size: i64): void -> @nish.QuicRecovery.setDatagramSize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: size
   calls: nish.QuicRecovery.initialWindow nish.QuicRecovery.minimumWindow nish.quicRecoveryMax
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.minimumWindow#0 nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.initialWindow#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.minimumWindow#0 nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.initialWindow#0
   stackSites=0 stackLocals=0
   local -2:11 next: i64 (const)
   callee -2:23 quicRecoveryMax -> @nish.quicRecoveryMax
@@ -9337,7 +9369,7 @@ function QuicRecovery.restartEcn(this: QuicRecovery): void -> @nish.QuicRecovery
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicSentPackets.setMarked
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=232 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:16 sp: QuicSentPackets (const)
   local -4:16 s: i32 (let)
@@ -9345,19 +9377,19 @@ function QuicRecovery.restartEcn(this: QuicRecovery): void -> @nish.QuicRecovery
 function QuicRecovery.space(this: QuicRecovery, space: i32): QuicSentPackets | null -> @nish.QuicRecovery.space [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: space
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicRecovery.bytesInFlight(this: QuicRecovery): i64 -> @nish.QuicRecovery.bytesInFlight [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 total: i64 (let)
   local +1:16 sp: QuicSentPackets (const)
 function QuicRecovery.canSend(this: QuicRecovery): boolean -> @nish.QuicRecovery.canSend [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.bytesInFlight nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.bytesInFlight#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.bytesInFlight#0
   stackSites=0 stackLocals=0
   callee +0:12 QuicRecovery.bytesInFlight -> @nish.QuicRecovery.bytesInFlight
 function QuicRecovery.onPacketSent(this: QuicRecovery, space: i32, pn: i64, size: i32, now: i64): i32 -> @nish.QuicRecovery.onPacketSent [exported method]
@@ -9365,7 +9397,7 @@ function QuicRecovery.onPacketSent(this: QuicRecovery, space: i32, pn: i64, size
   sharedWrite: +0:5
   escaping: now pn size space
   calls: nish.QuicRecovery.fineNow nish.QuicRecovery.space nish.QuicSentPackets.full nish.QuicSentPackets.setMarked nish.QuicSentPackets.setProbe nish.QuicSentPackets.setState nish.QuicSentPackets.slot nish_panic_index nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.fineNow#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.fineNow#0
   stackSites=0 stackLocals=0
   local -14:11 sp: QuicSentPackets | null (const)
   callee -14:40 QuicRecovery.space -> @nish.QuicRecovery.space
@@ -9381,14 +9413,14 @@ function QuicRecovery.onProbeSent(this: QuicRecovery, space: i32, slot: i32): vo
   sharedWrite: via nish.QuicSentPackets.setProbe
   escaping: slot space
   calls: nish.QuicRecovery.space nish.QuicSentPackets.setProbe
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0
   stackSites=0 stackLocals=0
   local +0:11 sp: QuicSentPackets | null (const)
   callee +0:40 QuicRecovery.space -> @nish.QuicRecovery.space
   callee +2:7 QuicSentPackets.setProbe -> @nish.QuicSentPackets.setProbe
 function QuicRecovery.ecnCodepoint(this: QuicRecovery): i32 -> @nish.QuicRecovery.ecnCodepoint [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 testing: boolean (const)
 function QuicRecovery.onEctSent(this: QuicRecovery, space: i32, slot: i32): void -> @nish.QuicRecovery.onEctSent [exported method]
@@ -9396,7 +9428,7 @@ function QuicRecovery.onEctSent(this: QuicRecovery, space: i32, slot: i32): void
   sharedWrite: +0:5
   escaping: slot space
   calls: nish.QuicRecovery.space nish.QuicSentPackets.inFlightAt nish.QuicSentPackets.markedAt nish.QuicSentPackets.setMarked nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0
   stackSites=0 stackLocals=0
   local -4:11 sp: QuicSentPackets | null (const)
   callee -4:40 QuicRecovery.space -> @nish.QuicRecovery.space
@@ -9409,7 +9441,7 @@ function QuicRecovery.onAck(this: QuicRecovery, space: i32, ranges: i64[], count
   sharedWrite: via nish.QuicRecovery.onAckEcn
   escaping: ackDelay count now space
   calls: nish.QuicRecovery.onAckEcn
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.onAckEcn#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.onAckEcn#0
   pointer ranges: size=0 writesThrough=false captured=false passedTo=nish.QuicRecovery.onAckEcn#2
   stackSites=0 stackLocals=0
   local +0:11 none: i64 (const)
@@ -9418,8 +9450,8 @@ function QuicRecovery.onAckEcn(this: QuicRecovery, space: i32, ranges: i64[], co
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: ackDelay ce count ect0 ect1 now space
-  calls: nish.QuicRecovery.bytesInFlight nish.QuicRecovery.detectLoss nish.QuicRecovery.fineSample nish.QuicRecovery.packetAcked nish.QuicRecovery.packetsLost nish.QuicRecovery.processEcn nish.QuicRecovery.space nish.QuicRecovery.updatePacerRtt nish.QuicRecovery.updateRtt nish.QuicSentPackets.ackedSlot nish.QuicSentPackets.clearResults nish.QuicSentPackets.compact nish.QuicSentPackets.fineAt nish.QuicSentPackets.pnAt nish.QuicSentPackets.settle nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish.quicRecoveryInRanges nish.quicRecoveryMax nish_panic_index nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.bytesInFlight#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.updateRtt#0 nish.QuicRecovery.updatePacerRtt#0 nish.QuicRecovery.fineSample#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.detectLoss#0 nish.QuicRecovery.packetsLost#0 nish.QuicRecovery.packetAcked#0
+  calls: nish.QuicRecovery.bytesInFlight nish.QuicRecovery.cubicInUse nish.QuicRecovery.detectLoss nish.QuicRecovery.fineSample nish.QuicRecovery.packetAcked nish.QuicRecovery.packetsLost nish.QuicRecovery.processEcn nish.QuicRecovery.space nish.QuicRecovery.updatePacerRtt nish.QuicRecovery.updateRtt nish.QuicSentPackets.ackedSlot nish.QuicSentPackets.clearResults nish.QuicSentPackets.compact nish.QuicSentPackets.fineAt nish.QuicSentPackets.pnAt nish.QuicSentPackets.settle nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish.quicRecoveryInRanges nish.quicRecoveryMax nish_panic_index nish_panic_overflow
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.bytesInFlight#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.updateRtt#0 nish.QuicRecovery.updatePacerRtt#0 nish.QuicRecovery.fineSample#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.detectLoss#0 nish.QuicRecovery.packetsLost#0 nish.QuicRecovery.cubicInUse#0 nish.QuicRecovery.packetAcked#0
   pointer ranges: size=0 writesThrough=false captured=false passedTo=nish.quicRecoveryInRanges#0
   stackSites=0 stackLocals=0
   local -9:11 sp: QuicSentPackets | null (const)
@@ -9456,15 +9488,16 @@ function QuicRecovery.onAckEcn(this: QuicRecovery, space: i32, ranges: i64[], co
   callee +45:7 QuicRecovery.processEcn -> @nish.QuicRecovery.processEcn
   callee +47:5 QuicRecovery.detectLoss -> @nish.QuicRecovery.detectLoss
   callee +48:5 QuicRecovery.packetsLost -> @nish.QuicRecovery.packetsLost
-  local +49:14 k: i32 (let)
-  callee +50:7 QuicRecovery.packetAcked -> @nish.QuicRecovery.packetAcked
-  callee +50:28 QuicSentPackets.ackedSlot -> @nish.QuicSentPackets.ackedSlot
+  callee +50:7 QuicRecovery.cubicInUse -> @nish.QuicRecovery.cubicInUse
+  local +52:14 k: i32 (let)
+  callee +53:7 QuicRecovery.packetAcked -> @nish.QuicRecovery.packetAcked
+  callee +53:28 QuicSentPackets.ackedSlot -> @nish.QuicSentPackets.ackedSlot
 function QuicRecovery.processEcn(this: QuicRecovery, sp: QuicSentPackets, raised: boolean, ect0: i64, ect1: i64, ce: i64, later: i64, now: i64): void -> @nish.QuicRecovery.processEcn [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: ce ect0 ect1 later now
   calls: nish.QuicRecovery.congestionEvent nish.QuicSentPackets.ackedSlot nish.QuicSentPackets.markedAt nish.QuicSentPackets.timeAt nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0
   pointer sp: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.ackedSlot#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.ackedSlot#0
   stackSites=0 stackLocals=0
   local -9:9 marked: i64 (let)
@@ -9482,7 +9515,7 @@ function QuicRecovery.updateRtt(this: QuicRecovery, ackDelay: i64, now: i64): vo
   sharedWrite: +0:7
   escaping: ackDelay now
   calls: nish.QuicRecovery.boundAckDelay nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.boundAckDelay#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.boundAckDelay#0
   stackSites=0 stackLocals=0
   local -2:11 latest: i64 (const)
   local +9:11 delay: i64 (const)
@@ -9492,19 +9525,19 @@ function QuicRecovery.updateRtt(this: QuicRecovery, ackDelay: i64, now: i64): vo
 function QuicRecovery.boundAckDelay(this: QuicRecovery, ackDelay: i64): i64 -> @nish.QuicRecovery.boundAckDelay [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: ackDelay
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicRecovery.fineNow(this: QuicRecovery, now: i64): i64 -> @nish.QuicRecovery.fineNow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 coarse: i64 (const)
 function QuicRecovery.fineSample(this: QuicRecovery, now: i64, sent: i64): i64 -> @nish.QuicRecovery.fineSample [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.QuicRecovery.fineNow nish.quicRecoveryMax nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.fineNow#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.fineNow#0
   stackSites=0 stackLocals=0
   local +0:11 at: i64 (const)
   callee +0:21 QuicRecovery.fineNow -> @nish.QuicRecovery.fineNow
@@ -9515,7 +9548,7 @@ function QuicRecovery.updatePacerRtt(this: QuicRecovery, sample: i64, ackDelay: 
   sharedWrite: +0:7
   escaping: ackDelay sample
   calls: nish.QuicRecovery.boundAckDelay nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.boundAckDelay#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.boundAckDelay#0
   stackSites=0 stackLocals=0
   local +3:11 delay: i64 (const)
   callee +3:24 QuicRecovery.boundAckDelay -> @nish.QuicRecovery.boundAckDelay
@@ -9523,7 +9556,7 @@ function QuicRecovery.updatePacerRtt(this: QuicRecovery, sample: i64, ackDelay: 
 function QuicRecovery.lossDelay(this: QuicRecovery): i64 -> @nish.QuicRecovery.lossDelay [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.quicRecoveryMax nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 delay: i64 (const)
   callee +0:29 quicRecoveryMax -> @nish.quicRecoveryMax
@@ -9532,7 +9565,7 @@ function QuicRecovery.detectLoss(this: QuicRecovery, sp: QuicSentPackets, now: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicRecovery.lossDelay nish.QuicSentPackets.markLost nish.QuicSentPackets.pnAt nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.lossDelay#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.lossDelay#0
   pointer sp: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.slot#0 nish.QuicSentPackets.pnAt#0 nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.markLost#0 nish.QuicSentPackets.timeAt#0
   stackSites=0 stackLocals=0
   local +1:11 delay: i64 (const)
@@ -9553,7 +9586,7 @@ function QuicRecovery.packetsLost(this: QuicRecovery, sp: QuicSentPackets, now: 
   sharedWrite: +0:9
   escaping: now
   calls: nish.QuicRecovery.congestionEvent nish.QuicRecovery.minimumWindow nish.QuicRecovery.persistentCongestion nish.QuicSentPackets.lostSlot nish.QuicSentPackets.markedAt nish.QuicSentPackets.probeAt nish.QuicSentPackets.setState nish.QuicSentPackets.timeAt nish.quicRecoveryMax nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0 nish.QuicRecovery.persistentCongestion#0 nish.QuicRecovery.minimumWindow#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0 nish.QuicRecovery.persistentCongestion#0 nish.QuicRecovery.minimumWindow#0
   pointer sp: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.probeAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicRecovery.persistentCongestion#1 nish.QuicSentPackets.setState#0 nish.QuicSentPackets.lostSlot#0
   stackSites=0 stackLocals=0
   local -6:9 newest: i64 (let)
@@ -9568,13 +9601,13 @@ function QuicRecovery.packetsLost(this: QuicRecovery, sp: QuicSentPackets, now: 
   callee +13:7 QuicRecovery.congestionEvent -> @nish.QuicRecovery.congestionEvent
   callee +15:24 QuicRecovery.persistentCongestion -> @nish.QuicRecovery.persistentCongestion
   callee +16:31 QuicRecovery.minimumWindow -> @nish.QuicRecovery.minimumWindow
-  local +20:14 k: i32 (let)
-  callee +21:7 QuicSentPackets.setState -> @nish.QuicSentPackets.setState
-  callee +21:19 QuicSentPackets.lostSlot -> @nish.QuicSentPackets.lostSlot
+  local +23:14 k: i32 (let)
+  callee +24:7 QuicSentPackets.setState -> @nish.QuicSentPackets.setState
+  callee +24:19 QuicSentPackets.lostSlot -> @nish.QuicSentPackets.lostSlot
 function QuicRecovery.persistentCongestion(this: QuicRecovery, sp: QuicSentPackets): boolean -> @nish.QuicRecovery.persistentCongestion [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.ptoBase nish.QuicSentPackets.probeAt nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoBase#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoBase#0
   pointer sp: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.slot#0 nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.probeAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.timeAt#0
   stackSites=0 stackLocals=0
   local +0:11 span: i64 (const)
@@ -9593,47 +9626,92 @@ function QuicRecovery.persistentCongestion(this: QuicRecovery, sp: QuicSentPacke
   callee +28:20 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
 function QuicRecovery.inRecovery(this: QuicRecovery, sentTime: i64): boolean -> @nish.QuicRecovery.inRecovery [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicRecovery.congestionEvent(this: QuicRecovery, sentTime: i64, now: i64): void -> @nish.QuicRecovery.congestionEvent [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now sentTime
   calls: nish.QuicRecovery.inRecovery nish.QuicRecovery.minimumWindow nish.quicRecoveryMax nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.inRecovery#0 nish.QuicRecovery.minimumWindow#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.inRecovery#0 nish.QuicRecovery.minimumWindow#0
   stackSites=0 stackLocals=0
   callee -3:9 QuicRecovery.inRecovery -> @nish.QuicRecovery.inRecovery
-  callee +2:29 quicRecoveryMax -> @nish.quicRecoveryMax
-  callee +2:60 QuicRecovery.minimumWindow -> @nish.QuicRecovery.minimumWindow
-function QuicRecovery.packetAcked(this: QuicRecovery, sp: QuicSentPackets, s: i32, inUse: boolean): void -> @nish.QuicRecovery.packetAcked [exported method]
+  local +1:11 cwnd: i64 (const)
+  callee +11:29 quicRecoveryMax -> @nish.quicRecoveryMax
+  callee +11:60 QuicRecovery.minimumWindow -> @nish.QuicRecovery.minimumWindow
+function QuicRecovery.packetAcked(this: QuicRecovery, sp: QuicSentPackets, s: i32, inUse: boolean, now: i64): void -> @nish.QuicRecovery.packetAcked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: s
-  calls: nish.QuicRecovery.inRecovery nish.QuicSentPackets.sizeAt nish.QuicSentPackets.timeAt nish_panic_div nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.inRecovery#0
+  escaping: now s
+  calls: nish.QuicRecovery.cubicAcked nish.QuicRecovery.inRecovery nish.QuicSentPackets.sizeAt nish.QuicSentPackets.timeAt nish_panic_div nish_panic_overflow
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.inRecovery#0 nish.QuicRecovery.cubicAcked#0
   pointer sp: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.sizeAt#0
   stackSites=0 stackLocals=0
   callee -5:19 QuicRecovery.inRecovery -> @nish.QuicRecovery.inRecovery
   callee -5:35 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
   local -2:11 size: i64 (const)
   callee -2:29 QuicSentPackets.sizeAt -> @nish.QuicSentPackets.sizeAt
+  callee +2:7 QuicRecovery.cubicAcked -> @nish.QuicRecovery.cubicAcked
+function QuicRecovery.cubicAcked(this: QuicRecovery, size: i64, now: i64): void -> @nish.QuicRecovery.cubicAcked [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: now
+  calls: nish.QuicRecovery.cubicSpan nish.QuicRecovery.cubicWindow nish.quicRecoveryMax nish_panic_div nish_panic_overflow
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.cubicSpan#0 nish.QuicRecovery.cubicWindow#0 nish.QuicRecovery.cubicWindow#0
+  stackSites=0 stackLocals=0
+  local -2:11 cwnd: i64 (const)
+  callee +6:23 QuicRecovery.cubicSpan -> @nish.QuicRecovery.cubicSpan
+  local +12:11 alpha: i64 (const)
+  local +13:11 num: i64 (const)
+  local +14:11 den: i64 (const)
+  local +17:11 t: i64 (const)
+  callee +18:9 QuicRecovery.cubicWindow -> @nish.QuicRecovery.cubicWindow
+  callee +19:31 quicRecoveryMax -> @nish.quicRecoveryMax
+  local +22:11 ceiling: i64 (const)
+  local +23:11 curve: i64 (const)
+  callee +23:24 QuicRecovery.cubicWindow -> @nish.QuicRecovery.cubicWindow
+  local +24:11 target: i64 (const)
+  callee +24:25 quicRecoveryMax -> @nish.quicRecoveryMax
+  local +27:11 step: i64 (const)
+function QuicRecovery.cubicWindow(this: QuicRecovery, t: i64): i64 -> @nish.QuicRecovery.cubicWindow [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.quicRecoveryCubicClamp nish_panic_overflow
+  pointer this: size=232 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 d: i64 (const)
+  callee +0:20 quicRecoveryCubicClamp -> @nish.quicRecoveryCubicClamp
+function QuicRecovery.cubicSpan(this: QuicRecovery, drop: i64): i64 -> @nish.QuicRecovery.cubicSpan [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.quicRecoveryCbrt nish_panic_div nish_panic_overflow
+  pointer this: size=232 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 two: i64 (const)
+  local +1:11 span: i64 (const)
+  callee +6:12 quicRecoveryCbrt -> @nish.quicRecoveryCbrt
+function QuicRecovery.cubicInUse(this: QuicRecovery, inUse: boolean, now: i64): void -> @nish.QuicRecovery.cubicInUse [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: now
+  calls: nish_panic_overflow
+  pointer this: size=232 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function QuicRecovery.probeTimeout(this: QuicRecovery): i64 -> @nish.QuicRecovery.probeTimeout [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.ptoBase nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoBase#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoBase#0
   stackSites=0 stackLocals=0
   local +0:11 base: i64 (const)
   callee +0:23 QuicRecovery.ptoBase -> @nish.QuicRecovery.ptoBase
 function QuicRecovery.ptoBase(this: QuicRecovery): i64 -> @nish.QuicRecovery.ptoBase [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.quicRecoveryMax nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:31 quicRecoveryMax -> @nish.quicRecoveryMax
 function QuicRecovery.ptoTime(this: QuicRecovery): i64 -> @nish.QuicRecovery.ptoTime [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.ptoSpace nish.QuicRecovery.ptoTimeOf
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoSpace#0 nish.QuicRecovery.ptoTimeOf#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoSpace#0 nish.QuicRecovery.ptoTimeOf#0
   stackSites=0 stackLocals=0
   local +0:11 space: i32 (const)
   callee +0:24 QuicRecovery.ptoSpace -> @nish.QuicRecovery.ptoSpace
@@ -9642,7 +9720,7 @@ function QuicRecovery.ptoTimeOf(this: QuicRecovery, space: i32): i64 -> @nish.Qu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: space
   calls: nish.QuicRecovery.ptoBase nish.QuicRecovery.space nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.ptoBase#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.ptoBase#0
   stackSites=0 stackLocals=0
   local +0:11 sp: QuicSentPackets | null (const)
   callee +0:40 QuicRecovery.space -> @nish.QuicRecovery.space
@@ -9652,7 +9730,7 @@ function QuicRecovery.ptoTimeOf(this: QuicRecovery, space: i32): i64 -> @nish.Qu
 function QuicRecovery.ptoSpace(this: QuicRecovery): i32 -> @nish.QuicRecovery.ptoSpace [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.ptoTimeOf
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoTimeOf#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoTimeOf#0
   stackSites=0 stackLocals=0
   local +0:9 best: i32 (let)
   local +1:9 bestTime: i64 (let)
@@ -9662,7 +9740,7 @@ function QuicRecovery.ptoSpace(this: QuicRecovery): i32 -> @nish.QuicRecovery.pt
   callee +7:23 QuicRecovery.ptoTimeOf -> @nish.QuicRecovery.ptoTimeOf
 function QuicRecovery.lossSpace(this: QuicRecovery): i32 -> @nish.QuicRecovery.lossSpace [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 best: i32 (let)
   local +1:9 bestTime: i64 (let)
@@ -9671,7 +9749,7 @@ function QuicRecovery.lossSpace(this: QuicRecovery): i32 -> @nish.QuicRecovery.l
 function QuicRecovery.deadline(this: QuicRecovery, amplificationBlocked: boolean): i64 -> @nish.QuicRecovery.deadline [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.lossSpace nish.QuicRecovery.ptoTime nish_panic_index
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.lossSpace#0 nish.QuicRecovery.ptoTime#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.lossSpace#0 nish.QuicRecovery.ptoTime#0
   stackSites=0 stackLocals=0
   local +0:11 loss: i32 (const)
   callee +0:23 QuicRecovery.lossSpace -> @nish.QuicRecovery.lossSpace
@@ -9681,7 +9759,7 @@ function QuicRecovery.onTimeout(this: QuicRecovery, now: i64, amplificationBlock
   sharedWrite: +0:5
   escaping: amplificationBlocked now
   calls: nish.QuicRecovery.deadline nish.QuicRecovery.detectLoss nish.QuicRecovery.lossSpace nish.QuicRecovery.packetsLost nish.QuicRecovery.ptoSpace nish.QuicSentPackets.clearResults nish.QuicSentPackets.compact nish_panic_index nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.deadline#0 nish.QuicRecovery.lossSpace#0 nish.QuicRecovery.detectLoss#0 nish.QuicRecovery.packetsLost#0 nish.QuicRecovery.ptoSpace#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.deadline#0 nish.QuicRecovery.lossSpace#0 nish.QuicRecovery.detectLoss#0 nish.QuicRecovery.packetsLost#0 nish.QuicRecovery.ptoSpace#0
   stackSites=0 stackLocals=0
   local -4:16 sp: QuicSentPackets (const)
   callee -3:7 QuicSentPackets.compact -> @nish.QuicSentPackets.compact
@@ -9699,7 +9777,7 @@ function QuicRecovery.evictOldest(this: QuicRecovery, space: i32): i32 -> @nish.
   sharedWrite: via nish.QuicSentPackets.compact
   escaping: space
   calls: nish.QuicRecovery.space nish.QuicSentPackets.compact nish.QuicSentPackets.settle nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.space#0
   stackSites=0 stackLocals=0
   local +0:11 sp: QuicSentPackets | null (const)
   callee +0:40 QuicRecovery.space -> @nish.QuicRecovery.space
@@ -9714,21 +9792,21 @@ function QuicRecovery.discardSpace(this: QuicRecovery, space: i32): void -> @nis
   sharedWrite: +0:5
   escaping: space
   calls: nish.QuicRecovery.space nish.QuicSentPackets.clear
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0
   stackSites=0 stackLocals=0
   local -5:11 sp: QuicSentPackets | null (const)
   callee -5:40 QuicRecovery.space -> @nish.QuicRecovery.space
   callee -1:5 QuicSentPackets.clear -> @nish.QuicSentPackets.clear
 function QuicRecovery.pacerWindow(this: QuicRecovery): i64 -> @nish.QuicRecovery.pacerWindow [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicRecovery.pacerRefill(this: QuicRecovery, now: i64): void -> @nish.QuicRecovery.pacerRefill [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: now
   calls: nish.QuicRecovery.fineNow nish.QuicRecovery.initialWindow nish.QuicRecovery.pacerWindow nish.quicRecoveryMax nish_panic_div nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.fineNow#0 nish.QuicRecovery.pacerWindow#0 nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.initialWindow#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.fineNow#0 nish.QuicRecovery.pacerWindow#0 nish.QuicRecovery.initialWindow#0 nish.QuicRecovery.initialWindow#0
   stackSites=0 stackLocals=0
   local -2:11 at: i64 (const)
   callee -2:21 QuicRecovery.fineNow -> @nish.QuicRecovery.fineNow
@@ -9744,7 +9822,7 @@ function QuicRecovery.pacerDelay(this: QuicRecovery, now: i64, size: i32): i64 -
   sharedWrite: via nish.QuicRecovery.pacerRefill
   escaping: now
   calls: nish.QuicRecovery.pacerRefill nish.QuicRecovery.pacerWindow nish.quicRecoveryMax nish_panic_div nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.pacerRefill#0 nish.QuicRecovery.pacerWindow#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.pacerRefill#0 nish.QuicRecovery.pacerWindow#0
   stackSites=0 stackLocals=0
   callee +0:5 QuicRecovery.pacerRefill -> @nish.QuicRecovery.pacerRefill
   local +1:11 need: i64 (const)
@@ -9759,7 +9837,7 @@ function QuicRecovery.pacerQuantum(this: QuicRecovery, least: i32, most: i32): i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: least most
   calls: nish.QuicRecovery.pacerWindow nish.quicRecoveryMax nish_panic_div nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicRecovery.pacerWindow#0
+  pointer this: size=232 writesThrough=false captured=false passedTo=nish.QuicRecovery.pacerWindow#0
   stackSites=0 stackLocals=0
   local +0:11 rtt: i64 (const)
   callee +0:22 quicRecoveryMax -> @nish.quicRecoveryMax
@@ -9770,7 +9848,7 @@ function QuicRecovery.onPaced(this: QuicRecovery, now: i64, size: i32): void -> 
   sharedWrite: +0:5
   escaping: now
   calls: nish.QuicRecovery.pacerRefill nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicRecovery.pacerRefill#0
+  pointer this: size=232 writesThrough=true captured=false passedTo=nish.QuicRecovery.pacerRefill#0
   stackSites=0 stackLocals=0
   callee -1:5 QuicRecovery.pacerRefill -> @nish.QuicRecovery.pacerRefill
 module std/net/quic-conn-cid.ts [package nish]
@@ -19378,7 +19456,7 @@ function QuicListener.constructor(this: QuicListener, config: QuicServerConfig, 
   escaping: config
   calls: nish.AesKey.constructor nish.HkdfScratch.constructor nish.QuicHeader.constructor nish.QuicKeysSlot.constructor nish.QuicListenerAnswer.constructor nish.QuicPacket.constructor nish.aesKeyInto nish.quicListenerRetryKey nish.quicPacketCopy nish.quicWorkerCheck nish_alloc_struct nish_panic nish_wipe
   pointer this: size=192 writesThrough=true captured=false
-  pointer config: size=120 writesThrough=true captured=true passedTo=nish.quicWorkerCheck#0
+  pointer config: size=128 writesThrough=true captured=true passedTo=nish.quicWorkerCheck#0
   pointer entropy: size=0 writesThrough=true captured=false passedTo=nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
   callee -28:5 quicWorkerCheck -> @nish.quicWorkerCheck
@@ -26870,7 +26948,7 @@ function Http3Server.constructor(this: Http3Server, quicConfig: QuicServerConfig
   escaping: config fd quicConfig size
   calls: nish.BufferPool.constructor nish.Http3CidIndex.constructor nish.Http3Wheel.constructor nish.HttpDate.constructor nish.HttpDate.current nish.QuicListener.constructor nish.QuicListenerAnswer.constructor nish.QuicStreamPools.constructor nish.TlsP256Signer.constructor nish.quicStreamGrowFree nish_alloc_struct nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=280 writesThrough=true captured=false
-  pointer quicConfig: size=120 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1
+  pointer quicConfig: size=128 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1
   pointer config: size=32 writesThrough=true captured=true
   pointer listenerEntropy: size=0 writesThrough=true captured=false passedTo=nish.Http3CidIndex.constructor#2 nish.QuicListener.constructor#2
   stackSites=0 stackLocals=0

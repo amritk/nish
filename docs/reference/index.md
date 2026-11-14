@@ -62,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 53 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 54 modules.
 
 </scalar-card>
 
@@ -199,6 +199,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/hpack`](net/hpack.md) | HPACK, the header compression of HTTP/2, as RFC 7541 defines it: the §5.1 integer with an N-bit prefix, the §5.2 string literal with Appendix B's Huffman code, the Appendix A static table, the §2.3.2 dynamic table with its §4 size accounting and eviction, and the four §6 representations. |
 | [`nish/net/http-compress`](net/http-compress.md) | Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a request's `Accept-Encoding` and compressing a body with `Content-Encoding: gzip`, for any of the three servers. |
 | [`nish/net/http-fields`](net/http-fields.md) | The header model HTTP/2 and HTTP/3 share: what a field name and a field value may hold, the pseudo-header fields and the order and count they come in, the connection-specific fields neither version carries, and the shapes of a request, a response and a trailer section. |
+| [`nish/net/http-server`](net/http-server.md) | One handler for HTTP/1.1, HTTP/2 (over TLS and cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port. |
 | [`nish/net/http1-client-codec`](net/http1-client-codec.md) | The client side of HTTP/1.1, sans-IO: a request writer and an incremental response parser, bytes in, events and bytes out, and no socket anywhere. |
 | [`nish/net/http1-codec`](net/http1-codec.md) | An incremental HTTP/1.1 request parser and a response writer, sans-IO: bytes in, events and bytes out, and no socket anywhere. |
 | [`nish/net/http1-server`](net/http1-server.md) | The server side of HTTP/1.1 (RFC 9112): a sans-IO connection that drives `nish/net/http1-codec`'s parser, and two pools of them for a program that owns its readiness loop, one on `nish:net`'s plain TCP and one on `nish/net/tls-tcp` with ALPN `http/1.1`. |
@@ -222,7 +223,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/quic-frame`](net/quic-frame.md) | The frames of QUIC version 1 (RFC 9000 §19) and RFC 9221's DATAGRAM, read from a decrypted packet payload and written into one, and the transport error codes a connection closes with (§20.1). |
 | [`nish/net/quic-listener`](net/quic-listener.md) | What a QUIC version 1 server answers to a datagram no connection owns: Version Negotiation for a version it does not speak (RFC 9000 §6, §17.2.1), a Retry that asks a client to prove its address before any connection state exists (§8.1.2, §17.2.5), and a stateless reset for a packet sent to a connection the server no longer has (§10.3). |
 | [`nish/net/quic-packet`](net/quic-packet.md) | QUIC version 1's packets, as RFC 9000 §16-§17 frames them and RFC 9001 §5 protects them: the variable-length integer, the long and short headers, packet-number encoding and recovery, the Initial secrets, AEAD packet protection, header protection and the Retry integrity tag. |
-| [`nish/net/quic-recovery`](net/quic-recovery.md) | QUIC loss detection and congestion control (RFC 9002): the packets each packet number space has in flight, the round-trip estimate, loss by packet and by time threshold, the probe timeout with its backoff, NewReno, and a pacer. |
+| [`nish/net/quic-recovery`](net/quic-recovery.md) | QUIC loss detection and congestion control (RFC 9002): the packets each packet number space has in flight, the round-trip estimate, loss by packet and by time threshold, the probe timeout with its backoff, NewReno or CUBIC, and a pacer. |
 | [`nish/net/quic-stream`](net/quic-stream.md) | The streams of one QUIC version 1 connection (RFC 9000 §2-§4): stream IDs and their four types, the sending and receiving state machines, reassembly, flow control per stream and for the connection, and the stream limits. |
 | [`nish/net/quic`](net/quic.md) | The server side of a QUIC version 1 connection (RFC 9000, RFC 9001, RFC 9221): the TLS 1.3 handshake carried in CRYPTO frames at three encryption levels, transport parameters both ways, acknowledgements per packet number space, the connection-ID table, streams both ways (`nish/net/quic-stream`) and DATAGRAM frames once the handshake is done. |
 | [`nish/net/router`](net/router.md) | A method and path router for HTTP servers, independent of the carrier: the same table answers an HTTP/1 request line and an HTTP/2 or HTTP/3 `:path`. |
