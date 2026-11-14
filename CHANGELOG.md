@@ -16,6 +16,107 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-14
+
+### Added
+
+- runtime: Add nish/page/frame, a framebuffer presenter and fixed-step loop ([#1512](https://github.com/amritk/nish/pull/1512))
+- runtime: Add nish/input, a step input any host can fill ([#1506](https://github.com/amritk/nish/pull/1506))
+- checker: A process.spawn grant that lets a program start helpers ([#1515](https://github.com/amritk/nish/pull/1515))
+- net: An HTTP/3 server clock (H3-5) and WebTransport's rate-cap decision ([#1513](https://github.com/amritk/nish/pull/1513))
+- runtime: Add nish/raster, nish/synth and nish/host/game for browser games ([#1526](https://github.com/amritk/nish/pull/1526))
+- runtime: Close the HTTP, WebSocket, YAML and PKI attack paths and pin CI to Node 26 LTS ([#1532](https://github.com/amritk/nish/pull/1532))
+- cli: An update notice and `nish upgrade` ([#1530](https://github.com/amritk/nish/pull/1530))
+- runtime: Add nish/page/game, a one-call browser game harness, with a starter and a guide ([#1531](https://github.com/amritk/nish/pull/1531))
+- codegen: Keep root storage's object graph alive between wasm export calls ([#1538](https://github.com/amritk/nish/pull/1538))
+- interop: Let the docs hero terminal take a command ([#1533](https://github.com/amritk/nish/pull/1533))
+- cli: Install.sh puts nish on PATH in the shell's startup file ([#1559](https://github.com/amritk/nish/pull/1559))
+- checker: Warn when an unbounded loop keeps what each pass allocates (NL9018) ([#1555](https://github.com/amritk/nish/pull/1555))
+- checker: Let a discriminated union be a generic's type argument ([#1566](https://github.com/amritk/nish/pull/1566))
+- cli: Make the docs site's break game playable by touch ([#1567](https://github.com/amritk/nish/pull/1567))
+- checker: Warn when a function keeps per-call memory no scope releases ([#1558](https://github.com/amritk/nish/pull/1558))
+- net: CUBIC congestion control for QUIC (WP39 G5) ([#1495](https://github.com/amritk/nish/pull/1495))
+- net: One handler for HTTP/1.1, 2 and 3 with Alt-Svc (WP39 G7) ([#1473](https://github.com/amritk/nish/pull/1473))
+- checker: ForEach on arrays, Map and Set ([#1589](https://github.com/amritk/nish/pull/1589))
+- threads: AtomicI32Array and AtomicI64Array, n atomics in one buffer ([#1598](https://github.com/amritk/nish/pull/1598))
+- checker: Destructuring declarations over objects and arrays ([#1593](https://github.com/amritk/nish/pull/1593))
+
+### Fixed
+
+- runtime: Reach what the AES kernels leave in vector registers (AEAD-4), and settle --cpu for the kernel path ([#1510](https://github.com/amritk/nish/pull/1510))
+- net: A QUIC transfer survives a NAT rebind while one hole fills the stream buffer ([#1511](https://github.com/amritk/nish/pull/1511))
+- codegen: ReadCString tests its pointer for NULL and panics with ffi-null ([#1507](https://github.com/amritk/nish/pull/1507))
+- runtime: Raise the soft descriptor limit to the hard limit in nish:net ([#1548](https://github.com/amritk/nish/pull/1548))
+- runtime: Finish a Content-Length response once its whole body is sent ([#1546](https://github.com/amritk/nish/pull/1546))
+- codegen: A reassigned let no longer keeps its values in the arena ([#1553](https://github.com/amritk/nish/pull/1553))
+- runtime: Bound the root-storage trace to the arena and the static data ([#1571](https://github.com/amritk/nish/pull/1571))
+- cli: Drop internal work-package references from diagnostics and generated files ([#1572](https://github.com/amritk/nish/pull/1572))
+- cli: Fit the docs site's break game to a phone and give it one menu ([#1594](https://github.com/amritk/nish/pull/1594))
+
+### Performance
+
+- crypto: P-256's cached table for G and a safegcd scalar inverse for verify (K5) ([#1516](https://github.com/amritk/nish/pull/1516))
+- net: Answer static routes from an exact-path table ahead of the trie walk (WP49 stage 6) ([#1491](https://github.com/amritk/nish/pull/1491))
+- crypto: P-256 field arithmetic on 64-bit limbs (K5), or the figures that decline it ([#1518](https://github.com/amritk/nish/pull/1518))
+- checker: Enum narrowing builds an enum's members once ([#1520](https://github.com/amritk/nish/pull/1520))
+- net: Shrink what an idle Http1Server connection holds ([#1552](https://github.com/amritk/nish/pull/1552))
+- crypto: HmacSha256.digest allocates only the tag, and digestInto allocates nothing ([#1549](https://github.com/amritk/nish/pull/1549))
+- interop: Load YAML into a JsonDocument about a fifth faster ([#1557](https://github.com/amritk/nish/pull/1557))
+- runtime: Cheaper string runs past non-ASCII bytes ([#1588](https://github.com/amritk/nish/pull/1588))
+- runtime: Parse a JSON number in one pass ([#1590](https://github.com/amritk/nish/pull/1590))
+- codegen: Write a typed object's keys as one pre-escaped copy ([#1592](https://github.com/amritk/nish/pull/1592))
+- runtime: Less fixed work per JSON token ([#1600](https://github.com/amritk/nish/pull/1600))
+- net: Cut Router.match's instructions per request for every route kind ([#1596](https://github.com/amritk/nish/pull/1596))
+- codegen: Emit self-recursive checked sums as a loop ([#1597](https://github.com/amritk/nish/pull/1597))
+- net: Serve drives the HTTP/1 server directly instead of through HttpHandler (WP49 stage 6) ([#1601](https://github.com/amritk/nish/pull/1601))
+- net: Cut serve's answer path and hold a request record only from parse to copy ([#1621](https://github.com/amritk/nish/pull/1621))
+- codegen: Emit self-recursive checked-sum methods as a loop ([#1616](https://github.com/amritk/nish/pull/1616))
+
+### Changed
+
+- self: The AST node kinds become a NodeKind enum ([#1508](https://github.com/amritk/nish/pull/1508))
+
+### Documentation
+
+- benchmarks: Record the WP49 stage 6 gate after task recycling ([#1514](https://github.com/amritk/nish/pull/1514))
+- runtime: Re-measure the explicit TFB entry against uWS and go-fasthttp after the codec work ([#1519](https://github.com/amritk/nish/pull/1519))
+- Keep the docs site still under the pointer and stop its home page jumping on load ([#1529](https://github.com/amritk/nish/pull/1529))
+- Write down the CI-runner rule for spawn checks and the c-symbols and NL9007 gates ([#1536](https://github.com/amritk/nish/pull/1536))
+- WP34's roadmap page and design note match main ([#1522](https://github.com/amritk/nish/pull/1522))
+- Plan WP56, generators whose memory stays flat ([#1561](https://github.com/amritk/nish/pull/1561))
+- roadmap: Propose WP57, module-scoped names ([#1562](https://github.com/amritk/nish/pull/1562))
+- Hold the hero terminal still while it is hovered or focused ([#1564](https://github.com/amritk/nish/pull/1564))
+- Set inline code as a lightly tinted word, not a ringed chip ([#1569](https://github.com/amritk/nish/pull/1569))
+- Clean up the docs for the public site ([#1570](https://github.com/amritk/nish/pull/1570))
+- Run the hero once and leave the terminal's prompt waiting ([#1565](https://github.com/amritk/nish/pull/1565))
+- Put WP34's phase two on its roadmap page ([#1527](https://github.com/amritk/nish/pull/1527))
+- WP54, async on wasm with the page as the executor (design only) ([#1528](https://github.com/amritk/nish/pull/1528))
+- Make the README a short tour and drop the owner wording ([#1578](https://github.com/amritk/nish/pull/1578))
+- Add object graphs in an arena block to WP56 as S5 ([#1586](https://github.com/amritk/nish/pull/1586))
+- roadmap: Propose WP59, the wasm arena in a second, unexported memory ([#1577](https://github.com/amritk/nish/pull/1577))
+- cli: Document package.json and the capability lockfile from JSON Schemas ([#1599](https://github.com/amritk/nish/pull/1599))
+- runtime: Record the JSON tokenizer result ([#1604](https://github.com/amritk/nish/pull/1604))
+- checker: Design and measure dynamic dispatch over interfaces (WP60) ([#1587](https://github.com/amritk/nish/pull/1587))
+- runtime: Re-measure WP49 stage 6's gate after the hand-off build ([#1608](https://github.com/amritk/nish/pull/1608))
+- codegen: Record main's typed-serialize profile and re-measure #1592 ([#1615](https://github.com/amritk/nish/pull/1615))
+- Say that a record type is always a declared name ([#1622](https://github.com/amritk/nish/pull/1622))
+- checker: Propose WP61, typed JSON constraints and coercion in one pass ([#1623](https://github.com/amritk/nish/pull/1623))
+- checker: Propose WP62, Nish classes from a JSON Schema ([#1625](https://github.com/amritk/nish/pull/1625))
+
+### Tests
+
+- Declare the IR that #1511's QuicConnection field moves ([#1521](https://github.com/amritk/nish/pull/1521))
+- runtime: Print async_cancel's lines in an order no clock decides ([#1551](https://github.com/amritk/nish/pull/1551))
+- runtime: Pin SQLite's sub-second lock-wait backoff in the default build ([#1545](https://github.com/amritk/nish/pull/1545))
+- codegen: Pin every panicking acc_* case against --no-elision byte for byte ([#1614](https://github.com/amritk/nish/pull/1614))
+- bench: Commit the tree-sum benchmark with a free-function and a method kernel ([#1619](https://github.com/amritk/nish/pull/1619))
+
+### CI
+
+- Reuse the compiler under test across runs and deal the golden cases across shards ([#1524](https://github.com/amritk/nish/pull/1524))
+- Deal the small sections before the link programs across the test shards ([#1537](https://github.com/amritk/nish/pull/1537))
+
+
 ## [0.39.0] - 2026-11-13
 
 ### Added
@@ -1843,3 +1944,4 @@ file per release, and each release's notes and downloads are on the
 [0.37.0]: https://github.com/amritk/nish/releases/tag/v0.37.0
 [0.38.0]: https://github.com/amritk/nish/releases/tag/v0.38.0
 [0.39.0]: https://github.com/amritk/nish/releases/tag/v0.39.0
+[0.40.0]: https://github.com/amritk/nish/releases/tag/v0.40.0
