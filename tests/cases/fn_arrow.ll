@@ -7,7 +7,6 @@ declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @double(i32 noundef %n) #0 {
 entry:
@@ -27,28 +26,41 @@ if.end:
   ret i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
 }
 
-define internal noundef i32 @sumTo(i32 noundef %n) #1 {
+define internal noundef i32 @sumTo(i32 noundef %n.in) #1 {
 entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %9, %rec.false ]
+  %rec.sum = phi i64 [ 0, %entry ], [ %15, %rec.false ]
+  %rec.min = phi i64 [ 0, %entry ], [ %12, %rec.false ]
+  %rec.max = phi i64 [ 0, %entry ], [ %14, %rec.false ]
   %0 = icmp sle i32 %n, 0
-  br i1 %0, label %cond.true, label %cond.false
+  br i1 %0, label %rec.true, label %rec.false
 
-cond.true:
-  br label %cond.end
-
-cond.false:
-  %1 = sub nsw i32 %n, 1
-  %2 = call i32 @sumTo(i32 %1)
-  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 %2)
-  %4 = extractvalue { i32, i1 } %3, 0
-  %5 = extractvalue { i32, i1 } %3, 1
-  br i1 %5, label %ovf.fail, label %ovf.ok
+rec.true:
+  %1 = sext i32 0 to i64
+  %2 = add i64 %rec.sum, %1
+  %3 = sub i64 %2, 2147483647
+  %4 = add i64 %2, 2147483648
+  %5 = icmp slt i64 %rec.min, %3
+  %6 = icmp sgt i64 %rec.max, %4
+  %7 = or i1 %5, %6
+  br i1 %7, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  br label %cond.end
+  %8 = trunc i64 %2 to i32
+  ret i32 %8
 
-cond.end:
-  %6 = phi i32 [ 0, %cond.true ], [ %4, %ovf.ok ]
-  ret i32 %6
+rec.false:
+  %9 = sub nsw i32 %n, 1
+  %10 = sext i32 %n to i64
+  %11 = icmp slt i64 %rec.sum, %rec.min
+  %12 = select i1 %11, i64 %rec.sum, i64 %rec.min
+  %13 = icmp sgt i64 %rec.sum, %rec.max
+  %14 = select i1 %13, i64 %rec.sum, i64 %rec.max
+  %15 = add i64 %rec.sum, %10
+  br label %rec.head
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

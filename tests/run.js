@@ -16155,6 +16155,43 @@ if (dealtHere("arrayChecks")) {
     )
   }
 
+  // ---- Self-recursive checked sums ------------------------------------------------
+  // A function whose recursive returns are `X + self(...)` is one loop with its overflow
+  // check deferred to the base (src/emit-accumulate.ts). acc_overflow's cases (a)-(d)
+  // each overflow one add of the recursion at a different depth, and the loop must panic
+  // as the recursion did; acc_ineligible's sums must stay recursion.
+  if (!only || "acc_".includes(only) || only.startsWith("acc")) {
+    const accLl = path.join(buildDir, "acc_overflow.ll")
+    const accExe = path.join(buildDir, "acc_overflow")
+    const linked = fs.existsSync(accLl) ? linkNative(accExe, accLl) : null
+    if (linked !== null && linked.status === 0) {
+      const failed = []
+      for (let k = 0; k < 4; k++) {
+        const run = spawnSync(accExe, [String(k)], { encoding: "utf8" })
+        if (run.status !== 1 || !run.stderr.includes("attempt to add with overflow") || run.stdout !== "") {
+          failed.push(`case ${k}: ${shown(run)}`)
+        }
+      }
+      check(
+        'acc_overflow: cases (a)-(d) each exit 1 with "attempt to add with overflow" and print nothing',
+        failed.length === 0,
+        failed.join("\n")
+      )
+    } else if (linked !== null) {
+      check("acc_overflow: links", false, String(linked.stderr))
+    }
+    const looped = (name) => {
+      const ll = path.join(casesDir, `${name}.ll`)
+      return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8").split("\nrec.head:").length - 1 : -1
+    }
+    check(
+      "acc_: fib, the tree sum, the shapes and the overflow chain are each one loop",
+      ["acc_fib", "acc_tree", "acc_shapes", "acc_overflow"].every((name) => looped(name) === 1),
+      ["acc_fib", "acc_tree", "acc_shapes", "acc_overflow"].map((name) => `${name}: ${looped(name)}`).join(", ")
+    )
+    check("acc_ineligible: no sum it holds becomes a loop", looped("acc_ineligible") === 0)
+  }
+
   // ---- Ranged integers (WP31) ------------------------------------------------------
   // A value that leaves `integer<Lo, Hi>` at an entry panics (exit 1) with the range
   // on stderr, before the line after it prints. The f64 twin is the one the
