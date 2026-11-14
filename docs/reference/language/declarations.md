@@ -2541,7 +2541,7 @@ them, then the expired timers, earliest deadline first, ties in the order
 they were made (`async_sleep`, `tests/link/async_timer_order`,
 `tests/link/async_readable`). A wait holds a duplicate of its descriptor, so
 closing the descriptor while a task waits on it does not end the wait, and
-the number's reuse cannot answer it ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md),
+the number's reuse cannot answer it ([`docs/security/async.md`](../../security/async.md),
 ASYNC-4).
 
 ```ts
@@ -2579,7 +2579,7 @@ export async function main(): Promise<i32> {
 - **`readable` and `writable` have no deadline of their own.** A descriptor
   that never becomes ready parks its task until it does, or until the task
   is cancelled; `readableWithin` and `writableWithin`, below, take one
-  ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-6).
+  ([`docs/security/async.md`](../../security/async.md), ASYNC-6).
 
 ### Bounding a wait and cancelling a task
 
@@ -2601,7 +2601,7 @@ without parking, so the task runs on to its end, its `using` bindings
 dispose and its region is freed. A task that does not await is not reached
 until it does. A handle names its task and no later one: a handle kept past
 its task's end, once the executor reuses the task's slot, cancels nothing
-([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-18).
+([`docs/security/async.md`](../../security/async.md), ASYNC-18).
 
 ```ts
 import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"

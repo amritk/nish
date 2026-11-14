@@ -16,22 +16,6 @@ memory corruption, a verifier that accepts bad input, secret-dependent timing
 in a fixture path. Medium: denial of service (a panic, an unbounded loop or
 allocation) on attacker input. Low: hardening and documentation drift.
 
-## Writing a record
-
-- **A record states the commit its `file:line` anchors are at.** A row
-  rewritten after that base names the commit its own anchors are at, rather
-  than moving them silently (#529, CG-5).
-- **A record's Tests list names every check it cites by its exact
-  `check(...)` string**, templated names as templates, so a grep from the
-  record finds the test. Grep each one against `tests/run.js` before pushing
-  (#557, rounds 2 and 4).
-- **A cache entry's `key`, written last, is its only completeness signal.** A
-  hit trusts the stored key alone, equal byte for byte to the computed one; a
-  missing or mismatched key is a miss and the entry is rebuilt. Files removed
-  by hand from an entry whose key is intact are out of scope for the run cache
-  and the runtime cache alike (CLI-5, CLI-11), so a review need not raise
-  them: #557's reviewers did in all five rounds, and each was refuted.
-
 ## Areas
 
 Counts are by severity, C / H / M / L, and say what is true on `main` now. A
@@ -88,7 +72,7 @@ the record that found it. The notes below the table name each such finding.
 | Async server | [serve.md](serve.md) | `std/net/serve.ts` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 1 |
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 2 |
-| Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
+| Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
 | **Total** ⁸ | | | **3 / 16 / 87 / 196** | **0 / 0 / 2 / 39** |
 
@@ -480,8 +464,7 @@ Files of the attacker-facing surface (`std/net/**/*.ts`, `std/crypto/*.ts`,
 `node scripts/security-scope.mjs` (run by `npm test` and CI) fails on a file
 of that surface that is in no scope and not listed here, and on a row here
 whose file is now in a scope or gone, so this list only shrinks: a new module
-ships with its record (CLAUDE.md, "Definition of done"), and an audit that
-takes a file in deletes its row.
+ships with its record, and an audit that takes a file in deletes its row.
 
 | File | Why it is not in a record yet |
 | --- | --- |
@@ -535,12 +518,34 @@ refusing `orReturn` inside a `scope()` region. Joining before the return in
 ## Corrections still to make
 
 None. The stages listed documentation corrections outside their own files,
-and the security-policy stage made every one in `std/README.md`,
-`docs/INSTALL.md`, `docs/LANGUAGE.md`, `docs/ARCHITECTURE.md`,
-`docs/wp7-runtime.md`, `.claude/selfhost.md`, `codegen.md` and `cli.md`. The
-three it left open have been made since: `runtime/shim.mjs` and
+and the security-policy stage made every one in the user documentation and in
+`codegen.md` and `cli.md`. The three it left open have been made since: `runtime/shim.mjs` and
 `runtime/nish.d.ts` open their writes with `O_NOFOLLOW`, as the native
 runtime does for RT-4 (#405, [runtime.md](runtime.md)); `scripts/bootstrap.sh`
 no longer needs the working-directory fallback (#425, [cli.md](cli.md)); and
 `std/README.md` no longer says a string built by `join` can pass 2^31 − 1
 bytes, since #427 closed CG-3.
+
+## Writing a record
+
+For contributors. A new attacker-facing file — a `std/net` or `std/crypto`
+module, a `runtime/*.c` file, or a builtin or `nish:` module that reads the
+network, the terminal or another process — lands with its record and its row
+in the tables above, in the same pull request. The record states its scope,
+each finding fixed with a test shown failing before the fix and passing after,
+and each finding left open. `node scripts/security-scope.mjs` refuses a file
+of that surface that no record's scope names and that "Not yet audited" does
+not list.
+
+- **A record states the commit its `file:line` anchors are at.** A row
+  rewritten after that commit names the commit its own anchors are at, rather
+  than moving them silently (CG-5).
+- **A record's Tests list names every check it cites by its exact
+  `check(...)` string**, templated names as templates, so a search for the
+  string finds the test in `tests/run.js`.
+- **A cache entry's `key`, written last, is its only completeness signal.** A
+  hit trusts the stored key alone, equal byte for byte to the computed one; a
+  missing or mismatched key is a miss and the entry is rebuilt. Files removed
+  by hand from an entry whose key is intact are out of scope for the run cache
+  and the runtime cache alike (CLI-5, CLI-11), so a review need not raise
+  them.

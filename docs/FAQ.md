@@ -12,9 +12,8 @@ layout, decided at compile time. `any` (and `unknown`, unions other than
 runtime type tags, boxing, and dynamic dispatch, which is what a JavaScript
 engine provides and what Nish deliberately leaves out. The full list,
 with the guarantee each construct would break, is in
-[LANGUAGE.md: Forbidden constructs](LANGUAGE.md#forbidden-constructs-phase-0-validator)
-and [wp0-validator.md](wp0-validator.md). If it compiles, the layout is
-known.
+[LANGUAGE.md: Forbidden constructs](LANGUAGE.md#forbidden-constructs-phase-0-validator).
+If it compiles, the layout is known.
 
 ### Why is `number` a 32-bit integer by default?
 
@@ -27,9 +26,7 @@ suite, compiling the same program `--number-mode f64` costs 1.36x on `fib`,
 1.80x on `sieve` and 3.4x on an array reduction (14x when the array is
 cache-resident, where a float accumulator cannot be split into parallel
 partial sums), plus about 12 KB of binary for the double formatter that
-`console.log` then needs:
-[wp9-optimisation.md](wp9-optimisation.md#what-the-number-mode-costs) has the
-tables and the three mechanisms. The cost is that `number`
+`console.log` then needs. The cost is that `number`
 does not behave like JavaScript's number: signed integer overflow panics
 rather than wrapping (see below), and `1.5` is rejected in i32 mode
 ([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)). The
@@ -61,13 +58,14 @@ caller; nothing is freed individually; the entry wrapper frees everything when
 batches to recycle memory in O(1). Objects, arrays, and strings built at run
 time live there; string literals are constant data. On top of that the compiler
 places memory statically ([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model),
-[wp6-memory.md](wp6-memory.md)): an object, object literal, or array
+[the guide's Memory page](guide/language/memory.md)): an object, object literal, or array
 literal that provably never leaves its function is an `alloca`, and a
 function whose arena temporaries all die with it marks the arena on entry
 and releases it before returning, so a hot loop keeps the arena flat.
 `using a = arena()` frees a batch explicitly, and `Arena.mark()` /
-`Arena.used()` read the arena. Optional reference counting for objects that
-must outlive an arena release is still on the plan; it has not been built.
+`Arena.used()` read the arena. State that must outlive an arena release but
+not the whole run goes in a region from `nish:region` (below); there is no
+reference counting.
 
 ### How do I keep memory flat in a long-running loop?
 
@@ -153,30 +151,27 @@ gone, and no flag brings it back or makes a whole program wrap (`--nsw` and
 
 ### How do I know the compiled program behaves like Node?
 
-`npm run test:diff` compiles every whole program in `tests/cases` and a
-71-program corpus, runs each binary, runs the same program's JavaScript
-rewrite under Node with `runtime/shim.mjs`, and compares stdout and exit
-status byte for byte. The rewrite was made from the compiler's own recorded
-types (`(a + b) | 0` for `i32`, `BigInt` for `i64`, a bounds-checked index
-helper, byte lengths) by a rewriter that was deleted with stage0, so it is
-frozen in `tests/differential/goldens/`. `node tests/differential/fuzz.js --count 200`
-compiles random integer programs with the last release and with the current
-compiler and compares the IR. Everything that still differs
-is listed with a reproducer in
-[wp13-differential.md](wp13-differential.md) and
-`tests/differential/known-failures.txt`: 1-ulp libm differences in
-`sin`/`cos`/`log`/`pow`, `Math.min`/`max` with NaN, `Math.round(-0.3)`,
-and the division panics above. A program built with `--deterministic`
-avoids the libm differences: `sin`, `cos`, `exp`, `log`, `pow` and a float `%`
-are the standard library's own on every target, and its `--emit-ts` reading
-calls the same functions, so x86-64, AArch64, wasm32 and Node print the same
-bits for everything the float corpus (`tests/differential/corpus/float/`)
-covers ([`--deterministic`](LANGUAGE.md#--deterministic)).
+The compiler's tests compile every whole program in its corpus, run each
+binary, run the same program under Node, and compare stdout and exit status
+byte for byte. What still differs is deliberate or below the language:
+
+- 1-ulp libm differences in `sin`/`cos`/`log`/`pow`;
+- `Math.min`/`max` with a NaN operand, `Math.round(-0.3)`, and `toI32`
+  saturating instead of wrapping;
+- the integer division and overflow panics above, and the bounds checks.
+
+A program built with `--deterministic` avoids the libm differences: `sin`,
+`cos`, `exp`, `log`, `pow` and a float `%` are the standard library's own on
+every target, and its `--emit-ts` reading calls the same functions, so x86-64,
+AArch64, wasm32 and Node print the same bits
+([`--deterministic`](LANGUAGE.md#--deterministic)).
+[RUN_UNDER_NODE.md](RUN_UNDER_NODE.md) lists every difference you can meet
+when you run the source itself under Node.
 
 ### How do I call Nish code from Node?
 
 Two ways, both generated from the same signatures as the IR
-([wp8-interop.md](wp8-interop.md)):
+([Calling Nish from other languages](guide/using-nish/interop.md)):
 
 - **WebAssembly**: `scripts/build.sh a.ll -o a.wasm --profile wasm` builds a
   freestanding module; `WebAssembly.instantiate` loads it and every exported
@@ -225,7 +220,7 @@ Syntax errors use the same layout with `syntax error:`. The compiler reports
 every error it finds, in source order, up to 20 before `...and N more errors`,
 and `--json` prints each as one object with a stable `code`. The message texts are catalogued in
 [LANGUAGE.md](LANGUAGE.md#forbidden-constructs-phase-0-validator) and the
-format in [wp10-ci.md](wp10-ci.md#diagnostic-format).
+format in [the CLI guide](guide/using-nish/cli.md#reading-diagnostics).
 
 ### Which exit codes does `nish` use?
 
@@ -233,7 +228,7 @@ format in [wp10-ci.md](wp10-ci.md#diagnostic-format).
 `2` usage error (unknown flag, no inputs); `3` toolchain error (`--link`
 found no `clang`, or `scripts/build.sh` failed; the `.ll` files are still
 written and named); `70` internal compiler error. Details in
-[INSTALL.md](INSTALL.md#4-exit-codes) and [wp12-release.md](wp12-release.md#exit-codes-and-failure-modes).
+[INSTALL.md](INSTALL.md#4-exit-codes) and [the CLI guide](guide/using-nish/cli.md#exit-codes).
 
 ### How do I report a bug?
 
@@ -255,35 +250,11 @@ written and named); `70` internal compiler error. Details in
 
 ### Why does clang warn about "overriding the module target triple"?
 
-By default the IR is target-neutral (no `target triple` line), so clang
-fills in the host triple and warns. It is harmless; `scripts/build.sh`
-passes `-Wno-override-module`. `--target host` (or a triple such as
-`aarch64-unknown-linux-gnu` or `wasm32-wasi`) writes the `target datalayout`
-and `target triple` lines and the warning goes away. Cross-compile with
-`--target <triple>` plus `clang --target=<triple>`, or with `llc -mtriple=...`.
-
-### Why does `opt -O2` on my `.ll` not vectorise anything?
-
-Because a target-neutral module gives `opt` a generic data layout with no
-vector registers. `--link` is unaffected (clang supplies the layout), but
-when you inspect optimised IR by hand compile with `--target host` and
-`opt -O2 -S` will vectorise the same loops the binary gets
-(`tests/cases/opt_target_triple` is checked for exactly that).
-
-### Why does my function not get `willreturn` / `readnone`?
-
-Because the compiler could not prove it. A `while` loop, a `for` loop that
-is not a counted loop, a checked `a[i]`, an integer `/` or `%`
-(the divisor check can panic), a signed `+`, `-` or `*` not proven to fit
-(the overflow check can panic), or a call to `process.exit` drops
-`willreturn`; any arena allocation, `console.log`, string concatenation,
-field store through a non-stack object, integer division, a checked signed
-operation, or `Math.random` makes the function impure. An object that lives in a stack slot is the
-function's own memory, so reading and writing its fields keeps `readnone`
-(`tests/cases/mem_stack_struct`, `swapped`). The
-exact rules are in
-[ARCHITECTURE.md: Attribute soundness rules](ARCHITECTURE.md#attribute-soundness-rules);
-the attributes are guarantees, so the compiler never guesses.
+Only when you link the `.ll` by hand: the IR is target-neutral unless you pass
+`--target`, so clang fills in the host triple and warns. It is harmless
+(`--link` silences it), and `--target host` writes the triple and the data
+layout, which `opt` also needs to vectorise a loop when you inspect optimised
+IR yourself.
 
 ### Can I use this on Windows?
 

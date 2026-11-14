@@ -50,8 +50,8 @@ made on `main` and ship in the next release. Nothing is backported.
 | the latest 0.x release ([releases](https://github.com/amritk/nish/releases/latest), [npm](https://www.npmjs.com/package/nish)) | yes, through the next release |
 | every earlier release | no: upgrade |
 
-The compiler is built by the release before it (the seed,
-[`.claude/selfhost.md`](.claude/selfhost.md)). A fix in the C runtime, or a new
+The compiler is built by the previous release
+([CONTRIBUTING.md](CONTRIBUTING.md#building-the-compiler-from-source)). A fix in the C runtime, or a new
 runtime function the compiler needs, therefore reaches the `nish` binary itself
 one release after it lands. The audit records say where that applies (CLI-6,
 CLI-7 and CLI-9 in [`docs/security/cli.md`](docs/security/cli.md)).
@@ -66,7 +66,7 @@ The full model for each area is in its record. In summary:
 | A peer of a program using `nish/crypto` | every byte on the verifying, decrypting and key-agreement side: keys, signatures, tags, ciphertexts, certificates, PEM | no forgery, no key recovery, no panic, no accepted non-canonical encoding, and no branch or secret-indexed load on a secret in the code the constant-time check reads | [crypto-aead](docs/security/crypto-aead.md), [crypto-ecc](docs/security/crypto-ecc.md), [crypto-k1](docs/security/crypto-k1.md), [crypto-x509](docs/security/crypto-x509.md), [ct-verification](docs/security/ct-verification.md) |
 | The author of a checkout you compile, or another user on your machine | every file and file name in the checkout, the source itself, and anything in a world-writable directory | compiling a program runs none of its code. `nish run` runs the program its source describes and nothing else. No output is written outside what the command line names | [cli](docs/security/cli.md) |
 | Code linked into a program built with `--sandbox`: its dependencies, its `ffi` callees, their constructors | everything the process runs after the sandbox's `.preinit_array` call | on Linux, the process cannot open, write, execute, fork or connect beyond what the compiler computed for `main`, nor attach to another process; a kernel that cannot apply it stops the program (exit 126) unless the build asked for `--sandbox=best-effort` | [sandbox](docs/security/sandbox.md) |
-| Whoever sits between you and a release: a mirror, a proxy, a tampered release asset | the bytes of a download | the installers, the seed fetch and CI unpack and run nothing whose SHA-256 is not either pinned in `install.sh` or published in the release's `SHA256SUMS` | [supply-chain](docs/security/supply-chain.md) |
+| Whoever sits between you and a release: a mirror, a proxy, a tampered release asset | the bytes of a download | the installers, the build's download of the previous release and CI unpack and run nothing whose SHA-256 is not either pinned in `install.sh` or published in the release's `SHA256SUMS` | [supply-chain](docs/security/supply-chain.md) |
 
 **Out of scope.** These are not vulnerabilities:
 

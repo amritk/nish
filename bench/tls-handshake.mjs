@@ -8,7 +8,7 @@
 // CPUs 1-3, so no session is resumed. The server's utime + stime over the N
 // is read from /proc/<pid>/stat. A copy differs from its build only by the
 // machine, so the copy is the noise band. See bench/README.md ("TLS
-// handshake") and docs/wp34-hosting-cs.md ("K5: P-256, the inversion").
+// handshake") and docs/wp34-network-stack.md ("K5: P-256, the inversion").
 //
 //   npm run build && node bench/tls-handshake.mjs [options]
 //     --runs N            timed rounds; every target runs once per round (default 16)

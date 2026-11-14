@@ -14,7 +14,7 @@ only the guide your task touches; the rules there are authoritative:
 | copy or port code in | [`.claude/licensing.md`](.claude/licensing.md) |
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
-| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`docs/roadmap/index.md`](docs/roadmap/index.md) → "Picking up a work package"; tick its box in the PR that lands the stage |
+| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package"; tick its box in the PR that lands the stage |
 
 **An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
 types only through `walk.typeAt`, and treat a null binding table

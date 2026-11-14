@@ -189,9 +189,9 @@ the project root. An import of a file listed in `entries` may leave out the
 import is left to Vite. Vite's extension order still holds: with a `stats.js`
 beside `stats.ts`, `"../stats"` is the JavaScript file.
 
-The generated module calls the loader's `loadSync`, which a compiler older
-than WP50 stage 1 does not write. With one, the build stops with an error
-naming it:
+The generated module calls the loader's `loadSync`, which an older `nish`
+that predates `loadSync` does not write. With one, the build stops with an
+error naming it:
 
 ```console
 Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (WP50 stage 1), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.

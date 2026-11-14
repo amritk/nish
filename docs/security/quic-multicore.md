@@ -1,6 +1,6 @@
 # Security record: QUIC on every core — steering, worker-marked IDs and the UDP group
 
-The record of WP39's stage G6, the design in
+The record of QUIC on more than one core, the design in
 [`docs/h3-multicore.md`](https://github.com/amritk/nish/blob/main/docs/h3-multicore.md): a prefork group of N workers on
 one UDP port, where the kernel hands each datagram to the worker whose index
 is byte 0 of its destination connection ID. It covers the three places that

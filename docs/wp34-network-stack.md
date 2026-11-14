@@ -1,6 +1,6 @@
-# WP34: Hosting cs — the network stack first
+# WP34: The network stack
 
-**Status: in progress.** Built: every compiler and runtime item phase one
+**Status: landed.** Built: every compiler and runtime item phase one
 needs (N1, N2, N3, N5, N6 of §4); every crypto lane, K1 to K6; and the whole
 stack of §3 — the TLS 1.3 server handshake and its TCP carrier (T1 #407, T2
 #437), with its state kept in the slot (#467); the HTTP/1.1 parser, server and
@@ -8,9 +8,9 @@ WebSocket (H1 #399, #468); HPACK and HTTP/2 (H2 #406, #465); QUIC packets,
 connections, loss recovery, streams and datagrams (Q1 #404, Q2 #441 and #444,
 Q3 #466, Q4 #469), with the handshake's state kept in the slot (#492); QPACK
 and HTTP/3 (R1 #464, #470); WebTransport (R2 #471); the loopback suite
-across every carrier (#489); and the interop job of decision S2 (#487). **A1 adds the relay**, `examples/relay/`: cs's
-`services/relay` in Nish on that stack, with its frame and grant tested
-against cs's own fixtures, its caps, timeouts, close codes, stats, identity
+across every carrier (#489); and the interop job of decision S2 (#487). **A1 adds the relay**, `examples/relay/`: a game's
+WebTransport relay in Nish on that stack, with its frame and grant tested
+against the original relay's own fixtures, its caps, timeouts, close codes, stats, identity
 and certificate reload, one upstream socket per session, GSO and GRO both
 sides and a clean stop on a signal, proved across loopback in `npm test`
 (§5a), and N9's soak flat: 100,000 sessions measured at 0 bytes kept, arena
@@ -20,22 +20,19 @@ is followed and the new path validated (RFC 9000 §8.2, §9.3), the interop
 runner's `rebind-port` and `rebind-addr` cases with it (#1210, merged in #1218
 and shipped in 0.35.0); a rebind that came while one lost packet held a stream up was missed until #1485 (#1511, QUIC-12) added an earlier ACK-eliciting probe; connection migration a client starts stays out (§9). #430, the key-holding structs on `nish:secret`, is closed: TLS-1, TLS-2,
 QUIC-1, QUIC-2 and QUIC-5 are closed in their records, with #674's
-secret-fields stage. **Open:** the cs side of A1 — the port of
-`services/relay` itself, `boot-check`'s wire pass and `bench:offload` against
-the Rust relay. 0.16.0 carried N1, N2, N3, N5 and N6 (less #402 and
+secret-fields stage. Nothing of WP34 is open in this repository. 0.16.0 carried N1, N2, N3, N5 and N6 (less #402 and
 `tcpConnect`, #411) and K1–K6 (less HKDF-Expand-Label, #398); 0.17.0 carried
-everything from T1 to R2 and the minted certificate's extensions (#491), so the
-cs side can start; #489, #492 and A1 have shipped in releases since (§7).
+everything from T1 to R2 and the minted certificate's extensions (#491); #489,
+#492 and A1 have shipped in releases since (§7).
 
-This note covers the compiler's half of a plan whose other half lives in the
-program being ported,
-[`amritk/cs` → `docs/nish-port.md`](https://github.com/amritk/cs/blob/main/docs/nish-port.md).
+This note covers the compiler's half of porting a browser game's servers to
+Nish; the game's own repository holds the other half.
 
-On 2026-09-28 the owner set the order: **the port starts with the Rust part of
+On 2026-09-28 the order was set: **the port starts with the Rust part of
 the game server.** That part is the relay, the process that terminates
 WebTransport and forwards game datagrams over UDP. It is built on a Nish network
 stack that serves HTTP/1.1, HTTP/2 and HTTP/3 with streaming, raw sockets, and
-WebTransport. Everything else in cs comes after it:
+WebTransport. Everything else in the game comes after it:
 
 - the simulation;
 - netcode;
@@ -47,7 +44,7 @@ WebTransport. Everything else in cs comes after it:
 
 [LANGUAGE.md](LANGUAGE.md) stays normative. Where this note and LANGUAGE.md
 disagree, LANGUAGE.md wins, and an item that changes the language lands its rule
-there in the same pull request. The TypeScript half of cs moves in place, which
+there in the same pull request. The game's TypeScript half moves in place, which
 is [WP33](wp33-round-trip.md)'s road in. Its `portability` class (§5.2 there) is
 the map of the sites where a rewritten module and its TypeScript reading
 disagree. This note therefore adds no check of its own for that.
@@ -105,7 +102,7 @@ It does eight things:
   - or a real `--cert`/`--key` pair, re-read when the files change (polled
     every 60 s).
 - **Batches with the kernel** (`offload.rs`). It uses `UDP_SEGMENT` and
-  `UDP_GRO` through raw `cmsg`. This is the only `unsafe` in cs.
+  `UDP_GRO` through raw `cmsg`. This is the only `unsafe` in the game.
 - **Stops cleanly on a signal.**
 
 ## 3. The target: one stack, two transports
@@ -136,7 +133,7 @@ whole body.
 
 **Out of scope for phase one:**
 
-- WebTransport over HTTP/2, which no browser cs targets speaks.
+- WebTransport over HTTP/2, which no browser the game targets speaks.
 - 0-RTT.
 - Connection migration beyond a peer's address change: a server preferred
   address, and a client moving to a new connection ID. A NAT rebinding is
@@ -290,7 +287,7 @@ protocols are `std/` modules, imported as `nish/crypto/<primitive>`,
 `nish/net/http3` and `nish/net/webtransport`. A `nish/` specifier may already
 have more than one segment (LANGUAGE.md §Modules). The sockets and the loop are
 N5's builtin module, `nish:net`, beside `nish:fs` and `nish:io`. The relay
-itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
+itself (A1) is the game's Rust relay, rewritten in Nish on top of them.
 
 | Lane | What | Proved by | Needs | State |
 | --- | --- | --- | --- | --- |
@@ -310,17 +307,17 @@ itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 | **Q4** | Streams (bidirectional and unidirectional, with flow control) and DATAGRAM frames (RFC 9221); send batching through GSO | the interop runner's transfer cases; a datagram round trip at the MTU edge | Q2 | built, with a datagram at the MTU edge, a GSO flight read back through GRO, and nothing allocated per packet (QUIC-3 closed); the interop runner's `transfer` and `multiplexing` cases pass in S2's interop job (#487) |
 | **R1** | HTTP/3 and QPACK, with a static table and dynamic capacity 0 | RFC 9204 static-table encodings; the interop runner's `http3` case; `curl --http3` where available | Q4, H2's header model | QPACK and HTTP/3 built; the interop runner's `http3` case and `curl --http3` pass in S2's interop job (#487) |
 | **R2** | Extended CONNECT (RFC 9220), HTTP datagrams (RFC 9297) and **WebTransport over HTTP/3**: sessions, datagrams, unidirectional and bidirectional streams, and close. It is pinned to the draft Chrome negotiates today; that draft's SETTINGS and headers are recorded once from a `wtransport` 0.7 exchange and held as a golden | Chrome through Playwright; a `wtransport` (Rust) client against the Nish server, which is the cross-implementation test | R1, Q4 | built against a Nish client, with a `wtransport` 0.7 exchange recorded and replayed byte for byte; Chromium through Playwright opens a WebTransport session and echoes a datagram and a stream in S2's interop job (#487) |
-| **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; cs's `boot-check` wire pass asserting WebTransport carried the match; `bench:offload` against the Rust relay; N9's soak | R2, K6, N3, N5 | built in nish as `examples/relay/`, with the `cargo test` cases and fixtures ported and every refusal across loopback; N9's soak flat (0 bytes a session over 100,000, with #492, #512 and #515); `boot-check`, `bench:offload` and the cs port open, 0.17.0 carrying R2; DATA down above 1,164 bytes landed with DPLPMTUD (#1458) |
+| **A1** | **The relay**: `frame` and `grant` with their existing fixtures, the session table and caps, the timeouts and stats, the hash file and certificate reload, one upstream socket per session, and GSO/GRO | the relay's `cargo test` cases ported with the same fixtures; N9's soak | R2, K6, N3, N5 | built in nish as `examples/relay/`, with the `cargo test` cases and fixtures ported and every refusal across loopback; N9's soak flat (0 bytes a session over 100,000, with #492, #512 and #515), 0.17.0 carrying R2; DATA down above 1,164 bytes landed with DPLPMTUD (#1458) |
 
-**What is left, in order.** *2026-11-12:* K2 to K4's disassembly (#1464), K5's safegcd field inversion and windowed verify (#1469), T1's secp256r1 key shares and TLS-4 (#1449, #1479), WP39 G1 (#1437) and G2 (#1454), Q3's congestion cases (#1477) and A1's DPLPMTUD (#1458) are done. *2026-11-13:* K5's cached table for G and verify's scalar safegcd (#1516) and 64-bit limbs for its field arithmetic (#1518, [the result](#k5-p-256-64-bit-limbs--the-result)), H3-5's HTTP/3 clock with WT-2's decision (#1513), AEAD-4's narrowing with the `--cpu` finding (#1510) and #1485's rebind fix (#1511, QUIC-12) are done too. What remains here is the cs side; K5's scalar arithmetic on 64-bit limbs is a recorded follow-up.
+**What is left, in order.** *2026-11-12:* K2 to K4's disassembly (#1464), K5's safegcd field inversion and windowed verify (#1469), T1's secp256r1 key shares and TLS-4 (#1449, #1479), WP39 G1 (#1437) and G2 (#1454), Q3's congestion cases (#1477) and A1's DPLPMTUD (#1458) are done. *2026-11-13:* K5's cached table for G and verify's scalar safegcd (#1516) and 64-bit limbs for its field arithmetic (#1518, [the result](#k5-p-256-64-bit-limbs--the-result)), H3-5's HTTP/3 clock with WT-2's decision (#1513), AEAD-4's narrowing with the `--cpu` finding (#1510) and #1485's rebind fix (#1511, QUIC-12) are done too. Nothing remains here; K5's scalar arithmetic on 64-bit limbs is a recorded follow-up.
 
 *2026-11-08:* the chain Q3 → Q4 → R1 → R2 that
 was the critical path is built, and A1 with it. So are the HTTP/1.1 and
 HTTP/2 servers, and the three items that cut across lanes: the loopback suite
 (#489), S2's interop job (#487), and #430, which moved the TLS and QUIC
 key-holding structs onto `nish:secret` so the wipes TLS-1, TLS-2 and QUIC-1,
-QUIC-2 and QUIC-5 record are closed. What is left is the cs side of A1 (§7's
-waves 3 and 4) and each lane's "Left" cell in §5a.
+QUIC-2 and QUIC-5 record are closed. What is left is each lane's "Left" cell in
+§5a.
 
 ### 5a. Landed
 
@@ -355,7 +352,7 @@ lists what each module exports and what is verified, and
 | **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, and by the quic-interop-runner against quic-go and ngtcp2 since #487. ~~Loss recovery (Q3); full streams with flow control (Q4)~~, built; ~~the AEAD limits (QUIC-6)~~, closed by #784; per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); ~~the wipes QUIC-2 and QUIC-5 record~~, closed by #430 |
 | **Q3** | #466; the handshake flight's two probes and early resend (QUIC-8) | `nish/net/quic-recovery` (RFC 9002: sent-packet rings per space, the RTT estimate, loss by packet and time threshold, the probe timeout with backoff, NewReno, a pacer), used by `nish/net/quic` to send lost CRYPTO, STREAM and connection-ID frames again, and `nish/net/quic-listener`'s paced send | ECN; a stream's send buffer is sized by `maxStreamData`, so a NAT rebind in the gap once stranded a transfer (#1485), closed by an earlier ACK-eliciting probe (#1511, QUIC-12), so the interop server's 256 KiB window is no longer what keeps a rebind transfer alive; the send buffer stays tied to `maxStreamData`, the documented memory bound; the interop runner's congestion cases are closed (#1477); ~~detecting an optimistic ACK (QUIC-7)~~, closed by #784 |
 | **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; ~~the AEAD limits (QUIC-6)~~, closed by #784. The handshake's own arena (88 KB a connection) went with N9's QUIC stage, which keeps the handshake's state in the slot: a connection through a reused slot now keeps 0 bytes (QUIC-3, `net_quic_memory`), and a handshake through the HTTP/3 carrier 0 bytes too, now that the caller's P-256 signature is made in scratch (#512) and `quic-listener` reads a datagram no slot owns in place and answers into scratch (H3-1 and H3-3 closed) |
-| **A1** | #488 | `examples/relay/` (not a `std/` module): `frame` and `grant` ported from cs's `frame.rs` and `grant.rs` with their fixtures, a hand-written JSON reader for the grant (N11's phase-one case), the per-peer table, `Relay` (the session flow, both caps, the rate cap, the hello and idle timeouts, STATS, CLOSE with every code, one upstream socket per session, GSO and GRO with `--offload`) on `nish/net/http3-server` and `nish/net/webtransport`, the identity (a 13-day self-signed P-256 certificate and its hash file, or `--cert`/`--key` re-read every 60 s) and main.rs's command line and environment, with a clean stop on SIGINT and SIGTERM | DATA down is no longer limited to 1,164 bytes: QUIC's DPLPMTUD (#1458) sends past 1,200; no DNS, so a grant names an address: the cs port, `boot-check`'s wire pass and `bench:offload` |
+| **A1** | #488 | `examples/relay/` (not a `std/` module): `frame` and `grant` ported from the Rust relay's `frame.rs` and `grant.rs` with their fixtures, a hand-written JSON reader for the grant (N11's phase-one case), the per-peer table, `Relay` (the session flow, both caps, the rate cap, the hello and idle timeouts, STATS, CLOSE with every code, one upstream socket per session, GSO and GRO with `--offload`) on `nish/net/http3-server` and `nish/net/webtransport`, the identity (a 13-day self-signed P-256 certificate and its hash file, or `--cert`/`--key` re-read every 60 s) and main.rs's command line and environment, with a clean stop on SIGINT and SIGTERM | DATA down is no longer limited to 1,164 bytes: QUIC's DPLPMTUD (#1458) sends past 1,200; no DNS, so a grant names an address |
 | **S2** (interop job) | #487 | No module: `.github/workflows/interop.yml` and `tests/interop/` run the quic-interop-runner (quic-go, ngtcp2), `h2spec`, `curl --http3` and `--http2`, and Chromium through Playwright over WebTransport against `tests/link/net_interop_server`, a server on every carrier from one loop whose smoke checks run in `npm test`; `h2spec` 146 of 146 | Nothing left here: the job also runs Autobahn's server cases and `curl --http1.1` for H1 and Chrome over HTTP/1.1 (#1437), and the runner's goodput and crosstraffic cases (#1477). Three `std/` defects were found here and fixed: the pacer's timer (#490), the minted certificate's extensions (#491), and a lost first flight resent one datagram per probe timeout (#514)
 
 K1 and K4 did not wait for their **Needs** column: they export no enum or
@@ -1173,37 +1170,37 @@ verify's public inversion of `s` uses the constant-time `p256ScalarInverse`
 rather than a variable-time safegcd.
 X25519 is still the largest module of a handshake.
 
-## 6. Decisions for the owner
+## 6. Decisions
 
 | | Question | Recommendation |
 | --- | --- | --- |
 | **S1** | Crypto: pure Nish, or a verified C library through FFI | **Pure Nish, and it is also the shorter road.** Three facts make it affordable. First, ChaCha20-Poly1305 is add, rotate and xor, so it is constant time and fast in portable code; the server picks the cipher suite, and every browser offers it. Second, AES-128-GCM is required only for QUIC Initial packets, whose keys come from a connection id sent in the clear, and as TLS 1.3's mandatory fallback, where a bitsliced AES is correct though slow. Third, X25519 and P-256 fit in `i64` and `u64` limbs. The C route needs [wp27](wp27-ffi.md) S3 and S4, neither built, and hands the fixpoint callees it cannot see into. AES-NI and PCLMUL become builtins later, when a profile of the relay asks for them |
-| **S2** | Where the stack lives | **Decided by the owner, 2026-09-28: the standard library.** It follows [wp26](wp26-stdlib.md)'s own line: a builtin exists for a syscall, and everything the language can express is a module. So N5's sockets are the builtin module `nish:net`, and everything above them is `nish/crypto/*` and `nish/net/*`. What it buys is the property wp26 §1a measured: a `std/` module is compiled into its importer, so the attribute fixpoint sees through it, and `--gc-sections` drops what the relay does not call. What it costs is cadence and suite. The stack ships in compiler releases, so a Release PR is worth cutting as each lane cs waits on lands. Its interop suites (the QUIC interop runner, `h2spec`, Chrome) run as a CI job of their own, beside `npm test` rather than inside it, and each module keeps wp26 §5's `tests/link/` case |
+| **S2** | Where the stack lives | **Accepted (2026-09-28): the standard library.** It follows [wp26](wp26-stdlib.md)'s own line: a builtin exists for a syscall, and everything the language can express is a module. So N5's sockets are the builtin module `nish:net`, and everything above them is `nish/crypto/*` and `nish/net/*`. What it buys is the property wp26 §1a measured: a `std/` module is compiled into its importer, so the attribute fixpoint sees through it, and `--gc-sections` drops what the relay does not call. What it costs is cadence and suite. The stack ships in compiler releases, so a Release PR is worth cutting as each lane the relay waits on lands. Its interop suites (the QUIC interop runner, `h2spec`, Chrome) run as a CI job of their own, beside `npm test` rather than inside it, and each module keeps wp26 §5's `tests/link/` case |
 | **S3** | The relay alone first, or the fold into the game server first | **The relay alone**, as a drop-in binary with the same flags and the same hash file, chosen per deployment. It carries real players while the game server is still Bun. Folding the relay into the game server is phase two's cutover, once netcode is Nish |
 | **S4** | Memory for phase one | **Pools sized from the caps** (N9 above). The memory-model note, [wp46](wp46-long-running-memory.md), is phase two's, and nothing here waits for it |
 | **S5** | The HTTP the stack serves beyond the relay | **All three versions, once the relay is live (wave 4).** The same process answers `/connect` and upgrades `/play` for the Bun game server as a reverse proxy. That puts H1 and H2 under real traffic in phase one, and makes Caddy optional for game traffic |
 
 ## 7. Waves
 
-| Wave | Compiler and runtime | The stack, in `std/` | cs | State |
+| Wave | Compiler and runtime | The stack, in `std/` | The game | State |
 | --- | --- | --- | --- | --- |
-| 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) | done |
+| 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered | done |
 | 1 | a release carrying N1–N3, N5, N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — | done: 0.16.0 carried N1–N3, N5 and N6 and K1–K6, less #398, #402 and #411; T1, T2, Q2, the H1 server and H2 shipped after it |
 | 2 | — | Q3, Q4, R1; the loopback suite | — | done; the loopback suite landed (#489) |
-| 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust | R2 released (0.17.0) and A1 built; the staging run, `boot-check` and `bench:offload` open, on the cs side |
-| 4 | — | S5's reverse proxy | the Rust relay retired | open |
+| 3 | a release carrying R2 | R2 | A1, the relay in Nish | R2 released (0.17.0) and A1 built; the game's staging run is outside this repository |
+| 4 | — | S5's reverse proxy | the Rust relay retired | outside this repository |
 
-Because the stack is `std/`, cs can use a lane only once a release carries it,
+Because the stack is `std/`, a program can use a lane only once a release carries it,
 so a release is worth cutting whenever a lane A1 depends on has landed. The
 first such release, the one carrying the N items, was 0.16.0, and 0.17.0
 carried every lane through R2. *2026-11-08:* every lane A1 depends on has
-since shipped, so what is left of the waves is on the cs side.
+since shipped, so nothing of the waves is left in this repository.
 
 ## 8. After phase one
 
 These are the items from the first version of this note that the later phases
-still owe. The cs note owns their order. Each keeps the justification it had:
-a named part of cs that cannot be written without it.
+still owe. Each keeps the justification it had: a named part of the game that
+cannot be written without it.
 
 | Item | For | Notes |
 | --- | --- | --- |

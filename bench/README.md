@@ -1263,7 +1263,7 @@ loopback TCP stack's work the Unix socket skips.
 `p256PublicKey` on a new private key, `p256SignSha256` on a 64-byte message,
 which is what a TLS 1.3 server's CertificateVerify costs, and
 `p256VerifySha256`. It is
-[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-baseline)'s baseline, and the
+[WP34 K5](../docs/wp34-network-stack.md#k5-p-256-the-baseline)'s baseline, and the
 measure a fixed-base table is judged by. It is not in this suite's tables, and
 it has no twins. `p256.mjs` builds it and drives it:
 
@@ -1328,9 +1328,9 @@ band. A missing compiler, libxcrypt or network leaves its row out with a note.
 `tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
 `tests/link/net_interop_server` run as `serve`, its own P-256 certificate,
 answering new connections on its h2 port. It is
-[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
+[WP34 K5](../docs/wp34-network-stack.md#k5-p-256-the-inversion--the-baseline)'s
 measure for the scalar inversion, where `bench/p256.mjs` times the signature on
-its own; [the result](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result)
+its own; [the result](../docs/wp34-network-stack.md#k5-p-256-the-inversion--the-result)
 reads both against the bar. It is not in this suite's tables. It needs `curl` with HTTP/2 and
 `taskset`.
 
@@ -1505,9 +1505,10 @@ at about 10 ms.
 
 `h3-latency.mjs` times `std/net`'s HTTP/3 server, run as
 `tests/link/net_interop_server serve`, against nginx, with h2load over HTTP/3.
-It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure, and
-[docs/h3-latency.md](../docs/h3-latency.md) records its figures and what
-they showed. It is not in this suite's tables. The tools are not
+It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure; what
+it found, a pacer that counted whole milliseconds, is QUIC-9 in
+[docs/security/quic.md](../docs/security/quic.md) and H3-8 in
+[docs/security/http3.md](../docs/security/http3.md). It is not in this suite's tables. The tools are not
 dependencies of nish: `h3-latency/build-tools.sh` builds them once, into
 `~/.cache/nish-h3-bench` by default, from pinned and checksummed tarballs:
 OpenSSL, ngtcp2, nghttp3, h2load (nghttp2) with HTTP/3, and nginx with
@@ -2591,8 +2592,9 @@ in is in parentheses.
   the result. Not part of this suite.
 - `wp48-refs/`: one AST-shaped tree in five layouts, pointer graphs against
   records in arrays addressed by `i32` (`node bench/wp48-refs/run.mjs`), the
-  measurements behind
-  [docs/wp48-compressed-references.md](../docs/wp48-compressed-references.md).
+  measurements behind the lean sibling-link layout
+  [docs/AI.md](../docs/AI.md#a-tree-links-first-child-and-next-sibling)
+  recommends; its README holds the figures. Not part of this suite.
 - `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
   accuracy figures ("Math accuracy" above).
 - `pg-batch-clock.ts`: when to start a PostgreSQL batch, adaptive against

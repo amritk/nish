@@ -4,7 +4,7 @@
 // in interleaved rounds, and prints latency p50/p99, req/s and server CPU per
 // target and scenario. The copy is the noise band: nish and nish-copy are the
 // same bytes, so whatever separates them is the machine, not the code. See
-// bench/README.md ("HTTP/3 latency") and docs/h3-latency.md.
+// bench/README.md ("HTTP/3 latency").
 //
 //   bash bench/h3-latency/build-tools.sh && node bench/h3-latency.mjs [options]
 //     --runs N            rounds; every target runs every scenario once per round (default 5)
