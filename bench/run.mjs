@@ -25,7 +25,7 @@
 //                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 21 programs executes
+//     --instructions    count the instructions each of the 22 programs executes
 //                       under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
@@ -79,7 +79,8 @@ const nishc = compilerFrom(process.argv)
  * `extraC` lists further C sources that print the same checksum (the
  * naive malloc/free string builder). `kernels` names the arguments a program
  * takes to run one of its loops alone: each is timed as its own row,
- * `<name>/<kernel>`, from the binaries built once.
+ * `<name>/<kernel>`, from the binaries built once. `counted: false` keeps a
+ * program out of `--instructions` and so out of bench/instructions.json.
  *
  * The compiler flags a benchmark needs are not listed here: they live in
  * `bench/<name>.args`, the sidecar `tests/cases` uses, so that the stage1
@@ -115,6 +116,12 @@ const BENCHMARKS = [
       "max",
       "f32-to-bits",
     ],
+  },
+  {
+    name: "treesum",
+    what: "depth-20 tree of class nodes summed 60 times, as a function and as a method",
+    kernels: ["fn", "method"],
+    counted: false,
   },
 ]
 
@@ -650,7 +657,7 @@ const countInstructions = (valgrind, exe, args, name) => {
 }
 
 /**
- * `--instructions`: build the seven bench/ programs, the four map layout
+ * `--instructions`: build the eight counted bench/ programs, the four map layout
  * prototypes, the three `Map` measurements and the seven AWFY ports at the
  * sizes bench/instructions.json names, count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
@@ -667,8 +674,9 @@ const runInstructions = () => {
       `the baseline is counted on ${baseline.platform}, so this ${host} host can neither check nor update it`
     )
   }
+  const counted = BENCHMARKS.filter((b) => b.counted !== false)
   const names = [
-    ...BENCHMARKS.map((b) => b.name),
+    ...counted.map((b) => b.name),
     ...MAPS.map((b) => b.name),
     ...MAP_MEASURES.map((b) => b.name),
     ...AWFY.map((b) => b.name),
@@ -697,7 +705,7 @@ const runInstructions = () => {
   const jobs = [] // { name, size, exe, args }
   process.stderr.write("instructions: building")
   const programs = [
-    ...BENCHMARKS.filter((x) => wanted(x.name, "")),
+    ...counted.filter((x) => wanted(x.name, "")),
     ...[...MAPS, ...MAP_MEASURES].filter((x) => wanted(x.name, "maps")),
   ]
   for (const b of programs) {

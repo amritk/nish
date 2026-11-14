@@ -1386,6 +1386,12 @@ const DECLARED = [
     why: RECURSION_LOOP_WHY,
   },
   {
+    program: "bench/treesum.ts",
+    file: "treesum.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
     program: "tests/differential/corpus/recursion.ts",
     file: "recursion.ll",
     changelog: RECURSION_LOOP,
