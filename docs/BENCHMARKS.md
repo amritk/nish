@@ -567,7 +567,62 @@ On citm, the escape scan does not make serialize faster outside its band: most s
 Instructions per document under callgrind: citm_catalog.json 14.13M → 10.74M (−24.0%); `bench/json-api`'s page of twenty users 188,879 → 162,647 (−13.9%). After the change, `keyQuoted` is about a quarter of either profile, `JsonWriter.i64` 30% of citm's, and `jsonWriterPutString` (escaping the string values) a third of the API page's.
 
 Wall clock, against main at `f8e21091`. In `bench/json-compare`, serialize on citm ran 548,213 and 554,908 ns/doc at the minimum in two runs, against main's 767,648 (**1.38x to 1.40x** at the minimum). The bands, each the build against its byte-identical copy on the minimums, were 8.8%, 5.8% and 0.2%. In `node bench/json-api/run.mjs --base <main's nish>` (18 interleaved rounds), the page took 8,676 against 11,149 ns at the minimum (**1.29x**) and 9,710 against 11,856 ns at the median (**1.22x**); the noise band, main against its own copy, was 2.3% on the minimums and 1.6% on the medians.
-Main's profile and the re-measure: in progress (#1603).
+
+#### Main's profile before the change, and the re-measure
+
+The claim was that the escape scan of each key and the writer's per-key state checks were the largest cost per field in typed serialize. The by-function profile of main just before the change, `d822c60d` (`e966fbe5^`), confirms it on both workloads. On citm_catalog.json key writing is 35.0% of the instructions per document, against `JsonWriter.i64`'s 30.5%, a close second. On `bench/json-api`'s page it is 33.1%, against string values' 30.9%. The escape scan is most of it: 30.7% of citm's total and 25.8% of the page's. The state checks, with the comma and colon bytes that `key` writes, are the rest: 4.3% and 7.3%.
+
+Each group's Ir/doc and share of the whole run. The share of the run includes the harness's checksum fold. The fold runs over the output after the timed region and is the same code in both builds.
+
+| citm_catalog.json | Before (`d822c60d`) | Share | After (`e966fbe5`) | Share |
+| --- | ---: | ---: | ---: | ---: |
+| Key writing: escape scan (`jsonWriterPutString` called for keys) | 4,335,399 | 30.73% | — | — |
+| Key writing: state checks and separators (`JsonWriter.key` self plus its lines inlined in the loop) | 601,146 | 4.26% | — | — |
+| Key writing: `JsonWriter.keyQuoted` | — | — | 2,704,943 | 25.31% |
+| Numbers: `JsonWriter.i64` (digits inlined) | 4,301,426 | 30.49% | 3,321,628 | 31.08% |
+| String values: `JsonWriter.string`, `jsonEncodeStringOrNull` | 173,583 | 1.23% | 173,583 | 1.62% |
+| Checksum fold (harness, outside the clock) | 2,602,071 | 18.44% | 2,602,070 | 24.34% |
+| Rest: brackets, value checks, the generated encoder, inlined byte writes | 2,094,487 | 14.85% | 1,886,323 | 17.65% |
+| Total | 14,108,112 | 100% | 10,688,547 | 100% |
+
+| `bench/json-api` page | Before (`d822c60d`) | Share | After (`e966fbe5`) | Share |
+| --- | ---: | ---: | ---: | ---: |
+| Key writing: escape scan (`jsonWriterPutString` called from `key`) | 48,620 | 25.76% | — | — |
+| Key writing: state checks and separators (`JsonWriter.key` self) | 13,852 | 7.34% | — | — |
+| Key writing: `JsonWriter.keyQuoted` | — | — | 38,143 | 23.52% |
+| String values: `JsonWriter.string` inclusive | 58,342 | 30.92% | 58,342 | 35.98% |
+| Numbers: `JsonWriter.i32` and `i64` | 10,721 | 5.68% | 8,188 | 5.05% |
+| Checksum fold (harness, outside the clock) | 39,951 | 21.17% | 39,951 | 24.64% |
+| Rest: the generated encoder, `boolean`, brackets, `memcpy` | 17,219 | 9.12% | 17,545 | 10.82% |
+| Total | 188,705 | 100% | 162,169 | 100% |
+
+Shares are rounded, so the after column for the page sums to 100.01%. Without the fold, key writing was 42.9% of citm's encode and 42.0% of the page's. Key writing is a lower bound on citm. The byte writes the loop inlines are shared with values and brackets and are counted in "Rest".
+
+Every key went through the scan. Per citm document, the before build calls `jsonWriterPutString` 24,444 times: 17,370 calls from `key` inlined in the loop, 6,723 from the out-of-line `JsonWriter.key`, and 351 from `JsonWriter.string`. The after build calls `keyQuoted` 24,093 times (17,370 + 6,723) and `jsonWriterPutString` only from `string`. The page writes 326 keys and 207 string values, and the after build never takes `keyQuoted`'s fallback to `key`.
+
+The shares are from builds with `-g`, so that inlined lines carry their function's name. Their Ir/doc is within 0.5% of the stripped builds (−0.18%, −0.47%, −0.09% and −0.29%). The Ir/doc figures below are from the stripped builds, re-measured in this run against #1592's:
+
+| Workload | Build | Totals (callgrind) | Ir/doc | #1592 | Difference |
+| --- | --- | --- | ---: | ---: | ---: |
+| citm | `d822c60d` | N=1 43,038,361; N=10 170,241,812 | 14,133,717 | 14.13M | +0.03% |
+| citm | `e966fbe5` | N=1 39,643,444; N=10 136,291,985 | 10,738,727 | 10.74M | −0.01% |
+| json-api | `d822c60d` | N=200 38,120,381; N=2000 378,102,615 | 188,879 | 188,879 | 0 |
+| json-api | `e966fbe5` | N=200 32,873,981; N=2000 325,638,601 | 162,647 | 162,647 | 0 |
+
+The change is −24.02% on citm and −13.89% on the page, which matches #1592. The difference columns compare #1592's rounded figures. Ir/doc is (Ir(N_hi) − Ir(N_lo)) / (N_hi − N_lo), the method of `heldout.mjs`.
+
+Both builds print the same serialize checksum on citm at 297 iterations, the bench's count for a 452,530-byte document: `serialize 18100868296888812225 452530`. The page's checksum line is also equal between builds at 200, 1000 and 2000 iterations (`checksum 15878354662562373591 bytes 6931` at 1000).
+
+Toolchain: x86_64 (Xeon @ 2.10GHz), valgrind-3.22.0, Ubuntu clang/LLVM 18.1.3, node v22.23.4. Each compiler was built by `scripts/bootstrap.sh` from seed 0.39.0 in a worktree of its commit. Both builds compile `bench/json-api/main.ts` as it is at `e966fbe5`, which is identical to main's. Reproduce, in each worktree:
+
+```sh
+node bench/json-compare/fetch.mjs   # the corpus
+./build/nish bench/json-compare/main.ts -o out/ --link citm-main --profile speed   # add -g for the by-function shares
+./build/nish <e966fbe5's bench/json-api/main.ts> -o out/ --link api-main --profile speed
+valgrind --tool=callgrind --callgrind-out-file=citm-N.out out/citm-main serialize bench/json-compare/cache/corpus/citm_catalog.json N -1   # N = 1, 10; 297 for the checksum
+valgrind --tool=callgrind --callgrind-out-file=api-N.out out/api-main N                                                              # N = 200, 2000
+callgrind_annotate --inclusive=yes citm-10.out    # and --tree=caller for call counts
+```
 <!-- json-encode-keys:end -->
 
 <!-- json-value-ranges:begin -->
