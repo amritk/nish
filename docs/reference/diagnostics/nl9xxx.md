@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 18 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 19 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -477,4 +477,38 @@ export const drain = (tally: Tally, budget: i32): void => {
 
 ```text
 this loop keeps what each pass allocates until the memory of `drain`'s caller is released, because the allocation on line 26 is stored into memory, where this analysis stops following it, and nothing bounds how many passes it runs, so the string built on line 24 piles up for as long as it runs. Move the per-pass work that builds it into a block inside the loop body that opens with `using a = arena()`, which the compiler refuses if anything allocated there could outlive the block
+```
+
+## NL9019
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…keeps an allocation on every call and runs on every pass of a loop that releases nothing…
+```
+
+[`nl9019_kept_memory.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9019_kept_memory.ts):
+
+```ts
+// NL9019: a function a loop runs on every pass keeps an allocation each call
+// (a `let` given a second string), and the loop's passes release nothing.
+const relabel = (n: i32): i32 => {
+  let s = "none";
+  if (n > 2) {
+    s = `b${n}`;
+  }
+  return s.length;
+};
+
+export const labels = (rows: i32): i32 => {
+  const out: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    out.push(`${relabel(i)}`);
+  }
+  return out.length;
+};
+```
+
+```text
+`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line 6, where this analysis does not prove it dead when the function returns (a local assigned more than once, or an array of its own). Give each value its own `const`, open a block with `using a = arena()` around the work, or keep what must outlive the call in a region
 ```

@@ -5609,6 +5609,96 @@ if (dealtHere("performance")) {
     passDrop.stderr
   )
 
+  // NL9019: a function that keeps an allocation on every call, run on every
+  // pass of a loop that releases nothing. Each of the three is named at its
+  // declaration with the line of the first allocation it holds; `fixed` keeps
+  // nothing.
+  const kept = compile("perf_kept_memory", "perf_kept_memory_report.ll")
+  const keptLines = summaries(kept.stderr)
+  check(
+    "performance: a function that keeps an allocation per call and runs on every unreleased pass of a loop warns at its declaration",
+    kept.status === 0 &&
+      keptLines.length === 3 &&
+      positions(keptLines) === "9:1,17:1,23:1" &&
+      keptLines[0].includes(
+        "`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so " +
+          "the memory it keeps grows with every pass: the first allocation it holds is on line 12, where this " +
+          "analysis does not prove it dead when the function returns"
+      ) &&
+      keptLines[1].includes("`choose` keeps an allocation on every call") &&
+      keptLines[1].includes("the first allocation it holds is on line 18,") &&
+      keptLines[2].includes("`parts` keeps an allocation on every call") &&
+      keptLines[2].includes("the first allocation it holds is on line 25,"),
+    kept.stderr
+  )
+
+  // No guard exempts a direct callee of an unscoped pass, whatever object the
+  // call receives. A re-entrancy guard, a negated or compound condition, a
+  // counter, a per-item flag and a fresh receiver each pass warn; so do a
+  // once-guard cleared elsewhere, directly or through another name, work
+  // before the guard, a second way out before the store, a field the loop
+  // replaces itself, through a method, through a callee (`prepG`) or through
+  // a name for the holder made before the loop (`prepAlias`), and a
+  // once-guard on one object the loop never replaces (`warmOnce`), which the
+  // rule does not try to prove. This is also the control that fails if the
+  // reach walk stops finding loop calls at all.
+  const direct = compile("perf_kept_memory_direct", "perf_kept_memory_direct_report.ll")
+  const directLines = summaries(direct.stderr)
+  const directNames = [
+    "guarded",
+    "whenReady",
+    "untilDone",
+    "capped",
+    "mark",
+    "stamp",
+    "armedWork",
+    "loadedWork",
+    "early",
+    "gated",
+    "prep",
+    "prepNext",
+    "prepG",
+    "prepAlias",
+    "warmOnce",
+  ]
+  const directFirst = [27, 41, 52, 62, 74, 85, 96, 110, 121, 139, 165, 176, 187, 199, 215]
+  check(
+    "performance: NL9019 reports every direct callee of an unscoped pass that keeps an allocation, guarded or not",
+    direct.status === 0 &&
+      directLines.length === 15 &&
+      positions(directLines) ===
+        "21:1,35:1,46:1,57:1,68:1,79:1,90:1,104:1,119:1,130:1,159:1,170:1,181:1,193:1,209:1" &&
+      directLines.every(
+        (l, i) =>
+          l.includes(`\`${directNames[i]}\` keeps an allocation on every call`) &&
+          l.includes(`the first allocation it holds is on line ${directFirst[i]},`)
+      ),
+    direct.stderr
+  )
+
+  // A `let` result handed back after reassignment is the arena stage's own
+  // shape: it must stay clear of every retention rule, not only NL9019.
+  const reassign = compile("res_let_reassign", "res_let_reassign_report.ll", ["--json"])
+  // --json writes one object per warning to stdout; a line that is not one
+  // counts as a failure rather than as no warning.
+  const reassignCodes = reassign.stdout
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => {
+      try {
+        const o = JSON.parse(l)
+        return typeof o.code === "string" ? o.code : null
+      } catch {
+        return null
+      }
+    })
+  check(
+    "performance: res_let_reassign raises no NL9003, NL9016, NL9018 or NL9019",
+    reassign.status === 0 &&
+      reassignCodes.every((c) => c !== null && !["NL9003", "NL9016", "NL9018", "NL9019"].includes(c)),
+    reassign.stdout + reassign.stderr
+  )
+
   // NL9018: a loop that nothing bounds -- a poll, `while (true)` -- keeps what
   // each pass allocates, because each pass stores into a structure older than
   // the loop and so gets no scope. The warning sits on the innermost loop that
@@ -5879,6 +5969,13 @@ if (dealtHere("performance")) {
     // a local of the pass, an assignment of no allocation and a loop that runs
     // once: none of them drops a value on every pass, so NL9016 is silent.
     "perf_arena_pass_quiet",
+    // A function that keeps nothing past its call, one whose arena block
+    // releases it, one run only where each pass, block or scoped caller
+    // releases it, one no loop calls directly (two deep, behind a callee that
+    // answers memory, silent by design), a `getenv` result only handed to a
+    // callee, and a template handed on as an element of an array or object
+    // literal or joined in place: NL9019 is silent on each.
+    "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that
