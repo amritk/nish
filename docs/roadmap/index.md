@@ -34,7 +34,7 @@ specified.
 - [WP57: Module-scoped names](wp57-module-scoped-names.md): whether two exported functions of one package may share a name, and what that does to the C surface (S2).
 - [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md): how module storage crosses into the hidden memory, how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` (S3).
 - [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md): whether to build `Dyn<I>`; the design note measures it against the hand-written dispatch and recommends shipping interface method signatures (stage 1) now, with `Dyn<I>` in registers and in stored places each gated on its own build's timing.
-- [WP61: Typed JSON from a JSON Schema, validated and coerced in one walk](wp61-json-schema.md): the shape of the `constraints` option, whether to record which keyword failed, whether the generator is a `nish` subcommand, coercion per field or per class, recursive `$ref`, and draft-07.
+- [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md): the shape of the `constraints` option, whether to record which keyword failed, whether encode checks constraints in a `-g` build, and whether a coerce class may reach a strict one.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 - [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
 
@@ -56,7 +56,7 @@ specified.
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
 | [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md) | Proposed | 0 of 4 |
 | [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 5 |
-| [WP61: Typed JSON from a JSON Schema, validated and coerced in one walk](wp61-json-schema.md) | Proposed | 0 of 4 |
+| [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md) | Proposed | 0 of 3 |
 
 ## Landed
 
