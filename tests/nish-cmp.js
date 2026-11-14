@@ -6810,7 +6810,6 @@ const DECLARED = [
     "tests/cases/enum_string_union_tag.ts",
     "docs/cookbook/decl-enum-string.ts",
     "tests/link/json_enum_string/main.ts",
-    "tests/link/enum_string_export/main.ts",
   ].map((program) => ({
     program,
     file: "exit",
