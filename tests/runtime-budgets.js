@@ -1142,7 +1142,7 @@ export const WASM_PLAIN_DIGESTS = [
   {
     src: "examples/results.ts",
     dts: "44fe9b7f259835e31570e83ddf00a31462e83032e733f378b75d6936ed2ca542",
-    loader: "a5c2128be043ae6cf8ed54608ed205d904d7db5dbd238c7fd82fd0d0413630d3",
+    loader: "700569e5007824aafbe0d99b42639db6f2280b65488a575edeb21d26da05aee6",
     wasm: "5040e616dfcf06673d5de62b5926e840734aaf550d2c0e1d8d7b1d1319c211a3",
     host: "4a93551c63373e264d34dd074f3f1e9da4a1ff10b8ed0225087bc7b24e9c0c22",
   },

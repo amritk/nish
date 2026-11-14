@@ -34,7 +34,7 @@
 /** No rule matched: the diagnostic has no code yet. */
 const UNCODED: string = "NL0000"
 
-/** Every syntax error shares one code: stage0 takes that text from the `typescript` package. */
+/** Every syntax error shares one code, whatever its text says. */
 const SYNTAX: string = "NL0001"
 
 /**
@@ -525,14 +525,10 @@ const diagnosticRules = (): string[] => [
   "NL2643",
   '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`',
   "NL2669",
-  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
-  "NL4011",
   "`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)",
   "NL2764",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
   "NL3043",
-  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
-  "NL4010",
   "` was moved into another `Secret` local and cannot be read again: one key has one owner, which is the one that wipes it",
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
@@ -547,8 +543,6 @@ const diagnosticRules = (): string[] => [
   "NL2284",
   " has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`",
   "NL2755",
-  "` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length",
-  "NL2665",
   "` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result",
   "NL2345",
   "`): an awaited call's frame is nested in its caller's, so recursion through `await` has no size — write it as a loop",
@@ -595,6 +589,8 @@ const diagnosticRules = (): string[] => [
   "NL2621",
   "` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false",
   "NL2692",
+  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement",
+  "NL4011",
   "` is only written inside an `async` function: make the function that holds it `async`, and `await` its calls",
   "NL2641",
   "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
@@ -603,6 +599,8 @@ const diagnosticRules = (): string[] => [
   "NL2155",
   "a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share",
   "NL2690",
+  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi",
+  "NL4010",
   "; C has one namespace, so every `declare function` of one name must agree on its parameter and return types",
   "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
@@ -657,6 +655,8 @@ const diagnosticRules = (): string[] => [
   "NL3010",
   "` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got ",
   "NL2395",
+  "` is a `string`: strings did not cross yet, so write the text into module storage and pass its length",
+  "NL2665",
   "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
   "NL2128",
   ", and a declared C function returns a scalar, a `CPtr` or a `string` it copies from a `const char *`",
