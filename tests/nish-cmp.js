@@ -4446,7 +4446,7 @@ const DECLARED = [
   ].map((file) => ({
     program: "tests/link/net_serve_slot_reuse/main.ts",
     file,
-    changelog: "serve drives the HTTP/1 server directly instead of through HttpHandler",
+    changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
     why: "a new probe of the request copy a slot's reuse cannot touch; it links the same modules as net_serve_burst, which the seed lays out and compiles differently (router, HMAC, owed sends, ServeConns)",
   })),
   ...taggedUnions(
