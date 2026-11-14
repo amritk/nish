@@ -181,6 +181,8 @@ import {
   COLLECTIONS_SPECIFIER,
   isArrayMethodLocal,
   isArrayModule,
+  isCollectionForEachLocal,
+  isCollectionsModule,
   isStdModule,
   isStdModuleName,
   SECRET_STD_SPECIFIER,
@@ -403,8 +405,9 @@ const isRetentionCode = (code: string): boolean =>
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of
  * the `nish/array` templates the checker gives a module for each array-method
- * name it calls (`importArrayMethods`, under a dotted local) that no call
- * instantiated, or that bound no template. The `--emit-checked` dump leaves it
+ * name it calls, or of the `nish/collections` ones it gives for `forEach`
+ * (`importArrayMethods`, under a dotted local), that no call instantiated, or
+ * that bound no template. The `--emit-checked` dump leaves it
  * out, and `std/array.ts` is unused when every `nish/array` import is one. An
  * import the program wrote is never unused, called or not, because the
  * emitted TypeScript still names it.
@@ -412,14 +415,16 @@ const isRetentionCode = (code: string): boolean =>
  * @param specifier The import's module specifier.
  * @param local The import's local name.
  * @param template The template it bound, or `null` for none.
- * @returns `true` when the import is a synthesised, uninstantiated `nish/array` one.
+ * @returns `true` when the import is a synthesised, uninstantiated template one.
  */
 export const isUnusedArrayImport = (
   specifier: string,
   local: string,
   template: TemplateInfo | null
 ): boolean =>
-  specifier === ARRAY_SPECIFIER && isArrayMethodLocal(local) && (template === null || template.count === 0)
+  ((specifier === ARRAY_SPECIFIER && isArrayMethodLocal(local)) ||
+    (specifier === COLLECTIONS_SPECIFIER && isCollectionForEachLocal(local))) &&
+  (template === null || template.count === 0)
 
 export class Compilation {
   opts: Options
@@ -3910,16 +3915,20 @@ export class Compilation {
    * a string's `slice` loads the module too; then it emits nothing, and the
    * `--emit-checked` dump and the `--emit-ts` output leave it out. An import
    * the program wrote keeps the module, instantiated or not, because the
-   * emitted TypeScript still names it.
+   * emitted TypeScript still names it. `std/collections.ts` is unused the same
+   * way when only `forEach` templates loaded it.
    */
   isUnusedArrayModule(unit: ModuleUnit): boolean {
-    if (!isArrayModule(unit.packageName, unit.name)) {
+    let specifier = ARRAY_SPECIFIER
+    if (isCollectionsModule(unit.packageName, unit.name)) {
+      specifier = COLLECTIONS_SPECIFIER
+    } else if (!isArrayModule(unit.packageName, unit.name)) {
       return false
     }
     for (const other of this.modules) {
       for (const imp of other.checker.program.imports) {
         if (
-          imp.specifier === ARRAY_SPECIFIER &&
+          imp.specifier === specifier &&
           !isUnusedArrayImport(imp.specifier, imp.localName, imp.template)
         ) {
           return false

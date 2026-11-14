@@ -40,6 +40,8 @@ import {
   arrayMethodLocal,
   arrayMethodTemplate,
   arrayMethodTemplateCount,
+  collectionForEachLocal,
+  collectionForEachTemplate,
   isSortModule,
   SORT_LOCAL,
 } from "./std-modules"
@@ -577,6 +579,40 @@ const checkCallbackMethod = (ctx: CheckContext, call: Node, access: Node, args: 
     arrayMethodLocal(arrayMethodTemplate(name, pick)),
     scope
   )
+}
+
+/**
+ * `m.forEach(f)` on a `Map` and `s.forEach(f)` on a `Set`: a call of
+ * `std/collections.ts`'s `forEachEntry` when a `Map`'s callback takes the key
+ * too, `forEachValue` when it takes only the value, and `forEachElement` for a
+ * `Set`, each the table walk a `for...of` makes, with the callback called
+ * directly. JavaScript's later arguments are the key (a `Set` passes its
+ * element twice) and then the receiver, which the call already names: a
+ * callback that asks for more than Nish passes is refused.
+ */
+export const checkCollectionForEach = (
+  ctx: CheckContext,
+  call: Node,
+  access: Node,
+  args: Node,
+  isMap: boolean,
+  scope: Scope
+): i32 => {
+  if (!checkBuiltinArity(ctx, call, "forEach", args, 1)) {
+    return T_ERROR
+  }
+  const arity = callbackArity(ctx, args.children[0], scope)
+  if (arity > (isMap ? 2 : 1)) {
+    ctx.error(
+      args.children[0],
+      isMap
+        ? `The callback of \`forEach\` on a \`Map\` takes ${arity} parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead`
+        : `The callback of \`forEach\` on a \`Set\` takes ${arity} parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names`
+    )
+    return T_ERROR
+  }
+  const template = isMap ? collectionForEachTemplate(arity === 2 ? 0 : 1) : collectionForEachTemplate(2)
+  return checkAsTemplateCall(ctx, call, access, args, collectionForEachLocal(template), scope)
 }
 
 /**

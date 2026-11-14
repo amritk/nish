@@ -68,6 +68,9 @@ import {
   arrayMethodLocal,
   arrayMethodTemplate,
   arrayMethodTemplateCount,
+  COLLECTION_FOR_EACH_COUNT,
+  collectionForEachLocal,
+  collectionForEachTemplate,
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
@@ -471,6 +474,32 @@ export class Checker {
           )
         )
       }
+      if (name === "forEach" && !this.program.isCollections()) {
+        this.importCollectionForEach()
+      }
+    }
+  }
+
+  /**
+   * The `nish/collections` templates a `.forEach(...)` call on a `Map` or a
+   * `Set` becomes (`checkCollectionForEach`), imported for the reason the
+   * array ones are: the call is scanned by name before any type is known. One
+   * that no call instantiates emits nothing and is left out of the dumps
+   * (`isUnusedArrayImport`), and so is `std/collections.ts` when nothing else
+   * loaded it.
+   */
+  importCollectionForEach(): void {
+    for (let k: i32 = 0; k < COLLECTION_FOR_EACH_COUNT; k++) {
+      const template = collectionForEachTemplate(k)
+      this.program.imports.push(
+        new ImportBinding(
+          COLLECTIONS_SPECIFIER,
+          template,
+          collectionForEachLocal(template),
+          this.program.file,
+          this.program.file
+        )
+      )
     }
   }
 
