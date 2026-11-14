@@ -328,7 +328,9 @@ inside the package that exists: a value that is not a list of strings
 (NL2694), an entry that is empty, absolute or climbs out of the package with
 `..` (NL2695) and one that names no file (NL2696) are refused where the
 `package.json` writes them. An entry naming the program's own entry file
-changes nothing: the entry is compiled as Nish all the same.
+changes nothing: the entry is compiled as Nish all the same. The
+[`package.json` reference](../../reference/config/package-json.md#host)
+lists the field beside every other one Nish reads.
 
 Nish reads only the host module's exported signatures, and skips each
 function body unread, so a body may use the DOM, closures, classes and

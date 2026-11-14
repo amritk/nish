@@ -5,6 +5,7 @@
 %struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, i64, { i64, i8* }, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1 }
 %struct.JsonNumber = type { %struct.nish_array*, i32 }
 %struct.nish_array = type { i64, i64, i8* }
+%union.tagged = type { i32 }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @nish_argv = external global %struct.nish_array*, align 8
@@ -13,6 +14,7 @@
 @.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"message\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"\22message\22:\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
@@ -29,6 +31,7 @@ declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull alig
 declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8 nocapture) #0
 declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonWriter.keyBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonWriter.stringBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
@@ -392,7 +395,7 @@ json.stop:
 
 json.write:
   call void @nish.JsonWriter.beginObject(%struct.JsonWriter* %r)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [11 x i8] }* @.str.5 to i8*))
   %3 = getelementptr inbounds %struct.Hello, %struct.Hello* %v, i32 0, i32 0
   %4 = load i8*, i8** %3, align 8, !tbaa !17
   call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* %4)
