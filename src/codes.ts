@@ -1614,7 +1614,7 @@ const diagnosticRules = (): string[] => [
   "NL1032",
   "A rest parameter copies each `",
   "NL2608",
-  "Destructuring is not supported",
+  "A pattern may destructure an `await` only of ",
   "NL2193",
   "Object spread is forbidden in ",
   "NL1061",

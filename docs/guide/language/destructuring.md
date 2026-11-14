@@ -30,7 +30,14 @@ export const main = (): i32 => {
 ```
 
 This prints `25`. A name the class does not have is refused, as `p.z` would
-be.
+be. A name you bind and never read is an error, as for any local; to keep it
+on purpose, rename it inside the pattern, `{ x, y: _y }`.
+
+Over a plain name, `const { x } = p` compiles to exactly `const x = p.x`.
+Any other value on the right, such as `o.pt` or a call, is evaluated once and
+held in a hidden local first, which the optimiser removes. An empty pattern,
+`const {} = p` or `const [] = xs`, binds nothing but still evaluates the right
+side once.
 
 ## Arrays
 
@@ -90,10 +97,11 @@ to write it instead:
 - **Computed or quoted keys**, `{ ["x"]: a }`: name the field, `{ x: a }`.
 - **A value that may be absent**, a `T | null` or the `V | undefined` that
   `Map.get` returns: narrow it first, as in `if (p !== null)`.
-- **A `Map` or a `string`**: read a `Map` with `get`, a `string` by index.
+- **A `Map`, a `Set` or a `string`**: read a `Map` with `get`, a `Set` with
+  `has` or a `for...of`, a `string` by index.
 - **Parameters and module constants**: destructure inside the function body.
-  A module constant binds one name, because that name is the symbol the
-  compiler writes for it.
+  A module constant is a compile-time value the compiler folds into each
+  use, so there is no receiver at run time for a pattern to read.
 
 ```ts nish:err-body NL2773
 const [first, ...rest] = [1, 2, 3];

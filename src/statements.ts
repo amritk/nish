@@ -43,7 +43,7 @@ import {
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
-import { checkAwaitAllDeclaration, isAwaitAllShape } from "./async-check"
+import { AWAIT_PATTERN, checkAwaitAllDeclaration, isAwaitAllShape } from "./async-check"
 import { CheckContext, LOOP_BLOCK, LOOP_ITERATION, LOOP_SWITCH, SwitchFrame } from "./context"
 import { ASYNC_RETURN_MESSAGE, refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
@@ -75,6 +75,7 @@ import {
   Node,
   NodeKind,
   awaitsInitializer,
+  bindsHiddenReceiver,
   isPatternName,
   isPlainSlot,
   patternOf,
@@ -396,6 +397,9 @@ const checkDeclarator = (
       : resolveType(annotation, ctx)
   }
   const initializer = decl.children[2]
+  // A pattern's hidden receiver is named in a diagnostic as its pattern is
+  // written: `{ x }`, not the `pattern.12` no program can spell.
+  const shown = bindsHiddenReceiver(decl) ? ctx.textOf(decl.children[3]) : name
   if (initializer.kind === NodeKind.Empty) {
     ctx.error(decl, `Variable \`${name}\` must be initialized`)
     const origin = declaredOrigin(ctx, annotation, initializer, scope)
@@ -420,11 +424,11 @@ const checkDeclarator = (
   if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
     ctx.error(
       initializer,
-      `Cannot initialize ${ctx.table.typeName(declared)} variable \`${name}\` with ${ctx.table.typeName(initType)}`
+      `Cannot initialize ${ctx.table.typeName(declared)} variable \`${shown}\` with ${ctx.table.typeName(initType)}`
     )
   }
   if (declared >= 0 && initType !== T_ERROR) {
-    refuseNarrowingStore(ctx, initializer, declared, `The variable \`${name}\``)
+    refuseNarrowingStore(ctx, initializer, declared, `The variable \`${shown}\``)
   }
   if (type === T_VOID) {
     ctx.error(decl, "Cannot declare a variable of type void")
@@ -1227,7 +1231,7 @@ const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
     if (owner.kind === NodeKind.ModuleConst) {
       ctx.error(decl, "Destructured constants are not supported")
     } else if (awaitsInitializer(decl)) {
-      ctx.error(decl, "Destructuring is not supported")
+      ctx.error(decl, AWAIT_PATTERN)
     } else {
       refusePattern(ctx, pattern)
     }

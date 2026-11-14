@@ -98,7 +98,15 @@ import {
 } from "./emit-util"
 import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
-import { FLAG_CONST, FLAG_OBJECT_SPREAD, Node, NodeKind, bindsHiddenReceiver, isPatternName } from "./nodes"
+import {
+  FLAG_CONST,
+  FLAG_OBJECT_SPREAD,
+  Node,
+  NodeKind,
+  bindsHiddenReceiver,
+  isPatternName,
+  patternOf,
+} from "./nodes"
 import { Options } from "./options"
 import {
   CaptureTarget,
@@ -1339,7 +1347,13 @@ const classifyPatternUse = (unit: AnalysisUnit, table: TypeTable, decl: Node): P
   }
   let kind = USE_NONE
   let i = list.children.indexOf(decl) + 1
-  while (i < list.children.length && isPatternName(list.children[i])) {
+  // The names after the head, up to the next pattern's head: a direct
+  // pattern's first name is a pattern name too, and reads its own receiver.
+  while (
+    i < list.children.length &&
+    isPatternName(list.children[i]) &&
+    patternOf(list.children[i]) === null
+  ) {
     const found = classifyUse(unit, table, list.children[i].children[2].children[0])
     if (found.kind === USE_WRITE || (found.kind === USE_READ && kind !== USE_WRITE)) {
       kind = found.kind

@@ -174,7 +174,8 @@ messages are exact for the cases cited; other entries quote the checker
   rest, a nested pattern or a computed key**:
   `Destructured constants are not supported` /
   `Destructured parameters are not supported` /
-  `Destructuring is not supported` / NL2771 to NL2783
+  ``A pattern may destructure an `await` only of `awaitAll(...)` …`` /
+  NL2771 to NL2783
   (`reject_const_destructured`, `reject_param_destructured`,
   `reject_destructure_*`; [Destructuring declarations](statements.md#destructuring-declarations))
 - **an optional parameter; a default or rest outside a function, method,

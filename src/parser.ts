@@ -2314,6 +2314,9 @@ export class Parser {
       declaration.children[1].kind === NodeKind.Empty &&
       (base.kind === NodeKind.Ident || base.kind === NodeKind.This) &&
       readsDirectly(pattern, base.text)
+    // Each read's receiver spans what the source wrote on the right, so a
+    // message quotes `p.inner` (`CheckContext.textOf`), never the hidden name.
+    const written = base
     if (!direct) {
       const hidden = this.node(NodeKind.Ident, pattern.start, pattern.end)
       hidden.text = patternReceiverName(pattern)
@@ -2329,8 +2332,16 @@ export class Parser {
         continue
       }
       const object = slot.kind === NodeKind.Property
-      const read = this.node(object ? NodeKind.Member : NodeKind.Index, slot.start, slot.end)
-      const receiver = this.node(base.kind, direct ? base.start : slot.start, direct ? base.end : slot.end)
+      // An object read spans its key, where a caret on the field belongs; an
+      // array read spans its slot.
+      const read = this.node(
+        object ? NodeKind.Member : NodeKind.Index,
+        slot.start,
+        object ? slot.start + slot.text.length : slot.end
+      )
+      // A `for...of` head's pattern has no right-hand side until the loop's.
+      const at = written.kind === NodeKind.Empty ? slot : written
+      const receiver = this.node(base.kind, at.start, at.end)
       receiver.text = base.text
       read.children.push(receiver)
       if (object) {

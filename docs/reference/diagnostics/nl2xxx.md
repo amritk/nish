@@ -2696,7 +2696,7 @@ Destructured constants are not supported
 [`nl2191_destructured_constant.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2191_destructured_constant.ts):
 
 ```ts
-// NL2191: A module constant binds one name, because the name is the symbol the emitter writes.
+// NL2191: A module constant is a compile-time value folded into each use, so a pattern has no receiver to read.
 const { x } = { x: 1 };
 ```
 
@@ -2732,7 +2732,7 @@ Destructured parameters are not supported
 The message of an error contains:
 
 ```text
-Destructuring is not supported
+A pattern may destructure an `await` only of …
 ```
 
 [`nl2193_destructuring_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2193_destructuring_local.ts):
@@ -2749,7 +2749,7 @@ export const main = async (): Promise<i32> => {
 ```
 
 ```text
-Destructuring is not supported
+A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name
 ```
 
 ## NL2194

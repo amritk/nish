@@ -10,7 +10,7 @@
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { Lexer } from "./lexer"
 import { StringMap, StringSet } from "./map"
-import { Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   DeferredConstraint,
@@ -659,6 +659,19 @@ export class CheckContext {
 
   /** The source text a node covers, for a message that quotes what was written. */
   textOf(node: Node): string {
+    // A destructuring pattern's read (`Parser.lowerPattern`) spans its key
+    // or slot, and its receiver is written elsewhere: `{ inner: q } = p` is
+    // quoted as the `p.inner` it reads.
+    if (
+      (node.kind === NodeKind.Member || node.kind === NodeKind.Index) &&
+      node.children.length > 0 &&
+      node.children[0].start > node.start
+    ) {
+      const receiver = this.textOf(node.children[0])
+      return node.kind === NodeKind.Member
+        ? `${receiver}.${node.text}`
+        : `${receiver}[${node.children[1].text}]`
+    }
     return this.source.text.substring(node.start, node.end)
   }
 

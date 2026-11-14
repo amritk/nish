@@ -441,6 +441,10 @@ export const isAwaitAllShape = (decl: Node): boolean => {
   return init.kind === NodeKind.Unary && init.text === "await" && directCall(init.children[0]) !== null
 }
 
+/** NL2193: a pattern over an `await` that is not `awaitAll(...)`'s. */
+export const AWAIT_PATTERN: string =
+  "A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name"
+
 /**
  * The declarator `isAwaitAllShape` read: the answer type of each call, one
  * per name, or null having refused. The calls are awaited together, so each
@@ -456,7 +460,7 @@ export const checkAwaitAllDeclaration = (ctx: CheckContext, decl: Node, scope: S
     imported === null ||
     asyncBuiltinOf(imported) !== "awaitAll"
   ) {
-    ctx.error(decl, "Destructuring is not supported")
+    ctx.error(decl, AWAIT_PATTERN)
     return null
   }
   ctx.program.nodeBuiltins[call.id] = imported.canonical

@@ -103,7 +103,7 @@ function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node, name
   callee +6:18 CheckContext.textOf -> @CheckContext.textOf
   local +7:11 local: string (const)
 function neverNullMessage(ctx: CheckContext, receiverExpr: Node): string -> @neverNullMessage [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat
   pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1

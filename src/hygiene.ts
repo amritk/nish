@@ -21,7 +21,7 @@
 
 import { CheckContext } from "./context"
 import { Diagnostic } from "./diagnostics"
-import { FLAG_USING, Node, NodeKind } from "./nodes"
+import { bindsHiddenReceiver, FLAG_USING, isPatternName, Node, NodeKind } from "./nodes"
 import { CheckedProgram } from "./program"
 import { Local, sourceLocal } from "./symbols"
 import { isUnsigned, T_F32, T_F64 } from "./types"
@@ -73,7 +73,9 @@ const holdFinding = (ctx: CheckContext, node: Node, message: string): void => {
  * the block's end does without naming it.
  */
 const collectDeclared = (program: CheckedProgram, node: Node, inVar: boolean, out: Declared[]): void => {
-  if (node.kind === NodeKind.VarDecl && inVar) {
+  // A pattern's hidden receiver is the pattern's to read: its names answer
+  // for themselves, and `const {} = p` names none but still evaluates `p`.
+  if (node.kind === NodeKind.VarDecl && inVar && !bindsHiddenReceiver(node)) {
     const local = program.nodeLocals[node.id]
     if (local !== null) {
       out.push(new Declared(node, local))
@@ -189,10 +191,15 @@ const reportUnread = (ctx: CheckContext, d: Declared): void => {
     return
   }
   const what = d.written ? "is assigned but its value is never read" : "is declared but never read"
+  // A shorthand pattern name is its field's too: `{ _y }` would read `_y`.
+  const read = d.node.children[2]
+  const shorthand =
+    isPatternName(d.node) && read.kind === NodeKind.Member && read.start === d.node.children[0].start
+  const renamed = shorthand ? `{ ${name}: _${name} }` : `_${name}`
   holdFinding(
     ctx,
     d.node.children[0],
-    `\`${name}\` ${what}: use it, delete it, or rename it \`_${name}\` if it is unused on purpose`
+    `\`${name}\` ${what}: use it, delete it, or rename it \`${renamed}\` if it is unused on purpose`
   )
 }
 

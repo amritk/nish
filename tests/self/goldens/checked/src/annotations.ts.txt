@@ -219,7 +219,7 @@ function resolveType(node: Node, ctx: CheckContext): i32 -> @resolveType [export
   callee +33:14 CheckContext.errorType -> @CheckContext.errorType
   callee +33:34 unsupportedType -> @unsupportedType
 function unsupportedType(ctx: CheckContext, node: Node): string -> @unsupportedType
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat
   pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1

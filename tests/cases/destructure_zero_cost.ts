@@ -189,6 +189,32 @@ export const rows_plain = (rows: number[][]): number => {
   return total
 }
 
+// A receiver that is not a name (`h.pt`, `h.items`) is bound to a hidden
+// copy of its pointer, so unoptimised it costs one alloca more than the
+// twin; after `opt -O2` the bodies are the same (compared at -O2 only).
+class Holder {
+  pt: Point
+  items: number[]
+  constructor(pt: Point, items: number[]) {
+    this.pt = pt
+    this.items = items
+  }
+}
+
+export const member_pattern = (h: Holder): number => {
+  const { x, y } = h.pt
+  const [a, b] = h.items
+  return x * 3 + y + a * b
+}
+
+export const member_plain = (h: Holder): number => {
+  const x = h.pt.x
+  const y = h.pt.y
+  const a = h.items[0]
+  const b = h.items[1]
+  return x * 3 + y + a * b
+}
+
 export const main = (): void => {
   const p = new Point(2, 5)
   const xs = [4, 7]
@@ -206,4 +232,6 @@ export const main = (): void => {
   console.log(let_pattern(p) === let_plain(p))
   const rows = [[1, 2], [3, 4]]
   console.log(rows_pattern(rows) === rows_plain(rows))
+  const h = new Holder(p, xs)
+  console.log(member_pattern(h) === member_plain(h))
 }

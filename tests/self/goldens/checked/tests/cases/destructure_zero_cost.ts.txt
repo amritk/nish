@@ -5,6 +5,10 @@ struct Point (class) size=8 align=4
   field x: i32 index=0 offset=0
   field y: i32 index=1 offset=4
   constructor -> @Point.constructor
+struct Holder (class) size=16 align=8
+  field pt: Point index=0 offset=0
+  field items: i32[] index=1 offset=8
+  constructor -> @Holder.constructor
 function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: x y
@@ -198,11 +202,38 @@ function rows_plain(rows: i32[][]): i32 -> @rows_plain [exported]
   local +1:14 row: i32[] (const)
   local +2:11 a: i32 (const)
   local +3:11 b: i32 (const)
+function Holder.constructor(this: Holder, pt: Point, items: i32[]): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: items pt
+  pointer this: size=16 writesThrough=true captured=false
+  pointer pt: size=8 writesThrough=true captured=true
+  pointer items: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function member_pattern(h: Holder): i32 -> @member_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer h: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 pattern.4668: Point (const)
+  local +0:11 x: i32 (const)
+  local +0:14 y: i32 (const)
+  local +1:9 pattern.4692: i32[] (const)
+  local +1:10 a: i32 (const)
+  local +1:13 b: i32 (const)
+function member_plain(h: Holder): i32 -> @member_plain [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer h: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 x: i32 (const)
+  local +1:9 y: i32 (const)
+  local +2:9 a: i32 (const)
+  local +3:9 b: i32 (const)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Point.constructor array_pattern array_plain call_pattern call_plain for_pattern for_plain fresh_pattern fresh_plain guard_loop_pattern guard_loop_plain guard_pattern guard_plain hole_pattern hole_plain let_pattern let_plain local_pattern local_plain nish_alloc_struct nish_arena_mark nish_arena_release nish_print object_pattern object_plain rows_pattern rows_plain
-  stackSites=5 stackLocals=5
+  calls: Holder.constructor Point.constructor array_pattern array_plain call_pattern call_plain for_pattern for_plain fresh_pattern fresh_plain guard_loop_pattern guard_loop_plain guard_pattern guard_plain hole_pattern hole_plain let_pattern let_plain local_pattern local_plain member_pattern member_plain nish_alloc_struct nish_arena_mark nish_arena_release nish_print object_pattern object_plain rows_pattern rows_plain
+  stackSites=4 stackLocals=4
   local +0:9 p: Point (const)
   callee +0:13 new Point -> @Point.constructor
   local +1:9 xs: i32[] (const)
@@ -233,3 +264,7 @@ function main(): void -> @nish_main [exported entry]
   local +14:9 rows: i32[][] (const)
   callee +15:15 rows_pattern -> @rows_pattern
   callee +15:38 rows_plain -> @rows_plain
+  local +16:9 h: Holder (const)
+  callee +16:13 new Holder -> @Holder.constructor
+  callee +17:15 member_pattern -> @member_pattern
+  callee +17:37 member_plain -> @member_plain

@@ -96,7 +96,7 @@ function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, wan
   callee +39:70 TypeTable.typeName -> @TypeTable.typeName
   callee +39:103 TypeTable.typeName -> @TypeTable.typeName
 function narrowHint(ctx: CheckContext, receiverExpr: Node, payload: string): string -> @narrowHint
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat nish_str_eq
   pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1

@@ -71,6 +71,7 @@ import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import Node from "./nodes" -> struct Node
 import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import isPatternName from "./nodes" -> function @isPatternName
+import patternOf from "./nodes" -> function @patternOf
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
 import arrowCallee from "./parallel" -> function @arrowCallee
@@ -754,7 +755,7 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
 function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse -> @classifyPatternUse
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via classifyUse
-  calls: ParentTable.parentOf classifyUse isPatternName nish_panic_index nish_panic_overflow use
+  calls: ParentTable.parentOf classifyUse isPatternName nish_panic_index nish_panic_overflow patternOf use
   pointer unit: size=16 writesThrough=false captured=false passedTo=classifyUse#0
   pointer table: size=136 writesThrough=false captured=false passedTo=classifyUse#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
@@ -764,11 +765,12 @@ function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): P
   callee +2:12 use -> @use
   local +4:7 kind: i32 (let)
   local +5:7 i: i32 (let)
-  callee +6:38 isPatternName -> @isPatternName
-  local +7:11 found: ParamUse (const)
-  callee +7:19 classifyUse -> @classifyUse
-  callee +11:14 use -> @use
-  callee +15:10 use -> @use
+  callee +10:5 isPatternName -> @isPatternName
+  callee +11:5 patternOf -> @patternOf
+  local +13:11 found: ParamUse (const)
+  callee +13:19 classifyUse -> @classifyUse
+  callee +17:14 use -> @use
+  callee +21:10 use -> @use
 function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse -> @classifyMemberUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: ParentTable.parentOf argumentUse arrayMethodName isArrayWriteMethod isAssignmentTarget isInlineField isStringMethodCall nish_panic_index nish_str_eq resultMethodName use

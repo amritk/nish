@@ -14626,6 +14626,9 @@ if (dealtHere("arrayChecks")) {
     // `<form>_plain` twin's, unoptimised (local names aside) and after `opt -O2`.
     const zero = path.join(buildDir, "destructure_zero_cost.ll")
     const forms = ["object", "array", "for", "local", "fresh", "guard", "guard_loop", "call", "hole", "let", "rows"]
+    // The local a `<form>_plain` twin names its receiver, which the pattern
+    // holds in its hidden `pattern.N` instead (a name receiver has none).
+    const twinReceiver = { for: "point", local: "point", fresh: "xs", call: "p", rows: "row" }
     const bodyOf = (ir, name) => {
       const m = new RegExp(`^define [^\\n]*@${name}\\([^]*?^\\}`, "m").exec(ir)
       return m ? m[0].replace(`@${name}(`, "@F(") : null
@@ -14634,17 +14637,26 @@ if (dealtHere("arrayChecks")) {
       skip("destructure_zero_cost: no .ll was built for it")
     } else {
       const raw = fs.readFileSync(zero, "utf8")
-      // Unoptimised, only the names of locals and metadata ids may differ.
+      // Unoptimised, only a pattern's hidden receiver, the numbered
+      // temporaries and metadata ids may differ; every named local must match.
       const plain = (name) => {
         const b = bodyOf(raw, name)
-        return b ? b.replace(/%[\w.]+/g, "%_").replace(/![\w.]+/g, "!_") : null
+        return b
+          ? b
+              .replace(/%pattern\.\d+/g, "%pattern.N")
+              .replace(/%\d+\b/g, "%N")
+              .replace(/![\w.]+/g, "!_")
+          : null
       }
       for (const form of forms) {
         const pattern = plain(`${form}_pattern`)
+        const receiver = twinReceiver[form]
+        const twin = plain(`${form}_plain`)
+        const named = twin !== null && receiver ? twin.replace(new RegExp(`%${receiver}\\.addr\\b`, "g"), "%pattern.N.addr") : twin
         check(
           `destructure_zero_cost: unoptimised, ${form}_pattern compiles to the body of ${form}_plain`,
-          pattern !== null && pattern === plain(`${form}_plain`),
-          `${pattern}\n----\n${plain(`${form}_plain`)}`
+          pattern !== null && pattern === named,
+          `${pattern}\n----\n${named}`
         )
       }
     }
@@ -14652,12 +14664,15 @@ if (dealtHere("arrayChecks")) {
       skip("destructure_zero_cost: no `opt` on this host for the -O2 comparison")
     } else if (fs.existsSync(zero)) {
       const o2 = spawnSync("opt", ["-O2", "-S", zero, "-o", "-"], { encoding: "utf8" })
-      // Inlining mints alias scopes per function; their ids are not the body.
+      // Inlining mints alias scopes per function, and instcombine numbers the
+      // `%.not` it names per function; neither is the body.
       const body = (name) => {
         const b = bodyOf(o2.stdout, name)
-        return b ? b.replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N") : null
+        return b ? b.replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N").replace(/%\.not\d+\b/g, "%.not") : null
       }
-      for (const form of forms) {
+      // `member` reads through `h.pt` and `h.items`: its hidden receiver is one
+      // alloca more unoptimised, so it is compared here only.
+      for (const form of [...forms, "member"]) {
         const pattern = body(`${form}_pattern`)
         check(
           `destructure_zero_cost: after opt -O2, ${form}_pattern compiles to the body of ${form}_plain`,

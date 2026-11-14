@@ -13690,11 +13690,16 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 ### Destructuring declarations
 
-A pattern stores the receiver's pointer in a hidden local, then declares each
-name as an ordinary local read off it: a field name is one `getelementptr`
-and one `load`, with no copy of the struct; an array position is the same
-bounds-checked element read as `xs[i]`, so `[a, , c]` checks `0` and `2` and
-skips the hole.
+A pattern over a name (`p`, `xs`, `this`) declares each name as an ordinary
+local read straight off it, exactly as `const x = p.x` would: a field name is
+one `getelementptr` and one `load`, with no copy of the struct; an array
+position is the same bounds-checked element read as `xs[i]`, so `[a, , c]`
+checks `0` and `2` and skips the hole. Any other receiver (`o.pt`,
+`o.items`, a call, a `for...of` element) is evaluated once into a hidden
+local, a pointer, and the names are read off that: unoptimised that is one
+alloca and one store more than the hand-written reads, and after `opt -O2`
+the bodies are the same (`tests/cases/destructure_zero_cost`, its `member`
+pair).
 
 <!-- cookbook:begin decl-destructure -->
 ```ts
@@ -13738,27 +13743,23 @@ entry:
 
 define internal noundef i32 @pick(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #1 {
 entry:
-  %pattern.143.addr = alloca %struct.Point*, align 8
   %x.addr = alloca i32, align 4
   %py.addr = alloca i32, align 4
-  store %struct.Point* %p, %struct.Point** %pattern.143.addr, align 8
-  %0 = load %struct.Point*, %struct.Point** %pattern.143.addr, align 8
-  %1 = getelementptr inbounds %struct.Point, %struct.Point* %0, i32 0, i32 0
-  %2 = load i32, i32* %1, align 4, !tbaa !4
-  store i32 %2, i32* %x.addr, align 4
-  %3 = load %struct.Point*, %struct.Point** %pattern.143.addr, align 8
-  %4 = getelementptr inbounds %struct.Point, %struct.Point* %3, i32 0, i32 1
-  %5 = load i32, i32* %4, align 4, !tbaa !5
-  store i32 %5, i32* %py.addr, align 4
-  %6 = load i32, i32* %x.addr, align 4
-  %7 = load i32, i32* %py.addr, align 4
-  %8 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %6, i32 %7)
-  %9 = extractvalue { i32, i1 } %8, 0
-  %10 = extractvalue { i32, i1 } %8, 1
-  br i1 %10, label %ovf.fail, label %ovf.ok
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4, !tbaa !4
+  store i32 %1, i32* %x.addr, align 4
+  %2 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4, !tbaa !5
+  store i32 %3, i32* %py.addr, align 4
+  %4 = load i32, i32* %x.addr, align 4
+  %5 = load i32, i32* %py.addr, align 4
+  %6 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %4, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %9
+  ret i32 %7
 
 ovf.fail:
   call void @nish_panic_overflow(i32 1)
@@ -13767,53 +13768,49 @@ ovf.fail:
 
 define internal noundef i32 @third(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
-  %pattern.223.addr = alloca %struct.nish_array*, align 8
   %a.addr = alloca i32, align 4
   %c.addr = alloca i32, align 4
-  store %struct.nish_array* %xs, %struct.nish_array** %pattern.223.addr, align 8
-  %0 = load %struct.nish_array*, %struct.nish_array** %pattern.223.addr, align 8
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %3 = icmp ult i64 0, %2
-  br i1 %3, label %bounds.ok, label %bounds.fail
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %2 = icmp ult i64 0, %1
+  br i1 %2, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %2)
+  call void @nish_panic_index(i64 0, i64 %1)
   unreachable
 
 bounds.ok:
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  %6 = bitcast i8* %5 to i32*
-  %7 = getelementptr inbounds i32, i32* %6, i64 0
-  %8 = load i32, i32* %7, align 4, !alias.scope !10, !noalias !9, !tbaa !17
-  store i32 %8, i32* %a.addr, align 4
-  %9 = load %struct.nish_array*, %struct.nish_array** %pattern.223.addr, align 8
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
-  %11 = load i64, i64* %10, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %12 = icmp ult i64 2, %11
-  br i1 %12, label %bounds.ok.1, label %bounds.fail.1
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %5 = bitcast i8* %4 to i32*
+  %6 = getelementptr inbounds i32, i32* %5, i64 0
+  %7 = load i32, i32* %6, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  store i32 %7, i32* %a.addr, align 4
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %9 = load i64, i64* %8, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %10 = icmp ult i64 2, %9
+  br i1 %10, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 2, i64 %11)
+  call void @nish_panic_index(i64 2, i64 %9)
   unreachable
 
 bounds.ok.1:
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
-  %14 = load i8*, i8** %13, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  %15 = bitcast i8* %14 to i32*
-  %16 = getelementptr inbounds i32, i32* %15, i64 2
-  %17 = load i32, i32* %16, align 4, !alias.scope !10, !noalias !9, !tbaa !17
-  store i32 %17, i32* %c.addr, align 4
-  %18 = load i32, i32* %a.addr, align 4
-  %19 = load i32, i32* %c.addr, align 4
-  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 %19)
-  %21 = extractvalue { i32, i1 } %20, 0
-  %22 = extractvalue { i32, i1 } %20, 1
-  br i1 %22, label %ovf.fail, label %ovf.ok
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 2
+  %15 = load i32, i32* %14, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  store i32 %15, i32* %c.addr, align 4
+  %16 = load i32, i32* %a.addr, align 4
+  %17 = load i32, i32* %c.addr, align 4
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %21
+  ret i32 %19
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

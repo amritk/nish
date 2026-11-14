@@ -23,6 +23,7 @@ const AWAIT_ALL_MAX: i32 = 8
 const AWAIT_ALL_FORM: string = "`awaitAll` is awaited into one name per call: `const [a, b] = await awaitAll(f(x), g(y))`, from two to eight calls"
 const AWAIT_SITE_MESSAGE: string = "`await` stands at the top of a statement — an expression statement, a declaration's initializer, a `return` or the right side of `=` — and not inside another expression, which would hold a value across the wait"
 const AWAIT_CALL_MESSAGE: string = "`await(...)` outside an `async` function is a call to a function named `await`, and there is none: `await` is written inside an `async` function, before its call, `await f(x)`" [exported]
+const AWAIT_PATTERN: string = "A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name" [exported]
 struct AwaitCycle (class) size=24 align=8 exported
   field fn: FunctionSig index=0 offset=0
   field site: Node index=1 offset=8

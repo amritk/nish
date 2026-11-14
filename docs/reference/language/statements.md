@@ -22,8 +22,10 @@ loop body that is a single statement rather than a block is accepted
   *(CLI only)*. A local may be a destructuring pattern, `const { x, y } = p`
   or `let [a, b] = xs` ([Destructuring declarations](#destructuring-declarations));
   a module constant may not: `Destructured constants are not supported`
-  (`reject_const_destructured`), because a module constant binds one name,
-  and that name is the symbol the emitter writes. `var` is forbidden
+  (`reject_const_destructured`): a module constant's initialiser is a
+  literal, another constant or arithmetic over them ([Module constants](declarations.md#module-constants)),
+  folded into each use with no storage of its own, and a pattern's names are
+  reads of a receiver at run time. `var` is forbidden
   (`tests/cases/reject_var_keyword`, `reject_var_in_for`).
 - `const` freezes the binding, not the contents: `xs[0] = 1` and
   `xs.push(1)` on a `const xs` are fine, `xs = []` is not
@@ -64,26 +66,37 @@ for (const { x, y } of points) { ... }
   not. A struct's fields are read through its pointer, so
   `const { x } = p` on a stack-allocated `p` costs one load
   (`destructure_stack`).
+- **The receiver.** Over a name (`p`, `xs`, `this`) each name is read
+  straight off it, and the function compiles to the body of its hand-written
+  reads. Any other receiver (`o.pt`, `o.items`, a call, a `for...of`
+  element) is evaluated once into a hidden copy of its pointer: unoptimised
+  that is one alloca more than `const x = o.pt.x`, and after `opt -O2` the
+  bodies are the same (`destructure_zero_cost`). A pattern works over `this`
+  in a method, in an arrow's or an async body, and in a C-style `for`
+  initialiser (`destructure_forms`).
+- **An empty pattern**, `const {} = p`, `const [] = xs` or `const [,] = xs`,
+  binds nothing; its receiver is still evaluated once, for any effect it has
+  (`destructure_empty`).
 
 Refused, each with its own diagnostic and test:
 
 | Pattern | Diagnostic | Test |
 | --- | --- | --- |
-| `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object` |
-| `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default` |
-| `[a, ...rest]`, `{ x, ...others }` | NL2773 | `reject_destructure_rest` |
-| `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested` |
+| `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object`, `reject_destructure_assignment_renamed` |
+| `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default`, `reject_destructure_for_of_default` |
+| `[a, ...rest]`, `{ x, ...others }` | NL2773 | `reject_destructure_rest`, `reject_destructure_for_of_rest` |
+| `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested`, `reject_destructure_for_of_nested` |
 | `{ ["x"]: a }`, `{ "x": a }` | NL2775 | `reject_destructure_key` |
 | a value that may be absent, `Point \| null` or a `V \| undefined` from `Map.get` | NL2777, narrow it first | `reject_destructure_nullable`, `reject_destructure_undefined` |
 | a `Map` | NL2778, read each value with `get` | `reject_destructure_map` |
 | a `string` | NL2779, read each character by its index | `reject_destructure_string` |
 | an object pattern over a number | NL2780 | `reject_destructure_object_of_number` |
-| an array pattern over an object | NL2781 | `reject_destructure_array_of_object` |
+| an array pattern over an object or a `Set` | NL2781 | `reject_destructure_array_of_object`, `reject_destructure_set` |
 | `let { x }: Point;` (no initializer) | NL2782 | `reject_destructure_uninitialized` |
 | a parameter, `({ x }: Point) => x` | `Destructured parameters are not supported` | `reject_param_destructured` |
 | a module constant | `Destructured constants are not supported` | `reject_const_destructured` |
 
-A pattern over `await` is refused with `Destructuring is not supported`
+A pattern over `await` is refused with ``A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name``
 (`nl2193_destructuring_local`), but for the answers of
 `const [a, b] = await awaitAll(f(x), g(y))`
 ([Async functions](declarations.md#async-functions-async-and-await)).

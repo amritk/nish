@@ -3,7 +3,9 @@
 entry: src/hygiene.ts src/context.ts src/diagnostics.ts std/cli.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/region.ts src/branding.ts src/std-modules.ts src/paths.ts src/nish-modules.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-root.ts src/ice.ts src/types.ts src/secret.ts src/builtins.ts src/annotations.ts src/simd.ts src/arrays.ts src/expressions.ts src/constants.ts src/async-check.ts src/emit-util.ts src/symbols.ts src/region-rules.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/parallel.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/checker.ts src/assignment.ts src/declarations.ts src/host-module.ts src/parser.ts src/module-storage.ts src/script.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/fnrefs.ts src/visibility.ts src/parents.ts src/region-check.ts src/loop-flow.ts src/tbaa.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-map.ts src/runtime.ts src/target.ts src/emit-region.ts src/emit-shm-window.ts src/shm-window.ts src/emit-json.ts src/emit-async.ts src/capabilities.ts src/debug.ts src/emit-fnrefs.ts
 import CheckContext from "./context" -> struct CheckContext
 import Diagnostic from "./diagnostics" -> struct Diagnostic
+import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import FLAG_USING from "./nodes" -> const FLAG_USING
+import isPatternName from "./nodes" -> function @isPatternName
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import Local from "./symbols" -> struct Local
@@ -52,11 +54,12 @@ function holdFinding(ctx: CheckContext, node: Node, message: string): void -> @h
 function collectDeclared(program: CheckedProgram, node: Node, inVar: boolean, out: Declared[]): void -> @collectDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: Declared.constructor collectDeclared nish_alloc_struct nish_array_grow nish_panic_index
+  calls: Declared.constructor bindsHiddenReceiver collectDeclared nish_alloc_struct nish_array_grow nish_panic_index
   pointer program: size=888 writesThrough=false captured=false passedTo=collectDeclared#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=Declared.constructor#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=bindsHiddenReceiver#0 Declared.constructor#1
   pointer out: size=0 writesThrough=true captured=false passedTo=collectDeclared#3
   stackSites=0 stackLocals=0
+  callee -3:51 bindsHiddenReceiver -> @bindsHiddenReceiver
   local -2:11 local: Local | null (const)
   callee +0:16 new Declared -> @Declared.constructor
   local +8:9 passes: boolean (const)
@@ -107,14 +110,18 @@ function markUse(program: CheckedProgram, node: Node, declared: Declared[], valu
 function reportUnread(ctx: CheckContext, d: Declared): void -> @reportUnread
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
-  calls: TypeTable.isResult holdFinding nish_panic_index nish_str_at nish_str_concat
+  calls: TypeTable.isResult holdFinding isPatternName nish_panic_index nish_str_at nish_str_concat
   pointer ctx: size=344 writesThrough=false captured=false passedTo=holdFinding#0
   pointer d: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   callee +2:41 TypeTable.isResult -> @TypeTable.isResult
   local +5:9 what: string (const)
-  callee +6:3 holdFinding -> @holdFinding
+  local +7:9 read: Node (const)
+  local +8:9 shorthand: boolean (const)
+  callee +9:5 isPatternName -> @isPatternName
+  local +10:9 renamed: string (const)
+  callee +11:3 holdFinding -> @holdFinding
 function walkHygiene(ctx: CheckContext, node: Node): void -> @walkHygiene
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding

@@ -198,7 +198,9 @@ cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
 cases/destructure_array added after R6: no rewriter to freeze it with
+cases/destructure_empty added after R6: no rewriter to freeze it with
 cases/destructure_for_of added after R6: no rewriter to freeze it with
+cases/destructure_forms added after R6: no rewriter to freeze it with
 cases/destructure_object added after R6: no rewriter to freeze it with
 cases/destructure_out_of_range added after R6: no rewriter to freeze it with
 cases/destructure_stack added after R6: no rewriter to freeze it with
