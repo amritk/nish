@@ -1,9 +1,14 @@
 // A request's task keeps its own copy of the request (SERVE-17): `serve`
 // reads each request in place in the connection slot's parser and the task
-// copies it before its first await, so a task that reads its request after
-// the slot has closed and taken the next connection still sees its own
-// method, path, header and body. One connection slot, so the second client's
-// connection lands in the slot the first one's hang-up freed.
+// copies it before its first await. This pins the behaviour, not the copy: a
+// task cancelled by its client's hang-up still reads its own method, path,
+// header and body after its await, and the next connection on the slot (one
+// connection slot, so the second client lands in the slot the first one's
+// hang-up freed) gets its own answer. It would pass without the copy too: the
+// copy is forced by the region checker (a task that keeps the slot's request
+// does not compile), and the loop cancels a hung-up task in the turn its slot
+// closes, before the next connection's bytes are read, so no stale read is
+// reachable at run time.
 import { cancelled, readable, sleep, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { Router, RouterLimits } from "nish/net/router"

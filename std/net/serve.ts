@@ -774,11 +774,12 @@ const serveProblem = (status: i32, title: string): u8[] => {
 
 /** Whether `bytes[start .. end)` is the ASCII text `text`. */
 const serveSpanIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
-  if (end - start !== toI32(text.length)) {
+  const n: i32 = toI32(text.length)
+  if (end - start !== n || start < 0 || end > toI32(bytes.length)) {
     return false
   }
-  for (let k: i32 = 0; k < toI32(text.length); k++) {
-    if (start + k >= toI32(bytes.length) || toI32(bytes[start + k]) !== toI32(text.charCodeAt(k))) {
+  for (let k: i32 = 0; k < n; k++) {
+    if (toI32(bytes[start + k]) !== toI32(text.charCodeAt(k))) {
       return false
     }
   }

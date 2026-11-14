@@ -4431,24 +4431,29 @@ const DECLARED = [
     why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
   },
   // WP49 stage 6, part 6: `serve` drives the HTTP/1 server itself. The new
-  // probe links every module net_serve_burst does, and each one differs from
-  // the seed's for the reasons the entries above give for that program.
-  ...[
-    "handler.ll",
-    "hkdf.ll",
-    "hmac.ll",
-    "main.h",
-    "main.ll",
-    "record.ll",
-    "router.ll",
-    "serve.ll",
-    "tls.ll",
-  ].map((file) => ({
-    program: "tests/link/net_serve_slot_reuse/main.ts",
-    file,
-    changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
-    why: "a new probe of the request copy a slot's reuse cannot touch; it links the same modules as net_serve_burst, which the seed lays out and compiles differently (router, HMAC, owed sends, ServeConns)",
-  })),
+  // probes link the modules net_serve_burst does (json.ll too, on aarch64),
+  // and each differs from the seed's because the seed's `serve` goes through
+  // HttpHandler while this one drives Http1Server from its own ServeConns.
+  ...["tests/link/net_serve_slot_reuse/main.ts", "tests/link/net_serve_head_drain/main.ts"].flatMap(
+    (program) =>
+      [
+        "handler.ll",
+        "hkdf.ll",
+        "hmac.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "record.ll",
+        "router.ll",
+        "serve.ll",
+        "tls.ll",
+      ].map((file) => ({
+        program,
+        file,
+        changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
+        why: "a probe new with this change: serve.ll is ServeConns driving Http1Server in place of HttpHandler, and the other modules are laid out as net_serve_burst's are, which the seed compiles differently",
+      }))
+  ),
   ...taggedUnions(
     "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
     {
