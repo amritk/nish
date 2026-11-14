@@ -520,8 +520,12 @@ const serveFields = (st: ServeState, server: string): void => {
   st.typedValues.push(type)
 }
 
-/** The last freed slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
-const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
+/**
+ * The last freed slot, making one when every slot is busy and `inFlight`
+ * allows; -1 when none. A slot made here starts on `rec`, the record its
+ * first request is copied from, which the caller sets again for each one.
+ */
+const serveFreeSlot = (st: ServeState, limits: ServeLimits, rec: HttpRequest): i32 => {
   if (st.freeCount > 0) {
     st.freeCount -= 1
     return st.free[st.freeCount]
@@ -530,7 +534,7 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   if (n >= limits.inFlight) {
     return -1
   }
-  st.reqs.push(new HttpRequest(-1))
+  st.reqs.push(rec)
   st.slots.push(toI32(0))
   st.gens.push(toI32(0))
   st.busy.push(false)
@@ -846,7 +850,9 @@ class ServeExchange {
  * answer is sent, and the request's task copies them before it first waits,
  * as `spawn` runs it that far at once. What an exchange needs after the copy
  * — its state, its route for a 404 or 405, the answer's pending bytes — is
- * the slot's own, in a `ServeExchange` of a few dozen bytes. An exchange
+ * the slot's own, in a `ServeExchange`: a few dozen bytes, and the pending
+ * array, which grows to the most of an answer the output could not take (at
+ * most `responseBytes`) and is kept for the slot's next answer. An exchange
  * moves idle → reading → (parked →) queued → held → (flushing →) idle; a
  * slot whose connection closes goes idle and its generation moves on, so an
  * answer for it is dropped.
@@ -1560,7 +1566,7 @@ export const serveOn = async (
       st.finishedCount = 0
       while (c.ready()) {
         const s: i32 = c.take()
-        const k: i32 = serveFreeSlot(st, limits)
+        const k: i32 = serveFreeSlot(st, limits, c.req(s))
         moved = true
         if (k < 0) {
           c.release(s)

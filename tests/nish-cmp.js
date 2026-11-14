@@ -4567,12 +4567,30 @@ const DECLARED = [
   // probes link the modules net_serve_burst does (json.ll too, on aarch64),
   // and each differs from the seed's because the seed's `serve` goes through
   // HttpHandler while this one drives Http1Server from its own ServeConns.
-  // net_serve_raw, which pins serve's answered bytes, links the same modules.
-  ...[
-    "tests/link/net_serve_slot_reuse/main.ts",
-    "tests/link/net_serve_head_drain/main.ts",
-    "tests/link/net_serve_raw/main.ts",
-  ].flatMap((program) =>
+  ...["tests/link/net_serve_slot_reuse/main.ts", "tests/link/net_serve_head_drain/main.ts"].flatMap(
+    (program) =>
+      [
+        "handler.ll",
+        "hkdf.ll",
+        "hmac.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "record.ll",
+        "router.ll",
+        "serve.ll",
+        "tls.ll",
+      ].map((file) => ({
+        program,
+        file,
+        changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
+        why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
+      }))
+  ),
+  // Two probes new with this change: net_serve_raw pins serve's answered
+  // bytes and net_serve_idle_record an idle connection's record. Each links
+  // the same modules as the probes above, which differ from the seed's.
+  ...["tests/link/net_serve_raw/main.ts", "tests/link/net_serve_idle_record/main.ts"].flatMap((program) =>
     [
       "handler.ll",
       "hkdf.ll",
@@ -4587,7 +4605,7 @@ const DECLARED = [
     ].map((file) => ({
       program,
       file,
-      changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
+      changelog: "Cut serve's answer path and hold a request record only from parse to copy",
       why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
     }))
   ),
