@@ -3,7 +3,12 @@
 // answer is within `BAND` of what it was after the warm-up, so `serve` keeps
 // no memory per request beyond what a task's region frees. The client runs
 // in the same process, one task per round with its own `Conn` on the same
-// descriptor, so its own garbage goes with each round's region. VmHWM is Linux's; elsewhere the check reads 0 twice.
+// descriptor, so its own garbage goes with each round's region. The 256 KiB
+// band over the 4500 requests after the warm-up catches a leak of about 58
+// bytes per request or more; a smaller one passes. VmHWM is Linux's:
+// elsewhere nothing is measured, the comparison reads 0 twice, and the probe
+// says so on stderr (its stdout stays the same on every platform, as the
+// macOS net_ job compares it).
 import { readable, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { platform } from "nish:process"
@@ -92,6 +97,9 @@ async function client(port: i32, doneFd: i32): Promise<void> {
     }
   }
   const last: i64 = peakKib()
+  if (platform !== "linux") {
+    console.error(`peak RSS: skipped, not measured on ${platform} (no VmHWM)`)
+  }
   console.log(`client: ${ROUNDS * BATCH} answered, ${bad} round(s) wrong`)
   console.log(`peak RSS read: ${warm >= 0 && last >= 0}`)
   console.log(`peak RSS after ${ROUNDS * BATCH} requests within ${BAND} KiB of after ${WARM_ROUNDS * BATCH}: ${last - warm <= BAND}`)

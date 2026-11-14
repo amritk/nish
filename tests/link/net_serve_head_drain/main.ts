@@ -2,7 +2,9 @@
 // a HEAD reaches only a route GET reaches, and its answer has the GET's
 // length but no body (HANDLER-6); and once the server drains, the answer of
 // a request still running says `Connection: close`, and a request pipelined
-// behind it is never read (HANDLER-9).
+// behind it is never read (HANDLER-9). The slow handler signals the client
+// once it runs, on the descriptor its request names in `x-signal`, so the drain starts only after it is in flight, with no
+// fixed sleep to order the two.
 import { readable, sleep, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { Router, RouterLimits } from "nish/net/router"
@@ -17,6 +19,8 @@ async function handle(req: Request): Promise<Response> {
     return new Response(201).text("posted")
   }
   if (req.route === 2) {
+    const one: u8[] = [1]
+    netWrite(toI32(parseInt(req.header("x-signal"))), one, 0, 1)
     const slept: boolean = await sleep(5000)
     console.log(`slow: the sleep answered ${slept}`)
     return new Response(200).text("slow")
@@ -59,7 +63,7 @@ async function readHead(conn: Conn): Promise<string> {
   }
 }
 
-async function client(port: i32, doneFd: i32): Promise<void> {
+async function client(port: i32, doneFd: i32, signal: i32, signalled: i32): Promise<void> {
   const a: Conn = new Conn(8192)
   await dial(a, port)
   await sendText(a, "HEAD /page HTTP/1.1\r\nhost: t\r\n\r\n")
@@ -73,8 +77,11 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   const r3: string = await readHead(a)
   console.log(`HEAD /form: ${r3}`)
   // A slow request, with another pipelined behind it in the same write.
-  await sendText(a, "GET /slow HTTP/1.1\r\nhost: t\r\n\r\nGET /page HTTP/1.1\r\nhost: t\r\n\r\n")
-  await sleep(50)
+  await sendText(a, `GET /slow HTTP/1.1\r\nhost: t\r\nx-signal: ${signalled}\r\n\r\nGET /page HTTP/1.1\r\nhost: t\r\n\r\n`)
+  // The slow handler writes one byte to `signalled` once it runs.
+  await readable(signal)
+  const started: u8[] = [0]
+  netRead(signal, started, 0, 1)
   // The answer that reaches `maxRequests` starts the drain.
   const b: Conn = new Conn(8192)
   await dial(b, port)
@@ -105,15 +112,19 @@ export async function main(): Promise<i32> {
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
   const port: i32 = netLocalPort(listener)
   const stats: ServeStats = new ServeStats()
+  const signal: i32[] = [0, 0]
+  unixSocketPair(NET_UNIX_STREAM, signal)
   const fds: i32[] = [0, 0]
   unixSocketPair(NET_UNIX_STREAM, fds)
-  spawn(client(port, fds[1]))
+  spawn(client(port, fds[1], signal[0], signal[1]))
   const done: i32 = await serveOn(listener, router, limits, handle, stats)
   await readable(fds[0])
   const got: u8[] = [0]
   netRead(fds[0], got, 0, 1)
   netClose(fds[0])
   netClose(fds[1])
+  netClose(signal[0])
+  netClose(signal[1])
   netClose(listener)
   console.log(`serve: ${done}, answered ${stats.answered}`)
   return 0

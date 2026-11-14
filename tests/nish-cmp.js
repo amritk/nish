@@ -4451,7 +4451,7 @@ const DECLARED = [
         program,
         file,
         changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
-        why: "a probe new with this change: serve.ll is ServeConns driving Http1Server in place of HttpHandler, and the other modules are laid out as net_serve_burst's are, which the seed compiles differently",
+        why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
       }))
   ),
   ...taggedUnions(

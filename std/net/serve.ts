@@ -137,6 +137,9 @@ const SERVE_ACCEPT_REST: i64 = 100000000
 const SERVE_BODY_SWEEP: i64 = 1000000000
 /** Nanoseconds a request's body may take to arrive, from its head. */
 const SERVE_BODY_TIMEOUT: i64 = 30000000000
+// `HttpRequest.state` is internal: under `serve` it carries these SERVE_*
+// numbers, which are not `HttpHandler`'s HANDLER_* ones (its FLUSHING is 6,
+// and `serve` has no STREAMING), so the two must not be mixed.
 /** A slot's exchange: no request. */
 const SERVE_IDLE: i32 = 0
 /** A slot's exchange: its head is read and its body is arriving. */
