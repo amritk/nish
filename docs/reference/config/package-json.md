@@ -232,7 +232,7 @@ Nish reads only a host module's exported signatures and skips each function body
 Each entry is a path relative to this `package.json`, naming a file inside the package that exists:
 
 - a value that is not a list of strings is [NL2694](../diagnostics/nl2xxx.md#nl2694);
-- an empty entry, an absolute path, or one that climbs out of the package with `..` is [NL2695](../diagnostics/nl2xxx.md#nl2695);
+- an empty entry, an absolute path (one that starts with `/`, `\` or a drive letter), or one that climbs out of the package with `..` is [NL2695](../diagnostics/nl2xxx.md#nl2695). A `..` that only cancels a directory before it, as in `web/../host.ts`, stays inside and is fine;
 - an entry that names no file is [NL2696](../diagnostics/nl2xxx.md#nl2696).
 
 An entry naming the program's own entry file changes nothing: the entry is compiled as Nish all the same.
@@ -309,7 +309,7 @@ Package `pkg_future` needs a newer compiler: its `engines.nish` asks for `>=999.
 
 Any other shape is refused rather than taken as met, because a floor the compiler cannot read is one it cannot claim to meet ([NL3019](../diagnostics/nl3xxx.md#nl3019)). That includes a caret, a tilde, an upper bound, a bare version, and a value that is not a string.
 
-**Constraints:** `pattern: ^\s*>=\s*[0-9]+\.[0-9]+(\.[0-9]+)?\s*$`
+**Constraints:** `pattern: ^\s*>=\s*[0-9]{1,9}\.[0-9]{1,9}(\.[0-9]{1,9})?\s*$`
 
 ```json
 {

@@ -239,11 +239,11 @@
     },
     "host": {
       "type": "array",
-      "description": "Host modules: TypeScript files the web page owns, whose exported functions a wasm module calls back into. An import from a listed file becomes a wasm import from module `host`. An import from any other file is an ordinary Nish import. `--host <file.ts>` on the command line adds to the list.\n\nNish reads only a host module's exported signatures and skips each function body, so a body may use the DOM, closures, classes and promises. The [interop guide](../../guide/using-nish/interop.md#functions-the-page-supplies-host-modules) shows a whole page.\n\nEach entry is a path relative to this `package.json`, naming a file inside the package that exists:\n\n- a value that is not a list of strings is [NL2694](../diagnostics/nl2xxx.md#nl2694);\n- an empty entry, an absolute path, or one that climbs out of the package with `..` is [NL2695](../diagnostics/nl2xxx.md#nl2695);\n- an entry that names no file is [NL2696](../diagnostics/nl2xxx.md#nl2696).\n\nAn entry naming the program's own entry file changes nothing: the entry is compiled as Nish all the same.",
+      "description": "Host modules: TypeScript files the web page owns, whose exported functions a wasm module calls back into. An import from a listed file becomes a wasm import from module `host`. An import from any other file is an ordinary Nish import. `--host <file.ts>` on the command line adds to the list.\n\nNish reads only a host module's exported signatures and skips each function body, so a body may use the DOM, closures, classes and promises. The [interop guide](../../guide/using-nish/interop.md#functions-the-page-supplies-host-modules) shows a whole page.\n\nEach entry is a path relative to this `package.json`, naming a file inside the package that exists:\n\n- a value that is not a list of strings is [NL2694](../diagnostics/nl2xxx.md#nl2694);\n- an empty entry, an absolute path (one that starts with `/`, `\\` or a drive letter), or one that climbs out of the package with `..` is [NL2695](../diagnostics/nl2xxx.md#nl2695). A `..` that only cancels a directory before it, as in `web/../host.ts`, stays inside and is fine;\n- an entry that names no file is [NL2696](../diagnostics/nl2xxx.md#nl2696).\n\nAn entry naming the program's own entry file changes nothing: the entry is compiled as Nish all the same.",
       "items": {
         "type": "string",
         "minLength": 1,
-        "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"
+        "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!\\.\\.([/\\\\]|$)).+$"
       },
       "examples": [
         [
@@ -338,7 +338,7 @@
         "nish": {
           "type": "string",
           "description": "The lowest compiler version the package needs, as a floor: `>=X.Y.Z` or `>=X.Y`, with blanks allowed around the version.\n\nAn older compiler refuses the package and says which version it asked for ([NL3018](../diagnostics/nl3xxx.md#nl3018)):\n\n```text\nPackage `pkg_future` needs a newer compiler: its `engines.nish` asks for `>=999.0.0` and this is nish 0.8.0\n```\n\nAny other shape is refused rather than taken as met, because a floor the compiler cannot read is one it cannot claim to meet ([NL3019](../diagnostics/nl3xxx.md#nl3019)). That includes a caret, a tilde, an upper bound, a bare version, and a value that is not a string.",
-          "pattern": "^\\s*>=\\s*[0-9]+\\.[0-9]+(\\.[0-9]+)?\\s*$",
+          "pattern": "^\\s*>=\\s*[0-9]{1,9}\\.[0-9]{1,9}(\\.[0-9]{1,9})?\\s*$",
           "examples": [
             ">=0.18.0"
           ]
