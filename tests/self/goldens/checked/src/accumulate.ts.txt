@@ -13,6 +13,8 @@ import ACC_SPLIT from "./program" -> const ACC_SPLIT
 import ACC_STEP from "./program" -> const ACC_STEP
 import FunctionSig from "./program" -> struct FunctionSig
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
+import ROLE_METHOD from "./program" -> const ROLE_METHOD
+import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import T_I32 from "./types" -> const T_I32
 const TAIL_BASE: i32 = 1
@@ -45,18 +47,24 @@ function recordAccumulation(ctx: CheckContext, sig: FunctionSig, body: Node): vo
   callee +26:5 FusionTable.record -> @FusionTable.record
 function signatureQualifies(ctx: CheckContext, sig: FunctionSig): boolean -> @signatureQualifies
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FunctionSig.defaultOf FunctionSig.foreign FunctionSig.isAsync TypeTable.isRanged TypeTable.isResult isGenericFunction
+  calls: FunctionSig.defaultOf FunctionSig.foreign FunctionSig.isAsync TypeTable.isRanged TypeTable.isResult isGenericFunction ownerQualifies
   pointer ctx: size=344 writesThrough=false captured=false
-  pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.foreign#0 FunctionSig.isAsync#0 FunctionSig.defaultOf#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=ownerQualifies#0 FunctionSig.foreign#0 FunctionSig.isAsync#0 FunctionSig.defaultOf#0
   stackSites=0 stackLocals=0
-  callee +0:5 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +1:5 FunctionSig.isAsync -> @FunctionSig.isAsync
-  callee +3:5 isGenericFunction -> @isGenericFunction
-  local +11:12 i: i32 (let)
-  local +12:11 type: i32 (const)
-  callee +13:9 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +13:37 TypeTable.isResult -> @TypeTable.isResult
-  callee +13:65 FunctionSig.defaultOf -> @FunctionSig.defaultOf
+  callee +0:6 ownerQualifies -> @ownerQualifies
+  callee +2:5 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +3:5 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +5:5 isGenericFunction -> @isGenericFunction
+  local +13:12 i: i32 (let)
+  local +14:11 type: i32 (const)
+  callee +15:9 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +15:37 TypeTable.isResult -> @TypeTable.isResult
+  callee +15:65 FunctionSig.defaultOf -> @FunctionSig.defaultOf
+function ownerQualifies(sig: FunctionSig): boolean -> @ownerQualifies
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer sig: size=200 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 owner: StructInfo | null (const)
 function collectTailValues(node: Node, out: Node[]): boolean -> @collectTailValues
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -128,14 +136,16 @@ function isPlainI32(ctx: CheckContext, node: Node): boolean -> @isPlainI32
   stackSites=0 stackLocals=0
 function isSelfCall(ctx: CheckContext, sig: FunctionSig, node: Node): boolean -> @isSelfCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FunctionSig.writtenArity hasSpread nish_panic_index
+  calls: FunctionSig.writtenArity hasSpread nish_panic_index nish_panic_overflow
   pointer ctx: size=344 writesThrough=false captured=false
-  pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0 FunctionSig.writtenArity#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: FunctionSig | null (const)
-  callee +4:42 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +5:6 hasSpread -> @hasSpread
+  callee +1:44 hasSpread -> @hasSpread
+  callee +5:49 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  local +7:9 access: Node (const)
+  callee +11:42 FunctionSig.writtenArity -> @FunctionSig.writtenArity
 function isStable(ctx: CheckContext, node: Node): boolean -> @isStable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
