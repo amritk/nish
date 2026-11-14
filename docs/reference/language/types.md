@@ -57,6 +57,11 @@ crosses to C, then the exact rules.
   function reference is the tag `0` ([Function references](declarations.md#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](declarations.md#enums)).
+- **A record's type has a name.** Its fields are declared once, in an
+  `interface` or a `class`; an inline object type, `{ x: i32 }`, is refused
+  wherever a type is written, and `type` only renames a type that already
+  exists ([Interfaces and object literals](declarations.md#interfaces-and-object-literals),
+  [Type aliases](declarations.md#type-aliases)).
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](result-and-error-handling.md)).
