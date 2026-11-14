@@ -189,7 +189,8 @@ function exportsOf(instance, state) {
     value.set(new value.constructor(memory.buffer, data, Math.min(len, value.length)));
   };
   const layout = {
-    BREAK_LINK: { at: raw["nish_storage_0_BREAK_LINK.data"].value, length: 10, stride: 4 },
+    BREAK_LINK: { at: raw["nish_storage_0_BREAK_LINK.data"].value, length: 17, stride: 4 },
+    BOX: { at: raw["nish_storage_0_BOX.data"].value, length: 2, stride: 4 },
     BREAK_HELP_IN: { at: raw["nish_storage_0_BREAK_HELP_IN.data"].value, length: 8192, stride: 4 },
     GAME_FRAME: { at: raw["nish_storage_1_GAME_FRAME.data"].value, length: 518400, stride: 4 },
     GAME_INFO: { at: raw["nish_storage_1_GAME_INFO.data"].value, length: 4, stride: 4 },
@@ -215,7 +216,8 @@ function exportsOf(instance, state) {
       i64: new BigInt64Array(buffer),
       u64: new BigUint64Array(buffer),
       storage: {
-        BREAK_LINK: new Int32Array(buffer, layout.BREAK_LINK.at, 10),
+        BREAK_LINK: new Int32Array(buffer, layout.BREAK_LINK.at, 17),
+        BOX: new Int32Array(buffer, layout.BOX.at, 2),
         BREAK_HELP_IN: new Int32Array(buffer, layout.BREAK_HELP_IN.at, 8192),
         GAME_FRAME: new Int32Array(buffer, layout.GAME_FRAME.at, 518400),
         GAME_INFO: new Int32Array(buffer, layout.GAME_INFO.at, 4),
@@ -234,6 +236,8 @@ function exportsOf(instance, state) {
     views,
     /** game.ts: init(seed: number): void */
     init: (seed) => guarded(() => raw.init(typedIn(seed, "number", "init: argument 1 (seed)"))),
+    /** game.ts: resize(width: number, height: number): void */
+    resize: (width, height) => guarded(() => raw.resize(typedIn(width, "number", "resize: argument 1 (width)"), typedIn(height, "number", "resize: argument 2 (height)"))),
     /** game.ts: sound(id: number): number */
     sound: (id) => guarded(() => raw.sound(typedIn(id, "number", "sound: argument 1 (id)"))),
     /** game.ts: step(nowMs: number): void */

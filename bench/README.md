@@ -2438,20 +2438,53 @@ between them is the noise band. Rounds are interleaved, rotated and every
 other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
 input (default 32). It is run by hand and is not in `tests/run.js`.
 
-On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
+Against `main` at `e0a1661e`, before the load built a map with no merge key
+straight from its own pairs (the parser having checked them for repeats),
+stored scalars and keys from the source span, sized each container before
+filling it, and resolved, typed and decoded each scalar once (a plain number
+stored without the tokenizer's second check, and copied a scalar that is its
+own source span with no check per byte): `main`'s `main.ts` built twice and
+this branch's built twice (each pair `cmp` byte-identical; this branch's by
+the compiler of `main` at `4bd22892`, which it merges), the four binaries
+interleaved on both workloads, 31 rounds, the whole measurement done twice, on
+a 4-core cloud container, 1,107,038 bytes and 30 documents a run. Every run
+gave the same checksum. Milliseconds a document, the two builds' medians, and
+the band between them:
 
-| Workload | Median | Copy | Band | MB/s |
-| --- | ---: | ---: | ---: | ---: |
-| parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
-| load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
+| Workload | Run | Before | Band | After | Band | After / before |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| parse | 1 | 15.206 / 15.174 | 0.2% | 14.960 / 14.934 | 0.2% | 0.984 |
+| parse | 2 | 15.203 / 15.236 | 0.2% | 14.929 / 14.964 | 0.2% | 0.982 |
+| load | 1 | 28.388 / 28.413 | 0.1% | 21.945 / 21.985 | 0.2% | 0.773 |
+| load | 2 | 28.370 / 28.315 | 0.2% | 21.919 / 21.945 | 0.1% | 0.774 |
 
-Both rows time the whole binary, so **load** includes the parse. In wall
-clock, parse plus load is 1.94x the parse alone; the load step by itself is
-the 17.6 ms a document between them, 0.94x the parse, for 75,025 values from
-276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`, a document
-is 136M instructions to parse and 309M to parse and load, 2.27x; the load
-step alone is 173M, 1.27x the parse. The load step retires more instructions
-than the parse but takes less time than it.
+Both rows time the whole binary, so **load** includes the parse. Parse plus
+load went from 1.87x and 1.86x the parse alone to 1.47x in both runs. The
+parse read 1.6% and 1.8% faster, outside its band but with the newer compiler
+on one side; its instruction count, 0.2% lower with the verbatim mark paid, is
+the firmer figure. Under `valgrind --tool=cachegrind --cache-sim=no`, steady
+state a document:
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| parse | 135.82M | 135.50M |
+| parse + load | 298.85M | 231.44M |
+| load step alone | 163.03M | 95.94M |
+
+#1072 recorded 309M and 173M for the same input on its own head; `main` at
+`e0a1661e`, with the compiler and library changes since, measures the
+298.85M and 163.03M above, and that is the baseline here. The load step is
+41.2% cheaper, past the 40% (97.82M) that was the aim, and now 0.71x the
+parse in instructions. The last 6.3M of it came from copying scalar text
+into the document without a bounds check on each byte: the parser marks a
+flow scalar whose source span is its body (one line, and quoted, no escape or
+doubled quote), the loader copies such a span with no search for a line
+break, and both copies store each byte unchecked after one range test of the
+whole span. The mark costs the parse 0.44M of the 135.50M. What is left of the
+load step, as self costs a document: `build`'s own dispatch (about 23.6M over
+its inlined parts), copying and storing scalar text (about 18M), appending
+members (7.6M), making nodes (5.3M), recording source ranges (9.2M), reading
+node types (3.1M), merge keys (3.8M) and storing keys (4.5M).
 
 ```bash
 node bench/yaml-json/run.mjs

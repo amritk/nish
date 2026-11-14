@@ -190,6 +190,7 @@ cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
+cases/dbg_union_generic added after R6: no rewriter to freeze it with
 cases/deny_panics_arr_map added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
@@ -281,6 +282,7 @@ cases/fnref_row_map_set added after R6: no rewriter to freeze it with
 cases/fnref_row_nullish added after R6: no rewriter to freeze it with
 cases/fnref_row_push_nullable added after R6: no rewriter to freeze it with
 cases/fnref_stores added after R6: no rewriter to freeze it with
+cases/generic_interface_class_arg added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/hygiene_quiet added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
@@ -660,6 +662,11 @@ cases/term_pty added after R6: no rewriter to freeze it with
 cases/term_restore added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
+cases/union_generic_call added after R6: no rewriter to freeze it with
+cases/union_generic_class added after R6: no rewriter to freeze it with
+cases/union_generic_escape added after R6: no rewriter to freeze it with
+cases/union_generic_nullable added after R6: no rewriter to freeze it with
+cases/union_map_helpers added after R6: no rewriter to freeze it with
 cases/union_map_value added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with
 cases/union_narrowing_arms added after R6: no rewriter to freeze it with
@@ -671,6 +678,7 @@ cases/union_narrowing_loop_reads added after R6: no rewriter to freeze it with
 cases/union_narrowing_paths added after R6: no rewriter to freeze it with
 cases/union_narrowing_switch_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_tested_join added after R6: no rewriter to freeze it with
+cases/union_result added after R6: no rewriter to freeze it with
 cases/union_scale added after R6: no rewriter to freeze it with
 cases/union_switch added after R6: no rewriter to freeze it with
 cases/union_switch_flow added after R6: no rewriter to freeze it with
@@ -682,6 +690,7 @@ cases/unsafe_get_set added after R6: no rewriter to freeze it with
 cases/unsafe_wrapping added after R6: no rewriter to freeze it with
 cases/wall_clock added after R6: no rewriter to freeze it with
 cases/wasm_math_std added after R6: no rewriter to freeze it with
+cases/wasm_union_generic added after R6: no rewriter to freeze it with
 cases/wipe_bytes added after R6: no rewriter to freeze it with
 corpus/bit_fnv1a stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bit_fnv1a.args` now says `(none)`
 corpus/bit_i64 stale since R6: tests/differential/corpus/bit_i64.ts changed since the rewrite was frozen (37bc5d4b4613df3f -> f7c5558235ba86d2)

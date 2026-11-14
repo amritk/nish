@@ -42,6 +42,11 @@ class Node {
     const node = this
     this.classList = { add: (c) => (node.className = `${node.className} ${c}`.trim()) }
     this.style = { setProperty: () => {} }
+    this.getBoundingClientRect = () => ({ height: 0 })
+  }
+  /** The tag as a browser spells an HTML element's: upper case. */
+  get tagName() {
+    return this.tag.toUpperCase()
   }
   get textContent() {
     return this.text + this.children.map((c) => (typeof c === "string" ? c : c.textContent)).join("")
@@ -52,6 +57,12 @@ class Node {
   }
   setAttribute(name, value) {
     this.attributes[name] = String(value)
+  }
+  hasAttribute(name) {
+    return name in this.attributes
+  }
+  removeAttribute(name) {
+    delete this.attributes[name]
   }
   append(...children) {
     for (const child of children) {
@@ -91,6 +102,13 @@ class Node {
     this.focused++
     if (this.doc !== null) {
       this.doc.activeElement = this
+    }
+    this.dispatch("focus", event("focus"))
+  }
+  blur() {
+    if (this.doc?.activeElement === this) {
+      this.doc.activeElement = this.doc.body
+      this.dispatch("blur", event("blur"))
     }
   }
   /** Every element below this one, depth first. */
@@ -182,10 +200,11 @@ check(
 )
 
 // The hero's script ships on every docs page, so all the terminal does lives in
-// the lazy shell: site.js may grow by under 400 B gzipped for it. The baseline
-// is site.js on main before the terminal took keys (71c41439).
+// the lazy shell: site.js may grow by under 1050 B gzipped for it (400 B took
+// keys, the rest holds the terminal still under a mouse or focus). The
+// baseline is site.js on main before the terminal took keys (71c41439).
 const SITE_GZIP_BEFORE = 3480
-const SITE_GZIP_GROWTH = 400
+const SITE_GZIP_GROWTH = 1050
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(
   `site.js grows by under ${SITE_GZIP_GROWTH} B gzipped`,
@@ -195,9 +214,10 @@ check(
 
 // The terminal's look before it is used ships in theme.css on every docs page
 // too; the rest comes with the shell. The baseline is theme.css on main
-// (c6c797f9b) before the terminal took keys.
-const THEME_GZIP_BEFORE = 8956
-const THEME_GZIP_GROWTH = 250
+// (c6c797f9b) before the terminal took keys, plus 404 B for the inline-code
+// style added after it, which is no part of the terminal.
+const THEME_GZIP_BEFORE = 8956 + 404
+const THEME_GZIP_GROWTH = 550
 const themeGzipped = zlib.gzipSync(fs.readFileSync(path.join(root, "docs", "site", "theme.css")), { level: 9 }).length
 check(
   `theme.css grows by under ${THEME_GZIP_GROWTH} B gzipped`,
@@ -332,6 +352,89 @@ const runSite = (load) => {
   )
 }
 
+{
+  // A mouse over the terminal holds it and focuses its input; leaving before a key lets go.
+  const asked = []
+  const hero = runSite((specifier) => (asked.push(specifier), new Promise(() => {})))
+  const term = hero.terminal
+  const input = term.find("nish-hero__input")
+  const loopAt = (progress) => {
+    term.querySelector("pre").getAnimations = () => [{ effect: { getComputedTiming: () => ({ progress }) } }]
+  }
+  const held = () => term.attributes["data-held"]
+  check("the terminal's prompt is drawn before the shell loads", term.find("nish-hero__ready")?.parent === term.querySelector("pre"))
+  loopAt(0.1)
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  check("a mouse over the terminal, before the command is typed, holds it blank and focuses its input",
+    held() === "blank" && hero.document.activeElement === input && asked.length === 0, `${held()} ${hero.document.activeElement?.tag}`)
+  term.dispatch("pointerleave", event("pointerleave"))
+  check("leaving before a key blurs the input and lets the loop go on",
+    held() === undefined && hero.document.activeElement === hero.document.body, `${held()} ${hero.document.activeElement?.tag}`)
+  loopAt(0.7)
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  check("a mouse over the terminal while its output shows holds it with the prompt under the output", held() === "")
+  term.dispatch("pointerleave", event("pointerleave"))
+  loopAt(0.9)
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  check("once the output has faded the hold is blank again", held() === "blank", held())
+  term.dispatch("pointerleave", event("pointerleave"))
+
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 1 }))
+  check("a mouse dragging over the terminal takes no focus", hero.document.activeElement === hero.document.body)
+  term.dispatch("pointerleave", event("pointerleave"))
+
+  const search = hero.document.createElement("input")
+  hero.document.body.append(search)
+  search.focus()
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  check("a mouse over the terminal takes no focus from a field that has it", hero.document.activeElement === search)
+  term.dispatch("pointerleave", event("pointerleave"))
+  check("and leaving lets the terminal go", held() === undefined, held())
+  search.blur()
+
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "touch" }))
+  check("a touch passing over focuses nothing", hero.document.activeElement === hero.document.body && held() === undefined)
+  term.dispatch("pointerleave", event("pointerleave"))
+
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  term.dispatch("click", event("click"))
+  term.dispatch("pointerleave", event("pointerleave"))
+  check("a clicked terminal keeps focus, and its hold, as the mouse leaves", hero.document.activeElement === input && held() !== undefined)
+  input.blur()
+  check("a clicked terminal stays held for good, even blurred", held() !== undefined, held())
+}
+
+{
+  // Hovered, then typed into: the hold is for good.
+  const asked = []
+  const hero = runSite((specifier) => (asked.push(specifier), new Promise(() => {})))
+  const term = hero.terminal
+  const input = term.find("nish-hero__input")
+  const held = () => term.attributes["data-held"]
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  typeIn(input, "l")
+  term.dispatch("pointerleave", event("pointerleave"))
+  check("once a key asks for the shell, leaving keeps the input focused and the terminal held",
+    hero.document.activeElement === input && held() !== undefined && asked.length === 1, `${held()} ${asked.length}`)
+}
+
+{
+  // A shell that fails to load after the mouse has left lets the terminal go.
+  let reject = null
+  const hero = runSite(() => new Promise((_, no) => (reject = no)))
+  const term = hero.terminal
+  const input = term.find("nish-hero__input")
+  term.dispatch("pointerenter", event("pointerenter", { pointerType: "mouse", buttons: 0 }))
+  typeIn(input, "l")
+  term.dispatch("pointerleave", event("pointerleave"))
+  input.blur()
+  const heldWhileLoading = term.attributes["data-held"] !== undefined
+  reject(new Error("offline"))
+  await settle()
+  check("a shell that fails to load, once the terminal is left, lets the loop go on",
+    heldWhileLoading && term.attributes["data-held"] === undefined, term.attributes["data-held"])
+}
+
 // --- shell.mjs: what the terminal answers ------------------------------------
 
 // The served shell, as build.mjs fills it in from the compiler.
@@ -429,6 +532,7 @@ const asks = (args, cwd, env = person(false)) => spawnSync(nish, args, { cwd, en
       form.attributes.autocomplete === "off", `${form?.id} ${input.attributes.form} ${JSON.stringify(form?.attributes)}`)
   check("the shell takes the input's events in place of site.js",
     input.listeners.get("input")?.length === 1 && input.listeners.get("keydown")?.length === 1, input.listeners.get("input")?.length)
+  check("the shell's line replaces site.js's prompt", hero.host.find("nish-hero__ready") === null)
   check("the terminal stays still for good once the shell has it", hero.terminal.className.includes("nish-hero__terminal--live"),
     hero.terminal.className)
   const drawn = hero.host.find("nish-hero__caret")?.parent
@@ -597,16 +701,22 @@ const openFake = (document, extra = {}) => {
   })
   return { focus, runs, started }
 }
-/** A module with BREAK_LINK whose next step quits. */
+/** A module with BREAK_LINK whose next step quits, showing a 480 by 270 frame. */
 const fakeGame = () => {
-  const link = new Int32Array(10)
+  const link = new Int32Array(17)
+  const info = Int32Array.of(480, 270, 0, 0)
   return {
     layout: { BREAK_LINK: 0 },
-    views: () => ({ storage: { BREAK_LINK: link } }),
+    views: () => ({ storage: { BREAK_LINK: link, GAME_INFO: info } }),
     step: () => (link[0] = 1),
   }
 }
 const overlays = (document) => [...document.body.all()].filter((n) => n.className === "nish-break")
+/** The overlay's button named `label`. */
+const buttonIn = (overlay, label) =>
+  overlay?.children.find((c) => c instanceof Node && c.tag === "button" && c.attributes["aria-label"] === label)
+const closeIn = (overlay) => buttonIn(overlay, "Close the game")
+const menuIn = (overlay) => buttonIn(overlay, "Game menu")
 
 {
   const { document } = makeDocument()
@@ -620,13 +730,24 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
   check("the overlay is a modal dialog", overlay?.attributes.role === "dialog" && overlay?.attributes["aria-modal"] === "true",
     JSON.stringify(overlay?.attributes))
   const canvas = overlay.children.find((c) => c instanceof Node && c.tag === "canvas")
-  const close = overlay.children.find((c) => c instanceof Node && c.tag === "button")
+  const close = closeIn(overlay)
+  const menu = menuIn(overlay)
   check("once the game runs, its screen has focus", document.activeElement === canvas && close.focused === 1 && canvas.focused === 1,
     `${document.activeElement?.tag} ${close.focused} ${canvas.focused}`)
+  check("the overlay has a menu button, named, between the screen and the close control",
+    menu !== undefined && menu.attributes.type === "button" && menu.className === "nish-break__menu" &&
+      overlay.children.indexOf(canvas) < overlay.children.indexOf(menu) && overlay.children.indexOf(menu) < overlay.children.indexOf(close),
+    JSON.stringify(menu?.attributes))
   const fromCanvas = press(overlay, "Tab", { target: canvas })
-  const fromClose = press(overlay, "Tab", { target: close, shiftKey: true })
-  check("Tab and Shift+Tab stay between the game and its close control",
-    fromCanvas.prevented && fromClose.prevented && close.focused === 2 && canvas.focused === 2, `${close.focused} ${canvas.focused}`)
+  const fromMenu = press(overlay, "Tab", { target: menu })
+  const fromClose = press(overlay, "Tab", { target: close })
+  check("Tab goes from the game to its menu button, the close control, and back",
+    fromCanvas.prevented && fromMenu.prevented && fromClose.prevented && menu.focused === 1 && close.focused === 2 &&
+      canvas.focused === 2, `${menu.focused} ${close.focused} ${canvas.focused}`)
+  press(overlay, "Tab", { target: canvas, shiftKey: true })
+  press(overlay, "Tab", { target: close, shiftKey: true })
+  check("Shift+Tab goes round the other way", close.focused === 3 && menu.focused === 2, `${close.focused} ${menu.focused}`)
+  check("touch is the page's, not nish/page/game's arrow zones", run.options.touch === false, run.options.touch)
   // A renderer that falls back may put a fresh canvas in the first one's place.
   const swapped = new Node("canvas")
   canvas.remove()
@@ -651,7 +772,7 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
   const third = openFake(document)
   await third.started
   const thirdOverlay = overlays(document)[0]
-  const escOnClose = press(thirdOverlay, "Escape", { target: thirdOverlay.children.find((c) => c instanceof Node && c.tag === "button") })
+  const escOnClose = press(thirdOverlay, "Escape", { target: closeIn(thirdOverlay) })
   check("Escape off the game's screen closes it and hands focus back",
     escOnClose.prevented && overlays(document).length === 0 && third.runs[0].options.signal.aborted && third.focus.focused === 1,
     `${overlays(document).length} ${third.focus.focused}`)
@@ -659,8 +780,7 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
   await again.started
   check("opening again after a quit starts a fresh game", again.started !== first.started && again.runs.length === 1 &&
     overlays(document).length === 1 && !again.runs[0].options.signal.aborted, overlays(document).length)
-  const button = overlays(document)[0]?.children.find((c) => c instanceof Node && c.tag === "button")
-  button?.dispatch("click", event("click"))
+  closeIn(overlays(document)[0])?.dispatch("click", event("click"))
   check("the close control removes the overlay, stops the game and hands focus back",
     overlays(document).length === 0 && again.runs[0].options.signal.aborted && again.focus.focused === 1,
     `${overlays(document).length} ${again.focus.focused}`)
@@ -672,7 +792,7 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
   let begin = null
   const loading = openFake(document, { start: () => new Promise((resolve) => (begin = resolve)) })
   const [overlay] = overlays(document)
-  const close = overlay.children.find((c) => c instanceof Node && c.tag === "button")
+  const close = closeIn(overlay)
   check("the overlay takes focus as it opens, on its close control until the game runs", document.activeElement === close,
     document.activeElement?.tag)
   const esc = press(overlay, "Escape", { target: document.activeElement })
@@ -707,7 +827,80 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
     }
   }
   check("a localStorage that throws when read does not stop the game opening", error === null, error)
-  overlays(document)[0]?.children.find((c) => c instanceof Node && c.tag === "button")?.dispatch("click", event("click"))
+  closeIn(overlays(document)[0])?.dispatch("click", event("click"))
+}
+
+{
+  // The frame pixel under a client point, through the presenter's letterbox.
+  const wide = { left: 0, top: 0, width: 960, height: 540 }
+  const tall = { left: 10, top: 20, width: 390, height: 844 }
+  const cases = [
+    [page.framePixel(480, 270, wide, 480, 270), [240, 135]],
+    [page.framePixel(-5, 999, wide, 480, 270), [0, 269]],
+    // 303 by 540 in 390 by 844: 1.287 CSS px a pixel, 74.5 of bar above and below.
+    [page.framePixel(10 + 195, 20 + 500, tall, 303, 540), [151, 330]],
+    [page.framePixel(10, 20 + 74, tall, 303, 540), [0, 0]],
+    [page.framePixel(10 + 389, 20 + 844 - 62, tall, 303, 540), [302, 539]],
+    [page.framePixel(0, 0, { left: 0, top: 0, width: 0, height: 0 }, 480, 270), null],
+    [page.framePixel(0, 0, wide, 0, 0), null],
+  ]
+  const wrong = cases.filter(([got, want]) => JSON.stringify(got) !== JSON.stringify(want))
+  check("framePixel finds the frame pixel under a point, letterboxed as the presenter draws", wrong.length === 0, JSON.stringify(wrong))
+}
+
+{
+  // Touch on the overlay, as BREAK_LINK words for the module.
+  const { document } = makeDocument()
+  const opened = openFake(document)
+  await opened.started
+  const [overlay] = overlays(document)
+  const canvas = overlay.children.find((c) => c instanceof Node && c.tag === "canvas")
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 960, height: 540 })
+  const menu = menuIn(overlay)
+  const ignored = event("click")
+  menu.dispatch("click", ignored)
+  const game = await opened.runs[0].options.loader.load(new Uint8Array(), {})
+  const link = game.views().storage.BREAK_LINK
+  const [AIM, AIM_Y, TAPS, TAP_X, TAP_Y, MENU, TOUCH] = [10, 11, 12, 13, 14, 15, 16]
+  const pointer = (type, fields) => {
+    const made = event(type, { pointerType: "touch", pointerId: 1, target: canvas, timeStamp: 0, ...fields })
+    overlay.dispatch(type, made)
+    return made
+  }
+  check("before the module loads, the menu button and touch write nothing", link[MENU] === 0 && link[AIM] === 0, `${link[MENU]}`)
+  const down = pointer("pointerdown", { clientX: 480, clientY: 300 })
+  check("a finger held on the screen aims at the frame pixel under it, and the screen is touched",
+    down.prevented && link[AIM] === 241 && link[AIM_Y] === 150 && link[TOUCH] === 1, `${link[AIM]} ${link[AIM_Y]} ${link[TOUCH]}`)
+  pointer("pointermove", { clientX: 2000, clientY: 300, timeStamp: 100 })
+  const dragged = link[AIM]
+  pointer("pointermove", { pointerId: 2, clientX: 10, clientY: 300, timeStamp: 100 })
+  check("a drag moves the aim, clamped to the frame, and only the held finger's moves count",
+    dragged === 480 && link[AIM] === 480, `${dragged} ${link[AIM]}`)
+  pointer("pointerup", { clientX: 2000, clientY: 300, timeStamp: 1000 })
+  check("lifting the finger lets go of the aim, and a drag is no tap", link[AIM] === 0 && link[TAPS] === 0, `${link[AIM]} ${link[TAPS]}`)
+  pointer("pointerdown", { clientX: 100, clientY: 50, timeStamp: 2000 })
+  pointer("pointerup", { clientX: 104, clientY: 53, timeStamp: 2120 })
+  check("a short still touch is a tap at the frame pixel it ended on",
+    link[TAPS] === 1 && link[TAP_X] === 52 && link[TAP_Y] === 26 && link[AIM] === 0, `${link[TAPS]} ${link[TAP_X]} ${link[TAP_Y]}`)
+  pointer("pointerdown", { clientX: 100, clientY: 50, timeStamp: 3000 })
+  pointer("pointerup", { clientX: 100, clientY: 50, timeStamp: 3400 })
+  pointer("pointerdown", { clientX: 100, clientY: 50, timeStamp: 4000 })
+  pointer("pointercancel", { clientX: 100, clientY: 50, timeStamp: 4010 })
+  check("a long touch, or one the browser cancels, is no tap", link[TAPS] === 1 && link[AIM] === 0, `${link[TAPS]} ${link[AIM]}`)
+  pointer("pointerdown", { target: menu, clientX: 900, clientY: 20, timeStamp: 5000 })
+  pointer("pointerup", { target: menu, clientX: 900, clientY: 20, timeStamp: 5050 })
+  check("a touch on the overlay's buttons neither aims nor taps", link[TAPS] === 1 && link[AIM] === 0, `${link[TAPS]} ${link[AIM]}`)
+  const before = canvas.focused
+  const pressing = event("mousedown")
+  menu.dispatch("mousedown", pressing)
+  menu.dispatch("click", event("click"))
+  check("the menu button counts a press for the module, and keeps the keys on the game's screen",
+    link[MENU] === 1 && pressing.prevented && canvas.focused === before + 1, `${link[MENU]} ${canvas.focused - before}`)
+  pointer("pointerdown", { pointerType: "mouse", clientX: 100, clientY: 50, timeStamp: 6000 })
+  pointer("pointerup", { pointerType: "mouse", clientX: 100, clientY: 50, timeStamp: 6010 })
+  check("a mouse neither aims nor taps, and tells the module the screen is pointed at",
+    link[TOUCH] === 0 && link[AIM] === 0 && link[TAPS] === 1, `${link[TOUCH]} ${link[AIM]} ${link[TAPS]}`)
+  closeIn(overlay)?.dispatch("click", event("click"))
 }
 
 // --- game.wasm: the built module plays as the terminal game does -------------
@@ -823,6 +1016,209 @@ const standIn = JSON.parse(
   tap(ENTER)
   idle(5)
   check("Quit on the title quits, and the page is told once", quits === 1, quits)
+}
+
+{
+  // Touch, as break.mjs writes it into BREAK_LINK, plays as the keys do: each
+  // path is played twice, once by keys and once by touch, from a fresh module,
+  // and the frames compared. At 270 lines the frame is 480 by 270, 1.5 pixels
+  // a world unit, with no bars. Each step is drawn, as a page draws: a tap
+  // lands on the frame last drawn.
+  const { ringOver } = await import(pathToFileURL(path.join(built, "nish", "page.mjs")).href)
+  const loader = await import(pathToFileURL(path.join(built, "game.mjs")).href)
+  const { linkLoader } = await import(pathToFileURL(path.join(built, "break.mjs")).href)
+  const wasm = fs.readFileSync(path.join(built, "game.wasm"))
+  const [PRESS, RELEASE] = [1, 3]
+  const [DOWN, RIGHT, LEFT, ENTER, SPACE, ESCAPE] = [3, 4, 5, 6, 7, 8]
+  const [AIM, AIM_Y, TAPS, TAP_X, TAP_Y, MENU, TOUCH] = [10, 11, 12, 13, 14, 15, 16]
+  /** A fresh game at 270 lines, on the title; `saves` gets each settings change. */
+  const fresh = async (saves = []) => {
+    const game = await linkLoader(loader, [0, 1, -1, 1, 1, 0, 0], (w) => saves.push(w), () => {}, standIn).load(wasm)
+    game.init(11)
+    const ring = ringOver(game.memory, game.layout.GAME_INPUT)
+    const link = () => game.views().storage.BREAK_LINK
+    const step = (events = []) => {
+      for (const [kind, action] of events) {
+        for (const word of [1, kind, 0, 0, action, 0, 0]) {
+          ring.push(word)
+        }
+      }
+      game.step(0)
+      game.draw(1, 0)
+    }
+    const idle = (n) => {
+      for (let i = 0; i < n; i++) {
+        step()
+      }
+    }
+    /** A key pressed and let go: two steps. */
+    const key = (kind) => {
+      step([[kind, PRESS]])
+      step([[kind, RELEASE]])
+    }
+    /** A tap at world point `x`, `y` of the frame last drawn, whose size a setting can change: two steps, as a key takes. */
+    const tap = (x, y) => {
+      const [w, h] = game.views().storage.GAME_INFO
+      const k = Math.min(w / 320, h / 180)
+      const words = link()
+      words[TAP_X] = Math.floor((w - 320 * k) / 2 + x * k)
+      words[TAP_Y] = Math.floor((h - 180 * k) / 2 + y * k)
+      words[TAPS] += 1
+      idle(2)
+    }
+    const menu = () => {
+      link()[MENU] += 1
+      idle(2)
+    }
+    /** A finger held at frame pixel `x`, `y`, or let go with none. */
+    const aim = (x = null, y = 0) => {
+      link()[AIM] = x === null ? 0 : x + 1
+      link()[AIM_Y] = y
+    }
+    idle(40)
+    key(SPACE)
+    idle(30)
+    return { game, link, step, idle, key, tap, menu, aim, frame: () => hashFrame(game) }
+  }
+  // Start level is the title's second line, Settings its fourth (src/break-menu.ts's ITEM_*).
+  const line = (i) => 82 + 13 * i + 3.5
+
+  const byKey = await fresh()
+  byKey.key(ENTER)
+  byKey.idle(179)
+  const keyLevel = byKey.frame()
+  const byTouch = await fresh()
+  byTouch.tap(160, line(0))
+  byTouch.idle(179)
+  check("a tap on the title's Play starts the game, as Enter does", byTouch.frame() === keyLevel, `${byTouch.frame()} vs ${keyLevel}`)
+
+  byKey.key(SPACE)
+  byKey.idle(30)
+  byTouch.tap(200, 150)
+  byTouch.idle(30)
+  check("a tap in play serves, as Space does", byTouch.frame() === byKey.frame(), `${byTouch.frame()} vs ${byKey.frame()}`)
+
+  byKey.key(ESCAPE)
+  byKey.idle(10)
+  byTouch.menu()
+  byTouch.idle(10)
+  const paused = byKey.frame()
+  check("the menu button pauses the game, as Escape does", byTouch.frame() === paused && paused !== keyLevel,
+    `${byTouch.frame()} vs ${paused}`)
+  byKey.key(SPACE)
+  byKey.idle(10)
+  byTouch.tap(160, 90)
+  byTouch.idle(10)
+  check("a tap on the pause screen resumes, as Space does", byTouch.frame() === byKey.frame() && byKey.frame() !== paused,
+    `${byTouch.frame()} vs ${byKey.frame()}`)
+
+  // A finger held at the field's right edge, against Right held: the paddle comes to rest against the same wall.
+  const steerKeys = await fresh()
+  steerKeys.key(ENTER)
+  steerKeys.idle(179)
+  steerKeys.step([[RIGHT, PRESS]])
+  steerKeys.idle(298)
+  steerKeys.step([[RIGHT, RELEASE]])
+  const keyRight = steerKeys.frame()
+  const steerTouch = await fresh()
+  steerTouch.key(ENTER)
+  steerTouch.idle(179)
+  const start = steerTouch.frame()
+  steerTouch.aim(479, 200)
+  steerTouch.idle(20)
+  const twenty = steerTouch.frame()
+  steerTouch.idle(279)
+  steerTouch.aim()
+  steerTouch.step()
+  check("a finger held at the right moves the paddle to the wall, as Right held does",
+    steerTouch.frame() === keyRight && twenty !== start, `${steerTouch.frame()} vs ${keyRight}`)
+  steerKeys.step([[LEFT, PRESS]])
+  steerKeys.idle(298)
+  steerKeys.step([[LEFT, RELEASE]])
+  steerTouch.aim(0, 200)
+  steerTouch.idle(299)
+  steerTouch.aim()
+  steerTouch.step()
+  check("and at the left, to the other wall, as Left held does", steerTouch.frame() === steerKeys.frame(),
+    `${steerTouch.frame()} vs ${steerKeys.frame()}`)
+  // Both at the left wall: Right held, against Right held with a finger at the left.
+  const keyLeft = steerKeys.frame()
+  steerKeys.step([[RIGHT, PRESS]])
+  steerTouch.aim(0, 200)
+  steerTouch.step([[RIGHT, PRESS]])
+  steerKeys.idle(298)
+  steerTouch.idle(298)
+  steerKeys.step([[RIGHT, RELEASE]])
+  steerTouch.aim()
+  steerTouch.step([[RIGHT, RELEASE]])
+  check("a key held steers over a finger held", steerTouch.frame() === steerKeys.frame() && steerTouch.frame() !== keyLeft,
+    `${steerTouch.frame()} vs ${steerKeys.frame()}`)
+
+  // Settings by touch: open it, step Resolution right on its value, and Back keeps it.
+  const saves = []
+  const settings = await fresh(saves)
+  settings.tap(160, line(3))
+  settings.idle(30)
+  const keySettings = await fresh()
+  for (const kind of [DOWN, DOWN, DOWN, ENTER]) {
+    keySettings.key(kind)
+  }
+  keySettings.idle(24)
+  check("a tap on the title's Settings opens it, as Down to it and Enter do", settings.frame() === keySettings.frame(),
+    `${settings.frame()} vs ${keySettings.frame()}`)
+  // A page's Settings hides the frame rate and graphics rows: Resolution is
+  // its first line and Back its sixth. A value's right half steps it up, and
+  // from just before its `<` to its middle, down.
+  const row = (i) => 80 + 9 * i + 3.5
+  settings.tap(250, row(0))
+  settings.tap(250, row(0))
+  settings.tap(200, row(0))
+  settings.idle(10)
+  settings.tap(160, row(5))
+  settings.idle(10)
+  check("taps on a setting's value step it each way, and a tap on Back keeps the settings",
+    saves.length === 1 && JSON.stringify(saves[0]) === "[0,2,-1,1,1,0,0]", JSON.stringify(saves))
+  settings.tap(10, row(5))
+  settings.tap(160, 20)
+  settings.idle(10)
+  check("a tap off the title's lines does nothing", saves.length === 1, JSON.stringify(saves))
+
+  // A touched portrait canvas turns the frame a quarter, clockwise; a mouse's never does.
+  const turn = await fresh()
+  turn.game.resize(390, 844)
+  const flat = (() => {
+    turn.game.draw(1, 0)
+    const s = turn.game.views().storage
+    return { w: s.GAME_INFO[0], h: s.GAME_INFO[1], pixels: s.GAME_FRAME.slice(0, s.GAME_INFO[0] * s.GAME_INFO[1]) }
+  })()
+  turn.link()[TOUCH] = 1
+  turn.game.draw(1, 0)
+  const s = turn.game.views().storage
+  const [w, h] = [s.GAME_INFO[0], s.GAME_INFO[1]]
+  let moved = 0
+  for (let y = 0; y < flat.h; y++) {
+    for (let x = 0; x < flat.w; x++) {
+      moved += s.GAME_FRAME[x * flat.h + (flat.h - 1 - y)] === flat.pixels[y * flat.w + x] ? 0 : 1
+    }
+  }
+  check("a mouse on a portrait canvas keeps the frame landscape", flat.w === 480 && flat.h === 270, `${flat.w}x${flat.h}`)
+  check("a finger on a portrait canvas turns the frame a quarter clockwise, pixel for pixel",
+    w === 270 && h === 480 && moved === 0, `${w}x${h}, ${moved} pixels moved`)
+  turn.game.resize(844, 390)
+  turn.game.draw(1, 0)
+  const wide = turn.game.views().storage.GAME_INFO
+  check("a finger on a landscape canvas keeps the frame landscape", wide[0] === 480 && wide[1] === 270, `${wide[0]}x${wide[1]}`)
+  // Turned, the shown frame's column is the field's row, counted from the right:
+  // a tap where Settings is shown opens it, as Down to it and Enter do.
+  turn.game.resize(390, 844)
+  turn.game.draw(1, 0)
+  turn.link()[TAP_X] = 269 - Math.floor(line(3) * 1.5)
+  turn.link()[TAP_Y] = 240
+  turn.link()[TAPS] += 1
+  turn.idle(8)
+  turn.link()[TOUCH] = 0
+  turn.idle(24)
+  check("turned, a tap where Settings is shown opens it", turn.frame() === keySettings.frame(), `${turn.frame()} vs ${keySettings.frame()}`)
 }
 
 {
