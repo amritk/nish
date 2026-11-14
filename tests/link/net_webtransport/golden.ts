@@ -1,5 +1,5 @@
 // One real exchange with a `wtransport` 0.7.0 client (the Rust crate on
-// quinn and rustls, the one cs's relay runs on today), recorded by `main.ts
+// quinn and rustls, the one the Rust relay runs on), recorded by `main.ts
 // record` (`record.ts`) on 2026-10-06 over loopback and replayed here, byte
 // for byte, by a Nish client against the Nish server. The client:
 //

@@ -15,7 +15,7 @@ resumption, G4's AES kernel, G5's address change, G8's harness and G10 are
 built; §3 says what each row has left. The anchors below are at `ce9d394`;
 §1 says where each row stands now (*2026-11-08*).
 
-[WP34](wp34-hosting-cs.md) built a network stack for one program: cs's relay.
+[WP34](wp34-network-stack.md) built a network stack for one program: a game's relay.
 That stack serves HTTP/1.1 with WebSocket, HTTP/2, HTTP/3 and WebTransport, and
 S2's interop job (`.github/workflows/interop.yml`) runs it against real
 clients:
@@ -81,7 +81,7 @@ model; TFB accepts it, and many entries use it.
 
 #478's second half is WP34 N12: non-blocking `spawn`, `kill` and `waitpid`,
 the available parallelism, and the total memory, so that the supervisor can
-be written in Nish. It is wanted for the relay and cs's master too. TFB does
+be written in Nish. It is wanted for the relay and a game's master server too. TFB does
 not wait for it.
 
 **Acceptance.** #478's own: a `tests/link/` case with two listeners on one
@@ -220,9 +220,9 @@ closes.
 | Stage | What | Closes | Size |
 | --- | --- | --- | --- |
 | **G1** | Third-party interop where it is still missing: `curl` and the Autobahn suite's server cases for HTTP/1.1 and WebSocket, and Chrome over TLS on TCP for HTTP/1.1 and HTTP/2, all added to S2's job. Built: Chrome over HTTP/2 on TCP (`tests/interop/chrome-resume.py`), and `curl --http1.1`, Autobahn and Chrome over HTTP/1.1 (#1437) | WP34 H1 and T2 "Left"; H2's "Chrome open" | S–M |
-| **G2** | Server hardening: ~~a deadline for a whole request head ([H1-1](security/http1-codec.md))~~, closed by #895; ~~a lingering close after a refusal (H1-2)~~, closed by #1454; ~~HPACK's allocation per header block ([H2-1](security/http2.md))~~, closed by #473; ~~a SETTINGS timeout and an idle timeout for HTTP/2 (H2-3)~~, closed by #1454; ~~an idle timeout in the TLS carrier ([TLS-4](security/tls.md))~~, closed by #1449; ~~a session clock and a rate cap for WebTransport ([WT-2](security/webtransport.md))~~, closed by #1454; H3-5 stays open | those findings | M |
+| **G2** | Server hardening: ~~a deadline for a whole request head ([H1-1](security/http1-codec.md))~~, closed by #895; ~~a lingering close after a refusal (H1-2)~~, closed by #1454; ~~HPACK's allocation per header block ([H2-1](security/http2.md))~~, closed by #473; ~~a SETTINGS timeout and an idle timeout for HTTP/2 (H2-3)~~, closed by #1454; ~~an idle timeout in the TLS carrier ([TLS-4](security/tls.md))~~, closed by #1449; ~~a session clock and a rate cap for WebTransport ([WT-2](security/webtransport.md))~~, closed by #1454; ~~H3-5, an HTTP/3 server clock~~, closed by #1513 | those findings | M |
 | **G3** | TLS resumption: ~~NewSessionTicket and PSK resumption, without 0-RTT~~, built (`std/net/tls/ticket.ts`, "Resumption" in [tls.md](security/tls.md)); `secp256r1` as a key-share group beside x25519 on the server (the client accepts it, TLS-8); `record_size_limit` | WP34 T1 and T2 "Left" | M–L |
-| **G4** | Crypto speed, each part gated on its own measurement: ~~AES-GCM and AES header protection as a runtime kernel on AES-NI with PCLMULQDQ, and on AArch64's AESE with PMULL, falling back to the bitsliced Nish~~, built (`runtime/runtime-aes.c`, through `src/kernels.ts`; [WP38](wp38-simd.md)); a faster P-256, with 64-bit limbs or a fixed-base table, still open | WP34 K3 and K5 "Left" | M each |
+| **G4** | Crypto speed, each part gated on its own measurement: ~~AES-GCM and AES header protection as a runtime kernel on AES-NI with PCLMULQDQ, and on AArch64's AESE with PMULL, falling back to the bitsliced Nish~~, built (`runtime/runtime-aes.c`, through `src/kernels.ts`; [WP38](wp38-simd.md)); ~~a faster P-256, with 64-bit limbs or a fixed-base table~~, built (#1516: a cached table for G and a safegcd scalar inverse for verify; #1518: 64-bit limbs) | WP34 K3 and K5 "Left" | M each |
 | **G5** | QUIC: the runner's congestion cases; a congestion controller beyond NewReno (CUBIC, or BBR), if a measurement asks for one; ECN; ~~the AEAD limits ([QUIC-6](security/quic.md)); detecting an optimistic ACK (QUIC-7)~~, closed by #784; path MTU discovery (RFC 8899), since packets stay at 1,200 bytes today; ~~following a peer's address change, which A1 records as its NAT-rebinding gap~~, built (path validation and migration in `std/net/quic.ts`, QUIC-11 in [quic.md](security/quic.md)) | WP34 Q3, Q4 and A1 "Left" | L |
 | **G6** | QUIC on more than one core: E1's pre-fork shares a UDP port today, but the kernel picks a process from the peer's address, so a rebinding peer lands on another process. The process to route to is carried in the connection ID, and the packet is steered either by a `SO_ATTACH_REUSEPORT_EBPF` program or by forwarding between processes. Design note first | — | M–L |
 | **G7** | One handler for all three versions: a façade over `Http1Server`, `Http2TlsServer` and `Http3Server`, so that a program answers a request once whatever version carried it. It advertises `Alt-Svc` for HTTP/3 from the HTTP/1.1 and HTTP/2 responses, and adds cleartext HTTP/2 with prior knowledge (h2c), which is what `h2load` and a proxy's upstream speak. The façade must keep "nothing allocates per request". Design note first | — | M–L |
@@ -230,7 +230,7 @@ closes.
 | **G9** | WebTransport's draft: when Chrome moves past the draft `std/net/webtransport.ts` is pinned to, re-record the exchange and move the pin | [webtransport.md](security/webtransport.md), "The draft" | continuous |
 | **G10** | ~~The client role of TLS against the web PKI (WP34 N13)~~, built: `nish/net/tls/client`, chain validation against the system store in `nish/net/tls/verify`, and outbound HTTPS in `nish/net/fetch` ("The client" in [tls.md](security/tls.md)). Postgres over TLS (E6) is what is left | WP34 §8 | L |
 
-## 4. Decisions for the owner
+## 4. Decisions
 
 | | Question | Recommendation |
 | --- | --- | --- |

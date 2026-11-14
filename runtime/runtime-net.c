@@ -68,6 +68,7 @@ typedef int nish_net_unused;
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -88,6 +89,7 @@ typedef int nish_net_unused;
 #define SO_ATTACH_REUSEPORT_CBPF 51
 #endif
 #else
+#include <limits.h>
 #include <sys/event.h>
 #include <sys/time.h>
 #endif
@@ -178,7 +180,35 @@ static int nish_net_setup(int fd) {
 #define NISH_NOSIGNAL MSG_NOSIGNAL
 #endif
 
+/* Raises the soft `RLIMIT_NOFILE` to the hard limit, once per process, as Go
+   and Node do at start-up: a server is otherwise held to the soft limit it
+   inherits, often 1024 (256 on macOS), though the hard limit is usually far
+   higher. Every call here that makes a descriptor out of nothing calls it
+   first, so a program that never touches `nish:net` keeps the limit it was
+   given. Darwin's `setrlimit` refuses a soft limit above `OPEN_MAX`, and an
+   unlimited hard limit is the usual case there, so the raise stops at
+   `OPEN_MAX`. A failure is ignored: the program keeps the limit it had, and
+   the call that wanted a descriptor answers -24 when it meets it. The flag is
+   claimed atomically because `scope()` tasks can make their first sockets at
+   the same moment; a task that loses the claim goes on before the raise lands,
+   and holds no more descriptors than it could before. Children `spawn` starts
+   inherit the raised soft limit (docs/security/runtime.md, RT-54). */
+static void nish_net_raise_nofile(void) {
+  static int raised;
+  if (__atomic_exchange_n(&raised, 1, __ATOMIC_RELAXED)) return;
+  struct rlimit r;
+  if (getrlimit(RLIMIT_NOFILE, &r) != 0) return;
+  rlim_t want = r.rlim_max;
+#if !defined(__linux__)
+  if (want > (rlim_t)OPEN_MAX) want = (rlim_t)OPEN_MAX;
+#endif
+  if (r.rlim_cur >= want) return;
+  r.rlim_cur = want;
+  setrlimit(RLIMIT_NOFILE, &r);
+}
+
 static int nish_net_socket(int family, int type) {
+  nish_net_raise_nofile();
 #if defined(__linux__)
   return socket(family, type | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 #else
@@ -686,6 +716,7 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
    the `fcntl` after `kqueue()` on Darwin, where a child another thread spawns
    in between can inherit it, as `nish_net_setup`'s sockets can. */
 int32_t nish_poll_create(void) {
+  nish_net_raise_nofile();
 #if defined(__linux__)
   int fd = epoll_create1(EPOLL_CLOEXEC);
 #else
@@ -969,6 +1000,7 @@ int32_t nish_unix_accept(int32_t fd) {
 int32_t nish_unix_socket_pair(int32_t kind, nish_array *fds) {
   if ((kind != 1 && kind != 2) || fds->len < 2) return -22;
   int sv[2];
+  nish_net_raise_nofile();
 #if defined(__linux__)
   if (socketpair(AF_UNIX, (kind == 1 ? SOCK_STREAM : SOCK_SEQPACKET) | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, sv) != 0)
     return nish_net_fail();

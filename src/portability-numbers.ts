@@ -24,20 +24,7 @@
 // module constant once per module, at the root of its first walked body.
 
 import { isFractional, parseIntegerLiteral } from "./constants"
-import {
-  FLAG_PREFIX,
-  N_BINARY,
-  N_CALL,
-  N_CONSTRUCTOR,
-  N_EMPTY,
-  N_IDENT,
-  N_IMPORT_SPEC,
-  N_NUMBER,
-  N_PAREN,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { FLAG_PREFIX, Node, NodeKind } from "./nodes"
 import { isBuiltinConversion } from "./bounds"
 import { Edit } from "./diagnostics"
 import { StringSet } from "./map"
@@ -72,13 +59,13 @@ export const numberFindings = (walk: PortabilityWalk, node: Node, out: Portabili
     }
   }
   switch (node.kind) {
-    case N_BINARY:
+    case NodeKind.Binary:
       binaryFindings(walk, node, out)
       return
-    case N_UNARY:
+    case NodeKind.Unary:
       stepFinding(walk, node, out)
       return
-    case N_VAR_DECL:
+    case NodeKind.VarDecl:
       localFinding(walk, node, out)
       return
     default:
@@ -145,7 +132,7 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
   }
   let arg = node
   let up = walk.parents.parentOf(arg)
-  while (up !== null && up.kind === N_PAREN) {
+  while (up !== null && up.kind === NodeKind.Paren) {
     arg = up
     up = walk.parents.parentOf(arg)
   }
@@ -155,7 +142,7 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
   const call = walk.parents.parentOf(up)
   return (
     call !== null &&
-    call.kind === N_CALL &&
+    call.kind === NodeKind.Call &&
     call.children[1] === up &&
     isBuiltinConversion(walk.program, call, name)
   )
@@ -202,11 +189,14 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
     edits.push(new Edit(node.end, node.end, ")"))
     return edits
   }
-  if (left.kind !== N_IDENT || holdsDivision(right) || !onlyOperatorBetween(walk, left, right)) {
+  if (left.kind !== NodeKind.Ident || holdsDivision(right) || !onlyOperatorBetween(walk, left, right)) {
     return edits
   }
   const bare =
-    right.kind === N_IDENT || right.kind === N_NUMBER || right.kind === N_PAREN || right.kind === N_CALL
+    right.kind === NodeKind.Ident ||
+    right.kind === NodeKind.Number ||
+    right.kind === NodeKind.Paren ||
+    right.kind === NodeKind.Call
   const divisor = bare ? walk.textOf(right) : `(${walk.textOf(right)})`
   edits.push(new Edit(left.end, right.end, ` = ${name}(${left.text} / ${divisor})`))
   return edits
@@ -237,14 +227,14 @@ const collectBoundConversions = (
   const named =
     node.text === "toI32" || node.text === "toU8" || node.text === "toU16" || node.text === "toU32"
   // `import { half as toI32 }` binds the spec's own text; its IDENT is `half`.
-  if (named && node.kind === N_IMPORT_SPEC) {
+  if (named && node.kind === NodeKind.ImportSpec) {
     out.add(node.text)
   }
-  if (named && node.kind === N_IDENT) {
+  if (named && node.kind === NodeKind.Ident) {
     const call = parents.parentOf(node)
     const builtin =
       call !== null &&
-      call.kind === N_CALL &&
+      call.kind === NodeKind.Call &&
       call.children[0] === node &&
       isBuiltinConversion(program, call, node.text)
     if (!builtin) {
@@ -258,7 +248,7 @@ const collectBoundConversions = (
 
 /** Whether `node` is or contains a `/` or `/=`, at any depth. */
 const holdsDivision = (node: Node): boolean => {
-  if (node.kind === N_BINARY && (node.text === "/" || node.text === "/=")) {
+  if (node.kind === NodeKind.Binary && (node.text === "/" || node.text === "/=")) {
     return true
   }
   let i = 0
@@ -300,13 +290,17 @@ const onlyOperatorBetween = (walk: PortabilityWalk, left: Node, right: Node): bo
  * does not change the answer, because `-k & 31` is 0 exactly when `k & 31` is.
  */
 const clearsSignBit = (walk: PortabilityWalk, count: Node): boolean => {
-  if (count.kind === N_NUMBER) {
+  if (count.kind === NodeKind.Number) {
     return !isFractional(count.text) && (parseIntegerLiteral(count.text) & toI64(31)) !== toI64(0)
   }
-  if (count.kind === N_PAREN) {
+  if (count.kind === NodeKind.Paren) {
     return clearsSignBit(walk, count.children[0])
   }
-  if (count.kind === N_UNARY && count.flags === FLAG_PREFIX && (count.text === "-" || count.text === "+")) {
+  if (
+    count.kind === NodeKind.Unary &&
+    count.flags === FLAG_PREFIX &&
+    (count.text === "-" || count.text === "+")
+  ) {
     return clearsSignBit(walk, count.children[0])
   }
   const constant = walk.program.nodeConstants[count.id]
@@ -382,7 +376,7 @@ const localFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding
  */
 const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   const decl = walk.sig.decl
-  const ctor = decl.kind === N_CONSTRUCTOR
+  const ctor = decl.kind === NodeKind.Constructor
   const at: i32 = ctor ? 0 : 1
   const params = decl.children[at].children
   const types = walk.sig.paramTypes
@@ -401,7 +395,7 @@ const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): vo
   // An arrow argument whose return type was inferred has no annotation, and
   // what it returns is a value some declaration already holds.
   const annotation = decl.children[2]
-  if (annotation.kind !== N_EMPTY) {
+  if (annotation.kind !== NodeKind.Empty) {
     out.push(wideFinding(annotation, `\`${walk.sig.sourceName}\`'s return value`))
   }
 }

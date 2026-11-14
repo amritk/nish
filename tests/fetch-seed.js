@@ -59,6 +59,7 @@ const check = (name, ok, detail) => {
 const installer = (mode, version) => `#!/bin/sh
 printf '%s\\n' "$*" >> install.calls
 printf '%s\\n' "$#" >> install.argc
+printf '%s\\n' "\${NISH_NO_MODIFY_PATH:-}" >> install.nopath
 dir=""
 while [ $# -gt 0 ]; do
   case "$1" in --dir) dir="$2"; shift 2 ;; *) shift ;; esac
@@ -122,6 +123,13 @@ const fresh = (...a) => {
     `${both(r)}\ncalls: ${calls(dir)}`
   )
   check("and says which version it fetched", r.stdout === "fetch-seed: nish 0.5.0 in build/seed\n", both(r))
+  // A seed in build/ is no one's command: install.sh would otherwise put
+  // build/seed/bin on the PATH in the developer's own shell profile.
+  check(
+    "and tells the installer to leave the shell profile alone",
+    readOr(path.join(dir, "install.nopath"), "") === "1\n",
+    readOr(path.join(dir, "install.nopath"), "(installer not called)")
+  )
   check(
     "and keeps the installer's success chatter to itself",
     !r.stdout.includes("stand-in chatter") && !r.stderr.includes("stand-in chatter"),
@@ -366,7 +374,7 @@ const installSandbox = (version) => {
   return { dir, name, tarball, release, home: path.join(dir, "home", "nish") }
 }
 
-const install = (box, args) =>
+const install = (box, args, env = {}) =>
   spawnSync("sh", [installSh, ...args], {
     encoding: "utf8",
     env: {
@@ -377,6 +385,15 @@ const install = (box, args) =>
       GH_MODE: path.join(box.dir, "gh-mode"),
       GH_LOG: path.join(box.dir, "gh.log"),
       NISH_VERSION: "",
+      NISH_REQUIRE_ATTESTATION: "",
+      // A home of the sandbox's own: a successful install writes the PATH line
+      // into the startup file of $SHELL, and that must never be the real one.
+      HOME: path.join(box.dir, "user"),
+      SHELL: "/bin/sh",
+      ZDOTDIR: "",
+      XDG_CONFIG_HOME: "",
+      NISH_NO_MODIFY_PATH: "",
+      ...env,
     },
   })
 const ran = (box) => fs.existsSync(path.join(box.dir, "ran"))
@@ -514,6 +531,53 @@ for (const [mode, reason] of [
   check(
     "install.sh asks for no attestation from 0.21.0, which predates them",
     r.status === 0 && ran(box) && ghCalls(box) === "",
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+
+// NISH_REQUIRE_ATTESTATION=1 (SC-32): CI's seed fetches may not skip the
+// check. With no usable gh the install is refused, the compiler never runs and
+// gh is never asked to verify; with a gh that accepts it, it installs as
+// before; and a release too old to carry an attestation is refused, before gh
+// is asked anything.
+for (const [mode, reason] of [
+  ["signed-out", "not signed in"],
+  ["old", "too old"],
+]) {
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, mode)
+  const r = install(box, ["9.9.9", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  check(
+    `install.sh with NISH_REQUIRE_ATTESTATION=1 refuses when gh is ${mode}, without running it`,
+    refused(box, r) &&
+      r.stderr.includes("NISH_REQUIRE_ATTESTATION=1 refuses") &&
+      r.stderr.includes(reason) &&
+      !ghCalls(box)
+        .split("\n")
+        .some((call) => call.startsWith("attestation verify ") && call !== "attestation verify --help"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+{
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, "pass")
+  const r = install(box, ["9.9.9", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  check(
+    "install.sh with NISH_REQUIRE_ATTESTATION=1 installs a release whose attestation gh accepts",
+    r.status === 0 && ran(box) && r.stdout.includes("verified:"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+{
+  const box = installSandbox("0.21.0")
+  withSums(box)
+  ghMode(box, "pass")
+  const r = install(box, ["0.21.0", "--dir", box.home], { NISH_REQUIRE_ATTESTATION: "1" })
+  check(
+    "install.sh with NISH_REQUIRE_ATTESTATION=1 refuses 0.21.0, which predates attestations",
+    refused(box, r) && r.stderr.includes("predates build provenance attestations") && ghCalls(box) === "",
     `${told(box, r)}\ngh:\n${ghCalls(box)}`
   )
 }
@@ -733,6 +797,259 @@ for (const args of [
   )
 }
 
+// ---- install.sh puts the install on PATH ------------------------------------------
+//
+// The one-liner used to print an `export PATH=` line and stop, and the next thing
+// nearly every user typed was `nish`, into `command not found`. It now writes the
+// line into the startup file of the shell $SHELL names, between markers, once.
+
+/** Which startup file install.sh picks for a shell, a system and a home. */
+const profileFor = (shell, os_, home, env = {}) =>
+  spawnSync(
+    "sh",
+    [
+      "-c",
+      'NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_profile_for "$2" "$3" "$4"',
+      "sh",
+      installSh,
+      shell,
+      os_,
+      home,
+    ],
+    { encoding: "utf8", env: { ...process.env, ZDOTDIR: "", XDG_CONFIG_HOME: "", ...env } }
+  ).stdout.trim()
+
+{
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "install-sh-rc-"))
+  sandboxes.push(home)
+  const got = {
+    zsh: profileFor("/bin/zsh", "Darwin", home),
+    zdotdir: profileFor("/bin/zsh", "Linux", home, { ZDOTDIR: path.join(home, "zdot") }),
+    bashLinux: profileFor("/usr/bin/bash", "Linux", home),
+    bashMacFresh: profileFor("/bin/bash", "Darwin", home),
+    fish: profileFor("/opt/homebrew/bin/fish", "Darwin", home),
+    fishXdg: profileFor("fish", "Linux", home, { XDG_CONFIG_HOME: path.join(home, "xdg") }),
+    dash: profileFor("/bin/dash", "Linux", home),
+    unset: profileFor("", "Linux", home),
+  }
+  check(
+    "install.sh picks ~/.zshrc for zsh, ~/.bashrc for bash on Linux, conf.d/nish.fish for fish, ~/.profile otherwise",
+    got.zsh === `${home}/.zshrc` &&
+      got.zdotdir === `${home}/zdot/.zshrc` &&
+      got.bashLinux === `${home}/.bashrc` &&
+      got.bashMacFresh === `${home}/.bash_profile` &&
+      got.fish === `${home}/.config/fish/conf.d/nish.fish` &&
+      got.fishXdg === `${home}/xdg/fish/conf.d/nish.fish` &&
+      got.dash === `${home}/.profile` &&
+      got.unset === `${home}/.profile`,
+    JSON.stringify(got, null, 2)
+  )
+  // macOS's Terminal starts login shells, and login bash reads only the first of
+  // these that exists: creating ~/.bash_profile beside a ~/.profile would make it
+  // stop reading ~/.profile.
+  fs.writeFileSync(path.join(home, ".profile"), "")
+  const onlyProfile = profileFor("/bin/bash", "Darwin", home)
+  fs.writeFileSync(path.join(home, ".bash_login"), "")
+  const login = profileFor("/bin/bash", "Darwin", home)
+  check(
+    "install.sh writes for bash on macOS into the one login file bash already reads",
+    onlyProfile === `${home}/.profile` && login === `${home}/.bash_login`,
+    JSON.stringify({ onlyProfile, login })
+  )
+}
+
+/** A sandbox with a release 9.9.9 whose SHA256SUMS matches, and a home to install into. */
+const pathBox = () => {
+  const box = installSandbox("9.9.9")
+  fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
+  const user = path.join(box.dir, "user")
+  fs.mkdirSync(user)
+  return { box, user, bin: path.join(box.home, "bin") }
+}
+
+// zsh, the macOS default: the line lands in ~/.zshrc, after what was there, and a
+// shell that reads the file runs the installed compiler by its bare name.
+{
+  const { box, user, bin } = pathBox()
+  const rc = path.join(user, ".zshrc")
+  const before = "alias ll='ls -l'\nexport EDITOR=vi" // no newline at the end
+  fs.writeFileSync(rc, before)
+  const r = install(box, ["9.9.9", "--dir", box.home], { SHELL: "/bin/zsh" })
+  const text = readOr(rc, "")
+  check(
+    "install.sh adds the install to PATH in ~/.zshrc for zsh, after a last line with no newline",
+    r.status === 0 &&
+      text.startsWith(`${before}\n# >>> nish >>>\n`) &&
+      text.includes(`export PATH='${bin}':"$PATH"\n# <<< nish <<<\n`) &&
+      r.stdout.includes(`Added it to your PATH in ${rc}`) &&
+      r.stdout.includes(`source '${rc}'`) &&
+      !r.stdout.includes("cp "),
+    `${told(box, r)}\n.zshrc:\n${text}`
+  )
+  const sourced = spawnSync("sh", ["-c", '. "$1"; nish --version', "sh", rc], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: "/usr/bin:/bin" },
+  })
+  check(
+    "install.sh's PATH line, read by a shell, finds the installed nish by its bare name",
+    sourced.status === 0 && sourced.stdout.trim() === "nish 9.9.9",
+    both(sourced)
+  )
+  const again = install(box, ["9.9.9", "--dir", box.home, "--force"], { SHELL: "/bin/zsh" })
+  const twice = readOr(rc, "")
+  check(
+    "install.sh adds the PATH line once, however many times it runs",
+    again.status === 0 && twice === text && twice.split("# >>> nish >>>").length === 2,
+    `${both(again)}\n.zshrc:\n${twice}`
+  )
+  // A second run of the same version stops at "already installed" -- which is where
+  // someone who installed before any of this lands when they run it again for PATH.
+  fs.writeFileSync(rc, before)
+  const same = install(box, ["9.9.9", "--dir", box.home], { SHELL: "/bin/zsh" })
+  check(
+    "install.sh sets PATH up even when the version asked for is already installed",
+    same.status === 0 && same.stdout.includes("already installed") && readOr(rc, "").includes(`'${bin}'`),
+    `${both(same)}\n.zshrc:\n${readOr(rc, "")}`
+  )
+  const u = install(box, ["--uninstall", "--dir", box.home], { SHELL: "/bin/zsh" })
+  check(
+    "install.sh --uninstall takes its PATH line out of ~/.zshrc and leaves the rest as it was",
+    u.status === 0 &&
+      readOr(rc, "") === `${before}\n` &&
+      u.stdout.includes(`removed the PATH line from ${rc}`),
+    `${both(u)}\n.zshrc:\n${readOr(rc, "")}`
+  )
+}
+
+// bash on Linux, through a ~/.bashrc that is a symlink into a dotfiles checkout:
+// it is still that symlink after the install and after the uninstall.
+{
+  const { box, user, bin } = pathBox()
+  const real = path.join(box.dir, "dotfiles-bashrc")
+  fs.writeFileSync(real, "PS1='$ '\n")
+  const rc = path.join(user, ".bashrc")
+  fs.symlinkSync(real, rc)
+  const r = install(box, ["9.9.9", "--dir", box.home], { SHELL: "/bin/bash" })
+  const want = os.platform() === "darwin" ? path.join(user, ".bash_profile") : rc
+  const wrote = readOr(want, "")
+  const linked = fs.lstatSync(rc).isSymbolicLink()
+  const u = install(box, ["--uninstall", "--dir", box.home], { SHELL: "/bin/bash" })
+  check(
+    "install.sh writes bash's PATH line through a symlinked startup file, and takes it out again, keeping the link",
+    r.status === 0 &&
+      wrote.includes(`export PATH='${bin}':"$PATH"`) &&
+      linked &&
+      u.status === 0 &&
+      fs.lstatSync(rc).isSymbolicLink() &&
+      readOr(real, "") === "PS1='$ '\n",
+    `${told(box, r)}\n${want}:\n${wrote}\nuninstall: ${both(u)}`
+  )
+}
+
+// fish reads every file in conf.d/ by itself, so the install has one of its own,
+// and the uninstall deletes it.
+{
+  const { box, user, bin } = pathBox()
+  const conf = path.join(user, ".config", "fish", "conf.d", "nish.fish")
+  const r = install(box, ["9.9.9", "--dir", box.home], { SHELL: "/usr/local/bin/fish" })
+  const text = readOr(conf, "")
+  check(
+    "install.sh writes fish's PATH line into conf.d/nish.fish, in fish's own syntax",
+    r.status === 0 &&
+      text.includes(`if not contains -- '${bin}' $PATH\n    set -gx PATH '${bin}' $PATH\nend\n`) &&
+      r.stdout.includes(`source '${conf}'`),
+    `${told(box, r)}\nnish.fish:\n${text}`
+  )
+  if (spawnSync("fish", ["--version"]).status === 0) {
+    const inFish = spawnSync("fish", ["--no-config", "-c", `source '${conf}'; nish --version`], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: "/usr/bin:/bin" },
+    })
+    check(
+      "install.sh's fish line, sourced by fish, finds nish",
+      inFish.stdout.trim() === "nish 9.9.9",
+      both(inFish)
+    )
+  }
+  const u = install(box, ["--uninstall", "--dir", box.home])
+  check(
+    "install.sh --uninstall deletes the fish file it wrote, whatever $SHELL is now",
+    u.status === 0 && !fs.existsSync(conf),
+    both(u)
+  )
+}
+
+// Any other shell gets ~/.profile, in POSIX syntax, sourced with `.`.
+{
+  const { box, user, bin } = pathBox()
+  const rc = path.join(user, ".profile")
+  const r = install(box, ["9.9.9", "--dir", box.home], { SHELL: "/bin/dash" })
+  check(
+    "install.sh adds the PATH line to ~/.profile for any other shell, and says to read it with `.`",
+    r.status === 0 &&
+      readOr(rc, "").includes(`export PATH='${bin}':"$PATH"`) &&
+      r.stdout.includes(`. '${rc}'`),
+    `${told(box, r)}\n.profile:\n${readOr(rc, "")}`
+  )
+}
+
+// Told not to -- by flag or by environment -- or with the directory already on
+// PATH, it writes nothing into the home at all.
+{
+  const cases = [
+    ["--no-modify-path", ["--no-modify-path"], {}, "export PATH="],
+    ["NISH_NO_MODIFY_PATH=1", [], { NISH_NO_MODIFY_PATH: "1" }, "export PATH="],
+    ["the directory already on PATH", [], {}, "already on your PATH"],
+  ]
+  for (const [label, flags, env, says] of cases) {
+    const { box, user, bin } = pathBox()
+    const onPath = label.includes("already")
+      ? { PATH: `${bin}:${path.join(box.dir, "bin")}:${process.env.PATH}` }
+      : {}
+    const r = install(box, ["9.9.9", "--dir", box.home, ...flags], { SHELL: "/bin/zsh", ...env, ...onPath })
+    check(
+      `install.sh leaves every startup file alone with ${label}`,
+      r.status === 0 && fs.readdirSync(user).length === 0 && r.stdout.includes(says),
+      `${told(box, r)}\nhome: ${fs.readdirSync(user)}`
+    )
+  }
+}
+
+// A directory whose path a startup file cannot hold literally is not written; the
+// line to add by hand is printed instead, with the reason.
+{
+  const { box, user } = pathBox()
+  const odd = path.join(box.dir, "a:b")
+  const r = install(box, ["9.9.9", "--dir", odd], { SHELL: "/bin/zsh" })
+  check(
+    "install.sh does not write a PATH line for a directory with a colon in it, and says why",
+    r.status === 0 &&
+      fs.readdirSync(user).length === 0 &&
+      r.stdout.includes("was not changed") &&
+      r.stdout.includes("colon"),
+    `${told(box, r)}\nhome: ${fs.readdirSync(user)}`
+  )
+}
+
+// Two installs, two blocks: uninstalling one leaves the other's line where it is.
+{
+  const { box, user, bin } = pathBox()
+  const second = path.join(box.dir, "home", "other")
+  const rc = path.join(user, ".zshrc")
+  install(box, ["9.9.9", "--dir", box.home], { SHELL: "/bin/zsh" })
+  install(box, ["9.9.9", "--dir", second], { SHELL: "/bin/zsh" })
+  const u = install(box, ["--uninstall", "--dir", second], { SHELL: "/bin/zsh" })
+  const text = readOr(rc, "")
+  check(
+    "install.sh --uninstall takes out only the PATH line of the install it removes",
+    u.status === 0 &&
+      text.includes(`'${bin}'`) &&
+      !text.includes(`'${second}/bin'`) &&
+      text.split("# >>> nish >>>").length === 2,
+    `${both(u)}\n.zshrc:\n${text}`
+  )
+}
+
 // ---- the npm channel: a platform package runs nothing on install -------------------
 //
 // npm verifies every tarball against the lockfile's integrity hash, so what this
@@ -874,6 +1191,59 @@ const runScripts = (text) => {
   check("every action a workflow uses is pinned to a full commit SHA", loose.length === 0, loose.join("\n"))
 }
 
+// SC-30: no workflow lets a dependency run code at install time, and every
+// job runs the one Node release CI pins, named exactly. The one exception is
+// rebuild.yml's `ddc` job, which installs old tags' lockfiles that npm 11
+// refuses; it pins its own older release, as exactly.
+{
+  const scripted = workflows.flatMap(({ file, text }) =>
+    [...text.matchAll(/^\s*(?:- )?run:\s*(npm ci\b[^\n]*)/gm)]
+      .filter((m) => !m[1].includes("--ignore-scripts"))
+      .map((m) => `${file}: ${m[1]}`)
+  )
+  check("every `npm ci` a workflow runs passes --ignore-scripts", scripted.length === 0, scripted.join("\n"))
+  const versions = workflows.flatMap(({ file, text }) =>
+    [...text.matchAll(/node-version:\s*(\S+)/g)].map((m) => ({ file, v: m[1].replace(/^["']|["']$/g, "") }))
+  )
+  const historical = versions.filter(({ file, v }) => file === "rebuild.yml" && v.startsWith("22."))
+  check(
+    `rebuild.yml's ddc job alone pins an older Node, exactly (${historical.map(({ v }) => v).join(", ")})`,
+    historical.length === 1 && /^\d+\.\d+\.\d+$/.test(historical[0].v),
+    historical.map(({ file, v }) => `${file}: ${v}`).join("\n")
+  )
+  const current = versions.filter((entry) => !historical.includes(entry))
+  const distinct = [...new Set(current.map(({ v }) => v))]
+  check(
+    `every other workflow pins one exact Node release (${distinct.join(", ")})`,
+    current.length > 0 && distinct.length === 1 && /^\d+\.\d+\.\d+$/.test(distinct[0]),
+    current.map(({ file, v }) => `${file}: ${v}`).join("\n")
+  )
+}
+
+// SC-32: a seed CI fetches has its build provenance checked, or the fetch
+// fails; install.sh's warn-and-continue is for a person's machine.
+{
+  const unchecked = workflows.flatMap(({ file, text }) => {
+    const steps = text.split(/\n(?=\s*- (?:name|uses|run):)/)
+    return steps
+      .filter((step) => /^\s*(?:- )?(?:run: )?bash scripts\/fetch-seed\.sh/m.test(step))
+      .filter(
+        (step) =>
+          !/NISH_REQUIRE_ATTESTATION: "1"/.test(step) || !/GH_TOKEN: \$\{\{ github\.token \}\}/.test(step)
+      )
+      .map((step) => `${file}: ${step.trim().split("\n")[0]}`)
+  })
+  const fetches = workflows.filter(({ text }) =>
+    /^\s*(?:- )?(?:run: )?bash scripts\/fetch-seed\.sh/m.test(text)
+  )
+  const ungranted = fetches.filter(({ text }) => !/\n\s+attestations: read\n/.test(text))
+  check(
+    `every workflow step that fetches the seed requires its attestation, with a token that may read it (${fetches.length} files)`,
+    fetches.length > 0 && unchecked.length === 0 && ungranted.length === 0,
+    `${unchecked.join("\n")}\nno attestations: read: ${ungranted.map((w) => w.file).join(", ")}`
+  )
+}
+
 // The two triggers that run a fork's pull request with the base repository's
 // secrets and a write token, and the explicit token every file narrows.
 {
@@ -887,17 +1257,16 @@ const runScripts = (text) => {
 }
 
 // release.yml: the job holding `contents: write` does not leave the token in
-// .git/config while `npm ci` runs install scripts, the release carries a
-// SHA256SUMS for install.sh to check, and the npm that publishes is an exact
-// version rather than whatever a range resolves to on the day.
+// .git/config, the release carries a SHA256SUMS for install.sh to check, and
+// the npm that publishes is the one the pinned Node ships, never a download
+// made under id-token: write (SC-14, SC-30).
 {
   const release = workflows.find((w) => w.file === "release.yml").text
   const job = (name) => jobOf(release, name)
   const releaseJob = job("release")
   check(
     "release.yml's release job checks out without persisting its write token",
-    /uses: actions\/checkout@\S+[^\n]*\n\s+with:\n\s+persist-credentials: false/.test(releaseJob) &&
-      releaseJob.includes("npm ci"),
+    /uses: actions\/checkout@\S+[^\n]*\n\s+with:\n\s+persist-credentials: false/.test(releaseJob),
     releaseJob
   )
   check(
@@ -906,9 +1275,23 @@ const runScripts = (text) => {
       /gh release create[^\n]*\\\n(?:[^\n]*\\\n)*\s+build\/release\/SHA256SUMS \\/.test(releaseJob),
     releaseJob
   )
+  const code = release.replace(/^\s*#.*$/gm, "")
   check(
-    "release.yml publishes with an exact npm version, not a range",
-    /npm install -g npm@\d+\.\d+\.\d+\n/.test(job("npm")) && !/npm@[\^~]/.test(release),
+    "release.yml installs no npm package in any job, and restores no npm or apt cache another run saved",
+    !/\bnpm (ci|install|i)\b/.test(code) &&
+      !/cache: npm/.test(code) &&
+      !/registry-url:/.test(code) &&
+      /uses: \.\/\.github\/actions\/apt-install\n\s+with:\n\s+packages: [^\n]+\n\s+cache: "false"\n/.test(
+        job("binaries")
+      ),
+    job("binaries")
+  )
+  check(
+    "release.yml's npm job publishes in the npm environment with the npm its pinned Node ships",
+    /\n {4}environment: npm\n/.test(job("npm")) &&
+      /node-version: \d+\.\d+\.\d+\n/.test(job("npm")) &&
+      !/npm@/.test(job("npm").replace(/^\s*#.*$/gm, "")) &&
+      !/environment:/.test(release.replace(job("npm"), "").replace(/^\s*#.*$/gm, "")),
     job("npm")
   )
   // The release job hands its sums to the npm job as an output, and the npm job

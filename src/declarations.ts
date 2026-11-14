@@ -36,13 +36,8 @@ import {
   FLAG_REST,
   FLAG_SIGNATURE,
   FLAG_TYPE_ONLY,
-  N_ARRAY,
-  N_EMPTY,
-  N_IDENT,
-  N_LIST,
-  N_NULL,
-  N_UNARY,
   Node,
+  NodeKind,
 } from "./nodes"
 import { FieldInfo, FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
 import { checkLiteralInitializer, layoutClass } from "./structs"
@@ -124,7 +119,7 @@ export const collectParams = (
     // A default without an annotation is refused by `collectParamForm`, which
     // names the form to write; the empty annotation is no type to resolve.
     const untypedDefault =
-      param.children[1].kind === N_EMPTY &&
+      param.children[1].kind === NodeKind.Empty &&
       (param.flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) === (FLAG_DEFAULT | FLAG_SIGNATURE)
     const type = untypedDefault ? T_ERROR : resolveType(param.children[1], ctx)
     let duplicate = false
@@ -191,7 +186,7 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
     return
   }
   const init = param.children[2]
-  if (param.children[1].kind === N_EMPTY) {
+  if (param.children[1].kind === NodeKind.Empty) {
     ctx.error(
       param,
       `Parameter \`${name}\` has a default and no type annotation; write its type before the default, \`${name}: T = ${spellingOf(ctx, init)}\``
@@ -210,7 +205,7 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
   }
   // `null` is the one default of a `T | null`: a constant pointer, so the
   // call passes it as it passes a number, and nothing is built per call.
-  const isNull = init.kind === N_NULL
+  const isNull = init.kind === NodeKind.Null
   if (isNull && !ctx.table.isNullable(type)) {
     ctx.error(
       init,
@@ -244,11 +239,11 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
   // recorded here for the walks that read it (`--emit-ts` writes `5` at
   // `i64` as `5n`).
   ctx.program.nodeTypes[init.id] = type
-  if (init.kind === N_UNARY && init.children.length > 0) {
+  if (init.kind === NodeKind.Unary && init.children.length > 0) {
     ctx.program.nodeTypes[init.children[0].id] = type
   }
   const notLiteral = `Default of parameter \`${name}\`: a default is a literal, an enum member or the name of an earlier parameter of the same number, \`boolean\` or enum type, because each call that leaves the argument out passes it as a constant`
-  if (init.kind === N_IDENT) {
+  if (init.kind === NodeKind.Ident) {
     const source = sig.paramNames.indexOf(init.text)
     if (source < 0 || source >= position || init.text === "this" || sig.isCompileTime(source)) {
       ctx.error(init, notLiteral)
@@ -415,7 +410,7 @@ const gatherRest = (ctx: CheckContext, call: Node, args: Node, from: i32): void 
   }
   const start = elements.length > 0 ? elements[0].start : call.end - 1
   const end = elements.length > 0 ? elements[elements.length - 1].end : call.end - 1
-  const array = new Node(N_ARRAY, start, end)
+  const array = new Node(NodeKind.Array, start, end)
   array.id = args.id + 1
   array.flags = FLAG_GATHERED
   array.children = elements
@@ -441,7 +436,7 @@ const functionParameterFormMessage = (name: string): string =>
  */
 export const optionalParameterMessage = (ctx: CheckContext, param: Node): string => {
   const name = param.children[0].text
-  const type = param.children[1].kind === N_EMPTY ? "T" : spellingOf(ctx, param.children[1])
+  const type = param.children[1].kind === NodeKind.Empty ? "T" : spellingOf(ctx, param.children[1])
   return `Optional parameters are not supported: give \`${name}\` a default instead, \`${name}: ${type} = <default>\`, which a call that leaves it out passes`
 }
 
@@ -468,7 +463,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
   const foreign = sig.foreign()
   collectParams(ctx, sig, decl.children[1], -1, foreign)
   const returnAnnotation = decl.children[2]
-  if (returnAnnotation.kind === N_EMPTY) {
+  if (returnAnnotation.kind === NodeKind.Empty) {
     // The pass 1 sweep has refused it (NL2096, or NL2655 when async; `refuseUnsupportedForms`).
     sig.returnType = T_ERROR
   } else if (sig.isAsync()) {
@@ -744,7 +739,7 @@ const typeOnlyImportFix = (ctx: CheckContext, decl: Node, defaultName: Node | nu
   const edits: Edit[] = []
   const text = ctx.source.text
   if (
-    decl.children[0].kind !== N_LIST ||
+    decl.children[0].kind !== NodeKind.List ||
     defaultName !== null ||
     text.substring(decl.start, decl.start + 6) !== "import"
   ) {
@@ -805,7 +800,7 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
   }
   const specs = decl.children[0]
   const defaultName: Node | null = decl.children.length > 1 ? decl.children[1] : null
-  if (specs.kind === N_EMPTY && defaultName === null) {
+  if (specs.kind === NodeKind.Empty && defaultName === null) {
     ctx.error(
       decl,
       `Side-effect imports (\`import "${specifier}"\`) are not supported; modules have no top-level code`
@@ -820,14 +815,14 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
     refuseDefaultImport(ctx, defaultName, defaultName.text, specifier)
     return
   }
-  if (specs.kind === N_IDENT) {
+  if (specs.kind === NodeKind.Ident) {
     ctx.error(
       specs,
       `Namespace imports (\`import * as ${specs.text}\`) are not supported; import functions by name`
     )
     return
   }
-  if (specs.kind !== N_LIST || specs.children.length === 0) {
+  if (specs.kind !== NodeKind.List || specs.children.length === 0) {
     ctx.error(decl, "Empty import list")
     return
   }
@@ -836,7 +831,7 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
       ctx.error(spec, "Type-only imports are not supported")
       return
     }
-    if (spec.children[0].kind === N_IDENT && spec.children[0].text === "default") {
+    if (spec.children[0].kind === NodeKind.Ident && spec.children[0].text === "default") {
       refuseDefaultImport(ctx, spec, spec.text, specifier)
       return
     }

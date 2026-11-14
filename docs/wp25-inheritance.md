@@ -126,7 +126,7 @@ Almost nothing, which is the argument.
 The self-hosted compiler was 25,911 lines over 57 modules at the time and
 declared no derived class at all. That is not an accident:
 [wp14-selfhost.md](wp14-selfhost.md) §2.1 chose **one `Node` class with a
-`kind: i32` discriminant** over a hierarchy, and Nish-0 — the subset `src/` is
+`kind` discriminant** (now typed `NodeKind`) over a hierarchy, and Nish-0 — the subset `src/` is
 written in — was defined as the language minus "inheritance and downcasts".
 The largest Nish program in existence had already declined the feature.
 

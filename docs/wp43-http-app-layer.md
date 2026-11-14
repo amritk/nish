@@ -35,7 +35,7 @@ A full application server, with logging, configuration and graceful shutdown,
 stays an example under `examples/`. Those three are policy, and they depend on
 work filed elsewhere: request deadlines (G2 in
 [wp39-http-server.md](wp39-http-server.md)) and signal handling (N12 in
-[wp34-hosting-cs.md](wp34-hosting-cs.md)). A program copies the example and
+[wp34-network-stack.md](wp34-network-stack.md)). A program copies the example and
 changes it. A library would have to guess.
 
 ## 2. The router

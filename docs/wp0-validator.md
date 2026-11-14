@@ -91,10 +91,11 @@ an error. [`.claude/linting.md`](../.claude/linting.md) has the full rule set.
 The reasoning that rule set rests on:
 
 - **Rules that mirror the language**, so the compiler's source and the
-  examples read like Nish: `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
+  examples read like Nish: `noVar`, `noExplicitAny`, `noNamespace`,
   `noVoid`, `noParameterAssign` (parameters are immutable in Nish),
   `useExplicitLengthCheck` (there is no truthiness) and
-  `useConsistentArrayType` (`T[]`). `useOptionalChain` and
+  `useConsistentArrayType` (`T[]`). `noEnum` holds for the JavaScript tooling
+  only, since Nish has numeric enums. `useOptionalChain` and
   `useExponentiationOperator` are turned *off* because they push code towards
   `?.` and `**`, which Nish rejects.
 - **House style** (kebab-case file names, `type` over `interface`, a function

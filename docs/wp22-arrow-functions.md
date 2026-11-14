@@ -46,7 +46,7 @@ none, and cannot change the output of any program.
 ## 2. Why it costs nothing at runtime
 
 **The IR is identical by construction.** The parser normalises both spellings
-to one `N_FUNCTION` node. The name comes from the `const`, and the parameters,
+to one `NodeKind.FunctionDecl` node. The name comes from the `const`, and the parameters,
 return type and body come from the arrow. So nothing after the parser can tell
 the two apart. There is no closure, no `this` binding and no allocation. The
 existing goldens are therefore the migration's oracle: a rewrite that moves any
@@ -275,7 +275,7 @@ two sides is illegal?** It is stage D's to answer.
 refused for carrying a body, and §9 keeps that rule.
 
 **Where the rule goes.** The parser normalises both spellings to one
-`N_FUNCTION` and records no flag for which one it read (§2). So D needs a flag
+`NodeKind.FunctionDecl` and records no flag for which one it read (§2). So D needs a flag
 on the node for the keyword form, set in `src/parser.ts`. The refusal then goes
 in `refuseBindingForm` (`src/statements.ts`), *after* the two checks that
 already run there: `Functions must be named` (NL2203) and the `export default`

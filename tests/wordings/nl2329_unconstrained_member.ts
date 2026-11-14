@@ -1,4 +1,4 @@
-// NL2329: a member of an unconstrained type parameter (WP18 §8 message 8), in
+// NL2329: a member of an unconstrained type parameter, in
 // the write form. `T` is `Cell` at the one instantiation, and the language
 // still says `T` has no members until a constraint names them.
 class Cell {

@@ -211,7 +211,7 @@ this is what is true now.
   `XDG_CACHE_HOME` set" should say *set to an absolute path* (a relative one is
   now ignored), and should say that the cache root is made `0700` on the first
   run that builds into it.
-- `docs/INSTALL.md` and `.claude/selfhost.md`: a compiler outside its package no
+- `docs/INSTALL.md` and the contributor notes: a compiler outside its package no
   longer falls back to the working directory for `scripts/build.sh` and `std/`
   unless the compiler itself is inside that directory. An install has to keep
   `bin/nish` beside `scripts/`, `runtime/` and `std/`, which every documented

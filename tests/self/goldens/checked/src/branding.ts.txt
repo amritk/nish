@@ -9,6 +9,10 @@ const PACKAGE_CONDITION: string = "nish" [exported]
 const VERSION: string = "<version>" [exported]
 const RUNTIME_HEADER: string = "nish.h" [exported]
 const HEADER_GUARD_PREFIX: string = "NISH" [exported]
+const REPOSITORY: string = "https://github.com/amritk/nish" [exported]
+const RAW_REPOSITORY: string = "https://raw.githubusercontent.com/amritk/nish" [exported]
+const NPM_PACKAGE: string = "nish" [exported]
+const NPM_PLATFORM_DIR: string = "/node_modules/@amritk/nish-" [exported]
 function packageConditionFor(numberMode: string): string -> @packageConditionFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

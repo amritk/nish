@@ -118,7 +118,7 @@ export default function nish(options = {}) {
       );
       throw new Error(
         `nish/vite: the compiler ${compiler} (${version}) wrote a loader with no \`loadSync\` export: ` +
-          "it predates `loadSync` (WP50 stage 1), which the generated module calls. " +
+          "it predates `loadSync` (nish 0.36.0), which the generated module calls. " +
           "Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.",
       );
     }

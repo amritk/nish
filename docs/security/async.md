@@ -6,9 +6,9 @@ says so, and the driver the compiler emits around it. What it reads from the
 outside is the kernel's readiness report for descriptors the program chose,
 and those descriptors are often a network peer's sockets, so a peer decides
 when, and whether, a task is resumed. It says what each such input can do,
-with the test that pins each answer. The design is
-[`wp49-async-server.md`](../wp49-async-server.md),
-"Stage 5, part 1". It was written on top of `main` at `ba85d3e`, in the change
+with the test that pins each answer. The design is in
+[`wp49-async-server.md`](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md).
+It was written on top of `main` at `ba85d3e`, in the change
 that adds the executor, and names functions rather than lines, so it has no
 `file:line` anchors to move.
 

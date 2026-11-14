@@ -27,7 +27,8 @@
  * serverAuth, name constraints — and that the leaf's subjectAltName names
  * the host dialled. Its refusal becomes the alert: `certificate_expired` for
  * a certificate outside its validity, `unknown_ca` when no path reaches a
- * root of the store, and `bad_certificate` for every other reason. There is
+ * root of the store, and `bad_certificate` for every other reason, a key
+ * distrusted with `tlsClientDistrustSpki` among them. There is
  * no switch that skips the step and none is to be added: a client that is to
  * talk to a server it cannot authenticate is given a store holding its
  * issuing root, never a way around the check (`docs/security/tls.md`, "The
@@ -47,6 +48,7 @@ import {
   PKI_OK,
   PkiResult,
   PkiTrustStore,
+  pkiDistrustSpki,
   pkiTrustStore,
   pkiVerifyServer,
 } from "nish/crypto/pki"
@@ -134,6 +136,22 @@ export const tlsClientTrust = (roots: PkiRoots): TlsClientTrust => new TlsClient
  * @returns A trust over the roots `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system bundle's.
  */
 export const tlsClientSystemTrust = (): TlsClientTrust => tlsClientTrust(pkiLoadSystemRoots())
+
+/**
+ * Distrusts a key in `trust`: every connection made with it from now on
+ * refuses, with `bad_certificate`, a server whose path holds a certificate
+ * (leaf, intermediate or root) whose subjectPublicKeyInfo DER hashes to
+ * `spkiSha256` under SHA-256 (`pkiDistrustSpki`). It is how a program stops
+ * trusting a CA its roots still hold, or a key known to be compromised,
+ * before the system bundle drops it. A trust distrusts nothing until this is
+ * called.
+ *
+ * @param trust The trust to change; every connection that shares it sees the change.
+ * @param spkiSha256 The SHA-256 of the subjectPublicKeyInfo DER, 32 bytes.
+ * @returns Whether the hash was added: false, and nothing added, unless it is 32 bytes long.
+ */
+export const tlsClientDistrustSpki = (trust: TlsClientTrust, spkiSha256: u8[]): boolean =>
+  pkiDistrustSpki(trust.store, spkiSha256)
 
 /**
  * Whether `signature`, as a CertificateVerify carries it under `scheme`,
