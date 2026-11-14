@@ -26,6 +26,7 @@ import emitWalk from "./emit-map" -> function @emitWalk
 import RootTraces from "./emit-root" -> struct RootTraces
 import rootTable from "./emit-root" -> function @rootTable
 import emitChannelWalk from "./emit-parallel" -> function @emitChannelWalk
+import isAtomicArrayConstructor from "./parallel" -> function @isAtomicArrayConstructor
 import isChannelReader from "./parallel" -> function @isChannelReader
 import isGuardedAccess from "./parallel" -> function @isGuardedAccess
 import emitSliceCheck from "./emit-strings" -> function @emitSliceCheck
@@ -829,6 +830,26 @@ function emitBoundsCheck(emitter: Emitter, base: ArrayBase, idx: string, site: N
   stackSites=0 stackLocals=0
   callee +0:3 emitRangeCheck -> @emitRangeCheck
   callee +0:32 baseLength -> @baseLength
+function checkedFieldElement(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo, arr: string, idx: string): string -> @checkedFieldElement [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: arr field idx info receiver
+  calls: ArrayBase.constructor Emitter.declareType FieldInfo.inline TypeTable.refOf baseLength elementPointer emitRangeCheck inlineHeaderPointer nish_alloc_struct slicePointer
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.declareType#0 slicePointer#0 inlineHeaderPointer#0 emitRangeCheck#0 baseLength#0 elementPointer#0
+  pointer info: size=176 writesThrough=true captured=true passedTo=slicePointer#1 inlineHeaderPointer#1
+  pointer field: size=80 writesThrough=true captured=true passedTo=FieldInfo.inline#0 slicePointer#3 inlineHeaderPointer#3
+  stackSites=0 stackLocals=0
+  callee -9:3 Emitter.declareType -> @Emitter.declareType
+  local -8:7 base: ArrayBase (let)
+  callee -8:14 new ArrayBase -> @ArrayBase.constructor
+  callee -7:22 FieldInfo.inline -> @FieldInfo.inline
+  callee -6:12 new ArrayBase -> @ArrayBase.constructor
+  callee -4:11 slicePointer -> @slicePointer
+  callee -3:11 inlineHeaderPointer -> @inlineHeaderPointer
+  callee +5:3 emitRangeCheck -> @emitRangeCheck
+  callee +5:32 baseLength -> @baseLength
+  callee +6:10 elementPointer -> @elementPointer
+  callee +6:40 TypeTable.refOf -> @TypeTable.refOf
 function arenaHeader(emitter: Emitter): string -> @arenaHeader
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -879,6 +900,27 @@ function emitData(emitter: Emitter, site: Node, elem: i32, count: i32, bytes: st
   callee +3:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee +5:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +5:43 Emitter.useRuntime -> @Emitter.useRuntime
+function emitLineData(emitter: Emitter, bytes: string): string -> @emitLineData
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 room: string (const)
+  callee +1:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +2:9 raw: string (const)
+  callee +2:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:40 Emitter.useRuntime -> @Emitter.useRuntime
+  local +3:9 at: string (const)
+  callee +3:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local +4:9 back: string (const)
+  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 gap: string (const)
+  callee +5:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:9 offset: string (const)
+  callee +6:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:10 IRFunction.emitValue -> @IRFunction.emitValue
 function storeData(emitter: Emitter, arr: string, data: string): void -> @storeData
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storeHeaderField
@@ -988,8 +1030,8 @@ function emitNewArrayLength(emitter: Emitter, length: Node, size: i32): string -
 function emitNewArray(emitter: Emitter, expr: Node): string -> @emitNewArray [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
-  calls: Emitter.declare Emitter.isStackSite Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize emitData emitHeader emitNewArrayLength internalErrorFor isSortInstance literalLength nish_exit nish_panic_index nish_str_concat nish_str_from_i32 storeData
-  pointer emitter: size=392 writesThrough=true captured=false passedTo=Emitter.typeOf#0 elementSize#0 emitNewArrayLength#0 emitHeader#0 Emitter.isStackSite#0 Emitter.isStackSite#0 emitData#0 Emitter.declare#0 elementAccess#0 storeData#0
+  calls: Emitter.declare Emitter.isStackSite Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize emitData emitHeader emitLineData emitNewArrayLength internalErrorFor isAtomicArrayConstructor isSortInstance literalLength nish_exit nish_panic_index nish_str_concat nish_str_from_i32 storeData
+  pointer emitter: size=392 writesThrough=true captured=false passedTo=Emitter.typeOf#0 elementSize#0 emitNewArrayLength#0 emitHeader#0 Emitter.isStackSite#0 Emitter.isStackSite#0 emitLineData#0 emitData#0 Emitter.declare#0 elementAccess#0 storeData#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitHeader#2 Emitter.isStackSite#1 Emitter.isStackSite#1 emitData#1
   stackSites=0 stackLocals=0
   local +0:9 elem: i32 (const)
@@ -1009,13 +1051,15 @@ function emitNewArray(emitter: Emitter, expr: Node): string -> @emitNewArray [ex
   callee +12:20 Emitter.isStackSite -> @Emitter.isStackSite
   callee +13:18 internalErrorFor -> @internalErrorFor
   local +15:9 data: string (const)
-  callee +15:16 emitData -> @emitData
-  callee +18:8 isSortInstance -> @isSortInstance
-  callee +19:5 Emitter.declare -> @Emitter.declare
-  local +20:11 dataArg: string (const)
-  callee +23:5 IRFunction.emit -> @IRFunction.emit
-  callee +23:86 elementAccess -> @elementAccess
-  callee +25:3 storeData -> @storeData
+  callee +15:16 isAtomicArrayConstructor -> @isAtomicArrayConstructor
+  callee +16:7 emitLineData -> @emitLineData
+  callee +17:7 emitData -> @emitData
+  callee +20:8 isSortInstance -> @isSortInstance
+  callee +21:5 Emitter.declare -> @Emitter.declare
+  local +22:11 dataArg: string (const)
+  callee +25:5 IRFunction.emit -> @IRFunction.emit
+  callee +25:86 elementAccess -> @elementAccess
+  callee +27:3 storeData -> @storeData
 function emitElementAccess(emitter: Emitter, expr: Node): string -> @emitElementAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

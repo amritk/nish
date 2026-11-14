@@ -105,6 +105,7 @@ import {
   arrowCallee,
   captureTarget,
   capturesOf,
+  isAtomicArrayMethod,
   isAtomicMethod,
   isChannelReader,
   isChannelSend,
@@ -4115,6 +4116,15 @@ const collectStatedFacts = (
   // An atomic's method, whose body the emitter writes.
   if (isAtomicMethod(sig)) {
     applyStance(facts, markAtomic(facts))
+    if (isAtomicArrayMethod(sig)) {
+      // The element's index is checked as `a[i]`'s is, and an index out of
+      // range stops the program there.
+      facts.willReturn = false
+      facts.callees.add("nish_panic_index")
+      if (opts.recordsPanics()) {
+        facts.panicSites.push(new PanicSite(sig.decl, program.source, PANIC_INDEX, sig.name, false, ""))
+      }
+    }
     return facts
   }
 
@@ -4635,14 +4645,15 @@ const markChannelSend = (facts: FunctionFacts): BodilessStance => {
 }
 
 /**
- * An `AtomicI32` or `AtomicI64` method. The source body is Node's, and the
- * emitter writes one sequentially consistent instruction on `this`'s `value`
- * (`src/emit-parallel.ts`). Every one of them, `load` included, writes: a
- * read-only call could be hoisted out of the loop that spins on it, or merged
- * with the one before it. It allocates nothing, keeps nothing, answers a
- * scalar and returns. The write is through `this` and is not a shared one: an
- * atomic update is what a task and a data-parallel body may make beside the
- * guarded store and the send.
+ * An atomic's method. The source body is Node's, and the emitter writes one
+ * sequentially consistent instruction on `this`'s `value`, or on the element
+ * of an atomic array's buffer the index names (`src/emit-parallel.ts`). Every
+ * one of them, `load` included, writes: a read-only call could be hoisted out
+ * of the loop that spins on it, or merged with the one before it. It allocates
+ * nothing, keeps nothing, answers a scalar and returns. The write is through
+ * `this`, or for an array one load deeper, through the buffer `this` points
+ * to, and is not a shared one: an atomic update is what a task and a
+ * data-parallel body may make beside the guarded store and the send.
  */
 const markAtomic = (facts: FunctionFacts): BodilessStance => {
   facts.atomic = true

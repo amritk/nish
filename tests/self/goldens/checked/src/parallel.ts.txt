@@ -87,6 +87,8 @@ const MUTEX_GUARD: string = "MutexGuard"
 const CHANNEL: string = "Channel"
 const ATOMIC_I32: string = "AtomicI32"
 const ATOMIC_I64: string = "AtomicI64"
+const ATOMIC_I32_ARRAY: string = "AtomicI32Array"
+const ATOMIC_I64_ARRAY: string = "AtomicI64Array"
 const GUARD_HELD_TAIL: string = ": inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held"
 const GUARD_NULL_STORE_MESSAGE: string = "This stores `null` through a guard into a slot that holds an object, and a guard stores only a number, a `boolean`, an enum or a `string`, and a `null` only into a `string | null` slot, where the store frees the copy the slot held; keep a `boolean` field beside the slot, `g.value.hasNext = false`, and test it before reading the object"
 const TASK_WRITE_TAIL: string = ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; "
@@ -2544,10 +2546,36 @@ function markAtomicClass(program: CheckedProgram, info: StructInfo): void -> @ma
   pointer info: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -2:5 isThreadsModule -> @isThreadsModule
+function isAtomicArrayMethod(sig: FunctionSig): boolean -> @isAtomicArrayMethod [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: StructInfo.field isAtomicMethod
+  pointer sig: size=200 writesThrough=false captured=false passedTo=isAtomicMethod#0
+  stackSites=0 stackLocals=0
+  local +0:9 owner: StructInfo | null (const)
+  callee +1:10 isAtomicMethod -> @isAtomicMethod
+  callee +1:51 StructInfo.field -> @StructInfo.field
+function isAtomicArrayConstructor(sig: FunctionSig | null): boolean -> @isAtomicArrayConstructor [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: StructInfo.field isAtomicClass
+  pointer sig: size=200 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 owner: StructInfo | null (const)
+  callee +2:5 isAtomicClass -> @isAtomicClass
+  callee +2:80 StructInfo.field -> @StructInfo.field
 function isAtomicClass(info: StructInfo | null): boolean -> @isAtomicClass
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function isAtomicReadonlyField(program: CheckedProgram, table: TypeTable, type: i32, name: string): boolean -> @isAtomicReadonlyField
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: classLayoutOf nish_str_eq
+  pointer program: size=896 writesThrough=false captured=false passedTo=classLayoutOf#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=classLayoutOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 info: StructInfo | null (const)
+  callee +0:16 classLayoutOf -> @classLayoutOf
+  local +2:16 field: FieldInfo (const)
 function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isAtomicType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -3016,9 +3044,9 @@ function walkMutexes(program: CheckedProgram, table: TypeTable, node: Node, pare
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: node
-  calls: ScopeFinding.constructor TypeTable.isArray TypeTable.stripNull TypeTable.typeName atomicMemberMessage boundNameOf copiedSlot fixedFinding freshName guardArgumentMessage guardArgumentWhy guardDerivedMessage guardMethodMessage guardSlot guardStoreMessage guardUseIn guardUseMessage isAtomicType isFreshValue isGuardType isGuardedAccess isLockCall isMutexType isScalarArgument isStoreTarget isThreadsObjectType isUsingInitialiser lastWordOf lockNotUsingMessage mutexFreshMessage mutexMemberMessage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq shownSource slotLiteral storeTargetType storedInto threadsLiteralMessage unwrapParens usingEdits walkMutexes
-  pointer program: size=896 writesThrough=false captured=false passedTo=isMutexType#0 isFreshValue#0 isMutexType#0 isThreadsObjectType#0 isAtomicType#0 isLockCall#0 shownSource#0 usingEdits#0 isGuardType#0 guardArgumentWhy#0 guardSlot#0 guardUseIn#0 guardSlot#0 isGuardedAccess#0 shownSource#0 copiedSlot#0 storedInto#0 storeTargetType#0 shownSource#0 copiedSlot#0 storedInto#0 copiedSlot#0 shownSource#0 walkMutexes#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=isMutexType#1 isFreshValue#1 isMutexType#1 isThreadsObjectType#1 threadsLiteralMessage#0 isAtomicType#1 isGuardType#1 guardArgumentWhy#1 TypeTable.typeName#0 guardSlot#1 guardUseIn#1 guardSlot#1 isGuardedAccess#1 copiedSlot#1 TypeTable.isArray#0 storeTargetType#1 TypeTable.stripNull#0 isScalarArgument#0 copiedSlot#1 guardStoreMessage#0 isScalarArgument#0 copiedSlot#1 guardDerivedMessage#0 walkMutexes#1
+  calls: ScopeFinding.constructor TypeTable.isArray TypeTable.stripNull TypeTable.typeName atomicMemberMessage boundNameOf copiedSlot fixedFinding freshName guardArgumentMessage guardArgumentWhy guardDerivedMessage guardMethodMessage guardSlot guardStoreMessage guardUseIn guardUseMessage isAtomicReadonlyField isAtomicType isFreshValue isGuardType isGuardedAccess isLockCall isMutexType isScalarArgument isStoreTarget isThreadsObjectType isUsingInitialiser lastWordOf lockNotUsingMessage mutexFreshMessage mutexMemberMessage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq shownSource slotLiteral storeTargetType storedInto threadsLiteralMessage unwrapParens usingEdits walkMutexes
+  pointer program: size=896 writesThrough=false captured=false passedTo=isMutexType#0 isFreshValue#0 isMutexType#0 isThreadsObjectType#0 isAtomicType#0 isAtomicReadonlyField#0 isLockCall#0 shownSource#0 usingEdits#0 isGuardType#0 guardArgumentWhy#0 guardSlot#0 guardUseIn#0 guardSlot#0 isGuardedAccess#0 shownSource#0 copiedSlot#0 storedInto#0 storeTargetType#0 shownSource#0 copiedSlot#0 storedInto#0 copiedSlot#0 shownSource#0 walkMutexes#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=isMutexType#1 isFreshValue#1 isMutexType#1 isThreadsObjectType#1 threadsLiteralMessage#0 isAtomicType#1 isAtomicReadonlyField#1 isGuardType#1 guardArgumentWhy#1 TypeTable.typeName#0 guardSlot#1 guardUseIn#1 guardSlot#1 isGuardedAccess#1 copiedSlot#1 TypeTable.isArray#0 storeTargetType#1 TypeTable.stripNull#0 isScalarArgument#0 copiedSlot#1 guardStoreMessage#0 isScalarArgument#0 copiedSlot#1 guardDerivedMessage#0 walkMutexes#1
   pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isLockCall#1 fixedFinding#0 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isGuardedAccess#2 shownSource#1 boundNameOf#0 ScopeFinding.constructor#1
   pointer parents: size=0 writesThrough=true captured=false passedTo=isUsingInitialiser#1 boundNameOf#1 usingEdits#2 isStoreTarget#1 boundNameOf#1 walkMutexes#3
   pointer out: size=0 writesThrough=true captured=false passedTo=walkMutexes#4
@@ -3041,89 +3069,90 @@ function walkMutexes(program: CheckedProgram, table: TypeTable, node: Node, pare
   callee +11:14 new ScopeFinding -> @ScopeFinding.constructor
   callee +11:37 threadsLiteralMessage -> @threadsLiteralMessage
   callee +15:5 isAtomicType -> @isAtomicType
-  callee +18:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee +18:39 atomicMemberMessage -> @atomicMemberMessage
-  callee +21:14 isLockCall -> @isLockCall
-  callee +22:10 isUsingInitialiser -> @isUsingInitialiser
-  local +23:13 callee: Node (const)
-  callee +23:22 unwrapParens -> @unwrapParens
-  local +24:13 mutex: string (const)
-  callee +24:55 shownSource -> @shownSource
-  local +25:13 message: string (const)
-  callee +25:23 lockNotUsingMessage -> @lockNotUsingMessage
-  callee +25:43 boundNameOf -> @boundNameOf
-  callee +26:16 fixedFinding -> @fixedFinding
-  callee +26:44 usingEdits -> @usingEdits
-  callee +28:14 isGuardType -> @isGuardType
-  local +29:11 named: string (const)
-  local +30:11 asValue: boolean (const)
-  local +37:13 call: Node | null (const)
-  local +38:13 passed: boolean (const)
-  local +40:13 why: string (const)
-  callee +40:45 guardArgumentWhy -> @guardArgumentWhy
-  local +41:13 guard: string (const)
-  callee +41:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +44:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee +44:34 guardUseMessage -> @guardUseMessage
-  callee +44:64 guardSlot -> @guardSlot
-  local +49:15 helper: string (const)
-  callee +49:24 freshName -> @freshName
-  local +50:15 used: string (const)
-  callee +50:38 guardUseIn -> @guardUseIn
-  local +51:15 slot: string (const)
-  callee +51:47 guardSlot -> @guardSlot
-  local +52:15 message: string (const)
-  callee +52:25 guardArgumentMessage -> @guardArgumentMessage
-  callee +53:18 new ScopeFinding -> @ScopeFinding.constructor
-  callee +57:14 isGuardedAccess -> @isGuardedAccess
-  local +60:11 base: boolean (const)
-  local +64:11 above: Node | null (const)
-  local +74:13 chain: string (const)
-  callee +74:21 shownSource -> @shownSource
-  local +75:13 slot: CopiedSlot (const)
-  callee +75:20 copiedSlot -> @copiedSlot
-  local +76:13 args: Node[] (const)
-  local +77:13 from: Node | null (const)
-  callee +77:51 unwrapParens -> @unwrapParens
-  local +78:13 value: string (const)
-  callee +78:38 TypeTable.isArray -> @TypeTable.isArray
-  callee +78:60 storedInto -> @storedInto
-  local +79:13 store: string (const)
-  callee +80:79 slotLiteral -> @slotLiteral
-  callee +81:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee +81:40 guardMethodMessage -> @guardMethodMessage
-  callee +84:35 isStoreTarget -> @isStoreTarget
-  local +86:13 stored: i32 (const)
-  callee +87:46 unwrapParens -> @unwrapParens
-  local +88:15 slot: i32 (const)
-  callee +88:22 storeTargetType -> @storeTargetType
-  callee +89:25 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +90:20 new ScopeFinding -> @ScopeFinding.constructor
-  callee +92:34 isScalarArgument -> @isScalarArgument
-  local +93:15 target: string (const)
-  callee +93:24 shownSource -> @shownSource
-  local +94:15 from: Node | null (const)
-  callee +94:69 unwrapParens -> @unwrapParens
-  local +95:15 slot: CopiedSlot (const)
-  callee +95:22 copiedSlot -> @copiedSlot
-  local +96:15 store: string (const)
-  callee +96:64 storedInto -> @storedInto
-  callee +97:18 new ScopeFinding -> @ScopeFinding.constructor
-  callee +97:43 guardStoreMessage -> @guardStoreMessage
-  callee +99:30 isScalarArgument -> @isScalarArgument
-  local +100:13 slot: CopiedSlot (const)
-  callee +100:20 copiedSlot -> @copiedSlot
-  callee +100:47 shownSource -> @shownSource
-  local +101:13 bound: string (const)
-  callee +101:21 boundNameOf -> @boundNameOf
-  local +102:13 read: string (const)
-  callee +104:49 freshName -> @freshName
-  callee +104:80 lastWordOf -> @lastWordOf
-  local +106:13 field: string (const)
-  callee +107:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee +107:39 guardDerivedMessage -> @guardDerivedMessage
-  local +112:14 child: Node (const)
-  callee +113:5 walkMutexes -> @walkMutexes
+  callee +19:8 isAtomicReadonlyField -> @isAtomicReadonlyField
+  callee +21:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee +21:39 atomicMemberMessage -> @atomicMemberMessage
+  callee +24:14 isLockCall -> @isLockCall
+  callee +25:10 isUsingInitialiser -> @isUsingInitialiser
+  local +26:13 callee: Node (const)
+  callee +26:22 unwrapParens -> @unwrapParens
+  local +27:13 mutex: string (const)
+  callee +27:55 shownSource -> @shownSource
+  local +28:13 message: string (const)
+  callee +28:23 lockNotUsingMessage -> @lockNotUsingMessage
+  callee +28:43 boundNameOf -> @boundNameOf
+  callee +29:16 fixedFinding -> @fixedFinding
+  callee +29:44 usingEdits -> @usingEdits
+  callee +31:14 isGuardType -> @isGuardType
+  local +32:11 named: string (const)
+  local +33:11 asValue: boolean (const)
+  local +40:13 call: Node | null (const)
+  local +41:13 passed: boolean (const)
+  local +43:13 why: string (const)
+  callee +43:45 guardArgumentWhy -> @guardArgumentWhy
+  local +44:13 guard: string (const)
+  callee +44:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +47:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee +47:34 guardUseMessage -> @guardUseMessage
+  callee +47:64 guardSlot -> @guardSlot
+  local +52:15 helper: string (const)
+  callee +52:24 freshName -> @freshName
+  local +53:15 used: string (const)
+  callee +53:38 guardUseIn -> @guardUseIn
+  local +54:15 slot: string (const)
+  callee +54:47 guardSlot -> @guardSlot
+  local +55:15 message: string (const)
+  callee +55:25 guardArgumentMessage -> @guardArgumentMessage
+  callee +56:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee +60:14 isGuardedAccess -> @isGuardedAccess
+  local +63:11 base: boolean (const)
+  local +67:11 above: Node | null (const)
+  local +77:13 chain: string (const)
+  callee +77:21 shownSource -> @shownSource
+  local +78:13 slot: CopiedSlot (const)
+  callee +78:20 copiedSlot -> @copiedSlot
+  local +79:13 args: Node[] (const)
+  local +80:13 from: Node | null (const)
+  callee +80:51 unwrapParens -> @unwrapParens
+  local +81:13 value: string (const)
+  callee +81:38 TypeTable.isArray -> @TypeTable.isArray
+  callee +81:60 storedInto -> @storedInto
+  local +82:13 store: string (const)
+  callee +83:79 slotLiteral -> @slotLiteral
+  callee +84:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee +84:40 guardMethodMessage -> @guardMethodMessage
+  callee +87:35 isStoreTarget -> @isStoreTarget
+  local +89:13 stored: i32 (const)
+  callee +90:46 unwrapParens -> @unwrapParens
+  local +91:15 slot: i32 (const)
+  callee +91:22 storeTargetType -> @storeTargetType
+  callee +92:25 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +93:20 new ScopeFinding -> @ScopeFinding.constructor
+  callee +95:34 isScalarArgument -> @isScalarArgument
+  local +96:15 target: string (const)
+  callee +96:24 shownSource -> @shownSource
+  local +97:15 from: Node | null (const)
+  callee +97:69 unwrapParens -> @unwrapParens
+  local +98:15 slot: CopiedSlot (const)
+  callee +98:22 copiedSlot -> @copiedSlot
+  local +99:15 store: string (const)
+  callee +99:64 storedInto -> @storedInto
+  callee +100:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee +100:43 guardStoreMessage -> @guardStoreMessage
+  callee +102:30 isScalarArgument -> @isScalarArgument
+  local +103:13 slot: CopiedSlot (const)
+  callee +103:20 copiedSlot -> @copiedSlot
+  callee +103:47 shownSource -> @shownSource
+  local +104:13 bound: string (const)
+  callee +104:21 boundNameOf -> @boundNameOf
+  local +105:13 read: string (const)
+  callee +107:49 freshName -> @freshName
+  callee +107:80 lastWordOf -> @lastWordOf
+  local +109:13 field: string (const)
+  callee +110:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee +110:39 guardDerivedMessage -> @guardDerivedMessage
+  local +115:14 child: Node (const)
+  callee +116:5 walkMutexes -> @walkMutexes
 function guardArgumentWhy(program: CheckedProgram, table: TypeTable, call: Node, arg: Node, name: string): string -> @guardArgumentWhy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.isCompileTime TypeTable.typeName nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq unwrapParens
