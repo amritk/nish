@@ -7,6 +7,7 @@
 //   node tests/persist/drive.mjs chain    <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs graph    <loader.mjs> <module.wasm> <steps>
 //   node tests/persist/drive.mjs shapes   <loader.mjs> <module.wasm> <steps>
+//   node tests/persist/drive.mjs forge    <loader.mjs> <module.wasm> 1
 //
 // The kept heap is the arena's offset after a call, which only the runtime's
 // `nish_arena_mark` answers; the loader keeps the instance to itself, so the
@@ -17,8 +18,8 @@ import { pathToFileURL } from "node:url";
 
 const [mode, loaderPath, wasmPath, stepsArg] = process.argv.slice(2);
 const steps = Number(stepsArg);
-if (!["world", "director", "chain", "graph", "shapes"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
-  console.error("usage: drive.mjs world|director|chain|graph|shapes <loader.mjs> <module.wasm> <steps>");
+if (!["world", "director", "chain", "graph", "shapes", "forge"].includes(mode) || !loaderPath || !wasmPath || !(steps > 0)) {
+  console.error("usage: drive.mjs world|director|chain|graph|shapes|forge <loader.mjs> <module.wasm> <steps>");
   process.exit(2);
 }
 
@@ -418,7 +419,101 @@ const runShapes = () => {
   );
 };
 
-if (mode === "world") {
+/**
+ * tests/module-storage/persist/forge.ts under a page that forges the kept
+ * graph (WH-10). Each case loads a fresh instance, runs `init`, finds the
+ * root's cell by its magic word (`%struct.Cell = { i32 magic, names, next }`,
+ * `names` a `{ i64 len, i64 cap, data }` header), forges one thing and calls
+ * `churn`, whose keep compacts. A fake cell sits at the end of a page the
+ * page grew past everything the arena holds, its `names` pointing at the real
+ * header: a trace that followed a forged pointer to it would record that
+ * field as a slot into the region and rewrite it when the header moved.
+ * Every forgery must end the call with a NishPanic naming what was forged,
+ * and the fake's bytes must be as the page wrote them. An unforged instance
+ * first shows `churn` does compact and the graph survives it.
+ */
+const FORGE_MAGIC = 1592594996;
+const runForge = () => {
+  const setUp = () => {
+    const m = load(true);
+    m.mod.init();
+    const words = new Uint32Array(m.mod.memory.buffer);
+    let cell = -1;
+    for (let i = 2; i + 2 < words.length; i += 2) {
+      if (words[i] !== FORGE_MAGIC) {
+        continue;
+      }
+      const names = words[i + 1];
+      if (names % 8 === 0 && names + 8 <= words.length * 4 && words[names / 4] === 4 && words[names / 4 + 1] === 0) {
+        cell = i * 4;
+        break;
+      }
+    }
+    if (cell < 0) {
+      fail("no cell carries the magic word and a four-name array");
+    }
+    return { ...m, cell, names: words[cell / 4 + 1] };
+  };
+
+  const plain = setUp();
+  const before = plain.kept();
+  if (plain.mod.churn() !== 40000) {
+    fail("churn() did not answer 40000");
+  }
+  if (!(plain.kept() < before + 4096) || plain.mod.names() !== 42) {
+    fail(`an unforged churn, which must compact, kept ${plain.kept() - before} bytes over init and names() is ${plain.mod.names()}`);
+  }
+
+  const POINTER = "root storage: a pointer in the kept graph names memory outside the arena";
+  const LENGTH = "root storage: a length in the kept graph runs past its block";
+  const HUGE = 2n ** 40n;
+  const cases = [
+    ["a root slot", POINTER, (v, f, c) => {
+      // Every word holding the cell's address: the root slot, and any dead
+      // copy (a stack slot), which nothing reads.
+      for (let at = 0; at + 4 <= v.byteLength; at += 4) {
+        if (v.getUint32(at, true) === c.cell) {
+          v.setUint32(at, f, true);
+        }
+      }
+    }],
+    ["a pointer field", POINTER, (v, f, c) => v.setUint32(c.cell + 8, f, true)],
+    ["an array's len", LENGTH, (v, f, c) => v.setBigUint64(c.names, HUGE, true)],
+    ["an array's len and cap", LENGTH, (v, f, c) => {
+      v.setBigUint64(c.names, HUGE, true);
+      v.setBigUint64(c.names + 8, HUGE, true);
+    }],
+  ];
+  for (const [what, says, forge] of cases) {
+    const c = setUp();
+    c.mod.memory.grow(64);
+    const v = new DataView(c.mod.memory.buffer);
+    const fake = v.byteLength - 64;
+    v.setUint32(fake, 0, true);
+    v.setUint32(fake + 4, c.names, true);
+    v.setUint32(fake + 8, 0, true);
+    const wrote = [...new Uint8Array(c.mod.memory.buffer, fake, 16)].join();
+    forge(v, fake, c);
+    let got = "no error";
+    try {
+      c.mod.churn();
+    } catch (e) {
+      got = `${e.name}: ${e.message}`;
+    }
+    if (!got.startsWith("NishPanic") || !got.includes(says)) {
+      fail(`forged ${what}: churn() ended with ${got}, expected a NishPanic saying "${says}"`);
+    }
+    const now = [...new Uint8Array(c.mod.memory.buffer, fake, 16)].join();
+    if (now !== wrote) {
+      fail(`forged ${what}: the fake cell's bytes went from ${wrote} to ${now}`);
+    }
+  }
+  console.log(`persist forge: ${steps} steps, ${cases.length} forgeries each refused with a NishPanic, nothing outside the arena read or written`);
+};
+
+if (mode === "forge") {
+  runForge();
+} else if (mode === "world") {
   runWorld();
 } else if (mode === "director") {
   runDirector();

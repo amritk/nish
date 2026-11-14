@@ -13,7 +13,7 @@
 
 ## Next
 
-Nothing scheduled: every stage is built. cs builds its client on it, in the cs repository.
+Nothing scheduled: every stage is built.
 
 ## Not planned
 

@@ -764,7 +764,7 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[], guard:
   if (!wasmHasPackedResult(table, bridged)) {
     return lines
   }
-  lines.push("  /** A Result in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */")
+  lines.push("  /** A Result in one i64: bit 0 is the tag, bits 32..63 the payload. */")
   lines.push("  const resultOut = (word, readValue, readError) => {")
   lines.push("    const payload = BigInt.asUintN(32, word >> 32n);")
   lines.push("    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };")
@@ -1673,7 +1673,7 @@ export const heapViewsNew = (): string[] => [
 export const layoutTypes = (layouts: StorageLayout[]): string[] => {
   const lines: string[] = []
   lines.push("/**")
-  lines.push(" * Where module storage lives in `memory` (WP50 §5.2). `length`, `stride` and")
+  lines.push(" * Where module storage lives in `memory`. `length`, `stride` and")
   lines.push(" * each field's byte offset are literal types, so a page that hard-codes one")
   lines.push(" * fails `tsc` once the layout changes. `at` is the byte address of the data,")
   lines.push(" * read from the instance at load; it never moves.")

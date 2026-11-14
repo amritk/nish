@@ -53,7 +53,15 @@ import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
 import { analyzeFunctions, AnalysisUnit, FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
-import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
+import {
+  arenaBlockFindings,
+  arenaLoopFindings,
+  explainMemory,
+  keptMemoryFindings,
+  loopReachedFunctions,
+  mayKeepMemory,
+  MemoryReport,
+} from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
 import { Checker } from "./checker"
@@ -385,7 +393,12 @@ export class EmittedModule {
 
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
-  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016" || code === "NL9018"
+  code === "NL9002" ||
+  code === "NL9003" ||
+  code === "NL9011" ||
+  code === "NL9016" ||
+  code === "NL9018" ||
+  code === "NL9019"
 
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of
@@ -2565,17 +2578,18 @@ export class Compilation {
 
   /**
    * `--deny-retention`: each arena-retention warning in a module of the root
-   * package becomes an error. The five rules are the ones whose finding is
+   * package becomes an error. The six rules are the ones whose finding is
    * memory nothing can reach that stays allocated: quadratic string building
    * (NL9002), an allocation dropped by an assignment (NL9003), a loop over a
    * call that leaves its memory behind (NL9011), an allocation dropped on
-   * every pass (NL9016) and a pass of an unbounded loop that keeps what it
-   * allocates (NL9018). The error keeps the warning's text, which names the
+   * every pass (NL9016), a pass of an unbounded loop that keeps what it
+   * allocates (NL9018) and a function a loop runs that keeps an allocation on
+   * every call (NL9019). The error keeps the warning's text, which names the
    * rewrite, and its code, so a reader sees which rule refused the build. A
    * dependency's warnings stay warnings, as its panic sites stay outside the
    * no-panic scope: the program's author cannot change that code.
    *
-   * Run after `reportUnboundedPasses`, the last of the five to be found, and the
+   * Run after `reportUnboundedPasses`, the last of the six to be found, and the
    * warning it restates is dropped so the line is said once.
    */
   denyRetention(): void {
@@ -3043,17 +3057,41 @@ export class Compilation {
   }
 
   /**
-   * The one performance warning that needs the whole-program facts: a loop
-   * over a call that leaves arena memory behind, in a function that gets no
-   * automatic scope (`arenaLoopFindings`, escape.ts). It is reported here, at
-   * the end of checking, so that it reaches the report with every other
-   * warning, which the driver prints before it emits anything. The analysis is
-   * the one `emit` runs, memoised by `analyze`, so it is not paid twice.
+   * The performance warnings that need the whole-program facts: a loop over
+   * a call that leaves arena memory behind, in a function that gets no
+   * automatic scope (`arenaLoopFindings`, escape.ts), and a function of the
+   * root package that keeps an allocation on every call and is called directly
+   * by a pass of a loop that releases nothing (`keptMemoryFindings`), wherever
+   * that loop is: a dependency's event loop calls the program's handler. It
+   * is reported here, at the end of checking, so that it reaches the report
+   * with every other warning, which the driver prints before it emits
+   * anything. The analysis is the one `emit` runs, memoised by `analyze`, so
+   * it is not paid twice.
    */
   reportArenaLoops(): void {
     const facts = this.analyze()
     for (const unit of this.analysisUnits) {
       for (const finding of arenaLoopFindings(unit, facts)) {
+        this.sink.reportPerformance(
+          unit.program.source,
+          finding.node.start,
+          finding.node.end,
+          finding.message
+        )
+      }
+    }
+    const roots: AnalysisUnit[] = []
+    for (const unit of this.analysisUnits) {
+      if (this.inRootPackage(unit.program.source)) {
+        roots.push(unit)
+      }
+    }
+    if (!mayKeepMemory(roots, facts)) {
+      return
+    }
+    const reached = loopReachedFunctions(this.analysisUnits, this.table, facts)
+    for (const unit of roots) {
+      for (const finding of keptMemoryFindings(unit, this.table, facts, reached)) {
         this.sink.reportPerformance(
           unit.program.source,
           finding.node.start,

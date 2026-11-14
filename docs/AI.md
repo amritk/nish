@@ -2114,10 +2114,14 @@ export const main = (): i32 => {
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`), and a `Map`'s value is any of those (`Map<string, Shape>`,
-  `Map<string, Shape[]>`, `Map<string, Shape | null>`). An alias may name another union, which is flattened. A
+  `Map<string, Shape[]>`, `Map<string, Shape | null>`), and a type argument:
+  `Box<Shape>`, `Stack<Shape>`, a generic call binding `T` to a union,
+  `Result<Shape, E>` / `Result<T, Shape>`, and `nish/map`'s `getOrInsert` /
+  `reserve` on a `Map<K, Shape>`. An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
   expected — argument, `return`, `push`, an annotated array literal, a
-  ternary arm or `??` default whose other side is the union. A class that
+  ternary arm or `??` default whose other side is the union, and a generic's
+  `T` bound to it (`new Box<Shape>(new Circle())`, `Ok(new Square())`). A class that
   implements an interface variant converts to that interface first. A union
   crosses modules but not a sidecar (NL4009).
 - **Test the tag to read a variant.** Before a test, the tag is the only
@@ -2185,12 +2189,13 @@ export const main = (): i32 => {
   falls back to every member the body stored
   anywhere or the whole type, which accepts a few comparisons `tsc` refuses
   (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
-- **Refused by design:** union type arguments (`Box<Shape>`,
-  `Result<Shape, E>`, a generic call binding `T` to a union: NL2533; a
-  built-in `Map`'s value is the one that may be a union, though `nish/map`'s
-  generic `getOrInsert`/`reserve` on such a map is NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
-  is not `Shape[]`), and inferred unions (an unannotated ternary or array of
-  two variants).
+- **Refused by design:** unions as `Map`/`Set` keys (NL2353), a generic
+  class as a variant (NL2522), covariant arrays (`Circle[]` is not
+  `Shape[]`), inferred unions (an unannotated ternary or array of two
+  variants, or one a generic call would infer: NL2172), a union meeting a
+  constraint `<T extends I>` (NL2328), and a union inside a `Secret`
+  (NL2428), a typed-JSON class (NL2486) or a C header / N-API signature
+  (NL4009), generic instance or not.
 - **Declare what you store.** A store of a value that is only some of the
   variants into a union slot is NL2534, because `tsc` would narrow the slot
   from there on. Declare the slot as the variant, or store a value of the
@@ -2249,7 +2254,9 @@ export const main = (): i32 => {
 - Functions and enums may be renamed on import; classes and interfaces may
   not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
-- **A function name is unique across the whole program**, exported or not.
+- **A function name is unique across the whole program**, exported or not
+  (a proposal to relax this for private functions is
+  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); it has not shipped).
 - An `export`ed function is an external C-ABI symbol; every other function gets
   `internal` linkage so LLVM may inline or drop it.
 - **So an exported function is not named after a C library function**

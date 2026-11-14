@@ -110,7 +110,7 @@ Whether S5 should happen at all was a language question, not a
 schedule: a language whose selling point is that every value has one known
 layout may decide that the OS is reached through builtins on purpose. §8
 answers it for S3, §9 for S4 and §10 for S5.
-[wp34-hosting-cs.md](wp34-hosting-cs.md) weighed C crypto through FFI against
+[wp34-network-stack.md](wp34-network-stack.md) weighed C crypto through FFI against
 pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 
 ## 4. What S1 refuses

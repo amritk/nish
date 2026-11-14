@@ -865,13 +865,25 @@ field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
 spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
 and a `Map`'s value is any of those: `Map<string, Shape>`,
 `Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
+A union is also a type argument: a generic class's (`Box<Shape>`,
+`Box<Box<Shape>>`, `Stack<Shape>`, `union_generic_class`), a generic
+function's or method's type parameter bound to one by its arguments
+(`union_generic_call`), either side of a `Result`, `Result<Shape, E>` and
+`Result<T, Shape>` (`union_result`), and `nish/map`'s `getOrInsert` and
+`reserve` on a `Map<K, Shape>` (`union_map_helpers`). The instance is
+monomorphised as for any other type argument, so `Box<Shape>` is laid out as
+a class with a `Shape` field would be, and a `T` slot holds the union's one
+pointer.
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
 converts to the union wherever the union is expected: an argument, a
 `return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
 arm or a `??` default whose other side is the union
-(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+(`tests/cases/union_forms`), and the same places where a generic's `T` is
+the union: a constructor's or a generic call's argument, `Ok(new Circle())`
+in a function that returns `Result<Shape, E>` (`union_generic_class`,
+`union_generic_call`, `union_result`). Equality on two unions compares the pointers, as
 on any object.
 
 **Reading.** The tag is the one member a union has until a test of the tag
@@ -1125,22 +1137,26 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
-  function or method whose type parameter would bind to a union, and
-  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
-  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_result_ok`,
-  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
-  its value as it is, the way an array stores an element of a union, and
-  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
-  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
-  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
-  and is NL2533 as any generic call is. A union is not a
-  `Map` or `Set` key, which is the key rule's refusal
-  (`reject_union_map_key`, `reject_union_set`).
+- **A union is a type argument, but not a key.** `Box<Shape>`, a generic
+  function or method whose type parameter binds to a union, `Result<Shape, E>`
+  / `Result<T, Shape>` and `nish/map`'s helpers on a `Map<K, Shape>` are
+  accepted (above), as in `tsc`. Three things stay refused, each under its own
+  rule: a union is not a `Map` or `Set` key, which is the key rule's refusal
+  (NL2353, `reject_union_map_key`, `reject_union_set`); a generic class is
+  not a variant (NL2522, `reject_union_generic_variant`); and a store of a
+  bare variant into a generic instance's union field, `b.value = new
+  Square()` on a `Box<Shape>`, is NL2534 as into any union field
+  (`reject_union_generic_field_store`). A union does not meet a constraint
+  (`<T extends HasKind>`, NL2328, `reject_union_generic_constraint`), and an instance
+  over a union is not key material for `nish:secret`
+  (NL2428, `reject_union_generic_secret`), nor a class typed JSON writes
+  (NL2486, `reject_union_generic_json`), nor something a C header or N-API bridge
+  spells (`reject_union_generic_export`, `reject_union_result_export`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
   or array literal of two variants is the existing same-type refusal
-  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`; so is
+  one a generic call would bind `T` to, `first([new Square(), new Circle()])`,
+  `reject_union_generic_inferred`), an arrow
   returning one needs its annotation (`reject_union_arrow_result`), and a
   local initialised from the tag without an annotation, `const k = s.kind`
   or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
@@ -2945,7 +2961,9 @@ and their `.ll` goldens are byte-identical files.
   second namespace: the whole-program attribute analysis is keyed by symbol
   name, so two functions sharing one would be emitted with each other's
   attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag.
+  does not depend on the flag. A proposal to qualify a private function's
+  symbol by its module when it would clash is
+  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
 
 ### `main`
 
@@ -12423,7 +12441,7 @@ whole.
   length the bounds proof holds.
 - **A window into a buffer is `(buf, offset, length)` by convention**, not a
   view type: a second array layout would be one every array path in the emitter
-  has to handle ([wp34-hosting-cs.md](wp34-hosting-cs.md) §4 N2).
+  has to handle ([wp34-network-stack.md](wp34-network-stack.md) §4 N2).
 
 The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2): `fill` is
 **class A** — a `u8[]` is a plain `Array` under Node, and `Array.prototype.fill`
@@ -14592,7 +14610,8 @@ by the caller.
     enclosing loop, or one that finishes before the assignment starts, leaves
     the old value reachable and the `const` rewrite inapplicable (a capture is
     the value passed to a call or a constructor, either arm of a conditional
-    included, a method called on it unless it is a string or an array, a
+    included, a method called on it unless it is a string, an array or a
+    `Result`, whose methods hand back a flag or the payload and never the box, a
     `return`, an element of an array or object literal, or the right-hand side
     of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
@@ -14607,7 +14626,10 @@ by the caller.
     `last = \`item ${i}\`` peaked at 392 MB where the rewrite peaks at 11 MB.
     The hints are a `const` inside the loop when only the pass reads the value,
     or numbers kept across passes and the value built once after the loop
-    (`tests/cases/perf_arena_pass_drop`). Reported whatever the local was
+    (`tests/cases/perf_arena_pass_drop`). An `Ok(...)` or `Err(...)` inside
+    a loop is such an allocation unless its `Result` is passed by value, so a
+    `let r` given a new one on every pass is reported, and so is one assigned
+    over another inside the pass (NL9003). Reported whatever the local was
     declared holding and whatever the function returns, since the dropped
     values are this assignment's own; a line the rule above already reports is
     its alone. Not reported for an assignment inside a branch, which may run
@@ -14734,6 +14756,42 @@ by the caller.
 
     It reads the `"accumulates"` fact `--emit-arena` prints, then keeps only
     the temporaries a pass drops, and changes no byte of the IR.
+  - **a function that keeps memory on every call** (NL9019) — a function
+    that keeps an allocation of its own past the call (a local assigned more
+    than once, or an array of its own; a value it only hands to a function's
+    parameter does not count, nor does one it only places in an array or
+    object literal that is itself handed to a parameter or to `spawnSync`, or
+    only reads in place, as in `[a, b].join(",")`), so that it has no arena
+    scope of its own, and that a loop pass which releases nothing calls
+    directly. Every pass adds the allocation the call kept, and nothing
+    releases it while the loop runs. Reported once, at the function's
+    declaration, naming the line of the first allocation it holds; the hints
+    are a `const` per value, a block that opens with
+    [`using a = arena()`](#using-a--arena) around the work, or a region for
+    what must outlive the call (`tests/cases/perf_kept_memory`). The rule
+    counts passes, not their number: a short fixed loop such as
+    `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
+    when the function returns a value that is not a number, a boolean, an enum
+    or nothing, because then its caller owns the memory; when it manages the
+    arena itself, feeds tasks, or fills a parameter; when it is a
+    constructor reached by `new`; or when every loop that calls it releases
+    what it kept — a pass with a scope of its own, or a call inside a
+    `using a = arena()` block. A loop nested in such a block, or in a pass of
+    an outer loop that has a scope of its own, counts as released, because
+    the memory goes back when that block or pass ends: a block around a loop
+    that never ends silences the warning without bounding the growth. Only a loop's direct callees are
+    judged, each on its own allocations: memory kept deeper in the chain,
+    behind a direct callee that answers memory, is not this warning's, and
+    [`--explain-memory`](#explaining-kept-memory) lists it
+    (`tests/cases/perf_kept_memory_quiet`). No call is excused for the object
+    it receives: a function that does its work once, behind a guard on a
+    field (`if (s.ready) return; s.ready = true`), still warns when it keeps
+    an array of its own, because the rule does not prove which object reaches
+    it on each pass; open a block with `using a = arena()` around that work
+    (`tests/cases/perf_kept_memory_direct`). A value handed to a callee's
+    parameter is not counted as kept even when the callee stores it into
+    something older (`add(list, makeItem())`): this rule does not report
+    that retention.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -15512,7 +15570,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Five performance warnings are exactly that finding, and
+killed. Six performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
@@ -15523,12 +15581,16 @@ modules:
 | NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
 | NL9016, an allocation dropped on every pass | the value each pass replaced |
 | NL9018, a pass of an unbounded loop that keeps what it allocates | the temporary each pass built, for as long as the loop runs |
+| NL9019, a function that keeps memory on every call | what each call a loop makes keeps |
 
 - **The error keeps the warning.** Its text is the warning's, after the code of
   the rule that found it, so it names the same rewrite:
   `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
   (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
-  `reject_deny_retention_loop`, `reject_deny_retention_concat`, `reject_deny_retention_unbounded_pass`). The warning it
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`,
+  `reject_deny_retention_unbounded_pass`, `reject_deny_retention_kept`, and for
+  a `Result` assigned over another, `reject_deny_retention_result_drop` and
+  `reject_deny_retention_result_reassign`). The warning it
   restates is not printed as well, and `--no-warn-performance` does not
   silence the error.
 - **The program's own modules only.** A module of the root package is held to

@@ -585,15 +585,17 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs but
-// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts) and the
+// the dealt sections there (`DEALT_SECTIONS`: term-io, --emit-ts and the small
+// sections between the native run limit and the link programs) and the
 // golden cases' work past their IR check, which `caseShard` deals by position:
 // every shard compiles every case, since later sections read that compile, and
-// does the rest for its own eighth. Shard 1 then runs every section after them that
-// is not dealt, and
-// the link programs a later section reads the output of (`LINK_READ_LATER`);
-// a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
-// sections, among them most of what follows the link programs in groups
-// marked `tail`, and the other link programs are dealt by their cost in
+// does the rest for its own eighth. Each dealt section before the link programs
+// runs in the one shard its cost deals it to. Shard 1 also runs every section
+// after the link programs that is not dealt, and the link programs a later
+// section reads the output of (`LINK_READ_LATER`); a `pinned` group
+// (`DEALT_SECTIONS`) runs in the shard it names. The dealt sections, among them
+// most of what follows the link programs in groups marked `tail`, and the
+// other link programs are dealt by their cost in
 // `tests/shard-costs.json` (see `linkShard`), and every shard but 1 stops once
 // its share is done. A filtered run (`node tests/run.js net_ --shard 2/3`)
 // deals only the programs its filter selects. What a shard leaves to
@@ -1472,6 +1474,293 @@ const runUnderPrelude = (entry, args, exported = "main", options = {}) =>
 /** A spawned run's status and both streams, for a failed check's message. */
 const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
 
+// A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
+// called with everything it has printed so far each time it prints, and the answer
+// comes once it exits, or once it has been killed after 10 s.
+const runWatched = (exe, args, onChunk) =>
+  new Promise((resolve) => {
+    const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let out = ""
+    let err = ""
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGKILL")
+    }, 10000)
+    child.stdout.on("data", (chunk) => {
+      out += chunk
+      onChunk(out, child)
+    })
+    child.stderr.on("data", (chunk) => {
+      err += chunk
+    })
+    child.on("close", (code, signal) => {
+      clearTimeout(timer)
+      resolve({ code, signal, out, err, timedOut })
+    })
+  })
+
+// `runWatched`, with `onPort(port)` called once the program prints `port <n>`; the
+// answer waits for that promise as well as the exit. A program that prints no port
+// is simply run, with `results` empty.
+const runWithPort = async (exe, args, onPort) => {
+  let talks = null
+  const r = await runWatched(exe, args, (out) => {
+    const port = /^port (\d+)\n/.exec(out)
+    if (talks === null && port !== null) {
+      talks = onPort(Number(port[1]))
+    }
+  })
+  return { ...r, results: await (talks ?? Promise.resolve([])) }
+}
+
+// ---- The deal: which shard runs what ------------------------------------------
+// The link programs and the dealt sections, and the shard each runs in. It sits
+// before the first dealt section, the `term-io` one below, because a section
+// that every shard used to repeat is dealt too: what decides where it runs has
+// to be known before it is reached.
+const linkDir = path.join(root, "tests", "link")
+const linkTests = fs.existsSync(linkDir)
+  ? fs
+      .readdirSync(linkDir)
+      .filter((d) => fs.existsSync(path.join(linkDir, d, "main.ts")))
+      .sort()
+  : []
+
+/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
+const INDEX_OF_ANY_REFUSALS = [
+  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
+]
+
+/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
+const TEXT_REFUSALS = [
+  ["std_text_split_empty_separator", "split: an empty separator"],
+  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
+  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
+  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
+  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
+  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
+]
+
+/**
+ * The link programs whose output a check after the loop reads: by path, from
+ * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
+ * those checks; a new check that reads another program's output adds its name
+ * here, or it reads nothing in a sharded run.
+ */
+const LINK_READ_LATER = [
+  "async_await_all_retain",
+  "net_tls_resume_bench",
+  "par_dst_short",
+  "par_map_idle",
+  "par_map_join_small",
+  "par_map_reclaim",
+  "par_map_release",
+  "range_export",
+  "range_export_dts",
+  "range_export_foreign",
+  "range_export_header",
+  "range_export_napi",
+  "range_export_napi_async",
+  "range_export_unproven",
+  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  ...TEXT_REFUSALS.map(([name]) => name),
+  "std_compress_node",
+  "std_json_conformance",
+  "std_json_tokenizer",
+  "std_json_typed",
+  "std_json_value",
+  "thread_channel_string_many",
+  "thread_scope_reclaim",
+  "thread_task_release",
+]
+/** Whether the run's filter selects a section gated on any of `words`. */
+const selects = (...words) => !only || words.some((word) => word.includes(only))
+/**
+ * The sections that are dealt like the link programs rather than run by every
+ * shard (`termIo`, `emitTs` and the small sections from `osHost` to `fix`,
+ * before the link programs) or by shard 1 alone (the rest, after them): each
+ * runs in the shard `sectionShard` names, and one
+ * after the link programs sits before the point where every other shard stops.
+ * A dealt section writes only under a directory of its own and reads nothing
+ * another section writes, since the shard it runs in may run no other section
+ * that the shard which used to run it did. The key is its cost's in
+ * `tests/shard-costs.json`; `selected` is the section's own filter gate, which
+ * is also whether it is dealt, so a section of several gated blocks selects
+ * the union of their words and each block keeps its own gate beside
+ * `dealtHere`.
+ *
+ * The groups marked `tail` were shard 1's own until their cost made it the
+ * longest shard by ten minutes: blocks of the sections after the link
+ * programs, each moved whole, with every name it declares and every
+ * directory it writes, to before the stop. Their blocks keep their own
+ * gates, too many to union, so a `tail` group is always selected; a
+ * filtered run sends every one of them to shard 1, as it sent the whole of
+ * what came after the link programs, and the deal counts them only in a
+ * whole run. `pinned` names the shard a group always runs in, whatever the
+ * deal: the job's steps after the suite that read its lines or its
+ * binaries run in that shard (`.github/workflows/ci.yml`, "The AVX2 path
+ * ran" and the six after it).
+ */
+const DEALT_SECTIONS = {
+  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io", "break") },
+  emitTs: { name: "the --emit-ts section", selected: selects("emit-ts") },
+  osHost: { name: "the host builtins section (os_host)", selected: selects("os_host") },
+  term: { name: "the nish:term section over a pipe and a pseudo-terminal", selected: selects("term") },
+  termWasi: { name: "the nish:term section under --profile wasi", selected: selects("term_wasi", "wasi") },
+  netTcp: { name: "the net_tcp section", selected: selects("net_tcp") },
+  netUnix: { name: "the net_unix section", selected: selects("net_unix") },
+  netMss: { name: "the net_mss section", selected: selects("net_mss", "wasi") },
+  fileWasi: {
+    name: "the file_ programs under --profile wasi",
+    selected: !only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only),
+  },
+  fnref: { name: "the fnref section", selected: selects("fnref", "fnref_debug_check") },
+  netTlsTcp: { name: "the net_tls_tcp section", selected: selects("net_tls_tcp") },
+  http2: { name: "the net_http2_cleartext section", selected: selects("net_http2_cleartext") },
+  tlsClient: { name: "the net_tls_client_tcp section", selected: selects("net_tls_client_tcp") },
+  diagnostics: { name: "the diagnostics section", selected: selects("diagnostics") },
+  performance: { name: "the performance section", selected: selects("performance") },
+  memAwfy: { name: "the mem_awfy section", selected: selects("mem_awfy") },
+  fix: {
+    name: "the tests/fix section",
+    // Every run takes it, whatever its filter, as it did before it was dealt.
+    selected: true,
+  },
+  selfHosting: {
+    name: "the WP14 self-hosting section",
+    selected: !only || "selfhost".includes(only) || only.includes("self"),
+  },
+  cryptoBench: { name: "the crypto-bench section", selected: selects("crypto-bench") },
+  sanitizers: {
+    name: "the runtime under the sanitizers and the fuzz targets' replays",
+    selected: selects("runtime_sanitize", "fuzz"),
+  },
+  nishRunner: { name: "the golden runner written in Nish", selected: selects("nish-runner") },
+  bench: {
+    name: "the WP9 bench section (the twins' table, json-compare, yaml-compare, instruction counts)",
+    selected: selects("bench", "wp9", "bench: the twins' reading", "json-compare", "yaml-compare", "instructions"),
+  },
+  runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
+  sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
+  fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
+  unboundedPass: {
+    name: "NL9018 on a request loop (--json, the flag, the http1 servers and their RSS)",
+    selected: selects("nl9018", "unbounded_pass"),
+  },
+  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
+  differential: { name: "the WP13 differential section", selected: selects("differential") },
+  p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
+  netStartup: { name: "the net servers' startup links", selected: true, tail: true },
+  threadWasi: { name: "thread_mutex_counter under wasi-threads", selected: true, tail: true },
+  cryptoChecks: {
+    name: "the crypto checks after the link programs (bcrypt, the variable-time scan, the wipes, ct_asm, the map hashes)",
+    selected: true,
+    tail: true,
+  },
+  arrayChecks: {
+    name: "the arrays, strings, memory, layout, division, overflow and rng sections",
+    selected: true,
+    tail: true,
+  },
+  runtimeChecks: {
+    name: "the region, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
+    selected: true,
+    tail: true,
+  },
+  simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
+  cliChecks: {
+    name: "the contract, interop, exit-code, secret, capabilities, run-command and compat-erasure sections",
+    selected: true,
+    tail: true,
+  },
+  releaseChecks: {
+    name: "the ambient, docs, package, release, seed and changelog sections",
+    selected: true,
+    tail: true,
+  },
+  cSymbols: { name: "the c-symbols section", selected: true, tail: true },
+  runCache: { name: "the nish run module cache and watch sections", selected: true, tail: true },
+}
+/**
+ * The shard each link program runs in, and the shard each of `DEALT_SECTIONS`
+ * runs in: a greedy deal by cost, so that the shards finish together.
+ * `tests/shard-costs.json` holds the seconds each piece took in a CI shard --
+ * `link` per program, one entry per dealt section under its key, and
+ * `shardOne` for what only shard 1 runs: every other section after the link
+ * programs and its job's steps after the suite. Shard 1 starts with that and
+ * its `LINK_READ_LATER` programs, a `pinned` group's shard with the group (its
+ * cost counts the steps after the suite that read it), and the rest go
+ * largest first, ties by name, each to the shard with the least so far (the
+ * lowest number of those tied). The
+ * deal reads nothing a run measures, so every shard of one CI run computes the
+ * same one.
+ *
+ * A program costs at least `linkFloor`, whether the table names it or not. The
+ * table's figure is a gap in a pooled log, which reads near 0 for a program
+ * that finished behind a slower one. In run 40820090678, 632 of the 806
+ * programs had 0 in the table or no entry; dealt at 0 they all went to the
+ * shard that was least loaded when they came up -- 634 programs to shard 2
+ * and 69 and 79 to shards 3 and 4 -- and the 482 of them that link cost 238 s
+ * between them there, about half a second each. A rejection (`expected.err`)
+ * compiles and stops, and costs a tenth of that.
+ *
+ * A filtered run deals only what its filter selects, and starts shard 1 at
+ * nothing, since the sections it alone runs are filtered too: dealt from the
+ * whole table, the 188 `net_` programs the macOS `runtime-net` job runs fell
+ * 1.3, 4.2, 7.4 and 7.6 minutes to its four shards rather than about 5 each.
+ */
+const { linkShard, sectionShard } = (() => {
+  const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8"))
+  const linkFloor = (name) => (fs.existsSync(path.join(linkDir, name, "expected.err")) ? 0.05 : 0.5)
+  const cost = (name) => Math.max(costs.link[name] ?? 0, linkFloor(name))
+  const shardOf = new Map()
+  const load = Array.from({ length: SHARDS }, () => 0)
+  load[0] = only ? 0 : costs.shardOne
+  const sections = new Map()
+  const items = []
+  for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
+    if (!section.selected) {
+      continue
+    }
+    const pinned = only && section.tail ? 1 : section.pinned
+    if (pinned !== undefined) {
+      const shard = Math.min(pinned, SHARDS)
+      sections.set(key, shard)
+      load[shard - 1] += only ? 0 : (costs[key] ?? 1)
+    } else {
+      items.push({ section: key, cost: costs[key] ?? 1 })
+    }
+  }
+  for (const name of linkTests) {
+    if (only && !name.includes(only)) {
+      continue
+    }
+    if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
+      shardOf.set(name, 1)
+      load[0] += cost(name)
+    } else {
+      items.push({ name, cost: cost(name) })
+    }
+  }
+  const label = (item) => item.name ?? item.section
+  items.sort((a, b) => b.cost - a.cost || label(a).localeCompare(label(b)))
+  for (const item of items) {
+    const least = load.indexOf(Math.min(...load))
+    load[least] += item.cost
+    if (item.section !== undefined) {
+      sections.set(item.section, least + 1)
+    } else {
+      shardOf.set(item.name, least + 1)
+    }
+  }
+  return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
+})()
+/** Whether this shard runs the dealt section `key`: the filter selects it and the deal gave it here. */
+const dealtHere = (key) => DEALT_SECTIONS[key].selected && SHARD === sectionShard(key)
+
 // ---- The host builtins, against the clock, the kernel and Node (WP34 N3) ----------
 //
 // What a golden cannot say about `Date.now`, `crypto.getRandomValues`,
@@ -1480,7 +1769,7 @@ const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}
 // `--link` into a directory of its own, so no check depends on what section A left
 // behind, and each claim is asked of the native binary and, where the TypeScript
 // reading is class A, of the same source under `runtime/nish.mjs`.
-if (!only || "os_host".includes(only)) {
+if (dealtHere("osHost")) {
   const osDir = path.join(buildDir, "os")
   fs.rmSync(osDir, { recursive: true, force: true })
   fs.mkdirSync(osDir, { recursive: true })
@@ -1737,270 +2026,6 @@ if (!only || "os_host".includes(only)) {
   )
 }
 
-// A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
-// called with everything it has printed so far each time it prints, and the answer
-// comes once it exits, or once it has been killed after 10 s.
-const runWatched = (exe, args, onChunk) =>
-  new Promise((resolve) => {
-    const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
-    let out = ""
-    let err = ""
-    let timedOut = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill("SIGKILL")
-    }, 10000)
-    child.stdout.on("data", (chunk) => {
-      out += chunk
-      onChunk(out, child)
-    })
-    child.stderr.on("data", (chunk) => {
-      err += chunk
-    })
-    child.on("close", (code, signal) => {
-      clearTimeout(timer)
-      resolve({ code, signal, out, err, timedOut })
-    })
-  })
-
-// `runWatched`, with `onPort(port)` called once the program prints `port <n>`; the
-// answer waits for that promise as well as the exit. A program that prints no port
-// is simply run, with `results` empty.
-const runWithPort = async (exe, args, onPort) => {
-  let talks = null
-  const r = await runWatched(exe, args, (out) => {
-    const port = /^port (\d+)\n/.exec(out)
-    if (talks === null && port !== null) {
-      talks = onPort(Number(port[1]))
-    }
-  })
-  return { ...r, results: await (talks ?? Promise.resolve([])) }
-}
-
-// ---- The deal: which shard runs what ------------------------------------------
-// The link programs and the dealt sections, and the shard each runs in. It sits
-// before the first dealt section, the `term-io` one below, because a section
-// that every shard used to repeat is dealt too: what decides where it runs has
-// to be known before it is reached.
-const linkDir = path.join(root, "tests", "link")
-const linkTests = fs.existsSync(linkDir)
-  ? fs
-      .readdirSync(linkDir)
-      .filter((d) => fs.existsSync(path.join(linkDir, d, "main.ts")))
-      .sort()
-  : []
-
-/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
-const INDEX_OF_ANY_REFUSALS = [
-  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
-]
-
-/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
-const TEXT_REFUSALS = [
-  ["std_text_split_empty_separator", "split: an empty separator"],
-  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
-  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
-  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
-  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
-  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
-]
-
-/**
- * The link programs whose output a check after the loop reads: by path, from
- * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
- * those checks; a new check that reads another program's output adds its name
- * here, or it reads nothing in a sharded run.
- */
-const LINK_READ_LATER = [
-  "async_await_all_retain",
-  "net_tls_resume_bench",
-  "par_dst_short",
-  "par_map_idle",
-  "par_map_join_small",
-  "par_map_reclaim",
-  "par_map_release",
-  "range_export",
-  "range_export_dts",
-  "range_export_foreign",
-  "range_export_header",
-  "range_export_napi",
-  "range_export_napi_async",
-  "range_export_unproven",
-  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
-  ...TEXT_REFUSALS.map(([name]) => name),
-  "std_compress_node",
-  "std_json_conformance",
-  "std_json_tokenizer",
-  "std_json_typed",
-  "std_json_value",
-  "thread_channel_string_many",
-  "thread_scope_reclaim",
-  "thread_task_release",
-]
-/** Whether the run's filter selects a section gated on any of `words`. */
-const selects = (...words) => !only || words.some((word) => word.includes(only))
-/**
- * The sections that are dealt like the link programs rather than run by every
- * shard (`termIo`, `emitTs`, before the link programs) or by shard 1 alone
- * (the rest, after them): each runs in the shard `sectionShard` names, and one
- * after the link programs sits before the point where every other shard stops.
- * A dealt section writes only under a directory of its own and reads nothing
- * another section writes, since the shard it runs in may run no other section
- * that the shard which used to run it did. The key is its cost's in
- * `tests/shard-costs.json`; `selected` is the section's own filter gate, which
- * is also whether it is dealt, so a section of several gated blocks selects
- * the union of their words and each block keeps its own gate beside
- * `dealtHere`.
- *
- * The groups marked `tail` were shard 1's own until their cost made it the
- * longest shard by ten minutes: blocks of the sections after the link
- * programs, each moved whole, with every name it declares and every
- * directory it writes, to before the stop. Their blocks keep their own
- * gates, too many to union, so a `tail` group is always selected; a
- * filtered run sends every one of them to shard 1, as it sent the whole of
- * what came after the link programs, and the deal counts them only in a
- * whole run. `pinned` names the shard a group always runs in, whatever the
- * deal: the job's steps after the suite that read its lines or its
- * binaries run in that shard (`.github/workflows/ci.yml`, "The AVX2 path
- * ran" and the six after it).
- */
-const DEALT_SECTIONS = {
-  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io", "break") },
-  emitTs: { name: "the --emit-ts section", selected: selects("emit-ts") },
-  selfHosting: {
-    name: "the WP14 self-hosting section",
-    selected: !only || "selfhost".includes(only) || only.includes("self"),
-  },
-  cryptoBench: { name: "the crypto-bench section", selected: selects("crypto-bench") },
-  sanitizers: {
-    name: "the runtime under the sanitizers and the fuzz targets' replays",
-    selected: selects("runtime_sanitize", "fuzz"),
-  },
-  nishRunner: { name: "the golden runner written in Nish", selected: selects("nish-runner") },
-  bench: {
-    name: "the WP9 bench section (the twins' table, json-compare, yaml-compare, instruction counts)",
-    selected: selects("bench", "wp9", "bench: the twins' reading", "json-compare", "yaml-compare", "instructions"),
-  },
-  runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
-  sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
-  fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
-  unboundedPass: {
-    name: "NL9018 on a request loop (--json, the flag, the http1 servers and their RSS)",
-    selected: selects("nl9018", "unbounded_pass"),
-  },
-  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
-  differential: { name: "the WP13 differential section", selected: selects("differential") },
-  p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
-  netStartup: { name: "the net servers' startup links", selected: true, tail: true },
-  threadWasi: { name: "thread_mutex_counter under wasi-threads", selected: true, tail: true },
-  cryptoChecks: {
-    name: "the crypto checks after the link programs (bcrypt, the variable-time scan, the wipes, ct_asm, the map hashes)",
-    selected: true,
-    tail: true,
-  },
-  arrayChecks: {
-    name: "the arrays, strings, memory, layout, division, overflow and rng sections",
-    selected: true,
-    tail: true,
-  },
-  runtimeChecks: {
-    name: "the region, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
-    selected: true,
-    tail: true,
-  },
-  simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
-  cliChecks: {
-    name: "the contract, interop, exit-code, secret, capabilities, run-command and compat-erasure sections",
-    selected: true,
-    tail: true,
-  },
-  releaseChecks: {
-    name: "the ambient, docs, package, release, seed and changelog sections",
-    selected: true,
-    tail: true,
-  },
-  cSymbols: { name: "the c-symbols section", selected: true, tail: true },
-  runCache: { name: "the nish run module cache and watch sections", selected: true, tail: true },
-}
-/**
- * The shard each link program runs in, and the shard each of `DEALT_SECTIONS`
- * runs in: a greedy deal by cost, so that the shards finish together.
- * `tests/shard-costs.json` holds the seconds each piece took in a CI shard --
- * `link` per program, one entry per dealt section under its key, and
- * `shardOne` for what only shard 1 runs: every other section after the link
- * programs and its job's steps after the suite. Shard 1 starts with that and
- * its `LINK_READ_LATER` programs, a `pinned` group's shard with the group (its
- * cost counts the steps after the suite that read it), and the rest go
- * largest first, ties by name, each to the shard with the least so far (the
- * lowest number of those tied). The
- * deal reads nothing a run measures, so every shard of one CI run computes the
- * same one.
- *
- * A program costs at least `linkFloor`, whether the table names it or not. The
- * table's figure is a gap in a pooled log, which reads near 0 for a program
- * that finished behind a slower one. In run 40820090678, 632 of the 806
- * programs had 0 in the table or no entry; dealt at 0 they all went to the
- * shard that was least loaded when they came up -- 634 programs to shard 2
- * and 69 and 79 to shards 3 and 4 -- and the 482 of them that link cost 238 s
- * between them there, about half a second each. A rejection (`expected.err`)
- * compiles and stops, and costs a tenth of that.
- *
- * A filtered run deals only what its filter selects, and starts shard 1 at
- * nothing, since the sections it alone runs are filtered too: dealt from the
- * whole table, the 188 `net_` programs the macOS `runtime-net` job runs fell
- * 1.3, 4.2, 7.4 and 7.6 minutes to its four shards rather than about 5 each.
- */
-const { linkShard, sectionShard } = (() => {
-  const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8"))
-  const linkFloor = (name) => (fs.existsSync(path.join(linkDir, name, "expected.err")) ? 0.05 : 0.5)
-  const cost = (name) => Math.max(costs.link[name] ?? 0, linkFloor(name))
-  const shardOf = new Map()
-  const load = Array.from({ length: SHARDS }, () => 0)
-  load[0] = only ? 0 : costs.shardOne
-  const sections = new Map()
-  const items = []
-  for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
-    if (!section.selected) {
-      continue
-    }
-    const pinned = only && section.tail ? 1 : section.pinned
-    if (pinned !== undefined) {
-      const shard = Math.min(pinned, SHARDS)
-      sections.set(key, shard)
-      load[shard - 1] += only ? 0 : (costs[key] ?? 1)
-    } else {
-      items.push({ section: key, cost: costs[key] ?? 1 })
-    }
-  }
-  for (const name of linkTests) {
-    if (only && !name.includes(only)) {
-      continue
-    }
-    if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
-      shardOf.set(name, 1)
-      load[0] += cost(name)
-    } else {
-      items.push({ name, cost: cost(name) })
-    }
-  }
-  const label = (item) => item.name ?? item.section
-  items.sort((a, b) => b.cost - a.cost || label(a).localeCompare(label(b)))
-  for (const item of items) {
-    const least = load.indexOf(Math.min(...load))
-    load[least] += item.cost
-    if (item.section !== undefined) {
-      sections.set(item.section, least + 1)
-    } else {
-      shardOf.set(item.name, least + 1)
-    }
-  }
-  return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
-})()
-/** Whether this shard runs the dealt section `key`: the filter selects it and the deal gave it here. */
-const dealtHere = (key) => DEALT_SECTIONS[key].selected && SHARD === sectionShard(key)
-
 // ---- `nish:term`, over a pipe and a pseudo-terminal -------------------------------
 //
 // What a golden cannot say about stdin and the terminal, because the case runner
@@ -2009,7 +2034,7 @@ const dealtHere = (key) => DEALT_SECTIONS[key].selected && SHARD === sectionShar
 // nothing in it times `waitStdin` out, and `script` puts a pseudo-terminal under
 // `tests/cases/term_pty`, where raw mode takes and each way out (returning, a
 // panic, SIGTERM) leaves `stty -g` as it found it.
-if (!only || "term".includes(only)) {
+if (dealtHere("term")) {
   const termDir = path.join(buildDir, "term")
   fs.rmSync(termDir, { recursive: true, force: true })
   fs.mkdirSync(termDir, { recursive: true })
@@ -2806,7 +2831,7 @@ if (dealtHere("termIo")) {
 // where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
 // `waitStdin(0)`, which there polls for 10 ms rather than not at all.
-if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
+if (dealtHere("termWasi")) {
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasiDir = path.join(buildDir, "term_wasi")
     fs.rmSync(wasiDir, { recursive: true, force: true })
@@ -2871,7 +2896,7 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
 // moved it no further than the first. The section-GC check here is the other
 // half of the unit's budget: a program that calls no `nish:net` function links
 // none of runtime-net.c.
-if (!only || "net_tcp".includes(only)) {
+if (dealtHere("netTcp")) {
   const netDir = path.join(buildDir, "net")
   fs.rmSync(netDir, { recursive: true, force: true })
   fs.mkdirSync(netDir, { recursive: true })
@@ -3126,7 +3151,7 @@ if (!only || "net_set_option".includes(only)) {
 // the eight throws, naming itself, and the flag and the two pair kinds read as
 // the numbers a native build folds them to (`tests/cases/net_unix_calls`,
 // `net_unix_paths` and `net_unix_scm` are the native half).
-if (!only || "net_unix".includes(only)) {
+if (dealtHere("netUnix")) {
   const unixDir = path.join(buildDir, "net-prelude")
   fs.mkdirSync(unixDir, { recursive: true })
   const kindsEntry = path.join(unixDir, "unix-kinds.ts")
@@ -3219,7 +3244,7 @@ if (!only || "spawn_fds".includes(only)) {
 // the constant -1, with no runtime symbol for the freestanding link to miss,
 // and the `--profile wasi` build runs and prints that -1
 // (`tests/cases/net_mss` is the native half).
-if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+if (dealtHere("netMss")) {
   const mssDir = path.join(buildDir, "net-mss")
   fs.rmSync(mssDir, { recursive: true, force: true })
   fs.mkdirSync(mssDir, { recursive: true })
@@ -3276,7 +3301,7 @@ if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
 // same `.out` as its native run. `file_open_errors` is the one that showed a
 // gap: WASI resolves "" to the preopened directory, so the runtime refuses an
 // empty path, and a path holding a NUL, before it asks.
-if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only)) {
+if (dealtHere("fileWasi")) {
   const fileCases = [
     "file_read_at",
     "file_read_at_eof",
@@ -3728,7 +3753,7 @@ if (!only || "net_loop".includes(only)) {
 // forged call hands `g`'s dispatcher `dec`'s tag, a tag of the right signature
 // that the place pass proves `g` never holds. The debug binary must panic with
 // the set message; the speed IR, its golden, has no check to reach.
-if (selects("fnref", "fnref_debug_check")) {
+if (dealtHere("fnref")) {
   const fnrefDir = path.join(buildDir, "fnref-debug")
   fs.mkdirSync(fnrefDir, { recursive: true })
   const cases = fs
@@ -4058,7 +4083,7 @@ const linkProfile = (name, args = []) =>
 // its suite, and macOS's curl, built on LibreSSL 3.3, has no `--tls13-ciphers`;
 // Node carries its own OpenSSL on every platform. openssl is on CI's runners,
 // so a missing one is a failure here rather than a skip.
-if (!only || "net_tls_tcp".includes(only)) {
+if (dealtHere("netTlsTcp")) {
   const tlsDir = path.join(buildDir, "net-tls")
   fs.rmSync(tlsDir, { recursive: true, force: true })
   fs.mkdirSync(tlsDir, { recursive: true })
@@ -4265,7 +4290,7 @@ if (!only || "net_tls_tcp".includes(only)) {
 // `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
 // server prints one line per connection it closed; each must end with no error.
 // Either client missing is a skip, named, rather than a pass.
-if (!only || "net_http2_cleartext".includes(only)) {
+if (dealtHere("http2")) {
   const h2cDir = path.join(buildDir, "net-h2c")
   fs.rmSync(h2cDir, { recursive: true, force: true })
   fs.mkdirSync(h2cDir, { recursive: true })
@@ -4484,7 +4509,7 @@ if (!only || "net_tls_record_size_limit".includes(only)) {
 // both ways and a close under each suite and group, and closes first once,
 // for s_server to report the client's close_notify. openssl is on CI's runners, so
 // a missing one is a failure here rather than a skip.
-if (!only || "net_tls_client_tcp".includes(only)) {
+if (dealtHere("tlsClient")) {
   const dir = path.join(buildDir, "net-tls-client")
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
@@ -4870,7 +4895,7 @@ if (!only || "reject_computed_skip".includes(only)) {
 // ---- WP10: diagnostics ------------------------------------------------------------
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).
-if (!only || "diagnostics".includes(only)) {
+if (dealtHere("diagnostics")) {
   const mm = spawnSync(
     NISH,
     [path.join(casesDir, "reject_type_mismatch.ts"), "-o", path.join(buildDir, "diag_mismatch.ll")],
@@ -5361,7 +5386,7 @@ if (!only || "diagnostics".includes(only)) {
 // silences the class without changing one byte of the IR. The guard cases matter
 // most: a warning that fires where the compiler already did the right thing is what
 // teaches people to ignore a whole diagnostic class.
-if (!only || "performance".includes(only)) {
+if (dealtHere("performance")) {
   /** Compile one case to its own output file and hand back the whole result. */
   const compile = (name, out, extra = []) =>
     spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, out), ...extra], {
@@ -5582,6 +5607,96 @@ if (!only || "performance".includes(only)) {
       passDropLines[2].includes("`at` is given a new allocation on every pass") &&
       passDropLines[3].includes("`row` already holds an allocation and this one drops it"),
     passDrop.stderr
+  )
+
+  // NL9019: a function that keeps an allocation on every call, run on every
+  // pass of a loop that releases nothing. Each of the three is named at its
+  // declaration with the line of the first allocation it holds; `fixed` keeps
+  // nothing.
+  const kept = compile("perf_kept_memory", "perf_kept_memory_report.ll")
+  const keptLines = summaries(kept.stderr)
+  check(
+    "performance: a function that keeps an allocation per call and runs on every unreleased pass of a loop warns at its declaration",
+    kept.status === 0 &&
+      keptLines.length === 3 &&
+      positions(keptLines) === "9:1,17:1,23:1" &&
+      keptLines[0].includes(
+        "`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so " +
+          "the memory it keeps grows with every pass: the first allocation it holds is on line 12, where this " +
+          "analysis does not prove it dead when the function returns"
+      ) &&
+      keptLines[1].includes("`choose` keeps an allocation on every call") &&
+      keptLines[1].includes("the first allocation it holds is on line 18,") &&
+      keptLines[2].includes("`parts` keeps an allocation on every call") &&
+      keptLines[2].includes("the first allocation it holds is on line 25,"),
+    kept.stderr
+  )
+
+  // No guard exempts a direct callee of an unscoped pass, whatever object the
+  // call receives. A re-entrancy guard, a negated or compound condition, a
+  // counter, a per-item flag and a fresh receiver each pass warn; so do a
+  // once-guard cleared elsewhere, directly or through another name, work
+  // before the guard, a second way out before the store, a field the loop
+  // replaces itself, through a method, through a callee (`prepG`) or through
+  // a name for the holder made before the loop (`prepAlias`), and a
+  // once-guard on one object the loop never replaces (`warmOnce`), which the
+  // rule does not try to prove. This is also the control that fails if the
+  // reach walk stops finding loop calls at all.
+  const direct = compile("perf_kept_memory_direct", "perf_kept_memory_direct_report.ll")
+  const directLines = summaries(direct.stderr)
+  const directNames = [
+    "guarded",
+    "whenReady",
+    "untilDone",
+    "capped",
+    "mark",
+    "stamp",
+    "armedWork",
+    "loadedWork",
+    "early",
+    "gated",
+    "prep",
+    "prepNext",
+    "prepG",
+    "prepAlias",
+    "warmOnce",
+  ]
+  const directFirst = [27, 41, 52, 62, 74, 85, 96, 110, 121, 139, 165, 176, 187, 199, 215]
+  check(
+    "performance: NL9019 reports every direct callee of an unscoped pass that keeps an allocation, guarded or not",
+    direct.status === 0 &&
+      directLines.length === 15 &&
+      positions(directLines) ===
+        "21:1,35:1,46:1,57:1,68:1,79:1,90:1,104:1,119:1,130:1,159:1,170:1,181:1,193:1,209:1" &&
+      directLines.every(
+        (l, i) =>
+          l.includes(`\`${directNames[i]}\` keeps an allocation on every call`) &&
+          l.includes(`the first allocation it holds is on line ${directFirst[i]},`)
+      ),
+    direct.stderr
+  )
+
+  // A `let` result handed back after reassignment is the arena stage's own
+  // shape: it must stay clear of every retention rule, not only NL9019.
+  const reassign = compile("res_let_reassign", "res_let_reassign_report.ll", ["--json"])
+  // --json writes one object per warning to stdout; a line that is not one
+  // counts as a failure rather than as no warning.
+  const reassignCodes = reassign.stdout
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => {
+      try {
+        const o = JSON.parse(l)
+        return typeof o.code === "string" ? o.code : null
+      } catch {
+        return null
+      }
+    })
+  check(
+    "performance: res_let_reassign raises no NL9003, NL9016, NL9018 or NL9019",
+    reassign.status === 0 &&
+      reassignCodes.every((c) => c !== null && !["NL9003", "NL9016", "NL9018", "NL9019"].includes(c)),
+    reassign.stdout + reassign.stderr
   )
 
   // NL9018: a loop that nothing bounds -- a poll, `while (true)` -- keeps what
@@ -5854,6 +5969,13 @@ if (!only || "performance".includes(only)) {
     // a local of the pass, an assignment of no allocation and a loop that runs
     // once: none of them drops a value on every pass, so NL9016 is silent.
     "perf_arena_pass_quiet",
+    // A function that keeps nothing past its call, one whose arena block
+    // releases it, one run only where each pass, block or scoped caller
+    // releases it, one no loop calls directly (two deep, behind a callee that
+    // answers memory, silent by design), a `getenv` result only handed to a
+    // callee, and a template handed on as an element of an array or object
+    // literal or joined in place: NL9019 is silent on each.
+    "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that
@@ -6200,7 +6322,7 @@ if (!only || "performance".includes(only)) {
 // that scope switched off, Storage 1 1000 peaks at 390 MB and List 1 100000 at
 // 49 MB, against under 2 MB for each. Like `mem_loop_scope_chunk`, the bound is
 // a ratio between two runs of one binary, so the runtime's footprint can move.
-if (!only || "mem_awfy".includes(only)) {
+if (dealtHere("memAwfy")) {
   if (has("clang")) {
     const dir = path.join(buildDir, "mem_awfy")
     const exe = path.join(dir, "harness")
@@ -6805,7 +6927,7 @@ if (!only || "arena_removed".includes(only)) {
 // come out untouched. A directory is a case with more than one file, for what
 // the command line decides: which files are named, and which may be rewritten.
 // `tests/fix/README.md` is the table.
-{
+if (dealtHere("fix")) {
   // A case's sidecar, trimmed, or `fallback` when it has none.
   const sidecar = (file, fallback) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : fallback)
   // A plain run exits 1 on an error and 0 on a program whose only diagnostics
@@ -11993,7 +12115,7 @@ if (dealtHere("breakWeb")) {
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 104
+  const BREAK_WEB_CHECKS = 138
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))
@@ -21431,6 +21553,53 @@ if (dealtHere("cliChecks")) {
         !skipMjs.includes("widest"),
       skipDts + skipMjs
     )
+    // WP58: a generic instance over a union is a struct the freestanding wasm
+    // profile cannot hand to JavaScript, so an export returning `Box<Shape>`
+    // is declined like any other runtime-backed result: commented with its
+    // reason in the declarations, absent from the loader, and the module's
+    // scalar export beside it still typed and loaded.
+    const unionBoxSrc = path.join(interopDir, "union_generic_dts.ts")
+    fs.writeFileSync(
+      unionBoxSrc,
+      [
+        "enum Kind {",
+        "  Circle,",
+        "  Square,",
+        "}",
+        "class Circle {",
+        "  readonly kind: Kind.Circle = Kind.Circle;",
+        "  r: i32 = 1;",
+        "}",
+        "class Square {",
+        "  readonly kind: Kind.Square = Kind.Square;",
+        "  side: i32 = 2;",
+        "}",
+        "type Shape = Circle | Square;",
+        "class Box<T> {",
+        "  value: T;",
+        "  constructor(value: T) {",
+        "    this.value = value;",
+        "  }",
+        "}",
+        "export const make = (n: i32): Box<Shape> => new Box<Shape>(n > 0 ? new Circle() : new Square());",
+        "export const twice = (n: i32): i32 => n * 2;",
+        "",
+      ].join("\n")
+    )
+    const unionBox = emit(unionBoxSrc, ["--emit-dts", sidecar("union_generic_dts", "d.ts")])
+    const unionBoxDts = unionBox.status === 0 ? fs.readFileSync(sidecar("union_generic_dts", "d.ts"), "utf8") : ""
+    const unionBoxMjs = unionBox.status === 0 ? fs.readFileSync(sidecar("union_generic_dts", "mjs"), "utf8") : ""
+    check(
+      "--emit-dts declines an export returning a generic instance over a union, with its reason",
+      unionBoxDts.includes(
+        "  // make(n: number): Box$un2.$Circle.$Square  -- not exported to JS: the result is `Box$un2.$Circle.$Square`, which needs the Nish runtime the freestanding wasm profile does not include"
+      ) &&
+        unionBoxDts.includes("  twice(n: number): number;") &&
+        unionBoxMjs.length > 0 &&
+        !unionBoxMjs.includes("make") &&
+        unionBoxMjs.includes("twice"),
+      `exit ${unionBox.status}\n${unionBox.stderr ?? ""}\n${unionBoxDts}${unionBoxMjs}`
+    )
     // WP30: the same widths as arrays, where the masks above have no
     // counterpart. An element never travels in a wasm value type -- it is a byte
     // in `data` that the typed array reads unsigned -- so a mask here would be
@@ -26540,17 +26709,23 @@ if (dealtHere("releaseChecks")) {
       "the two darwin rows have different attachedSince values, so a claim about `the darwin pair` no longer has one answer: give each asset its own pattern in versionClaims above"
     )
 
-    const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"]
+    const proseDocs = [
+      "CONTRIBUTING.md",
+      "docs/INSTALL.md",
+      "docs/wp10-ci.md",
+      "docs/wp12-release.md",
+      "docs/wp19-stage0-retirement.md",
+    ]
     const staleProse = []
     let proseClaims = 0
     for (const doc of proseDocs) {
-      const text = fs.readFileSync(path.join(root, "docs", doc), "utf8")
+      const text = fs.readFileSync(path.join(root, doc), "utf8")
       for (const [shape, re, asset] of versionClaims) {
         const want = rows.find((t) => t.asset === asset)?.attachedSince
         for (const m of text.matchAll(new RegExp(re, "g"))) {
           proseClaims += 1
           if (m[1] !== want) {
-            staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`)
+            staleProse.push(`${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`)
           }
         }
       }
@@ -36254,6 +36429,12 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // kept in place, a union and a nullable-union field, a `(C | null)[]` and
 // `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
 // to pack the list to 8 bytes a node, so a run whose keep never compacts fails.
+// A sixth, tests/module-storage/persist/forge.ts, plays a hostile page (WH-10,
+// docs/security/wasm-host.md): it points a root slot or a pointer field at a
+// fake cell past the arena, or sets an array's len (and cap) to 2^40, then
+// forces a compaction, which must throw a NishPanic and leave the fake's bytes
+// as written. Before the fix the compactor rewrote the fake's field for the
+// first two and walked the len into a bare out-of-bounds trap.
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
 // without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
 // union is fine in a page build's `.d.ts` but refused once a C header is asked
@@ -36345,6 +36526,7 @@ if (!only || "persist".includes(only)) {
       ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
+      ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
     ]) {
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })

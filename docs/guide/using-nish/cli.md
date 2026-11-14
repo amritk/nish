@@ -53,7 +53,7 @@ argument 3: --help
   profile, unless you pass `--profile`), and every run after that starts the
   binary it already linked. Under `debug`, the link compiles only the modules
   your edit changed: a one-line edit to a 5,000-line server rebuilds in about
-  a second and a half on a 4-core machine, against about five seconds for the
+  a second and a half on four cores, against about five seconds for the
   first link.
 - **What `nish run` caches**, under `$XDG_CACHE_HOME/nish`, or `~/.cache/nish`
   when that is unset:
@@ -350,8 +350,8 @@ Seven kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
-app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
-app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi
+app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
 app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
 app.ts:12:15: error: --emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type

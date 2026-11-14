@@ -528,6 +528,7 @@ const pageMath = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
   )
+const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1219,14 +1220,58 @@ const quicRebind = byFinding(
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
 
+/** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
+const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
+
+/**
+ * The generated comment lines that named a work package, as the seed writes
+ * them and as they read now: `[seed, candidate]`.
+ */
+const WP_COMMENT_LINES = [
+  [
+    "; WP49 stage 5: the loop over the executor in runtime-async.c (docs/wp49-async-server.md)",
+    "; the loop over the executor in runtime-async.c",
+  ],
+  [
+    "// Module storage for the TypeScript reading (WP50 §5.4), written by",
+    "// Module storage for the TypeScript reading, written by",
+  ],
+  ["/* `Result<T, E>` (WP16/WP17). A `Result`", "/* `Result<T, E>`. A `Result`"],
+  ["/* The arena is thread-local (WP20 T0), so", "/* The arena is thread-local, so"],
+  ["/* WP17: a `Result` as the object JS", "/* A `Result` as the object JS"],
+  ["/** A Result in one i64 (WP17): bit 0", "/** A Result in one i64: bit 0"],
+  [
+    " * Where module storage lives in `memory` (WP50 §5.2). `length`",
+    " * Where module storage lives in `memory`. `length`",
+  ],
+]
+
+/**
+ * `text` with each work-package comment line put back as the seed wrote it. A
+ * declaration's `undo`: it touches only those lines, so any other change differs.
+ */
+const withSeedWpComments = (text) =>
+  WP_COMMENT_LINES.reduce((acc, [seed, now]) => acc.split(now).join(seed), text)
+
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
 const DECLARED = [
+  {
+    changelog: "internal work-package references from diagnostics and generated files",
+    why: "generated comments in async .ll, interop headers, N-API sidecars and wasm loaders no longer name a work package",
+    undo: (text) => withSeedWpComments(text),
+  },
   {
     program: "tests/cases/res_let_reassign.ts",
     file: "res_let_reassign.ll",
     changelog: LET_REASSIGN,
     why: "an `Ok`/`Err` assigned to a `let` of the frame follows the `let`, so the sites outside a loop are allocas and the functions keep their arena scope",
+  },
+  {
+    program: "tests/cases/perf_kept_memory_quiet.ts",
+    file: "perf_kept_memory_quiet.ll",
+    changelog: LET_REASSIGN,
+    why: "`pick` assigns an `Ok`/`Err` to a `let` of its frame outside a loop, so the Result is an alloca rather than an arena allocation",
   },
   {
     program: "tests/cases/res_proof_consumers.ts",
@@ -1889,7 +1934,7 @@ const DECLARED = [
   // SSSE3 or NEON kernel, the walk on the other arm.
   {
     file: "checksum.ll",
-    changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+    changelog: "Ship the SSSE3 and NEON Adler-32 kernels",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
   // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it
@@ -6410,6 +6455,13 @@ const DECLARED = [
       "tests/link/std_yaml_json/main.ts": ["main.h"],
     }
   ),
+  ...byFinding(YAML_LOAD_CUTS)(
+    "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickCount` and `quickPart` over `quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
+    {
+      "tests/link/std_yaml_json_golden/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+    }
+  ),
   ...byFinding(SECURITY_PATHS)(
     "X509Certificate gains `spki`, PkiTrustStore gains a `distrusted` set and HttpOptions gains `distrustSpkiSha256`, so every module laying them out moves and a program naming `PKI_ERR_DISTRUSTED` or `spki` compiles only under the candidate",
     {
@@ -6454,6 +6506,19 @@ const DECLARED = [
     "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
     { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
   ),
+  // WP58 S1: a discriminated union is a generic's type argument, which the
+  // seed refuses as NL2533, as it refuses a class passed where a generic
+  // call bound `T` to an interface the class implements.
+  ...[
+    "tests/cases/union_generic_call.ts",
+    "tests/cases/union_result.ts",
+    "tests/cases/generic_interface_class_arg.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: UNION_GENERICS,
+    why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
 ]
 
 /**
@@ -7330,7 +7395,13 @@ const judge = (pair, job, reference, candidate, limit) => {
     }
     const wantPlain = withoutOwnVersion(wantRooted, pair.reference.version)
     const gotPlain = withoutOwnVersion(gotRooted, pair.candidate.version)
-    const undone = DECLARED.find((entry) => entry.undo !== undefined && entry.undo(gotPlain) === wantPlain)
+    // An `undo` is tried on the files as written too: removing a root can
+    // rewrite a relative path on one side only (a `--host` import that climbs
+    // out of the temporary directory), which no undo can put back.
+    const undone = DECLARED.find(
+      (entry) =>
+        entry.undo !== undefined && (entry.undo(gotPlain) === wantPlain || entry.undo(gotText) === wantText)
+    )
     const where = excerpt(wantText, gotText, limit)
     differences.push({
       surface: name,

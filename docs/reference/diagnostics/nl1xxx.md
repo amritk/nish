@@ -36,7 +36,7 @@ The message of an error contains:
 … (no event loop or promises)
 ```
 
-**Retired**: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that WP49 stage 4 replaced; `await` outside an `async` function is NL2641 now (tests/cases/reject_await)
+**Retired**: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that async functions replaced; `await` outside an `async` function is NL2641 now (tests/cases/reject_await)
 
 ## NL1005
 
@@ -126,7 +126,7 @@ The message of an error contains:
 `async` functions are forbidden in …
 ```
 
-**Retired**: `async` functions are forbidden, the Phase 0 refusal WP49 stage 4 replaced; an async function is checked now, and its rules are NL1063 and NL2639-NL2655 (tests/cases/async_*, tests/cases/reject_async_*)
+**Retired**: `async` functions are forbidden, the Phase 0 refusal async functions replaced; an async function is checked now, and its rules are NL1063 and NL2639-NL2655 (tests/cases/async_*, tests/cases/reject_async_*)
 
 ## NL1016
 
@@ -417,7 +417,7 @@ The message of an error contains:
 Generic type parameters are forbidden in …
 ```
 
-**Retired**: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
+**Retired**: Phase 0's blanket `Generic type parameters are forbidden in ` before the refusal named the kind; the live ones are NL1054 and NL1055
 
 ## NL1046
 
@@ -513,7 +513,7 @@ The message of an error contains:
 Generic type parameters are forbidden on a method in …
 ```
 
-**Retired**: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
+**Retired**: Phase 0's refusal of a type parameter on a method; generic methods compile now, and reject_generic_method now pins type arguments at a method call
 
 ## NL1056
 

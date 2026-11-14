@@ -75,6 +75,67 @@ export const main = (): i32 => {
 };
 ```
 
+### A union on either side
+
+Either side of a `Result` can be a [discriminated union](unions.md). The
+success of a parse that answers one of several shapes is the union, and
+`Ok(new Circle(r))` converts the variant into it, as passing it to a
+`Shape` parameter would. Read the value into a local, then switch on its tag:
+
+```ts nish:ok
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32;
+  constructor(r: i32) {
+    this.r = r;
+  }
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32;
+  constructor(side: i32) {
+    this.side = side;
+  }
+}
+
+type Shape = Circle | Square;
+
+const parseShape = (text: string, size: i32): Result<Shape, string> => {
+  if (text === "circle") {
+    return Ok(new Circle(size));
+  }
+  if (text === "square") {
+    return Ok(new Square(size));
+  }
+  return Err(`${text} is not a shape`);
+};
+
+export const main = (): void => {
+  const r = parseShape("square", 4);
+  if (r.ok) {
+    const shape = r.value;
+    switch (shape.kind) {
+      case Kind.Circle:
+        console.log(`circle of radius ${shape.r}`);
+        break;
+      case Kind.Square:
+        console.log(`square of side ${shape.side}`); // square of side 4
+        break;
+    }
+  }
+  const bad = parseShape("star", 1);
+  if (!bad.ok) {
+    console.log(bad.error); // star is not a shape
+  }
+};
+```
+
 ## The rules that stop a failure being ignored
 
 TypeScript lets you forget about an exception. Nish turns each way of

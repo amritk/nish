@@ -15,7 +15,7 @@
       "body": "The status line of the WP34 note said only lanes K1 and K4 had landed. It\nnow says N1, N2, N3 and N6 have too. Each of those sections names the pull\nrequests that built it: N1 in #296 (enums) and #300 (aliases), N2 in #295,\nN3 in #312, N6 in #310. N5 and the remaining lanes are marked not built.\n§5a no longer waits for N6. It says what N6 checks today: its own fixtures,\nnot yet the crypto modules.\n\nMASTER_PLAN §9 \"Next\" now lists the live work, each item linking its note:\n- WP34 wave 1: N5 and the K2, K3, K5 and K6 crypto lanes\n- WP33 R2 to R4\n- threads P3\n\nThreads P1 and P2, ranged integers and Map/Set move to a shipped line, with\ntheir releases and pull requests. The 0.10.0 breaking-change note is written\nas history instead of \"the next release\".\n\nThe branch also carries the v0.14.0 package-lock.json from #319,\nbyte-identical, so `npm ci` passes on it. It is a no-op once #319 lands.",
       "metrics": [],
       "refs": [
-        "docs/wp34-hosting-cs.md",
+        "docs/wp34-network-stack.md",
         "docs/MASTER_PLAN.md"
       ],
       "tests": [
@@ -57,7 +57,7 @@
       "refs": [
         "RFC 8439",
         "RFC 9001 §5.4.4",
-        "docs/wp34-hosting-cs.md §5"
+        "docs/wp34-network-stack.md §5"
       ],
       "tests": [
         "tests/link/crypto_chacha20poly1305",
@@ -148,14 +148,14 @@
       "type": "feat",
       "scope": "runtime",
       "breaking": false,
-      "title": "nish:net with a runtime-net.c unit and non-blocking TCP (WP34 N5)",
+      "title": "nish:net with a runtime-net.c unit and non-blocking TCP",
       "body": "A builtin module `nish:net` whose handles are `i32` descriptors: `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`, each also a global. Every socket is non-blocking and close-on-exec, and the program owns its loop: a call that would wait answers -11 instead of blocking. Failures are negative errnos in Linux's numbering on every platform (-11, -95, -32, -104, -98, -22; Darwin translates its own). An address is 18 bytes of the caller's `u8[]`: 16 address bytes (IPv4 as `::ffff:a.b.c.d`), then the port, big-endian. Hosts are numeric literals, and nothing allocates. A listener on `::` is dual-stack and falls back to IPv4 when the kernel has no IPv6.\n\nThe C is a fifth runtime translation unit, `runtime/runtime-net.c`, with a `.text*` ceiling of its own. It is named in the five places a new unit is: `scripts/build.sh`, `RUNTIME_C` and the `npm pack` list in `tests/run.js`, the golden runner's link line, the `nish run` cache key and `NET_TEXT_BUDGET`. Section GC drops all of it from a program that calls none of it.\n\n`netRead` and `netWrite` range-check `off` and `len` in the IR through the slice check `dst.set` uses, which `--unchecked-indexing` drops. The written-argument rule now covers identifier builtins and several written arguments, with these effects:\n- a filled buffer is never `readonly`;\n- a readonly one is refused;\n- a scope's region refuses a write to an array a task reads.\n\nEvery call is also refused in a `scope()` task, in a parallel body, and on wasm (NL2404). Under Node, each function throws, naming itself: the TypeScript reading is class C. There is one new diagnostic, NL2405, for a `netWrite` buffer that is not a `u8[]`.",
       "metrics": [
         "runtime-net.c 853 bytes of .text*, ceiling 1024; runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c unchanged"
       ],
       "refs": [
         "docs/LANGUAGE.md#nishnet-addresses-and-non-blocking-tcp",
-        "docs/wp34-hosting-cs.md"
+        "docs/wp34-network-stack.md"
       ],
       "tests": [
         "tests/cases/net_tcp_echo",
@@ -187,7 +187,7 @@
         "FIPS 197",
         "NIST SP 800-38D",
         "RFC 9001 §5.4.3",
-        "docs/wp34-hosting-cs.md §5"
+        "docs/wp34-network-stack.md §5"
       ],
       "tests": [
         "tests/link/crypto_aes",
@@ -215,7 +215,7 @@
         "RFC 6979",
         "SEC 1",
         "FIPS 186-5",
-        "docs/wp34-hosting-cs.md §5"
+        "docs/wp34-network-stack.md §5"
       ],
       "tests": [
         "tests/link/crypto_p256",
@@ -273,7 +273,7 @@
       "metrics": [],
       "refs": [
         "#306",
-        "docs/wp34-hosting-cs.md §5a",
+        "docs/wp34-network-stack.md §5a",
         "std/README.md"
       ],
       "tests": [
@@ -292,7 +292,7 @@
       "type": "feat",
       "scope": "runtime",
       "breaking": false,
-      "title": "nish:net UDP with GSO, GRO, ECN and SO_REUSEPORT (WP34 N5)",
+      "title": "nish:net UDP with GSO, GRO, ECN and SO_REUSEPORT",
       "body": "UDP for `nish:net`, adding three calls that are also globals:\n- `udpBind(host, port, flags)`\n- `udpSendTo(fd, buf, off, len, to, segment, ecn)`\n- `udpRecvFrom(fd, buf, off, len, from, meta)`\n\nEach call is one `sendmsg` or `recvmsg` with its control messages on the stack, and nothing allocates:\n- **GSO:** a `segment` above 0 sends through `UDP_SEGMENT`, so one call leaves as several datagrams.\n- **GRO:** flag 2 turns on `UDP_GRO`, and `meta[0]` receives the segment size (0 when nothing was coalesced).\n- **ECN:** `ecn` sets the two ECN bits through `IP_TOS` / `IPV6_TCLASS`, and `meta[1]` reads them back.\n- **Port sharing:** flag 1 is `SO_REUSEPORT`.\n\nA dual-stack `\"::\"` falls back to IPv4 when the kernel has no IPv6, and an IPv4 destination in the address form's `::ffff:` spelling reaches either kind of socket. On Darwin, a segment, an ECN mark or the GRO flag answers -95. That branch is compiled by CI but never run.\n\nOn loopback, GRO keeps a GSO super-packet whole but does not merge separately sent datagrams. So the offload test pairs a Nish GSO sender with a Nish GRO receiver: one receive returns 4,800 bytes with a segment size of 1,200. Node counts the four 1,200-byte datagrams the sender's single call produced. Node also drives a UDP echo written in Nish through 1 and 200 datagrams, with the arena flat across both.\n\nThe signature alphabet gains `m`, a written `i32[]`, so the checker, the written-argument rule and the emitter cover `meta` like any written buffer. There is one new diagnostic, NL2406, for a `meta` that is not an `i32[]`. `tcpAccept` on a datagram socket pins a Linux -95. `runtime-net.c` grows to 1,782 bytes, and only its own ceiling moves, to 2,048.",
       "metrics": [
         "loopback 1,200-byte datagrams, Nish to Nish, median of three 3 s runs on an Intel Xeon @ 2.10 GHz (4 vCPU, Linux 6.18): 459,000/s sent (456,000/s received) one per call, against 1,760,000/s sent (1,310,000/s received) with segment = 1200 over 49,200-byte sends",
@@ -300,7 +300,7 @@
       ],
       "refs": [
         "docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp",
-        "docs/wp34-hosting-cs.md"
+        "docs/wp34-network-stack.md"
       ],
       "tests": [
         "tests/cases/net_udp_echo",
@@ -400,14 +400,14 @@
       "type": "feat",
       "scope": "runtime",
       "breaking": false,
-      "title": "nish:net readiness loop that wakes on sockets and SIGTERM (WP34 N5)",
+      "title": "nish:net readiness loop that wakes on sockets and SIGTERM",
       "body": "A readiness loop that the program owns: `pollCreate`, `pollAdd`, `pollModify`, `pollRemove` and `pollWait`, in `nish:net` and as globals.\n\n- **Events.** Events are 1 for readable and 2 for writable. `pollWait` adds 4 for a hang-up or an error.\n- **Level-triggered.** Whatever a program leaves unhandled is reported again at the next wait.\n- **Waiting.** `pollWait` fills at most `ready.length / 2` pairs, and at most 64 per call, with a token and its events. It answers the count, 0 on a timeout, and waits forever for a negative timeout. A signal that interrupts the wait answers 0, so the wait never runs past its deadline.\n- **Signals.** N3's `signalFd()` goes into the loop like any other descriptor, so a server wakes on SIGTERM without a handler in the language.\n- **Platforms.** On Linux it is `epoll`, with the token in `data.u32`. On Darwin it is `kqueue`, with the token in `udata`; that branch is compiled by CI's Darwin rows and never run.\n- **Allocation.** Nothing allocates: the event array is a bounded chunk on the stack.\n\n`ready` is a written `i32[]`, the same kind as UDP's `meta`, so the checker, the written-argument rule and the region rule cover it without new code, and no new diagnostic was needed. `pollWait` is not `willreturn`, because it can wait forever. The other four never wait.\n\nNode drives `net_loop_two`, a Nish program that owns a loop over two UDP sockets and the signal descriptor:\n- Node writes to one socket, then the other, in both orders. The program reports which woke.\n- On SIGTERM the program reads 15, prints that the arena stayed flat, and exits 0.\n\n`net_loop_calls` pins the timeout, level-triggered re-reporting, the cap, modify, remove, hang-up and the error answers. `test_poll` in the runtime tests pins close-on-exec, the 64-pair bound and the prompt return on a signal.\n\nWith this slice WP34 N5 is built. wp34 §N5 has its State line, and wp33 §3.5 records the module as class C: Node's sockets are asynchronous only, so there is no synchronous reading, and the translation is `await` on a queue. `runtime-net.c` grows to 2,071 bytes; only its own ceiling moves, to 2,304.",
       "metrics": [
         "runtime-net.c 2,071 bytes of .text*, ceiling 2,304 (the loop is 289 of them); runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c unchanged"
       ],
       "refs": [
         "docs/LANGUAGE.md#the-readiness-loop",
-        "docs/wp34-hosting-cs.md",
+        "docs/wp34-network-stack.md",
         "docs/wp33-round-trip.md"
       ],
       "tests": [

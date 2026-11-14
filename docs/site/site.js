@@ -228,8 +228,12 @@
       )
     )
 
-  /** The hero's terminal: a hidden input whose first use imports the shell (examples/break-web). */
-  const terminal = (...children) => {
+  /**
+   * The hero's terminal: a hidden input whose first use imports the shell
+   * (examples/break-web). When the hero's one run ends, a prompt waits under
+   * the output; the shell's own line takes its place.
+   */
+  const terminal = (bar, code) => {
     const input = el("input.nish-hero__input", {
       "aria-label": "Terminal",
       autocapitalize: "off",
@@ -237,7 +241,9 @@
       spellcheck: "false",
       enterkeyhint: "go",
     })
-    const term = el("div.nish-hero__window.nish-hero__terminal", {}, ...children, input)
+    const ready = el("span.nish-hero__ready", {}, el("b", {}, "$ "), el("i"))
+    code.append(ready)
+    const term = el("div.nish-hero__window.nish-hero__terminal", {}, bar, code, input)
     term.addEventListener("click", () => getSelection().isCollapsed && input.focus())
     const lines = [] // entered while the shell loads
     let shell = null
@@ -250,7 +256,10 @@
       }
       const shellUrl = "/break/shell.mjs"
       shell ??= import(shellUrl)
-        .then((m) => m.attach(term, input, lines, first))
+        .then((m) => {
+          m.attach(term, input, lines, first)
+          ready.remove()
+        })
         .catch(() => {
           lines.length = 0
           shell = null

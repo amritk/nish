@@ -1,4 +1,4 @@
-// NL2319: the struct half of the termination rule (WP18 §4). A field whose
+// NL2319: the struct half of the termination rule. A field whose
 // type puts the class's own type argument under a constructor asks for a
 // strictly larger instantiation, so the chain has no end, and the sentence
 // names the two shapes that do terminate rather than a depth — the fix is to

@@ -1,0 +1,1 @@
+`T` of `kindOf` requires `T extends HasKind`, and `Circle | Square` does not implement it; pass a class or interface that declares `implements HasKind`
