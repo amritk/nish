@@ -353,7 +353,7 @@ function recordsRow(walk: Walk, node: Node, operands: Operands): string | null -
   sharedWrite: via Walk.helperName
   calls: Operands.at Walk.helperName checkedAt checkedPattern checkedPatternHead literalRow newRow nish_str_concat processArgv recordCallRow storeRow
   pointer walk: size=256 writesThrough=true captured=false passedTo=checkedAt#0 Walk.helperName#0 storeRow#0 recordCallRow#0 literalRow#0 newRow#0 processArgv#0 checkedPattern#0 checkedPatternHead#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1 storeRow#1 recordCallRow#1 literalRow#1 newRow#1 processArgv#1 checkedPattern#1 checkedPatternHead#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=checkedAt#1 storeRow#1 recordCallRow#1 literalRow#1 newRow#1 processArgv#1 checkedPattern#1 checkedPatternHead#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 storeRow#2 recordCallRow#2 literalRow#2 newRow#2 checkedPattern#2 checkedPatternHead#2
   stackSites=0 stackLocals=0
   callee +0:50 checkedAt -> @checkedAt
@@ -391,30 +391,38 @@ function patternChecks(walk: Walk, indices: string[], t: string): string -> @pat
 function checkedPattern(walk: Walk, node: Node, operands: Operands): string | null -> @checkedPattern
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: Operands.at Walk.missType Walk.spanOf Walk.temporary isPatternName nish_panic_index nish_str_concat nish_str_eq nish_str_new patternChecks patternNamesEnd patternNamesStart patternOf splice uncheckedReads
-  pointer walk: size=256 writesThrough=true captured=false passedTo=Walk.missType#0 uncheckedReads#0 Walk.temporary#0 patternChecks#0 Walk.spanOf#0 splice#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=patternOf#0 isPatternName#0 splice#1
+  escaping: node
+  calls: Operands.at Walk.missType Walk.spanOf Walk.temporary isPatternName nish_panic_index nish_str_concat nish_str_eq nish_str_new patternChecks patternNamesEnd patternNamesStart patternOf processArgv splice uncheckedReads
+  pointer walk: size=256 writesThrough=true captured=false passedTo=Walk.missType#0 uncheckedReads#0 processArgv#0 Walk.spanOf#0 Walk.temporary#0 patternChecks#0 Walk.temporary#0 patternChecks#0 splice#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=patternOf#0 isPatternName#0 splice#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 splice#2
   stackSites=0 stackLocals=0
-  local -27:9 pattern: Node | null (const)
-  callee -27:19 patternOf -> @patternOf
-  local -26:9 list: Node | null (const)
-  callee -20:5 Walk.missType -> @Walk.missType
-  local -17:9 direct: boolean (const)
-  callee -17:18 isPatternName -> @isPatternName
-  local -13:9 from: i32 (const)
-  callee -13:16 patternNamesStart -> @patternNamesStart
-  local -12:9 end: i32 (const)
-  callee -12:15 patternNamesEnd -> @patternNamesEnd
-  local -11:9 indices: string[] (const)
-  callee -11:19 uncheckedReads -> @uncheckedReads
-  local -7:9 t: string (const)
-  callee -7:13 Walk.temporary -> @Walk.temporary
-  local -6:9 checks: string (const)
-  callee -6:18 patternChecks -> @patternChecks
-  local -4:11 base: Node (const)
-  local -3:11 text: string (const)
-  callee -2:84 Walk.spanOf -> @Walk.spanOf
+  local -35:9 pattern: Node | null (const)
+  callee -35:19 patternOf -> @patternOf
+  local -34:9 list: Node | null (const)
+  callee -28:5 Walk.missType -> @Walk.missType
+  local -25:9 direct: boolean (const)
+  callee -25:18 isPatternName -> @isPatternName
+  local -21:9 from: i32 (const)
+  callee -21:16 patternNamesStart -> @patternNamesStart
+  local -20:9 end: i32 (const)
+  callee -20:15 patternNamesEnd -> @patternNamesEnd
+  local -19:9 indices: string[] (const)
+  callee -19:19 uncheckedReads -> @uncheckedReads
+  local -17:9 base: Node (const)
+  local -16:9 receiver: string | null (const)
+  callee -16:77 processArgv -> @processArgv
+  local -11:11 text: string (const)
+  local -10:11 read: string (const)
+  callee -10:38 Walk.spanOf -> @Walk.spanOf
+  local -9:9 value: string (let)
+  local -7:13 t: string (const)
+  callee -7:17 Walk.temporary -> @Walk.temporary
+  callee -6:30 patternChecks -> @patternChecks
+  local -2:9 t: string (const)
+  callee -2:13 Walk.temporary -> @Walk.temporary
+  local -1:9 checks: string (const)
+  callee -1:18 patternChecks -> @patternChecks
   callee +0:54 Operands.at -> @Operands.at
   callee +2:10 splice -> @splice
 function checkedPatternHead(walk: Walk, node: Node, operands: Operands): string | null -> @checkedPatternHead
