@@ -360,6 +360,15 @@ export class TypeTable {
   memberTables: i32[][]
   /** The enum `enumMemberOf` last looked up and its `memberTables` index: runs ask for one enum. */
   lastMemberEnum: i32
+  /**
+   * Every string enum, and `stringEnumTexts[i]` the strings of `stringEnums[i]`'s
+   * members by ordinal: the table `String(r)` loads from and typed JSON matches
+   * against, kept here because a value reaches a module that never named its enum.
+   */
+  stringEnums: i32[]
+  stringEnumTexts: string[][]
+  /** The member names of `stringEnums[i]`, by ordinal, for a refusal that names one. */
+  stringEnumNames: string[][]
   lastMemberAt: i32
   /**
    * `nish:secret`: the struct id of every `Secret<T>` instance -> the id of
@@ -402,6 +411,9 @@ export class TypeTable {
     this.displays = []
     this.index = new StringMap()
     this.memberEnums = []
+    this.stringEnums = []
+    this.stringEnumTexts = []
+    this.stringEnumNames = []
     this.memberTables = []
     this.lastMemberEnum = -1
     this.lastMemberAt = -1
@@ -529,6 +541,35 @@ export class TypeTable {
     const id = this.enumOf(symbol)
     this.setDisplayName(id, name)
     return id
+  }
+
+  /** Record the enum `enumType` as a string enum whose members, by ordinal, are `texts`. */
+  markStringEnum(enumType: i32, texts: string[], names: string[]): void {
+    this.stringEnums.push(enumType)
+    this.stringEnumTexts.push(texts)
+    this.stringEnumNames.push(names)
+  }
+
+  /**
+   * `Role.Admin`: the member of the string enum `type` whose string is `text`,
+   * or its first member when none is, for a refusal to suggest.
+   */
+  stringEnumMember(type: i32, text: string): string {
+    const base = this.enumBase(type)
+    const at = this.stringEnums.indexOf(base)
+    const texts = this.stringEnumTexts[at]
+    const names = this.stringEnumNames[at]
+    const found = texts.indexOf(text)
+    const index = found < 0 ? 0 : found
+    const member = names.length === 0 ? "" : names[index]
+    return `${this.typeName(base)}.${member}`
+  }
+
+  /** The member strings of the string enum that `type` is or is a member of, by ordinal; `null` for any other type. */
+  enumStrings(type: i32): string[] | null {
+    const base = this.enumBase(type)
+    const at = base < 0 ? -1 : this.stringEnums.indexOf(base)
+    return at < 0 ? null : this.stringEnumTexts[at]
   }
 
   isEnum(type: i32): boolean {

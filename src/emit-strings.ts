@@ -27,9 +27,20 @@ import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
 import { Node, NodeKind } from "./nodes"
-import { FunctionSig } from "./program"
+import { CheckedProgram, FunctionSig } from "./program"
 import { irEscape } from "./strings"
-import { isFloat, isForeignBuffer, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
+import {
+  isFloat,
+  isForeignBuffer,
+  isUnsigned,
+  T_BOOL,
+  T_F32,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  TypeTable,
+} from "./types"
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -49,6 +60,60 @@ export const addStringConstant = (module: IRModule, index: i32, text: string): s
 }
 
 // ---- Conversion to string -----------------------------------------------------------
+
+/**
+ * `String(r)` on a string enum, as the checker bound it: the global `String`,
+ * no function of the program's, and one argument whose type is a string enum.
+ */
+export const isEnumStringCall = (program: CheckedProgram, table: TypeTable, call: Node): boolean => {
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Ident || callee.text !== "String" || program.nodeCallees[call.id] !== null) {
+    return false
+  }
+  const args = call.children[1].children
+  return args.length === 1 && table.enumStrings(program.nodeTypes[args[0].id]) !== null
+}
+
+/**
+ * `String(r)`: a load from the enum's private table of its member strings,
+ * indexed by the ordinal `r` is. The table is added to the module the first
+ * time one of its strings is asked for:
+ *
+ * ```llvm
+ * @.enumstr.Role = private unnamed_addr constant [2 x i8*] [i8* <"admin">, i8* <"guest">], align 8
+ * %0 = sext i32 %r to i64
+ * %1 = getelementptr inbounds [2 x i8*], [2 x i8*]* @.enumstr.Role, i64 0, i64 %0
+ * %2 = load i8*, i8** %1, align 8
+ * ```
+ *
+ * The ordinal is in range by construction: an enum value is only ever one of
+ * its members, so the load needs no check.
+ */
+export const emitEnumString = (emitter: Emitter, call: Node): string => {
+  const arg = call.children[1].children[0]
+  const type = emitter.table.enumBase(emitter.program.nodeTypes[arg.id])
+  const found = emitter.table.enumStrings(type)
+  const texts: string[] = found === null ? [] : found
+  const symbol = emitter.table.nameOf(type)
+  const array = `[${texts.length} x i8*]`
+  const global = `@.enumstr.${symbol}`
+  if (!emitter.enumTables.has(symbol)) {
+    emitter.enumTables.add(symbol)
+    const entries: string[] = []
+    for (const text of texts) {
+      entries.push(`i8* ${emitter.stringConstant(text)}`)
+    }
+    emitter.declareGlobal(
+      `${global} = private unnamed_addr constant ${array} [${entries.join(", ")}], align 8`
+    )
+  }
+  const ordinal = emitter.emitExpression(arg)
+  const wide = emitter.fn.emitValue(`sext i32 ${ordinal} to i64`)
+  const slot = emitter.fn.emitValue(
+    `getelementptr inbounds ${array}, ${array}* ${global}, i64 0, i64 ${wide}`
+  )
+  return emitter.fn.emitValue(`load i8*, i8** ${slot}, align 8`)
+}
 
 /**
  * The runtime symbol that converts `type` to a string, or the empty string

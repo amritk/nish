@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 945
+export const RULE_COUNT: i32 = 953
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -363,6 +363,8 @@ const diagnosticRules = (): string[] => [
   "NL2449",
   "` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function",
   "NL2671",
+  "A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared",
+  "NL1066",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2441",
   "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native",
@@ -493,6 +495,8 @@ const diagnosticRules = (): string[] => [
   "NL2645",
   "`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds",
   "NL2392",
+  "An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared",
+  "NL1065",
   ": the block releases to the mark it took when it opened, which a release or a reset in between has already moved the arena below",
   "NL2426",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
@@ -577,6 +581,8 @@ const diagnosticRules = (): string[] => [
   "NL2285",
   "; a class or interface name must be unique across the program, and an instantiation is named after its template",
   "NL3013",
+  "`: each member of a string enum has its own string, because the string is how JSON and `String` name the member",
+  "NL2786",
   ": the block releases what it allocated before the function returns, so the caller would be handed freed memory",
   "NL2423",
   "` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end",
@@ -641,6 +647,8 @@ const diagnosticRules = (): string[] => [
   "NL2234",
   "` reads a file, and a freestanding wasm32 build has no file system to read (build with `--profile wasi`)",
   "NL2718",
+  "` has no initializer: every member of an enum whose members are strings is given its own string literal",
+  "NL1064",
   "` is not a `declare function`: a handle is closed by the C function its dispose names, and nothing else",
   "NL2569",
   "` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself",
@@ -677,6 +685,8 @@ const diagnosticRules = (): string[] => [
   "NL2754",
   "` is both allowed and denied in the root package's capability policy; a policy says one or the other",
   "NL3035",
+  "` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8",
+  "NL2787",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
   "NL2123",
   "A nested destructuring pattern is not supported; bind the inner value to a name and destructure that",
@@ -911,6 +921,8 @@ const diagnosticRules = (): string[] => [
   "NL3051",
   "`, which only its body could bind, and a block body's type is not inferred",
   "NL2343",
+  "`: an enum value is not its string, so compare it with a member, such as `",
+  "NL2788",
   "storage outside the region that grows inside it would move into the region",
   "NL2615",
   "` of `integer<Lo, Hi>` is outside i32 (a ranged integer is always an i32)",
@@ -1254,6 +1266,8 @@ const diagnosticRules = (): string[] => [
   "NL3052",
   "Type arguments are not written at a call site in ",
   "NL2303",
+  "` is not one: write the member itself, such as `",
+  "NL2790",
   "` where a bound of `integer<Lo, Hi>` is expected",
   "NL2380",
   "Getters and setters are not supported in class `",
@@ -1536,6 +1550,8 @@ const diagnosticRules = (): string[] => [
   "NL2043",
   "` but not exported (add `export`)",
   "NL2045",
+  "` is not a string: write `String(",
+  "NL2789",
   "` requires boolean operands, got ",
   "NL2099",
   "`, and a task cannot capture it: ",

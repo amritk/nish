@@ -36,6 +36,7 @@ import {
   refuseExpressionForm,
   refuseNarrowingStore,
   resolveMaybeAnnotation,
+  stringEnumMismatch,
   tagVariable,
   unproven,
   WANT_INFERRED,
@@ -440,7 +441,11 @@ const checkDeclarator = (
   // `let y = r` inside `if (r.ok)` is a `Result`, and `y` may be assigned
   // an error later.
   let type = declared < 0 ? unproven(ctx, initType) : declared
-  if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
+  const enumText: string | null =
+    declared >= 0 && initType !== T_ERROR ? stringEnumMismatch(ctx, declared, initType, initializer) : null
+  if (enumText !== null) {
+    ctx.error(initializer, enumText)
+  } else if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
     ctx.error(
       initializer,
       `Cannot initialize ${ctx.table.typeName(declared)} variable \`${shown}\` with ${ctx.table.typeName(initType)}`

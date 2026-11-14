@@ -1071,6 +1071,11 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       refuseReferenceHole(ctx, part)
       continue
     }
+    const enumText = stringEnumMismatch(ctx, T_STRING, hole, part)
+    if (enumText !== null) {
+      ctx.error(part, enumText)
+      continue
+    }
     if (!isNumeric(hole) && hole !== T_BOOL && hole !== T_STRING) {
       const spelled = ctx.table.typeName(hole)
       ctx.error(part, `Template literal hole must be string, number, or boolean, got ${spelled}`)
@@ -1805,6 +1810,10 @@ const checkEquality = (
         expr,
         `Cannot compare ${a} with ${b} using \`${op}\`; check the nullable side against \`null\` first, then compare the narrowed values`
       )
+    }
+    const enumText = stringEnumComparison(ctx, op, left, right, leftNode, rightNode)
+    if (enumText !== null) {
+      return ctx.errorType(expr, enumText)
     }
     return ctx.errorType(expr, `Operator \`${op}\` requires two operands of the same type, got ${a} and ${b}`)
   }
@@ -3922,6 +3931,63 @@ const stringCallFix = (ctx: CheckContext, call: Node, global: boolean, scope: Sc
 }
 
 /**
+ * `String(r)` where `r` is a string enum: the member's string, which is the
+ * one conversion such an enum has (docs/LANGUAGE.md, Enums). Any other
+ * argument keeps `String` an unknown function, with the template literal the
+ * language converts by as the fix; the argument is checked first, because
+ * only its type says which this is.
+ */
+/**
+ * The refusal for a string enum where a `string` was wanted, or the reverse,
+ * naming what to write instead; or `null` when neither side is one. `got` is
+ * the type of `node`, the value refused.
+ */
+export const stringEnumMismatch = (ctx: CheckContext, want: i32, got: i32, node: Node): string | null => {
+  if (want === T_STRING && ctx.table.enumStrings(got) !== null) {
+    return `A \`${ctx.table.typeName(got)}\` is not a string: write \`String(${ctx.textOf(node)})\` for the member's string`
+  }
+  if (got === T_STRING && ctx.table.enumStrings(want) !== null) {
+    const text = node.kind === NodeKind.String ? node.text : ""
+    const member = ctx.table.stringEnumMember(want, text)
+    return `\`${ctx.textOf(node)}\` is a string, and a \`${ctx.table.typeName(want)}\` is not one: write the member itself, such as \`${member}\``
+  }
+  return null
+}
+
+/** The refusal for `r === "admin"`: a string enum compared with a `string`; or `null`. */
+const stringEnumComparison = (
+  ctx: CheckContext,
+  op: string,
+  left: i32,
+  right: i32,
+  leftNode: Node,
+  rightNode: Node
+): string | null => {
+  const leftEnum = ctx.table.enumStrings(left) !== null
+  if (!(leftEnum && right === T_STRING) && !(left === T_STRING && ctx.table.enumStrings(right) !== null)) {
+    return null
+  }
+  const type = leftEnum ? left : right
+  const other = leftEnum ? rightNode : leftNode
+  const member = ctx.table.stringEnumMember(type, other.kind === NodeKind.String ? other.text : "")
+  return `Cannot compare a \`${ctx.table.typeName(type)}\` with a string using \`${op}\`: an enum value is not its string, so compare it with a member, such as \`${member}\``
+}
+
+const checkEnumString = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
+  const callee = call.children[0]
+  const arg = call.children[1].children[0]
+  const type = checkExpression(ctx, arg, scope, -1)
+  if (type === T_ERROR) {
+    return T_ERROR
+  }
+  if (ctx.table.enumStrings(type) !== null) {
+    return T_STRING
+  }
+  ctx.errorFix(callee, `Unknown function \`${callee.text}\``, stringCallFix(ctx, call, true, scope))
+  return T_ERROR
+}
+
+/**
  * Replace `call` with a template literal holding `value`, parentheses aside,
  * as its one hole: the conversion to a string the language has. `String(x)`
  * and `x.toString()` (`checkMethodCall`) share it.
@@ -4063,6 +4129,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
         return T_ERROR
       }
       return checkBuiltinFunction(ctx, expr, scope)
+    }
+    if (callee.text === "String" && local === null && expr.children[1].children.length === 1) {
+      return checkEnumString(ctx, expr, scope)
     }
     // A local whose initializer was refused is `T_ERROR`, and calling it
     // repeats that refusal rather than finding a new one.

@@ -165,9 +165,11 @@ import {
   emitForeignBuffers,
   emitForeignString,
   emitForeignStringResult,
+  emitEnumString,
   emitIndexOfAnyKernel,
   emitRegexScanKernel,
   emitTemplate,
+  isEnumStringCall,
 } from "./emit-strings"
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -362,6 +364,8 @@ export class Emitter {
   /** Interned string literals: text -> index into `stringRefs`. */
   strings: StringMap
   stringRefs: string[]
+  /** The string enums whose `@.enumstr.<symbol>` table `String(r)` has added to this module. */
+  enumTables: StringSet
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
   /** WP50 S3: the module's panic sites on wasm32 (`PanicSiteTable`); null elsewhere. */
@@ -449,6 +453,7 @@ export class Emitter {
     this.definesRuntime = new StringSet()
     this.readsArenaGlobal = false
     this.strings = new StringMap()
+    this.enumTables = new StringSet()
     this.stringRefs = []
     this.debug = null
     this.panicSites = isWasmBuild(opts) && opts.panicSites ? new PanicSiteTable() : null
@@ -1852,6 +1857,9 @@ export class Emitter {
     }
     if (isResultConstructorCall(this.program, this.table, expr)) {
       return emitResultConstructor(this, expr, callee.text) // WP16: `Ok(v)` / `Err(e)`
+    }
+    if (isEnumStringCall(this.program, this.table, expr)) {
+      return emitEnumString(this, expr)
     }
     // Under a `nish:` import the identifier is the local name, so the checker
     // recorded which builtin it is. A dotted one (`process.exit`) then goes to

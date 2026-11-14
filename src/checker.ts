@@ -689,6 +689,9 @@ export class Checker {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`)
       return
     }
+    if (isString) {
+      this.ctx.table.markStringEnum(type, info.memberStrings, info.memberNames)
+    }
     this.program.addEnum(info)
   }
 
