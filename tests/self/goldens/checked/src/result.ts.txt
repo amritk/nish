@@ -67,7 +67,7 @@ function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, wan
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: want
-  calls: CheckContext.error CheckContext.errorType TypeTable.assignable TypeTable.errOf TypeTable.isEntered TypeTable.isResult TypeTable.okOf TypeTable.typeName checkBuiltinArity checkExpression nish_panic_index nish_str_concat nish_str_eq
+  calls: CheckContext.error CheckContext.errorType TypeTable.assignable TypeTable.errOf TypeTable.isEntered TypeTable.isResult TypeTable.isUnion TypeTable.okOf TypeTable.stripNull TypeTable.typeName checkBuiltinArity checkExpression nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 checkBuiltinArity#1 checkBuiltinArity#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
@@ -84,14 +84,17 @@ function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, wan
   callee +12:49 TypeTable.errOf -> @TypeTable.errOf
   callee +14:5 checkBuiltinArity -> @checkBuiltinArity
   callee +17:8 checkBuiltinArity -> @checkBuiltinArity
-  local +31:9 got: i32 (const)
-  callee +31:15 checkExpression -> @checkExpression
-  callee +31:61 TypeTable.isEntered -> @TypeTable.isEntered
-  callee +32:8 TypeTable.assignable -> @TypeTable.assignable
-  callee +33:5 CheckContext.error -> @CheckContext.error
-  callee +35:35 TypeTable.typeName -> @TypeTable.typeName
-  callee +35:70 TypeTable.typeName -> @TypeTable.typeName
-  callee +35:103 TypeTable.typeName -> @TypeTable.typeName
+  local +34:9 sink: boolean (const)
+  callee +34:16 TypeTable.isEntered -> @TypeTable.isEntered
+  callee +34:48 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +34:66 TypeTable.stripNull -> @TypeTable.stripNull
+  local +35:9 got: i32 (const)
+  callee +35:15 checkExpression -> @checkExpression
+  callee +36:8 TypeTable.assignable -> @TypeTable.assignable
+  callee +37:5 CheckContext.error -> @CheckContext.error
+  callee +39:35 TypeTable.typeName -> @TypeTable.typeName
+  callee +39:70 TypeTable.typeName -> @TypeTable.typeName
+  callee +39:103 TypeTable.typeName -> @TypeTable.typeName
 function narrowHint(ctx: CheckContext, receiverExpr: Node, payload: string): string -> @narrowHint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat nish_str_eq

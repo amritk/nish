@@ -289,16 +289,30 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (type !== computed && ctx.table.isEnumMemberType(computed)) {
     ctx.program.memberSets[expr.id] = computed
   }
-  if (coercesTo(ctx, type, want)) {
-    // A nullable variant stays nullable as its union; everything else that
-    // converts is a non-null struct, and lands on the non-null target.
-    const target = type === ctx.table.stripNull(type) ? ctx.table.stripNull(want) : want
-    ctx.program.nodeCoercions[expr.id] = type
-    ctx.program.nodeTypes[expr.id] = target
-    return target
+  if (recordCoercion(ctx, expr, type, want)) {
+    return ctx.program.nodeTypes[expr.id]
   }
   ctx.program.nodeTypes[expr.id] = type
   return type
+}
+
+/**
+ * Whether `node`, of type `from`, converts to `want` without a written
+ * conversion (`coercesTo`): a class to an interface it implements, a variant
+ * to its union. The conversion is recorded on the node, which the emitter
+ * reads as one pointer recast. `checkExpression` calls it when the sink is
+ * known first; a generic argument, checked before its type arguments were
+ * inferred, calls it once they are, as `recordRangeEntry` does for a range.
+ */
+export const recordCoercion = (ctx: CheckContext, node: Node, from: i32, want: i32): boolean => {
+  if (!coercesTo(ctx, from, want)) {
+    return false
+  }
+  // A nullable variant stays nullable as its union; everything else that
+  // converts is a non-null struct, and lands on the non-null target.
+  ctx.program.nodeCoercions[node.id] = from
+  ctx.program.nodeTypes[node.id] = from === ctx.table.stripNull(from) ? ctx.table.stripNull(want) : want
+  return true
 }
 
 /**

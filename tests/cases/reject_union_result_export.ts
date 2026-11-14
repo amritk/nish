@@ -1,8 +1,7 @@
-// The error arm too.
+// A `Result` over a union crosses no C boundary either.
 enum Kind {
   Circle,
   Square,
-  Tri,
 }
 
 class Circle {
@@ -19,4 +18,4 @@ type Shape = Circle | Square;
 
 const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
 
-const get = (n: i32): Result<i32, Shape> => Err(pick(n));
+export const measure = (n: i32): Result<Shape, string> => (n === 0 ? Err("zero") : Ok(pick(n)));

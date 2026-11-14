@@ -1,8 +1,11 @@
-// A union is not a type argument: `Box<Shape>` is refused.
+// Typed JSON writes a declared class, so a generic instance over a union, or
+// a `Result` of one, is refused as any generic instance is.
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
 enum Kind {
   Circle,
   Square,
-  Tri,
 }
 
 class Circle {
@@ -26,4 +29,6 @@ class Box<T> {
   }
 }
 
-const open = (b: Box<Shape>): Kind => b.value.kind;
+export const write = (w: JsonWriter): void => {
+  jsonEncode(w, new Box<Shape>(pick(1)));
+};

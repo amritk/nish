@@ -1,8 +1,9 @@
-// NL2533: a union given as a generic class's type argument.
+// A variant stored into a generic instance's union field is refused as it is
+// into any union field (NL2534): TypeScript narrows `b.value` to `Square`
+// from there on, which this version does not track.
 enum Kind {
   Circle,
   Square,
-  Tri,
 }
 
 class Circle {
@@ -26,4 +27,8 @@ class Box<T> {
   }
 }
 
-const open = (b: Box<Shape>): Kind => b.value.kind;
+export const main = (): void => {
+  const b = new Box<Shape>(pick(1));
+  b.value = new Square();
+  console.log(b.value.kind === Kind.Circle ? "circle" : "square");
+};

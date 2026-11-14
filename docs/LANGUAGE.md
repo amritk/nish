@@ -865,13 +865,25 @@ field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
 spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
 and a `Map`'s value is any of those: `Map<string, Shape>`,
 `Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
+A union is also a type argument: a generic class's (`Box<Shape>`,
+`Box<Box<Shape>>`, `Stack<Shape>`, `union_generic_class`), a generic
+function's or method's type parameter bound to one by its arguments
+(`union_generic_call`), either side of a `Result`, `Result<Shape, E>` and
+`Result<T, Shape>` (`union_result`), and `nish/map`'s `getOrInsert` and
+`reserve` on a `Map<K, Shape>` (`union_map_helpers`). The instance is
+monomorphised as for any other type argument, so `Box<Shape>` is laid out as
+a class with a `Shape` field would be, and a `T` slot holds the union's one
+pointer.
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
 converts to the union wherever the union is expected: an argument, a
 `return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
 arm or a `??` default whose other side is the union
-(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+(`tests/cases/union_forms`), and the same places where a generic's `T` is
+the union: a constructor's or a generic call's argument, `Ok(new Circle())`
+in a function that returns `Result<Shape, E>` (`union_generic_class`,
+`union_generic_call`, `union_result`). Equality on two unions compares the pointers, as
 on any object.
 
 **Reading.** The tag is the one member a union has until a test of the tag
@@ -1125,22 +1137,26 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
-  function or method whose type parameter would bind to a union, and
-  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
-  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_result_ok`,
-  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
-  its value as it is, the way an array stores an element of a union, and
-  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
-  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
-  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
-  and is NL2533 as any generic call is. A union is not a
-  `Map` or `Set` key, which is the key rule's refusal
-  (`reject_union_map_key`, `reject_union_set`).
+- **A union is a type argument, but not a key.** `Box<Shape>`, a generic
+  function or method whose type parameter binds to a union, `Result<Shape, E>`
+  / `Result<T, Shape>` and `nish/map`'s helpers on a `Map<K, Shape>` are
+  accepted (above), as in `tsc`. Three things stay refused, each under its own
+  rule: a union is not a `Map` or `Set` key, which is the key rule's refusal
+  (NL2353, `reject_union_map_key`, `reject_union_set`); a generic class is
+  not a variant (NL2522, `reject_union_generic_variant`); and a store of a
+  bare variant into a generic instance's union field, `b.value = new
+  Square()` on a `Box<Shape>`, is NL2534 as into any union field
+  (`reject_union_generic_field_store`). A union does not meet a constraint
+  (`<T extends HasKind>`, NL2328, `reject_union_generic_constraint`), and an instance
+  over a union is not key material for `nish:secret`
+  (NL2428, `reject_union_generic_secret`), nor a class typed JSON writes
+  (NL2486, `reject_union_generic_json`), nor something a C header or N-API bridge
+  spells (`reject_union_generic_export`, `reject_union_result_export`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
   or array literal of two variants is the existing same-type refusal
-  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`; so is
+  one a generic call would bind `T` to, `first([new Square(), new Circle()])`,
+  `reject_union_generic_inferred`), an arrow
   returning one needs its annotation (`reject_union_arrow_result`), and a
   local initialised from the tag without an annotation, `const k = s.kind`
   or the tag in a `for…of`, is NL2530, because `tsc` would infer the union

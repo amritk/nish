@@ -528,6 +528,7 @@ const pageMath = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
   )
+const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -6464,6 +6465,19 @@ const DECLARED = [
     "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
     { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
   ),
+  // WP58 S1: a discriminated union is a generic's type argument, which the
+  // seed refuses as NL2533, as it refuses a class passed where a generic
+  // call bound `T` to an interface the class implements.
+  ...[
+    "tests/cases/union_generic_call.ts",
+    "tests/cases/union_result.ts",
+    "tests/cases/generic_interface_class_arg.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: UNION_GENERICS,
+    why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
 ]
 
 /**
