@@ -5,6 +5,7 @@ import Emitter from "./emit" -> struct Emitter
 import LoopTarget from "./emit" -> struct LoopTarget
 import openedHandle from "./handles" -> function @openedHandle
 import isScalarArgument from "./escape" -> function @isScalarArgument
+import checkedFieldElement from "./emit-arrays" -> function @checkedFieldElement
 import loadField from "./emit-classes" -> function @loadField
 import structFieldPointer from "./emit-classes" -> function @structFieldPointer
 import structInfoOf from "./emit-classes" -> function @structInfoOf
@@ -523,37 +524,49 @@ function emitLockBody(emitter: Emitter, sig: FunctionSig): void -> @emitLockBody
 function emitAtomicBody(emitter: Emitter, sig: FunctionSig): void -> @emitAtomicBody [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
-  calls: Emitter.llvm IRFunction.emit IRFunction.emitValue atomicRmwOperation internalErrorFor lockWord nish_exit nish_panic_index nish_str_concat nish_str_eq paramValue structFieldPointer
-  pointer emitter: size=384 writesThrough=false captured=false passedTo=lockWord#0 Emitter.llvm#0 structFieldPointer#0
+  calls: Emitter.llvm FieldInfo.inline IRFunction.emit IRFunction.emitValue StructInfo.field TypeTable.refOf atomicRmwOperation checkedFieldElement internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat nish_str_eq paramValue structFieldPointer
+  pointer emitter: size=384 writesThrough=false captured=false passedTo=Emitter.llvm#0 loadField#0 checkedFieldElement#0 lockWord#0 Emitter.llvm#0 structFieldPointer#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
   local +4:9 fn: IRFunction (const)
-  local +5:9 field: FieldInfo (const)
-  callee +5:17 lockWord -> @lockWord
-  local +6:9 ty: string (const)
-  callee +6:14 Emitter.llvm -> @Emitter.llvm
-  local +7:9 align: string (const)
-  local +8:9 word: string (const)
-  callee +8:16 structFieldPointer -> @structFieldPointer
-  local +9:9 op: string (const)
-  local +10:9 first: string (const)
-  callee +10:45 paramValue -> @paramValue
-  callee +12:5 IRFunction.emit -> @IRFunction.emit
-  callee +12:26 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +14:5 IRFunction.emit -> @IRFunction.emit
-  callee +15:5 IRFunction.emit -> @IRFunction.emit
-  local +17:11 pair: string (const)
-  callee +17:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +18:56 paramValue -> @paramValue
-  callee +20:5 IRFunction.emit -> @IRFunction.emit
-  callee +20:26 IRFunction.emitValue -> @IRFunction.emitValue
-  local +22:11 rmw: string (const)
-  callee +22:17 atomicRmwOperation -> @atomicRmwOperation
-  callee +24:20 internalErrorFor -> @internalErrorFor
+  local +5:9 values: FieldInfo | null (const)
+  callee +5:18 StructInfo.field -> @StructInfo.field
+  local +8:7 operand: i32 (let)
+  local +9:7 ty: string (let)
+  local +10:7 word: string (let)
+  callee +13:10 Emitter.llvm -> @Emitter.llvm
+  callee +13:23 TypeTable.refOf -> @TypeTable.refOf
+  local +14:11 arr: string (const)
+  callee +14:33 FieldInfo.inline -> @FieldInfo.inline
+  callee +14:56 loadField -> @loadField
+  local +15:11 idx: string (const)
+  callee +15:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +15:42 paramValue -> @paramValue
+  callee +16:12 checkedFieldElement -> @checkedFieldElement
+  local +18:11 field: FieldInfo (const)
+  callee +18:19 lockWord -> @lockWord
+  callee +19:10 Emitter.llvm -> @Emitter.llvm
+  callee +20:12 structFieldPointer -> @structFieldPointer
+  local +22:9 align: string (const)
+  local +23:9 op: string (const)
+  local +24:9 first: string (const)
+  callee +24:51 paramValue -> @paramValue
   callee +26:5 IRFunction.emit -> @IRFunction.emit
   callee +26:26 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +28:5 IRFunction.emit -> @IRFunction.emit
+  callee +29:5 IRFunction.emit -> @IRFunction.emit
+  local +31:11 pair: string (const)
+  callee +31:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +32:56 paramValue -> @paramValue
+  callee +34:5 IRFunction.emit -> @IRFunction.emit
+  callee +34:26 IRFunction.emitValue -> @IRFunction.emitValue
+  local +36:11 rmw: string (const)
+  callee +36:17 atomicRmwOperation -> @atomicRmwOperation
+  callee +38:20 internalErrorFor -> @internalErrorFor
+  callee +40:5 IRFunction.emit -> @IRFunction.emit
+  callee +40:26 IRFunction.emitValue -> @IRFunction.emitValue
 function atomicRmwOperation(name: string): string -> @atomicRmwOperation
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
