@@ -52,18 +52,17 @@
  * - A path that matches only routes of other methods answers
  *   `ROUTER_METHOD_NOT_ALLOWED`, so a server can tell 405 from 404.
  *
- * **What is unchecked.** `routerSameRange` reads with `nish:unsafe`'s
- * `uncheckedGet`, and has one caller: `staticRoute` compares a path `add`
- * stored with the start of the target. The stored range is inside
- * `staticPaths` because only `add` writes that private array and nothing
- * removes a byte; the target range is the one `enter` panics on when it is
- * outside `target`. Every other read is checked, the method compare in
- * `enter` included, since the method arrays are public.
+ * **What is unchecked.** `routerSameBytes` reads with `nish:unsafe`'s
+ * `uncheckedGet`, after one check that both ranges are inside their arrays;
+ * a range that is not compares unequal, as a byte that differs does. It is
+ * the one byte compare a lookup makes: the method against each known one,
+ * a path against a static route's, a segment against a label. Every other
+ * read is checked.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
-import { uncheckedGet } from "nish:unsafe"
+import { uncheckedGet, wrappingAdd } from "nish:unsafe"
 
 /** `add`: the pattern is empty, does not start with `/`, or misuses `:`, `*`, `%`, `?` or a byte outside `!` to `~`. */
 export const ROUTER_BAD_PATTERN: i32 = -1
@@ -173,6 +172,12 @@ export class Router {
    * @internal Read by std/net/handler.ts beside `methodStart`, for the same matches.
    */
   methodEnd: i32[]
+  /**
+   * Per method: its bytes and length packed by `routerMethodKey`, or 0 for one
+   * too long to pack. Private and written only by `add`, beside the public
+   * arrays it is made from, so a lookup compares one word for a method.
+   */
+  private methodKey: u64[]
   /** `match`'s scratch, sized by the constructor: each segment's span, then the pairs found so far. */
   private segStart: i32[]
   private segEnd: i32[]
@@ -246,6 +251,7 @@ export class Router {
     this.methodBytes = []
     this.methodStart = []
     this.methodEnd = []
+    this.methodKey = []
     this.segStart = new Array<i32>(limits.maxSegments + 1)
     this.segEnd = new Array<i32>(limits.maxSegments + 1)
     this.found = new Array<i32>(2 * limits.maxParams)
@@ -362,6 +368,7 @@ export class Router {
         this.methodBytes.push(toU8(toI32(method.charCodeAt(k))))
       }
       this.methodEnd.push(toI32(this.methodBytes.length))
+      this.methodKey.push(routerMethodKey(this.methodBytes, this.methodStart[methodId], methodLength))
     }
     node = 0
     for (let k: i32 = 0; k < count; k++) {
@@ -567,6 +574,8 @@ export class Router {
       if (route >= 0) {
         return route
       }
+      // The pass that hashed the path split it too, so the tree reads no byte again.
+      return this.answer(target, params)
     }
     return this.descend(target, tStart, tEnd, params)
   }
@@ -616,23 +625,37 @@ export class Router {
       this.pathEnd = end
       return false
     }
-    this.wanted = -1
     const methodLength: i32 = mEnd - mStart
-    for (let m: i32 = 0; m < toI32(this.methodStart.length) && this.wanted < 0; m++) {
+    const key: u64 = routerMethodKey(method, mStart, methodLength)
+    if (key !== toU64(0)) {
+      for (let m: i32 = 0; m < toI32(this.methodKey.length); m++) {
+        if (this.methodKey[m] === key) {
+          this.wanted = m
+          return true
+        }
+      }
+      this.wanted = -1
+      return true
+    }
+    // A method too long for a key is compared byte by byte with each known one.
+    for (let m: i32 = 0; m < toI32(this.methodStart.length); m++) {
       const at: i32 = this.methodStart[m]
-      // Checked: `methodBytes`, `methodStart` and `methodEnd` are public, so
-      // nothing here can rely on `add` being the only writer.
+      // Checked, the compare's ranges included: `methodBytes`, `methodStart`
+      // and `methodEnd` are public, so nothing here can rely on `add` being
+      // the only writer.
       if (
         this.methodEnd[m] - at === methodLength &&
         routerSameBytes(this.methodBytes, at, method, mStart, methodLength)
       ) {
         this.wanted = m
+        return true
       }
     }
+    this.wanted = -1
     return true
   }
 
-  /** The tree's answer for a target `enter` took: the split, the walk and the pairs. */
+  /** The tree's answer for a target `enter` took and no scan has split: the split, then `answer`. */
   private descend(target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
     // `enter` took this range, so this is never true; it is here because a
     // proof does not cross a call, and the reads below need this one.
@@ -664,9 +687,13 @@ export class Router {
       this.segStart[segments] = start
       this.segEnd[segments] = end
     }
-    segments += 1
-    this.segments = segments
+    this.segments = segments + 1
     this.pathEnd = end
+    return this.answer(target, params)
+  }
+
+  /** The tree's answer for a path already split into `segStart`/`segEnd`: the walk and the pairs. */
+  private answer(target: u8[], params: i32[]): i32 {
     this.foundCount = 0
     this.otherMethod = false
     const route: i32 = this.walk(target, toI32(0), toI32(0))
@@ -687,9 +714,10 @@ export class Router {
    * The static route of the wanted method whose path is `target` from `tStart`
    * to its first `?` or `tEnd`, or -1 when the exact-path table holds none. On
    * a route `pathEnd` is set; it has no pairs, so `params` is not needed.
+   * Either way the path is left split, as `descend` splits it, for `answer`.
    *
    * `match` calls this only for a target no longer than the longest static
-   * route. One pass hashes the path; then at most `ROUTER_PROBES` slots are
+   * route. One pass hashes and splits the path; then at most `ROUTER_PROBES` slots are
    * read, and a slot's path is compared only when its method and length
    * agree. The hash picks the slot and decides nothing else: a route is
    * answered for its method and its bytes. The cost is bounded by the longest static route's length,
@@ -700,16 +728,35 @@ export class Router {
     if (tStart < 0 || tEnd > toI32(target.length)) {
       return ROUTER_NONE
     }
-    let hash: u32 = routerHashOf(this.wanted)
-    let end: i32 = tStart
+    // The first byte is the `/` `enter` found; each later one is hashed, and
+    // a `/` among them also closes a segment, as in `descend`.
+    let hash: u32 = routerHashWith(routerHashOf(this.wanted), 47)
+    const keep: i32 = this.deepest + 1
+    let segments: i32 = 0
+    let start: i32 = tStart + 1
+    let end: i32 = start
     while (end < tEnd) {
       const c: i32 = toI32(target[end])
       if (c === 63) {
         break
       }
+      if (c === 47) {
+        if (segments < keep) {
+          this.segStart[segments] = start
+          this.segEnd[segments] = end
+        }
+        segments += 1
+        start = end + 1
+      }
       hash = routerHashWith(hash, c)
       end += 1
     }
+    if (segments < keep) {
+      this.segStart[segments] = start
+      this.segEnd[segments] = end
+    }
+    this.segments = segments + 1
+    this.pathEnd = end
     const length: i32 = end - tStart
     const mask: i32 = toI32(this.staticSlots.length) - 1
     let slot: i32 = routerSlot(hash, mask)
@@ -722,12 +769,8 @@ export class Router {
       if (
         this.routeMethod[route] === this.wanted &&
         this.routePathEnd[route] - at === length &&
-        // Both ranges are inside their arrays: `add` wrote this route's path
-        // at `at`, and `length` bytes from `tStart` end at or before `tEnd`,
-        // which `enter` checked against the target.
-        routerSameRange(this.staticPaths, at, target, tStart, length)
+        routerSameBytes(this.staticPaths, at, target, tStart, length)
       ) {
-        this.pathEnd = end
         return route
       }
       slot = (slot + 1) & mask
@@ -742,7 +785,8 @@ export class Router {
    * pairs it pushed popped.
    */
   private walk(target: u8[], node: i32, depth: i32): i32 {
-    this.visited += 1
+    // Never more than the nodes, so the count needs no overflow check.
+    this.visited = wrappingAdd(this.visited, toI32(1))
     if (depth === this.segments) {
       return this.endpointFor(node)
     }
@@ -856,6 +900,26 @@ export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32
  * the method's index, so that two methods of one path do not share a slot.
  */
 const routerHashOf = (method: i32): u32 => toU32(method + 1)
+
+/**
+ * `bytes[at .. at + length)` packed into one word, its first byte lowest and
+ * its length in the top byte, so two methods of up to 7 bytes have the same
+ * key exactly when they have the same bytes. 0, which no packed method is,
+ * for a length outside 1 to 7 or a range outside `bytes`.
+ */
+const routerMethodKey = (bytes: u8[], at: i32, length: i32): u64 => {
+  if (length < 1 || length > 7 || at < 0 || length > toI32(bytes.length) - at) {
+    return toU64(0)
+  }
+  let key: u64 = toU64(length) << toU64(56)
+  let shift: u64 = toU64(0)
+  const stop: i32 = at + length
+  for (let i: i32 = at; i < stop; i++) {
+    key = key | (toU64(bytes[i]) << shift)
+    shift = shift + toU64(8)
+  }
+  return key
+}
 
 /**
  * `hash` with the path byte `byte` taken in, as FNV-1a takes one: an exclusive
@@ -977,34 +1041,23 @@ const routerLabelIsText = (bytes: u8[], at: i32, text: string, from: i32, length
 
 /**
  * Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same
- * bytes, read with no bounds check: the caller has both ranges inside their
- * arrays, which its one call site states where it calls.
+ * bytes; a range outside its array does not. The ranges are checked once,
+ * here, and the bytes are then read without a check per byte.
  */
-const routerSameRange = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
-  const stop: i32 = at + length
+const routerSameBytes = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
+  if (at < 0 || from < 0 || length > toI32(a.length) - at || length > toI32(b.length) - from) {
+    return false
+  }
+  // Two cursors, each stepped without an overflow check: `at` and `from` are
+  // not negative and `length` is at most what is left of each array after
+  // them, so neither passes its array's length, an i32.
+  const stop: i32 = wrappingAdd(at, length)
   let j: i32 = from
-  for (let i: i32 = at; i < stop; i++) {
+  for (let i: i32 = at; i < stop; i = wrappingAdd(i, toI32(1))) {
     if (uncheckedGet(a, i) !== uncheckedGet(b, j)) {
       return false
     }
-    j++
-  }
-  return true
-}
-
-/** Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same bytes; a range outside its array does not. */
-const routerSameBytes = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
-  // Two cursors, so no index is a sum that must be checked for overflow. `stop`
-  // is one sum, but every caller passes a label's or a method's offset and
-  // length inside an array whose length is an i32, so it cannot overflow; a
-  // range past either end fails the per-byte checks and answers false.
-  const stop: i32 = at + length
-  let j: i32 = from
-  for (let i: i32 = at; i < stop; i++) {
-    if (i < 0 || i >= toI32(a.length) || j < 0 || j >= toI32(b.length) || a[i] !== b[j]) {
-      return false
-    }
-    j++
+    j = wrappingAdd(j, toI32(1))
   }
   return true
 }
