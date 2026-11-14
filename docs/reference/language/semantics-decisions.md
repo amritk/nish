@@ -751,8 +751,8 @@ by the caller.
     through a once-latch on the same object every pass. A once-latch is a
     function whose body is exactly: optional leading `const`s that only read
     a field; an `if (<field>) return …` guard with no `else` and nothing in
-    its branch but the `return`, its condition the field of a parameter alone
-    or `<field> !== null`, read directly or through such a `const`; and at
+    its branch but the `return`, its condition one field of a parameter alone
+    (`s.ready`, not `s.inner.ready`) or `<field> !== null`, read directly or through such a `const`; and at
     once an assignment to that field that keeps the guard true (`true`, a
     `new` object or an array literal, or for the `!== null` form a value
     whose type is not nullable), with at most one `const` between them
@@ -763,8 +763,10 @@ by the caller.
     once-guard or a cache (`tests/cases/perf_kept_memory_quiet`). The value
     the guard returns is computed on every call and is not followed. The
     same object is `this`, a name, or a field path off one, where the loop
-    neither declares nor assigns the name, stores into nothing at or under
-    it, and uses no shorter path it runs through as a value (handed to a
+    neither declares nor assigns the name, stores into neither it nor a
+    shorter path it runs through (a store into a field under it leaves the
+    object in place, and the rule above answers for the guard's own field),
+    and uses no shorter path it runs through as a value (handed to a
     call, or a method's receiver); for a call inside a function the loop
     reaches, the same holds of a parameter every call reaching it passes the
     same object, within that function's body. A negated or compound

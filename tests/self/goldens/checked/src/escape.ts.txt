@@ -1887,7 +1887,7 @@ function latchParameter(units: AnalysisUnit[], table: TypeTable, sig: FunctionSi
   callee +57:8 noResets -> @noResets
   callee +57:31 unwrapParens -> @unwrapParens
   local +60:9 root: string (const)
-  local +61:7 i: i32 (let)
+  local +66:7 i: i32 (let)
 function isAliasRead(stmt: Node, aliases: string[]): boolean -> @isAliasRead
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1988,6 +1988,10 @@ function passedPath(call: Node, callee: FunctionSig, at: i32): string -> @passed
   local +6:9 index: i32 (const)
   local +7:9 args: Node (const)
   callee +8:41 latchPathOf -> @latchPathOf
+function extendsPath(long: string, short: string): boolean -> @extendsPath
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_at
+  stackSites=0 stackLocals=0
 function rootOf(path: string): string -> @rootOf
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: path
@@ -2004,25 +2008,30 @@ function sameObjectIn(scope: Node, path: string): boolean -> @sameObjectIn
   callee +0:16 rootOf -> @rootOf
   callee +1:26 loopBindsName -> @loopBindsName
   callee +4:11 touchesPath -> @touchesPath
-function touchesPath(node: Node, parent: Node | null, outer: Node | null, root: string, path: string): boolean -> @touchesPath
+function touchesPath(node: Node, parent: Node | null, outer: Node | null, path: string): boolean -> @touchesPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  escaping: path root
-  calls: isAssignmentOperator latchPathOf nish_arena_mark nish_arena_release nish_panic_index nish_str_at nish_str_concat nish_str_eq touchesPath unwrapParens
+  escaping: path
+  calls: extendsPath isAssignmentOperator latchPathOf nish_arena_mark nish_arena_release nish_panic_index nish_str_eq touchesPath unwrapParens
   pointer node: size=40 writesThrough=true captured=true passedTo=latchPathOf#0 touchesPath#1
   pointer parent: size=40 writesThrough=false captured=false passedTo=touchesPath#2
   pointer outer: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 stores: boolean (const)
   callee +1:39 isAssignmentOperator -> @isAssignmentOperator
-  local +4:9 target: Node (let)
-  callee +4:18 unwrapParens -> @unwrapParens
+  local +6:9 walk: Node (let)
   callee +6:16 unwrapParens -> @unwrapParens
-  callee +8:9 latchPathOf -> @latchPathOf
-  local +12:9 p: string (const)
-  callee +12:13 latchPathOf -> @latchPathOf
-  local +15:11 read: boolean (const)
-  local +24:14 child: Node (const)
-  callee +25:9 touchesPath -> @touchesPath
+  local +7:9 target: Node (let)
+  callee +10:18 unwrapParens -> @unwrapParens
+  callee +12:14 unwrapParens -> @unwrapParens
+  local +14:11 t: string (const)
+  callee +14:15 latchPathOf -> @latchPathOf
+  callee +15:36 extendsPath -> @extendsPath
+  local +19:9 p: string (const)
+  callee +19:13 latchPathOf -> @latchPathOf
+  callee +20:19 extendsPath -> @extendsPath
+  local +22:11 read: boolean (const)
+  local +31:14 child: Node (const)
+  callee +32:9 touchesPath -> @touchesPath
 function passMask(call: Node, callee: FunctionSig, loop: Node): i32 -> @passMask
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq passedPath sameObjectIn
@@ -2037,7 +2046,7 @@ function passMask(call: Node, callee: FunctionSig, loop: Node): i32 -> @passMask
   callee +4:24 sameObjectIn -> @sameObjectIn
 function reachedMask(call: Node, callee: FunctionSig, sig: FunctionSig, body: Node, mask: i32): i32 -> @reachedMask
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq passedPath rootOf sameObjectIn
+  calls: extendsPath nish_str_eq passedPath sameObjectIn
   pointer call: size=40 writesThrough=false captured=false passedTo=passedPath#0
   pointer callee: size=200 writesThrough=false captured=false passedTo=passedPath#1
   pointer sig: size=200 writesThrough=false captured=false
@@ -2047,10 +2056,10 @@ function reachedMask(call: Node, callee: FunctionSig, sig: FunctionSig, body: No
   local +1:7 at: i32 (let)
   local +3:11 path: string (const)
   callee +3:18 passedPath -> @passedPath
-  local +4:11 root: string (const)
-  callee +4:18 rootOf -> @rootOf
-  local +5:9 p: i32 (let)
-  callee +7:68 sameObjectIn -> @sameObjectIn
+  local +4:9 p: i32 (let)
+  local +6:13 name: string (const)
+  callee +7:29 extendsPath -> @extendsPath
+  callee +7:84 sameObjectIn -> @sameObjectIn
 function collectReachedCalls(program: CheckedProgram, table: TypeTable, sig: FunctionSig, body: Node, node: Node, mask: i32, seen: StringSet, reach: Reach): void -> @collectReachedCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add

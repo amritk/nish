@@ -3463,6 +3463,11 @@ const latchParameter = (units: AnalysisUnit[], table: TypeTable, sig: FunctionSi
     return -1
   }
   const root = guard.substring(0, guard.indexOf("."))
+  // A guard one field off the parameter: a deeper one (`s.inner.flag`) would
+  // pass to a new object whenever `s.inner` is stored.
+  if (guard.substring(root.length + 1).indexOf(".") >= 0) {
+    return -1
+  }
   let i = 0
   while (i < sig.paramNames.length) {
     if (sig.paramNames[i] === root) {
@@ -3627,6 +3632,10 @@ const passedPath = (call: Node, callee: FunctionSig, at: i32): string => {
   return index < args.children.length ? latchPathOf(args.children[index]) : ""
 }
 
+/** Whether the path `long` runs through the shorter path `short`, as `run.sound` runs through `run`. */
+const extendsPath = (long: string, short: string): boolean =>
+  long.length > short.length && long.startsWith(short) && long.charCodeAt(short.length) === 46
+
 /** The name or `this` a path from `latchPathOf` starts at. */
 const rootOf = (path: string): string => {
   const dot = path.indexOf(".")
@@ -3636,7 +3645,10 @@ const rootOf = (path: string): string => {
 /**
  * Whether the path `path` names the same object everywhere in `scope`: its
  * root is `this` or a name `scope` neither declares nor assigns, nothing in
- * `scope` stores into its root or any field under it (`st.cur = make()`), and
+ * `scope` stores into the path or a shorter path it runs through
+ * (`st.cur = make()` for `st.cur`, but not `st.count = 1` nor `st.cur.n = 1`:
+ * a latch is one field off its object, and `noResets` answers for every store
+ * into that field), and
  * no shorter path it runs through is used there as a value, handed to a call
  * or a method's receiver (`st.reset()`), which could store a new object on
  * the way.
@@ -3646,31 +3658,32 @@ const sameObjectIn = (scope: Node, path: string): boolean => {
   if (root !== "this" && loopBindsName(scope, root)) {
     return false
   }
-  return !touchesPath(scope, null, null, root, path)
+  return !touchesPath(scope, null, null, path)
 }
 
 /** Whether something under `node` (whose parent is `parent`, and its parent `outer`) breaks `sameObjectIn`. */
-const touchesPath = (
-  node: Node,
-  parent: Node | null,
-  outer: Node | null,
-  root: string,
-  path: string
-): boolean => {
+const touchesPath = (node: Node, parent: Node | null, outer: Node | null, path: string): boolean => {
   const stores =
     (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) ||
     (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--"))
   if (stores) {
-    let target = unwrapParens(node.children[0])
-    while (target.kind === NodeKind.Member || target.kind === NodeKind.Index) {
-      target = unwrapParens(target.children[0])
+    // The path the store writes, cut at its first index: `a.xs[i].n = 1`
+    // writes into `a.xs`, which keeps its own field.
+    let walk = unwrapParens(node.children[0])
+    let target = walk
+    while (walk.kind === NodeKind.Member || walk.kind === NodeKind.Index) {
+      if (walk.kind === NodeKind.Index) {
+        target = unwrapParens(walk.children[0])
+      }
+      walk = unwrapParens(walk.children[0])
     }
-    if (latchPathOf(target) === root) {
+    const t = latchPathOf(target)
+    if (t !== "" && (t === path || extendsPath(path, t))) {
       return true
     }
   }
   const p = latchPathOf(node)
-  if (p !== "" && p !== path && path.startsWith(`${p}.`)) {
+  if (p !== "" && extendsPath(path, p)) {
     // A shorter path is only safe as the receiver of a further field read.
     const read =
       parent !== null &&
@@ -3682,7 +3695,7 @@ const touchesPath = (
     }
   }
   for (const child of node.children) {
-    if (touchesPath(child, node, parent, root, path)) {
+    if (touchesPath(child, node, parent, path)) {
       return true
     }
   }
@@ -3718,10 +3731,10 @@ const reachedMask = (call: Node, callee: FunctionSig, sig: FunctionSig, body: No
   let at = 0
   while (at < callee.paramNames.length && at < 31) {
     const path = passedPath(call, callee, at)
-    const root = rootOf(path)
     let p = 0
     while (path !== "" && p < sig.paramNames.length && p < 31) {
-      if (sig.paramNames[p] === root && (mask & (1 << p)) !== 0 && sameObjectIn(body, path)) {
+      const name = sig.paramNames[p]
+      if ((path === name || extendsPath(path, name)) && (mask & (1 << p)) !== 0 && sameObjectIn(body, path)) {
         out = out | (1 << at)
       }
       p = p + 1
