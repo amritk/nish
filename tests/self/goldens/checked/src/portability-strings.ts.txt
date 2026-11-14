@@ -91,7 +91,7 @@ function Trail.report(this: Trail, at: Node, holder: Local | null, reason: strin
   calls: PortabilityFinding.constructor PortabilityWalk.textOf Relay.name Trail.report nish_alloc_struct nish_array_grow nish_str_concat nish_str_new
   pointer this: size=80 writesThrough=false captured=false
   pointer at: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1 PortabilityFinding.constructor#1
-  pointer holder: size=72 writesThrough=false captured=false
+  pointer holder: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -13:11 relay: Relay | null (const)
   callee -11:7 Trail.report -> @Trail.report
@@ -120,7 +120,7 @@ function Relay.constructor(this: Relay, trail: Trail, value: Node, holder: Local
   pointer this: size=32 writesThrough=true captured=false
   pointer trail: size=80 writesThrough=true captured=true
   pointer value: size=40 writesThrough=true captured=true
-  pointer holder: size=72 writesThrough=true captured=true
+  pointer holder: size=64 writesThrough=true captured=true
   pointer call: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Relay.name(this: Relay): string -> @Relay.name [method]
@@ -197,7 +197,7 @@ function hostWritesOf(walk: PortabilityWalk, local: Local, writes: Node[]): bool
   sharedWrite: via writesOf
   calls: FunctionSig.body writesOf
   pointer walk: size=56 writesThrough=false captured=false passedTo=writesOf#0
-  pointer local: size=72 writesThrough=false captured=false passedTo=writesOf#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=writesOf#2
   pointer writes: size=0 writesThrough=true captured=false passedTo=writesOf#3
   stackSites=0 stackLocals=0
   local +0:7 host: FunctionSig | null (let)
@@ -224,7 +224,7 @@ function writesOf(walk: PortabilityWalk, node: Node, local: Local, writes: Node[
   calls: names nish_array_grow nish_panic_index nish_str_eq unwrapParens writesOf
   pointer walk: size=56 writesThrough=false captured=false passedTo=names#0 names#0 writesOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=names#1
-  pointer local: size=72 writesThrough=false captured=false passedTo=names#2 names#2 writesOf#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=names#2 names#2 writesOf#2
   pointer writes: size=0 writesThrough=true captured=false passedTo=writesOf#3
   stackSites=0 stackLocals=0
   local -2:7 declared: boolean (let)
@@ -262,7 +262,7 @@ function followValue(trail: Trail, value: Node, holder: Local | null): void -> @
   calls: followFrom
   pointer trail: size=80 writesThrough=true captured=true passedTo=followFrom#0
   pointer value: size=40 writesThrough=true captured=true passedTo=followFrom#1 followFrom#2
-  pointer holder: size=72 writesThrough=true captured=true passedTo=followFrom#3
+  pointer holder: size=64 writesThrough=true captured=true passedTo=followFrom#3
   stackSites=0 stackLocals=0
   callee +0:3 followFrom -> @followFrom
 function followFrom(trail: Trail, value: Node, from: Node, holder: Local | null): void -> @followFrom
@@ -273,7 +273,7 @@ function followFrom(trail: Trail, value: Node, from: Node, holder: Local | null)
   pointer trail: size=80 writesThrough=true captured=true passedTo=followOutOfFunction#0 followOutOfArrow#0 followIntoParameter#0 followIntoCall#0 isNeedleStep#0 followThroughBinary#0 Trail.report#0 followIntoPlace#0
   pointer value: size=40 writesThrough=true captured=true passedTo=followOutOfFunction#1 followOutOfArrow#2 followIntoParameter#3 followIntoCall#3 followThroughBinary#3 Trail.report#1 followIntoPlace#3
   pointer from: size=40 writesThrough=true captured=true
-  pointer holder: size=72 writesThrough=true captured=true passedTo=followOutOfFunction#2 followOutOfArrow#3 followIntoParameter#4 followIntoCall#4 followThroughBinary#4 Trail.report#2 followIntoPlace#4
+  pointer holder: size=64 writesThrough=true captured=true passedTo=followOutOfFunction#2 followOutOfArrow#3 followIntoParameter#4 followIntoCall#4 followThroughBinary#4 Trail.report#2 followIntoPlace#4
   stackSites=0 stackLocals=0
   local +0:9 walk: PortabilityWalk (const)
   local +1:7 at: Node (let)
@@ -299,7 +299,7 @@ function followIntoCall(trail: Trail, call: Node, arg: Node, value: Node, holder
   pointer call: size=40 writesThrough=true captured=true passedTo=isPushCall#2 followFrom#2 followIntoParameter#1
   pointer arg: size=40 writesThrough=false captured=false passedTo=argumentIndex#1 followIntoParameter#2
   pointer value: size=40 writesThrough=true captured=true passedTo=Trail.report#1 Trail.report#1 Trail.report#1 followFrom#1 followIntoParameter#3
-  pointer holder: size=72 writesThrough=true captured=true passedTo=Trail.report#2 Trail.report#2 Trail.report#2 followFrom#3 followIntoParameter#4
+  pointer holder: size=64 writesThrough=true captured=true passedTo=Trail.report#2 Trail.report#2 Trail.report#2 followFrom#3 followIntoParameter#4
   stackSites=0 stackLocals=0
   local +0:9 walk: PortabilityWalk (const)
   local +1:9 callee: Node (const)
@@ -339,7 +339,7 @@ function followIntoParameter(trail: Trail, call: Node, arg: Node, value: Node, h
   pointer call: size=40 writesThrough=true captured=true passedTo=Relay.constructor#4
   pointer arg: size=40 writesThrough=false captured=false passedTo=argumentIndex#1
   pointer value: size=40 writesThrough=true captured=true passedTo=Relay.constructor#2
-  pointer holder: size=72 writesThrough=true captured=true passedTo=Relay.constructor#3
+  pointer holder: size=64 writesThrough=true captured=true passedTo=Relay.constructor#3
   stackSites=0 stackLocals=0
   local +0:9 walk: PortabilityWalk (const)
   local +1:9 program: CheckedProgram (const)
@@ -376,7 +376,7 @@ function followOutOfFunction(trail: Trail, value: Node, holder: Local | null): v
   calls: Trail.report followFrom followIntoCallers isEntryMain
   pointer trail: size=80 writesThrough=false captured=false passedTo=Trail.report#0 followIntoCallers#0
   pointer value: size=40 writesThrough=true captured=true passedTo=Trail.report#1 followIntoCallers#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=Trail.report#2 followIntoCallers#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=Trail.report#2 followIntoCallers#2
   stackSites=0 stackLocals=0
   local +0:9 relay: Relay | null (const)
   callee +1:7 isEntryMain -> @isEntryMain
@@ -389,7 +389,7 @@ function followIntoCallers(trail: Trail, value: Node, holder: Local | null): voi
   calls: FunctionSig.body PortabilityWalk.constructor callsOf followIntoCaller isFollowable nish_alloc_struct
   pointer trail: size=80 writesThrough=false captured=false passedTo=followIntoCaller#0
   pointer value: size=40 writesThrough=true captured=true passedTo=followIntoCaller#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=followIntoCaller#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=followIntoCaller#2
   stackSites=1 stackLocals=1
   local +0:9 walk: PortabilityWalk (const)
   local +4:14 host: FunctionSig (const)
@@ -430,7 +430,7 @@ function followIntoCaller(trail: Trail, value: Node, holder: Local | null, there
   calls: Trail.derive Trail.report followValue isProvablyAscii nish_panic_index parallelRoleOf parameterIndex
   pointer trail: size=80 writesThrough=false captured=false passedTo=Trail.derive#0 Trail.derive#0 Trail.report#0 Trail.derive#0
   pointer value: size=40 writesThrough=true captured=true passedTo=Trail.report#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=Trail.report#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=Trail.report#2
   pointer there: size=56 writesThrough=true captured=true passedTo=isProvablyAscii#0 parameterIndex#0 Trail.derive#1 Trail.derive#1 Trail.derive#1
   pointer call: size=40 writesThrough=true captured=true passedTo=Trail.derive#2 followValue#1 followValue#1
   stackSites=1 stackLocals=0
@@ -477,7 +477,7 @@ function followThroughBinary(trail: Trail, binary: Node, at: Node, value: Node, 
   pointer binary: size=40 writesThrough=true captured=true passedTo=loopOf#1
   pointer at: size=40 writesThrough=false captured=false
   pointer value: size=40 writesThrough=true captured=true passedTo=storeInto#2 Trail.report#1 Trail.report#1 Trail.report#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=storeInto#3 Trail.report#2 Trail.report#2 Trail.report#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=storeInto#3 Trail.report#2 Trail.report#2 Trail.report#2
   stackSites=0 stackLocals=0
   local +0:9 walk: PortabilityWalk (const)
   local +1:9 op: string (const)
@@ -573,7 +573,7 @@ function storeInto(trail: Trail, target: Node, value: Node, holder: Local | null
   pointer trail: size=80 writesThrough=true captured=true passedTo=Trail.report#0 followLocal#0 Trail.report#0
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer value: size=40 writesThrough=true captured=true passedTo=Trail.report#1 Trail.report#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=Trail.report#2 Trail.report#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=Trail.report#2 Trail.report#2
   stackSites=0 stackLocals=0
   local +0:9 place: Node (const)
   callee +0:17 unwrapParens -> @unwrapParens
@@ -588,7 +588,7 @@ function followIntoPlace(trail: Trail, parent: Node, at: Node, value: Node, hold
   pointer parent: size=40 writesThrough=false captured=false passedTo=enclosingArrow#1
   pointer at: size=40 writesThrough=false captured=false
   pointer value: size=40 writesThrough=true captured=true passedTo=Trail.report#1 followOutOfArrow#2 followOutOfFunction#1 Trail.report#1 Trail.report#1
-  pointer holder: size=72 writesThrough=true captured=true passedTo=Trail.report#2 followOutOfArrow#3 followOutOfFunction#2 Trail.report#2 Trail.report#2
+  pointer holder: size=64 writesThrough=true captured=true passedTo=Trail.report#2 followOutOfArrow#3 followOutOfFunction#2 Trail.report#2 Trail.report#2
   stackSites=0 stackLocals=0
   callee +0:5 Trail.report -> @Trail.report
   local +2:11 arrow: Node | null (const)
@@ -614,7 +614,7 @@ function followOutOfArrow(trail: Trail, arrow: Node, value: Node, holder: Local 
   pointer trail: size=80 writesThrough=true captured=true passedTo=followFrom#0 Trail.report#0
   pointer arrow: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   pointer value: size=40 writesThrough=true captured=true passedTo=followFrom#1 Trail.report#1
-  pointer holder: size=72 writesThrough=true captured=true passedTo=followFrom#3 Trail.report#2
+  pointer holder: size=64 writesThrough=true captured=true passedTo=followFrom#3 Trail.report#2
   stackSites=0 stackLocals=0
   local +0:9 walk: PortabilityWalk (const)
   local +1:9 list: Node | null (const)
@@ -632,7 +632,7 @@ function followLocal(trail: Trail, local: Local | null): void -> @followLocal
   escaping: local
   calls: followValue nish_array_grow readsOf
   pointer trail: size=80 writesThrough=true captured=true passedTo=followValue#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=readsOf#2 followValue#2
+  pointer local: size=64 writesThrough=true captured=true passedTo=readsOf#2 followValue#2
   stackSites=1 stackLocals=1
   local -5:14 seen: Local (const)
   local +1:9 reads: Node[] (const)
@@ -644,7 +644,7 @@ function names(walk: PortabilityWalk, node: Node, local: Local): boolean -> @nam
   calls: nish_panic_index sourceLocal
   pointer walk: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 bound: Local | null (const)
   callee +0:17 sourceLocal -> @sourceLocal
@@ -655,7 +655,7 @@ function readsOf(walk: PortabilityWalk, node: Node, local: Local, reads: Node[])
   calls: ParentTable.parentOf names nish_array_grow nish_panic_index nish_str_eq readsOf
   pointer walk: size=56 writesThrough=false captured=false passedTo=names#0 readsOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=names#1 ParentTable.parentOf#1
-  pointer local: size=72 writesThrough=false captured=false passedTo=names#2 readsOf#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=names#2 readsOf#2
   pointer reads: size=0 writesThrough=true captured=false passedTo=readsOf#3
   stackSites=0 stackLocals=0
   callee -8:39 names -> @names

@@ -33,9 +33,10 @@ This prints `25`. A name the class does not have is refused, as `p.z` would
 be. A name you bind and never read is an error, as for any local; to keep it
 on purpose, rename it inside the pattern, `{ x, y: _y }`.
 
-Over a plain name, `const { x } = p` compiles to exactly `const x = p.x`.
-Any other value on the right, such as `o.pt` or a call, is evaluated once and
-held in a hidden local first, which the optimiser removes. An empty pattern,
+Over a plain name or a field path, `const { x } = p` compiles to exactly
+`const x = p.x`, and `const [a] = o.items` to `const a = o.items[0]`. Any
+other value on the right, such as a call, is evaluated once and held in a
+hidden local first, which the optimiser removes. An empty pattern,
 `const {} = p` or `const [] = xs`, binds nothing but still evaluates the right
 side once.
 

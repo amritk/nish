@@ -72,7 +72,7 @@ function recordGuardFusion(ctx: CheckContext, stmt: Node): void -> @recordGuardF
 function collectionOwnerOf(program: CheckedProgram, call: Node, name: string): StructInfo | null -> @collectionOwnerOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isCollectionStruct nish_panic_index nish_str_eq
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
@@ -90,7 +90,7 @@ function firstCallOf(branch: Node): Node | null -> @firstCallOf
 function sameCallTarget(program: CheckedProgram, call: Node, receiver: Node, key: Node): boolean -> @sameCallTarget
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index samePlace
-  pointer program: size=888 writesThrough=false captured=false passedTo=samePlace#0 samePlace#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=samePlace#0 samePlace#0
   pointer call: size=40 writesThrough=false captured=false
   pointer receiver: size=40 writesThrough=false captured=false passedTo=samePlace#2
   pointer key: size=40 writesThrough=false captured=false passedTo=samePlace#2
@@ -100,7 +100,7 @@ function sameCallTarget(program: CheckedProgram, call: Node, receiver: Node, key
 function isFusablePlace(program: CheckedProgram, node: Node): boolean -> @isFusablePlace
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isThisPath nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=isThisPath#0
   stackSites=0 stackLocals=0
   callee +0:73 isThisPath -> @isThisPath
@@ -113,7 +113,7 @@ function isThisPath(node: Node): boolean -> @isThisPath
 function isFusableKey(program: CheckedProgram, node: Node): boolean -> @isFusableKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isFusablePlace isKeyLiteral
-  pointer program: size=888 writesThrough=false captured=false passedTo=isFusablePlace#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=isFusablePlace#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isKeyLiteral#0 isFusablePlace#1
   stackSites=0 stackLocals=0
   callee +0:3 isKeyLiteral -> @isKeyLiteral
@@ -125,7 +125,7 @@ function isKeyLiteral(node: Node): boolean -> @isKeyLiteral
 function samePlace(program: CheckedProgram, a: Node, b: Node): boolean -> @samePlace
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isKeyLiteral nish_panic_index nish_str_eq samePlace
-  pointer program: size=888 writesThrough=false captured=false passedTo=samePlace#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=samePlace#0
   pointer a: size=40 writesThrough=false captured=false passedTo=isKeyLiteral#0
   pointer b: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0

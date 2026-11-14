@@ -449,7 +449,7 @@ function declareLocal(ctx: CheckContext, scope: Scope, decl: Node, site: Node, n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: mutable name origin type
-  calls: CheckContext.error CheckContext.textOf Local.constructor Scope.declare bindsHiddenReceiver nish_alloc_struct nish_panic_index nish_str_concat
+  calls: CheckContext.error CheckContext.textOf CheckedProgram.nameHiddenReceiver Local.constructor Scope.declare bindsHiddenReceiver nish_alloc_struct nish_panic_index nish_str_concat
   pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.textOf#0 CheckContext.error#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.declare#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=bindsHiddenReceiver#0
@@ -459,7 +459,8 @@ function declareLocal(ctx: CheckContext, scope: Scope, decl: Node, site: Node, n
   local -9:9 local: Local (const)
   callee -9:17 new Local -> @Local.constructor
   callee -7:41 bindsHiddenReceiver -> @bindsHiddenReceiver
-  callee -6:21 CheckContext.textOf -> @CheckContext.textOf
+  callee -6:5 CheckedProgram.nameHiddenReceiver -> @CheckedProgram.nameHiddenReceiver
+  callee -6:42 CheckContext.textOf -> @CheckContext.textOf
   callee -4:8 Scope.declare -> @Scope.declare
   callee -3:5 CheckContext.error -> @CheckContext.error
 function checkIf(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkIf
@@ -1054,7 +1055,7 @@ function switchCovered(ctx: CheckContext, unmatched: Scope, tagged: Local, membe
   calls: Scope.exhausted labelledMembers withoutMembers
   pointer ctx: size=344 writesThrough=false captured=false passedTo=withoutMembers#0 labelledMembers#0
   pointer unmatched: size=56 writesThrough=false captured=false passedTo=Scope.exhausted#0
-  pointer tagged: size=72 writesThrough=false captured=false passedTo=Scope.exhausted#1
+  pointer tagged: size=64 writesThrough=false captured=false passedTo=Scope.exhausted#1
   pointer members: size=0 writesThrough=false captured=false passedTo=withoutMembers#1
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
   stackSites=0 stackLocals=0
@@ -1092,8 +1093,8 @@ function narrowSwitched(ctx: CheckContext, scope: Scope, tagged: Local | null, h
   calls: narrowHeld narrowToTags
   pointer ctx: size=344 writesThrough=false captured=false passedTo=narrowToTags#0 narrowHeld#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=narrowToTags#1 narrowHeld#1
-  pointer tagged: size=72 writesThrough=true captured=true passedTo=narrowToTags#2
-  pointer held: size=72 writesThrough=true captured=true passedTo=narrowHeld#2
+  pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowToTags#2
+  pointer held: size=64 writesThrough=true captured=true passedTo=narrowHeld#2
   pointer members: size=0 writesThrough=true captured=false passedTo=narrowToTags#3 narrowHeld#3
   stackSites=0 stackLocals=0
   callee +0:5 narrowToTags -> @narrowToTags
@@ -1104,8 +1105,8 @@ function narrowClause(ctx: CheckContext, clauseScope: Scope, tagged: Local | nul
   calls: labelledMembers narrowSwitched withoutMembers
   pointer ctx: size=344 writesThrough=false captured=false passedTo=narrowSwitched#0 withoutMembers#0 labelledMembers#0 narrowSwitched#0
   pointer clauseScope: size=56 writesThrough=false captured=false passedTo=narrowSwitched#1 narrowSwitched#1
-  pointer tagged: size=72 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
-  pointer held: size=72 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
+  pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
+  pointer held: size=64 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
   pointer group: size=0 writesThrough=true captured=false passedTo=withoutMembers#2 narrowSwitched#4
   stackSites=0 stackLocals=0
@@ -1119,8 +1120,8 @@ function narrowAfterSwitch(ctx: CheckContext, scope: Scope, tagged: Local | null
   calls: labelledMembers narrowSwitched withoutMembers
   pointer ctx: size=344 writesThrough=false captured=false passedTo=narrowSwitched#0 withoutMembers#0 labelledMembers#0 narrowSwitched#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=narrowSwitched#1 narrowSwitched#1
-  pointer tagged: size=72 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
-  pointer held: size=72 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
+  pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
+  pointer held: size=64 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
   pointer reaching: size=0 writesThrough=true captured=false passedTo=withoutMembers#2 narrowSwitched#4
   stackSites=0 stackLocals=0

@@ -44,7 +44,7 @@ function main(): void -> @nish_main [exported entry]
   local +3:9 rows: Point[] (const)
   callee +3:17 new Point -> @Point.constructor
   callee +3:34 new Point -> @Point.constructor
-  local +4:12 pattern.752: Point (let)
+  local +4:12 { x, y }: Point (let)
   local +4:14 x: i32 (let)
   local +4:17 y: i32 (let)
   local +8:9 d: i32 (const)

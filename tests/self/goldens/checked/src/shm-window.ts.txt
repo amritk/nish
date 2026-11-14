@@ -11,13 +11,13 @@ const SHM_GIVE_BACK: i32 = 2
 function isShmSource(program: CheckedProgram): boolean -> @isShmSource [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:58 stdModuleName -> @stdModuleName
 function shmWindowRole(program: CheckedProgram, sig: FunctionSig): i32 -> @shmWindowRole [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn isShmSource nish_str_eq
-  pointer program: size=888 writesThrough=false captured=false passedTo=isShmSource#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=isShmSource#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:6 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -25,7 +25,7 @@ function shmWindowRole(program: CheckedProgram, sig: FunctionSig): i32 -> @shmWi
 function isShmWindowIntrinsic(program: CheckedProgram, sig: FunctionSig): boolean -> @isShmWindowIntrinsic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: shmWindowRole
-  pointer program: size=888 writesThrough=false captured=false passedTo=shmWindowRole#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=shmWindowRole#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=shmWindowRole#1
   stackSites=0 stackLocals=0
   callee +0:3 shmWindowRole -> @shmWindowRole

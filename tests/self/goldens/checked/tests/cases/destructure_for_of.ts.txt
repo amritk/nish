@@ -18,10 +18,10 @@ function main(): void -> @nish_main [exported entry]
   local +0:9 points: Point[] (const)
   callee +0:19 new Point -> @Point.constructor
   callee +0:36 new Point -> @Point.constructor
-  local +1:14 pattern.306: Point (const)
+  local +1:14 { x, y }: Point (const)
   local +1:16 x: i32 (const)
   local +1:19 y: i32 (const)
   local +4:9 pairs: i32[][] (const)
-  local +5:14 pattern.401: i32[] (const)
+  local +5:14 [lo, hi]: i32[] (const)
   local +5:15 lo: i32 (const)
   local +5:19 hi: i32 (const)

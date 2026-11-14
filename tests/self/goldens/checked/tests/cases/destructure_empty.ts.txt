@@ -31,11 +31,11 @@ function main(): void -> @nish_main [exported entry]
   local +0:9 p: Point (const)
   callee +0:13 new Point -> @Point.constructor
   local +1:9 xs: i32[] (const)
-  local +2:9 pattern.697: Point (const)
-  local +3:9 pattern.712: i32[] (const)
-  local +4:9 pattern.728: i32[] (const)
+  local +2:9 {}: Point (const)
+  local +3:9 []: i32[] (const)
+  local +4:9 [,]: i32[] (const)
   local +5:9 calls: i32[] (const)
-  local +6:9 pattern.774: i32[] (const)
+  local +6:9 [, ,]: i32[] (const)
   callee +6:17 make -> @make
-  local +7:9 pattern.802: Point (const)
+  local +7:9 {}: Point (const)
   callee +7:14 at -> @at

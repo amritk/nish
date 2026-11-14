@@ -160,7 +160,7 @@ function ArrayPath.constructor(this: ArrayPath, root: Local | null, path: string
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: path root type
   pointer this: size=24 writesThrough=true captured=false
-  pointer root: size=72 writesThrough=true captured=true
+  pointer root: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ArrayBase.constructor(this: ArrayBase, arr: string, header: HoistedHeader | null): void -> @ArrayBase.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -173,7 +173,7 @@ function ArrayUse.constructor(this: ArrayUse, expr: Node, root: Local, path: str
   escaping: data expr len path root
   pointer this: size=32 writesThrough=true captured=false
   pointer expr: size=40 writesThrough=true captured=true
-  pointer root: size=72 writesThrough=true captured=true
+  pointer root: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function NO_PATH(): ArrayPath -> @NO_PATH
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24

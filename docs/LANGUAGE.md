@@ -7515,12 +7515,16 @@ for (const { x, y } of points) { ... }
   not. A struct's fields are read through its pointer, so
   `const { x } = p` on a stack-allocated `p` costs one load
   (`destructure_stack`).
-- **The receiver.** Over a name (`p`, `xs`, `this`) each name is read
-  straight off it, and the function compiles to the body of its hand-written
-  reads. Any other receiver (`o.pt`, `o.items`, a call, a `for...of`
-  element) is evaluated once into a hidden copy of its pointer: unoptimised
-  that is one alloca and one store more than `const x = o.pt.x`, and after
-  `opt -O2` the bodies are the same (`destructure_zero_cost`). A pattern works over `this`
+- **The receiver.** Over a name or a field path (`p`, `xs`, `this`,
+  `o.pt`, `this.a.items`) each name is read straight off it, and the function
+  compiles to the body of its hand-written reads, so every rule about an
+  element of `o.items` applies to the pattern as to `o.items[0]`
+  (`reject_destructure_moved_field`). Any other receiver (a call, a
+  `for...of` element) is evaluated once into a hidden copy of its pointer,
+  which no rule names, as no rule names the call in `f()[0]`
+  (`reject_destructure_moved_call`): unoptimised that is one alloca and one
+  store more than the hand-written reads, and after `opt -O2` the bodies are
+  the same (`destructure_zero_cost`). A pattern works over `this`
   in a method, in an arrow's or an async body, and in a C-style `for`
   initialiser (`destructure_forms`).
 - **An empty pattern**, `const {} = p`, `const [] = xs` or `const [,] = xs`,

@@ -48,7 +48,7 @@ function for_pattern(points: Point[]): i32 -> @for_pattern [exported]
   pointer points: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 total: i32 (let)
-  local +1:14 pattern.883: Point (const)
+  local +1:14 { x, y }: Point (const)
   local +1:16 x: i32 (const)
   local +1:19 y: i32 (const)
 function for_plain(points: Point[]): i32 -> @for_plain [exported]
@@ -69,7 +69,7 @@ function local_pattern(n: i32): i32 -> @local_pattern [exported]
   callee +0:19 new Point -> @Point.constructor
   callee +0:36 new Point -> @Point.constructor
   local +1:7 total: i32 (let)
-  local +2:14 pattern.1439: Point (const)
+  local +2:14 { x, y }: Point (const)
   local +2:16 x: i32 (const)
   local +2:19 y: i32 (const)
 function local_plain(n: i32): i32 -> @local_plain [exported]
@@ -89,7 +89,7 @@ function fresh_pattern(n: i32): i32 -> @fresh_pattern [exported]
   escaping: n
   calls: nish_panic_overflow
   stackSites=1 stackLocals=1
-  local +0:9 pattern.1901: i32[] (const)
+  local +0:9 [a, b]: i32[] (const)
   local +0:10 a: i32 (const)
   local +0:13 b: i32 (const)
 function fresh_plain(n: i32): i32 -> @fresh_plain [exported]
@@ -143,7 +143,7 @@ function call_pattern(n: i32): i32 -> @call_pattern [exported]
   escaping: n
   calls: make nish_arena_mark nish_arena_release nish_panic_overflow
   stackSites=0 stackLocals=0
-  local +0:9 pattern.3120: Point (const)
+  local +0:9 { x, y }: Point (const)
   callee +0:20 make -> @make
   local +0:11 x: i32 (const)
   local +0:14 y: i32 (const)
@@ -190,7 +190,7 @@ function rows_pattern(rows: i32[][]): i32 -> @rows_pattern [exported]
   pointer rows: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 total: i32 (let)
-  local +1:14 pattern.3983: i32[] (const)
+  local +1:14 [a, b]: i32[] (const)
   local +1:15 a: i32 (const)
   local +1:18 b: i32 (const)
 function rows_plain(rows: i32[][]): i32 -> @rows_plain [exported]
@@ -214,11 +214,9 @@ function member_pattern(h: Holder): i32 -> @member_pattern [exported]
   calls: nish_panic_index nish_panic_overflow
   pointer h: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 pattern.4668: Point (const)
-  local +0:11 x: i32 (const)
+  local +0:9 x: i32 (const)
   local +0:14 y: i32 (const)
-  local +1:9 pattern.4692: i32[] (const)
-  local +1:10 a: i32 (const)
+  local +1:9 a: i32 (const)
   local +1:13 b: i32 (const)
 function member_plain(h: Holder): i32 -> @member_plain [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

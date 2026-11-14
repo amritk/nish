@@ -1245,7 +1245,7 @@ function Emitter.narrowedRead(this: Emitter, expr: Node, local: Local, value: st
   calls: Emitter.llvm IRFunction.emitValue TypeTable.isStruct TypeTable.isUnion TypeTable.stripNull intrinsicType nish_str_concat
   pointer this: size=384 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 declared: i32 (const)
   callee +0:22 TypeTable.stripNull -> @TypeTable.stripNull
@@ -1531,7 +1531,7 @@ function Emitter.slotOf(this: Emitter, local: Local): string -> @Emitter.slotOf 
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat
   pointer this: size=384 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
   callee +7:18 internalErrorFor -> @internalErrorFor
@@ -1541,7 +1541,7 @@ function Emitter.setSlot(this: Emitter, local: Local, slot: string): void -> @Em
   escaping: local slot
   calls: nish_array_grow
   pointer this: size=384 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Emitter.typeOf(this: Emitter, expr: Node): i32 -> @Emitter.typeOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true

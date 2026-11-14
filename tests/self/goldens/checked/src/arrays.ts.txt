@@ -32,6 +32,7 @@ import isGlobalMapType from "./members" -> function @isGlobalMapType
 import mapReadSpelling from "./members" -> function @mapReadSpelling
 import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_USING from "./nodes" -> const FLAG_USING
+import isPatternReceiverName from "./nodes" -> function @isPatternReceiverName
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
 import crossesByCopy from "./parallel" -> function @crossesByCopy
@@ -335,7 +336,7 @@ function spellAnnotation(ctx: CheckContext, home: CheckedProgram | null, node: N
   escaping: home node
   calls: CheckedProgram.alias StringMap.has annotationName indexOfName levelled nish_panic_index typedArrayElement
   pointer ctx: size=344 writesThrough=false captured=false
-  pointer home: size=888 writesThrough=true captured=true
+  pointer home: size=904 writesThrough=true captured=true
   pointer node: size=40 writesThrough=true captured=true
   pointer names: size=0 writesThrough=false captured=false passedTo=indexOfName#0
   pointer spellings: size=0 writesThrough=true captured=false
@@ -697,7 +698,7 @@ function ElementRef.constructor(this: ElementRef, local: Local, array: string, e
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: array arrayText elem local
   pointer this: size=56 writesThrough=true captured=false
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ElementRef.reachedBy(this: ElementRef, root: string, elem: string): boolean -> @ElementRef.reachedBy [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -709,22 +710,23 @@ function SlotOverwrite.constructor(this: SlotOverwrite, store: Node, reference: 
   escaping: read reference store
   pointer this: size=24 writesThrough=true captured=false
   pointer store: size=40 writesThrough=true captured=true
-  pointer reference: size=72 writesThrough=true captured=true
+  pointer reference: size=64 writesThrough=true captured=true
   pointer read: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function referenceRoot(expr: Node): string -> @referenceRoot [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_concat nish_str_eq referenceRoot unwrapParens
+  calls: isPatternReceiverName nish_panic_index nish_str_concat nish_str_eq referenceRoot unwrapParens
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 inner: Node (const)
   callee +0:17 unwrapParens -> @unwrapParens
+  callee +2:12 isPatternReceiverName -> @isPatternReceiverName
   local +8:11 base: string (const)
   callee +8:18 referenceRoot -> @referenceRoot
 function inlineArrayElement(program: CheckedProgram, table: TypeTable, expr: Node): string -> @inlineArrayElement [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray TypeTable.refOf inlineElementStruct nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isArray#0 inlineElementStruct#1 TypeTable.refOf#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -736,7 +738,7 @@ function inlineArrayElement(program: CheckedProgram, table: TypeTable, expr: Nod
 function rootText(program: CheckedProgram, table: TypeTable, expr: Node): string -> @rootText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_panic_index nish_str_eq referenceRoot
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=referenceRoot#0
   stackSites=0 stackLocals=0
@@ -747,7 +749,7 @@ function rootText(program: CheckedProgram, table: TypeTable, expr: Node): string
 function elementSource(program: CheckedProgram, table: TypeTable, expr: Node): Node | null -> @elementSource
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: inlineArrayElement nish_panic_index nish_str_eq unwrapParens
-  pointer program: size=888 writesThrough=false captured=false passedTo=inlineArrayElement#0 inlineArrayElement#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=inlineArrayElement#0 inlineArrayElement#0
   pointer table: size=136 writesThrough=false captured=false passedTo=inlineArrayElement#1 inlineArrayElement#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -760,7 +762,7 @@ function collectMutations(program: CheckedProgram, table: TypeTable, call: Node,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: Mutation.constructor TypeTable.isReadonlyArray inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq referenceRoot rootText
-  pointer program: size=888 writesThrough=false captured=false passedTo=inlineArrayElement#0 rootText#0 inlineArrayElement#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=inlineArrayElement#0 rootText#0 inlineArrayElement#0
   pointer table: size=136 writesThrough=false captured=false passedTo=inlineArrayElement#1 rootText#1 inlineArrayElement#1 TypeTable.isReadonlyArray#0
   pointer call: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
@@ -787,7 +789,7 @@ function collectMutations(program: CheckedProgram, table: TypeTable, call: Node,
 function slotStoreArray(program: CheckedProgram, table: TypeTable, node: Node): Node | null -> @slotStoreArray [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq storesInlineElements unwrapParens
-  pointer program: size=888 writesThrough=false captured=false passedTo=storesInlineElements#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=storesInlineElements#0
   pointer table: size=136 writesThrough=false captured=false passedTo=storesInlineElements#1
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -798,7 +800,7 @@ function RefWalk.constructor(this: RefWalk, program: CheckedProgram, table: Type
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: aliased ctx overwrites program table
   pointer this: size=88 writesThrough=true captured=false
-  pointer program: size=888 writesThrough=true captured=true
+  pointer program: size=904 writesThrough=true captured=true
   pointer table: size=136 writesThrough=true captured=true
   pointer ctx: size=344 writesThrough=true captured=true
   pointer overwrites: size=0 writesThrough=true captured=true
@@ -872,7 +874,7 @@ function RefWalk.declaredSince(this: RefWalk, local: Local, declaredDepth: i32):
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: declaredDepth
   pointer this: size=88 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function RefWalk.invalidate(this: RefWalk, m: Mutation): void -> @RefWalk.invalidate [method]
@@ -949,7 +951,7 @@ function RefWalk.visitChildren(this: RefWalk, node: Node): void -> @RefWalk.visi
 function RefWalk.visitIdentifier(this: RefWalk, node: Node): void -> @RefWalk.visitIdentifier [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: RefWalk.report SlotOverwrite.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq sourceLocal
+  calls: CheckedProgram.localText RefWalk.report SlotOverwrite.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq sourceLocal
   pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.report#0
   pointer node: size=40 writesThrough=true captured=true passedTo=SlotOverwrite.constructor#3 RefWalk.report#1
   stackSites=0 stackLocals=0
@@ -961,6 +963,7 @@ function RefWalk.visitIdentifier(this: RefWalk, node: Node): void -> @RefWalk.vi
   local -2:13 store: Node | null (const)
   callee +0:25 new SlotOverwrite -> @SlotOverwrite.constructor
   callee +4:9 RefWalk.report -> @RefWalk.report
+  callee +6:16 CheckedProgram.localText -> @CheckedProgram.localText
 function RefWalk.visitLoop(this: RefWalk, node: Node): void -> @RefWalk.visitLoop [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -1032,7 +1035,7 @@ function RefWalk.bind(this: RefWalk, local: Local, value: Node, replaceFrom: i32
   escaping: replaceFrom
   calls: RefWalk.keepFrom RefWalk.referencesOf nish_array_grow nish_panic_index
   pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.referencesOf#0 RefWalk.keepFrom#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=RefWalk.referencesOf#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=RefWalk.referencesOf#1
   pointer value: size=40 writesThrough=true captured=true passedTo=RefWalk.referencesOf#2
   stackSites=2 stackLocals=2
   local +0:11 found: ElementRef[] (const)
@@ -1046,7 +1049,7 @@ function RefWalk.referencesOf(this: RefWalk, local: Local, value: Node, out: Ele
   sharedWrite: +0:9
   calls: ElementRef.constructor RefWalk.aliasesOf RefWalk.referencesOf elementSource inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText sourceLocal unwrapParens
   pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.aliasesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=ElementRef.constructor#1 RefWalk.aliasesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=ElementRef.constructor#1 RefWalk.aliasesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer out: size=0 writesThrough=true captured=false passedTo=RefWalk.aliasesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3
   stackSites=0 stackLocals=0
@@ -1071,8 +1074,8 @@ function RefWalk.aliasesOf(this: RefWalk, local: Local, from: Local | null, out:
   sharedWrite: +0:9
   calls: ElementRef.constructor nish_alloc_struct nish_array_grow
   pointer this: size=88 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=true captured=true passedTo=ElementRef.constructor#1
-  pointer from: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=true captured=true passedTo=ElementRef.constructor#1
+  pointer from: size=64 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:16 ref: ElementRef (const)
@@ -1091,9 +1094,9 @@ function namesUnder(node: Node, out: Node[]): void -> @namesUnder
 function declaresUsing(program: CheckedProgram, block: Node, scope: Local): boolean -> @declaresUsing
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer block: size=40 writesThrough=false captured=false
-  pointer scope: size=72 writesThrough=false captured=false
+  pointer scope: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 stmt: Node (const)
   local +2:18 decl: Node (const)
@@ -1113,7 +1116,7 @@ function slotOverwrites(program: CheckedProgram, table: TypeTable, body: Node, a
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visit
   calls: RefWalk.constructor RefWalk.visit
-  pointer program: size=888 writesThrough=true captured=true passedTo=RefWalk.constructor#1
+  pointer program: size=904 writesThrough=true captured=true passedTo=RefWalk.constructor#1
   pointer table: size=136 writesThrough=true captured=true passedTo=RefWalk.constructor#2
   pointer body: size=40 writesThrough=true captured=true passedTo=RefWalk.visit#1
   pointer aliased: size=8 writesThrough=true captured=true passedTo=RefWalk.constructor#5
@@ -1144,7 +1147,7 @@ function collectAliased(program: CheckedProgram, table: TypeTable, node: Node, p
   sharedWrite: via capturedReads
   escaping: node parent
   calls: StringSet.add capturedReads collectAliased inlineArrayElement isNewArrayValue keepsItsName nish_panic_index nish_str_eq
-  pointer program: size=888 writesThrough=false captured=false passedTo=capturedReads#0 inlineArrayElement#0 inlineArrayElement#0 collectAliased#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=capturedReads#0 inlineArrayElement#0 inlineArrayElement#0 collectAliased#0
   pointer table: size=136 writesThrough=false captured=false passedTo=inlineArrayElement#1 inlineArrayElement#1 collectAliased#1
   pointer node: size=40 writesThrough=true captured=true passedTo=capturedReads#1 inlineArrayElement#2 keepsItsName#1
   pointer parent: size=40 writesThrough=true captured=true passedTo=keepsItsName#0
@@ -1169,7 +1172,7 @@ function aliasedRecordElements(program: CheckedProgram, table: TypeTable, body: 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via collectAliased
   calls: StringSet.constructor collectAliased nish_alloc_struct
-  pointer program: size=888 writesThrough=false captured=false passedTo=collectAliased#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=collectAliased#0
   pointer table: size=136 writesThrough=false captured=false passedTo=collectAliased#1
   pointer body: size=40 writesThrough=true captured=true passedTo=collectAliased#3
   stackSites=0 stackLocals=0

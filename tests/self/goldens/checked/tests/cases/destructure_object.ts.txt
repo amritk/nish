@@ -40,7 +40,7 @@ function main(): void -> @nish_main [exported entry]
   callee +0:13 new Point -> @Point.constructor
   local +1:9 x: i32 (const)
   local +1:14 py: i32 (const)
-  local +3:7 pattern.679: Box (const)
+  local +3:7 { label, w }: Box (const)
   callee +3:22 new Box -> @Box.constructor
   local +3:9 label: string (let)
   local +3:16 w: i32 (let)

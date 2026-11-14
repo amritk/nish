@@ -500,7 +500,7 @@ function AnalysisUnit.constructor(this: AnalysisUnit, program: CheckedProgram, p
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: parents program
   pointer this: size=16 writesThrough=true captured=false
-  pointer program: size=888 writesThrough=true captured=true
+  pointer program: size=904 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PointerParamFacts.constructor(this: PointerParamFacts, name: string, size: i32, align: i32): void -> @PointerParamFacts.constructor [exported constructor]
@@ -525,13 +525,13 @@ function HoistedHeader.constructor(this: HoistedHeader, root: Local, path: strin
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: arr data len path root
   pointer this: size=40 writesThrough=true captured=false
-  pointer root: size=72 writesThrough=true captured=true
+  pointer root: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PrivateArray.constructor(this: PrivateArray, local: Local): void -> @PrivateArray.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: local
   pointer this: size=24 writesThrough=true captured=false
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function MemPath.constructor(this: MemPath, kind: i32, name: string, steps: string): void -> @MemPath.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -557,7 +557,7 @@ function LocalPath.constructor(this: LocalPath, local: Local, path: MemPath): vo
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: local path
   pointer this: size=16 writesThrough=true captured=false
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   pointer path: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ArgEdge.constructor(this: ArgEdge, callee: string, index: i32, param: string, owner: PrivateArray | null, path: MemPath): void -> @ArgEdge.constructor [exported constructor]
@@ -638,7 +638,7 @@ function FunctionFacts.isStackParam(this: FunctionFacts, name: string): boolean 
 function FunctionFacts.holdsStackObject(this: FunctionFacts, local: Local): boolean -> @FunctionFacts.holdsStackObject [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=432 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 candidate: Local (const)
 function FactsTable.constructor(this: FactsTable): void -> @FactsTable.constructor [exported constructor]
@@ -804,7 +804,7 @@ function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): 
 function isInlineField(program: CheckedProgram, table: TypeTable, access: Node): boolean -> @isInlineField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct FieldInfo.inline StructInfo.field TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   pointer access: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -822,7 +822,7 @@ function spawnsShared(program: CheckedProgram, table: TypeTable, node: Node): bo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via capturesOf
   calls: CaptureSlot.type FunctionSig.isCompileTime TypeTable.sharedWithTask capturesOf nish_panic_index unwrapParens
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.sharedWithTask#0 TypeTable.sharedWithTask#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -919,7 +919,7 @@ function classifyElementHolder(unit: AnalysisUnit, table: TypeTable, holder: Loc
   calls: ParentTable.parentOf classifyMemberUse collectRefs use
   pointer unit: size=16 writesThrough=false captured=false passedTo=classifyMemberUse#0
   pointer table: size=136 writesThrough=false captured=false passedTo=classifyMemberUse#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer within: size=40 writesThrough=true captured=true passedTo=collectRefs#1
   stackSites=1 stackLocals=1
   callee +0:12 use -> @use
@@ -941,9 +941,9 @@ function collectRefs(program: CheckedProgram, node: Node, local: Local, out: Nod
   sharedWrite: +0:7
   escaping: node
   calls: collectRefs nish_array_grow nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false passedTo=collectRefs#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=collectRefs#0
   pointer node: size=40 writesThrough=true captured=true
-  pointer local: size=72 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer out: size=0 writesThrough=true captured=false passedTo=collectRefs#3
   stackSites=0 stackLocals=0
   local -2:11 named: Local | null (const)
@@ -952,9 +952,9 @@ function collectRefs(program: CheckedProgram, node: Node, local: Local, out: Nod
 function namedInArrow(program: CheckedProgram, node: Node, local: Local, inside: boolean): boolean -> @namedInArrow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: namedInArrow nish_panic_index sourceLocal
-  pointer program: size=888 writesThrough=false captured=false passedTo=namedInArrow#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=namedInArrow#0
   pointer node: size=40 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false passedTo=namedInArrow#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=namedInArrow#2
   stackSites=0 stackLocals=0
   local +0:11 named: Local | null (const)
   callee +0:19 sourceLocal -> @sourceLocal
@@ -981,7 +981,7 @@ function isFreshArrayLocal(table: TypeTable, v: Local, decl: Node | null): boole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index unwrapParens
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isArray#0
-  pointer v: size=72 writesThrough=false captured=false
+  pointer v: size=64 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:39 TypeTable.isArray -> @TypeTable.isArray
@@ -993,7 +993,7 @@ function isJoinedParts(unit: AnalysisUnit, table: TypeTable, parts: Local, decl:
   calls: ParentTable.parentOf TypeTable.refOf isFreshArrayLocal isPartsUse namedInArrow
   pointer unit: size=16 writesThrough=false captured=false passedTo=isPartsUse#0
   pointer table: size=136 writesThrough=false captured=false passedTo=isFreshArrayLocal#0 TypeTable.refOf#0 isPartsUse#1
-  pointer parts: size=72 writesThrough=false captured=false passedTo=isFreshArrayLocal#1 namedInArrow#2
+  pointer parts: size=64 writesThrough=false captured=false passedTo=isFreshArrayLocal#1 namedInArrow#2
   pointer decl: size=40 writesThrough=true captured=true passedTo=isFreshArrayLocal#2
   pointer refs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1025,7 +1025,7 @@ function gatherDeclarations(program: CheckedProgram, node: Node, names: StringMa
   sharedWrite: +0:7
   escaping: node
   calls: StringMap.get StringMap.set gatherDeclarations nish_array_grow nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false passedTo=gatherDeclarations#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=gatherDeclarations#0
   pointer node: size=40 writesThrough=true captured=true
   pointer names: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0 gatherDeclarations#2
   pointer buckets: size=0 writesThrough=true captured=false passedTo=gatherDeclarations#3
@@ -1103,7 +1103,7 @@ function constructorOf(program: CheckedProgram, table: TypeTable, type: i32): Fu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
-  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
@@ -1113,7 +1113,7 @@ function constructorOf(program: CheckedProgram, table: TypeTable, type: i32): Fu
 function isStringPassthrough(program: CheckedProgram, template: Node): boolean -> @isStringPassthrough
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: isTemplateExpression nish_arena_mark nish_arena_release nish_panic_index templateParts
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer template: size=40 writesThrough=false captured=false passedTo=isTemplateExpression#0 templateParts#0
   stackSites=0 stackLocals=0
   callee +0:8 isTemplateExpression -> @isTemplateExpression
@@ -1123,7 +1123,7 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isResult TypeTable.isStruct TypeTable.nameOf resultLayout
-  pointer program: size=888 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isResult#0 resultLayout#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isResult -> @TypeTable.isResult
@@ -1136,7 +1136,7 @@ function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.stripNull inlineElementStruct
-  pointer program: size=888 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=136 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
   local +0:9 record: StructInfo | null (const)
@@ -1173,7 +1173,7 @@ function FactCollector.declarationOf(this: FactCollector, body: Node, local: Loc
   calls: StringMap.get gatherDeclarations nish_panic_index
   pointer this: size=72 writesThrough=true captured=false
   pointer body: size=40 writesThrough=true captured=true passedTo=gatherDeclarations#1
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -1:7 gatherDeclarations -> @gatherDeclarations
   local +2:11 at: i32 (const)
@@ -1236,7 +1236,7 @@ function FactCollector.noteCaptured(this: FactCollector, source: Local, target: 
   escaping: via
   calls: ArgEdge.constructor DirtMark.constructor FactCollector.escapeParam FactCollector.localPathAt FactCollector.ownEdge FunctionFacts.pointerParam MemPath.constructor nish_alloc_struct nish_array_grow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.escapeParam#0 FactCollector.localPathAt#0 FactCollector.ownEdge#0 FactCollector.escapeParam#0
-  pointer source: size=72 writesThrough=true captured=true passedTo=FactCollector.localPathAt#1
+  pointer source: size=64 writesThrough=true captured=true passedTo=FactCollector.localPathAt#1
   pointer target: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:13 pointer: PointerParamFacts | null (const)
@@ -1417,7 +1417,7 @@ function FactCollector.localPathAt(this: FactCollector, local: Local, depth: i32
   escaping: depth
   calls: FactCollector.resolveLocal LocalPath.constructor nish_alloc_struct nish_array_grow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.resolveLocal#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=FactCollector.resolveLocal#1 LocalPath.constructor#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.resolveLocal#1 LocalPath.constructor#1
   stackSites=0 stackLocals=0
   local -6:16 seen: LocalPath (const)
   local -1:11 path: MemPath (const)
@@ -1428,7 +1428,7 @@ function FactCollector.resolveLocal(this: FactCollector, local: Local, depth: i3
   sharedWrite: via FactCollector.ownKeyOf
   calls: FactCollector.declarationOf FactCollector.elementPath FactCollector.ownKeyOf FactCollector.pathFrom FunctionSig.body MemPath.constructor ParentTable.parentOf nish_alloc_struct nish_panic_index nish_panic_overflow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.ownKeyOf#0 FactCollector.declarationOf#0 FactCollector.elementPath#0 FactCollector.pathFrom#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=FactCollector.ownKeyOf#1 FactCollector.declarationOf#2
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.ownKeyOf#1 FactCollector.declarationOf#2
   stackSites=0 stackLocals=0
   local +0:11 key: string (const)
   callee +0:17 FactCollector.ownKeyOf -> @FactCollector.ownKeyOf
@@ -1512,7 +1512,7 @@ function FactCollector.ownKeyOf(this: FactCollector, local: Local): string -> @F
   escaping: local
   calls: FactCollector.declarationOf FactCollector.isWipedFreshSecret FactCollector.noteFreshInit FactCollector.noteStore FunctionSig.body nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 unwrapParens
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.declarationOf#0 FactCollector.isWipedFreshSecret#0 FactCollector.noteFreshInit#0 FactCollector.noteStore#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=FactCollector.declarationOf#2 FactCollector.isWipedFreshSecret#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.declarationOf#2 FactCollector.isWipedFreshSecret#1
   stackSites=0 stackLocals=0
   local -15:11 at: i32 (const)
   local -11:11 body: Node | null (const)
@@ -1531,7 +1531,7 @@ function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, ini
   sharedWrite: via collectRefs
   calls: FunctionSig.body ParentTable.parentOf collectRefs nish_panic_index secretRoleOf unwrapParens
   pointer this: size=72 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer init: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 program: CheckedProgram (const)
@@ -1769,7 +1769,7 @@ function FactCollector.notePrivateArray(this: FactCollector, local: Local, decl:
   sharedWrite: +0:5
   calls: ArgEdge.constructor FactCollector.callAround FactCollector.heldByOf FactCollector.holdArray FactCollector.isReturned FactCollector.ownEdge FactCollector.ownKeyOf FunctionSig.body MemPath.constructor PrivateArray.constructor TypeTable.refOf classifyUse collectRefs inlineElementStruct isFreshArrayLocal namedInArrow nish_alloc_struct nish_array_grow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isReturned#0 FactCollector.ownKeyOf#0 FactCollector.ownEdge#0 FactCollector.callAround#0 FactCollector.holdArray#0 FactCollector.heldByOf#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=isFreshArrayLocal#1 namedInArrow#2 collectRefs#2 PrivateArray.constructor#1 FactCollector.ownKeyOf#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=isFreshArrayLocal#1 namedInArrow#2 collectRefs#2 PrivateArray.constructor#1 FactCollector.ownKeyOf#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=isFreshArrayLocal#2
   stackSites=3 stackLocals=3
   local -30:11 program: CheckedProgram (const)
@@ -2547,7 +2547,7 @@ function applyStance(facts: FunctionFacts, stance: BodilessStance): void -> @app
 function needsStance(program: CheckedProgram, sig: FunctionSig): boolean -> @needsStance
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isAtomicMethod isChannelSend isLockMethod isMapRoute isRegionEntry isRegionIntrinsic isShmWindowIntrinsic isSpawnEntry jsonRouteOf secretRoleOf
-  pointer program: size=888 writesThrough=false captured=false passedTo=isRegionIntrinsic#0 isShmWindowIntrinsic#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=isRegionIntrinsic#0 isShmWindowIntrinsic#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=jsonRouteOf#0 isChannelSend#0 isAtomicMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 secretRoleOf#0 isLockMethod#0
   stackSites=0 stackLocals=0
   callee +0:3 jsonRouteOf -> @jsonRouteOf
@@ -2671,7 +2671,7 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor FunctionFacts.pointerParam ParamStance.constructor StringSet.add handsParamsTo jsonRouteCallees jsonRouteOf nish_alloc_struct nish_array_grow statesNothing
-  pointer program: size=888 writesThrough=false captured=false passedTo=jsonRouteCallees#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=jsonRouteCallees#0
   pointer table: size=136 writesThrough=false captured=false passedTo=jsonRouteCallees#1
   pointer sig: size=200 writesThrough=false captured=false passedTo=jsonRouteCallees#2 jsonRouteOf#0
   pointer facts: size=432 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 handsParamsTo#0
@@ -3337,7 +3337,7 @@ function pollutePath(f: FunctionFacts, path: MemPath): boolean -> @pollutePath
 function tableReceiver(program: CheckedProgram, call: Node): Node | null -> @tableReceiver
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isMapRoute methodReceiver nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false passedTo=methodReceiver#0
   stackSites=0 stackLocals=0
   local +0:9 receiver: Node | null (const)
@@ -3348,7 +3348,7 @@ function tableReceiver(program: CheckedProgram, call: Node): Node | null -> @tab
 function keepsArguments(program: CheckedProgram, call: Node): boolean -> @keepsArguments
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.method isCollectionStruct isMapRoute mapIntrinsicOf nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false
+  pointer program: size=904 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: FunctionSig | null (const)
@@ -3606,7 +3606,7 @@ function stepOf(expr: Node, name: string): i32 -> @stepOf [exported]
 function bodyMayExtend(program: CheckedProgram, table: TypeTable, body: Node, known: FactsTable | null): boolean -> @bodyMayExtend
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get bodyMayExtend isResizeCall nish_panic_index
-  pointer program: size=888 writesThrough=false captured=false passedTo=isResizeCall#0 bodyMayExtend#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=isResizeCall#0 bodyMayExtend#0
   pointer table: size=136 writesThrough=false captured=false passedTo=isResizeCall#1 bodyMayExtend#1
   pointer body: size=40 writesThrough=false captured=false passedTo=isResizeCall#2
   pointer known: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 bodyMayExtend#3
@@ -3636,7 +3636,7 @@ function filledByC(program: CheckedProgram, table: TypeTable, sig: FunctionSig, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: TypeTable.isReadonlyArray TypeTable.stripNull layoutClass lentBuffer
-  pointer program: size=888 writesThrough=false captured=false passedTo=layoutClass#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=layoutClass#0
   pointer table: size=136 writesThrough=false captured=false passedTo=lentBuffer#0 TypeTable.isReadonlyArray#0 layoutClass#1 TypeTable.stripNull#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=lentBuffer#1
   stackSites=0 stackLocals=0
@@ -3648,7 +3648,7 @@ function hostWindowProven(program: CheckedProgram, table: TypeTable, call: Node,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: foreignBufferCountProven nish_panic_index nish_panic_overflow nish_str_eq
-  pointer program: size=888 writesThrough=false captured=false passedTo=foreignBufferCountProven#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=foreignBufferCountProven#0
   pointer table: size=136 writesThrough=false captured=false passedTo=foreignBufferCountProven#1
   pointer call: size=40 writesThrough=false captured=false passedTo=foreignBufferCountProven#2
   pointer known: size=24 writesThrough=false captured=false passedTo=foreignBufferCountProven#5
@@ -3667,7 +3667,7 @@ function foreignBufferCountProven(program: CheckedProgram, table: TypeTable, cal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: conversion count index
   calls: bodyMayExtend isBuiltinConversion nish_panic_index nish_str_eq
-  pointer program: size=888 writesThrough=false captured=false passedTo=isBuiltinConversion#0 bodyMayExtend#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=isBuiltinConversion#0 bodyMayExtend#0
   pointer table: size=136 writesThrough=false captured=false passedTo=bodyMayExtend#1
   pointer call: size=40 writesThrough=false captured=false
   pointer known: size=24 writesThrough=false captured=false passedTo=bodyMayExtend#3
@@ -3683,7 +3683,7 @@ function foreignBufferCountProven(program: CheckedProgram, table: TypeTable, cal
 function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @isResizeCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: arrayMethodName builtinNameOf nish_panic_index nish_str_eq
-  pointer program: size=888 writesThrough=false captured=false passedTo=arrayMethodName#0 builtinNameOf#0
+  pointer program: size=904 writesThrough=false captured=false passedTo=arrayMethodName#0 builtinNameOf#0
   pointer table: size=136 writesThrough=false captured=false passedTo=arrayMethodName#1
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2 builtinNameOf#1
   stackSites=0 stackLocals=0
