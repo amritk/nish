@@ -592,7 +592,8 @@ function refuseUnions(compilation: Compilation, fns: ExternalFunction[], laysOut
   local +31:7 f: FieldInfo | null (let)
   callee +33:9 unionField -> @unionField
   callee +36:5 reportUnion -> @reportUnion
-  callee +36:79 TypeTable.typeName -> @TypeTable.typeName
+  callee +40:12 TypeTable.typeName -> @TypeTable.typeName
+  callee +40:58 TypeTable.typeName -> @TypeTable.typeName
 function unionStruct(table: TypeTable, unit: ModuleUnit): StructInfo | null -> @unionStruct
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: unionField

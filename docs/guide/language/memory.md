@@ -113,6 +113,46 @@ that opens with `using a = arena()`, which gives it back when the block ends;
 [Networking](../using-nish/networking.md#keeping-a-request-loops-memory-flat)
 shows it on a request loop.
 
+A function a loop calls on every pass can keep memory the same way. When a
+function assigns a `let` a second string, as `relabel` does below, the
+compiler cannot prove the first one dead when it returns, so the function
+keeps what it allocated on every call:
+
+```ts
+const relabel = (n: i32): i32 => {   // warning: keeps an allocation on every call
+  let s = "none";
+  if (n > 2) {
+    s = `b${n}`;
+  }
+  return s.length;
+};
+
+const names: string[] = [];
+for (let i = 0; i < 1000000; i++) {
+  names.push(`${relabel(i)}`);
+}
+```
+
+The warning (NL9019) names the function and the line it keeps. Give each
+value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
+block with `using a = arena()` around the work. A loop whose passes are
+released already, because nothing a pass makes outlives it, takes back what
+the call kept, so that one does not warn. So does a loop inside a
+`using a = arena()` block, or inside an outer loop whose passes are released:
+the memory goes back when that block or pass ends, so a block around a loop
+that never ends quiets the warning without stopping the growth. A constructor
+called with `new` is never reported. The warning counts passes, not how many
+there are, so a short fixed loop warns like an unbounded one.
+
+NL9019 judges only the functions a loop calls directly, each on what it
+allocates itself. When the loop calls a function that returns memory, and
+that function calls the one keeping it, the warning stays quiet: run
+`nish --explain-memory` to see which loop keeps it and why. A function that
+does its work only once, behind a guard such as `if (this.ready) { return }`,
+still warns when it keeps an array of its own, because the compiler does not
+prove that the same object reaches it on every pass. Open a block with
+`using a = arena()` around that work.
+
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:
 

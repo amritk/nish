@@ -2229,6 +2229,7 @@ import viewFor from "./break-gfx" -> function @viewFor
 import rasterRgb from "../std/raster" -> function @rasterRgb
 import GAME_PLAYING from "./break-game" -> const GAME_PLAYING
 import BreakGame from "./break-game" -> struct BreakGame
+import aimBreakPaddle from "./break-game" -> function @aimBreakPaddle
 import drawBreakGame from "./break-game" -> function @drawBreakGame
 import newBreakGame from "./break-game" -> function @newBreakGame
 import stepBreakGame from "./break-game" -> function @stepBreakGame
@@ -2250,6 +2251,7 @@ import fpsChoice from "./break-menu" -> function @fpsChoice
 import newBreakMenuWith from "./break-menu" -> function @newBreakMenuWith
 import resolutionChoice from "./break-menu" -> function @resolutionChoice
 import stepBreakMenu from "./break-menu" -> function @stepBreakMenu
+import tapBreakMenu from "./break-menu" -> function @tapBreakMenu
 const DIRECTOR_TOAST_STEPS: i32 = 240
 const DIRECTOR_ROW_STATS: i32 = 5
 const DIRECTOR_ROW_SOUND: i32 = 6
@@ -2437,6 +2439,35 @@ function directorStepMenu(d: BreakDirector, input: StepInput, resolution: i32, s
   callee +23:7 toastBreak -> @toastBreak
   callee +23:21 breakGraphicsToast -> @breakGraphicsToast
   callee +28:5 directorStartGame -> @directorStartGame
+function directorWorldX(view: View, px: f64): f64 -> @directorWorldX
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer view: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function directorWorldY(view: View, py: f64): f64 -> @directorWorldY
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer view: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function aimBreakDirector(d: BreakDirector, px: f64): void -> @aimBreakDirector [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via aimBreakPaddle
+  escaping: px
+  calls: aimBreakPaddle directorWorldX llvm.maximum.f64
+  pointer d: size=136 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 view: View (const)
+  callee +1:3 aimBreakPaddle -> @aimBreakPaddle
+  callee +1:74 directorWorldX -> @directorWorldX
+function tapBreakDirector(d: BreakDirector, px: f64, py: f64): boolean -> @tapBreakDirector [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via tapBreakMenu
+  escaping: px py
+  calls: directorWorldX directorWorldY tapBreakMenu
+  pointer d: size=136 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 view: View (const)
+  callee +2:5 tapBreakMenu -> @tapBreakMenu
+  callee +2:26 directorWorldX -> @directorWorldX
+  callee +2:52 directorWorldY -> @directorWorldY
 function stepBreakDirector(d: BreakDirector, input: StepInput): boolean -> @stepBreakDirector [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

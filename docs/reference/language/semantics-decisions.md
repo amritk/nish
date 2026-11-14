@@ -580,7 +580,8 @@ by the caller.
     enclosing loop, or one that finishes before the assignment starts, leaves
     the old value reachable and the `const` rewrite inapplicable (a capture is
     the value passed to a call or a constructor, either arm of a conditional
-    included, a method called on it unless it is a string or an array, a
+    included, a method called on it unless it is a string, an array or a
+    `Result`, whose methods hand back a flag or the payload and never the box, a
     `return`, an element of an array or object literal, or the right-hand side
     of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
@@ -595,7 +596,10 @@ by the caller.
     `last = \`item ${i}\`` peaked at 392 MB where the rewrite peaks at 11 MB.
     The hints are a `const` inside the loop when only the pass reads the value,
     or numbers kept across passes and the value built once after the loop
-    (`tests/cases/perf_arena_pass_drop`). Reported whatever the local was
+    (`tests/cases/perf_arena_pass_drop`). An `Ok(...)` or `Err(...)` inside
+    a loop is such an allocation unless its `Result` is passed by value, so a
+    `let r` given a new one on every pass is reported, and so is one assigned
+    over another inside the pass (NL9003). Reported whatever the local was
     declared holding and whatever the function returns, since the dropped
     values are this assignment's own; a line the rule above already reports is
     its alone. Not reported for an assignment inside a branch, which may run
@@ -722,6 +726,42 @@ by the caller.
 
     It reads the `"accumulates"` fact `--emit-arena` prints, then keeps only
     the temporaries a pass drops, and changes no byte of the IR.
+  - **a function that keeps memory on every call** (NL9019) — a function
+    that keeps an allocation of its own past the call (a local assigned more
+    than once, or an array of its own; a value it only hands to a function's
+    parameter does not count, nor does one it only places in an array or
+    object literal that is itself handed to a parameter or to `spawnSync`, or
+    only reads in place, as in `[a, b].join(",")`), so that it has no arena
+    scope of its own, and that a loop pass which releases nothing calls
+    directly. Every pass adds the allocation the call kept, and nothing
+    releases it while the loop runs. Reported once, at the function's
+    declaration, naming the line of the first allocation it holds; the hints
+    are a `const` per value, a block that opens with
+    [`using a = arena()`](builtins.md#using-a--arena) around the work, or a region for
+    what must outlive the call (`tests/cases/perf_kept_memory`). The rule
+    counts passes, not their number: a short fixed loop such as
+    `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
+    when the function returns a value that is not a number, a boolean, an enum
+    or nothing, because then its caller owns the memory; when it manages the
+    arena itself, feeds tasks, or fills a parameter; when it is a
+    constructor reached by `new`; or when every loop that calls it releases
+    what it kept — a pass with a scope of its own, or a call inside a
+    `using a = arena()` block. A loop nested in such a block, or in a pass of
+    an outer loop that has a scope of its own, counts as released, because
+    the memory goes back when that block or pass ends: a block around a loop
+    that never ends silences the warning without bounding the growth. Only a loop's direct callees are
+    judged, each on its own allocations: memory kept deeper in the chain,
+    behind a direct callee that answers memory, is not this warning's, and
+    [`--explain-memory`](#explaining-kept-memory) lists it
+    (`tests/cases/perf_kept_memory_quiet`). No call is excused for the object
+    it receives: a function that does its work once, behind a guard on a
+    field (`if (s.ready) return; s.ready = true`), still warns when it keeps
+    an array of its own, because the rule does not prove which object reaches
+    it on each pass; open a block with `using a = arena()` around that work
+    (`tests/cases/perf_kept_memory_direct`). A value handed to a callee's
+    parameter is not counted as kept even when the callee stores it into
+    something older (`add(list, makeItem())`): this rule does not report
+    that retention.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -1500,7 +1540,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Five performance warnings are exactly that finding, and
+killed. Six performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
@@ -1511,12 +1551,16 @@ modules:
 | NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
 | NL9016, an allocation dropped on every pass | the value each pass replaced |
 | NL9018, a pass of an unbounded loop that keeps what it allocates | the temporary each pass built, for as long as the loop runs |
+| NL9019, a function that keeps memory on every call | what each call a loop makes keeps |
 
 - **The error keeps the warning.** Its text is the warning's, after the code of
   the rule that found it, so it names the same rewrite:
   `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
   (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
-  `reject_deny_retention_loop`, `reject_deny_retention_concat`, `reject_deny_retention_unbounded_pass`). The warning it
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`,
+  `reject_deny_retention_unbounded_pass`, `reject_deny_retention_kept`, and for
+  a `Result` assigned over another, `reject_deny_retention_result_drop` and
+  `reject_deny_retention_result_reassign`). The warning it
   restates is not printed as well, and `--no-warn-performance` does not
   silence the error.
 - **The program's own modules only.** A module of the root package is held to

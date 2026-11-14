@@ -28,13 +28,13 @@ import TypeTable from "./types" -> struct TypeTable
 const AMBIENT_NAMES: string = " write writeError panic readFileSync readFileSyncOrNull readFileBytesSync writeFileSync appendFileSync mkdirSync isDirectorySync readdirSync realpathSync getenv spawnSync spawnSyncTo spawn kill waitPid availableParallelism totalMemory setNice setIdlePriority setCpuAffinity monotonicNanos wallClockNanos statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64 toF64 f64ToBits f32ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode setTerminalRestore renameSync unlinkSync writeFileBytesSync writeBytes writeFileSyncMode createFileExclusiveSync mkdirSyncMode spawnPiped spawnPipedWithin spawnWithFds fileOpen fileReadAt fileSize fileClose "
 const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 integer Int32Array Float32Array Float64Array BigInt64Array "
 const HOST_HANDLE_ALIAS: string = "type HostHandle<K extends string> = (number & { readonly __nishHostKind: K }) | 0\n" [exported]
-const SIGNAL_REFUSAL: string = "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)" [exported]
+const SIGNAL_REFUSAL: string = "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement" [exported]
 const WAIT_REFUSAL: string = "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native"
 const CANCEL_REFUSAL: string = "--emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native"
 const REGION_REFUSAL: string = "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native" [exported]
 const INSTANCES_REFUSAL: string = "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"
 const UNTYPED_REFUSAL: string = "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type"
-const FOREIGN_REFUSAL: string = "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"
+const FOREIGN_REFUSAL: string = "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi"
 const MATH_ROUTED: string = " sinF64 cosF64 tanF64 expF64 logF64 powF64 atan2F64 hypotF64 quietBitsF64 quietBitsF32 numberExact parseFloatExact "
 struct Walk (class) size=248 align=8 exported
   field program: CheckedProgram index=0 offset=0

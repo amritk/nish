@@ -32,14 +32,21 @@ import { refuseUnawaitedCall } from "./async-check"
 import { ASYNC_RETURN_MESSAGE, namesRegion, promiseArgument, resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectStoredMask } from "./simd"
-import { rejectForeignPointer, unionArgumentMessage } from "./annotations"
+import { rejectForeignPointer } from "./annotations"
 import { rejectHandleArgument } from "./handles"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature, fitTemplateArguments } from "./declarations"
 import { internalErrorFor } from "./ice"
-import { checkExpression, enterMember, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
+import {
+  checkExpression,
+  enterMember,
+  recordCoercion,
+  recordMemberEntry,
+  recordRangeEntry,
+  WANT_RANGE,
+} from "./expressions"
 import { unwrapParens } from "./emit-util"
 import {
   annotationName,
@@ -1069,10 +1076,6 @@ const instantiateStructHere = (
       return null
     }
   }
-  if (holdsAnyUnion(ctx.table, unionCheckedArguments(template, args))) {
-    site.asker.error(at, unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, args)))
-    return null
-  }
   adoptArgumentLayouts(ctx, args, site)
   // WP18 G6: before the tuple is looked up, so every request is held to the
   // constraint where it was written, not only the first one to name the tuple.
@@ -1607,20 +1610,6 @@ export const checkGenericCall = (
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
   }
-  // Typed JSON's routes take a union too: their calls are written from the
-  // variants' fields (`src/emit-json.ts`), and no body of theirs is instantiated.
-  // So do `std/collections.ts`'s own helpers, which the global `Map` calls on
-  // its values' array and which only move elements, as an array of a union may.
-  if (
-    jsonRouteRole(template) === JSON_NONE &&
-    !(template.owner === null && template.home.program.isCollections()) &&
-    holdsAnyUnion(ctx.table, tuple)
-  ) {
-    return ctx.errorType(
-      expr,
-      unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, tuple))
-    )
-  }
   // `nish:secret`: what `secret` may wrap and what `wipe` can zero, said at the
   // argument rather than inside the instance the call would have made.
   const secretRefusal = secretArgumentShapeMessage(ctx, template, tuple)
@@ -1653,7 +1642,8 @@ export const checkGenericCall = (
       argTypes[i] !== T_ERROR &&
       !recordRangeEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !recordMemberEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
-      !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
+      !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset]) &&
+      !recordCoercion(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset])
     ) {
       bad = i
     }
@@ -1764,24 +1754,6 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
         ctx.error(inner.children[1], functionTypeHereMessage(inner.children[0].text, "a function type"))
         return true
       }
-    }
-  }
-  return false
-}
-
-/**
- * The type arguments a union may not be: all of them, but for the global
- * `Map`'s value, which the map stores as it is, the way an array stores an
- * element of a union.
- */
-const unionCheckedArguments = (template: StructTemplateInfo, args: i32[]): i32[] =>
-  isCollectionTemplate(template) && template.sourceName === "Map" && args.length === 2 ? [args[0]] : args
-
-/** Whether a type argument holds a union, which is not a type argument (docs/LANGUAGE.md, Discriminated unions). */
-const holdsAnyUnion = (table: TypeTable, types: i32[]): boolean => {
-  for (const type of types) {
-    if (table.holdsUnion(type)) {
-      return true
     }
   }
   return false

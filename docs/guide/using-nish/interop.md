@@ -190,11 +190,11 @@ import is left to Vite. Vite's extension order still holds: with a `stats.js`
 beside `stats.ts`, `"../stats"` is the JavaScript file.
 
 The generated module calls the loader's `loadSync`, which a compiler older
-than WP50 stage 1 does not write. With one, the build stops with an error
+than 0.36.0 does not write. With one, the build stops with an error
 naming it:
 
 ```console
-Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (WP50 stage 1), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.
+Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (nish 0.36.0), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.
 ```
 
 #### Putting a framebuffer on a canvas: `nish/page/frame`
@@ -523,6 +523,12 @@ that.
   is refused with NL2766.
 - Root storage is not exported and has no `layout` entry: its objects move,
   so the page reads them through exported functions (NL2767).
+- The page must not write into kept objects through `memory`. If it points
+  one outside the module's heap or gives an array a length past its end, the
+  next compaction refuses it: the call throws a `NishPanic` of kind `panic`
+  ("root storage: a pointer in the kept graph names memory outside the
+  arena", or "... a length in the kept graph runs past its block") and the
+  module is dead.
 - A program that loads `nish/threads` or `nish:region` cannot have root
   storage (NL2768).
 - A native program keeps root storage like any module storage, with nothing

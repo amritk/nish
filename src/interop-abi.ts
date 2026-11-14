@@ -1173,7 +1173,12 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[], laysOut
     f = unionField(table, info)
   }
   if (unit !== null && info !== null && f !== null) {
-    reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+    reportUnion(
+      compilation,
+      unit,
+      f.decl,
+      `\`${table.typeName(info.type)}.${f.name}\` is \`${table.typeName(f.type)}\``
+    )
     return false
   }
   return true
@@ -1378,7 +1383,7 @@ export const resultDefinitions = (table: TypeTable, fns: ExternalFunction[], fie
     return lines
   }
   lines.push("")
-  lines.push("/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a")
+  lines.push("/* `Result<T, E>`. A `Result` small enough to travel in a")
   lines.push(" * register — returned or passed — is the `_word` struct: read `ok`, then")
   lines.push(" * `as.value` or `as.error`. Every other `Result` is a pointer to the arena")
   lines.push(" * object, valid until nish_reset_arena() / nish_arena_release() like every")

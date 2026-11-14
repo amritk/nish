@@ -94,6 +94,7 @@ import {
 import { BoundsWalk, Offset, analyzeBounds, offsetIndex } from "./bounds"
 import { isAssignmentOperator, isOptionalChain, unwrapParens } from "./emit-util"
 import { checkResultLocalsHandled } from "./result"
+import { isResultConstructorCall } from "./emit-result"
 import { checkHygiene } from "./hygiene"
 import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
@@ -2578,7 +2579,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
     if (local !== null) {
       walk.declared.push(local)
       walk.declaredDepth.push(walk.loops.length)
-      walk.declaredAllocates.push(perfAllocatesVisibly(walk.ctx, node.children[2]))
+      walk.declaredAllocates.push(perfAllocatesVisibly(walk.ctx, node.children[2], walk.loops.length > 0))
     }
     checkLoopAllocation(walk, node)
   } else if (node.kind === NodeKind.Binary) {
@@ -2843,7 +2844,10 @@ const perfIsReadBuiltin = (name: string): boolean =>
 /**
  * `expr` allocates from the arena in a way the checker can see for itself: a
  * `new`, an object or array literal, a template with a hole, a string
- * concatenation, or a `readFileSync`.
+ * concatenation, a `readFileSync`, or, inside a loop, an `Ok(..)`/`Err(..)`
+ * whose `Result` is boxed. Outside a loop a boxed `Result` site that stays in
+ * the function gets its own stack slot, so it drops nothing in the arena; one
+ * that leaves goes where the local goes, which the rules below already ask.
  *
  * A call to a user function is deliberately not counted even though it may
  * allocate: whether it does is a whole-program fact the attribute fixpoint
@@ -2851,7 +2855,7 @@ const perfIsReadBuiltin = (name: string): boolean =>
  * un-actionable kind of warning. A string literal is not counted either — it
  * is constant data, not an allocation.
  */
-const perfAllocatesVisibly = (ctx: CheckContext, expr: Node): boolean => {
+const perfAllocatesVisibly = (ctx: CheckContext, expr: Node, inLoop: boolean): boolean => {
   const e = unwrapPerfParens(expr)
   if (e.kind === NodeKind.New || e.kind === NodeKind.Object || e.kind === NodeKind.Array) {
     return true
@@ -2869,6 +2873,9 @@ const perfAllocatesVisibly = (ctx: CheckContext, expr: Node): boolean => {
     return false
   }
   if (e.kind === NodeKind.Call) {
+    if (isResultConstructorCall(ctx.program, ctx.table, e)) {
+      return inLoop && !ctx.table.resultByValue(ctx.program.nodeTypes[e.id])
+    }
     const callee = unwrapPerfParens(e.children[0])
     return callee.kind === NodeKind.Ident && perfIsReadBuiltin(callee.text) && !ctx.sigs.has(callee.text)
   }
@@ -2945,14 +2952,16 @@ const perfMayYieldLocal = (ctx: CheckContext, expr: Node, local: Local): boolean
  * A method called on `local` may keep its receiver, as `cur.attach(reg)` does
  * when `attach` pushes `this`, and this walk cannot see into the method. A
  * string's and an array's methods are the language's own and keep neither:
- * they copy what they return.
+ * they copy what they return, and so are a `Result`'s (`isOk`, `isErr`,
+ * `unwrapOr`, `expect`, `orReturn`): each hands back a flag or the payload,
+ * never the `Result` itself.
  */
 const perfReceiverMayBeKept = (ctx: CheckContext, callee: Node, local: Local): boolean => {
   const c = unwrapPerfParens(callee)
   if (c.kind !== NodeKind.Member || !isLocalRef(ctx, c.children[0], local)) {
     return false
   }
-  return local.type !== T_STRING && !ctx.table.isArray(local.type)
+  return local.type !== T_STRING && !ctx.table.isArray(local.type) && !ctx.table.isResult(local.type)
 }
 
 /**
@@ -3016,7 +3025,7 @@ const perfDroppingTarget = (walk: PerfWalk, expr: Node): Local | null => {
   if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
     return null
   }
-  return perfAllocatesVisibly(ctx, expr.children[1]) ? target : null
+  return perfAllocatesVisibly(ctx, expr.children[1], walk.loops.length > 0) ? target : null
 }
 
 /**

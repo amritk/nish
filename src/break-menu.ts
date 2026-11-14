@@ -50,6 +50,7 @@ import {
   rasterMix,
   rasterPushTrail,
   rasterSpawnParticle,
+  rasterTextWidth,
 } from "../std/raster"
 import {
   ACTION_PRESS,
@@ -402,6 +403,9 @@ export class BreakMenu {
   prevBallY: f64
   ballVX: f64
   ballVY: f64
+  /** Where in the world a tap landed, which the next step acts on when `tapped` is set. */
+  tapX: f64
+  tapY: f64
   trail: RasterTrail
   sparks: RasterParticles
   /** The view `drawBreakMenu` reuses, so a frame allocates none. */
@@ -427,6 +431,8 @@ export class BreakMenu {
   rngState: i32
   /** Whether the outro has answered the level, so later steps do not answer it again. */
   outroAnswered: boolean
+  /** Whether a tap at `tapX`, `tapY` waits for the next step; `tapBreakMenu` sets it. */
+  tapped: boolean
   /**
    * Whether the host opens a terminal, which the frame rate and graphics rows
    * are settings of; without one Settings leaves them out. True until a host says otherwise.
@@ -480,6 +486,9 @@ export class BreakMenu {
     this.prevBallY = this.ballY
     this.ballVX = 0.0
     this.ballVY = 0.0
+    this.tapX = 0.0
+    this.tapY = 0.0
+    this.tapped = false
     this.trail = new RasterTrail(MENU_TRAIL_POINTS)
     this.sparks = new RasterParticles(SPARK_CAPACITY)
     this.view = new View()
@@ -590,11 +599,14 @@ export const stepBreakMenu = (menu: BreakMenu, input: StepInput): i32 => {
   menuStepBall(menu)
   stepParticles(menu.sparks, 160.0, 1.5)
   menu.prevHighlightY = menu.highlightY
+  const tapped: boolean = menu.tapped
+  menu.tapped = false
   if (menu.screen === SCREEN_OUTRO) {
     return stepOutro(menu, input)
   }
-  let answer: i32 = MENU_STAY
   const entered: i32 = menu.screen
+  // A tap acts before the keys, and like a key it is the step's one screen change.
+  let answer: i32 = tapped ? actOnTap(menu) : MENU_STAY
   for (const e of input.events) {
     // One screen change a step: the rest of a burst was aimed at the screen just left.
     if (answer !== MENU_STAY || menu.screen !== entered) {
@@ -620,6 +632,97 @@ export const stepBreakMenu = (menu: BreakMenu, input: StepInput): i32 => {
   }
   slideHighlight(menu)
   return answer
+}
+
+/**
+ * Tap the menu at world `x`, `y`, as a finger on a phone does: the next step
+ * acts on the line under it. On the title a tap picks the item it lands on,
+ * and on Start level's arrows steps the level; in Settings it steps the row's
+ * value, back on its `<` and on everywhere else, and Back leaves; How to play
+ * closes on any tap. A tap on no line does nothing.
+ *
+ * @param menu The menu, as `drawBreakMenu` last drew it.
+ * @param x The tap's world x.
+ * @param y The tap's world y.
+ */
+export const tapBreakMenu = (menu: BreakMenu, x: f64, y: f64): void => {
+  menu.tapX = x
+  menu.tapY = y
+  menu.tapped = true
+}
+
+/** The line `y` lands on in a list of `count` lines from `top`, `gap` apart, each 7 tall; -1 for none. */
+const lineAt = (y: f64, top: f64, gap: f64, count: i32): i32 => {
+  const line: f64 = Math.round((y - top - 3.5) / gap)
+  return line >= 0.0 && line < toF64(count) ? toI32(line) : -1
+}
+
+/** Act on the waiting tap at `tapX`, `tapY`, by the actions a key would take, so a tap does nothing a key cannot. */
+const actOnTap = (menu: BreakMenu): i32 => {
+  const x: f64 = menu.tapX
+  const y: f64 = menu.tapY
+  if (menu.screen === SCREEN_HOWTO) {
+    return actOnHowTo(menu, ACT_BACK)
+  }
+  // Compact, one line shows: a tap above it or below it moves, and on it acts.
+  const compact: boolean = lineScale(menu.view) < 1
+  if (menu.screen === SCREEN_TITLE) {
+    if (compact) {
+      if (y < 110.0) {
+        return actOnTitle(menu, ACT_UP)
+      }
+      return actOnTitle(menu, y >= 122.0 ? ACT_DOWN : ACT_PICK)
+    }
+    const item: i32 = lineAt(y, ITEM_TOP, ITEM_GAP, ITEM_COUNT)
+    if (item < 0 || Math.abs(x - WORLD_W / 2.0) > 60.0) {
+      return MENU_STAY
+    }
+    menu.selected = item
+    const turn: i32 = item === ITEM_LEVEL ? levelArrowAt(menu, x) : 0
+    return turn === 0 ? pickTitle(menu) : actOnTitle(menu, turn < 0 ? ACT_LEFT : ACT_RIGHT)
+  }
+  if (compact) {
+    if (y < 108.0) {
+      return actOnSettings(menu, ACT_DOWN)
+    }
+    if (menu.row === ROW_BACK) {
+      return actOnSettings(menu, ACT_PICK)
+    }
+    return actOnSettings(menu, x < WORLD_W / 2.0 ? ACT_LEFT : ACT_RIGHT)
+  }
+  const line: i32 = lineAt(y, ROW_TOP, ROW_GAP, rowLine(menu, ROW_COUNT))
+  if (line < 0 || Math.abs(x - WORLD_W / 2.0) > 120.0) {
+    return MENU_STAY
+  }
+  let row: i32 = ROW_BACK
+  for (let r: i32 = 0; r < ROW_COUNT; r++) {
+    if (rowShown(menu, r) && rowLine(menu, r) === line) {
+      row = r
+    }
+  }
+  menu.row = row
+  if (row === ROW_BACK) {
+    return leaveSettings(menu)
+  }
+  // From just before `<` (x 196) to the middle of the value (x 234) steps back.
+  return actOnSettings(menu, x >= 190.0 && x < 234.0 ? ACT_LEFT : ACT_RIGHT)
+}
+
+/**
+ * Which of Start level's arrows world `x` is on: -1 from `<` to the middle of
+ * the number, 1 from there on, 0 on the words. The label is 18 cells of the
+ * menu's font, centred, and `<` is its 14th.
+ */
+const levelArrowAt = (menu: BreakMenu, x: f64): i32 => {
+  const view: View = menu.view
+  const cells: f64 = 18.0
+  const width: f64 = toF64(rasterTextWidth(menuLevelLabel(menu.level), lineScale(view))) / view.scale
+  const cell: f64 = width / cells
+  const left: f64 = WORLD_W / 2.0 - width / 2.0
+  if (x < left + 12.0 * cell) {
+    return 0
+  }
+  return x < left + 15.5 * cell ? -1 : 1
 }
 
 /** What key event `e` asks of the menu, as an `ACT_*`. */
