@@ -16,6 +16,7 @@ import ACC_FUNCTION from "./program" -> const ACC_FUNCTION
 import ACC_SPLIT from "./program" -> const ACC_SPLIT
 import ACC_STEP from "./program" -> const ACC_STEP
 import FunctionSig from "./program" -> struct FunctionSig
+import ROLE_METHOD from "./program" -> const ROLE_METHOD
 struct RecursionLoop (class) size=56 align=8 exported
   field sig: FunctionSig index=0 offset=0
   field entry: string index=1 offset=8
@@ -243,19 +244,21 @@ function emitStep(emitter: Emitter, acc: RecursionLoop, step: Node): void -> @em
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.emitArgument Emitter.emitExpression FusionTable.partnerOf IRFunction.currentBlock IRFunction.emit nish_array_grow nish_panic_index nish_str_concat
-  pointer emitter: size=392 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitArgument#0 Emitter.emitExpression#0
+  pointer emitter: size=392 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitArgument#0 Emitter.emitExpression#0
   pointer acc: size=56 writesThrough=false captured=false
   pointer step: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -17:9 fn: IRFunction (const)
-  local -16:9 partner: i32 (const)
-  callee -16:19 FusionTable.partnerOf -> @FusionTable.partnerOf
-  local -15:9 callFirst: boolean (const)
-  local -14:9 call: Node (const)
-  local -13:9 other: Node (const)
-  local -12:7 x: string (let)
-  callee -10:9 Emitter.emitExpression -> @Emitter.emitExpression
-  local -8:9 args: string[] (const)
+  local -24:9 fn: IRFunction (const)
+  local -23:9 partner: i32 (const)
+  callee -23:19 FusionTable.partnerOf -> @FusionTable.partnerOf
+  local -22:9 callFirst: boolean (const)
+  local -21:9 call: Node (const)
+  local -20:9 other: Node (const)
+  local -19:7 x: string (let)
+  callee -17:9 Emitter.emitExpression -> @Emitter.emitExpression
+  local -13:9 args: string[] (const)
+  local -12:7 first: i32 (let)
+  callee -10:15 Emitter.emitExpression -> @Emitter.emitExpression
   local -7:9 written: Node[] (const)
   local -6:12 i: i32 (let)
   callee -5:15 Emitter.emitArgument -> @Emitter.emitArgument
