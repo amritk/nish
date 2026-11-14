@@ -94,13 +94,6 @@ Two notes record a stage of WP39 rather than a package of their own:
 | [h3-multicore.md](h3-multicore.md) | WP39 G6, built: QUIC on more than one core, each datagram steered by a classic-BPF reuseport program to the worker whose index the connection ID carries, with the measurements against eBPF and forwarding. |
 | [http-one-handler.md](http-one-handler.md) | WP39 G7: one handler across HTTP/1.1, h2c, HTTP/2 and HTTP/3; the h2c carrier is built, the `nish/net/http-server` façade is next. |
 
-Two notes record a stage of WP39 rather than a package of their own:
-
-| Document | One line |
-| --- | --- |
-| [h3-multicore.md](h3-multicore.md) | WP39 G6, built: QUIC on more than one core, each datagram steered by a classic-BPF reuseport program to the worker whose index the connection ID carries, with the measurements against eBPF and forwarding. |
-| [http-one-handler.md](http-one-handler.md) | WP39 G7: one handler across HTTP/1.1, h2c, HTTP/2 and HTTP/3; the h2c carrier is built, the `nish/net/http-server` façade is next. |
-
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
 `-2147483648`) have no design note of their own; LANGUAGE.md and
