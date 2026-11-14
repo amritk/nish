@@ -15,6 +15,8 @@ cases/acc_overflow added after R6: no rewriter to freeze it with
 cases/acc_shapes added after R6: no rewriter to freeze it with
 cases/acc_soundness added after R6: no rewriter to freeze it with
 cases/acc_tree added after R6: no rewriter to freeze it with
+cases/acc_width_i64 added after R6: no rewriter to freeze it with
+cases/acc_width_unsigned added after R6: no rewriter to freeze it with
 cases/arena_placement added after R6: no rewriter to freeze it with
 cases/arena_placement_loops added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_for added after R6: no rewriter to freeze it with

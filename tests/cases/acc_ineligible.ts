@@ -19,12 +19,12 @@ const product = (n: i32): i32 => {
   return n * product(n - 1)
 }
 
-// An `i64` result.
-const wide = (n: i32): i64 => {
+// A `u64` result: its `+` wraps, so there is no checked add to defer.
+const wide = (n: i32): u64 => {
   if (n <= 0) {
-    return toI64(0)
+    return toU64(0)
   }
-  return toI64(n) + wide(n - 1)
+  return toU64(n) + wide(n - 1)
 }
 
 // No base: every return is a step.
