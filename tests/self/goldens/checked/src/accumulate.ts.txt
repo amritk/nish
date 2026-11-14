@@ -15,6 +15,7 @@ import FunctionSig from "./program" -> struct FunctionSig
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
 import ROLE_METHOD from "./program" -> const ROLE_METHOD
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
+import isScalarArgument from "./escape" -> function @isScalarArgument
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import isInteger from "./types" -> function @isInteger
 import isUnsigned from "./types" -> function @isUnsigned
@@ -25,9 +26,9 @@ function recordAccumulation(ctx: CheckContext, sig: FunctionSig, body: Node): vo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via tailKind
   escaping: body
-  calls: FusionTable.record collectTailValues containsArrow nish_array_grow signatureQualifies stepCall tailKind
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=signatureQualifies#0 tailKind#0 stepCall#0
-  pointer sig: size=200 writesThrough=false captured=false passedTo=signatureQualifies#1 tailKind#1 stepCall#1
+  calls: FusionTable.record collectTailValues containsArrow nish_array_grow passesOnlyHeld signatureQualifies stepCall tailKind
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=signatureQualifies#0 tailKind#0 passesOnlyHeld#0 stepCall#0 stepCall#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=signatureQualifies#1 tailKind#1 passesOnlyHeld#1 stepCall#1 stepCall#1
   pointer body: size=40 writesThrough=true captured=true passedTo=containsArrow#0 collectTailValues#0
   stackSites=3 stackLocals=3
   callee +0:8 signatureQualifies -> @signatureQualifies
@@ -39,13 +40,17 @@ function recordAccumulation(ctx: CheckContext, sig: FunctionSig, body: Node): vo
   local +13:7 seen: i32 (let)
   local +14:14 value: Node (const)
   callee +15:19 tailKind -> @tailKind
-  local +20:9 table: FusionTable (const)
-  callee +21:3 FusionTable.record -> @FusionTable.record
-  local +22:14 step: Node (const)
-  callee +23:5 FusionTable.record -> @FusionTable.record
-  callee +23:37 stepCall -> @stepCall
-  local +25:14 split: Node (const)
-  callee +26:5 FusionTable.record -> @FusionTable.record
+  local +20:7 holds: boolean (let)
+  local +21:14 step: Node (const)
+  callee +22:22 passesOnlyHeld -> @passesOnlyHeld
+  callee +22:47 stepCall -> @stepCall
+  local +24:9 table: FusionTable (const)
+  callee +25:3 FusionTable.record -> @FusionTable.record
+  local +26:14 step: Node (const)
+  callee +27:5 FusionTable.record -> @FusionTable.record
+  callee +27:37 stepCall -> @stepCall
+  local +29:14 split: Node (const)
+  callee +30:5 FusionTable.record -> @FusionTable.record
 function signatureQualifies(ctx: CheckContext, sig: FunctionSig): boolean -> @signatureQualifies
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.defaultOf FunctionSig.foreign FunctionSig.isAsync TypeTable.isRanged TypeTable.isResult hasCheckedSum isGenericFunction ownerQualifies
@@ -163,3 +168,25 @@ function isStable(ctx: CheckContext, node: Node): boolean -> @isStable
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 local: Local | null (const)
+function passesOnlyHeld(ctx: CheckContext, sig: FunctionSig, call: Node): boolean -> @passesOnlyHeld
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isHeld nish_panic_index
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=isHeld#0 isHeld#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=isHeld#1 isHeld#1
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 first: i32 (let)
+  callee +2:10 isHeld -> @isHeld
+  local +7:9 written: Node[] (const)
+  local +8:12 i: i32 (let)
+  callee +9:10 isHeld -> @isHeld
+function isHeld(ctx: CheckContext, sig: FunctionSig, arg: Node, index: i32): boolean -> @isHeld
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: index
+  calls: isScalarArgument nish_panic_index
+  pointer ctx: size=344 writesThrough=false captured=false
+  pointer sig: size=200 writesThrough=false captured=false
+  pointer arg: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:40 isScalarArgument -> @isScalarArgument
+  local +12:9 local: Local | null (const)
