@@ -309,6 +309,8 @@ const main = () => {
       check = true
     } else if (args[i] === "--base") {
       base = args[++i]
+    } else if (args[i] === "--compiler") {
+      i++ // only reaches here under --check, which has no compiler to resolve
     } else if (args[i] === "--only") {
       only = String(args[++i]).split(",")
     } else {
@@ -316,14 +318,16 @@ const main = () => {
     }
   }
   const docs = generate()
-  if (check) {
-    let bad = 0
-    for (const [name, doc] of Object.entries(docs)) {
-      const got = sha256(doc)
-      const ok = got === PINNED[name]
+  let bad = 0
+  for (const [name, doc] of Object.entries(docs)) {
+    const got = sha256(doc)
+    const ok = got === PINNED[name]
+    if (check || !ok) {
       console.log(`${ok ? "ok  " : "FAIL"} ${name} ${doc.length} bytes sha256 ${got}`)
-      bad += ok ? 0 : 1
     }
+    bad += ok ? 0 : 1
+  }
+  if (check || bad > 0) {
     process.exit(bad === 0 ? 0 : 1)
   }
   for (const name of only) {
