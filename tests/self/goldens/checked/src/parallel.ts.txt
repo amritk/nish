@@ -914,7 +914,7 @@ function callLetCaptureMessage(name: string): string -> @callLetCaptureMessage [
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function callCaptureWriteMessage(name: string): string -> @callCaptureWriteMessage [exported]
+function callCaptureWriteMessage(name: string, forEach: boolean): string -> @callCaptureWriteMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0

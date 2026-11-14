@@ -345,6 +345,26 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
   }
 }
 
+/**
+ * The concise body of an arrow whose answer is `void`, `(x) => log(x)` handed
+ * to `forEach`: an expression statement, as TypeScript reads it, so a call
+ * that answers nothing is legal there and whatever the body answers is
+ * dropped. An arrow that writes `: void` itself is held to `tsc`'s rule too:
+ * its body may answer nothing else.
+ */
+export const checkVoidConciseBody = (ctx: CheckContext, body: Node, scope: Scope, written: boolean): void => {
+  ctx.statementExpression = body
+  const got = checkExpression(ctx, body, scope, -1)
+  ctx.statementExpression = null
+  rejectDiscardedResult(ctx, body, got, scope)
+  if (written && got !== T_VOID && got !== T_ERROR) {
+    ctx.error(
+      body,
+      `Return type mismatch: function returns void but expression is ${ctx.table.typeName(got)}`
+    )
+  }
+}
+
 /** Each `let`/`const` of a list, declared in `scope`. Shared with a `for` initializer. */
 const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0

@@ -475,6 +475,66 @@ PASS  and the new window reads from its start
 PASS  reset to a window of the same array
 PASS  ...which is a whole document
 PASS  reset to a window outside the array
+PASS  inside: a comma after a closed object is an array's
+PASS  inside: a comma after a closed array is an object's
+PASS  inside: an array's closer after a closed object
+PASS  inside: an object's closer after a closed array
+PASS  inside: three levels close back to the top
+PASS  inside: a document after the top level closes
+PASS  dispatch: a string where a colon is wanted
+PASS  dispatch: a string where a comma is wanted
+PASS  dispatch: a string after a top-level value
+PASS  dispatch: a colon in an array
+PASS  dispatch: a colon where a key is wanted
+PASS  dispatch: a colon where a value is wanted
+PASS  dispatch: a colon at the top level
+PASS  dispatch: a comma where a colon is wanted
+PASS  dispatch: a comma where a key is wanted
+PASS  dispatch: a comma after a top-level value
+PASS  dispatch: a brace closing where a colon is wanted
+PASS  dispatch: a brace closing where a value is wanted
+PASS  dispatch: a bracket closing where a colon is wanted
+PASS  dispatch: a bracket closing where a key is wanted
+PASS  dispatch: a bracket closing an object's value
+PASS  dispatch: a closer at the top level
+PASS  dispatch: a value where a comma is wanted
+PASS  dispatch: a value after a key
+PASS  dispatch: blanks before each token
+PASS  blanks: one before a token
+PASS  blanks: two before a token
+PASS  blanks: a long run before a token
+PASS  blanks: one, then the window's end
+PASS  blanks: two, then the window's end
+PASS  blanks: a window ending inside a run
+PASS  blanks: a window ending before a blank
+PASS  failed: the error
+PASS  failed: rewindObject after an error leaves it answered
+PASS  failed: ...at the same place
+PASS  failed: ...and skipValue answers it
+PASS  rewindObject: the next token is the first key
+PASS  rewindObject: ...and it is the key read before
+PASS  stringFrom: a string one past the limit, cut by the window
+PASS  stringFrom: a string at the limit, cut by the window
+PASS  stringFrom: in an array, one past
+PASS  stringFrom: in an array, at the limit
+PASS  stringFrom: a window from 2, cut at the limit
+PASS  stringFrom: ...truncated at the window's end
+PASS  stringFrom: reset to a window one past the limit
+PASS  stringFrom: ...refused at the limit
+PASS  stringFrom: reset to a window outside the array
+PASS  stringFrom: a limit of 2^31 - 1 does not overflow
+PASS  stringInto: plain runs either side of each escape
+PASS  stringInto: escapes back to back with plain bytes between
+PASS  stringInto: a run stopped by a byte other than a backslash
+PASS  stringInto: only escapes, no run between them
+PASS  stringInto: ...their bytes from the offset
+PASS  stringInto: the last run ends at the closing quote
+PASS  stringInto: the last run ends at the window's end
+PASS  stringInto: a surrogate pair between two runs
+PASS  stringInto: a run grown past the decoded length
+PASS  stringInto: ...is cut to the room in out
+PASS  dispatch: a trailing comma in an array
+PASS  dispatch: a trailing comma in an object
 PASS  skipValue: the key
 PASS  skipValue after a key steps over its object value, to its closer
 PASS  ...back at the key's depth
@@ -514,4 +574,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 516 passed, 0 failed, 0 skipped
+std/json-tokenizer: 576 passed, 0 failed, 0 skipped
