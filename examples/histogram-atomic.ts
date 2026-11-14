@@ -63,7 +63,7 @@ const binShard = (s: Shard): i32 => {
       local[bin] += 1
     }
   }
-  for (let b = 0; b < local.length; b++) {
+  for (let b: i32 = 0; b < toI32(local.length); b++) {
     s.bins.add(b, local[b])
   }
   return s.n

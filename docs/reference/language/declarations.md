@@ -4031,7 +4031,9 @@ parallel body may make. Where an `AtomicI32[]` is one object per counter, each
 its own allocation, so sixteen counters land on several cache lines that the
 cores writing them pass back and forth, an `AtomicI32Array(16)` is sixteen
 adjacent `i32`s in 64 contiguous bytes, which is the layout Rust's
-`[AtomicI32; 16]` and Go's `[16]atomic.Int32` have.
+`[AtomicI32; 16]` and Go's `[16]atomic.Int32` have. The buffer starts on a
+64-byte boundary with a cache line of nothing else before and after it, so no
+other object shares a line the counters' writers fight over.
 
 ```typescript
 import { AtomicI32Array, AtomicI64Array, parallelMapInto, scope } from "nish/threads";

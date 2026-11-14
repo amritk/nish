@@ -63,6 +63,8 @@ export const RULE_COUNT: i32 = 930
 const diagnosticRules = (): string[] => [
   "`using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this version: they are the values whose disposal the language defines — a scope joins its tasks, a guard releases its lock, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs",
   "NL2387",
+  "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
+  "NL2515",
   "`new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock",
   "NL2463",
   "This stores `null` through a guard into a slot that holds an object, and a guard stores only a number, a `boolean`, an enum or a `string`, and a `null` only into a `string | null` slot, where the store frees the copy the slot held; keep a `boolean` field beside the slot, `g.value.hasNext = false`, and test it before reading the object",
@@ -81,8 +83,6 @@ const diagnosticRules = (): string[] => [
   "NL2766",
   "` go further than indexing: storage keeps its length, so a callee it is lent to only indexes the parameter, reads its `length`, loops over it, calls a method that reads it, or lends it on the same way — never passes it elsewhere, binds, returns or stores it, where it could be spelled `T[]` and resized",
   "NL2684",
-  "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
-  "NL2515",
   "` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module",
   "NL2769",
   "`, a `let` of the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so it may read only a `const` or a parameter of that function, whose value is the one the arrow is handed; bind the value to a `const` before the call",
