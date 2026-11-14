@@ -8,6 +8,7 @@ import Walk from "./emit-ts-edits" -> struct Walk
 import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import Node from "./nodes" -> struct Node
+import PATTERN_NAMES_AT from "./nodes" -> const PATTERN_NAMES_AT
 import CheckedProgram from "./program" -> struct CheckedProgram
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
 import K_ARRAY from "./types" -> const K_ARRAY
@@ -378,7 +379,7 @@ function patternChecks(walk: Walk, decl: Node, t: string): string -> @patternChe
 function checkedPattern(walk: Walk, node: Node, operands: Operands): string | null -> @checkedPattern
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: Operands.at Walk.temporary nish_panic_index nish_str_concat patternChecks splice
+  calls: Operands.at Walk.temporary nish_panic_index nish_str_concat nish_str_eq patternChecks splice
   pointer walk: size=248 writesThrough=true captured=false passedTo=Walk.temporary#0 patternChecks#0 splice#0
   pointer node: size=40 writesThrough=false captured=false passedTo=patternChecks#1 splice#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 splice#2
@@ -392,7 +393,7 @@ function checkedPattern(walk: Walk, node: Node, operands: Operands): string | nu
 function checkedPatternHead(walk: Walk, node: Node, operands: Operands): string | null -> @checkedPatternHead
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: Operands.at Walk.temporary nish_panic_index nish_str_concat patternChecks splice
+  calls: Operands.at Walk.temporary nish_panic_index nish_str_concat nish_str_eq patternChecks splice
   pointer walk: size=248 writesThrough=true captured=false passedTo=Walk.temporary#0 patternChecks#0 Walk.temporary#0 splice#0
   pointer node: size=40 writesThrough=false captured=false passedTo=splice#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 splice#2

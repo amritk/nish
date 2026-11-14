@@ -17,6 +17,7 @@ import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
 import isNumeric from "./types" -> function @isNumeric
 import Node from "./nodes" -> struct Node
+import isPlainSlot from "./nodes" -> function @isPlainSlot
 const AWAIT_ALL_MIN: i32 = 2
 const AWAIT_ALL_MAX: i32 = 8
 const AWAIT_ALL_FORM: string = "`awaitAll` is awaited into one name per call: `const [a, b] = await awaitAll(f(x), g(y))`, from two to eight calls"
@@ -290,11 +291,12 @@ function isSpawnable(ctx: CheckContext, type: i32): boolean -> @isSpawnable
   callee +4:3 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
 function isAwaitAllShape(decl: Node): boolean -> @isAwaitAllShape [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: directCall nish_panic_index nish_str_eq unwrapParens
+  calls: directCall isPlainSlot nish_panic_index nish_str_eq unwrapParens
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 pattern: Node (const)
-  local +4:14 name: Node (const)
+  local +4:14 slot: Node (const)
+  callee +5:10 isPlainSlot -> @isPlainSlot
   local +9:9 init: Node (const)
   callee +9:16 unwrapParens -> @unwrapParens
   callee +10:67 directCall -> @directCall

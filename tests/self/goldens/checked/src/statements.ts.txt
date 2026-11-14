@@ -77,7 +77,10 @@ import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import Node from "./nodes" -> struct Node
 import awaitsInitializer from "./nodes" -> function @awaitsInitializer
+import isPlainSlot from "./nodes" -> function @isPlainSlot
 import patternReceiverName from "./nodes" -> function @patternReceiverName
+import patternSlotName from "./nodes" -> function @patternSlotName
+import PATTERN_NAMES_AT from "./nodes" -> const PATTERN_NAMES_AT
 import JSON_OPTIONS from "./json-typed" -> const JSON_OPTIONS
 import jsonOptionsShapeMessage from "./json-typed" -> function @jsonOptionsShapeMessage
 import caseValue from "./constants" -> function @caseValue
@@ -325,7 +328,7 @@ function checkPatternNames(ctx: CheckContext, decl: Node, scope: Scope, mutable:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via patternReceiverFits
   escaping: mutable type
-  calls: CheckContext.error StringMap.get TypeTable.typeName checkDeclarator declareLocal declarePatternNames declareRefusedSlots nish_panic_index nish_str_concat patternReceiverFits structOf
+  calls: CheckContext.error StructInfo.field TypeTable.typeName checkDeclarator declareLocal declarePatternNames declareRefusedSlots nish_panic_index nish_str_concat patternReceiverFits structOf
   pointer ctx: size=344 writesThrough=true captured=true passedTo=patternReceiverFits#0 declarePatternNames#0 structOf#0 CheckContext.error#0 declareLocal#0 checkDeclarator#0 declareRefusedSlots#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=declarePatternNames#1 declareRefusedSlots#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=declarePatternNames#2 declareLocal#1 checkDeclarator#2 declareRefusedSlots#2
@@ -338,7 +341,7 @@ function checkPatternNames(ctx: CheckContext, decl: Node, scope: Scope, mutable:
   local +5:12 i: i32 (let)
   local +6:11 named: Node (const)
   local +7:11 read: Node (const)
-  callee +8:59 StringMap.get -> @StringMap.get
+  callee +8:59 StructInfo.field -> @StructInfo.field
   callee +9:7 CheckContext.error -> @CheckContext.error
   callee +11:55 TypeTable.typeName -> @TypeTable.typeName
   callee +13:7 declareLocal -> @declareLocal
@@ -353,20 +356,21 @@ function patternReceiverFits(ctx: CheckContext, pattern: Node, type: i32, at: No
   pointer pattern: size=40 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local +0:9 shown: string (const)
-  callee +0:17 TypeTable.typeName -> @TypeTable.typeName
-  local +1:9 info: StructInfo | null (const)
-  callee +1:16 structOf -> @structOf
-  callee +2:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +2:37 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee +3:5 CheckContext.error -> @CheckContext.error
-  callee +8:5 CheckContext.error -> @CheckContext.error
-  callee +9:31 isMapOwner -> @isMapOwner
-  callee +10:5 CheckContext.error -> @CheckContext.error
-  callee +11:57 TypeTable.isStruct -> @TypeTable.isStruct
-  callee +12:5 CheckContext.error -> @CheckContext.error
-  callee +13:39 TypeTable.isArray -> @TypeTable.isArray
-  callee +14:5 CheckContext.error -> @CheckContext.error
+  local +0:9 info: StructInfo | null (const)
+  callee +0:16 structOf -> @structOf
+  callee +1:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +1:37 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee +2:5 CheckContext.error -> @CheckContext.error
+  callee +4:29 TypeTable.typeName -> @TypeTable.typeName
+  callee +7:5 CheckContext.error -> @CheckContext.error
+  callee +8:31 isMapOwner -> @isMapOwner
+  callee +9:5 CheckContext.error -> @CheckContext.error
+  callee +10:57 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +11:5 CheckContext.error -> @CheckContext.error
+  callee +11:78 TypeTable.typeName -> @TypeTable.typeName
+  callee +12:39 TypeTable.isArray -> @TypeTable.isArray
+  callee +13:5 CheckContext.error -> @CheckContext.error
+  callee +13:59 TypeTable.typeName -> @TypeTable.typeName
 function declarePatternNames(ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, type: i32): void -> @declarePatternNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via declareLocal
@@ -384,13 +388,15 @@ function declareRefusedSlots(ctx: CheckContext, decl: Node, scope: Scope, mutabl
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via declareLocal
   escaping: mutable
-  calls: declareLocal nish_panic_index
+  calls: declareLocal isPlainSlot nish_panic_index patternSlotName
   pointer ctx: size=344 writesThrough=true captured=false passedTo=declareLocal#0
   pointer decl: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=false captured=false passedTo=declareLocal#1
   stackSites=0 stackLocals=0
   local +0:14 slot: Node (const)
   local +1:11 name: Node (const)
+  callee +1:18 patternSlotName -> @patternSlotName
+  callee +2:42 isPlainSlot -> @isPlainSlot
   callee +3:7 declareLocal -> @declareLocal
 function declareAwaitAll(ctx: CheckContext, decl: Node, scope: Scope): void -> @declareAwaitAll
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -829,12 +835,13 @@ function refuseDeclarator(ctx: CheckContext, owner: Node, decl: Node): void -> @
 function refusePattern(ctx: CheckContext, pattern: Node): void -> @refusePattern
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  calls: CheckContext.error nish_panic_index
+  calls: CheckContext.error patternSlotName
   pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
   pointer pattern: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 slot: Node (const)
   local +1:11 name: Node (const)
+  callee +1:18 patternSlotName -> @patternSlotName
   local +2:11 flags: i32 (const)
   callee +4:7 CheckContext.error -> @CheckContext.error
   callee +9:7 CheckContext.error -> @CheckContext.error

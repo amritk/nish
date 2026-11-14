@@ -69,6 +69,7 @@ import compareStrings from "./strings" -> function @compareStrings
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import Node from "./nodes" -> struct Node
+import PATTERN_NAMES_AT from "./nodes" -> const PATTERN_NAMES_AT
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
 import arrowCallee from "./parallel" -> function @arrowCallee

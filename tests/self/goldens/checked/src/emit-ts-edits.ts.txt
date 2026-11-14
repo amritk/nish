@@ -18,6 +18,7 @@ import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_TYPE_ONLY from "./nodes" -> const FLAG_TYPE_ONLY
 import Node from "./nodes" -> struct Node
+import PATTERN_NAMES_AT from "./nodes" -> const PATTERN_NAMES_AT
 import CheckedProgram from "./program" -> struct CheckedProgram
 import Instantiation from "./program" -> struct Instantiation
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE

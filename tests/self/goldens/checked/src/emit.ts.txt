@@ -165,6 +165,7 @@ import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import FLAG_USING from "./nodes" -> const FLAG_USING
 import Node from "./nodes" -> struct Node
+import PATTERN_NAMES_AT from "./nodes" -> const PATTERN_NAMES_AT
 import nodeName from "./nodes" -> function @nodeName
 import Options from "./options" -> struct Options
 import TbaaCache from "./tbaa" -> struct TbaaCache
@@ -1114,7 +1115,7 @@ function Emitter.emitVariableDeclaration(this: Emitter, decl: Node): void -> @Em
 function Emitter.emitPatternNames(this: Emitter, decl: Node): void -> @Emitter.emitPatternNames [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitVariableDeclaration
-  calls: Emitter.emitVariableDeclaration
+  calls: Emitter.emitVariableDeclaration nish_panic_index
   pointer this: size=384 writesThrough=true captured=false passedTo=Emitter.emitVariableDeclaration#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
