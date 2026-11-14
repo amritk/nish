@@ -2037,7 +2037,7 @@ function Compilation.isUnusedArrayModule(this: Compilation, unit: ModuleUnit): b
   callee +3:17 isArrayModule -> @isArrayModule
   local +6:16 other: ModuleUnit (const)
   local +7:18 imp: ImportBinding (const)
-  callee +10:12 isUnusedArrayImport -> @isUnusedArrayImport
+  callee +8:45 isUnusedArrayImport -> @isUnusedArrayImport
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:9
