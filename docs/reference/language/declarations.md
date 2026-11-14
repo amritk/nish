@@ -4730,9 +4730,12 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `` syntax error: expected a type name, found `{` `` (NL0001), and so is the
   same type after `type Point =`, in a field, a return type or a type
   argument (`tests/cases/reject_type_object_literal_param`,
-  `reject_type_object_literal_alias`). Types are compared by name, not by
-  shape, and each record is one named struct, so its fields are declared once,
-  in an `interface` or a `class`, and every annotation names it.
+  `reject_type_object_literal_alias`, `_field`, `_return`, `_type_arg`).
+  A record type is identified by its declaration, not by its fields: two
+  interfaces that declare the same fields are two types, and a value of one
+  is refused where the other is wanted, the only widening being a class to an
+  interface it `implements` ([Types](types.md)). So a record's fields are declared
+  once, in an `interface` or a `class`, and every annotation names it.
 - An interface is a struct type with the same layout rules as a class, with
   fields only: a method, or an accessor signature `get x(): i32`, is
   `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``

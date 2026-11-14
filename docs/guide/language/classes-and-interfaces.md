@@ -118,9 +118,10 @@ export const main = (): i32 => {
 `type Point = { x: i32; y: i32 }` is refused with the same message,
 `` expected a type name, found `{` ``, because a `type` alias only gives a
 second name to a type that already exists. Declare the shape once as an
-interface, as `Point` above, and name it wherever the type is written. Nish
-compares records by name rather than by shape, so two interfaces with the
-same fields are still two different types.
+interface, as the first example in this section does with `Point`, and name
+it wherever the type is written. Nish tells records apart by their
+declaration rather than their fields, so two interfaces with the same fields
+are still two different types.
 
 A literal can also stand for a class without methods. A class
 with methods is different: it is made only by `new`. Compiled, a literal
