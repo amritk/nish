@@ -32618,10 +32618,16 @@ every `return` that recurses is `X + self(args)`, or `self(args) + Y` with
 `Y` a number literal or a parameter (so moving `Y`
 ahead of the call cannot move an effect), at least one `return` does not, and
 the body is only blocks, `if`, declarations, expression statements and
-`return`s. It may not open an arena scope (a string template does), hold a
-stack-allocated local or site, or bracket a loop's passes with arena scopes
-(`scopesAnyPass`): each of those ties memory's lifetime to one call, which
-the loop's steps would share. `self(args) - X`,
+`return`s. It may not hold a stack-allocated local or site, or bracket a
+loop's passes with arena scopes (`scopesAnyPass`): each of those ties
+memory's lifetime to one call, which the loop's steps would share. It may
+open an arena scope (a string template does) when every step passes only
+numbers, booleans, enums, or a parameter or `this` unchanged, and nothing it
+runs reads `Arena.mark` or `Arena.used`: then nothing a step allocated is
+reachable from the next, and the loop releases the scope at the end of every
+step, before the cold call's `ret` and before the base's
+(`tests/cases/acc_arena`). A step that passes a string it built keeps the
+recursion (`tests/cases/acc_arena_ineligible`). `self(args) - X`,
 `X - self(args)` and `self(args) + f()` stay recursion.
 
 Each parameter becomes a `phi` of `rec.head`, and a step evaluates `X` and the
@@ -32837,6 +32843,15 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-recursion-i64 -->
+
+A frame that allocates on the arena marks it once, in `entry`, and releases
+to that mark at the end of every step, before the edge back to `rec.head`,
+and before each `ret`: what a step built is garbage before the next begins,
+as it was when each frame returned. The proof is `src/emit-accumulate.ts`,
+"Arena scope".
+
+<!-- cookbook:begin opt-recursion-arena -->
+<!-- cookbook:end opt-recursion-arena -->
 
 A method's self call is `r.m(args)` on a receiver the checker typed as the
 method's own class, written with `.`, not `?.`. Nish binds every method call
