@@ -1373,7 +1373,8 @@
                   "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
                   "/wp57-module-scoped-names": { "type": "page", "title": "WP57: Module-scoped names", "filepath": "docs/roadmap/wp57-module-scoped-names.md" },
                   "/wp59-wasm-arena-memory": { "type": "page", "title": "WP59: The wasm arena in a second, unexported memory", "filepath": "docs/roadmap/wp59-wasm-arena-memory.md" },
-                  "/wp60-dyn-dispatch": { "type": "page", "title": "WP60: Dynamic dispatch over interfaces", "filepath": "docs/roadmap/wp60-dyn-dispatch.md" }
+                  "/wp60-dyn-dispatch": { "type": "page", "title": "WP60: Dynamic dispatch over interfaces", "filepath": "docs/roadmap/wp60-dyn-dispatch.md" },
+                  "/wp61-json-schema": { "type": "page", "title": "WP61: Typed JSON from a JSON Schema", "filepath": "docs/roadmap/wp61-json-schema.md" }
                 }
               },
               "/done/..": {
