@@ -107,9 +107,10 @@ function closeAccumulation(emitter: Emitter, acc: RecursionLoop): void -> @close
   callee +22:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   local +23:9 answer: string (const)
   callee +23:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +24:3 IRFunction.emit -> @IRFunction.emit
-  callee +24:27 checkedAdd -> @checkedAdd
-  callee +24:65 checkedAdd -> @checkedAdd
+  local +24:9 total: string (const)
+  callee +24:17 checkedAdd -> @checkedAdd
+  callee +24:55 checkedAdd -> @checkedAdd
+  callee +25:3 IRFunction.emit -> @IRFunction.emit
 function paramPhi(acc: RecursionLoop, name: string, type: string, passed: string[]): string -> @paramPhi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name type

@@ -254,7 +254,8 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   }
   fn.placeBlock(call)
   const answer = fn.emitValue(`call ${width} @${acc.sig.name}(${operands.join(", ")})`)
-  fn.emit(`ret ${width} ${checkedAdd(emitter, acc, "%rec.prev", checkedAdd(emitter, acc, "%rec.last", answer))}`)
+  const total = checkedAdd(emitter, acc, "%rec.prev", checkedAdd(emitter, acc, "%rec.last", answer))
+  fn.emit(`ret ${width} ${total}`)
   emitter.accumulator = null
 }
 
