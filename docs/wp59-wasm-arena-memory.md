@@ -222,6 +222,7 @@ does not touch it.
 | the stack, static data, `nish_arena`, `nish_roots`, scratch | 0, unexported | Runtime state the page never had a reason to see. Static data includes every string literal and the panic texts. |
 | exported module storage | 0, mirrored in 1 at the same offset | Codegen indexes storage like any array (`src/emit-arrays.ts:2085`–`:2102`: a `%struct.nish_array` header over a `.data` global), so storage flows wherever an array flows, and which memory a pointer names is not known statically. It stays in 0, where every access works, and the mirror is what the page sees (§4.1). |
 | the rings | 1, as part of the mirror | A ring is a storage layout entry (`runtime/page.mjs:76`). Its offsets do not change. |
+| the `views()` typed arrays | over memory 1 | `views()` builds them over the exported `memory.buffer`, which is now memory 1, so each one reads the mirror at the offset `layout` gives. They hold no view of memory 0. §4.2 says when they are rebuilt. |
 | module storage that is not exported | 0 only | The page has no layout entry for it, so no mirror is made. |
 | strings and arrays crossing one call | the exchange area in 1 | §5. |
 | panic text | copied into the exchange area, bounded | The message may be a built string in the arena (§5.4). |
@@ -273,10 +274,25 @@ the flag, the page compares `memory.buffer` with the one it built its views
 over and calls `views()` again when it changes (`docs/wp50-wasm-host.md`
 §5.2). WP59 keeps both rules and applies them to memory 1.
 
-**The rewrite sizes memory 1 from the layout.** The rewrite reads every
-exported storage's `{ at, length × stride }` from the same `.data` exports the
-loader's `layout` reads (`scripts/build.sh:1016`). Call the highest end of
-those regions *mirror top*. Memory 1's minimum is
+**The rewrite sizes memory 1 from the objects and the linked module.** The
+linked module does not hold a storage's size: `scripts/build.sh:1012`–`:1016`
+exports each `<name>.data` symbol as a global holding its address, and the
+loader's `length` and `stride` are literals in the loader's JavaScript
+(`src/interop-wasm.ts:1738`). So the rewrite takes its two inputs from two
+places:
+
+- **`at`**, from the linked module: the exported `<name>.data` global's
+  initial value, the address the loader's `layout` reads at run time;
+- **the size in bytes**, from the objects S1 links: `<name>.data` is a
+  `[<length> x <slot>]` global (`src/emit-arrays.ts:2091`–`:2094`), and a
+  wasm object records each data symbol's size, which `llvm-nm -S` prints
+  (§12.5: 400 bytes for `[100 x i32]`, 240 for ten 24-byte cells). The
+  objects exist because S1 compiles each input with `-c` before the link
+  (§3.2). The size then includes the slot's padding, as `stride` does.
+
+The names to look up are the ones `scripts/build.sh:1016` already scans for
+its `--export` list. Call the highest `at + size` *mirror top*. Memory 1's
+minimum is
 
   ceil((mirror top + exchange size) / 64 KiB) pages.
 
@@ -335,9 +351,17 @@ copy of the elements.
 
 The result header `stringOut` (`:1178`) reads, and the `(p, n)` that `text`
 (`:1388`) decodes, are first copied into the exchange area. This includes a
-literal, because static data is in memory 0 too. The cost is one copy of the
-string's bytes. WH-9's bounds then apply to the exchange area, not to memory
-0.
+literal, because static data is in memory 0 too. Today a literal crosses as
+`(p, n)` into static data and allocates nothing. Under WP59 it costs one copy
+of its bytes, and the block is released when the import returns (§5.6), so a
+loop that calls `host.log("tick")` once per entity uses the same few bytes on
+every call and never grows the area. The cost is one copy of the string's
+bytes. WH-9's bounds then apply to the exchange area, not to memory 0.
+
+S2 copies literals too. A literal could skip the copy if static data's
+read-only part were mirrored into memory 1 once, at instantiation, at the same
+offset. That needs the bounds of the read-only part, and it shows the page
+bytes it does not see today, so it is left as §10.6.
 
 ### 5.4 A panic's message
 
@@ -352,19 +376,70 @@ whether that offset lies inside a mirrored region:
 
 - **inside**: the offset is passed as it is. The import's pre-call sync has
   already brought the mirror up to date.
-- **outside** (a local or kept array): the elements are copied into the
-  exchange area, that offset is lent, and they are copied back after the
-  import returns.
+- **outside** (a local or kept array): only the window's bytes, `[at, at + n)`
+  of the array's elements, are copied into an exchange block, not the whole
+  array. The import is lent `(block, 0, n)`, so its `p + at` lands on the
+  block's first element. The block is copied back into `[at, at + n)` after
+  the import returns, and before the import's blocks are released (§5.6).
 
-The cost is two copies of the window, and only for a non-storage window.
+Two windows over one local array in one import call alias today: they are one
+memory. S2 keeps that. The runtime groups the call's non-storage windows by
+array, merges windows whose ranges overlap into one block over their union,
+and lends each window its own offset inside that block. A write through one
+is then seen through the other during the call, and each block is copied
+back once, so no copy-back can overwrite another's bytes. Windows over one
+array that do not overlap get a block each. They share no byte, so the order
+of their copy-backs cannot matter.
+
+The cost is two copies of each window's bytes, and only for a non-storage
+window.
 
 ### 5.6 Exchange area lifetime
 
-The exchange area is reset with the arena bracket. Without `--memory`, its
-high-water mark is grown with `memory.grow 1` and never shrinks, just as the
-arena's chunks never return. Under `--memory` it is fixed (§4.2).
-`__builtin_wasm_memory_grow(1, n)` emits `memory.grow 1` (§12.1), and it
-answers `-1` on a fixed memory (§12.3).
+The exchange area is a bump region with two scopes, and every block belongs
+to exactly one:
+
+- **An export call.** The loader's array arguments, the results it reads
+  (`arrayOut`, `stringOut`) and its copy-back blocks are taken after the
+  export's mark (`src/interop-wasm.ts:992`). They are released with the arena
+  bracket in the call's `finally` (`:1005`–`:1011`), after the loader has
+  read every result. With root storage the bracket is `nish_root_keep(mark)`;
+  the exchange area is reset there too, because nothing in it is kept.
+- **A host-import call.** Before the import, the runtime takes an exchange
+  mark. The import's strings and its non-storage windows are copied in above
+  it. After the import returns, the windows are copied back, and the area is
+  reset to that mark. A loop of imports inside one export therefore uses the
+  space of one import, not the sum of them.
+
+Neither scope nests inside itself. A page that calls an export from inside an
+import is refused today (`NishReentry`, `src/interop-wasm.ts:999`), so an
+import's mark is always above its export's blocks, and resetting it never
+releases them.
+
+The top 4 KiB of the exchange area is kept back for panic text (§5.4). A
+crossing that would reach into it panics with "exchange area full" instead,
+and that panic's own text then has the room it needs. Nothing runs after a
+panic, so the reserve is never reset.
+
+Without `--memory`, the area's high-water mark is grown with `memory.grow 1`
+and never shrinks, just as the arena's chunks never return. Under `--memory`
+it is fixed (§4.2). `__builtin_wasm_memory_grow(1, n)` emits
+`memory.grow 1` (§12.1), and it answers `-1` on a fixed memory (§12.3).
+
+### 5.6.1 Every region of memory 1, who sizes it, and when it is reset
+
+| Region | Placed and sized by | Lives | Reset |
+| --- | --- | --- | --- |
+| `[0, lowest mirror)` | nothing; these are the offsets of memory 0's static data and stack | the module's life | never written |
+| each storage mirror | the rewrite: `at` from the `<name>.data` export, the size from `llvm-nm -S` over the objects (§4.2) | the module's life | never; synced at every edge of a call (§4.1) |
+| export blocks: array arguments, results, copy-back | the runtime, bumped up from the exchange area's base | one export call | at the bracket, after the loader has read them |
+| import blocks: strings to an import, non-storage windows | the runtime, bumped above the export's blocks | one import call | when the import returns, after copy-back |
+| the panic reserve, the top 4 KiB of the exchange area | the rewrite, inside the exchange size | from a panic on | never; no call follows a panic |
+| the page's `views()` arrays | the page, over `memory.buffer` | the module's life under `--memory`; until the next grow without it | rebuilt after a grow (§4.2) |
+
+The exchange size, minus the 4 KiB reserve, bounds what one export call and
+its deepest import can hold at once. That is the figure §8.3 asks the owner
+to choose.
 
 ### 5.7 What the copies cost, estimated
 
@@ -398,9 +473,12 @@ Worked examples, at bytes per crossing × crossings per call:
 | an export over 64 KiB of exported storage (§4.1) | 64 KiB × 2 (in at entry, out at return) | 2.3–2.4 µs |
 | the same export calling one host import | 64 KiB × 4 | 4.6–4.8 µs |
 | the same export calling a host import 1,000 times | 64 KiB × 2,002 | 2.3–2.4 ms |
+| an export with no exported storage calling `host.log("tick")` 1,000 times (§5.3) | 4 B × 1,000, in the same block each time | about 1,000 × the 64-byte row: 4.1–4.4 µs |
 
-The copies of a value that crosses (the first three rows) cost the same order
-as the JavaScript that reads or writes that value today. The storage sync
+The copies of a value that crosses (the first three rows, and the last) cost
+the same order as the JavaScript that reads or writes that value today. The
+last row also uses the same exchange bytes on every call, so its footprint is
+one literal, not a thousand (§5.6). The storage sync
 does not. An export over 64 KiB of storage pays about a thousand times a bare
 call, every call, whether or not anything changed. An import called in a loop
 multiplies that. So the storage sync is the one cost that can decide §8.1,
@@ -545,7 +623,13 @@ Tests:
     read after;
   - a panic text past 4 KiB, cut at a character;
   - under `--memory`, a value larger than the exchange area panics with
-    "exchange area full";
+    "exchange area full", and the panic's text arrives whole;
+  - under `--memory`, one export call that calls `host.log("tick")` 100,000
+    times returns normally, and `nish_exchange_high()` (S2's high-water mark
+    export) is the same after the loop as after its first call;
+  - two overlapping windows over one local array in one import call: a write
+    through one is read through the other inside the import, and both
+    writes are in the array after it;
   - a ring pushed by the page between calls and inside an import;
 - `nish-cmp` `DECLARED` entries for the IR that moves.
 
@@ -606,6 +690,15 @@ What lands:
 - the single-memory fallback's residual is recorded where it stays: today's
   WH-10 text, unchanged for that build.
 
+Tests:
+
+- S3's forge test is the after-test the WH-10 row names. The old in-arena
+  forgeries, kept against the single-memory build, are the before-test;
+- `node scripts/security-scope.mjs`: every file the record's scope names
+  exists, and the "Not yet audited" list does not grow;
+- `npm run lint`, `node docs/check-links.mjs` and `npm run lint:dead` on the
+  record and its index row.
+
 ## 10. Open questions
 
 1. **A forged trace descriptor.** Descriptors are `internal constant`s in
@@ -635,6 +728,12 @@ What lands:
    memory between calls.
 5. **A newer LLVM.** If a later LLVM lowers an address space to a memory
    index, S-tag gets cheaper. That has not been checked, and CI pins 18.
+6. **Literals without a copy.** A string literal to an import is copied into
+   the exchange area (§5.3). Mirroring static data's read-only part into
+   memory 1 once, at instantiation, would let a literal cross as `(p, n)`
+   again. It needs the read-only part's bounds from the link, and it shows
+   the page every literal and panic text at once. Only worth it if S3's sweep
+   shows literal copies matter.
 
 ## 11. Not planned
 
@@ -647,9 +746,10 @@ What lands:
 
 ## 12. Appendix: the experiment, re-runnable
 
-Every observed result in §3.1, §3.2, §4.2, §5.6 and §5.7 comes from the runs
-below. Each input is printed in full, and each command is followed by what it
-printed. The toolchain was `llc`, `clang`, `llvm-mc` and `wasm-ld` 18.1.3,
+Every observed result in §3.1, §3.2, §4.2, §5.6 and §5.7, and the
+`memory.fill` row of §3, comes from the runs below; §12.5 holds that row
+and §4.2's storage sizes. Each input is printed in full, and each
+command is followed by what it printed. The toolchain was `llc`, `clang`, `llvm-mc` and `wasm-ld` 18.1.3,
 Node v22.23.4 and headless Chromium 153.0.8010.12, on a 4-core Intel Xeon @
 2.10 GHz. Binaryen was not installed (`command -v wasm-opt` printed nothing
 and exited 1), so no link below ran `wasm-opt`, and none met the one clang
@@ -972,3 +1072,61 @@ ld1(): 2.4 ns per call (true)
 $ node call.mjs fixed.wasm
 ld1(): 2.5 ns per call (true)
 ```
+
+### 12.5 `memory.fill 1`, and a storage's size in its object
+
+S1's `nish_page_fill` is the one instruction of §3's four that §12.1 does not
+run. It is emitted and run here. The same step shows where the rewrite reads a
+storage's size (§4.2): `storage.ll` declares two `.data` globals the way
+`src/emit-arrays.ts:2091`–`:2094` does, and `llvm-nm -S` prints each one's size
+from the object. `rewrite.mjs` is §12.2's.
+
+`fill.c`:
+
+```c
+/* memory.fill on memory 1: the instruction S1's nish_page_fill emits. */
+void fill_page(int dst, int byte, int n) {
+  __asm__ volatile("local.get %0\n\tlocal.get %1\n\tlocal.get %2\n\tmemory.fill 1"
+                   :: "r"(dst), "r"(byte), "r"(n) : "memory");
+}
+```
+
+`fill.mjs`:
+
+```js
+// node fill.mjs fill-page.wasm
+import { readFileSync } from "node:fs"
+const { instance: { exports: e } } = await WebAssembly.instantiate(readFileSync(process.argv[2]))
+e.fill_page(8, 0xab, 4)
+console.log("after fill_page(8, 0xab, 4): page[6..13] =", [...new Uint8Array(e.memory.buffer, 6, 8)].join(", "))
+```
+
+`storage.ll`:
+
+```llvm
+target triple = "wasm32-unknown-unknown"
+%cell = type { i32, double, i8 }
+@nish_storage_main_ring.data = global [100 x i32] zeroinitializer, align 16
+@nish_storage_main_cells.data = global [10 x %cell] zeroinitializer, align 16
+define i32 @first() {
+  %v = load i32, ptr @nish_storage_main_ring.data
+  ret i32 %v
+}
+```
+
+The commands and their output:
+
+```text
+$ clang --target=wasm32 -mmultimemory -mbulk-memory -O2 -S fill.c -o - | grep memory\\.
+	memory.fill	1
+$ clang --target=wasm32 -mmultimemory -mbulk-memory -O2 -nostdlib -Wl,--no-entry -Wl,--export=fill_page fill.c -o fill.wasm
+$ node rewrite.mjs fill.wasm fill-page.wasm 1 && node fill.mjs fill-page.wasm
+after fill_page(8, 0xab, 4): page[6..13] = 0, 0, 171, 171, 171, 171, 0, 0
+$ clang --target=wasm32-unknown-unknown -O2 -c storage.ll -o storage.o && llvm-nm -S storage.o | grep "\.data$"
+00000190 000000f0 D nish_storage_main_cells.data
+00000000 00000190 D nish_storage_main_ring.data
+```
+
+`memory.fill 1` writes bytes 8 to 11 of memory 1 and nothing beside them. The
+sizes are 0x190 = 400 = 100 × 4 and 0xf0 = 240 = 10 × 24, the 24 being
+`{ i32, double, i8 }` padded to its 8-byte alignment.
