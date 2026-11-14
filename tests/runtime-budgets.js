@@ -659,10 +659,15 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * their scalar, SSE2 and AVX2 paths, the UTF-8 step the JSON text class takes, and the
  * resolver with its CPUID question and `NISH_SIMD` pin.
  *
- * Measured **1,525 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
- * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
- * 238 and its resume 26, the plain class's scalar path 49 and SSE2 path 110, the
- * resolver 249 and the four entry points 83. It was 1,303 with three classes; the
+ * Measured **1,808 bytes** on 2026-11-14 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 137, the SSE2 path 711, the AVX2 path 231, the UTF-8 step
+ * 238, the plain class's scalar path 49 and SSE2 path 110, the resolver 249 and the
+ * four entry points 83. It was 1,525 before the SSE2 path checked a text block's
+ * UTF-8 whole (+283: the SSE2 path 265 to 711 with the check, the cut-sequence
+ * back-off and the resume, 26, now inlined into it; the AVX2 path 368 to 231, which
+ * hands text past a high byte to the SSE2 path instead of stepping it itself), for
+ * 116 to 66 Ir a JSON text run on twitter.json, 8.3% of the document's tokenize Ir
+ * (docs/wp7-runtime.md). It was 1,303 with three classes; the
  * fourth, the writer's plain bytes, added 222: its own paths 159, its entry point 21
  * and the resolver's second pointer 45 (the resolver 204 to 249), less 3 from the
  * UTF-8 resume (29 to 26, layout). The three class paths' instructions are as they
@@ -673,7 +678,7 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * no JSON run and one that tokenizes JSON no byte-set search. The budget is the next
  * 256-byte boundary above the measurement, as every ceiling here was set.
  */
-const RUNTIME_BYTES_TEXT_BUDGET = 1536
+const RUNTIME_BYTES_TEXT_BUDGET = 2048
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sandbox.c`
  * -- the confinement `--sandbox` applies (WP37, docs/security/sandbox.md):

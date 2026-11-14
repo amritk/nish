@@ -26,7 +26,7 @@ nothing. Two Low findings are recorded, both fixed:
 
 | File | Functions |
 | --- | --- |
-| `runtime/runtime-bytes.c` | `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`, `nish_bytes_skip_json_plain`; the helpers `nish_run_in`, `nish_run_utf8`, `nish_run_wide`, `nish_run_scalar`, `nish_run_resume`, `nish_plain_scalar`, `nish_plain_base`, the SSE2/AVX2/NEON/wasm block walkers, `nish_cpu_has_avx2`, `nish_run_choose`, `nish_run_settle` and the resolver |
+| `runtime/runtime-bytes.c` | `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`, `nish_bytes_skip_json_plain`; the helpers `nish_run_in`, `nish_run_utf8`, `nish_run_wide`, `nish_run_scalar`, `nish_run_resume`, `nish_run_bad_sse2`, `nish_run_cut`, `nish_plain_scalar`, `nish_plain_base`, the SSE2/AVX2/NEON/wasm block walkers, `nish_cpu_has_avx2`, `nish_run_choose`, `nish_run_settle` and the resolver |
 | `std/bytes.ts` | `bytesRunEnd`, `bytesRunStart`, `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain`, `copyBytes`, and the walkers they lower from |
 | `std/bytes.ts` | `getU64BE` and `getU64BEByByte`: the single range check of an eight-byte big-endian read, which `getI64BE` and `getF64BE` call |
 | `src/kernels.ts`, `src/emit-arrays.ts`, `src/std-modules.ts` | `bytesWalkOf`, `bytesKernelOf`, `emitBytesKernel`, `bytePointer`, `isBytesModule` |
@@ -76,9 +76,25 @@ audit also ran these paths under ASan+UBSan and against guard-page windows;
 CI pins agreement between paths, not the sanitizer run.
 
 **Every path answers as the scalar one does** (`simd: byte-runs native x64:
-7497300 cases agree across scalar base avx2 (plain: scalar base); the resolver
+7682442 cases agree across scalar base avx2 (plain: scalar base); the resolver
 picks every pin`). This covers every class, the plain class's scalar and
 16-byte paths, every alignment and every pin of `NISH_SIMD`.
+
+**The SSE2 block check stops a text run where the scalar UTF-8 step does**
+(the same label; since #1584). A text block holding a high byte is checked
+whole: a byte is flagged when its continuation count disagrees with the leads
+before it, when it is a lead no RFC 3629 form starts with (C0, C1, F5 and up),
+or when it is the second byte of an overlong, surrogate or past-U+10FFFF form.
+The block is taken only when nothing is flagged up to its first ASCII stop, or
+in it at all; a sequence the block's end cuts is left to the next block, and
+anything else goes to the scalar step, which finds the exact stop. Before the
+change the step took every sequence. `tests/simd/byte-runs.c` puts each valid
+edge form, each overlong, surrogate and out-of-range form, each form cut by
+ASCII, `"` or a new lead, and each stray or extra continuation at every offset
+of a 72-byte stretch in dense multi-byte text, with `to` on every byte past it,
+then runs 60,000 dense random trials; every path must give the scalar answer.
+The JSON fixtures that read invalid UTF-8 (`link/std_json_tokenizer`,
+`link/std_json_conformance`) answer `JSON_TOK_ERR_UTF8` at the same offsets.
 
 **A run answers inside its clamped window** (`link/std_bytes_runs: exits with
 0 and stdout matches expected.out`). `bytesRunEnd` clamps `to` into

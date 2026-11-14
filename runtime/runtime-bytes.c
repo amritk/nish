@@ -200,15 +200,13 @@ static inline int64_t nish_run_resume(int cls, const uint8_t *p, int64_t i, int6
    the spirit of Keiser and Lemire's lookup validator ("Validating UTF-8 In
    Less Than One Instruction Per Byte", 2021) but without its table lookups,
    which SSE2 has no byte shuffle for, and written here rather than taken from
-   any implementation of it. A vector type of GCC's extension serves both
-   widths, so the 16- and 32-byte forms are one expression. */
+   any implementation of it. */
 #define NISH_RUN_BAD(v, p1, p2, p3)                                                                   \
   (((((p1) >= 0xc0) | ((p2) >= 0xe0) | ((p3) >= 0xf0)) != (((v) & 0xc0) == 0x80)) | (((v) & 0xfe) == 0xc0) | \
    ((v) >= 0xf5) | (((p1) == 0xe0) & ((v) < 0xa0)) | (((p1) == 0xf0) & ((v) < 0x90)) |                  \
    (((p1) == 0xed) & ((v) > 0x9f)) | (((p1) == 0xf4) & ((v) > 0x8f)))
 
 typedef uint8_t nish_u8x16 __attribute__((vector_size(16)));
-typedef uint8_t nish_u8x32 __attribute__((vector_size(32)));
 
 /* How many of the bytes before `e` start a sequence that `e` cuts off, in a
    block whose UTF-8 is otherwise well formed: the block after starts at its
@@ -243,16 +241,18 @@ static inline unsigned nish_run_stops_sse2(int cls, __m128i v) {
     return ~(unsigned)_mm_movemask_epi8(in) & 0xffffu;
   }
   /* A control byte is one that `min(v, 0x1f)` leaves alone; a high byte is
-     its own sign bit, which movemask reads straight off `v`. The plain class
-     stops at the same ASCII bytes and at no high one. */
+     its own sign bit, which movemask reads straight off `v`. */
   __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
                               _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
-  return (unsigned)_mm_movemask_epi8(cls == NISH_RUN_PLAIN ? stop : _mm_or_si128(stop, v));
+  return (unsigned)_mm_movemask_epi8(_mm_or_si128(stop, v));
 }
 
 static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to) {
   for (; to - i >= 16; i += 16) {
-    unsigned m = nish_run_stops_sse2(NISH_RUN_PLAIN, _mm_loadu_si128((const __m128i *)(p + i)));
+    __m128i v = _mm_loadu_si128((const __m128i *)(p + i));
+    __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
+                                _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
+    unsigned m = (unsigned)_mm_movemask_epi8(stop);
     if (m != 0) return i + __builtin_ctz(m);
   }
   return nish_plain_scalar(cls, p, i, to);
@@ -271,9 +271,10 @@ static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to
     /* A text block whose first stop is a high byte: its UTF-8 checked whole,
        up to its first ASCII stop or, with none, to its end less a sequence
        the end cuts off. Anything wrong goes to the step below, which finds
-       the exact byte. */
+       the exact byte. A high byte is never an ASCII stop, so those are the
+       stops less the bytes whose sign bit is set. */
     if (cls == NISH_RUN_TEXT && p[at] >= 0x80) {
-      unsigned s = nish_run_stops_sse2(NISH_RUN_PLAIN, v), bad = nish_run_bad_sse2(v);
+      unsigned s = m & ~(unsigned)_mm_movemask_epi8(v), bad = nish_run_bad_sse2(v);
       if (s != 0 && (bad & (s ^ (s - 1))) == 0) return i + __builtin_ctz(s);
       if (s == 0 && bad == 0) {
         i += 16 - nish_run_cut(p, i + 16);
@@ -301,40 +302,23 @@ __attribute__((target("avx2"))) static inline unsigned nish_run_stops_avx2(int c
   __m256i stop = _mm256_or_si256(
       _mm256_or_si256(_mm256_cmpeq_epi8(v, _mm256_set1_epi8(0x22)), _mm256_cmpeq_epi8(v, _mm256_set1_epi8(0x5c))),
       _mm256_cmpeq_epi8(_mm256_min_epu8(v, _mm256_set1_epi8(0x1f)), v));
-  return (unsigned)_mm256_movemask_epi8(cls == NISH_RUN_PLAIN ? stop : _mm256_or_si256(stop, v));
-}
-
-/* `nish_run_bad_sse2` over 32 bytes. A byte shift crosses the two lanes by
-   `alignr` against a copy whose low lane is zero and whose high lane is the
-   block's low one. */
-__attribute__((target("avx2"))) static inline unsigned nish_run_bad_avx2(__m256i x) {
-  __m256i lo = _mm256_permute2x128_si256(x, x, 0x08);
-  nish_u8x32 v = (nish_u8x32)x, p1 = (nish_u8x32)_mm256_alignr_epi8(x, lo, 15),
-             p2 = (nish_u8x32)_mm256_alignr_epi8(x, lo, 14), p3 = (nish_u8x32)_mm256_alignr_epi8(x, lo, 13);
-  return (unsigned)_mm256_movemask_epi8((__m256i)NISH_RUN_BAD(v, p1, p2, p3));
+  return (unsigned)_mm256_movemask_epi8(_mm256_or_si256(stop, v));
 }
 
 /* Thirty-two bytes a block, then the base path for what is left. */
 __attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint8_t *p, int64_t from, int64_t to) {
   int64_t i = from;
   while (to - i >= 32) {
-    __m256i v = _mm256_loadu_si256((const __m256i *)(p + i));
-    unsigned m = nish_run_stops_avx2(cls, v);
+    unsigned m = nish_run_stops_avx2(cls, _mm256_loadu_si256((const __m256i *)(p + i)));
     if (m == 0) {
       i += 32;
       continue;
     }
     int64_t at = i + __builtin_ctz(m);
-    if (cls == NISH_RUN_TEXT && p[at] >= 0x80) {
-      unsigned s = nish_run_stops_avx2(NISH_RUN_PLAIN, v), bad = nish_run_bad_avx2(v);
-      if (s != 0 && (bad & (s ^ (s - 1))) == 0) return i + __builtin_ctz(s);
-      if (s == 0 && bad == 0) {
-        i += 32 - nish_run_cut(p, i + 32);
-        continue;
-      }
-    }
-    i = nish_run_resume(cls, p, at, to);
-    if (i == at) return at;
+    if (cls != NISH_RUN_TEXT || p[at] < 0x80) return at;
+    /* Past UTF-8 the base path's block check takes the rest of the run:
+       text that has one multi-byte sequence tends to have more. */
+    return nish_run_base(cls, p, at, to);
   }
   return nish_run_base(cls, p, i, to);
 }
