@@ -32441,6 +32441,133 @@ instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
 `` attempt to compute with overflow in a constant ``, and
 `const OVER: i32 = wrappingAdd(2147483647, 1)` folds to `-2147483648`.
 
+#### A self-recursive sum: one loop, a sign test per step
+
+A checked `+` stops LLVM's tail-recursion elimination: it folds
+`return x + f(...)` into a loop and an accumulator only when the `+` is a plain
+`add`. So the compiler writes that loop itself (`src/accumulate.ts` chooses
+the functions, `src/emit-accumulate.ts` writes them, with the proof). A
+function qualifies when it is a plain function of its module that returns
+`i32` (an `f64` sum has no overflow check to defer, and another integer width
+is left to a later stage), every `return` that recurses is `X + self(args)`,
+or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`
+ahead of the call cannot move an effect), at least one `return` does not, and
+the body is only blocks, `if`, declarations, expression statements and
+`return`s. It may not open an arena scope (a string template does), hold a
+stack-allocated local or site, or bracket a loop's passes with arena scopes
+(`scopesAnyPass`): each of those ties memory's lifetime to one call, which
+the loop's steps would share. `self(args) - X`,
+`X - self(args)` and `self(args) + f()` stay recursion.
+
+Each parameter becomes a `phi` of `rec.head`, and a step evaluates `X` and the
+arguments in the source's order and branches back. Two more `phi`s carry the
+sum before the last step, `%rec.prev`, and that step's `X`, `%rec.last`. The
+header adds them with a wrapping `add` and calls the step cold when `X` or the
+sum is negative: while no step is cold the sum is exact and in `[0, MAX]`, so
+the base's one checked add panics exactly when the recursion would. Where the
+recursion would overflow, the loop panics at the same add with the same
+output; where it would exhaust the stack, the loop instead runs on, making
+its cold call only every 2^31 or so steps. A cold
+step goes to `rec.call`, which makes the call the step replaced and adds
+`%rec.last` and `%rec.prev` to its answer, each checked, so its panic is the
+recursion's too. When the header's own code only computes, the test is folded
+into the branch that ends it (`%rec.leave`) and `rec.exit` sorts a cold step
+from a base, so the hot loop takes no branch of its own. Code with an effect
+(a call) runs after the test instead, in `rec.body`. In `fib`, `fib(n - 1)`
+stays a call and `fib(n - 2)` is the back edge. `--no-elision` and a debug or
+wasm-panic-site build keep the recursion (`tests/cases/acc_fib`, `acc_tree`,
+`acc_shapes`, `acc_overflow`, `acc_effects`, `acc_soundness`,
+`acc_ineligible`, `acc_ineligible_f64`).
+
+<!-- cookbook:begin opt-recursion-loop -->
+```ts
+const fib = (n: i32): i32 => {
+  if (n < 2) {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+export const test = (): i32 => fib(30)
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @fib(i32 noundef %n.in) #0 {
+entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %6, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %5, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  %0 = icmp slt i32 %n, 2
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %n)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %2
+
+if.end:
+  %4 = sub nsw i32 %n, 1
+  %5 = call i32 @fib(i32 %4)
+  %6 = sub nsw i32 %n, 2
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %7 = call i32 @fib(i32 %n)
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %9)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test() #0 {
+entry:
+  %0 = tail call i32 @fib(i32 30)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-loop -->
+
 ### `--target`
 
 The module carries `target datalayout` and `target triple` (the strings

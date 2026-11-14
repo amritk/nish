@@ -1265,6 +1265,10 @@ const withSeedWpComments = (text) =>
 
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
+const RECURSION_LOOP = "Emit self-recursive checked sums as a loop"
+const RECURSION_LOOP_WHY =
+  "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+
 const DECLARED = [
   {
     changelog: "internal work-package references from diagnostics and generated files",
@@ -1288,6 +1292,103 @@ const DECLARED = [
     file: "res_proof_consumers.ll",
     changelog: LET_REASSIGN,
     why: "`s = parse(-5)`, a by-value `Result` assigned to a `let` and read only through `.ok`, follows the `let` onto the stack with its first value",
+  },
+  // Self-recursive checked sums become a loop (src/accumulate.ts, src/emit-accumulate.ts).
+  {
+    program: "tests/cases/acc_effects.ts",
+    file: "acc_effects.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_fib.ts",
+    file: "acc_fib.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_overflow.ts",
+    file: "acc_overflow.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_shapes.ts",
+    file: "acc_shapes.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_soundness.ts",
+    file: "acc_soundness.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_tree.ts",
+    file: "acc_tree.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/cf_fib.ts",
+    file: "cf_fib.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/cg_sec_recursion_willreturn.ts",
+    file: "cg_sec_recursion_willreturn.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/fn_arrow.ts",
+    file: "fn_arrow.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/fn_arrow_hoisting.ts",
+    file: "fn_arrow_hoisting.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/ovf_proven_callsite.ts",
+    file: "ovf_proven_callsite.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/ovf_proven_floor.ts",
+    file: "ovf_proven_floor.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/ovf_return_unproven.ts",
+    file: "ovf_return_unproven.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-loop.ts",
+    file: "opt-recursion-loop.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "bench/fib.ts",
+    file: "fib.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/differential/corpus/recursion.ts",
+    file: "recursion.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
   },
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).

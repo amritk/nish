@@ -37,7 +37,7 @@ const branch = (emitter: Emitter, target: IRBlock): void => {
   emitter.fn.emit(`br label %${target.label}`)
 }
 
-const condBranch = (emitter: Emitter, cond: string, ifTrue: IRBlock, ifFalse: IRBlock): void => {
+export const condBranch = (emitter: Emitter, cond: string, ifTrue: IRBlock, ifFalse: IRBlock): void => {
   emitter.fn.emit(`br i1 ${cond}, label %${ifTrue.label}, label %${ifFalse.label}`)
 }
 

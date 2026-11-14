@@ -76,28 +76,52 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @countdown(i32 noundef %n) #0 {
+define internal noundef i32 @countdown(i32 noundef %n.in) #0 {
 entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %4, %rec.false ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %rec.false ]
+  %rec.last = phi i32 [ 0, %entry ], [ 1, %rec.false ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp sle i32 %n, 0
-  br i1 %0, label %cond.true, label %cond.false
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %rec.false
 
-cond.true:
-  br label %cond.end
-
-cond.false:
-  %1 = sub nsw i32 %n, 1
-  %2 = call i32 @countdown(i32 %1)
-  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 1)
-  %4 = extractvalue { i32, i1 } %3, 0
-  %5 = extractvalue { i32, i1 } %3, 1
-  br i1 %5, label %ovf.fail, label %ovf.ok
+rec.true:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  br label %cond.end
+  ret i32 %2
 
-cond.end:
-  %6 = phi i32 [ 0, %cond.true ], [ %4, %ovf.ok ]
-  ret i32 %6
+rec.false:
+  %4 = sub nsw i32 %n, 1
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %rec.true
+
+rec.call:
+  %5 = call i32 @countdown(i32 %n)
+  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %7)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %10
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
