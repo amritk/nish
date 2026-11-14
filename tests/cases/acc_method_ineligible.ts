@@ -3,8 +3,8 @@
 //
 // Nish has no inheritance, no method in an interface and no method call on
 // a union (docs/LANGUAGE.md), so an overridden or interface-dispatched
-// method cannot be written; the dynamic calls a method can make are the
-// ones below.
+// method cannot be written, and no `static` method either; the dynamic calls
+// a method can make are the ones below.
 
 type Step = (n: i32) => i32
 
@@ -89,11 +89,29 @@ class Tail {
   }
 }
 
+// An optional call: `r?.m(...)` may not run, so its sum is not a step.
+class Opt {
+  next: Opt | null
+  constructor(next: Opt | null) {
+    this.next = next
+  }
+
+  m(n: i32): i32 {
+    if (n <= 0) {
+      return 0
+    }
+    const r = this.next
+    return n + (r?.m(n - 1) ?? 0)
+  }
+}
+
 export const main = (): i32 => {
   const pong = new Pong(null)
   const ping = new Ping(pong)
   pong.other = ping
   const box = new Box<string>("x")
-  console.log(`${new Indirect(inc).run(10)} ${ping.walk(10)} ${box.count(10)} ${new Tail(2).m(10)}`)
+  const opt = new Opt(null)
+  opt.next = new Opt(opt)
+  console.log(`${new Indirect(inc).run(10)} ${ping.walk(10)} ${box.count(10)} ${new Tail(2).m(10)} ${opt.m(10)}`)
   return 0
 }
