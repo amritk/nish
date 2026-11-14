@@ -283,6 +283,20 @@ export class RuntimeTable {
       mayNotReturn("nish_async_leave", "declare void @nish_async_leave(i8* nonnull, i8*)", EFFECT_WRITE)
     )
     this.add(mayNotReturn("nish_async_done", "declare void @nish_async_done(i8* nonnull)", EFFECT_WRITE))
+    this.add(
+      mayNotReturn(
+        "nish_async_start",
+        "declare nonnull i8* @nish_async_start(i32 noundef, i64 noundef, i8** nonnull)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_async_settle",
+        "declare void @nish_async_settle(i8* nonnull, i8*, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
     this.add(mayNotReturn("nish_async_next", "declare i8* @nish_async_next()", EFFECT_WRITE))
     this.add(
       mayNotReturn("nish_async_sleep", "declare noundef i64 @nish_async_sleep(i32 noundef)", EFFECT_WRITE)

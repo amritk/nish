@@ -129,6 +129,9 @@ typedef struct nish_task {
 #define NISH_TASK_QUEUED 1u
 /* Cancelled: each wait it has, or makes, answers false at once. */
 #define NISH_TASK_CANCELLED 2u
+/* Started in place (`nish_async_start`) and not yet settled: not counted live,
+   and a deadline set on it waits in `nish_async_inline` until it suspends. */
+#define NISH_TASK_INLINE 4u
 
 _Static_assert(sizeof(nish_task) <= NISH_ASYNC_HEADER, "a node's header holds a task");
 _Static_assert(offsetof(nish_task, kind) == 8, "the driver reads the kind at byte 8");
@@ -197,6 +200,16 @@ static int32_t nish_async_live; /* spawned tasks not yet done, each holding a re
 #define NISH_ASYNC_KEEP_TOTAL ((uint64_t)1 << 24)
 #define NISH_TASK_KEPT_SHIFT 8
 static uint64_t nish_async_kept; /* bytes the free nodes' regions keep */
+/* The tasks started in place and not yet settled, innermost last (a task
+   started in place settles before the code that started it runs on), each
+   with the deadline set on it while it ran, 0 for none: armed if it
+   suspends, dropped if it finishes. */
+typedef struct {
+  nish_task *task;
+  int64_t due;
+} nish_inline;
+static nish_inline *nish_async_inline;
+static uint32_t nish_async_inline_len, nish_async_inline_cap;
 extern NISH_TLS uint64_t nish_region_chunk; /* runtime.c: the entered region's next chunk size */
 
 enum { NISH_ASYNC_OOM, NISH_ASYNC_POLLER, NISH_ASYNC_TOO_MANY, NISH_ASYNC_WAIT };
@@ -256,7 +269,8 @@ static void nish_async_enqueue(nish_task *t) {
 
 /* ---- Tasks --------------------------------------------------------------- */
 
-void *nish_async_spawn(int32_t kind, uint64_t bytes) {
+/* A node of `kind` from its slab, with a region, not yet counted live. */
+static nish_task *nish_async_take(int32_t kind, uint64_t bytes) {
   if (kind < 0) nish_async_die(NISH_ASYNC_TOO_MANY);
   if ((uint32_t)kind >= nish_async_slab_count) {
     uint32_t want = (uint32_t)kind + 1;
@@ -294,7 +308,27 @@ void *nish_async_spawn(int32_t kind, uint64_t bytes) {
   nish_async_kept -= t->flags >> NISH_TASK_KEPT_SHIFT;
   t->flags = 0;
   if (!t->region) t->region = nish_region_new();
+  return t;
+}
+
+void *nish_async_spawn(int32_t kind, uint64_t bytes) {
+  nish_task *t = nish_async_take(kind, bytes);
   nish_async_live++;
+  return t;
+}
+
+/* Start a task of `kind` in place: its node, made the running task with its
+   region entered, `*prev` the task that was running. It counts as live, and
+   its deadline is armed, only if it suspends (`nish_async_settle`). */
+void *nish_async_start(int32_t kind, uint64_t bytes, void **prev) {
+  nish_task *t = nish_async_take(kind, bytes);
+  t->flags = NISH_TASK_INLINE;
+  if (nish_async_inline_len == nish_async_inline_cap)
+    nish_async_inline = nish_async_grow(nish_async_inline, &nish_async_inline_cap, sizeof *nish_async_inline);
+  nish_async_inline[nish_async_inline_len++] = (nish_inline){t, 0};
+  *prev = nish_async_current;
+  nish_async_current = t;
+  nish_region_enter(t->region);
   return t;
 }
 
@@ -316,12 +350,8 @@ void nish_async_leave(void *node, void *prev) {
 
 static void nish_async_disarm(nish_task *t);
 
-/* A task finished: take out its deadline, empty its region for the node's
-   next task and put its node back, a generation on. */
-void nish_async_done(void *node) {
-  nish_task *t = node;
-  if (t->kind < 0) return;
-  nish_async_disarm(t);
+/* Take `t` off the ready queue, if it is on it. */
+static void nish_async_unqueue(nish_task *t) {
   /* A task that cancelled itself while awaitAll ran its calls was queued by
      its own failed waits and may finish still on the ready queue: take it
      off, so the queue never holds a node on the free list. */
@@ -338,7 +368,11 @@ void nish_async_done(void *node) {
     }
     t->flags &= ~NISH_TASK_QUEUED;
   }
-  nish_region_enter(t->region);
+}
+
+/* Inside `t`'s region: rewind it for the node's next task, leave it and put
+   the node back on its slab, a generation on. */
+static void nish_async_recycle(nish_task *t) {
   nish_reset_arena();
   if (nish_arena.cap > (nish_async_kept < NISH_ASYNC_KEEP_TOTAL ? NISH_ASYNC_KEEP : 0)) {
     nish_free_arena();
@@ -348,11 +382,45 @@ void nish_async_done(void *node) {
   nish_region_leave(t->region, NULL);
   nish_async_kept += kept;
   t->flags = (uint32_t)kept << NISH_TASK_KEPT_SHIFT;
-  nish_async_live--;
   t->gen = t->gen == UINT32_MAX ? 1 : t->gen + 1;
   nish_slab *slab = &nish_async_slabs[t->kind];
   t->next = slab->free;
   slab->free = t;
+}
+
+/* A task finished: take out its deadline, empty its region for the node's
+   next task and put its node back, a generation on. */
+void nish_async_done(void *node) {
+  nish_task *t = node;
+  if (t->kind < 0) return;
+  nish_async_disarm(t);
+  nish_async_unqueue(t);
+  nish_async_live--;
+  nish_region_enter(t->region);
+  nish_async_recycle(t);
+}
+
+static void nish_async_arm(nish_task *t, int64_t due);
+
+/* After the first resume of a task `nish_async_start` started: one that
+   `finished` is emptied and its node put back while its region is still
+   entered, with no deadline ever armed; one that waits leaves its region,
+   counts as live and has the deadline set on it while it ran armed. Either
+   way `prev` runs again. */
+void nish_async_settle(void *node, void *prev, int32_t finished) {
+  nish_task *t = node;
+  int64_t due = nish_async_inline[--nish_async_inline_len].due;
+  t->flags &= ~NISH_TASK_INLINE;
+  if (finished) {
+    nish_async_unqueue(t);
+    nish_async_recycle(t);
+    nish_async_current = prev;
+    return;
+  }
+  nish_region_leave(t->region, NULL);
+  nish_async_current = prev;
+  nish_async_live++;
+  if (due && !(t->flags & NISH_TASK_CANCELLED)) nish_async_arm(t, due);
 }
 
 /* ---- Waits --------------------------------------------------------------- */
@@ -532,6 +600,11 @@ static void nish_async_cancel_task(nish_task *t) {
 
 /* Take out `t`'s armed deadline, if it has one. */
 static void nish_async_disarm(nish_task *t) {
+  if (t->flags & NISH_TASK_INLINE) {
+    for (uint32_t i = nish_async_inline_len; i-- > 0;)
+      if (nish_async_inline[i].task == t) nish_async_inline[i].due = 0;
+    return;
+  }
   if (!nish_async_deadlines || t->index >= nish_async_deadline_cap) return;
   uint32_t armed = nish_async_deadlines[t->index];
   if (!armed) return;
@@ -577,17 +650,28 @@ int32_t nish_async_cancel_after(int64_t handle, int32_t ms) {
   if (!t) return 0;
   nish_async_disarm(t);
   if (ms < 0 || (t->flags & NISH_TASK_CANCELLED)) return 1;
+  int64_t due = nish_async_now() + (int64_t)ms * 1000000;
+  if (t->flags & NISH_TASK_INLINE) {
+    for (uint32_t i = nish_async_inline_len; i-- > 0;)
+      if (nish_async_inline[i].task == t) nish_async_inline[i].due = due;
+    return 1;
+  }
+  nish_async_arm(t, due);
+  return 1;
+}
+
+/* Arm a timer that cancels `t` at `due`. */
+static void nish_async_arm(nish_task *t, int64_t due) {
   nish_task *running = nish_async_current;
   nish_async_current = t;
   uint32_t slot = nish_async_wait_new();
   nish_async_current = running;
   nish_wait *w = &nish_async_waits[slot];
   w->cancels = 1;
-  w->deadline = nish_async_now() + (int64_t)ms * 1000000;
+  w->deadline = due;
   w->seq = nish_async_seq++;
   nish_async_heap_push(slot);
   nish_async_deadlines[t->index] = slot + 1;
-  return 1;
 }
 
 /* A wait for `fd` to be readable (`dir` 0) or writable (`dir` 1). */

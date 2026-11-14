@@ -213,6 +213,8 @@ void *nish_async_spawn(int32_t kind, uint64_t bytes);
 void *nish_async_enter(void *node);
 void nish_async_leave(void *node, void *prev);
 void nish_async_done(void *node);
+void *nish_async_start(int32_t kind, uint64_t bytes, void **prev);
+void nish_async_settle(void *node, void *prev, int32_t finished);
 uint64_t nish_async_wait_fd(int32_t fd, int32_t dir);
 uint64_t nish_async_sleep(int32_t ms);
 int32_t nish_async_poll(uint64_t token);

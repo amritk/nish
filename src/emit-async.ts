@@ -384,12 +384,13 @@ export const emitAsyncCall = (
 }
 
 /**
- * `spawn`'s node, from the executor's slab for its kind (`nish_async_spawn`),
- * with a region of its own: the task is entered, its string arguments copied
- * into its region (the checker refuses any other argument that points at
- * memory, NL2673), started, and left; a task that finished at once gives its
- * node back, and one that waits is resumed by `@nish.async.run` when the
- * kernel says its wait is over.
+ * `spawn`'s node, from the executor's slab for its kind, with a region of its
+ * own, started in place (`nish_async_start`): the task is entered, its string
+ * arguments copied into its region (the checker refuses any other argument
+ * that points at memory, NL2673), and run to its first suspend; then
+ * `nish_async_settle` gives back the node of one that finished, still inside
+ * its region, and links one that waits, which `@nish.async.run` resumes when
+ * the kernel says its wait is over.
  */
 const emitSpawnedFrame = (
   emitter: Emitter,
@@ -410,10 +411,14 @@ const emitSpawnedFrame = (
   emitter.module.addRawDefinition(
     `define weak_odr hidden i1 @nish.async.task.${kind}(i8* %frame) nounwind${attrs} {\nentry:\n  %done = call i1 @${sig.name}.resume(i8* %frame)\n  ret i1 %done\n}`
   )
+  // Started in place (WP49 stage 6, spike A): the node is the frame's home
+  // from the start, but it counts as live, and a deadline set on it is armed,
+  // only if the first resume suspends; one that finishes is emptied and given
+  // back by the same call, still inside its region.
+  const prevSlot = fn.emitAlloca("async.prev", "i8*", 8)
   const node = fn.emitValue(
-    `call i8* ${emitter.useRuntime("nish_async_spawn")}(i32 ${kind}, i64 ${BYTES_MARK}${id}${MARK_END})`
+    `call i8* ${emitter.useRuntime("nish_async_start")}(i32 ${kind}, i64 ${BYTES_MARK}${id}${MARK_END}, i8** ${prevSlot})`
   )
-  const prev = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_enter")}(i8* ${node})`)
   const values: string[] = []
   // Operand `k` is parameter `p`: a compile-time function argument has no
   // operand (WP29), so the two part at the first one.
@@ -435,14 +440,9 @@ const emitSpawnedFrame = (
   const frame = fn.emitValue(`getelementptr inbounds i8, i8* ${node}, i64 ${NODE_HEADER}`)
   storeHead(emitter, frame, head, operandTypes, values)
   const finished = fn.emitValue(`call i1 @${sig.name}.resume(i8* ${frame})`)
-  fn.emit(`call void ${emitter.useRuntime("nish_async_leave")}(i8* ${node}, i8* ${prev})`)
-  const done = fn.newBlock("spawn.done")
-  const join = fn.newBlock("spawn.join")
-  fn.emit(`br i1 ${finished}, label %${done.label}, label %${join.label}`)
-  fn.placeBlock(done)
-  fn.emit(`call void ${emitter.useRuntime("nish_async_done")}(i8* ${node})`)
-  fn.emit(`br label %${join.label}`)
-  fn.placeBlock(join)
+  const prev = fn.emitValue(`load i8*, i8** ${prevSlot}`)
+  const flag = fn.emitValue(`zext i1 ${finished} to i32`)
+  fn.emit(`call void ${emitter.useRuntime("nish_async_settle")}(i8* ${node}, i8* ${prev}, i32 ${flag})`)
 }
 
 /**
