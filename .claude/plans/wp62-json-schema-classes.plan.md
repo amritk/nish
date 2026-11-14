@@ -17,7 +17,7 @@ stages:
         content: Write docs/wp62-json-schema-classes.md, the keyword-by-keyword table for draft 2020-12 and OpenAPI 3.1, defaults, names, round trip, how it runs, stages — see S1 — the WP62 proposal
         status: completed
       - id: roadmap-page
-        content: Write docs/roadmap/wp62-json-schema-classes.md, four unticked stages, S4 ending in *(owner's decisions)*; its index rows, scalar route, MASTER_PLAN and README rows — see S1 — the WP62 proposal
+        content: Write docs/roadmap/wp62-json-schema-classes.md, five unticked stages, S5 ending in *(owner's decisions)*; its index rows, scalar route, MASTER_PLAN and README rows — see S1 — the WP62 proposal
         status: completed
 ---
 
@@ -35,7 +35,9 @@ One PR, docs only. No file under `src/`, `std/`, `runtime/`, `tests/` or
 
 Stages proposed (unticked on the roadmap page):
 
-- S1: `nish schema` for plain objects, annotations and defaults
-- S2: `$ref`, maps, nullables and tagged unions
-- S3: validation keywords onto WP61's `constraints`
-- S4: the corpus, the guide page and the round trip *(owner's decisions)*
+- S1: typed JSON prerequisites (constructor-assigned optional defaults,
+  per-class unknown keys)
+- S2: `nish schema` for plain objects, annotations and defaults
+- S3: `$ref`, maps, nullables and tagged unions
+- S4: validation keywords onto WP61's `constraints`, and the coerce switch
+- S5: the corpus, the guide page and the round trip *(owner's decisions)*
