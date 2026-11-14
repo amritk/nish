@@ -1946,6 +1946,10 @@ These are recorded, not judged. Each cell is the async-db median against db-entr
 
 **What is left.** The gap on `/plaintext` and on `/json` at 512 connections is the per-request work the async path does and the explicit one does not. The [baseline profile](#the-baseline-profile-instructions-and-system-calls-per-request) measured it at 7,848 against 4,814 instructions on `plaintext`. #1493 then took off about 520 on `plaintext` and about 490 on `json`. [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) puts the rest in the serve, handler and router hand-off. The two library candidates above would together save less than 500 instructions a request, on a gap of more than 2,500. Closing the gap needs a change to that hand-off's design: for example, no spawned task per request, or a language rule that lets a task lend its connection's buffers to `handle`. That is a design decision, not a library fix.
 
+## TechEmpower: the gate after the hand-off build (WP49 stage 6)
+
+The re-measurement is running; the figures follow.
+
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 
