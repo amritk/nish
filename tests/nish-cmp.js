@@ -4521,10 +4521,12 @@ const DECLARED = [
   ...numberOnePass(
     "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
     {
+      "bench/json-api/main.ts": ["json-tokenizer.ll", "main.h"],
       "bench/json-tokenizer/main.ts": ["main.h"],
       "bench/json-value/main.ts": ["main.h"],
       "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.h"],
       "docs/cookbook/json-value.ts": ["json-value.h"],
+      "tests/link/json_encode_keys/main.ts": ["json-tokenizer.ll", "main.h"],
       "tests/link/std_json_conformance/main.ts": ["main.h"],
       "tests/link/std_json_equal/main.ts": ["main.h"],
       "tests/link/std_json_number/main.ts": ["main.h"],
