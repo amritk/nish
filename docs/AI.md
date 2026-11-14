@@ -153,7 +153,7 @@ everywhere, a template literal instead of `String(n)`.
 
 - A module is one `.ts` file. At the top level it may hold **only**
   declarations: `const` arrows (functions), `class`, `interface`, module
-  `const`s, `type` aliases, numeric `enum`s, and `import`s. There is no
+  `const`s, `type` aliases, `enum`s (numeric or string), and `import`s. There is no
   top-level code, so there is no initialisation order to think about. The
   one exception is an entry module with no `main`: its top-level statements
   run as `main` (`docs/LANGUAGE.md` → "Top-level code"). Declare every
@@ -294,6 +294,7 @@ compatible only when their types are identical.
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | aliases of `i32[]`, `f32[]`, `f64[]`, `i64[]` | not distinct types; fixed length, so no `push` or `pop` (NL2415): declare `f64[]` to grow one |
 | `class C`, `interface I` | a struct, fields in declaration order | no header, no vtable |
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
+| `enum K { A = "a" }` | a string enum: a distinct type, its member's ordinal as `i32` | never interchangeable with `string`; `String(k)` reads the member's string |
 | `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
 | `T \| null` | `T` a class, interface, array, string or function reference | a scalar can never be nullable |
 | `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read until a test of it narrows |
@@ -1099,8 +1100,8 @@ export const main = (): i32 => {
   NL9012: each element pays for building it and for the release. Storing an
   allocation into another object (NL2352) and touching `Arena` (NL2351) are
   refused, because either would make that release unsound.
-- **A map's result is a number, a `boolean`, an enum, a `string` or an array
-  of numbers, booleans or enums**: a string or a scalar array is copied out of
+- **A map's result is a number, a `boolean`, an enum (of either kind), a
+  `string` or an array of numbers, booleans or enums**: a string or a scalar array is copied out of
   the worker's arena at the join. An array of strings, a nested array, a class,
   a `Map` or a `Set` is refused (NL2348): answer a string or a number per
   element and build the structure after the call. **A reduce's `T` stays a number, a
@@ -1176,7 +1177,7 @@ export const main = (): i32 => {
   above the scope and `s.spawn(entry, arg, answer, 0)`. Either follows the
   data-parallel rules: it writes nothing anybody else can see but what it
   writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
-  a `boolean`, an enum, a `string` or an array of numbers, booleans or enums
+  a `boolean`, an enum of either kind, a `string` or an array of numbers, booleans or enums
   (copied out of its arena at the join), and leaves `Arena` alone. A task cannot open a scope
   of its own or call `parallelMapInto`.
 - **Any argument will do** — an array, an object — because nothing writes
@@ -1243,7 +1244,7 @@ export const main = (): i32 => {
 ```
 
 - **Only `g.value`, and only as the base of a field or element access.** Read
-  a number, a `boolean`, an enum or a `string` through it, or store one into a
+  a number, a `boolean`, an enum of either kind or a `string` through it, or store one into a
   field or an element that already exists (a string is copied each way) (for a `Mutex<i32>`, `g.value = g.value + 1`).
   Don't bind, store, return or walk `g` itself (NL2466), nor bind, store, return
   or walk `g.value` or an array it holds (NL2467); store only a scalar or a
@@ -1414,7 +1415,7 @@ export const main = (): i32 => {
 };
 ```
 
-- **It carries a number, a `boolean`, an enum or a `string`** (copied in by
+- **It carries a number, a `boolean`, an enum of either kind or a `string`** (copied in by
   `send`, out by the receive), never an array or an object.
 - **Declare it as a `const` right before its scope** — in the block that holds
   `using s = scope()`, or in the block around the scope's block — and hand it
@@ -1476,7 +1477,9 @@ export const main = (): i32 => {
 
 - **Crosses, by copy:** a number, a `boolean`, an enum, a `string`, an array
   of numbers, booleans or enums — a task's answer, a `parallelMap` element, a
-  `Channel<string>` value, a string stored through a guard. Each thread moves
+  `Channel<string>` value, a string stored through a guard. A string enum
+  crosses as its `i32` ordinal, like a numeric one: its strings sit in a
+  constant table every thread reads. Each thread moves
   the `parallelMap` elements it answers into blocks of its own, and the caller
   takes the blocks whole at the join; a task's answer under 64 KB is copied in
   by the joining thread. On one thread every element still pays the move, so
@@ -2010,6 +2013,43 @@ export const main = (): i32 => {
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
   no bitwise, so **bit flags stay `i32` module constants**.
+- A **string enum** gives every member a string literal (`Admin = "admin"`),
+  and is just as distinct: it is stored as its member's `i32` ordinal, `===`,
+  `!==` and `switch` compare ordinals, and `String(r)` is the only way to its
+  string (one load from a constant table, no allocation). `Role` and `string`
+  never convert either way — `r === "admin"` is NL2788,
+  `const s: string = r` and `` `${r}` `` NL2789, `const r: Role = "admin"`
+  NL2790 — because a string compare or a hidden conversion is exactly the cost
+  the ordinal exists to avoid: compare members, or write `String(r)` once.
+  Mixing string and numeric members is NL1043, a member without a value
+  NL1064, a template or computed value NL1065/NL1066, two members of one string
+  NL2786. A `Role | null` is NL2010, as for every enum. There is no
+  `Role.parse` yet: test `s === String(Role.Admin)` per member, or decode it
+  with typed JSON.
+
+```ts nish:ok
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const parse = (s: string): Role => (s === String(Role.Admin) ? Role.Admin : Role.Guest);
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 2;
+    default:
+      return 1;
+  }
+};
+
+export const main = (): i32 => {
+  const r = parse("admin");
+  console.log(`${String(r)} ${rank(r)}`);
+  return r === Role.Admin ? 0 : 1;
+};
+```
 - **A member is also a type.** `Kind.While` as an annotation is a slot that
   holds exactly that member — the shape of a tag field that says which case
   its object is. Only the member's own constant (or a value already of that
@@ -2870,14 +2910,18 @@ export const main = (): i32 => {
 
 `jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
 value)` writes one; the compiler writes the code at each call from the class's
-fields. A field is `i32`, `u32`, `i64`, `u64`, `f64`, `boolean`, `string`, a
-numeric enum, a class, an array of one of those, a `Map<string, V>` of any of
+fields. A field is `i32`, `u32`, `i64`, `u64`, `f64`, `boolean`, `string`, an
+enum, a class, an array of one of those, a `Map<string, V>` of any of
 those, or a `string`, class, array or map `| null`; anything else is refused at
 the call (NL2485), a `Map` with non-`string` keys and a `Set` included, and so
 is a value that is not a class (NL2486). Decoding is strict: every field
 required, each key once, an unknown key an error unless `d.ignoreUnknown`, and
 every outcome a sticky negative code in `d.failed`, never a panic. An enum is
-its number, and a number that is no member's value is `JSON_DECODE_TYPE`; a
+read and written as a numeric one's number or a string one's string, and a
+value that is no member's is `JSON_DECODE_TYPE` (the field keeps its member) —
+so a string enum field is how a program checks a closed set of strings from
+input (`role: Role`, `{"role":"admin"}`); a `Role | null` field is NL2010 and a
+`Map` keyed by an enum NL2485; a
 `u64` is exact to 2^64 - 1, and negative is `JSON_DECODE_RANGE`; a map is
 emptied and filled in the input's key order, a repeated key an error, and
 more keys over all the maps of one decode than `d.maxMapKeys` (4,096 unless
@@ -2895,7 +2939,8 @@ a rename to a non-string (NL2496) or to a key that is not valid UTF-8
 `JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
 `f64`, `setText`). A tagged union of classes is a field, an array element or
 `jsonEncode`'s value too: the object with its tag key first, the tag the
-member's name or the variant's `tag` option. Decode one with
+member's name (a string enum's member's string) or the variant's `tag`
+option. Decode one with
 `const u = jsonDecodeUnion(d, prev)` (never `jsonDecode`, NL2719, and no type
 argument): it answers `prev` refilled when the tag matches, else a new variant,
 and `prev` on failure (only at the top: a nested union slot may hold the new

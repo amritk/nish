@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 777 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 782 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15181,4 +15181,131 @@ export const main = (): void => {
 
 ```text
 A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body
+```
+
+## NL2786
+
+The message of an error contains:
+
+```text
+…`: each member of a string enum has its own string, because the string is how JSON and `String` name the member
+```
+
+[`nl2786_string_enum_same_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2786_string_enum_same_value.ts):
+
+```ts
+// Two members with one string would decode to the same member, so the second
+// is refused: the string is how JSON and `String` name a member.
+enum Role {
+  Admin = "admin",
+  Root = "admin",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member
+```
+
+## NL2787
+
+The message of an error contains:
+
+```text
+…` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8
+```
+
+[`nl2787_string_enum_utf8.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2787_string_enum_utf8.ts):
+
+```ts
+// A string enum's values are matched against JSON, so each is valid UTF-8.
+enum Role {
+  Bad = "\uD800",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8
+```
+
+## NL2788
+
+The message of an error contains:
+
+```text
+…`: an enum value is not its string, so compare it with a member, such as `…
+```
+
+[`nl2788_string_enum_compare_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2788_string_enum_compare_string.ts):
+
+```ts
+// A string enum is not a `string`: compare it with a member, not with text.
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const isAdmin = (r: Role): boolean => r === "admin";
+
+export const test = (): i32 => (isAdmin(Role.Admin) ? 1 : 0);
+```
+
+```text
+Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin`
+```
+
+## NL2789
+
+The message of an error contains:
+
+```text
+…` is not a string: write `String(…
+```
+
+[`nl2789_string_enum_to_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2789_string_enum_to_string.ts):
+
+```ts
+// A string enum does not convert to `string` on its own: `String(r)` does it.
+enum Role {
+  Admin = "admin",
+}
+
+export const test = (): i32 => {
+  const r: Role = Role.Admin;
+  const s: string = r;
+  return s.length;
+};
+```
+
+```text
+A `Role` is not a string: write `String(r)` for the member's string
+```
+
+## NL2790
+
+The message of an error contains:
+
+```text
+…` is not one: write the member itself, such as `…
+```
+
+[`nl2790_string_enum_from_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2790_string_enum_from_string.ts):
+
+```ts
+// A string does not become a member: write the member.
+enum Role {
+  Admin = "admin",
+}
+
+export const test = (): i32 => {
+  const r: Role = "admin";
+  return r === Role.Admin ? 1 : 0;
+};
+```
+
+```text
+`"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin`
 ```

@@ -4646,6 +4646,7 @@ export const main = (): i32 => {
   | `i32`, `u32`, `i64` | an integer written without a fraction or an exponent, in the type's range | `d.i32()`, `d.u32()`, `d.i64()` | `w.i32`, `w.u32`, `w.i64` |
   | `u64` | an integer written in digits alone, with no sign, fraction or exponent, up to 2^64 - 1 | `d.u64()`, through the tokenizer's `numberU64` | `jsonEncodeU64` |
   | a numeric `enum` `E` | the number of one of `E`'s members | `d.i32()`, then a `switch` over the members' values | `w.i32` |
+  | a [string `enum`](declarations.md#string-enums) `E` | the string of one of `E`'s members | `d.enumString()`, then the string's bytes against the members' strings | `w.string` of the member's string |
   | `f64` (and `number` under `--number-mode f64`) | any number; past the double range an infinity, which the writer writes as `null` | `d.f64()` | `w.f64` |
   | `boolean` | `true`, `false` | `d.boolean()` | `w.boolean` |
   | `string`, `string \| null` | a string, and `null` for the second | `d.string(cur)` | `w.string`, `jsonEncodeStringOrNull` |
@@ -4668,9 +4669,13 @@ export const main = (): i32 => {
   and so is a map whose values typed JSON cannot write, at any depth
   (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
   array of maps are refused as well (`json_reject_set_field`,
-  `json_reject_map_array`). An enum whose members are strings, or a mix of
-  strings and numbers, is not one the language declares at all
-  (NL1043, `json_reject_enum_string`, `json_reject_enum_mixed`), and a
+  `json_reject_map_array`). A `Map` keyed by a string enum is refused with
+  the rest: a map's keys are read and written as `string`s, and a string
+  enum is not one. An enum that mixes strings and numbers is not one the
+  language declares at all (NL1043, `json_reject_enum_mixed`), an enum is
+  never `| null`, numeric or string, so a `Role | null` field is refused where
+  it is written (NL2010, `json_reject_enum_nullable`) while a `Role[] | null`
+  is a field like any other, and a
   `const enum` is refused where it is declared (NL2285,
   `json_reject_const_enum`). A value that is not a declared class is
   `` `jsonEncode`'s value is `Point`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version ``
@@ -4690,7 +4695,7 @@ export const main = (): i32 => {
 
   | Outcome | Code | `errorAt` |
   | --- | --- | --- |
-  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for an enum | `JSON_DECODE_TYPE` (-20) | the value |
+  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for a numeric enum, a string that is no member's value, or a value that is not a string, for a string enum | `JSON_DECODE_TYPE` (-20) | the value |
   | a number its field cannot hold: a fraction or an exponent for an integer, or out of range, a negative number (`-0` included) for a `u64` | `JSON_DECODE_RANGE` (-21) | the number |
   | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
@@ -4711,13 +4716,25 @@ export const main = (): i32 => {
   read. After an error every field of `out` holds a value of its type, some
   decoded and some as they were: an enum field or element never holds a
   number that is no member's, because such a number is not stored.
-- **An enum is its number.** A numeric enum is read with `d.i32()`, so a
+- **A numeric enum is its number.** It is read with `d.i32()`, so a
   number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
   an integer that is not the value of one of its members is
   `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
   too. Two members of one value are one number (`tests/link/std_json_typed`,
   "enum: two members of one value both read 1"). It is written as `w.i32` of
   its value, as `JSON.stringify` writes a TypeScript numeric enum.
+- **A string enum is its member's string.** It is read with
+  `d.enumString()`, which takes the value as a string without copying it,
+  and its bytes are matched against the members' strings the way a key is
+  sent to its field: by length, then by one byte, then with `keyIs`, so the
+  read allocates nothing, and an escaped string, `"\u0061dmin"`, is the
+  member its unescaped bytes spell. A string that is no member's, a prefix of
+  one included, and a value that is not a string are `JSON_DECODE_TYPE`, and
+  the field or element keeps the member it held. It is written as `w.string`
+  of the member's string, which is what `JSON.stringify` writes for a
+  TypeScript string enum (`tests/link/json_enum_string`;
+  [IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#typed-json)). A field, an array, a
+  `| null` array and a `Map<string, Role>`'s values are read and written so.
 - **A `u64` is exact to 2^64 - 1.** It is read through the tokenizer's
   `numberU64`, so `18446744073709551615` decodes and `18446744073709551616`,
   `-1`, `-0` and `1.5` are `JSON_DECODE_RANGE`. It is written as its digits,
@@ -4864,7 +4881,7 @@ export const main = (): i32 => {
   or the value of `jsonEncode` may be a [discriminated union](types.md#discriminated-unions)
   whose variants are all declared classes, and the union is written as the
   variant's object with its tag key first, the tag's value the name of its
-  enum member:
+  enum member, or for a [string enum](declarations.md#string-enums) the member's string:
 
   ```typescript
   enum Kind { Num, Neg }
@@ -4885,14 +4902,18 @@ export const main = (): i32 => {
   jsonEncode(w, e);                      // the same text back
   ```
 
-  A variant's `tag` option replaces its member's name on the wire, and
+  With `enum Kind { Num = "num", Neg = "neg" }` the same union writes
+  `"kind":"num"`, and `Neg`'s `tag` still writes `"negate"`
+  (`tests/link/json_enum_string`). A variant's `tag` option replaces its
+  member's name or string on the wire, and
   `rename` renames the tag key as it renames any field. Every variant writes
   its tag under one key and as a different string, or the union is refused
   where a call reaches it (NL2721, `json_reject_union_tag_key`; NL2720,
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
   NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
   type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
-  `tag: ""` is the same as no `tag`: the variant writes its member's name. A
+  `tag: ""` is the same as no `tag`: the variant writes its member's name,
+  or string. A
   `tag` on a class that has such a field but that no union holds is not
   refused and does nothing: the class compiles while no JSON call reaches it,
   and one that does refuses the field (below). A variant

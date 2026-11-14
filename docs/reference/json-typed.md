@@ -199,7 +199,8 @@ That code is straight-line calls into the methods of `JsonDecoder` and the
 functions here for each field, and into `JsonWriter`'s, so all of the parsing
 is the tokenizer's and all of the writing is the writer's. A field may be an
 `i32`, `u32`, `i64`, `u64`, `f64` (or `number`), `boolean` or `string`, a
-numeric enum (its number), a class decoded the same way, a tagged union of
+numeric enum (its number), a string enum (its member's string), a class
+decoded the same way, a tagged union of
 classes, a `JsonNumber`, an array of any of those, a `Map<string, V>` (a
 JSON object) whose `V` is any of these, or a string, class, union, array or
 map `| null`; anything else is refused at the call, naming the field
@@ -236,6 +237,10 @@ u64                           digits alone, no sign,        d.u64()         json
                               2^64 - 1
 numeric enum E                the number of one of E's      d.i32(), then   w.i32
                               members                       a switch
+string enum E                 the string of one of E's      d.enumString(), w.string of
+                              members                       then its bytes  the member's
+                                                            against each    string
+                                                            member's
 f64 (number in f64 mode)      any number; past the double   d.f64()         w.f64
                               range an infinity, which the
                               writer writes as null
@@ -273,9 +278,9 @@ Anything else is refused at the call's argument, naming the class and the
 field (NL2485 for a field type, such as an `f32`, an `i32[][]`, a
 `Level[][]`, a `Set`, an array of maps, a `Map` not keyed by `string` (an
 enum key included) or a `Map` whose values cannot be written, and a generic
-class of the program's own). An enum whose members are strings or a mix is
-not one the language declares (NL1043), and a `const enum` is refused where
-it is declared (NL2285).
+class of the program's own). An enum that mixes string and numeric members
+is not one the language declares (NL1043), an enum is never `| null`
+(NL2010) and a `const enum` is refused where it is declared (NL2285).
 
 A value that is not a declared class (an interface, a generic class or any
 other type) is NL2486; decoding into an interface is left for a later
@@ -392,7 +397,7 @@ other than being absent:
 - `presence`, described below. Without it nothing is recorded.
 - `tag`, a string literal: what a variant of a tagged union writes as its
   tag, described below. Without it, or with `tag: ""`, the tag is the enum
-  member's name.
+  member's name, or for a string enum the member's string.
 
 </scalar-detail>
 
@@ -513,8 +518,9 @@ jsonEncode(w, e);
 </scalar-detail>
 
 The tag's key is the tag field's name, or its `rename`, and every variant
-gives the same one (NL2721). Its value is the enum member's name, or the
-variant's `tag` option, and no two variants write the same one (NL2720). The
+gives the same one (NL2721). Its value is the enum member's name (a string
+enum's member's string), or the variant's `tag` option, and no two variants
+write the same one (NL2720). The
 tag may be any key of the object: when it is the first, the variant is picked
 at once; when it is not, the keys before it are stepped over, checked but not
 kept, and the object is read again from its first key once the variant is
@@ -585,14 +591,26 @@ bounded by `maxMapKeys`, and a number's length by `JsonLimits.maxNumberBytes`.
 
 </scalar-callout>
 
-<scalar-detail title="An enum is its number">
+<scalar-detail title="A numeric enum is its number">
 
-A numeric enum is read with `d.i32()`, so a
+It is read with `d.i32()`, so a
 number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
 an integer that is not the value of one of its members is
 `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
 too. Two members of one value are one number. It is written as `w.i32` of
 its value, as `JSON.stringify` writes a TypeScript numeric enum.
+
+</scalar-detail>
+
+<scalar-detail title="A string enum is its member's string">
+
+It is read with `d.enumString()`
+and the string's bytes are matched against the members' strings by length,
+then by a byte, then with `keyIs`, so the read allocates nothing; an escaped
+string matches as its unescaped bytes. A string that is no member's string,
+and a value that is not a string, are `JSON_DECODE_TYPE`, and the field keeps
+the member it held. It is written as `w.string` of the member's string, as
+`JSON.stringify` writes a TypeScript string enum.
 
 </scalar-detail>
 

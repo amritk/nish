@@ -2,7 +2,7 @@
 
 # Diagnostics
 
-Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. These pages list all 949, one page per band: the 4 of band 0, which no rule matches, and the 945 rules `src/codes.ts` holds, 70 of them retired.
+Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. These pages list all 958, one page per band: the 4 of band 0, which no rule matches, and the 954 rules `src/codes.ts` holds, 70 of them retired.
 
 A rule is matched by a fragment of its message: the longest literal run of the message's template, with the names, types and counts it interpolates cut out. The fragment is matched as a substring, so `…` marks where the message goes on. Each example is a program from `tests/wordings/` that the suite compiles, and the message it gets, word for word. [Reading diagnostics](../guide/using-nish/cli.md#reading-diagnostics) in the guide says how to act on one; the [command-line reference](command-line.md) lists the flags that turn the warnings on and off.
 
@@ -16,13 +16,13 @@ Syntax errors and the run: 4 codes.
 
 <scalar-card title="NL1xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl1xxx.md">
 
-Forbidden syntax: 63 codes.
+Forbidden syntax: 66 codes.
 
 </scalar-card>
 
 <scalar-card title="NL2xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl2xxx.md">
 
-The type checker: 777 codes.
+The type checker: 782 codes.
 
 </scalar-card>
 
@@ -34,7 +34,7 @@ Modules and the driver: 54 codes.
 
 <scalar-card title="NL4xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl4xxx.md">
 
-The interop sidecars: 18 codes.
+The interop sidecars: 19 codes.
 
 </scalar-card>
 

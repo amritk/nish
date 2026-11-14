@@ -518,5 +518,40 @@ it.
 
 A union of classes reads and writes as JSON through `nish/json-typed`: the tag
 goes on the wire as the name of its enum member, and `jsonDecodeUnion` picks
-the variant by it. See
+the variant by it. When the tags come from a string enum, the tag on the wire
+is the member's string instead:
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+enum Kind {
+  Circle = "circle",
+  Square = "square",
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 3;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 4;
+}
+
+type Shape = Circle | Square;
+
+export const main = (): i32 => {
+  const shapes: Shape[] = [new Circle(), new Square()];
+  for (const s of shapes) {
+    const w = new JsonWriter(new Array<u8>(256), 0);
+    jsonEncode(w, s);
+    console.log(w.text()); // {"kind":"circle","r":3}, then {"kind":"square","side":4}
+  }
+  return 0;
+};
+```
+
+The tag enum can be either kind; nothing else about the union changes. See
 [Tagged unions](../using-nish/standard-library.md#tagged-unions).

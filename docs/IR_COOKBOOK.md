@@ -10284,9 +10284,10 @@ over the object's keys: a `switch` on `keyLength`, then, where two names share
 a length (`name` and `mood` below), a `switch` on the `keyByte` where they
 differ, with `-1` for a key written with an escape, and `keyIs` against the one
 name left; a `seen` flag per field for the duplicate and the missing checks;
-and the field's reader, whose result is stored straight into the field. An
-enum is `i32` and then a `switch` over its members' values, which stores only a
-member; a `u64` is `u64` and is written by `jsonEncodeU64`. A `Map<string, V>`
+and the field's reader, whose result is stored straight into the field. A
+numeric enum is `i32` and then a `switch` over its members' values, which
+stores only a member; a string enum is `enumString` and then its members'
+strings matched as keys are (below); a `u64` is `u64` and is written by `jsonEncodeU64`. A `Map<string, V>`
 gets a function of its own per direction, which calls the map's `clear`, `has`
 and `set`, or `walkNext`, `keyAt` and `valueAt`, copied into the module. A string's
 reader is bracketed by `nish_arena_mark` and `nish_arena_keep`, so the bytes
@@ -10398,6 +10399,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
@@ -10840,6 +10842,58 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end json-typed -->
 
+A **string enum** field (`role: Role = Role.Guest`, with `Admin = "admin"` and
+`Guest = "guest"`) is read by `enumString`, which leaves the string's bytes to
+compare as a key's are, unescaped and with no allocation, and then `keyIs`
+against each member's string in turn (with more members, a `switch` on
+`keyLength` and then a `keyByte` first, as for keys). A match is a `phi` of the member's ordinal, stored into the
+field; no match, or a value that is not a string, calls `wrongType`
+(`JSON_DECODE_TYPE`) and leaves the field's member as it was
+(`tests/link/json_enum_string`):
+
+```llvm
+json.take:
+  store i1 true, i1* %seen, align 1
+  %4 = call i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* %r)
+  br i1 %4, label %json.match, label %json.stored
+
+json.match:
+  %5 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
+  br i1 %5, label %json.is, label %json.next
+
+json.next:
+  %6 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
+  br i1 %6, label %json.is.1, label %json.other
+
+json.is:
+  br label %json.member
+
+json.is.1:
+  br label %json.member
+
+json.member:
+  %7 = phi i32 [ 0, %json.is ], [ 1, %json.is.1 ]
+  %8 = getelementptr inbounds %struct.User, %struct.User* %v, i32 0, i32 0
+  store i32 %7, i32* %8, align 4, !tbaa !15
+  br label %json.stored
+
+json.other:
+  call void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* %r)
+  br label %json.stored
+```
+
+The encoding is the load `String(r)` is, from the module's `@.enumstr.Role`,
+and one `string` call:
+
+```llvm
+  %3 = getelementptr inbounds %struct.User, %struct.User* %v, i32 0, i32 0
+  %4 = load i32, i32* %3, align 4, !tbaa !15
+  %5 = sext i32 %4 to i64
+  %6 = getelementptr inbounds [2 x i8*], [2 x i8*]* @.enumstr.Role, i64 0, i64 %5
+  %7 = load i8*, i8** %6, align 8
+  call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* %7)
+```
+
 ### Typed JSON: a tagged union
 
 `jsonDecodeUnion(d, prev)` and `jsonEncode(w, u)` over a union of classes are
@@ -10848,7 +10902,8 @@ and called from every place the union appears, so a recursive union recurses
 through them. The decoding calls `unionTag`, which finds the tag key (at once
 when it is the first key, otherwise by reading ahead and rewinding) and leaves
 the tag's string to compare, dispatched as a class's keys are: `keyIs` per
-variant's wire tag in turn, as here, and from three variants a `switch` on
+variant's wire tag (its tag member's name, or for a string enum the member's
+string, unless the variant's `tag` option names another) in turn, as here, and from three variants a `switch` on
 `keyLength` first. A match reuses `prev` when its `i32` tag is the variant's,
 and otherwise calls `.json.new.<V>`; `enterUnion` then steps into the object
 and the variant's own field loop runs with its tag already read. No match calls
@@ -10938,6 +10993,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
@@ -11427,6 +11483,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
@@ -16517,6 +16574,106 @@ attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-enum -->
+
+### String `enum`
+
+A string enum is the same **distinct type with `i32` representation**: a
+`Role` is its member's ordinal (`Role.Admin` is `0`, `Role.Guest` is `1`), the
+parameter is an `i32`, and the `switch` is the same jump table, comparing
+ordinals and never bytes. What a numeric enum does not have is one constant
+table per module, `@.enumstr.Role`, of pointers to the members' strings in
+declaration order. `String(r)` is a `getelementptr` and a `load` from it —
+no allocation and no copy — and it is the only way to a member's string:
+`r === "admin"`, `const s: string = r` and `` `${r}` `` are refused, so a
+string compare never hides behind an enum (`tests/cases/enum_string`).
+
+<!-- cookbook:begin decl-enum-string -->
+```ts
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 2
+    default:
+      return 1
+  }
+}
+
+export const main = (): number => {
+  const r: Role = Role.Guest
+  console.log(`${String(r)} ${rank(r)}`)
+  return 0
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"admin\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"guest\00" }, align 8
+@.enumstr.Role = private unnamed_addr constant [2 x i8*] [i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)], align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+
+define internal noundef i32 @rank(i32 noundef %r) #0 {
+entry:
+  switch i32 %r, label %sw.default [
+    i32 0, label %sw.case
+  ]
+
+sw.case:
+  ret i32 2
+
+sw.default:
+  ret i32 1
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %r.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 1, i32* %r.addr, align 4
+  %0 = load i32, i32* %r.addr, align 4
+  %1 = sext i32 %0 to i64
+  %2 = getelementptr inbounds [2 x i8*], [2 x i8*]* @.enumstr.Role, i64 0, i64 %1
+  %3 = load i8*, i8** %2, align 8
+  %4 = call i8* @nish_str_concat(i8* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %5 = load i32, i32* %r.addr, align 4
+  %6 = call i32 @rank(i32 %5)
+  %7 = call i8* @nish_str_from_i32(i32 %6)
+  %8 = call i8* @nish_str_concat(i8* %4, i8* %7)
+  call void @nish_print(i8* %8)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-enum-string -->
 
 **An imported enum lowers exactly as this one does.** `import { Kind } from
 "./kinds"` binds the exporter's enum, so a member folds to the exporter's

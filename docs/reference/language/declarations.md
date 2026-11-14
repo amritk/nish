@@ -672,18 +672,28 @@ enum Level {
   Mid,   // 1
   High,  // 2
 }
+
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
 ```
 
-A numeric `enum` declares a **distinct type whose representation is `i32`**.
-Distinct is the point, and it is stricter than TypeScript, where a numeric enum
-member is assignable to `number`: the rule this language is built on is that
+An `enum` is of one of two kinds. A **numeric** enum's members are integers;
+a **string** enum's members are each given a string literal, and its rules
+past the ones below are in [String enums](#string-enums). Either kind
+declares a **distinct type whose representation is `i32`**: a numeric
+member's integer, or a string member's ordinal. Distinct is the point, and it
+is stricter than TypeScript, where a numeric enum member is assignable to
+`number` and a string one to `string`: the rule this language is built on is that
 two values are compatible only when their types are identical
 ([Types](types.md)), and an enum that were silently `i32` would be the one type
 compatible with something it is not spelled as. So `Kind` and `i32` are two
-types, in both directions, and the only values of `Kind` are the members it
-declares.
+types, in both directions, as `Role` and `string` are, and the only values of
+`Kind` are the members it declares.
 
-Nothing is emitted for one. A member is folded to its integer the way a module
+Nothing is emitted for a numeric enum (a string enum adds its one table of
+strings, [String enums](#string-enums)). A member is folded to its integer the way a module
 constant is folded to its value, so `Kind.While` lowers to the literal `2`, a
 `Kind` parameter is an `i32` parameter, and there is no symbol, no table and no
 `%struct` anywhere. `tests/cases/enum_ir` and `tests/cases/enum_expanded` are
@@ -692,9 +702,11 @@ and their `.ll` goldens are byte-identical files.
 
 - **A member's value is a numeric literal, or the one before it plus one.**
   Auto-numbering is TypeScript's: the first member without an initialiser is
-  `0`. A member that is not a numeric literal is Phase 0's
-  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
-  (`tests/cases/reject_enum_string`, `reject_enum_computed`); a numeric literal
+  `0`. An enum any of whose members is given a string literal is a
+  [string enum](#string-enums) instead. A member that is neither — a computed
+  value in a numeric enum, or a numeric member beside a string one — is
+  `` Enum members must be numeric literals in Nish, or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings) ``
+  (NL1043, `tests/cases/reject_enum_computed`, `reject_enum_string_mixed`); a numeric literal
   that is not an integer is `` Enum member `Kind.Half` must be an integer literal ``
   (`reject_enum_float`), and one outside the width is
   `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`).
@@ -810,7 +822,8 @@ and their `.ll` goldens are byte-identical files.
     `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
     One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
   - **Two members of one value are one type**, as `tsc` reads them, spelled
-    by the member declared first: with `List = 1` beside `Array`, a
+    by the member declared first (a string enum has no two such members,
+    [String enums](#string-enums)): with `List = 1` beside `Array`, a
     `Kind.List` slot is reported as `` `Kind.Array` ``
     (`reject_enum_member_type_same_value`), and `Kind.List` enters a
     `Kind.Array[]` (`tests/cases/enum_member_type_slots`).
@@ -841,8 +854,9 @@ and their `.ll` goldens are byte-identical files.
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
     it reads an enum as any of its members, which a member type cannot hold.
     The one exception is a union's tag: a member that tags a variant of a
-    union is written as its name, the union's [typed JSON](builtins.md#typed-json-nishjson-typed)
-    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
+    union is written as its name, or a string enum's member as its string,
+    the union's [typed JSON](builtins.md#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`, `tests/link/json_enum_string`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
@@ -897,12 +911,153 @@ and their `.ll` goldens are byte-identical files.
   is written first).
 - **An enum does not cross to C or JavaScript.** `--emit-header`, `--emit-dts`
   and `--emit-napi` have no spelling for one, so a function whose signature
-  mentions an enum is skipped with the note those generators write for every
-  type they cannot carry (`weight(k: Kind): number: not declared; no C spelling
-  for one of its types.`). An enum is a type inside one module, as it is across
-  a module boundary: give a host an `i32` and keep the enum behind it.
+  mentions a numeric enum is skipped with the note those generators write for
+  every type they cannot carry (`weight(k: Kind): number: not declared; no C
+  spelling for one of its types.`), and one whose signature holds a string
+  enum is refused (NL4019, [String enums](#string-enums)). An enum is a type
+  inside one module, as it is across a module boundary: give a host an `i32`
+  or a `string` and keep the enum behind it.
 - **Enums are top-level only.** `enum K { A = 1 }` inside a function body is
   `Unsupported statement in Phase 1: EnumDeclaration` *(CLI only)*.
+
+### String enums
+
+An enum whose members are each given a string literal is a **string enum**.
+It is the spelling Nish takes for a closed set of strings: a union of string
+literals, `"admin" | "guest"`, is refused (NL1053, and a lone string literal
+type is NL2668), because a value has one fixed layout and a string enum's is
+an `i32`.
+
+```ts
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+  Nobody = "",
+}
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 3;
+    case Role.Guest:
+      return 1;
+    default:
+      return 0;
+  }
+};
+
+const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
+```
+
+- **A value is its member's ordinal.** A string enum is a distinct type, as a
+  numeric one is, stored as an `i32`: the member's position in declaration
+  order, `0`, `1`, `2`, and never the bytes of its string. Every rule of
+  [Enums](#enums) above holds for it as it does for a numeric enum: `===` and
+  `!==` between two of its values are the only operators, and they compare
+  ordinals; a `switch` over one lowers to LLVM's `switch` on the ordinal; a
+  member is also a type (`kind: Role.Admin`), and so tags a variant of a
+  [discriminated union](types.md#discriminated-unions)
+  (`tests/cases/enum_string_union_tag`); a value is a `Map` or `Set` key, an
+  element, a field and a `Result` arm; it crosses a thread, a channel and a
+  task as the `i32` it is; and it is exported and imported as a numeric enum
+  is (`tests/cases/enum_string`, `tests/link/enum_string_export`). It is never
+  `| null` (NL2010), as no enum is.
+- **Its strings are one table per module.** Each module that names the enum's
+  strings holds them as `@.enumstr.<Name>`, an array of the module's string
+  constants indexed by ordinal; an importer gets its own copy of the table, so
+  nothing is looked up across a module boundary
+  (`tests/link/enum_string_export`). Nothing else is emitted: `Role.Guest`
+  folds to `1` as `Kind.While` folds to `2`.
+
+  ```llvm
+  @.enumstr.Role = private unnamed_addr constant [3 x i8*] [i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*)], align 8
+
+  define internal noundef i32 @rank(i32 noundef %r) #0 {
+  entry:
+    switch i32 %r, label %sw.default [
+      i32 0, label %sw.case
+      i32 1, label %sw.case.1
+    ]
+  ```
+- **`String(r)` is the member's string.** It loads the table's entry at the
+  ordinal, so it allocates nothing and its answer is the module's constant:
+
+  ```llvm
+  %19 = sext i32 %18 to i64
+  %20 = getelementptr inbounds [3 x i8*], [3 x i8*]* @.enumstr.Role, i64 0, i64 %19
+  %21 = load i8*, i8** %20, align 8
+  call void @nish_print(i8* %21)
+  ```
+
+  `String` takes a string enum's value and nothing else; on any other
+  argument it is `` Unknown function `String` `` (NL2247).
+- **A member's value is a string literal, written once.** Every member of a
+  string enum has an initializer:
+  `` String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal ``
+  (NL1064, `tests/cases/reject_enum_string_missing`). A numeric member beside
+  a string one is NL1043 (`reject_enum_string_mixed`, and in typed JSON
+  `json_reject_enum_mixed`), and a template literal is
+  `` An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared ``
+  (NL1065, `reject_enum_string_template`); a computed value, `"gu" + "est"`,
+  is
+  `` A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared ``
+  (NL1066, `reject_enum_string_computed`). The value is valid UTF-8, since it
+  is written to and matched against JSON: a lone surrogate, `"\uD800"`, is
+  `` Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8 ``
+  (NL2787, `reject_enum_string_utf8`). The empty string is a value like any
+  other (`tests/cases/enum_string`).
+- **Two members do not share a string.**
+  `` Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member ``
+  (NL2786, `tests/cases/reject_enum_string_same_value`). A numeric enum
+  allows two members of one value, which are one type; a string enum does
+  not, because its string is how the member is named outside the program: a
+  decoded `"admin"` must name one member, and `String` must answer one
+  string per member. `tsc` would also read two members of one string as one
+  value, where Nish's ordinals would make them two.
+- **A `Role` is not a `string`, in either direction.** A string is never
+  compared with one:
+  `` Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin` ``
+  (NL2788, `tests/cases/reject_enum_string_compare_literal`). A `Role` where
+  a string is wanted, `const s: string = r` or `${r}` in a template, is
+  `` A `Role` is not a string: write `String(r)` for the member's string ``
+  (NL2789, `reject_enum_string_to_string`, `reject_enum_string_template_use`),
+  and a string where a `Role` is wanted, `const r: Role = "admin"`, is
+  `` `"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin` ``
+  (NL2790, `reject_enum_string_from_string`). Arithmetic is refused as on any
+  enum, `r + 1` being
+  `` Operator `+` requires two operands of the same numeric type or two strings, got Role and i32 ``
+  (NL2231, `reject_enum_string_arith`), and `const enum` is NL2285 as above.
+- **Typed JSON reads and writes its string.** A string-enum field, array,
+  `| null` array or `Map` value is the member's string on the wire, and a
+  union tagged by a string enum's member writes that string as its tag
+  ([Typed JSON](builtins.md#typed-json-nishjson-typed)).
+- **Under `--emit-ts` it is a `const` object.** `enum Role { Admin = "admin" }`
+  is written as
+
+  ```ts
+  export const Role = { Admin: "admin", Guest: "guest" } as const;
+  export type Role = (typeof Role)[keyof typeof Role];
+  ```
+
+  so each member is the string `tsc` gives it, `String(r)` is the identity
+  and prints what the native program reads from its table, and a member type
+  is `typeof Role.Admin` (`tests/emit-ts/control/string-enums`). `tsc` would
+  accept `r === "admin"`, `const s: string = r` and `const r: Role = "admin"`
+  on that output; Nish refuses all three, so it is the stricter of the two,
+  and every program it accepts is one `tsc` accepts too.
+- **A string enum does not cross to C, N-API or wasm yet.** An exported
+  function whose parameter or result is a string enum, or an array, `| null`
+  or `Result` that holds one, is refused under `--emit-header`, `--emit-dts`,
+  `--emit-napi` and `--emit-napi-async`:
+  `` `rank`'s parameter `r` is `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch` ``
+  (NL4019, `tests/cases/reject_enum_string_export`,
+  `reject_enum_string_export_napi`). It is an ordinal natively and a string in
+  TypeScript, and a sidecar cannot yet say which a host passes.
+- **Open questions.** A `Role.parse(s)` that answers the member a string
+  names is not built: today a program tests `s === String(Role.Admin)` for
+  each member, or decodes the string with typed JSON; the C, N-API and wasm spelling of a string enum is open
+  (NL4019); and a union of string literals stays refused, string enums being
+  the spelling Nish takes instead.
 
 ## `export` and `import`
 
@@ -1615,7 +1770,12 @@ export const main = (): i32 => {
   (NL4008, `tests/cases/reject_interop_generic_clash`). They also refuse a
   signature or an exported struct field that holds a
   [discriminated union](types.md#discriminated-unions), which has no C spelling yet
-  (NL4009, `tests/cases/reject_union_export_param`).
+  (NL4009, `tests/cases/reject_union_export_param`), and a signature that
+  holds a [string enum](#string-enums), alone or in an array, a `| null` or
+  a `Result`:
+  `` `rank`'s parameter `r` is `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch` ``
+  (NL4019, `tests/cases/reject_enum_string_export`,
+  `reject_enum_string_export_napi`).
 - **A template may be exported and instantiated from another module, and each
   instantiation is defined exactly once**, in the module that declares the
   template. Everywhere else it is a `declare` carrying that definition's

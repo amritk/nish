@@ -713,7 +713,7 @@ Its security record is [docs/security/json.md](../../security/json.md).
 declare, and `jsonEncode(w, value)` writes one back. There is nothing to
 register and no schema to write: the compiler writes the code from the class's
 fields at each call. A field can be an `i32`, `u32`, `i64`, `u64`, `f64`,
-`boolean`, `string`, a numeric `enum`, another class, an array of any of those,
+`boolean`, `string`, an `enum` of either kind, another class, an array of any of those,
 a `Map` with `string` keys whose values are any of those, or a `string`, a
 class, an array or a map with `| null`; and a `JsonNumber`, which keeps a
 number's text exactly.
@@ -784,12 +784,61 @@ takes no parameters. Encoding writes the fields in the order the class declares
 them, exactly as `JSON.stringify` would.
 
 A `u64` keeps every digit up to 2^64 - 1, which a JavaScript number cannot,
-and a negative number is a range error for it. An enum is read and written as
-its number: a number that is not one of its members' values is a type error,
-and the field keeps the member it held.
+and a negative number is a range error for it. A numeric enum is read and
+written as its number, and a string enum as its member's string. A value that
+is not one of the enum's members is a type error, `JSON_DECODE_TYPE`, and the
+field keeps the member it held. That makes a string enum field the way to take
+one of a fixed set of strings from input: the decoder checks it for you, and
+allocates nothing to do it.
 
-An enum whose members are strings is not something the language has, so it
-cannot be a field either; use a `string` field and check its value yourself. A
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JSON_DECODE_TYPE, JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
+
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+class Member {
+  name: string = "";
+  role: Role = Role.Guest;
+}
+
+const bytesOf = (text: string): u8[] => {
+  const out = new Array<u8>(toI32(text.length));
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(text.length); i += 1) {
+    out[i] = toU8(text.charCodeAt(i));
+  }
+  return out;
+};
+
+const read = (text: string, m: Member): i32 => {
+  const body = bytesOf(text);
+  const d = new JsonDecoder(body, 0, toI32(body.length), new JsonLimits());
+  return jsonDecode(d, m);
+};
+
+export const main = (): i32 => {
+  const m = new Member();
+  if (read(`{"name":"Ann","role":"admin"}`, m) !== 0) {
+    return 1;
+  }
+  console.log(m.role === Role.Admin ? "an admin" : "a guest"); // an admin
+  const w = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(w, m);
+  console.log(w.text()); // {"name":"Ann","role":"admin"}
+
+  const bad = new Member();
+  const code = read(`{"name":"Bo","role":"root"}`, bad);
+  console.log(`${code === JSON_DECODE_TYPE} ${String(bad.role)}`); // true guest
+  return 0;
+};
+```
+
+A field can't be `Role | null`, because an enum is never nullable, and a `Map`
+can't be keyed by an enum; an array of one, `Role[]`, is fine. A
 `Map<string, V>` is a JSON object whose keys you do not know in advance:
 decoding empties the map and fills it in the order the keys arrive, a key given
 twice is an error, and encoding writes the entries in the map's order.
@@ -976,7 +1025,8 @@ export const main = (): i32 => {
 A field, an array element or a whole document can be a
 [discriminated union](../language/unions.md) of classes. On the wire it is the
 variant's object with its tag key first, and the tag's value is the name of its
-enum member; a variant's `tag` option writes another string (`tag: ""` is
+enum member, or the member's string when the tags come from a string enum
+(`Circle = "circle"` writes `"circle"`); a variant's `tag` option writes another string (`tag: ""` is
 the same as no `tag`), and `rename`
 renames the tag key. Every variant must use the same key and a different
 string, and the compiler tells you where they clash.
