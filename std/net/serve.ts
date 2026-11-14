@@ -1535,7 +1535,9 @@ export const serveOn = async (
     // Each pass answers what the tasks wrote and takes what the connections
     // queued: a pipelined request is queued once the one before it is
     // answered, so a burst on a connection is taken and answered in request
-    // order within this turn, and the answers are sent together.
+    // order within this turn, and the answers are sent together. They carry
+    // one clock reading as their `Date`, as a carrier's serve call does,
+    // rather than one read per answer; it is let go once they are sent.
     c.server.date.hold()
     let moved: boolean = true
     while (moved || st.fresh) {

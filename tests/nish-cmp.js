@@ -4567,25 +4567,29 @@ const DECLARED = [
   // probes link the modules net_serve_burst does (json.ll too, on aarch64),
   // and each differs from the seed's because the seed's `serve` goes through
   // HttpHandler while this one drives Http1Server from its own ServeConns.
-  ...["tests/link/net_serve_slot_reuse/main.ts", "tests/link/net_serve_head_drain/main.ts"].flatMap(
-    (program) =>
-      [
-        "handler.ll",
-        "hkdf.ll",
-        "hmac.ll",
-        "json.ll",
-        "main.h",
-        "main.ll",
-        "record.ll",
-        "router.ll",
-        "serve.ll",
-        "tls.ll",
-      ].map((file) => ({
-        program,
-        file,
-        changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
-        why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
-      }))
+  // net_serve_raw, which pins serve's answered bytes, links the same modules.
+  ...[
+    "tests/link/net_serve_slot_reuse/main.ts",
+    "tests/link/net_serve_head_drain/main.ts",
+    "tests/link/net_serve_raw/main.ts",
+  ].flatMap((program) =>
+    [
+      "handler.ll",
+      "hkdf.ll",
+      "hmac.ll",
+      "json.ll",
+      "main.h",
+      "main.ll",
+      "record.ll",
+      "router.ll",
+      "serve.ll",
+      "tls.ll",
+    ].map((file) => ({
+      program,
+      file,
+      changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
+      why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
+    }))
   ),
   ...taggedUnions(
     "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
