@@ -52,12 +52,11 @@
 // is no more calls: `if (d.keyIs("x")) goto x; else if (d.keyIs("y")) goto y;
 // else goto unknown`.
 //
-// The encoding is `w.beginObject()`, `w.keyQuoted("id", "\"id\":")` and
-// `w.i32(v.id)` per field in declaration order, then `w.endObject()`: the key
-// is quoted and escaped here, once, so a minified writer copies it in one
-// step (`emitJsonFieldKey`). Every call into the decoder and
-// the writer is a call of one of their methods, and every error is theirs and
-// sticky, so this code has no error path of its own.
+// The encoding is `w.beginObject()`, `w.keyQuoted("id", "\"id\":")`
+// (`emitJsonFieldKey`) and `w.i32(v.id)` per field in declaration order, then
+// `w.endObject()`. This code only calls the decoder's and the writer's
+// methods, and every error is theirs and sticky, so it has no error path of
+// its own.
 //
 // The facts the attribute pass gives the instantiation are what this code may
 // do (`markJsonRoute` in `src/attributes.ts`), and the functions themselves
