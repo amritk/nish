@@ -1225,6 +1225,8 @@ const quicRebind = byFinding(
  * names its title; each entry's `why` says which fix moved the file.
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+/** The changelog words of the stage that writes a typed object's keys as one copy (#1580). */
+const JSON_KEYS_QUOTED = "a typed object's keys as one pre-escaped copy"
 
 /** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
 const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
@@ -4519,10 +4521,12 @@ const DECLARED = [
   ...numberOnePass(
     "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
     {
+      "bench/json-api/main.ts": ["json-tokenizer.ll", "main.h"],
       "bench/json-tokenizer/main.ts": ["main.h"],
       "bench/json-value/main.ts": ["main.h"],
       "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.h"],
       "docs/cookbook/json-value.ts": ["json-value.h"],
+      "tests/link/json_encode_keys/main.ts": ["json-tokenizer.ll", "main.h"],
       "tests/link/std_json_conformance/main.ts": ["main.h"],
       "tests/link/std_json_equal/main.ts": ["main.h"],
       "tests/link/std_json_number/main.ts": ["main.h"],
@@ -6594,6 +6598,98 @@ const DECLARED = [
     changelog: UNION_GENERICS,
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "JsonWriter gains `keyQuoted`, the compiler's `jsonEncode` of a class calls it with each key quoted and escaped as a string constant, and `i32` and `i64` count their digits by compares rather than divides, so nish/json moves in every program linking it and a module encoding a class moves where it writes a key",
+    {
+      "bench/http-app-carrier.ts": ["json.ll"],
+      "bench/http1-request/main.ts": ["json.ll"],
+      "bench/http1-server.ts": ["json.ll"],
+      "bench/json-compare/main.ts": ["json.ll"],
+      "bench/json-value/main.ts": ["json.ll"],
+      "bench/json-writer/main.ts": ["json.ll", "main.ll"],
+      "bench/runtime-copies/main.ts": ["json.ll", "main.ll"],
+      "bench/techempower/main.ts": ["json.ll"],
+      "bench/yaml-json/main.ts": ["json.ll"],
+      "docs/cookbook/json-fields.ts": ["json.ll"],
+      "docs/cookbook/json-presence.ts": ["json.ll"],
+      "docs/cookbook/json-typed.ts": ["json.ll"],
+      "docs/cookbook/json-value.ts": ["json.ll"],
+      "docs/cookbook/json-writer.ts": ["json-writer.ll", "json.ll"],
+      "examples/api-cli/main.ts": ["json.ll", "main.ll"],
+      "examples/http-app/main.ts": ["json.ll"],
+      "examples/http-get-json.ts": ["json.ll"],
+      "examples/merge-patch.ts": ["json.ll"],
+      "tests/link/json_merge_patch/main.ts": ["json.ll"],
+      "tests/link/json_presence/main.ts": ["json.ll"],
+      "tests/link/net_handler/main.ts": ["json.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["json.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["json.ll"],
+      "tests/link/net_handler_short/main.ts": ["json.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["json.ll"],
+      "tests/link/net_http_app/main.ts": ["json.ll"],
+      "tests/link/net_serve/main.ts": ["json.ll"],
+      "tests/link/net_serve_burst/main.ts": ["json.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["json.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["json.ll"],
+      "tests/link/net_serve_pg/main.ts": ["json.ll"],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["json.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["json.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["json.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["json.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["json.ll"],
+      "tests/link/net_upstream/main.ts": ["json.ll"],
+      "tests/link/net_upstream_release/main.ts": ["json.ll"],
+      "tests/link/std_json_conformance/main.ts": ["json.ll"],
+      "tests/link/std_json_equal/main.ts": ["json.ll"],
+      "tests/link/std_json_number/main.ts": ["json.ll"],
+      "tests/link/std_json_pointer/main.ts": ["json.ll"],
+      "tests/link/std_json_typed/main.ts": ["json.ll"],
+      "tests/link/std_json_value/main.ts": ["json.ll"],
+      "tests/link/std_json_value_ranges/main.ts": ["json.ll"],
+      "tests/link/std_json_writer/main.ts": ["bytes.ll", "json.ll", "main.ll"],
+      "tests/link/std_postgres_async/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json.ll"],
+      "tests/link/tfb_async_db/main.ts": ["json.ll"],
+      "tests/link/tfb_async_entry/main.ts": ["json.ll"],
+      "tests/link/tfb_db/main.ts": ["json.ll"],
+      "tests/link/tfb_entry/main.ts": ["json.ll"],
+    }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the API-page benchmark is new in this stage: its encoder and nish/json move as above, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks",
+    { "bench/json-api/main.ts": ["json-typed.ll", "json.ll", "main.ll"] }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the stage adds these tests: tests/link/json_encode_keys encodes a class whose keys need escaping, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks; std_json_typed gains keys.ts, which encodes classes and so writes their keys through it",
+    {
+      "tests/link/json_encode_keys/main.ts": ["json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/std_json_typed/main.ts": ["keys.ll"],
+    }
+  ),
 ]
 
 /**
