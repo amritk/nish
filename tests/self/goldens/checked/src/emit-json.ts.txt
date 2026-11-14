@@ -48,6 +48,7 @@ import StructInfo from "./program" -> struct StructInfo
 import TemplateInfo from "./program" -> struct TemplateInfo
 import StringSet from "./map" -> struct StringSet
 import ARRAY_TYPE from "./runtime" -> const ARRAY_TYPE
+import jsonQuote from "./strings" -> function @jsonQuote
 import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
@@ -1330,13 +1331,27 @@ function emitJsonDecodeMapBody(emitter: Emitter, part: JsonPart): void -> @emitJ
   callee +47:3 IRFunction.emit -> @IRFunction.emit
   callee +49:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee +50:3 IRFunction.emit -> @IRFunction.emit
+function emitJsonFieldKey(emitter: Emitter, part: JsonPart, wireName: string): void -> @emitJsonFieldKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.stringConstant
+  escaping: wireName
+  calls: Emitter.stringConstant jsonCallMethod jsonQuote nish_str_concat
+  pointer emitter: size=384 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0 jsonCallMethod#0
+  pointer part: size=56 writesThrough=false captured=false
+  stackSites=1 stackLocals=0
+  local +0:9 name: string (const)
+  callee +0:16 Emitter.stringConstant -> @Emitter.stringConstant
+  local +1:9 quoted: string (const)
+  callee +1:18 Emitter.stringConstant -> @Emitter.stringConstant
+  callee +1:44 jsonQuote -> @jsonQuote
+  callee +2:3 jsonCallMethod -> @jsonCallMethod
 function emitJsonEncodeBody(emitter: Emitter, part: JsonPart): void -> @emitJsonEncodeBody
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonPartInfo
-  calls: Emitter.stringConstant IRFunction.emit emitJsonEncodeValue emitJsonStopIfFailed jsonCallMethod jsonFieldsOf jsonPartInfo jsonWireTag loadField nish_str_concat
-  pointer emitter: size=384 writesThrough=false captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 emitJsonStopIfFailed#0 jsonCallMethod#0 jsonCallMethod#0 Emitter.stringConstant#0 Emitter.stringConstant#0 jsonCallMethod#0 jsonCallMethod#0 Emitter.stringConstant#0 emitJsonEncodeValue#0 loadField#0 jsonCallMethod#0
-  pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 emitJsonStopIfFailed#1 emitJsonEncodeValue#1
-  stackSites=5 stackLocals=0
+  calls: Emitter.stringConstant IRFunction.emit emitJsonEncodeValue emitJsonFieldKey emitJsonStopIfFailed jsonCallMethod jsonFieldsOf jsonPartInfo jsonWireTag loadField nish_str_concat
+  pointer emitter: size=384 writesThrough=false captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 emitJsonStopIfFailed#0 jsonCallMethod#0 emitJsonFieldKey#0 Emitter.stringConstant#0 jsonCallMethod#0 emitJsonFieldKey#0 emitJsonEncodeValue#0 loadField#0 jsonCallMethod#0
+  pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 emitJsonStopIfFailed#1 emitJsonFieldKey#1 emitJsonFieldKey#1 emitJsonEncodeValue#1
+  stackSites=3 stackLocals=0
   local +0:9 info: StructInfo (const)
   callee +0:16 jsonPartInfo -> @jsonPartInfo
   local +1:9 fields: JsonField[] (const)
@@ -1345,16 +1360,14 @@ function emitJsonEncodeBody(emitter: Emitter, part: JsonPart): void -> @emitJson
   callee +3:3 jsonCallMethod -> @jsonCallMethod
   local +4:14 f: JsonField (const)
   local +5:11 field: FieldInfo | null (const)
-  callee +7:7 jsonCallMethod -> @jsonCallMethod
-  callee +7:67 Emitter.stringConstant -> @Emitter.stringConstant
+  callee +7:7 emitJsonFieldKey -> @emitJsonFieldKey
   local +8:13 wire: string (const)
   callee +8:20 Emitter.stringConstant -> @Emitter.stringConstant
   callee +8:43 jsonWireTag -> @jsonWireTag
   callee +9:7 jsonCallMethod -> @jsonCallMethod
   local +12:14 f: JsonField (const)
   local +13:11 field: FieldInfo | null (const)
-  callee +15:7 jsonCallMethod -> @jsonCallMethod
-  callee +15:67 Emitter.stringConstant -> @Emitter.stringConstant
+  callee +15:7 emitJsonFieldKey -> @emitJsonFieldKey
   callee +16:7 emitJsonEncodeValue -> @emitJsonEncodeValue
   callee +16:45 loadField -> @loadField
   callee +19:3 jsonCallMethod -> @jsonCallMethod

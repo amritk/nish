@@ -238,6 +238,11 @@
                 "title": "An async server",
                 "filepath": "docs/guide/using-nish/async-server.md"
               },
+              "/http-server": {
+                "type": "page",
+                "title": "One server for HTTP/1.1, 2 and 3",
+                "filepath": "docs/guide/using-nish/http-server.md"
+              },
               "/websocket": {
                 "type": "page",
                 "title": "WebSocket",
@@ -675,6 +680,11 @@
                         "title": "http-fields",
                         "filepath": "docs/reference/net/http-fields.md"
                       },
+                      "/http-server": {
+                        "type": "page",
+                        "title": "http-server",
+                        "filepath": "docs/reference/net/http-server.md"
+                      },
                       "/http1-client-codec": {
                         "type": "page",
                         "title": "http1-client-codec",
@@ -1041,6 +1051,22 @@
                   }
                 }
               },
+              "/config": {
+                "type": "group",
+                "title": "Configuration files",
+                "children": {
+                  "/package-json": {
+                    "type": "page",
+                    "title": "package.json",
+                    "filepath": "docs/reference/config/package-json.md"
+                  },
+                  "/capabilities-lock": {
+                    "type": "page",
+                    "title": "nish-capabilities.lock.json",
+                    "filepath": "docs/reference/config/capabilities-lock.md"
+                  }
+                }
+              },
               "/standard-library": {
                 "type": "page",
                 "title": "Standard library modules",
@@ -1115,6 +1141,11 @@
                     "type": "page",
                     "title": "C runtime",
                     "filepath": "docs/security/runtime.md"
+                  },
+                  "/async": {
+                    "type": "page",
+                    "title": "Async executor",
+                    "filepath": "docs/security/async.md"
                   },
                   "/runtime-browser": {
                     "type": "page",
@@ -1247,6 +1278,11 @@
                     "title": "Async server",
                     "filepath": "docs/security/serve.md"
                   },
+                  "/http-server": {
+                    "type": "page",
+                    "title": "One HTTP server for HTTP/1.1, 2 and 3",
+                    "filepath": "docs/security/http-server.md"
+                  },
                   "/router": {
                     "type": "page",
                     "title": "HTTP router",
@@ -1326,22 +1362,17 @@
                 "children": {
                   "/wp21-packages": { "type": "page", "title": "WP21: Packages", "filepath": "docs/roadmap/wp21-packages.md" },
                   "/wp22-arrow-functions": { "type": "page", "title": "WP22: Arrow functions as the declaration form", "filepath": "docs/roadmap/wp22-arrow-functions.md" },
-                  "/wp27-ffi": { "type": "page", "title": "WP27: Calling C", "filepath": "docs/roadmap/wp27-ffi.md" },
-                  "/wp32-map": { "type": "page", "title": "WP32: Map and Set", "filepath": "docs/roadmap/wp32-map.md" },
                   "/wp33-round-trip": { "type": "page", "title": "WP33: The round trip to TypeScript", "filepath": "docs/roadmap/wp33-round-trip.md" },
-                  "/wp34-hosting-cs": { "type": "page", "title": "WP34: Hosting cs: the network stack", "filepath": "docs/roadmap/wp34-hosting-cs.md" },
                   "/wp37-os-sandbox": { "type": "page", "title": "WP37: The OS sandbox", "filepath": "docs/roadmap/wp37-os-sandbox.md" },
-                  "/wp38-simd": { "type": "page", "title": "WP38: SIMD", "filepath": "docs/roadmap/wp38-simd.md" },
                   "/wp39-http-server": { "type": "page", "title": "WP39: The HTTP server: a TechEmpower entry, then a general-purpose server", "filepath": "docs/roadmap/wp39-http-server.md" },
                   "/wp43-http-app-layer": { "type": "page", "title": "WP43: The HTTP application layer", "filepath": "docs/roadmap/wp43-http-app-layer.md" },
-                  "/wp46-long-running-memory": { "type": "page", "title": "WP46: Memory for programs that do not exit: regions", "filepath": "docs/roadmap/wp46-long-running-memory.md" },
                   "/wp49-async-server": { "type": "page", "title": "WP49: async/await on the server, and the TechEmpower top", "filepath": "docs/roadmap/wp49-async-server.md" },
+                  "/wp51-function-references": { "type": "page", "title": "WP51: References to capture-free top-level functions", "filepath": "docs/roadmap/wp51-function-references.md" },
                   "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
+                  "/wp54-async-wasm": { "type": "page", "title": "WP54: async on wasm, with the page as the executor", "filepath": "docs/roadmap/wp54-async-wasm.md" },
                   "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
                   "/wp57-module-scoped-names": { "type": "page", "title": "WP57: Module-scoped names", "filepath": "docs/roadmap/wp57-module-scoped-names.md" },
-                  "/wp44-streaming-files": { "type": "page", "title": "WP44: Streaming file reads", "filepath": "docs/roadmap/wp44-streaming-files.md" },
-                  "/wp48-compressed-references": { "type": "page", "title": "WP48: Compressed 32-bit references", "filepath": "docs/roadmap/wp48-compressed-references.md" },
-                  "/wp51-function-references": { "type": "page", "title": "WP51: References to capture-free top-level functions", "filepath": "docs/roadmap/wp51-function-references.md" }
+                  "/wp59-wasm-arena-memory": { "type": "page", "title": "WP59: The wasm arena in a second, unexported memory", "filepath": "docs/roadmap/wp59-wasm-arena-memory.md" }
                 }
               },
               "/done/..": {
@@ -1371,22 +1402,27 @@
                   "/wp23-language-surface": { "type": "page", "title": "WP23: The language surface a corpus review asked for", "filepath": "docs/roadmap/wp23-language-surface.md" },
                   "/wp25-inheritance": { "type": "page", "title": "WP25: Remove inheritance, widen implements", "filepath": "docs/roadmap/wp25-inheritance.md" },
                   "/wp26-stdlib": { "type": "page", "title": "WP26: The standard library", "filepath": "docs/roadmap/wp26-stdlib.md" },
+                  "/wp27-ffi": { "type": "page", "title": "WP27: Calling C", "filepath": "docs/roadmap/wp27-ffi.md" },
                   "/wp29-thread-surface": { "type": "page", "title": "WP29: The thread surface", "filepath": "docs/roadmap/wp29-thread-surface.md" },
                   "/wp30-bytes-interop": { "type": "page", "title": "WP30: Bytes across the interop boundary", "filepath": "docs/roadmap/wp30-bytes-interop.md" },
                   "/wp31-ranged-integers": { "type": "page", "title": "WP31: Ranged integers", "filepath": "docs/roadmap/wp31-ranged-integers.md" },
+                  "/wp32-map": { "type": "page", "title": "WP32: Map and Set", "filepath": "docs/roadmap/wp32-map.md" },
+                  "/wp34-network-stack": { "type": "page", "title": "WP34: The network stack", "filepath": "docs/roadmap/wp34-network-stack.md" },
                   "/wp35-capabilities": { "type": "page", "title": "WP35: The capability report", "filepath": "docs/roadmap/wp35-capabilities.md" },
                   "/wp36-capability-policy": { "type": "page", "title": "WP36: The capability policy", "filepath": "docs/roadmap/wp36-capability-policy.md" },
+                  "/wp38-simd": { "type": "page", "title": "WP38: SIMD", "filepath": "docs/roadmap/wp38-simd.md" },
                   "/wp40-dependency-capabilities": { "type": "page", "title": "WP40: Dependency capabilities", "filepath": "docs/roadmap/wp40-dependency-capabilities.md" },
                   "/wp42-multicore-server": { "type": "page", "title": "WP42: A multi-core server from pre-forked processes", "filepath": "docs/roadmap/wp42-multicore-server.md" },
+                  "/wp44-streaming-files": { "type": "page", "title": "WP44: Streaming file reads", "filepath": "docs/roadmap/wp44-streaming-files.md" },
                   "/wp45-name-resolution": { "type": "page", "title": "WP45: Name resolution: a DNS stub resolver", "filepath": "docs/roadmap/wp45-name-resolution.md" },
+                  "/wp46-long-running-memory": { "type": "page", "title": "WP46: Memory for programs that do not exit: regions", "filepath": "docs/roadmap/wp46-long-running-memory.md" },
                   "/wp47-shared-memory": { "type": "page", "title": "WP47: Shared work across cores: regions, atomics and rings", "filepath": "docs/roadmap/wp47-shared-memory.md" },
                   "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
                   "/wp52-run-rebuilds": { "type": "page", "title": "WP52: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp52-run-rebuilds.md" },
                   "/wp53-ffi-buffers-handles": { "type": "page", "title": "WP53: Buffers and handles across declare function", "filepath": "docs/roadmap/wp53-ffi-buffers-handles.md" },
                   "/wp55-persistent-root": { "type": "page", "title": "WP55: An object graph a WebAssembly module keeps between calls", "filepath": "docs/roadmap/wp55-persistent-root.md" },
                   "/wp58-generics-over-unions": { "type": "page", "title": "WP58: A discriminated union as a generic's type argument", "filepath": "docs/roadmap/wp58-generics-over-unions.md" },
-                  "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
-                  "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
+                  "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" }
                 }
               }
             }

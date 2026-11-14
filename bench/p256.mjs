@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // WP34 K5: ECDSA over P-256, the baseline a fixed-base table is judged by
-// (docs/wp34-hosting-cs.md, "K5: P-256, the baseline"). It builds
+// (docs/wp34-network-stack.md, "K5: P-256, the baseline"). It builds
 // bench/p256.ts, runs it in interleaved rounds, and prints each workload's
 // time a call and calls a second.
 //

@@ -23,6 +23,7 @@ import Http3Wheel from "nish/net/http3-server" -> struct Http3Wheel
 import H3_SERVER_WHEEL from "nish/net/http3-server" -> const H3_SERVER_WHEEL
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
 import quicPacketCopy from "nish/net/quic-packet" -> function @nish.quicPacketCopy
+import QUIC_RECOVERY_DEFAULT from "nish/net/quic-recovery" -> const QUIC_RECOVERY_DEFAULT
 import TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 from "nish/net/tls/codec" -> const TLS_SIGNATURE_ECDSA_SECP256R1_SHA256
 import WT_CLOSED from "nish/net/webtransport" -> const WT_CLOSED
 import WT_DATAGRAM from "nish/net/webtransport" -> const WT_DATAGRAM
@@ -188,7 +189,7 @@ function relayCheck(what: string, value: i64, low: i64, high: i64): void -> @rel
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i64
   stackSites=0 stackLocals=0
 function relayQuicConfig(chain: u8[][], resetKey: u8[], retryKey: u8[]): QuicServerConfig -> @relayQuicConfig [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=120
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=128
   escaping: chain resetKey retryKey
   calls: nish_alloc_struct
   pointer chain: size=0 writesThrough=true captured=true
@@ -211,7 +212,7 @@ function Relay.constructor(this: Relay, config: RelayConfig, quicConfig: QuicSer
   calls: RelayGrant.constructor RelayPeers.constructor nish.Http3Server.constructor nish.Http3Wheel.constructor nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow nish_poll_add nish_poll_create nish_str_concat nish_str_from_i32 relayCheck relayH3Config
   pointer this: size=424 writesThrough=true captured=false
   pointer config: size=56 writesThrough=true captured=true
-  pointer quicConfig: size=120 writesThrough=true captured=true passedTo=nish.Http3Server.constructor#1
+  pointer quicConfig: size=128 writesThrough=true captured=true passedTo=nish.Http3Server.constructor#1
   pointer verifier: size=16 writesThrough=true captured=true
   pointer entropy: size=0 writesThrough=true captured=false passedTo=RelayPeers.constructor#2 nish.Http3Server.constructor#5
   stackSites=0 stackLocals=0

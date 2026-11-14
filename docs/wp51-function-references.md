@@ -1,8 +1,11 @@
 # WP51: References to capture-free top-level functions — designed and measured
 
-**Status: proposed, design only.** Nothing in the compiler, the runtime, `std/`
-or the tests changes with this note; every program it measured lives in §12 and
-was not committed. [LANGUAGE.md](LANGUAGE.md) stays normative. The anchors are
+**Status: stages 1 and 2 built**: references in fields, locals, arrays and
+returns, calls through them, `===`, per-place sets, the escape-join refusal and
+the debug-build tag check (stage 1), then references as arguments, in
+`| null` and as `Map` values (stage 2). Stage 3, capture-free arrows in value
+position, is open. Every program this note measured lives in §12 and was not
+committed. [LANGUAGE.md](LANGUAGE.md) stays normative. The anchors are
 at `350bad84`. Part of #1348.
 
 Today a function is never a value in Nish. A function-typed *parameter* exists

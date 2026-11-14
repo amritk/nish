@@ -250,8 +250,8 @@ all. Setting `NET_TCP_QUICKACK` changes that, and the trade runs both ways:
   answered quickly, that call after each response changes nothing.
 - **No call** behaves like `0` once from the second request on.
 
-`bench/quickack/` in the repository measures each way. On a 4-vCPU Xeon VM
-running Linux 6.18, at 256 keep-alive connections over loopback, `1` after
+`bench/quickack/` in the repository measures each way. On four cores
+running Linux, at 256 keep-alive connections over loopback, `1` after
 each response added one system call and one segment per request and served
 13 to 18% fewer requests per second than no call. `0` after each response and
 `0` once stayed within the noise, since `0` saves an ACK only after a slow
@@ -490,6 +490,19 @@ A `serviceWorker` other than `0` has no place in that one-worker run, so
 there the supervisor starts nothing and answers `PREFORK_SPAWN_FAILED`.
 The underlying call is `udpBind` with flag `4`
 ([`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
+### QUIC congestion control: `congestion`
+
+`QuicServerConfig.congestion` picks the congestion controller every
+connection runs: `QUIC_RECOVERY_NEWRENO` (`0`, RFC 9002) or
+`QUIC_RECOVERY_CUBIC` (`1`, RFC 9438), both from `nish/net/quic-recovery`.
+The field is required; pass `QUIC_RECOVERY_DEFAULT`, which names CUBIC,
+unless you have a reason to pick. Any other value is refused: a connection
+built with it closes at once, as one with any other limit out of range does.
+CUBIC regrows the window faster after a loss on a long, lossy path, and on a
+transfer of one bandwidth-delay product the two finish level. The
+measurement is in
+[the QUIC security record](https://github.com/amritk/nish/blob/main/docs/security/quic.md#congestion-control).
 
 ### Workers that are not restarted
 

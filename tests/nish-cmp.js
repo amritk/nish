@@ -555,6 +555,12 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+/** The changelog line of the stage that folds a JSON number's digits as `number()` scans them. */
+const NUMBER_ONE_PASS = "Parse a JSON number in one pass"
+const numberOnePass = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: NUMBER_ONE_PASS, why }))
+  )
 const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
 const taggedUnions = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1220,6 +1226,8 @@ const quicRebind = byFinding(
  * names its title; each entry's `why` says which fix moved the file.
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+/** The changelog words of the stage that writes a typed object's keys as one copy (#1580). */
+const JSON_KEYS_QUOTED = "a typed object's keys as one pre-escaped copy"
 
 /** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
 const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
@@ -1881,6 +1889,13 @@ const DECLARED = [
       why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
     })
   ),
+  // WP39 G5: the goodput bench picks CUBIC, new in std/net/quic-recovery.
+  {
+    program: "bench/quic-goodput.ts",
+    file: "exit",
+    changelog: "CUBIC congestion control for QUIC",
+    why: "the program imports QUIC_RECOVERY_CUBIC from nish/net/quic-recovery, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+  },
   // nish/raster, nish/synth and nish/host/game are new std modules, so the
   // seed refuses the programs that import them.
   ...[
@@ -1935,7 +1950,7 @@ const DECLARED = [
   // SSSE3 or NEON kernel, the walk on the other arm.
   {
     file: "checksum.ll",
-    changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+    changelog: "Ship the SSSE3 and NEON Adler-32 kernels",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
   // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it
@@ -4504,6 +4519,25 @@ const DECLARED = [
       "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
     }
   ),
+  ...numberOnePass(
+    "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
+    {
+      "bench/json-api/main.ts": ["json-tokenizer.ll", "main.h"],
+      "bench/json-tokenizer/main.ts": ["main.h"],
+      "bench/json-value/main.ts": ["main.h"],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.h"],
+      "docs/cookbook/json-value.ts": ["json-value.h"],
+      "tests/link/json_encode_keys/main.ts": ["json-tokenizer.ll", "main.h"],
+      "tests/link/std_json_conformance/main.ts": ["main.h"],
+      "tests/link/std_json_equal/main.ts": ["main.h"],
+      "tests/link/std_json_number/main.ts": ["main.h"],
+      "tests/link/std_json_pointer/main.ts": ["main.h"],
+      "tests/link/std_json_value/main.ts": ["main.h"],
+      "tests/link/std_json_value_ranges/main.ts": ["main.h"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json-tokenizer.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-tokenizer.ll"],
+    }
+  ),
   {
     program: "tests/cases/caps_process_spawn_piped_within.ts",
     file: "exit",
@@ -6256,6 +6290,51 @@ const DECLARED = [
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
+  // g7-facade: `nish/net/http-server` is new, so the 0.38.0 seed refuses every program that imports it.
+  ...[
+    "tests/link/net_http_server/main.ts",
+    "tests/link/net_http_server_bad_limit/main.ts",
+    "tests/link/net_http_server_bad_param/main.ts",
+    "tests/link/net_http_server_bad_watch/main.ts",
+    "tests/link/net_http_server_caps/main.ts",
+    "tests/link/net_http_server_carriers/main.ts",
+    "tests/link/net_http_server_end_short/main.ts",
+    "tests/link/net_http_server_end_unstarted/main.ts",
+    "tests/link/net_http_server_foreign/main.ts",
+    "tests/link/net_http_server_h1_fields/main.ts",
+    "tests/link/net_http_server_h1_head/main.ts",
+    "tests/link/net_http_server_h1_slots/main.ts",
+    "tests/link/net_http_server_h1_twice/main.ts",
+    "tests/link/net_http_server_h2_connect/main.ts",
+    "tests/link/net_http_server_h2_head/main.ts",
+    "tests/link/net_http_server_h2_refused/main.ts",
+    "tests/link/net_http_server_h2_slots/main.ts",
+    "tests/link/net_http_server_h2_twice/main.ts",
+    "tests/link/net_http_server_h2c/main.ts",
+    "tests/link/net_http_server_h3_head/main.ts",
+    "tests/link/net_http_server_h3_slots/main.ts",
+    "tests/link/net_http_server_h3_twice/main.ts",
+    "tests/link/net_http_server_h3_webtransport/main.ts",
+    "tests/link/net_http_server_lifecycle/main.ts",
+    "tests/link/net_http_server_matrix/main.ts",
+    "tests/link/net_http_server_start_fields/main.ts",
+    "tests/link/net_http_server_start_length/main.ts",
+    "tests/link/net_http_server_start_refused/main.ts",
+    "tests/link/net_http_server_start_status/main.ts",
+    "tests/link/net_http_server_start_twice/main.ts",
+    "tests/link/net_http_server_take_none/main.ts",
+    "tests/link/net_http_server_timeouts/main.ts",
+    "tests/link/net_http_server_unbegun/main.ts",
+    "tests/link/net_http_server_wait_tls/main.ts",
+    "tests/link/net_http_server_write_long/main.ts",
+    "tests/link/net_http_server_write_unstarted/main.ts",
+    "tests/link/net_http_server_write_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "handler for HTTP/1.1, 2 and 3 with Alt-Svc",
+    why: "`nish/net/http-server` is a new module, which the 0.38.0 seed does not have, so only the candidate compiles the program",
+  })),
   {
     program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
     file: "exit",
@@ -6536,6 +6615,98 @@ const DECLARED = [
     changelog: DESTRUCTURING,
     why: "the program declares names with an object or array pattern, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "JsonWriter gains `keyQuoted`, the compiler's `jsonEncode` of a class calls it with each key quoted and escaped as a string constant, and `i32` and `i64` count their digits by compares rather than divides, so nish/json moves in every program linking it and a module encoding a class moves where it writes a key",
+    {
+      "bench/http-app-carrier.ts": ["json.ll"],
+      "bench/http1-request/main.ts": ["json.ll"],
+      "bench/http1-server.ts": ["json.ll"],
+      "bench/json-compare/main.ts": ["json.ll"],
+      "bench/json-value/main.ts": ["json.ll"],
+      "bench/json-writer/main.ts": ["json.ll", "main.ll"],
+      "bench/runtime-copies/main.ts": ["json.ll", "main.ll"],
+      "bench/techempower/main.ts": ["json.ll"],
+      "bench/yaml-json/main.ts": ["json.ll"],
+      "docs/cookbook/json-fields.ts": ["json.ll"],
+      "docs/cookbook/json-presence.ts": ["json.ll"],
+      "docs/cookbook/json-typed.ts": ["json.ll"],
+      "docs/cookbook/json-value.ts": ["json.ll"],
+      "docs/cookbook/json-writer.ts": ["json-writer.ll", "json.ll"],
+      "examples/api-cli/main.ts": ["json.ll", "main.ll"],
+      "examples/http-app/main.ts": ["json.ll"],
+      "examples/http-get-json.ts": ["json.ll"],
+      "examples/merge-patch.ts": ["json.ll"],
+      "tests/link/json_merge_patch/main.ts": ["json.ll"],
+      "tests/link/json_presence/main.ts": ["json.ll"],
+      "tests/link/net_handler/main.ts": ["json.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["json.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["json.ll"],
+      "tests/link/net_handler_short/main.ts": ["json.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["json.ll"],
+      "tests/link/net_http_app/main.ts": ["json.ll"],
+      "tests/link/net_serve/main.ts": ["json.ll"],
+      "tests/link/net_serve_burst/main.ts": ["json.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["json.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["json.ll"],
+      "tests/link/net_serve_pg/main.ts": ["json.ll"],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["json.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["json.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["json.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["json.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["json.ll"],
+      "tests/link/net_upstream/main.ts": ["json.ll"],
+      "tests/link/net_upstream_release/main.ts": ["json.ll"],
+      "tests/link/std_json_conformance/main.ts": ["json.ll"],
+      "tests/link/std_json_equal/main.ts": ["json.ll"],
+      "tests/link/std_json_number/main.ts": ["json.ll"],
+      "tests/link/std_json_pointer/main.ts": ["json.ll"],
+      "tests/link/std_json_typed/main.ts": ["json.ll"],
+      "tests/link/std_json_value/main.ts": ["json.ll"],
+      "tests/link/std_json_value_ranges/main.ts": ["json.ll"],
+      "tests/link/std_json_writer/main.ts": ["bytes.ll", "json.ll", "main.ll"],
+      "tests/link/std_postgres_async/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json.ll"],
+      "tests/link/tfb_async_db/main.ts": ["json.ll"],
+      "tests/link/tfb_async_entry/main.ts": ["json.ll"],
+      "tests/link/tfb_db/main.ts": ["json.ll"],
+      "tests/link/tfb_entry/main.ts": ["json.ll"],
+    }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the API-page benchmark is new in this stage: its encoder and nish/json move as above, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks",
+    { "bench/json-api/main.ts": ["json-typed.ll", "json.ll", "main.ll"] }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the stage adds these tests: tests/link/json_encode_keys encodes a class whose keys need escaping, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks; std_json_typed gains keys.ts, which encodes classes and so writes their keys through it",
+    {
+      "tests/link/json_encode_keys/main.ts": ["json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/std_json_typed/main.ts": ["keys.ll"],
+    }
+  ),
 ]
 
 /**

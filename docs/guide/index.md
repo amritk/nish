@@ -155,6 +155,7 @@ and the language specification.
   [HTTP routing](using-nish/http-router.md),
   [an API server](using-nish/api-server.md),
   [an async server](using-nish/async-server.md),
+  [one server for HTTP/1.1, 2 and 3](using-nish/http-server.md),
   [WebSocket](using-nish/websocket.md),
   [the HTTP client](using-nish/http-client.md),
   [calling other services](using-nish/calling-services.md),

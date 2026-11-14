@@ -478,6 +478,91 @@ const numbers = (t: Suite): void => {
   t.eqI64("numberF64(1.7976931348623159e308) rounds up to an infinity", jtF64Bits("1.7976931348623159e308"), infinity);
 };
 
+/** The bits of `numberF64` on the number the window `off`, `len` of `text` holds, or `-1` with no number. */
+const jtF64BitsWindow = (text: string, off: i32, len: i32): i64 => {
+  const bytes = jtBytes(text);
+  const t = new JsonTokenizer(bytes, off, len, new JsonLimits());
+  return t.next() === JSON_TOK_NUMBER ? f64ToBits(t.numberF64()) : -1;
+};
+
+/** `numberI64` of the first number in `text`, or 0. */
+const jtI64OfText = (text: string): i64 => {
+  const n = jtAt(text, JSON_TOK_NUMBER);
+  return n === null ? toI64(0) : n.numberI64();
+};
+
+// The one-pass scan reads eight digits at a time while eight fit before the
+// window's end, then one at a time: each length either side of a block of
+// eight, each place a run can stop, and the fall back to the text past 19
+// digits, held bit for bit against parseFloat.
+const numberRuns = (t: Suite): void => {
+  const texts = [
+    "123456789012345",
+    "1234567890123456",
+    "-123456789012345",
+    "-1234567890123456",
+    "0.123456789012345",
+    "0.1234567890123456",
+    "12345678",
+    "123456789",
+    "-12345678",
+    "-123456789",
+    "0.12345678",
+    "0.123456789",
+    "-0.12345678",
+    "-0.123456789",
+    "9.12345678",
+    "9.123456789",
+    "12345678.12345678",
+    "123456789.123456789",
+    "1234567890123456789",
+    "0.12345678e3",
+    "0.123456789E-3",
+    "1234567812345678e-8",
+    "1234567.5",
+    "[1234567 ]",
+    "[12345678,9]",
+    "{\"a\":123456789}",
+    "0.00000000000000000001234",
+    "123456789012345678901234567890",
+    "1.2345678901234567890123e5",
+    "9007199254740993.000000001",
+    "1e99999",
+    "1e100000",
+    "1e-999999",
+    "1e1000000",
+  ];
+  let i: i32 = 0;
+  while (i < toI32(texts.length)) {
+    const text = texts[i];
+    const n = jtAt(text, JSON_TOK_NUMBER);
+    if (n === null) {
+      t.fail(`a number token for ${text}`, "none");
+    } else {
+      const want = f64ToBits(parseFloat(String.fromBytes(n.src, n.tokStart, n.tokEnd)));
+      t.eqI64(`numberF64(${text}) is parseFloat's bits`, f64ToBits(n.numberF64()), want);
+    }
+    i += 1;
+  }
+  const billion: i64 = 1000000000;
+  const nines: i64 = billion * billion - 1;
+  const nineteen: i64 = toI64(1234567890) * billion + toI64(123456789);
+  t.eqI64("numberI64 of 18 digits", jtI64OfText("999999999999999999"), nines);
+  t.eqI64("numberI64 of -18 digits", jtI64OfText("-999999999999999999"), -nines);
+  t.eqI64("numberI64 of 19 digits", jtI64OfText("1234567890123456789"), nineteen);
+  t.eqI64("numberI64 of -19 digits", jtI64OfText("-1234567890123456789"), -nineteen);
+  // A window that ends inside a run: the scan stops at the window, not the buffer.
+  t.eqI64("a window ending after 5 of 16 digits", jtF64BitsWindow("1234567890123456", 0, 5), f64ToBits(toF64(12345)));
+  t.eqI64("a window ending after 9 of 16 digits", jtF64BitsWindow("1234567890123456", 0, 9), f64ToBits(toF64(123456789)));
+  t.eqI64("a window of 9 digits from the middle", jtF64BitsWindow("1234567890123456", 3, 9), f64ToBits(toF64(456789012)));
+  t.eqI64("a window ending after 8 fraction digits", jtF64BitsWindow("0.123456789", 0, 10), f64ToBits(parseFloat("0.12345678")));
+  t.eqI64("a window ending on a dot is not a number", jtF64BitsWindow("12345678.5", 0, 9), toI64(-1));
+  // `/` and `:` sit either side of the digits, so the eight-byte check must reject them.
+  t.eqStr("a slash in an eight-byte digit window", jtVerdict("[1234567/8]"), "SYNTAX@8");
+  t.eqStr("a colon in an eight-byte digit window", jtVerdict("[1234:678]"), "SYNTAX@5");
+  t.eqStr("a slash after eight digits", jtVerdict("[12345678/]"), "SYNTAX@9");
+};
+
 /** `numberF64` of the first number in `text`, or 0. */
 const jtF64OfText = (text: string): f64 => {
   const n = jtAt(text, JSON_TOK_NUMBER);
@@ -1010,6 +1095,7 @@ export const jtUnits = (t: Suite): void => {
   errors(t);
   strings(t);
   numbers(t);
+  numberRuns(t);
   unsigned(t);
   limits(t);
   windows(t);

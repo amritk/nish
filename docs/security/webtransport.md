@@ -1,6 +1,6 @@
 # Security record: WebTransport over HTTP/3
 
-The record of WP34's lane R2: `nish/net/webtransport` (sessions, HTTP
+The record of `nish/net/webtransport` (sessions, HTTP
 datagrams, the session's streams and capsules, over one `Http3Connection`) and
 the seam it needs in `nish/net/http3` and `nish/net/http3-frame` (extended
 CONNECT, the WebTransport SETTINGS, streams held until the program takes
@@ -40,7 +40,7 @@ WT-4 (datagrams copied, and one that overtakes its session dropped), and WT-5
 WebTransport over HTTP/3 has no RFC yet. This lane speaks
 **draft-ietf-webtrans-http3-02**, the version Chrome negotiates, with the
 identifiers checked against the `wtransport` 0.7.0 crate (BiagioFesta/wtransport,
-the one cs's relay runs on) by reading its source and by recording a live
+the one a production relay runs on) by reading its source and by recording a live
 exchange with it (below):
 
 | What | Value | Where |

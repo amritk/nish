@@ -326,7 +326,7 @@
       "id": "plan-websocket-client-opening-handshake-ws-client-stage",
       "type": "docs",
       "breaking": false,
-      "title": "plan WebSocket client opening handshake (ws-client stage)",
+      "title": "plan WebSocket client opening handshake",
       "body": "* docs(plan): WebSocket client opening handshake\n\n* docs(plan): match the ws-client-handshake plan to the repo's plan layout\n\nUse the runtime scope that std/net work lands under, and add the Approach,\ntop-level Tests and Verification sections, run notes and acceptance criteria\nthe other plans carry.",
       "metrics": [],
       "refs": [],
