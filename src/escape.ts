@@ -3307,9 +3307,9 @@ const collectPassCalls = (
 /**
  * The NL9019 warnings of one module: each function `reached` names (a direct
  * callee of an unscoped loop pass, `loopReachedFunctions`) that answers no
- * memory, would take a scope of its
- * own but for an allocation it holds where this analysis does not prove it
- * dead (`leaksItself`), and so keeps what it allocates on every call. Reported
+ * memory, would take a scope of its own but for an allocation it holds where
+ * this analysis does not prove it dead (`leaksItself`), and so keeps what it
+ * allocates on every call. Reported
  * at the function, naming the first allocation it holds. A function that
  * calls `Arena.mark`, files a task or fills a parameter keeps its memory on
  * purpose, and one refused its scope for another reason is `--explain-memory`'s
