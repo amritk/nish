@@ -2457,7 +2457,9 @@ const liftArrowArgument = (
     )
     return null
   }
-  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, captureMode(template))
+  const callee = call.children[0]
+  const forEach = callee.kind === NodeKind.Ident && rewrittenArrayMethod(callee.text) === "forEach"
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, captureMode(template), forEach)
   if (fn === null) {
     return null
   }
@@ -2524,7 +2526,8 @@ const liftArrow = (
   types: i32[],
   returnType: i32,
   outer: Scope,
-  mode: i32
+  mode: i32,
+  forEach: boolean
 ): FunctionSig | null => {
   // Checked twice in one body (a caller that re-checks an argument): the arrow
   // is lifted once, and the call node's table slot for it says which.
@@ -2589,6 +2592,7 @@ const liftArrow = (
   ctx.arrowModes.push(mode)
   fn.captureHost = enclosing
   fn.capturesForCall = mode === CAPTURE_CALL
+  fn.forEachCallback = forEach
   ctx.functionBindings = new FunctionBindings()
   ctx.current = fn
   ctx.errored = false

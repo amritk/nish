@@ -10,15 +10,16 @@
  *     };
  *
  * **A program does not need to import this module.** A `.map(...)`,
- * `.filter(...)`, `.some(...)`, `.every(...)`, `.findIndex(...)` or
- * `.slice(...)` call on an array is what loads it (the checker's
+ * `.filter(...)`, `.some(...)`, `.every(...)`, `.findIndex(...)`,
+ * `.forEach(...)` or `.slice(...)` call on an array is what loads it (the checker's
  * `importArrayMethods`), and the checker routes the call to the template here
  * that matches it: `xs.map(f)` is `map(xs, f)` when `f` takes one parameter
  * and `mapIndexed(xs, f)` when it takes two. `f` is a compile-time function
  * parameter, so each callback is an instantiation of its own whose body calls
  * it directly — there is no function pointer, and importing a template here
  * by name and calling it gives the same code as the method. Under Node,
- * `--emit-ts` leaves `map`, `filter`, `some`, `every` and `findIndex` as the
+ * `--emit-ts` leaves `map`, `filter`, `some`, `every`, `findIndex` and
+ * `forEach` as the
  * platform's own `Array.prototype` methods, writes `slice` as the runtime's
  * checked `sliceArray`, and copies an answer that holds records inline with
  * `copyRecords`, so nothing here runs there.
@@ -217,6 +218,38 @@ export const findIndexIndexed = <T>(xs: readonly T[], pred: (x: T, i: number) =>
     }
   }
   return -1
+}
+
+/**
+ * Calls `f` with each element of `xs`, in order: what `xs.forEach(f)`
+ * compiles to when `f` takes one parameter. The walk stops at the length the
+ * array had when the call began, so an element the callback pushes is not
+ * visited, and at the current length, so one it pops is not either, as
+ * `Array.prototype.forEach` does.
+ *
+ * @param xs the array read; the callback may change it.
+ * @param f called once per element, in order.
+ */
+export const forEach = <T>(xs: readonly T[], f: (x: T) => void): void => {
+  const n = xs.length
+  for (let i: number = 0; i < n && i < xs.length; i++) {
+    f(xs[i])
+  }
+}
+
+/**
+ * Calls `f` with each element of `xs` and its index, in order: what
+ * `xs.forEach(f)` compiles to when `f` takes two parameters. The walk stops
+ * where `forEach`'s does.
+ *
+ * @param xs the array read; the callback may change it.
+ * @param f called once per element, in order, with the element and its index.
+ */
+export const forEachIndexed = <T>(xs: readonly T[], f: (x: T, i: number) => void): void => {
+  const n = xs.length
+  for (let i: number = 0; i < n && i < xs.length; i++) {
+    f(xs[i], i)
+  }
 }
 
 /**
