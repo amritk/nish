@@ -738,12 +738,19 @@ const jsonTagsVariant = (table: TypeTable, info: StructInfo, field: FieldInfo): 
 
 /**
  * The string the variant `info` writes its tag, the field `field`, as: the
- * `tag` of its options, or else the name of the enum member the field's type
- * is. The `tag` names only the field a union tags `info` by, so another
- * enum-member field keeps its member's name.
+ * `tag` of its options, or else the member the field's type is, by its
+ * string for a string enum and by its name for a numeric one. The `tag`
+ * names only the field a union tags `info` by, so another enum-member field
+ * keeps its member's default.
  */
-export const jsonWireTag = (table: TypeTable, info: StructInfo, field: FieldInfo): string =>
-  info.jsonTag.length > 0 && jsonTagsVariant(table, info, field) ? info.jsonTag : table.nameOf(field.type)
+export const jsonWireTag = (table: TypeTable, info: StructInfo, field: FieldInfo): string => {
+  if (info.jsonTag.length > 0 && jsonTagsVariant(table, info, field)) {
+    return info.jsonTag
+  }
+  const texts = table.enumStrings(field.type)
+  const at = table.memberValue(field.type)
+  return texts !== null && at >= 0 && at < texts.length ? texts[at] : table.nameOf(field.type)
+}
 
 /** A value of `type` as the route reads and writes it, held in `field` (`null` for a `Map`'s value), or `null` when it cannot. */
 const jsonValueOf = (
@@ -1155,7 +1162,7 @@ export const jsonRefusal = (
           `\`${name}\` cannot handle \`${info.name}.${field.name}\`, which is \`${table.typeName(field.type)}\`: ` +
           "a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, " +
           "an array of one of those, or a `string`, a class or an array with `| null`; " +
-          "a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` " +
+          "a `u64` and an enum are too, alone or in an array, and so is a `Map` whose keys are `string` " +
           "and whose values are any of these, with `| null` or not; " +
           "so are a union of classes, alone, with `| null` or in an array, and a variant's tag"
         )
@@ -1356,7 +1363,14 @@ const jsonRouteNames = (
       if (isUnion) {
         jsonAddUnionMethods(names)
       }
-      if (isEnum) {
+      if (isEnum && table.enumStrings(f.enumType) !== null) {
+        // A string enum's string is matched as a key is.
+        names.add("enumString")
+        names.add("keyLength")
+        names.add("keyByte")
+        names.add("keyIs")
+        names.add("wrongType")
+      } else if (isEnum) {
         names.add("i32")
         names.add("wrongType")
       } else if (!holdsObject) {
@@ -1379,7 +1393,7 @@ const jsonRouteNames = (
     if (helper.length > 0) {
       names.add(helper)
     } else if (isEnum) {
-      names.add("i32")
+      names.add(table.enumStrings(f.enumType) !== null ? "string" : "i32")
     } else if (!holdsObject) {
       names.add(jsonScalarMethod(f.scalar))
     }

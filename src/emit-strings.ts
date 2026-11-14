@@ -91,7 +91,13 @@ export const isEnumStringCall = (program: CheckedProgram, table: TypeTable, call
  */
 export const emitEnumString = (emitter: Emitter, call: Node): string => {
   const arg = call.children[1].children[0]
-  const type = emitter.table.enumBase(emitter.program.nodeTypes[arg.id])
+  const type = emitter.program.nodeTypes[arg.id]
+  return emitEnumStringOf(emitter, type, emitter.emitExpression(arg))
+}
+
+/** The string of the member of the string enum `type` whose ordinal is `ordinal`: the load `String(r)` is, which typed JSON's encoder shares. */
+export const emitEnumStringOf = (emitter: Emitter, enumType: i32, ordinal: string): string => {
+  const type = emitter.table.enumBase(enumType)
   const found = emitter.table.enumStrings(type)
   const texts: string[] = found === null ? [] : found
   const symbol = emitter.table.nameOf(type)
@@ -107,7 +113,6 @@ export const emitEnumString = (emitter: Emitter, call: Node): string => {
       `${global} = private unnamed_addr constant ${array} [${entries.join(", ")}], align 8`
     )
   }
-  const ordinal = emitter.emitExpression(arg)
   const wide = emitter.fn.emitValue(`sext i32 ${ordinal} to i64`)
   const slot = emitter.fn.emitValue(
     `getelementptr inbounds ${array}, ${array}* ${global}, i64 0, i64 ${wide}`

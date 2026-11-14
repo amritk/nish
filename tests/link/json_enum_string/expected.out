@@ -1,0 +1,14 @@
+0 -1 admin {"role":"admin","roles":["owner","guest",""],"past":null,"grants":{"a":"admin"}} true
+0 -1 café {"role":"café","roles":[],"past":["admin"],"grants":{}} true
+0 -1 admin {"role":"admin","roles":["guest"],"past":null,"grants":{}} false
+-20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
+-20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
+-20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
+-20 33 guest {"role":"guest","roles":["admin"],"past":null,"grants":{}} false
+-20 53 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
+0 circle {"kind":"circle","r":1} true
+0 square {"kind":"square","side":2} true
+0 blob {"kind":"amoeba"} true
+-26 circle {"kind":"circle","r":0} false
+-26 circle {"kind":"circle","r":0} false
+blob

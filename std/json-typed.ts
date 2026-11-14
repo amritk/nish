@@ -675,6 +675,27 @@ export class JsonDecoder {
   }
 
   /**
+   * Takes the next value as a string enum's string, which it leaves as the
+   * current token for `keyLength`, `keyByte` and `keyIs` to match against
+   * the members' strings.
+   *
+   * @returns `true` at a string; `false` with `JSON_DECODE_TYPE` for any other value, and after any error.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
+  enumString(): boolean {
+    const k: i32 = this.take()
+    if (k === JSON_TOK_STRING) {
+      return true
+    }
+    if (k >= 0) {
+      this.wrongType()
+    }
+    return false
+  }
+
+  /**
    * Takes the next value's first token: the held token, when there is one,
    * and the tokenizer's next otherwise.
    *

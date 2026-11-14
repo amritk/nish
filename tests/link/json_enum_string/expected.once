@@ -1,0 +1,8 @@
+@.enumstr.Role = private unnamed_addr constant [5 x i8*]
+@.json.decode.User :: call i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* %r)
+@.json.decode.array.enum.Role :: call i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* %r)
+@.json.decode.map.Map$str$en$Role :: call i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* %r)
+@.json.encode.User :: getelementptr inbounds [5 x i8*], [5 x i8*]* @.enumstr.Role, i64 0, i64
+@.json.encode.array.enum.Role :: getelementptr inbounds [5 x i8*], [5 x i8*]* @.enumstr.Role, i64 0, i64
+@.json.encode.map.Map$str$en$Role :: getelementptr inbounds [5 x i8*], [5 x i8*]* @.enumstr.Role, i64 0, i64
+@figure :: getelementptr inbounds [3 x i8*], [3 x i8*]* @.enumstr.Shape, i64 0, i64

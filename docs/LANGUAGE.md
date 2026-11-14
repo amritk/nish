@@ -13474,7 +13474,7 @@ export const main = (): i32 => {
   `json_reject_map_value_class`; `i32[][]`, `json_reject_nested_array`, and
   `Level[][]`, `json_reject_enum_nested_array`; a generic class of the
   program's own, `json_reject_generic_field`). The message goes on to name the
-  kinds added since: `` a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
+  kinds added since: `` a `u64` and an enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
   A JSON object's keys are strings, so a `Map` keyed by anything else is
   refused, an enum included (`json_reject_map_key`, `json_reject_map_key_enum`),
   and so is a map whose values typed JSON cannot write, at any depth
