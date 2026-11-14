@@ -75,6 +75,7 @@ import {
   Node,
   NodeKind,
   awaitsInitializer,
+  bindsHiddenReceiver,
   isPatternName,
   isPlainSlot,
   patternOf,
@@ -413,6 +414,8 @@ const checkDeclarator = (
     want = WANT_INFERRED
   }
   const initType = checkExpression(ctx, initializer, scope, want)
+  // A pattern's hidden receiver is named by the pattern as written.
+  const shown = bindsHiddenReceiver(decl) ? ctx.textOf(decl.children[3]) : name
   // An inferred type never carries the initialiser's proof (#234):
   // `let y = r` inside `if (r.ok)` is a `Result`, and `y` may be assigned
   // an error later.
@@ -420,11 +423,11 @@ const checkDeclarator = (
   if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
     ctx.error(
       initializer,
-      `Cannot initialize ${ctx.table.typeName(declared)} variable \`${name}\` with ${ctx.table.typeName(initType)}`
+      `Cannot initialize ${ctx.table.typeName(declared)} variable \`${shown}\` with ${ctx.table.typeName(initType)}`
     )
   }
   if (declared >= 0 && initType !== T_ERROR) {
-    refuseNarrowingStore(ctx, initializer, declared, `The variable \`${name}\``)
+    refuseNarrowingStore(ctx, initializer, declared, `The variable \`${shown}\``)
   }
   if (type === T_VOID) {
     ctx.error(decl, "Cannot declare a variable of type void")
@@ -646,6 +649,9 @@ const declareLocal = (
 ): void => {
   const local = new Local(name, type, mutable, STORAGE_LOCAL)
   local.origin = origin
+  if (decl.kind === NodeKind.VarDecl && bindsHiddenReceiver(decl)) {
+    local.written = ctx.textOf(decl.children[3])
+  }
   if (!scope.declare(local)) {
     ctx.error(site, `Duplicate declaration of \`${name}\``)
     return

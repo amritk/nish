@@ -230,7 +230,7 @@ function RefPass.localPlace(this: RefPass, local: Local, type: i32): i32 -> @Ref
   escaping: local type
   calls: RefPass.newPlace RefPass.paramPlace nish_panic_index nish_panic_overflow nish_str_eq
   pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.paramPlace#0 RefPass.newPlace#0
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -24:9 source: Local (let)
   local -23:9 sig: FunctionSig | null (let)

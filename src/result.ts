@@ -442,7 +442,7 @@ export const checkResultLocalsHandled = (ctx: CheckContext, body: Node): void =>
       if (local !== null) {
         ctx.error(
           declarations[i].children[0],
-          `\`${local.name}\` holds a \`${ctx.table.typeName(local.type)}\` that is never inspected; test it with \`${local.name}.isErr()\`, or use \`.orReturn()\`, \`.unwrapOr(v)\` or \`.expect(message)\``
+          `\`${local.written}\` holds a \`${ctx.table.typeName(local.type)}\` that is never inspected; test it with \`${local.written}.isErr()\`, or use \`.orReturn()\`, \`.unwrapOr(v)\` or \`.expect(message)\``
         )
       }
     }

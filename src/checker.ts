@@ -2690,7 +2690,7 @@ const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
   }
   walk.ctx.performance(
     name,
-    `\`${local.name}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
+    `\`${local.written}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
       "past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, " +
       "or open the loop body with `using a = arena()`"
   )

@@ -2268,7 +2268,7 @@ class FreshJudge {
       return this.verdicts[k] || this.fail(`${this.quote(at)} is given its own value`)
     }
     const saved = this.subject
-    this.subject = `\`${local.name}\``
+    this.subject = `\`${local.written}\``
     // A cycle (`a = b`, `b = a`) is judged not fresh while it is in progress.
     this.judged.push(local)
     this.verdicts.push(false)

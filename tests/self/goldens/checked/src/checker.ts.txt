@@ -996,14 +996,14 @@ function PerfWalk.declaredHoldingAllocation(this: PerfWalk, local: Local): boole
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=80 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function PerfWalk.depthOf(this: PerfWalk, local: Local): i32 -> @PerfWalk.depthOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=80 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function checkSignatureBody(ctx: CheckContext, sig: FunctionSig, scope: Scope, inferReturn: boolean): void -> @checkSignatureBody [exported]
@@ -1396,7 +1396,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @
   calls: accumulates nish_panic_index nish_str_eq unwrapPerfParens
   pointer ctx: size=344 writesThrough=false captured=false passedTo=accumulates#0 accumulates#0 accumulates#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
-  pointer target: size=64 writesThrough=false captured=false passedTo=accumulates#2 accumulates#2 accumulates#2
+  pointer target: size=72 writesThrough=false captured=false passedTo=accumulates#2 accumulates#2 accumulates#2
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
@@ -1428,7 +1428,7 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
   calls: isLocalRef nish_panic_index nish_str_eq sourceLocal usedOnlyWithinIteration
   pointer ctx: size=344 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#0 isLocalRef#0 usedOnlyWithinIteration#0 isLocalRef#0 isLocalRef#0 usedOnlyWithinIteration#0 usedOnlyWithinIteration#0 usedOnlyWithinIteration#0
   pointer root: size=40 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#2 isLocalRef#2 usedOnlyWithinIteration#2 isLocalRef#2 isLocalRef#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#2 isLocalRef#2 usedOnlyWithinIteration#2 isLocalRef#2 isLocalRef#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2
   pointer own: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3
   stackSites=0 stackLocals=0
   callee +0:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
@@ -1447,7 +1447,7 @@ function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean -> @is
   calls: nish_panic_index unwrapPerfParens
   pointer ctx: size=344 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
@@ -1485,7 +1485,7 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
   calls: nish_panic_index nish_str_eq perfMayYieldLocal perfReceiverMayBeKept
   pointer ctx: size=344 writesThrough=false captured=false passedTo=perfMayYieldLocal#0 perfReceiverMayBeKept#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0
   pointer node: size=40 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false passedTo=perfMayYieldLocal#2 perfReceiverMayBeKept#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=perfMayYieldLocal#2 perfReceiverMayBeKept#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2
   stackSites=0 stackLocals=0
   local +0:16 arg: Node (const)
   callee +1:11 perfMayYieldLocal -> @perfMayYieldLocal
@@ -1502,7 +1502,7 @@ function perfMayYieldLocal(ctx: CheckContext, expr: Node, local: Local): boolean
   calls: isLocalRef nish_panic_index perfMayYieldLocal unwrapPerfParens
   pointer ctx: size=344 writesThrough=false captured=false passedTo=perfMayYieldLocal#0 perfMayYieldLocal#0 isLocalRef#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=perfMayYieldLocal#2 perfMayYieldLocal#2 isLocalRef#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=perfMayYieldLocal#2 perfMayYieldLocal#2 isLocalRef#2
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
@@ -1514,7 +1514,7 @@ function perfReceiverMayBeKept(ctx: CheckContext, callee: Node, local: Local): b
   calls: TypeTable.isArray TypeTable.isResult isLocalRef nish_panic_index unwrapPerfParens
   pointer ctx: size=344 writesThrough=false captured=false passedTo=isLocalRef#0
   pointer callee: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=isLocalRef#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=isLocalRef#2
   stackSites=0 stackLocals=0
   local +0:9 c: Node (const)
   callee +0:13 unwrapPerfParens -> @unwrapPerfParens
@@ -1526,7 +1526,7 @@ function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): 
   calls: nish_panic_index perfScanForCapture
   pointer walk: size=80 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false passedTo=perfScanForCapture#2 perfScanForCapture#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=perfScanForCapture#2 perfScanForCapture#2
   stackSites=0 stackLocals=0
   callee +0:7 perfScanForCapture -> @perfScanForCapture
   local +3:9 inLoop: boolean (const)
@@ -1538,7 +1538,7 @@ function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop:
   calls: perfCapturesLocal perfScanForCapture
   pointer ctx: size=344 writesThrough=false captured=false passedTo=perfCapturesLocal#0 perfScanForCapture#0
   pointer node: size=40 writesThrough=false captured=false passedTo=perfCapturesLocal#1
-  pointer local: size=64 writesThrough=false captured=false passedTo=perfCapturesLocal#2 perfScanForCapture#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=perfCapturesLocal#2 perfScanForCapture#2
   stackSites=0 stackLocals=0
   callee +0:41 perfCapturesLocal -> @perfCapturesLocal
   local +3:14 child: Node (const)

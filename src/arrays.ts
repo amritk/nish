@@ -1463,7 +1463,7 @@ class RefWalk {
       if (ref.invalidatedBy !== "" && !this.reported) {
         this.report(
           node,
-          `\`${ref.local.name}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
+          `\`${ref.local.written}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
         )
         return
       }

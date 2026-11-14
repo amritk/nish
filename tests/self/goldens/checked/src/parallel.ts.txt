@@ -1029,13 +1029,13 @@ function captureTypeMessage(program: CheckedProgram, table: TypeTable, name: str
   callee +14:48 TypeTable.typeName -> @TypeTable.typeName
 function isFreshConst(local: Local): boolean -> @isFreshConst
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function knownApart(captured: Local, dst: Local | null): boolean -> @knownApart
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isFreshConst nish_str_eq
-  pointer captured: size=64 writesThrough=false captured=false passedTo=isFreshConst#0
-  pointer dst: size=64 writesThrough=false captured=false passedTo=isFreshConst#0 isFreshConst#0
+  pointer captured: size=72 writesThrough=false captured=false passedTo=isFreshConst#0
+  pointer dst: size=72 writesThrough=false captured=false passedTo=isFreshConst#0 isFreshConst#0
   stackSites=0 stackLocals=0
   local +0:9 capturedParam: boolean (const)
   local +1:9 dstParam: boolean (const)
@@ -1102,7 +1102,7 @@ function dstUnsharedAt(program: CheckedProgram, call: Node, dst: Local): boolean
   calls: dstBindings dstHandedOn dstHostDecl dstLoopAround nish_panic_index unwrapParens
   pointer program: size=888 writesThrough=false captured=false passedTo=dstHostDecl#0
   pointer call: size=40 writesThrough=false captured=false passedTo=dstHostDecl#1 dstLoopAround#1
-  pointer dst: size=64 writesThrough=false captured=false
+  pointer dst: size=72 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 body: Node | null (const)
   callee +0:16 dstHostDecl -> @dstHostDecl
@@ -1120,7 +1120,7 @@ function dstUnshared(program: CheckedProgram, sig: FunctionSig, dst: Local | nul
   calls: dstUnsharedAt isFreshConst
   pointer program: size=888 writesThrough=false captured=false passedTo=dstUnsharedAt#0
   pointer sig: size=200 writesThrough=false captured=false
-  pointer dst: size=64 writesThrough=false captured=false passedTo=isFreshConst#0 dstUnsharedAt#2
+  pointer dst: size=72 writesThrough=false captured=false passedTo=isFreshConst#0 dstUnsharedAt#2
   stackSites=0 stackLocals=0
   callee +0:24 isFreshConst -> @isFreshConst
   local +3:7 found: boolean (let)
@@ -1135,7 +1135,7 @@ function captureReachesDstMessage(table: TypeTable, program: CheckedProgram, sig
   pointer program: size=888 writesThrough=false captured=false passedTo=reachingPath#1 dstUnshared#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=dstUnshared#1
   pointer fn: size=200 writesThrough=false captured=false
-  pointer dstLocal: size=64 writesThrough=false captured=false passedTo=knownApart#1 dstUnshared#2
+  pointer dstLocal: size=72 writesThrough=false captured=false passedTo=knownApart#1 dstUnshared#2
   stackSites=1 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +4:9 target: i32 (const)
@@ -1806,7 +1806,7 @@ function VariableUses.constructor(this: VariableUses): void -> @VariableUses.con
 function VariableUses.indexOf(this: VariableUses, local: Local | null): i32 -> @VariableUses.indexOf [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=48 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function VariableUses.add(this: VariableUses, local: Local): i32 -> @VariableUses.add [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1814,7 +1814,7 @@ function VariableUses.add(this: VariableUses, local: Local): i32 -> @VariableUse
   escaping: local
   calls: VariableUses.indexOf nish_array_grow
   pointer this: size=48 writesThrough=false captured=false passedTo=VariableUses.indexOf#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=VariableUses.indexOf#1
+  pointer local: size=72 writesThrough=true captured=true passedTo=VariableUses.indexOf#1
   stackSites=0 stackLocals=0
   local -4:11 at: i32 (const)
   callee -4:16 VariableUses.indexOf -> @VariableUses.indexOf
@@ -1822,7 +1822,7 @@ function VariableUses.isDestinationShaped(this: VariableUses, local: Local | nul
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: VariableUses.indexOf nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=VariableUses.indexOf#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=VariableUses.indexOf#1
+  pointer local: size=72 writesThrough=false captured=false passedTo=VariableUses.indexOf#1
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 VariableUses.indexOf -> @VariableUses.indexOf
@@ -1830,7 +1830,7 @@ function VariableUses.isFreshNew(this: VariableUses, local: Local | null): boole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: VariableUses.indexOf nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=VariableUses.indexOf#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=VariableUses.indexOf#1
+  pointer local: size=72 writesThrough=false captured=false passedTo=VariableUses.indexOf#1
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 VariableUses.indexOf -> @VariableUses.indexOf
@@ -1838,7 +1838,7 @@ function VariableUses.isPrivate(this: VariableUses, local: Local | null): boolea
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: VariableUses.indexOf nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=VariableUses.indexOf#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=VariableUses.indexOf#1
+  pointer local: size=72 writesThrough=false captured=false passedTo=VariableUses.indexOf#1
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 VariableUses.indexOf -> @VariableUses.indexOf
@@ -1956,12 +1956,12 @@ function RegionState.constructor(this: RegionState, locals: Local[], name: strin
 function RegionState.owns(this: RegionState, local: Local | null): boolean -> @RegionState.owns [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=48 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RegionState.isDestination(this: RegionState, local: Local | null): boolean -> @RegionState.isDestination [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=48 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RegionState.addDestination(this: RegionState, local: Local | null): void -> @RegionState.addDestination [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1969,7 +1969,7 @@ function RegionState.addDestination(this: RegionState, local: Local | null): voi
   escaping: local
   calls: nish_array_grow
   pointer this: size=48 writesThrough=true captured=false
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function RegionState.live(this: RegionState): boolean -> @RegionState.live [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2301,7 +2301,7 @@ function SiblingReach.constructor(this: SiblingReach, atomic: boolean, local: Lo
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: atomic local path type
   pointer this: size=24 writesThrough=true captured=false
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function SiblingReach.meets(this: SiblingReach, other: SiblingReach): boolean -> @SiblingReach.meets [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2315,8 +2315,8 @@ function SiblingSpawn.constructor(this: SiblingSpawn, node: Node, scope: Local, 
   escaping: destination node scope
   pointer this: size=32 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
-  pointer scope: size=64 writesThrough=true captured=true
-  pointer destination: size=64 writesThrough=true captured=true
+  pointer scope: size=72 writesThrough=true captured=true
+  pointer destination: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function collectSiblingSpawns(program: CheckedProgram, table: TypeTable, facts: FactsTable, uses: VariableUses, node: Node, locals: Local[], out: SiblingSpawn[]): void -> @collectSiblingSpawns
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -2366,7 +2366,7 @@ function siblingReaches(program: CheckedProgram, table: TypeTable, uses: Variabl
   pointer program: size=888 writesThrough=false captured=false passedTo=classLayoutOf#0 heldReaches#0 heldReaches#0
   pointer table: size=136 writesThrough=false captured=false passedTo=classLayoutOf#1 heldReaches#1 heldReaches#1
   pointer uses: size=48 writesThrough=false captured=false passedTo=VariableUses.isFreshNew#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=VariableUses.isFreshNew#1
+  pointer local: size=72 writesThrough=true captured=true passedTo=VariableUses.isFreshNew#1
   pointer out: size=0 writesThrough=true captured=false passedTo=heldReaches#7 heldReaches#7
   stackSites=2 stackLocals=0
   local -7:9 info: StructInfo | null (const)
@@ -3421,7 +3421,7 @@ function ChannelRef.constructor(this: ChannelRef, kind: i32, path: string, local
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: kind local path
   pointer this: size=24 writesThrough=true captured=false
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function channelRef(program: CheckedProgram, sig: FunctionSig, expr: Node, field: string): ChannelRef -> @channelRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
@@ -3857,7 +3857,7 @@ function ScopeSite.constructor(this: ScopeSite, decl: Node, local: Local | null,
   escaping: body decl local stmt
   pointer this: size=32 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function candidateScopes(program: CheckedProgram, block: Node, index: i32, scopeType: i32): ScopeSite[] -> @candidateScopes
@@ -3916,7 +3916,7 @@ function pathsInTaskArgument(program: CheckedProgram, spawn: Node, local: Local)
   calls: FunctionSig.body fieldsAssignedIn holdsChannelLocal nish_array_grow nish_panic_index unwrapParens
   pointer program: size=888 writesThrough=false captured=false passedTo=holdsChannelLocal#0 holdsChannelLocal#0
   pointer spawn: size=40 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false passedTo=holdsChannelLocal#2 holdsChannelLocal#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=holdsChannelLocal#2 holdsChannelLocal#2
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   local +1:9 args: Node[] (const)
@@ -3935,7 +3935,7 @@ function holdsChannelLocal(program: CheckedProgram, node: Node, local: Local): b
   calls: namedLocal
   pointer program: size=888 writesThrough=false captured=false passedTo=namedLocal#0
   pointer node: size=40 writesThrough=true captured=true passedTo=namedLocal#1
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 named: Local | null (const)
   callee +0:17 namedLocal -> @namedLocal
@@ -4279,7 +4279,7 @@ function checkChannel(program: CheckedProgram, table: TypeTable, summaries: Chan
   pointer table: size=136 writesThrough=false captured=false passedTo=channelElement#1 channelDeclareMessage#0 channelDeclareMessage#0 channelDeclareMessage#0
   pointer summaries: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.may#0 ChannelSummaries.may#0 ChannelSummaries.untraceable#0
   pointer body: size=40 writesThrough=true captured=true passedTo=statementSiteOf#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=pathsInTaskArgument#2 checkParentOps#4
+  pointer local: size=72 writesThrough=false captured=false passedTo=pathsInTaskArgument#2 checkParentOps#4
   pointer decl: size=40 writesThrough=true captured=true passedTo=statementSiteOf#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 recordSeal#2
   pointer spawns: size=0 writesThrough=false captured=false
   pointer ops: size=24 writesThrough=false captured=false passedTo=checkParentOps#6
@@ -4353,7 +4353,7 @@ function checkParentOps(program: CheckedProgram, block: Node, index: i32, chosen
   pointer program: size=888 writesThrough=false captured=false passedTo=oneLine#0
   pointer block: size=40 writesThrough=false captured=false passedTo=statementIndexIn#0
   pointer chosen: size=32 writesThrough=false captured=false passedTo=scopeNameOf#0
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   pointer ops: size=24 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

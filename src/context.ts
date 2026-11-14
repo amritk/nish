@@ -661,7 +661,9 @@ export class CheckContext {
   textOf(node: Node): string {
     // A destructuring pattern's read (`Parser.lowerPattern`) spans its key
     // or slot, and its receiver is written elsewhere: `{ inner: q } = p` is
-    // quoted as the `p.inner` it reads.
+    // quoted as the `p.inner` it reads. A written member or element starts
+    // where its receiver does (`Parser.parseMemberName`, `parseElement`), so
+    // no other node takes this branch.
     if (
       (node.kind === NodeKind.Member || node.kind === NodeKind.Index) &&
       node.children.length > 0 &&

@@ -60,6 +60,14 @@ export class Local {
    * whose type is the annotation's, a `let`, a parameter.
    */
   literalKey: string
+  /**
+   * The variable as a message names it: `name`, except for the hidden
+   * receiver a destructuring pattern binds (`bindsHiddenReceiver` in
+   * `src/nodes.ts`), whose `name` is no word the program wrote and which a
+   * message names by the pattern as written, `{ x, y }`. Among the pointers,
+   * as `typedArray` is.
+   */
+  written: string
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
@@ -89,6 +97,7 @@ export class Local {
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name
+    this.written = name
     this.type = type
     this.mutable = mutable
     this.storage = storage

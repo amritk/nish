@@ -636,7 +636,7 @@ function emitMaybeLocal(emitter: Emitter, local: Local, decl: Node): void -> @em
   escaping: local
   calls: DebugInfo.describeValue Emitter.llvm IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock MaybeParts.constructor TypeTable.refOf emitMaybe loadMaybeValue nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat zeroOf
   pointer emitter: size=384 writesThrough=true captured=false passedTo=emitMaybe#0 loadMaybeValue#0 Emitter.llvm#0 zeroOf#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=DebugInfo.describeValue#2
+  pointer local: size=72 writesThrough=true captured=true passedTo=DebugInfo.describeValue#2
   pointer decl: size=40 writesThrough=false captured=false passedTo=DebugInfo.describeValue#5
   stackSites=0 stackLocals=0
   local -18:7 parts: MaybeParts (let)
@@ -671,7 +671,7 @@ function maybeLocalIndex(emitter: Emitter, local: Local): i32 -> @maybeLocalInde
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=384 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   callee +7:16 internalErrorFor -> @internalErrorFor

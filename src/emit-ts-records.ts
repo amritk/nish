@@ -686,6 +686,11 @@ const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | nu
   if (pattern === null || pattern.text !== "[" || list === null || list.children[walk.listAt] !== node) {
     return null
   }
+  // An untyped body proves no read, so which ones need a check is not known.
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
   const direct = isPatternName(node)
   if (!direct && node.children[2].kind === NodeKind.Empty) {
     return null
@@ -730,6 +735,10 @@ const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string 
   }
   const names = body.children[0]
   if (names.kind !== NodeKind.Var || !isPatternName(names)) {
+    return null
+  }
+  if (walk.untyped) {
+    walk.missType()
     return null
   }
   const indices = uncheckedReads(walk, names.children[0], 0, names.children[0].children.length)

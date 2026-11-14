@@ -269,7 +269,7 @@ function checkResultLocalsHandled(ctx: CheckContext, body: Node): void -> @check
   local +7:7 i: i32 (let)
   local +10:13 local: Local | null (const)
   callee +12:9 CheckContext.error -> @CheckContext.error
-  callee +14:42 TypeTable.typeName -> @TypeTable.typeName
+  callee +14:45 TypeTable.typeName -> @TypeTable.typeName
   local +20:9 unread: boolean[] (const)
   callee +24:3 rejectUnreadOverwrites -> @rejectUnreadOverwrites
 function rejectUnreadOverwrites(ctx: CheckContext, node: Node, declarations: Node[], unread: boolean[]): void -> @rejectUnreadOverwrites
@@ -301,7 +301,7 @@ function declarationIndex(program: CheckedProgram, declarations: Node[], local: 
   calls: nish_panic_index
   pointer program: size=888 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 declared: Local | null (const)

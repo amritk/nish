@@ -79,6 +79,7 @@ import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import Node from "./nodes" -> struct Node
 import awaitsInitializer from "./nodes" -> function @awaitsInitializer
+import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import isPatternName from "./nodes" -> function @isPatternName
 import isPlainSlot from "./nodes" -> function @isPlainSlot
 import patternOf from "./nodes" -> function @patternOf
@@ -277,31 +278,34 @@ function checkDeclarator(ctx: CheckContext, decl: Node, scope: Scope, mutable: b
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: mutable name
-  calls: CheckContext.error TypeTable.assignable TypeTable.isArray TypeTable.isMaybe TypeTable.stripNull TypeTable.typeName allocatesArray annotationSpelling checkExpression declareLocal declaredOrigin holdMembers isMaybeAnnotation literalIndexName nish_panic_index nish_str_concat nish_str_eq refuseNarrowingStore resolveMaybeAnnotation resolveType typedArraySpelling unproven
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=resolveMaybeAnnotation#0 resolveType#1 CheckContext.error#0 declaredOrigin#0 declareLocal#0 checkExpression#0 unproven#0 CheckContext.error#0 refuseNarrowingStore#0 CheckContext.error#0 annotationSpelling#0 typedArraySpelling#0 declareLocal#0 declaredOrigin#0 holdMembers#0 allocatesArray#0
-  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 declareLocal#2 CheckContext.error#1 declareLocal#2
+  calls: CheckContext.error CheckContext.textOf TypeTable.assignable TypeTable.isArray TypeTable.isMaybe TypeTable.stripNull TypeTable.typeName allocatesArray annotationSpelling bindsHiddenReceiver checkExpression declareLocal declaredOrigin holdMembers isMaybeAnnotation literalIndexName nish_panic_index nish_str_concat nish_str_eq refuseNarrowingStore resolveMaybeAnnotation resolveType typedArraySpelling unproven
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=resolveMaybeAnnotation#0 resolveType#1 CheckContext.error#0 declaredOrigin#0 declareLocal#0 checkExpression#0 CheckContext.textOf#0 unproven#0 CheckContext.error#0 refuseNarrowingStore#0 CheckContext.error#0 annotationSpelling#0 typedArraySpelling#0 declareLocal#0 declaredOrigin#0 holdMembers#0 allocatesArray#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 declareLocal#2 bindsHiddenReceiver#0 CheckContext.error#1 declareLocal#2
   pointer scope: size=56 writesThrough=true captured=true passedTo=declaredOrigin#3 declareLocal#1 checkExpression#2 typedArraySpelling#2 declareLocal#1 declaredOrigin#3 literalIndexName#1 holdMembers#1
   stackSites=0 stackLocals=0
-  local -71:9 annotation: Node (const)
-  local -67:7 declared: i32 (let)
-  callee -65:16 isMaybeAnnotation -> @isMaybeAnnotation
-  callee -64:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
-  callee -63:9 resolveType -> @resolveType
-  local -61:9 initializer: Node (const)
-  callee -59:5 CheckContext.error -> @CheckContext.error
-  local -58:11 origin: TypeOrigin | null (const)
-  callee -58:20 declaredOrigin -> @declaredOrigin
-  callee -57:5 declareLocal -> @declareLocal
-  local -52:7 want: i32 (let)
-  callee -49:25 TypeTable.isMaybe -> @TypeTable.isMaybe
-  local -44:9 initType: i32 (const)
-  callee -44:20 checkExpression -> @checkExpression
+  local -73:9 annotation: Node (const)
+  local -69:7 declared: i32 (let)
+  callee -67:16 isMaybeAnnotation -> @isMaybeAnnotation
+  callee -66:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
+  callee -65:9 resolveType -> @resolveType
+  local -63:9 initializer: Node (const)
+  callee -61:5 CheckContext.error -> @CheckContext.error
+  local -60:11 origin: TypeOrigin | null (const)
+  callee -60:20 declaredOrigin -> @declaredOrigin
+  callee -59:5 declareLocal -> @declareLocal
+  local -54:7 want: i32 (let)
+  callee -51:25 TypeTable.isMaybe -> @TypeTable.isMaybe
+  local -46:9 initType: i32 (const)
+  callee -46:20 checkExpression -> @checkExpression
+  local -44:9 shown: string (const)
+  callee -44:17 bindsHiddenReceiver -> @bindsHiddenReceiver
+  callee -44:45 CheckContext.textOf -> @CheckContext.textOf
   local -40:7 type: i32 (let)
   callee -40:29 unproven -> @unproven
   callee -39:49 TypeTable.assignable -> @TypeTable.assignable
   callee -38:5 CheckContext.error -> @CheckContext.error
   callee -36:28 TypeTable.typeName -> @TypeTable.typeName
-  callee -36:86 TypeTable.typeName -> @TypeTable.typeName
+  callee -36:87 TypeTable.typeName -> @TypeTable.typeName
   callee -32:5 refuseNarrowingStore -> @refuseNarrowingStore
   callee -29:5 CheckContext.error -> @CheckContext.error
   local -16:9 typedArray: string (const)
@@ -431,15 +435,17 @@ function declareLocal(ctx: CheckContext, scope: Scope, decl: Node, site: Node, n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: mutable name origin type
-  calls: CheckContext.error Local.constructor Scope.declare nish_alloc_struct nish_panic_index nish_str_concat
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
+  calls: CheckContext.error CheckContext.textOf Local.constructor Scope.declare bindsHiddenReceiver nish_alloc_struct nish_panic_index nish_str_concat
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.textOf#0 CheckContext.error#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.declare#0
-  pointer decl: size=40 writesThrough=false captured=false
+  pointer decl: size=40 writesThrough=false captured=false passedTo=bindsHiddenReceiver#0
   pointer site: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   pointer origin: size=32 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local -6:9 local: Local (const)
-  callee -6:17 new Local -> @Local.constructor
+  local -9:9 local: Local (const)
+  callee -9:17 new Local -> @Local.constructor
+  callee -7:41 bindsHiddenReceiver -> @bindsHiddenReceiver
+  callee -6:21 CheckContext.textOf -> @CheckContext.textOf
   callee -4:8 Scope.declare -> @Scope.declare
   callee -3:5 CheckContext.error -> @CheckContext.error
 function checkIf(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkIf
@@ -1034,7 +1040,7 @@ function switchCovered(ctx: CheckContext, unmatched: Scope, tagged: Local, membe
   calls: Scope.exhausted labelledMembers withoutMembers
   pointer ctx: size=344 writesThrough=false captured=false passedTo=withoutMembers#0 labelledMembers#0
   pointer unmatched: size=56 writesThrough=false captured=false passedTo=Scope.exhausted#0
-  pointer tagged: size=64 writesThrough=false captured=false passedTo=Scope.exhausted#1
+  pointer tagged: size=72 writesThrough=false captured=false passedTo=Scope.exhausted#1
   pointer members: size=0 writesThrough=false captured=false passedTo=withoutMembers#1
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
   stackSites=0 stackLocals=0
@@ -1072,8 +1078,8 @@ function narrowSwitched(ctx: CheckContext, scope: Scope, tagged: Local | null, h
   calls: narrowHeld narrowToTags
   pointer ctx: size=344 writesThrough=false captured=false passedTo=narrowToTags#0 narrowHeld#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=narrowToTags#1 narrowHeld#1
-  pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowToTags#2
-  pointer held: size=64 writesThrough=true captured=true passedTo=narrowHeld#2
+  pointer tagged: size=72 writesThrough=true captured=true passedTo=narrowToTags#2
+  pointer held: size=72 writesThrough=true captured=true passedTo=narrowHeld#2
   pointer members: size=0 writesThrough=true captured=false passedTo=narrowToTags#3 narrowHeld#3
   stackSites=0 stackLocals=0
   callee +0:5 narrowToTags -> @narrowToTags
@@ -1084,8 +1090,8 @@ function narrowClause(ctx: CheckContext, clauseScope: Scope, tagged: Local | nul
   calls: labelledMembers narrowSwitched withoutMembers
   pointer ctx: size=344 writesThrough=false captured=false passedTo=narrowSwitched#0 withoutMembers#0 labelledMembers#0 narrowSwitched#0
   pointer clauseScope: size=56 writesThrough=false captured=false passedTo=narrowSwitched#1 narrowSwitched#1
-  pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
-  pointer held: size=64 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
+  pointer tagged: size=72 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
+  pointer held: size=72 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
   pointer group: size=0 writesThrough=true captured=false passedTo=withoutMembers#2 narrowSwitched#4
   stackSites=0 stackLocals=0
@@ -1099,8 +1105,8 @@ function narrowAfterSwitch(ctx: CheckContext, scope: Scope, tagged: Local | null
   calls: labelledMembers narrowSwitched withoutMembers
   pointer ctx: size=344 writesThrough=false captured=false passedTo=narrowSwitched#0 withoutMembers#0 labelledMembers#0 narrowSwitched#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=narrowSwitched#1 narrowSwitched#1
-  pointer tagged: size=64 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
-  pointer held: size=64 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
+  pointer tagged: size=72 writesThrough=true captured=true passedTo=narrowSwitched#2 narrowSwitched#2
+  pointer held: size=72 writesThrough=true captured=true passedTo=narrowSwitched#3 narrowSwitched#3
   pointer clauses: size=0 writesThrough=false captured=false passedTo=labelledMembers#1
   pointer reaching: size=0 writesThrough=true captured=false passedTo=withoutMembers#2 narrowSwitched#4
   stackSites=0 stackLocals=0

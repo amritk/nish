@@ -273,7 +273,7 @@ function FlowTarget.constructor(this: FlowTarget, local: Local | null, isReturn:
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: isReturn local
   pointer this: size=24 writesThrough=true captured=false
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function EscapeAnalysis.constructor(this: EscapeAnalysis, unit: AnalysisUnit, table: TypeTable, facts: FactsTable, opts: Options, nodeCount: i32, sig: FunctionSig, returnsByValueResult: boolean): void -> @EscapeAnalysis.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -300,7 +300,7 @@ function EscapeAnalysis.addRef(this: EscapeAnalysis, local: Local, node: Node): 
   escaping: local node
   calls: nish_array_grow nish_panic_index
   pointer this: size=144 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -3:9 i: i32 (let)
@@ -309,7 +309,7 @@ function EscapeAnalysis.refsOf(this: EscapeAnalysis, local: Local): Node[] -> @E
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=144 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function EscapeAnalysis.elementSize(this: EscapeAnalysis, elem: i32): i32 -> @EscapeAnalysis.elementSize [method]
@@ -364,7 +364,7 @@ function EscapeAnalysis.noteCaptures(this: EscapeAnalysis, arrow: Node, lifted: 
 function EscapeAnalysis.isCaptured(this: EscapeAnalysis, v: Local): boolean -> @EscapeAnalysis.isCaptured [method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=144 writesThrough=false captured=false
-  pointer v: size=64 writesThrough=false captured=false
+  pointer v: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 seen: Local (const)
 function EscapeAnalysis.visitNew(this: EscapeAnalysis, node: Node): void -> @EscapeAnalysis.visitNew [method]
@@ -554,7 +554,7 @@ function EscapeAnalysis.captureOutcome(this: EscapeAnalysis, v: Local): Outcome 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: EscapeAnalysis.argumentOutcome EscapeAnalysis.elementsFreeAt Outcome.constructor TypeTable.isArray TypeTable.stripNull nish_alloc_struct nish_arena_release worse
   pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.argumentOutcome#0 EscapeAnalysis.elementsFreeAt#0
-  pointer v: size=64 writesThrough=false captured=false
+  pointer v: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 flow: i32 (let)
   local +1:9 stable: boolean (let)
@@ -692,7 +692,7 @@ function EscapeAnalysis.forwardsFill(this: EscapeAnalysis, v: Local): boolean ->
   sharedWrite: via identRefs
   calls: EscapeAnalysis.isFillArgument FunctionSig.body ParentTable.parentOf identRefs nish_panic_index nish_str_eq
   pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.isFillArgument#0
-  pointer v: size=64 writesThrough=false captured=false passedTo=identRefs#2
+  pointer v: size=72 writesThrough=false captured=false passedTo=identRefs#2
   stackSites=1 stackLocals=1
   local +0:11 body: Node | null (const)
   callee +0:18 FunctionSig.body -> @FunctionSig.body
@@ -708,7 +708,7 @@ function EscapeAnalysis.onlyFilled(this: EscapeAnalysis, v: Local): boolean -> @
   sharedWrite: via identRefs
   calls: EscapeAnalysis.isCarrierUse EscapeAnalysis.isFillArgument EscapeAnalysis.refsOf FunctionSig.body TypeTable.refOf TypeTable.stripNull identRefs
   pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.refsOf#0 EscapeAnalysis.isCarrierUse#0 EscapeAnalysis.isFillArgument#0
-  pointer v: size=64 writesThrough=false captured=false passedTo=identRefs#2 EscapeAnalysis.refsOf#1
+  pointer v: size=72 writesThrough=false captured=false passedTo=identRefs#2 EscapeAnalysis.refsOf#1
   stackSites=1 stackLocals=1
   local +0:11 body: Node | null (const)
   callee +0:18 FunctionSig.body -> @FunctionSig.body
@@ -794,7 +794,7 @@ function EscapeAnalysis.memoised(this: EscapeAnalysis, v: Local): Outcome | null
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=144 writesThrough=false captured=false
-  pointer v: size=64 writesThrough=false captured=false
+  pointer v: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function EscapeAnalysis.localOutcome(this: EscapeAnalysis, v: Local, visiting: Local[]): Outcome -> @EscapeAnalysis.localOutcome [method]
@@ -803,7 +803,7 @@ function EscapeAnalysis.localOutcome(this: EscapeAnalysis, v: Local, visiting: L
   escaping: v
   calls: EscapeAnalysis.captureOutcome EscapeAnalysis.isCaptured EscapeAnalysis.memoised EscapeAnalysis.refsOf EscapeAnalysis.valueOutcome Outcome.constructor ParentTable.parentOf isAssignmentOperator nish_alloc_struct nish_array_grow nish_panic_index worse
   pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.memoised#0 EscapeAnalysis.isCaptured#0 EscapeAnalysis.captureOutcome#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.valueOutcome#0
-  pointer v: size=64 writesThrough=true captured=true passedTo=EscapeAnalysis.memoised#1 EscapeAnalysis.isCaptured#1 EscapeAnalysis.captureOutcome#1 EscapeAnalysis.refsOf#1
+  pointer v: size=72 writesThrough=true captured=true passedTo=EscapeAnalysis.memoised#1 EscapeAnalysis.isCaptured#1 EscapeAnalysis.captureOutcome#1 EscapeAnalysis.refsOf#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.valueOutcome#2
   stackSites=0 stackLocals=0
   local -22:11 known: Outcome | null (const)
@@ -969,14 +969,14 @@ function EscapeAnalysis.decide(this: EscapeAnalysis): void -> @EscapeAnalysis.de
 function EscapeAnalysis.holdsStackObject(this: EscapeAnalysis, local: Local): boolean -> @EscapeAnalysis.holdsStackObject [method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=144 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 candidate: Local (const)
 function EscapeAnalysis.ownsSite(this: EscapeAnalysis, v: Local): boolean -> @EscapeAnalysis.ownsSite [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: EscapeAnalysis.declarationOf EscapeAnalysis.ownsSite nish_panic_index unwrapParens
   pointer this: size=144 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#0 EscapeAnalysis.ownsSite#0
-  pointer v: size=64 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#1
+  pointer v: size=72 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#1
   stackSites=0 stackLocals=0
   local +0:11 decl: Node | null (const)
   callee +0:18 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
@@ -989,7 +989,7 @@ function EscapeAnalysis.declarationOf(this: EscapeAnalysis, v: Local): Node | nu
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=144 writesThrough=false captured=false
-  pointer v: size=64 writesThrough=false captured=false
+  pointer v: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 decl: Node (const)
   local +1:13 declared: Local | null (const)
@@ -1061,7 +1061,7 @@ function identRefs(program: CheckedProgram, node: Node, local: Local, out: Node[
   calls: identRefs nish_array_grow nish_panic_index
   pointer program: size=888 writesThrough=false captured=false passedTo=identRefs#0
   pointer node: size=40 writesThrough=true captured=true
-  pointer local: size=64 writesThrough=false captured=false passedTo=identRefs#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=identRefs#2
   pointer out: size=0 writesThrough=true captured=false passedTo=identRefs#3
   stackSites=0 stackLocals=0
   local -2:9 named: Local | null (const)
@@ -1111,7 +1111,7 @@ function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, 
 function holdsLocal(list: Local[], local: Local): boolean -> @holdsLocal
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer list: size=0 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 candidate: Local (const)
 function PassWalk.constructor(this: PassWalk, unit: AnalysisUnit, table: TypeTable, facts: FactsTable, scope: LoopScope): void -> @PassWalk.constructor [constructor]
@@ -1145,7 +1145,7 @@ function PassWalk.declaredInPass(this: PassWalk, local: Local): boolean -> @Pass
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: holdsLocal
   pointer this: size=80 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false passedTo=holdsLocal#1 holdsLocal#1
+  pointer local: size=72 writesThrough=false captured=false passedTo=holdsLocal#1 holdsLocal#1
   stackSites=0 stackLocals=0
   callee +0:12 holdsLocal -> @holdsLocal
   callee +0:47 holdsLocal -> @holdsLocal
@@ -1243,7 +1243,7 @@ function PassWalk.freshArray(this: PassWalk, local: Local): boolean -> @PassWalk
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: PassWalk.initialiserIsFresh
   pointer this: size=80 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#0
-  pointer local: size=64 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#2
   stackSites=0 stackLocals=0
   callee +0:12 PassWalk.initialiserIsFresh -> @PassWalk.initialiserIsFresh
 function PassWalk.initialiserIsFresh(this: PassWalk, node: Node, local: Local): boolean -> @PassWalk.initialiserIsFresh [method]
@@ -1251,7 +1251,7 @@ function PassWalk.initialiserIsFresh(this: PassWalk, node: Node, local: Local): 
   calls: PassWalk.initialiserIsFresh nish_panic_index unwrapParens
   pointer this: size=80 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#0
   pointer node: size=40 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#2
+  pointer local: size=72 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#2
   stackSites=0 stackLocals=0
   local +0:11 declared: Local | null (const)
   local +3:13 init: Node (const)

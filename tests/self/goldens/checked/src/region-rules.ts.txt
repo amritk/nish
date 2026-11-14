@@ -503,7 +503,7 @@ function RegionWalk.bind(this: RegionWalk, local: Local | null, origin: i32): vo
   escaping: local origin
   calls: RegionWalk.join nish_array_grow nish_panic_index
   pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.join#0
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -2:11 at: i32 (const)
   local +5:11 joined: i32 (const)

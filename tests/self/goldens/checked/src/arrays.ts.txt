@@ -676,7 +676,7 @@ function ElementRef.constructor(this: ElementRef, local: Local, array: string, e
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: array arrayText elem local
   pointer this: size=56 writesThrough=true captured=false
-  pointer local: size=64 writesThrough=true captured=true
+  pointer local: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ElementRef.reachedBy(this: ElementRef, root: string, elem: string): boolean -> @ElementRef.reachedBy [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -688,7 +688,7 @@ function SlotOverwrite.constructor(this: SlotOverwrite, store: Node, reference: 
   escaping: read reference store
   pointer this: size=24 writesThrough=true captured=false
   pointer store: size=40 writesThrough=true captured=true
-  pointer reference: size=64 writesThrough=true captured=true
+  pointer reference: size=72 writesThrough=true captured=true
   pointer read: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function referenceRoot(expr: Node): string -> @referenceRoot [exported]
@@ -851,7 +851,7 @@ function RefWalk.declaredSince(this: RefWalk, local: Local, declaredDepth: i32):
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: declaredDepth
   pointer this: size=88 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function RefWalk.invalidate(this: RefWalk, m: Mutation): void -> @RefWalk.invalidate [method]
@@ -1011,7 +1011,7 @@ function RefWalk.bind(this: RefWalk, local: Local, value: Node, replaceFrom: i32
   escaping: replaceFrom
   calls: RefWalk.keepFrom RefWalk.referencesOf nish_array_grow nish_panic_index
   pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.referencesOf#0 RefWalk.keepFrom#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=RefWalk.referencesOf#1
+  pointer local: size=72 writesThrough=true captured=true passedTo=RefWalk.referencesOf#1
   pointer value: size=40 writesThrough=true captured=true passedTo=RefWalk.referencesOf#2
   stackSites=2 stackLocals=2
   local +0:11 found: ElementRef[] (const)
@@ -1025,7 +1025,7 @@ function RefWalk.referencesOf(this: RefWalk, local: Local, value: Node, out: Ele
   sharedWrite: +0:9
   calls: ElementRef.constructor RefWalk.aliasesOf RefWalk.referencesOf elementSource inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText sourceLocal unwrapParens
   pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.aliasesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=ElementRef.constructor#1 RefWalk.aliasesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1
+  pointer local: size=72 writesThrough=true captured=true passedTo=ElementRef.constructor#1 RefWalk.aliasesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer out: size=0 writesThrough=true captured=false passedTo=RefWalk.aliasesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3
   stackSites=0 stackLocals=0
@@ -1050,8 +1050,8 @@ function RefWalk.aliasesOf(this: RefWalk, local: Local, from: Local | null, out:
   sharedWrite: +0:9
   calls: ElementRef.constructor nish_alloc_struct nish_array_grow
   pointer this: size=88 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=true captured=true passedTo=ElementRef.constructor#1
-  pointer from: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=true captured=true passedTo=ElementRef.constructor#1
+  pointer from: size=72 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:16 ref: ElementRef (const)
@@ -1072,7 +1072,7 @@ function declaresUsing(program: CheckedProgram, block: Node, scope: Local): bool
   calls: nish_panic_index
   pointer program: size=888 writesThrough=false captured=false
   pointer block: size=40 writesThrough=false captured=false
-  pointer scope: size=64 writesThrough=false captured=false
+  pointer scope: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 stmt: Node (const)
   local +2:18 decl: Node (const)

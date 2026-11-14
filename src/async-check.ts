@@ -442,7 +442,7 @@ export const isAwaitAllShape = (decl: Node): boolean => {
 }
 
 /** NL2193: a pattern over an `await` that is not `awaitAll(...)`'s. */
-export const AWAIT_PATTERN: string =
+const AWAIT_PATTERN: string =
   "A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name"
 
 /**

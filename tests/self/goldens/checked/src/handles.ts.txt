@@ -401,7 +401,7 @@ function admittedValue(walk: HandleWalk, node: Node, type: i32, depth: i32): boo
 function isDerived(walk: HandleWalk, local: Local | null): boolean -> @isDerived
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer walk: size=72 writesThrough=false captured=false
-  pointer local: size=64 writesThrough=false captured=false
+  pointer local: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 derived: Local (const)
 function checkHandleNew(walk: HandleWalk, node: Node, info: StructInfo, depth: i32): void -> @checkHandleNew
