@@ -157,3 +157,44 @@ export function hangUp(conn: Conn): void {
     conn.fd = -1
   }
 }
+
+/**
+ * One whole response as its bytes, or "closed" when the peer closed first:
+ * each CRLF shown as `|`, and the `Date` value as `<date>`, so two runs read
+ * the same. A `bodiless` response (to a HEAD) has no body, whatever its
+ * `Content-Length` says.
+ */
+export async function readRaw(conn: Conn, bodiless: boolean): Promise<string> {
+  let end: i32 = headEnd(conn)
+  while (end < 0) {
+    const more: boolean = await fill(conn)
+    if (!more) {
+      return "closed"
+    }
+    end = headEnd(conn)
+  }
+  const head: string = String.fromBytes(conn.buf, conn.start, end)
+  const length: i32 = toI32(parseInt(headerOf(head, "content-length")))
+  const want: i32 = bodiless || length < 0 ? 0 : length
+  while (conn.end - end < want) {
+    const more: boolean = await fill(conn)
+    if (!more) {
+      return "closed"
+    }
+    end = headEnd(conn)
+  }
+  const whole: string = String.fromBytes(conn.buf, conn.start, end + want)
+  conn.start = end + want
+  const date: string = headerOf(head, "date")
+  const at: i32 = date.length > 0 ? toI32(whole.indexOf(date)) : -1
+  const masked: string = at < 0 ? whole : `${whole.substring(0, at)}<date>${whole.substring(at + toI32(date.length))}`
+  let out: string = ""
+  let from: i32 = 0
+  let crlf: i32 = toI32(masked.indexOf("\r\n"))
+  while (crlf >= 0) {
+    out = `${out}${masked.substring(from, crlf)}|`
+    from = crlf + 2
+    crlf = toI32(masked.indexOf("\r\n", from))
+  }
+  return `${out}${masked.substring(from, toI32(masked.length))}`
+}

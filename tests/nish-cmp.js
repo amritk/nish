@@ -4622,6 +4622,28 @@ const DECLARED = [
         why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
       }))
   ),
+  // Two probes new with this change: net_serve_raw pins serve's answered
+  // bytes and net_serve_idle_record an idle connection's record. Each links
+  // the same modules as the probes above, which differ from the seed's.
+  ...["tests/link/net_serve_raw/main.ts", "tests/link/net_serve_idle_record/main.ts"].flatMap((program) =>
+    [
+      "handler.ll",
+      "hkdf.ll",
+      "hmac.ll",
+      "json.ll",
+      "main.h",
+      "main.ll",
+      "record.ll",
+      "router.ll",
+      "serve.ll",
+      "tls.ll",
+    ].map((file) => ({
+      program,
+      file,
+      changelog: "Cut serve's answer path and hold a request record only from parse to copy",
+      why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns, and this change moves serve's answer path and holds each request record only from the head's parse to the task's copy (json.ll only on aarch64)",
+    }))
+  ),
   ...taggedUnions(
     "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
     {
