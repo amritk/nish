@@ -1487,6 +1487,8 @@ export class JsonTokenizer {
       ) {
         // Clinger: both operands are exact doubles, so one rounding. An
         // integer of up to 15 digits is below 2^53 and needs no power at all.
+        // `numberWalk` repeats this decision; a shared helper cost 0.5% Ir
+        // on metrics, so the two copies must change together.
         if (scale === 0) {
           value = toF64(mantissa)
         } else {
@@ -1547,7 +1549,8 @@ export class JsonTokenizer {
     if (digits > 0) {
       const exact: boolean = mantissa <= toU64(1) << toU64(53)
       if (exact && scale >= -JSON_TOK_FAST_EXPONENT && scale <= JSON_TOK_FAST_EXPONENT) {
-        // Clinger: both operands are exact doubles, so one rounding.
+        // Clinger: both operands are exact doubles, so one rounding. The
+        // same decision as `numberF64`'s; change the two together.
         const power: f64 = jsonTokPowerOfTen(scale < 0 ? -scale : scale)
         value = scale < 0 ? toF64(mantissa) / power : toF64(mantissa) * power
       } else {

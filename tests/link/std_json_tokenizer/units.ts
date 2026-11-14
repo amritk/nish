@@ -527,6 +527,10 @@ const numberRuns = (t: Suite): void => {
     "123456789012345678901234567890",
     "1.2345678901234567890123e5",
     "9007199254740993.000000001",
+    "1e99999",
+    "1e100000",
+    "1e-999999",
+    "1e1000000",
   ];
   let i: i32 = 0;
   while (i < toI32(texts.length)) {
@@ -553,6 +557,10 @@ const numberRuns = (t: Suite): void => {
   t.eqI64("a window of 9 digits from the middle", jtF64BitsWindow("1234567890123456", 3, 9), f64ToBits(toF64(456789012)));
   t.eqI64("a window ending after 8 fraction digits", jtF64BitsWindow("0.123456789", 0, 10), f64ToBits(parseFloat("0.12345678")));
   t.eqI64("a window ending on a dot is not a number", jtF64BitsWindow("12345678.5", 0, 9), toI64(-1));
+  // `/` and `:` sit either side of the digits, so the eight-byte check must reject them.
+  t.eqStr("a slash in an eight-byte digit window", jtVerdict("[1234567/8]"), "SYNTAX@8");
+  t.eqStr("a colon in an eight-byte digit window", jtVerdict("[1234:678]"), "SYNTAX@5");
+  t.eqStr("a slash after eight digits", jtVerdict("[12345678/]"), "SYNTAX@9");
 };
 
 /** `numberF64` of the first number in `text`, or 0. */

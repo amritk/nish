@@ -2551,9 +2551,9 @@ function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenize
   local +2:11 mantissa: u64 (const)
   local +3:11 scale: i32 (const)
   local +4:9 value: f64 (let)
-  local +16:17 power: f64 (const)
-  callee +16:30 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
-  callee +20:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
+  local +18:17 power: f64 (const)
+  callee +18:30 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  callee +22:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
 function JsonTokenizer.numberWalk(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberWalk [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokEiselLemire nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
@@ -2576,9 +2576,9 @@ function JsonTokenizer.numberWalk(this: JsonTokenizer): f64 -> @nish.JsonTokeniz
   local +33:11 scale: i32 (const)
   local +34:9 value: f64 (let)
   local +36:13 exact: boolean (const)
-  local +39:15 power: f64 (const)
-  callee +39:28 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
-  callee +42:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
+  local +40:15 power: f64 (const)
+  callee +40:28 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  callee +43:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new
