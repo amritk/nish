@@ -22,12 +22,12 @@
 //   instantiation, a lifted arrow, async, a generator, foreign or generic, and
 //   with no compile-time, defaulted or rest parameter and no captures.
 // - It returns `i32`, and no parameter is ranged or a `Result`.
-// - Its body is blocks, `if`, `const` / `let` (no `using`, no `defer`),
-//   expression statements and `return`: no loop, `switch`, `try` or `throw`,
+// - Its body is blocks, `if`, `const` / `let` (no `using`), expression
+//   statements and `return`: no loop, `switch`, `try`, `throw` or `defer`,
 //   and no arrow anywhere in it, so no closure can see a local.
 // - Each `return` value, under parentheses and through either arm of a
-//   `c ? A : B` (neither converting the value), is a step or a base, there is at least one of each, and the
-//   recursion it folds is a step's own call. Any other call of the function
+//   `c ? A : B` (neither converting the value), is a step or a base, there
+//   is at least one of each, and the recursion it folds is a step's own call. Any other call of the function
 //   (`fib(n - 1)` in `fib`'s `X`) stays the ordinary call it is.
 //   - `X + self(a, ...)` with `X` any `i32` expression. `X` is evaluated
 //     before the arguments in the source and in the loop alike.
@@ -44,7 +44,7 @@
 import { CheckContext } from "./context"
 import { isGenericFunction } from "./generics"
 import { hasSpread } from "./members"
-import { FLAG_DEFER, FLAG_GENERATOR, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
+import { FLAG_GENERATOR, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
 import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig, ROLE_FUNCTION } from "./program"
 import { STORAGE_PARAM } from "./symbols"
 import { T_I32 } from "./types"
@@ -145,7 +145,7 @@ const collectTailValues = (node: Node, out: Node[]): boolean => {
       return true
     }
     case NodeKind.Var:
-      return (node.flags & (FLAG_USING | FLAG_DEFER)) === 0
+      return (node.flags & FLAG_USING) === 0
     case NodeKind.ExprStmt:
     case NodeKind.Empty:
       return true

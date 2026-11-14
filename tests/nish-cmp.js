@@ -1309,6 +1309,12 @@ const DECLARED = [
     why: RECURSION_LOOP_WHY,
   },
   {
+    program: "tests/cases/acc_soundness.ts",
+    file: "acc_soundness.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
     program: "tests/cases/acc_tree.ts",
     file: "acc_tree.ll",
     changelog: RECURSION_LOOP,

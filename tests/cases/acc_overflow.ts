@@ -8,12 +8,16 @@
 // (acc_overflow.out). With a case number as the argument that case runs
 // first and must panic with "attempt to add with overflow", exit 1 and print
 // nothing; tests/run.js runs each:
-//   0  (a) the deepest add overflows: MAX + 1
-//   1  (b) a middle add overflows though the whole sum fits: -1 + (MAX + 1)
-//   2  (c) the outermost add overflows: MAX + (1 + 0)
-//   3  (d) MAX + (MAX + (MAX + (-MAX + 0))): the inner adds fit and the
-//          outermost overflows, while the loop's sum from the outside in
-//          passes MAX at the second step, which it hands to the call
+//   0  the deepest add overflows: MAX + 1
+//   1  the deepest add overflows, under an outer add that would bring the
+//      whole sum back in range: -1 + (MAX + 1)
+//   2  only the outermost add overflows: MAX + (1 + 0)
+//   3  MAX + (MAX + (MAX + (-MAX + 0))): the inner adds fit and the
+//      outermost overflows, while the loop's sum from the outside in
+//      passes MAX at the second step, which it hands to the call
+// Case 2 is the plan's (b), an overflow at the outermost add only. Its (c),
+// a sum whose prefix passes MAX though no add of the recursion does, is
+// chain(11, 2) below, which must print.
 const MAX: i32 = 2147483647
 
 /** Step `i` of chain `c`; step 1 is the deepest add, the first to run. */

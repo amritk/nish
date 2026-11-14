@@ -7,8 +7,10 @@
 cases/acc_effects added after R6: no rewriter to freeze it with
 cases/acc_fib added after R6: no rewriter to freeze it with
 cases/acc_ineligible added after R6: no rewriter to freeze it with
+cases/acc_ineligible_f64 added after R6: no rewriter to freeze it with
 cases/acc_overflow added after R6: no rewriter to freeze it with
 cases/acc_shapes added after R6: no rewriter to freeze it with
+cases/acc_soundness added after R6: no rewriter to freeze it with
 cases/acc_tree added after R6: no rewriter to freeze it with
 cases/arena_placement added after R6: no rewriter to freeze it with
 cases/arena_placement_loops added after R6: no rewriter to freeze it with

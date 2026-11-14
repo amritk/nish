@@ -16157,9 +16157,10 @@ if (dealtHere("arrayChecks")) {
 
   // ---- Self-recursive checked sums ------------------------------------------------
   // A function whose recursive returns are `X + self(...)` is one loop whose overflow
-  // check panics where the recursion would (src/emit-accumulate.ts). acc_overflow's cases (a)-(d)
-  // each overflow one add of the recursion at a different depth, and the loop must panic
-  // as the recursion did; acc_ineligible's sums must stay recursion.
+  // check panics where the recursion would (src/emit-accumulate.ts). acc_overflow's cases 0-3
+  // each overflow one add of the recursion, and the loop must panic as the recursion
+  // did; acc_soundness' two divide-by-zero cases must panic as theirs do, though an
+  // overflow is pending; acc_ineligible's sums must stay recursion.
   if (!only || "acc_".includes(only) || only.startsWith("acc")) {
     const accLl = path.join(buildDir, "acc_overflow.ll")
     const accExe = path.join(buildDir, "acc_overflow")
@@ -16173,7 +16174,7 @@ if (dealtHere("arrayChecks")) {
         }
       }
       check(
-        'acc_overflow: cases (a)-(d) each exit 1 with "attempt to add with overflow" and print nothing',
+        'acc_overflow: cases 0-3 each exit 1 with "attempt to add with overflow" and print nothing',
         failed.length === 0,
         failed.join("\n")
       )
@@ -16195,6 +16196,26 @@ if (dealtHere("arrayChecks")) {
     } else if (effectsLinked !== null) {
       check("acc_effects: links", false, String(effectsLinked.stderr))
     }
+    // acc_soundness' cases 0 and 1 divide by zero after steps whose sum has passed MAX.
+    const soundLl = path.join(buildDir, "acc_soundness.ll")
+    const soundExe = path.join(buildDir, "acc_soundness")
+    const soundLinked = fs.existsSync(soundLl) ? linkNative(soundExe, soundLl) : null
+    if (soundLinked !== null && soundLinked.status === 0) {
+      const failed = []
+      for (let k = 0; k < 2; k++) {
+        const run = spawnSync(soundExe, [String(k)], { encoding: "utf8" })
+        if (run.status !== 1 || !run.stderr.includes("attempt to divide by zero") || run.stdout !== "") {
+          failed.push(`case ${k}: ${shown(run)}`)
+        }
+      }
+      check(
+        'acc_soundness: cases 0 and 1 each exit 1 with "attempt to divide by zero" and print nothing',
+        failed.length === 0,
+        failed.join("\n")
+      )
+    } else if (soundLinked !== null) {
+      check("acc_soundness: links", false, String(soundLinked.stderr))
+    }
     const looped = (name) => {
       const ll = path.join(casesDir, `${name}.ll`)
       return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8").split("\nrec.head:").length - 1 : -1
@@ -16212,7 +16233,11 @@ if (dealtHere("arrayChecks")) {
         effectsText.split("\nrec.body:").length === 2 &&
         effectsText.split("\nrec.exit:").length === 3
     )
-    check("acc_ineligible: no sum it holds becomes a loop", looped("acc_ineligible") === 0)
+    check("acc_soundness: each of its six sums is a loop", looped("acc_soundness") === 6, String(looped("acc_soundness")))
+    check(
+      "acc_ineligible: no sum it holds, in either number mode, becomes a loop",
+      looped("acc_ineligible") === 0 && looped("acc_ineligible_f64") === 0
+    )
   }
 
   // ---- Ranged integers (WP31) ------------------------------------------------------

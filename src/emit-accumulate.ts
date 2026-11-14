@@ -76,6 +76,7 @@ import { Emitter } from "./emit"
 import { emitCheckedArith, OVERFLOW_ADD } from "./emit-ops"
 import { unwrapParens } from "./emit-util"
 import { FunctionFacts } from "./attributes"
+import { internalError } from "./ice"
 import { IRBlock, IRFunction, paramValue } from "./ir"
 import { Node } from "./nodes"
 import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig } from "./program"
@@ -84,6 +85,8 @@ import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig } from "./program"
 export class RecursionLoop {
   /** The function the loop is. */
   sig: FunctionSig
+  /** The block that enters the header first: the function's own first block. */
+  entry: string
   head: IRBlock
   /** The parameters' LLVM types, in order. */
   types: string[]
@@ -92,8 +95,9 @@ export class RecursionLoop {
   args: string[][]
   addends: string[]
 
-  constructor(sig: FunctionSig, head: IRBlock, types: string[]) {
+  constructor(sig: FunctionSig, entry: string, head: IRBlock, types: string[]) {
     this.sig = sig
+    this.entry = entry
     this.head = head
     this.types = types
     this.edges = []
@@ -142,10 +146,16 @@ export const openAccumulation = (emitter: Emitter, sig: FunctionSig): void => {
   for (const type of sig.paramTypes) {
     types.push(emitter.llvm(type))
   }
+  // The prologue must still be one block: the header's `phi`s name it as
+  // the only way in that is not a step.
+  const entry = fn.currentBlock()
+  if (fn.blocks.length === 0 || fn.blocks[0] !== entry) {
+    process.exit(internalError(`emit: \`${sig.name}\`'s loop opens after its first block (openAccumulation)`))
+  }
   const head = fn.newBlock("rec.head")
   fn.emit(`br label %${head.label}`)
   fn.placeBlock(head)
-  emitter.accumulator = new RecursionLoop(sig, head, types)
+  emitter.accumulator = new RecursionLoop(sig, entry.label, head, types)
 }
 
 /**
@@ -182,6 +192,18 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
     // The body's first block does more than compute: test before it runs.
     const rest = fn.newBlock("rec.body")
     rest.instructions = body
+    // The phis above name each step's block; one leaving from the header's
+    // own code would now leave from `rec.body`. No step can: its tail sits
+    // after the base's test or a split's branch, each a block of its own.
+    for (const edge of acc.edges) {
+      if (edge === acc.head.label) {
+        process.exit(
+          internalError(
+            `emit: a step of \`${acc.sig.name}\` loops back from its own header (closeAccumulation)`
+          )
+        )
+      }
+    }
     acc.head.instructions.push(`br i1 %rec.cold, label %${call.label}, label %${rest.label}`)
     renameEdges(fn, acc.head.label, rest.label)
     placeAfter(fn, acc.head, rest)
@@ -200,7 +222,7 @@ const headPhi = (
   initial: string,
   incoming: string[]
 ): string => {
-  let line = `${value} = phi ${type} [ ${initial}, %entry ]`
+  let line = `${value} = phi ${type} [ ${initial}, %${acc.entry} ]`
   for (let e = 0; e < acc.edges.length; e++) {
     line = `${line}, [ ${incoming[e]}, %${acc.edges[e]} ]`
   }
@@ -285,8 +307,14 @@ const untilComma = (text: string): string => {
   return comma < 0 ? text : text.substring(0, comma)
 }
 
-/** Whether instruction `line` has no effect but its value: no call other than an overflow intrinsic, no store, nothing volatile or atomic. */
+/**
+ * Whether instruction `line` has no effect but its value: no call or invoke
+ * other than an overflow intrinsic, no store, nothing volatile or atomic.
+ */
 const onlyComputes = (line: string): boolean => {
+  if (line.indexOf("invoke ") >= 0) {
+    return false
+  }
   if (line.indexOf("call ") >= 0) {
     return line.indexOf(".with.overflow.") >= 0 && line.indexOf("@llvm.") >= 0
   }

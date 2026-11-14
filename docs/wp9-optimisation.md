@@ -126,19 +126,24 @@ the previous partial sum and the last `X` as phis and tests their signs: while
 every `X` and every partial sum is non-negative, the sum the recursion would
 build from the base outwards is monotone, so one checked add at the base is
 exact. A step whose sign test fails hands itself to one ordinary call of the
-function and adds the call's answer with checked adds, so the program panics
-exactly where, and with exactly the output, the recursion would. The proof is
+function and adds the call's answer with checked adds, so where the recursion
+would overflow the program panics at the same add, with the same output. A
+recursion deep enough to exhaust the stack is the one difference: the loop
+completes it, or makes its cold call only every 2^31 or so steps. The proof is
 the header comment of `src/emit-accumulate.ts`.
 
 - **fib(40)**: 1.68x → 0.99x and 1.06x of Rust (Nish 329 / 348 ms minima
   against Rust 333 / 329 on two interleaved `bench/run.mjs --runs 15` runs).
+  The two Nish minima are one binary and differ by 6 %, which is the band:
+  the loop is at parity with Rust, not ahead of it.
 - **Tree sum** (a depth-20 tree of class nodes, summed 60 times, `return
   t.value + sum(t.left) + sum(t.right)`): median 318 ms → 191 ms, 15
   interleaved runs; two copies of the new binary differ by 191 against
   179 ms, so the band is about 6 %.
 
-`tests/cases/acc_*` pin the shapes, the four overflow cases and the order of
-effects; `--no-elision` drops the records, so the soundness differential
+`tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
+effects, the soundness shapes (permuted arguments, a nested split, a panic
+other than overflow while one is pending) and the sums that stay recursion; `--no-elision` drops the records, so the soundness differential
 compares each such function with its plain recursive self.
 
 ### `dereferenceable(24)` on array parameters and returns

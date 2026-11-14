@@ -32009,17 +32009,27 @@ A checked `+` stops LLVM's tail-recursion elimination: it folds
 `return x + f(...)` into a loop and an accumulator only when the `+` is a plain
 `add`. So the compiler writes that loop itself (`src/accumulate.ts` chooses
 the functions, `src/emit-accumulate.ts` writes them, with the proof). A
-function qualifies when it is a plain `i32` function of its module and every
-`return` that recurses is `X + self(args)`, or `self(args) + Y` with `Y` a
-number or a parameter, at least one `return` does not, and the body is only
-blocks, `if`, declarations, expression statements and `return`s.
+function qualifies when it is a plain function of its module that returns
+`i32` (an `f64` sum has no overflow check to defer, and another integer width
+is left to a later stage), every `return` that recurses is `X + self(args)`,
+or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`
+ahead of the call cannot move an effect), at least one `return` does not, and
+the body is only blocks, `if`, declarations, expression statements and
+`return`s. It may not open an arena scope (a string template does), hold a
+stack-allocated local or site, or bracket a loop's passes with arena scopes
+(`scopesAnyPass`): each of those ties memory's lifetime to one call, which
+the loop's steps would share. `self(args) - X`,
+`X - self(args)` and `self(args) + f()` stay recursion.
 
 Each parameter becomes a `phi` of `rec.head`, and a step evaluates `X` and the
 arguments in the source's order and branches back. Two more `phi`s carry the
 sum before the last step, `%rec.prev`, and that step's `X`, `%rec.last`. The
 header adds them with a wrapping `add` and calls the step cold when `X` or the
 sum is negative: while no step is cold the sum is exact and in `[0, MAX]`, so
-the base's one checked add panics exactly when the recursion would. A cold
+the base's one checked add panics exactly when the recursion would. Where the
+recursion would overflow, the loop panics at the same add with the same
+output; where it would exhaust the stack, the loop instead runs on, making
+its cold call only every 2^31 or so steps. A cold
 step goes to `rec.call`, which makes the call the step replaced and adds
 `%rec.last` and `%rec.prev` to its answer, each checked, so its panic is the
 recursion's too. When the header's own code only computes, the test is folded
@@ -32028,7 +32038,8 @@ from a base, so the hot loop takes no branch of its own. Code with an effect
 (a call) runs after the test instead, in `rec.body`. In `fib`, `fib(n - 1)`
 stays a call and `fib(n - 2)` is the back edge. `--no-elision` and a debug or
 wasm-panic-site build keep the recursion (`tests/cases/acc_fib`, `acc_tree`,
-`acc_shapes`, `acc_overflow`, `acc_effects`, `acc_ineligible`).
+`acc_shapes`, `acc_overflow`, `acc_effects`, `acc_soundness`,
+`acc_ineligible`, `acc_ineligible_f64`).
 
 <!-- cookbook:begin opt-recursion-loop -->
 ```ts
