@@ -124,6 +124,9 @@ under any WASI host.
 
 ### In a browser
 
+A game — a framebuffer, keys, sounds, a loop at the display's rate — has a
+page of its own: [Writing a browser game](browser-games.md).
+
 For a page, link with the `wasm-host` profile instead. It takes the same
 inputs but exports only what the loader calls: your exported functions,
 `memory`, and the arena entry points when `runtime-wasm.c` is linked. That
@@ -187,12 +190,100 @@ import is left to Vite. Vite's extension order still holds: with a `stats.js`
 beside `stats.ts`, `"../stats"` is the JavaScript file.
 
 The generated module calls the loader's `loadSync`, which a compiler older
-than WP50 stage 1 does not write. With one, the build stops with an error
+than 0.36.0 does not write. With one, the build stops with an error
 naming it:
 
 ```console
-Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (WP50 stage 1), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.
+Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (nish 0.36.0), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.
 ```
+
+#### Putting a framebuffer on a canvas: `nish/page/frame`
+
+A program that draws into an `Int32Array` of 0xRRGGBB pixels, row by row,
+can show it on a `<canvas>` with `nish/page/frame`. Like `nish/page`, it is
+plain JavaScript with no imports and no build step. It has two exports:
+
+- **`createPresenter(canvas, options?)`** tries WebGPU, then WebGL 2, then
+  Canvas 2D, and keeps the first that works. Its `present(pixels, width,
+  height)` uploads the pixels and draws them scaled with nearest-neighbour
+  sampling, letterboxed in black to keep their aspect. Pass the module's own
+  view: the presenter reads it in place and copies nothing first. It keeps
+  its textures, buffers and descriptors from frame to frame, making them
+  again only when the framebuffer's size changes.
+- **`runFixedStep({ stepsPerSecond, step, render })`** calls `step` at a
+  fixed rate and `render(alpha, frameMs)` on every animation frame, so a
+  120 Hz or 240 Hz display gets that many renders even when the program
+  steps 60 times a second. `alpha` is how far the frame is between two
+  steps. A frame over a quarter second (a hidden tab, a debugger pause)
+  counts as a quarter second, and at most `maxStepsPerFrame` steps (8 by
+  default) run in one frame; the backlog past that is dropped. The loop's
+  `refreshHz` reads the display's rate from the fastest recent frames, its
+  `fps` counts renders a second, and `stop()` ends it.
+
+The program keeps the pixels in [module storage](#sharing-memory-with-the-page):
+
+```ts
+// screen.ts
+export const frame = new Int32Array(320 * 180);
+
+export const step = (): void => {
+  for (let i = 0; i < frame.length; i++) {
+    frame[i] = (frame[i] + 0x010203) & 0xffffff;
+  }
+};
+```
+
+```js
+import { createPresenter, runFixedStep } from "nish/page/frame";
+import { loadSync } from "./screen.mjs";
+import { bytes } from "./screen.bytes.mjs";
+
+const screen = loadSync(bytes);
+const canvas = document.querySelector("canvas");
+const presenter = await createPresenter(canvas, {
+  onFallback: (from, to, reason) => console.warn(`${from} -> ${to}: ${reason}`),
+});
+const fit = () => {
+  const box = presenter.canvas.getBoundingClientRect();
+  presenter.resize(box.width, box.height, devicePixelRatio);
+};
+addEventListener("resize", fit);
+fit();
+
+runFixedStep({
+  stepsPerSecond: 60,
+  step: () => screen.step(),
+  // views() after the step: a memory that grew has a new buffer.
+  render: () => presenter.present(screen.views().storage.frame, 320, 180),
+});
+```
+
+Each tier that does not work is recorded in `presenter.attempts` with the
+browser's reason (`navigator.gpu is missing`, `requestAdapter answered
+null`, `getContext("webgl2") answered null`, ...) and passed to
+`onFallback`, so a fallback is never silent. When none works,
+`createPresenter` rejects with every tier's reason. `prefer: "webgl2"` or
+`prefer: "canvas2d"` starts lower down the list, as a page's own
+`?renderer=` switch might ask; the tiers above it are not tried.
+
+A tier can also be lost while the page runs: a WebGPU device lost or an
+error nothing captured, or a `webglcontextlost` event. The presenter then
+moves to the next tier down before the next frame and calls `onFallback`.
+A canvas keeps the first kind of context it hands out, so the next tier
+gets a fresh `<canvas>`: a copy of the element made by `cloneNode`, put in
+the old one's place. It has the same id, classes, style and size, but not
+the event listeners added to the old one. `onFallback` gets that canvas as
+its fourth argument, `(from, to, reason, canvas)`: add those listeners again
+there. It is the only way to reach it while `createPresenter` is still
+running; after, `presenter.canvas` is the element on screen, as `fit` reads
+it above. A canvas not in the document has no place for the copy to take,
+so the copy is not in the document either: put `presenter.canvas` where you
+want it. The tier given up releases its device or context as it goes.
+`presenter.resize` throws a `RangeError` on a size that is not a finite
+number of at least 0, or a pixel ratio that is not above 0.
+
+The pixels are read as little-endian words, the byte order of wasm memory.
+The top byte of each word is ignored and every pixel is drawn opaque.
 
 ### Functions the page supplies: host modules
 
@@ -369,6 +460,89 @@ It differs from the wasm build in five places:
   TypeScript build's own throw, and the module is not ended by it.
 - An export never refuses an argument the way the loader's `TypeError` does:
   the type checker is the guard.
+
+### Keeping objects between calls: root storage
+
+Typed arrays are enough for a few numbers. For a whole object graph — a game
+world, a document, a list — declare module storage whose element is a class
+or `null`. Each slot is a *root*: the object in it, and everything that
+object reaches, outlives the call that built it.
+
+```ts nish:ok --target wasm32
+class Node {
+  value: i32
+  next: Node | null = null
+
+  constructor(value: i32) {
+    this.value = value
+  }
+}
+
+const head = new Array<Node | null>(1)
+
+export const push = (value: i32): void => {
+  const n = new Node(value)
+  n.next = head[0]
+  head[0] = n
+}
+
+export const total = (): i32 => {
+  let sum: i32 = 0
+  let n = head[0]
+  while (n !== null) {
+    sum = sum + n.value
+    n = n.next
+  }
+  return sum
+}
+```
+
+After each export call, the loader keeps what the roots reach and frees the
+rest of what the call allocated. Once the kept objects take more than twice
+the room they need (and 64 KiB), the runtime moves them together and rewrites
+every pointer to them, so memory stays bounded however long the page runs:
+200,000 calls to `push` above build a list of 1.6 MB (8 bytes a node), and
+memory peaks at about 14 MB, 8.8 times that.
+
+The moving needs room of its own, so a graph of many small objects needs
+several times its size. At worst the peak is
+
+    static data + 3 × live + 64 KiB + one call's allocations
+                + 220 B × objects + 32 B × pointer slots
+
+where an array counts as two objects (its header and its data). That bound
+is loose but safe, so use it when you cannot measure. The peak grows with the
+live graph, so a measurement holds only for a graph as large as the one
+measured: run the module once without `--memory` through the largest session
+the program will reach (the longest game, the biggest level), read the largest
+`memory.buffer.byteLength` it reaches, and give `--memory` about 1.5 times
+that.
+
+- What a root reaches must be numbers, booleans, enums, strings, arrays,
+  classes and unions of classes. A `Map`, a `Set`, an interface or a C type
+  is refused with NL2766.
+- Root storage is not exported and has no `layout` entry: its objects move,
+  so the page reads them through exported functions (NL2767).
+- The page must not write into kept objects through `memory`. If it points
+  one outside the module's heap or gives an array a length past its end, the
+  next compaction refuses it: the call throws a `NishPanic` of kind `panic`
+  ("root storage: a pointer in the kept graph names memory outside the
+  arena", or "... a length in the kept graph runs past its block") and the
+  module is dead.
+- A program that loads `nish/threads` or `nish:region` cannot have root
+  storage (NL2768).
+- A native program keeps root storage like any module storage, with nothing
+  to free between calls. A build that writes a native shim (`--emit-napi`,
+  `--emit-napi-async`, `--emit-header`) cannot: the shim frees what a call
+  allocated when the call passes a string or an array (NL2769). Nor can a
+  `--profile wasi` build with `--emit-dts`, whose loader frees everything a
+  call allocated (NL2770).
+- A `--target wasm32` build without `--emit-dts` writes no loader. If your
+  own host calls its exports, call `nish_root_keep(mark)` after each call
+  where you would call `nish_arena_release(mark)`; releasing frees what the
+  roots reach.
+
+The rules and the IR: [LANGUAGE.md → Root storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#root-storage-an-object-graph-kept-between-calls).
 
 ### Lending an array to the page
 
@@ -887,7 +1061,12 @@ The copy is an ordinary Nish string, so it outlives `free(p)`. `readCString`
 is in `nish:unsafe` because nothing proves the pointer is live or that its
 bytes end in a NUL: reading a freed or unterminated buffer is undefined
 behaviour, and the import is where a module says it takes that on. It takes a
-`CPtr`, not a `CPtr | null`, so an unnarrowed pointer is refused.
+`CPtr`, not a `CPtr | null`, so an unnarrowed pointer is refused. A C function
+declared to answer `CPtr` may still answer `NULL`, so `readCString` tests its
+pointer first: `NULL` stops the program with
+`` `readCString` read a NULL pointer `` on stderr and exit status 1, and
+`--deny-panics` refuses the call for that reason. Declare a result that may be
+`NULL` as `CPtr | null` and narrow it instead.
 
 A `NULL` reaches C only where the source spells it. A nullable pointer held in
 a variable is refused, because the path that passes it `NULL` is one nobody
@@ -1058,6 +1237,39 @@ capability, and a build with `--deny unsafe` refuses it. A
 at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
 [`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+
+A C function that fails through `errno` is checked with `cErrno` from
+`nish:unsafe`. It answers the errno the most recent `declare function` call on
+this thread left, and naming it makes the compiler set errno to 0 just before
+every C call, so a function like `strtol`, which reports an out-of-range number
+only through errno, can be told apart from a success:
+
+```ts nish:ok
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+export const main = (): i32 => {
+  const big = strtol("99999999999999999999", null, 10);
+  console.log(`${cErrno()}`);
+  const small = strtol("42", null, 10);
+  console.log(`${small} ${cErrno()}`);
+  return big > 0 ? 0 : 1;
+};
+```
+
+```console
+34
+42 0
+```
+
+The compiler saves errno the moment C returns, before it copies a `string`
+result or allocates, so nothing Nish does afterwards moves the value you read.
+Each thread reads its own. A program that never names `cErrno` pays nothing;
+one that does pays a store and a load around every C call in the program. A
+wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
+there. The rules are in
+[`cErrno`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#cerrno-the-errno-a-c-call-left).
 
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,

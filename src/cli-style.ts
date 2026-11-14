@@ -41,6 +41,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.usage("<file.ts> [more.ts ...] [flags]", "compile to LLVM IR")
   menu.usage("run [flags] <file.ts> [args ...]", "build, cache and run it")
   menu.usage("run --watch <file.ts> [args ...]", "rebuild and rerun it on each edit")
+  menu.usage("upgrade [<version>] [--check]", "install a newer release")
   menu.usage("-v, --version | -h, --help", "")
 
   menu.section("Build")
@@ -86,6 +87,7 @@ export const helpText = (style: Style, guide: string): string => {
 
   menu.section("Code generation")
   menu.row("--number-mode", "i32|f64", "what a bare number is; i32 by default")
+  menu.row("--compat", "", "compatibility dialect; accepts nothing yet")
   menu.row("--plain", "", "the IR without LLVM's attributes")
   menu.row("--no-strict-exports", "", "keep every function externally visible")
   menu.row("--no-stack-alloc", "", "keep every value off the stack")

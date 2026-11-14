@@ -99,12 +99,21 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
 
 - **`test`**, eight ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
-  programs but the two sections there that are dealt (`term-io` and
-  `--emit-ts`): about 200 s of setup, stage1 and pre-link sections per shard
-  (measured in the paragraph on the eight-way split, below). Shard 1 runs every section after them
+  programs but the sections there that are dealt (`term-io`, `--emit-ts`
+  and the fifteen small sections between the golden cases and the link
+  programs, from `os_host` to `tests/fix`): the setup, stage1 and the golden
+  cases' IR per shard (measured in the paragraph on the eight-way split,
+  below, from before the small sections were dealt). Of the golden
+  cases, every shard compiles all of them and checks their IR, because later
+  sections read that compile, and only does the rest of each case's work (the
+  `llvm-as` pass, the side compiles and the native run) for the eighth that
+  `caseShard` in `tests/run.js` deals it by position. Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
-  `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
+  `tests/run.js`: term-io, `--emit-ts`, the small pre-link sections (`os_host`,
+  `nish:term` and its wasi build, the `net_` and TLS socket sections, the
+  `file_` wasi builds, fnref, diagnostics, performance, `mem_awfy` and
+  `tests/fix`), WP14 self-hosting, crypto-bench, the
   sanitizer and fuzz replays, the Nish runner's `pop` run, WP9 bench, the
   runtime cache, SQLite linking, the WP13 differential, and eleven `tail`
   groups of the sections after the link programs) and the remaining link
@@ -170,11 +179,12 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1's 62 s of steps after the suite, 218 s. The link costs and the
   groups' costs are read from that run's four logs. With 946 link programs
   now, the job is split eight ways: about 390 s of the table each, after
-  about 200 s of setup, stage1 and pre-link sections that every shard runs
-  (job start to its first link program in three shards of `main`'s runs at
-  `2d10118`, `ea8b601` and `2f4f8e3`: 152 to 223 s, of which 28 to 45 s
+  about 200 s of setup, stage1 and pre-link sections that every shard ran
+  then (job start to its first link program in three shards of `main`'s runs
+  at `2d10118`, `ea8b601` and `2f4f8e3`: 152 to 223 s, of which 28 to 45 s
   are the steps before Test; a shard dealt a slow pre-link section, as
-  shard 5 at `ea8b601` was, takes longer).
+  shard 5 at `ea8b601` was, takes longer). That was before the golden cases
+  and the small pre-link sections were dealt, at the end of this section.
   A filtered run sends every `tail` group to shard 1, as it sent all of
   that, and counts none of them in its deal.
 
@@ -432,6 +442,41 @@ the longest `test` job took 20 min 0 s, again shard 1: 5.6 minutes before the
 link programs, which every shard repeated, and 13.2 after them, which shard 1
 alone ran. [Shards](#shards-and-time-limits) says what moved where. The
 `runner` job was the next longest at 13 min 6 s, on one core of four.
+
+On eight shards, in
+[run 43369900293](https://github.com/amritk/nish/actions/runs/43369900293)
+(`ac813b5`), the run took 11 min 31 s and the longest `test` job was shard 2's
+at 11 min 29 s. Each shard's Test step spent 43-75 s linking stage1, 109-249 s
+on the sections before the link programs (59 s of shard 2's in section A, the
+golden cases, which every shard ran in full) and 185-395 s after them. The stage1 link is the
+seed's front end (2 s) and then the speed profile's full LTO on one core (about
+69 s): a target with landing pads links in one partition. The NEON job, the
+second longest at 10 min 45 s, linked stage1 seven times, once per
+`node tests/run.js` step. Since then `tests/self/compiler-cache.js` keeps the
+linked binary under a hash of everything the link reads, and the
+`.github/actions/compiler-cache` step restores it through the Actions cache:
+a run whose compiler sources (the modules the seed's front end names: `src/`
+and the nine `std/` modules it imports), seed and toolchain match an earlier
+one copies stage1 instead of linking it, and a job that runs the suite more than once
+links it at most once. The golden cases are dealt too: a shard compiles
+all of them and does the other work of its eighth only, which took section A
+from 59 s to 30 s of shard 2 in
+[run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
+where every job restored stage1 from the cache. The longest `test` job there
+took 10 min 49 s and the NEON job 4 min 38 s. What every shard still ran
+before the link programs then was about 90 s of small sections, the largest
+`fnref`'s `--profile debug` runs and lldb check (15 s), the performance
+section (14 s), the diagnostics section (14 s) and `--fix` (10 s). Those
+fifteen sections are now dealt as well (`osHost` to `fix` in
+`DEALT_SECTIONS`), so a shard runs only its share of them. Their costs in
+`tests/shard-costs.json` are per-section maxima from that run: for each, the
+largest span from its first check to its last that one of shards 1 to 4 paid.
+In [run 43402907927](https://github.com/amritk/nish/actions/runs/43402907927),
+the first with that deal, the span from the native run limit to the first link
+program fell from 65–219 s a shard (825 s summed) to 7–121 s (272 s summed).
+What remains on shards 6 and 8 is `emitTs` and `termIo` with the `nish break`
+check, dealt before. The longest `test` job went from 10 min 49 s to
+8 min 32 s.
 
 ## Running the same steps locally
 

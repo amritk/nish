@@ -32,7 +32,8 @@ export const wipeChecks = [
   // `crypto_hkdf_wycheproof` imports both modules. The roots: an HMAC
   // constructor 6 (the long-key path's hasher, three arrays, its hash and the
   // key block; the short path's key block), `digest` 7 (the inner digest, both
-  // hashers' three arrays), HKDF's `expand` 15 (T(i) in the loop and the last
+  // hashers' three arrays; SHA-256's `digest` is its `digestInto` 7, into the
+  // tag it allocates), HKDF's `expand` 15 (T(i) in the loop and the last
   // one, the constructor's 6, the digest's 7), the `Secret` HKDF 29 (the PRK,
   // `extract`'s one-shot HMAC, 13, and `expand`), and the `Secret`
   // HKDF-Expand-Label 15 (`expand`'s, the label being no secret). The scratch:
@@ -54,6 +55,7 @@ export const wipeChecks = [
       ["nish.HmacSha256.digest", 7],
       ["nish.HmacSha384.digest", 7],
       ["nish.HmacSha512.digest", 7],
+      ["nish.HmacSha256.digestInto", 7],
       ["nish.hkdfExpandSha256", 15],
       ["nish.hkdfExpandSha384", 15],
       ["nish.hkdfSha256Secret", 29],
@@ -134,13 +136,16 @@ export const wipeChecks = [
       ["nish.chacha20Poly1305Open", 7],
     ],
   },
-  // `nish/crypto/p256`'s fixed-base comb (#628). `p256BaseMultWith` wipes the
-  // entry it selected, `s.entry`'s three coordinates, 3, and its callers wipe
-  // the scratch, the accumulator they hand it and the scalar's other
-  // intermediates (ECC-2): `p256PublicKeyExposed` 18, `p256SignExposed` 93 and
-  // `p256SignSha256Into` 56. `opt` inlines `p256BaseMult` into
-  // `p256PublicKeyExposed` and `p256SignScalar`, and that into
-  // `p256SignExposed`, so its wipes are counted there. The safegcd inversion
+  // `nish/crypto/p256`'s fixed-base comb (#628), signed since ECC-7.
+  // `p256BaseMultWith` wipes the entry it selected, `s.entry`'s three
+  // coordinates, and the recoded scalar `s.comb`, 4, and its callers wipe the
+  // scratch (`s.comb` again among it), the accumulator they hand it and the
+  // scalar's other intermediates (ECC-2). `opt` inlines `p256BaseMult` and
+  // `p256BaseMultWith` into `p256PublicKeyExposed` and `p256SignScalar`, and
+  // that into `p256SignExposed`, and `p256BaseMultWith` into
+  // `p256SignSha256Into`, so each of the three counts the comb's 4 and the
+  // scratch's wipes: 22, 99 and 62, two more each than before ECC-7 (`s.comb`
+  // in `p256BaseMultWith` and in `p256WipeScratch`). The safegcd inversion
   // (#758), `p256Safegcd`, which `opt` keeps out of line and both the nonce's
   // inverse (`p256ScalarInverse`) and the field's (`p256FieldInvert`, 1 / Z in
   // the public key and the signature's r) call, wipes d, e, f, g and the
@@ -150,15 +155,15 @@ export const wipeChecks = [
   // itself, nine for f, nine for g and four for t ("crypto: the wipes survive
   // opt -O2 (p256Safegcd's f, g and t, …)").
   {
-    name: "crypto: the wipes survive opt -O2 (P-256's selected comb entry in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
+    name: "crypto: the wipes survive opt -O2 (P-256's selected comb entry and recoded scalar in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
     program: "tests/link/crypto_p256/main.ts",
     modules: P256_MODULES,
     roots: [
-      ["nish.p256BaseMultWith", 3],
-      ["nish.p256PublicKeyExposed", 20],
+      ["nish.p256BaseMultWith", 4],
+      ["nish.p256PublicKeyExposed", 22],
       ["nish.p256ScalarInverse", 2],
-      ["nish.p256SignExposed", 97],
-      ["nish.p256SignSha256Into", 60],
+      ["nish.p256SignExposed", 99],
+      ["nish.p256SignSha256Into", 62],
     ],
   },
   // `nish/crypto/p256`'s ECDH (`p256Ecdh`, for TLS's secp256r1 share).
@@ -166,15 +171,16 @@ export const wipeChecks = [
   // shared x's limbs, and the output it refuses for a product at infinity;
   // `p256ScalarMult` under it wipes its window table and accumulator, and
   // `p256ScalarInRange` the key's limbs, and `p256FieldInvert`'s safegcd d
-  // and e. `opt` inlines it into `p256Ecdh`, so the two count the same 27.
-  // Deleting `wipe(acc)` (1 / Z) or `wipe(x)` takes 1 from each.
+  // and e, and `p256WipeScratch` the scratch's `s.comb`, which only the
+  // fixed-base comb writes (ECC-7). `opt` inlines it into `p256Ecdh`, so the
+  // two count the same 28. Deleting `wipe(acc)` (1 / Z) or `wipe(x)` takes 1 from each.
   {
     name: "crypto: the wipes survive opt -O2 (P-256 ECDH's product, scratch, 1 / Z and shared x in p256EcdhExposed)",
     program: "tests/link/crypto_p256_ecdh/main.ts",
     modules: P256_MODULES,
     roots: [
-      ["nish.p256Ecdh", 27],
-      ["nish.p256EcdhExposed", 27],
+      ["nish.p256Ecdh", 28],
+      ["nish.p256EcdhExposed", 28],
     ],
   },
   // The derivations into a held `Secret` (#668). Each derives into a fresh

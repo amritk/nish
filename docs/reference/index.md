@@ -38,13 +38,19 @@ Strings, regular expressions, JSON and YAML: 14 modules.
 
 <scalar-card title="Terminal and CLI" icon="phosphor/regular/terminal-window" href="#terminal-and-cli">
 
-Terminal output and input, and command-line parsing: 8 modules.
+Terminal output and input, a step's input with no terminal, and command-line parsing: 9 modules.
+
+</scalar-card>
+
+<scalar-card title="Graphics and sound" icon="phosphor/regular/paint-brush" href="#graphics-and-sound">
+
+Drawing into a frame of pixels and making short sounds: 2 modules.
 
 </scalar-card>
 
 <scalar-card title="Concurrency" icon="phosphor/regular/arrows-split" href="#concurrency">
 
-Threads, locks, shared memory and queues between processes or a wasm page: 5 modules.
+Threads, locks, shared memory and queues between processes or a wasm page: 6 modules.
 
 </scalar-card>
 
@@ -94,7 +100,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish:secret`](nish-secret.md) | Key material as an opaque value that the checker keeps from leaving the program by any road but one, and that is zeroed, with a store no optimiser may remove, before the function that made it lets go of it. |
 | [`nish:simd`](nish-simd.md) | Sixteen-byte vectors of one lane type, and the lane-wise operations on them, each lowered to target-independent LLVM vector IR. |
 | [`nish:term`](nish-term.md) | Terminal input for a full-screen program: read a key the moment it is pressed, wait for one with a timeout that doubles as a frame clock, and ask the terminal whether it is one, how big it is, and to stop echoing. |
-| [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves. |
+| [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, a C string or struct read through a pointer nothing proves, and the errno a C call left. |
 
 ## Standard library
 
@@ -144,16 +150,25 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/cli-args`](cli-args.md) | A command tree for a large command-line tool: declared once with a builder, parsed in one walk over the arguments, and answered as the matched command's id and every value with where it came from. |
 | [`nish/cli-flags`](cli-flags.md) | A command line's flags, declared once as data and read back by name, with the same declaration writing the `--help` rows. |
 | [`nish/cli`](cli.md) | A command-line tool's help menu: whether a stream gets colour, the escapes that paint it, and the rows a `--help` is made of. |
+| [`nish/input`](input.md) | What one fixed step of a program reads from its player: the key and mouse events since the last step, and which keys are held down. |
 | [`nish/term-io`](term-io.md) | Opening a terminal, drawing frames, reading events and leaving it as it was: the one entry point that uses the other term modules and does the I/O. |
 | [`nish/term-pixels`](term-pixels.md) | A framebuffer of pixels, and the encoders that draw it to a terminal with the best backend the terminal has: kitty graphics, Sixel, half-block cells or ASCII. |
 | [`nish/term-probe`](term-probe.md) | What the terminal a program runs in can do (its colours, keyboard protocol, graphics and size), asked of it once at start and read from its answer. |
 | [`nish/term-rate`](term-rate.md) | How fast the link to the terminal is, measured from frames sent and acknowledged, and the frame rate and drawing detail a program keeps to under it. |
 | [`nish/term`](term.md) | A terminal drawn as a grid of coloured cells, and the keys a terminal sends turned into events. |
 
+### Graphics and sound
+
+| Module | |
+| --- | --- |
+| [`nish/raster`](raster.md) | Software drawing into a frame of `0xRRGGBB` pixels: colour arithmetic, rectangles, anti-aliased discs, additive glows, a vertical gradient, a 5×7 pixel font, and two fixed pools that move and draw themselves (a particle pool and a trail). |
+| [`nish/synth`](synth.md) | Short sounds made from nothing: square, triangle and noise voices with a pitch slide and a decaying envelope, mixed into an array of `f64` samples. |
+
 ### Concurrency
 
 | Module | |
 | --- | --- |
+| [`nish/host/game`](host/game.md) | The memory a game built for `wasm32` shares with the page that runs it: the frame it draws, the input the page feeds it, the sounds it asks for and the samples the page plays them from. |
 | [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
 | [`nish/host/text`](host/text.md) | Text in module storage, for a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §7). |
 | [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
@@ -227,6 +242,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/url`](net/url.md) | The request target's path and query, split and percent-decoded in place, and its query string read as key/value pairs; and whole URLs, parsed into their parts and references resolved against them. |
 | [`nish/net/websocket`](net/websocket.md) | RFC 6455 WebSocket framing and both sides of the opening handshake, sans-IO: bytes in, events and bytes out. |
 | [`nish/net/webtransport`](net/webtransport.md) | WebTransport over HTTP/3, server side, as draft-ietf-webtrans-http3-02 has it and as Chrome and the `wtransport` 0.7 crate negotiate it: sessions made by an extended CONNECT (RFC 9220) with `:protocol` `webtransport`, HTTP datagrams (RFC 9297) carrying the session's quarter stream ID, the session's unidirectional and bidirectional streams, and CLOSE_WEBTRANSPORT_SESSION and DRAIN_WEBTRANSPORT_SESSION on the CONNECT stream's capsules. |
+| [`nish/release`](release.md) | What the newest release of a project on GitHub is, whether it is newer than the one running, and a small cache so a program asks at most once a day. |
 
 ### Cryptography
 

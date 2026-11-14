@@ -88,6 +88,7 @@ import {
   simulatedUnlabelledBuiltin,
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
 import {
@@ -593,7 +594,76 @@ const capabilityScopes = (scopes: string[], whole: i32, opts: Options): i32 => {
 const nearMiss = (word: string): boolean =>
   word === "brick" || word === "bricks" || word === "breakout" || word === "game" || word === "play"
 
+/**
+ * The compiler's own path, for a program that runs it again (the watch
+ * supervisor, the update notice's check): `argv[0]` when it names a path, else
+ * where `$PATH` finds it, or empty when neither does.
+ */
+const selfPath = (): string =>
+  process.argv[0].indexOf("/") >= 0 ? process.argv[0] : programOnPath(process.argv[0])
+
+/**
+ * The commands the update notice is never shown after: `nish run`, whose
+ * stderr is the program's; `nish upgrade`, which says the same thing itself;
+ * `nish break`; anything with `--json`, whose stderr a tool reads; and a usage
+ * error or a crash, whose stderr should say only what went wrong.
+ */
+const noticeSuppressed = (status: number): boolean => {
+  if (status !== 0 && status !== 1) {
+    return true
+  }
+  const command = process.argv[1]
+  if (command === "run" || command === "upgrade" || command === "break") {
+    return true
+  }
+  for (const arg of process.argv) {
+    if (arg === "--json") {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * `nish upgrade [<version>] [--check]` (`src/upgrade.ts`): refuses what it can
+ * without the network, then builds the release helper and runs it from a
+ * scratch directory beside it, removed afterwards.
+ */
+const upgrade = (): number => {
+  const self = selfPath()
+  const real = self.length === 0 ? "" : realpathSync(self)
+  const plan = planUpgrade(process.argv, 2, real === null ? self : real)
+  if (plan.status >= 0) {
+    return plan.status
+  }
+  const pkg = findPackage()
+  if (pkg.wasRefused()) {
+    reportToolchainFailure(`upgrade: no package root this user may trust (${pkg.where()})`, false)
+    return 3
+  }
+  const tool = cachedTool(pkg, "release", RELEASE_HELPER_SOURCE, "the release helper", false)
+  if (tool.status !== 0) {
+    return tool.status
+  }
+  const scratch = `${tool.dir}/upgrade-${hexOfI64(monotonicNanos(), 16)}`
+  if (!makeDirectory(scratch)) {
+    reportToolchainFailure(`upgrade: cannot create ${scratch}`, false)
+    return 3
+  }
+  const status = runUpgrade(plan, tool.binary, scratch)
+  spawnSync(["rm", "-rf", "--", scratch])
+  return status
+}
+
 export const main = (): number => {
+  const status = commandMain()
+  if (updateNotice(noticeSuppressed(status))) {
+    startNoticeCheck(selfPath())
+  }
+  return status
+}
+
+const commandMain = (): number => {
   if (process.argv.length < 2) {
     console.error(usageText(2))
     return 2
@@ -609,6 +679,11 @@ export const main = (): number => {
   if (process.argv.length === 2 && nearMiss(process.argv[1]) && realpathSync(process.argv[1]) === null) {
     console.error(`no file named ${process.argv[1]}. every loop needs one, though.`)
     return 1
+  }
+  // `nish upgrade` is a documented command, so unlike `break` it wins over a
+  // file named `upgrade` in the working directory, as `run` does.
+  if (process.argv[1] === "upgrade") {
+    return upgrade()
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
@@ -852,6 +927,16 @@ export const main = (): number => {
       opts.optimizeAttributes = false
     } else if (value === "--deterministic") {
       opts.deterministic = true
+    } else if (value === "--compat") {
+      opts.compat = true
+    } else if (value.startsWith("--compat=")) {
+      // The dialect takes no value yet: a feature list is a later release's,
+      // and a value read as a bare `--compat` would compile today and mean
+      // something else then.
+      console.error(
+        `compile: \`--compat\` takes no value, and \`${value}\` gives it one: the compatibility dialect accepts nothing yet, so write a bare \`--compat\``
+      )
+      return 2
     } else if (value === "--strict-exports") {
       opts.strictExports = true
     } else if (value === "--no-strict-exports") {
@@ -1994,6 +2079,83 @@ const cachedBinary = (
  */
 const isCheckout = (pkg: PackageSearch): boolean => realpathSync(`${pkg.root}/src/compile.ts`) !== null
 
+/** A program of the compiler's own, built into the run cache: its directory and binary, or the status that failed. */
+class CachedTool {
+  dir: string = ""
+  binary: string = ""
+  entry: string = ""
+  status: i32 = 0
+}
+
+/** `tool`, failed with status 3 after `reportToolchainFailure` says `message`. */
+const toolFailed = (tool: CachedTool, message: string, json: boolean): CachedTool => {
+  reportToolchainFailure(message, json)
+  tool.status = 3
+  return tool
+}
+
+/**
+ * Builds `source`, a Nish program the compiler keeps as a string, into the run
+ * cache as `nish-<name>` and answers its binary: the watch supervisor
+ * (`src/watch.ts`) and the release helper (`src/upgrade.ts`). These are
+ * programs rather than parts of the compiler because they need what a wasm
+ * build of `src/` is refused, and the compiler links each for the machine it
+ * runs on the first time it is needed. The source goes in a directory named
+ * for its hash and this version, which the caller may also use for scratch
+ * files, since the cache root is private to this user. `what` names it in the
+ * internal error a source that does not compile is.
+ */
+const cachedTool = (
+  pkg: PackageSearch,
+  name: string,
+  source: string,
+  what: string,
+  json: boolean
+): CachedTool => {
+  const tool = new CachedTool()
+  const cacheRoot = runCacheRoot()
+  if (cacheRoot.length === 0) {
+    return toolFailed(
+      tool,
+      `${name}: no directory to keep the binary in: set HOME or XDG_CACHE_HOME to an absolute path`,
+      json
+    )
+  }
+  if (refuseCacheRoot(cacheRoot, json) || !makePrivateRoot(cacheRoot, json)) {
+    tool.status = 3
+    return tool
+  }
+  tool.dir = `${cacheRoot}/${name}-${sha256Hex(`${VERSION}\n${source}`)}`
+  const file = `${tool.dir}/${name}.ts`
+  if (!makeDirectory(tool.dir)) {
+    return toolFailed(tool, `${name}: cannot create ${tool.dir}`, json)
+  }
+  const written = readFileSyncOrNull(file)
+  if (written === null || written !== source) {
+    // Beside it and renamed over it, so a run compiling it at the same time never reads half a file.
+    const temp = `${file}.${wallClockNanos()}.tmp`
+    if (writeFileSyncMode(temp, source, 0o600) < 0 || renameSync(temp, file) < 0) {
+      unlinkSync(temp)
+      return toolFailed(tool, `${name}: cannot write ${file}`, json)
+    }
+  }
+  const opts = new Options()
+  opts.packageRoot = pkg.library
+  opts.link = `${CLI} run`
+  opts.profile = "debug"
+  const compilation = new Compilation(opts)
+  if (!loadRoots(compilation, [file], false) || !compilation.check()) {
+    report(compilation, json)
+    tool.status = internalErrorFor(`${what} did not compile`, json)
+    return tool
+  }
+  const built = cachedBinary(compilation.emit(), pkg, `${CLI}-${name}`, "debug", "", false, false, json)
+  tool.binary = built.binary
+  tool.entry = built.entry
+  tool.status = built.status
+  return tool
+}
+
 /**
  * `nish run --watch <file.ts> [args ...]`: builds the supervisor (`src/watch.ts`)
  * into the run cache and runs it, handing it this line as the build command
@@ -2006,45 +2168,16 @@ const isCheckout = (pkg: PackageSearch): boolean => realpathSync(`${pkg.root}/sr
  * the program it started too.
  */
 const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolean): number => {
-  const cacheRoot = runCacheRoot()
-  if (cacheRoot.length === 0) {
-    reportToolchainFailure(
-      "run: no directory to keep the binary in: set HOME or XDG_CACHE_HOME to an absolute path",
-      json
-    )
-    return 3
-  }
-  if (refuseCacheRoot(cacheRoot, json) || !makePrivateRoot(cacheRoot, json)) {
-    return 3
-  }
-  const self = process.argv[0].indexOf("/") >= 0 ? process.argv[0] : programOnPath(process.argv[0])
+  const self = selfPath()
   if (self.length === 0) {
     reportToolchainFailure(`run: cannot find the compiler (${process.argv[0]}) to rebuild with`, json)
     return 3
   }
-  const dir = `${cacheRoot}/watch-${sha256Hex(`${VERSION}\n${WATCH_SUPERVISOR_SOURCE}`)}`
-  const source = `${dir}/watch.ts`
-  if (!makeDirectory(dir)) {
-    reportToolchainFailure(`run: cannot create ${dir}`, json)
-    return 3
+  const tool = cachedTool(pkg, "watch", WATCH_SUPERVISOR_SOURCE, "the watch supervisor", json)
+  if (tool.status !== 0) {
+    return tool.status
   }
-  const written = readFileSyncOrNull(source)
-  if (written === null || written !== WATCH_SUPERVISOR_SOURCE) {
-    writeFileSync(source, WATCH_SUPERVISOR_SOURCE)
-  }
-  const opts = new Options()
-  opts.packageRoot = pkg.library
-  opts.link = `${CLI} run`
-  opts.profile = "debug"
-  const compilation = new Compilation(opts)
-  if (!loadRoots(compilation, [source], false) || !compilation.check()) {
-    report(compilation, json)
-    return internalErrorFor("the watch supervisor did not compile", json)
-  }
-  const supervisor = cachedBinary(compilation.emit(), pkg, "nish-watch", "debug", "", false, false, json)
-  if (supervisor.status !== 0) {
-    return supervisor.status
-  }
+  const dir = tool.dir
   const driver = `${dir}/driver-${hexOfI64(monotonicNanos(), 16)}`
   spawnSyncTo(["sh", "-c", "echo $PPID"], driver, "/dev/null")
   const pidText = readFileSyncOrNull(driver)
@@ -2065,7 +2198,7 @@ const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   }
   build.push(`--watch-build=${state}`)
   build.push(entry)
-  const argv: string[] = [supervisor.binary, pid, state, entry, `${build.length}`]
+  const argv: string[] = [tool.binary, pid, state, entry, `${build.length}`]
   for (const word of build) {
     argv.push(word)
   }
@@ -2076,7 +2209,7 @@ const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   spawnSync(["rm", "-f", "--", driver, state])
   if (status < 0) {
     reportToolchainFailure(
-      `run: could not start ${supervisor.binary}; remove ${supervisor.entry} to build it again`,
+      `run: could not start ${tool.binary}; remove ${tool.entry} to build it again`,
       json
     )
     return 3

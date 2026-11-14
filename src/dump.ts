@@ -28,7 +28,7 @@ import { SourceFile } from "./diagnostics"
 import { EFFECT_READ, EFFECT_WRITE } from "./runtime"
 import { StringSet } from "./map"
 import { compareStrings, jsonQuote } from "./strings"
-import { N_CALL, N_CONSTRUCTOR, N_EMPTY, N_NEW, N_VAR_DECL, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   ConstInfo,
@@ -260,10 +260,10 @@ const bodyTables = (
   sig: FunctionSig,
   out: string[]
 ): void => {
-  const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
+  const body = sig.decl.kind === NodeKind.Constructor ? sig.decl.children[1] : sig.decl.children[3]
   // Any body, not just a block: a concise arrow body is the expression it
   // returns, and a call inside it is a callee like any other.
-  if (body.kind !== N_EMPTY) {
+  if (body.kind !== NodeKind.Empty) {
     walkBody(program, source, table, body, out)
   }
 }
@@ -275,7 +275,7 @@ const walkBody = (
   node: Node,
   out: string[]
 ): void => {
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const local = program.nodeLocals[node.id]
     if (local !== null) {
       const kind = local.mutable ? "let" : "const"
@@ -283,12 +283,12 @@ const walkBody = (
         `  local ${position(source, node.start)} ${local.name}: ${table.typeName(local.type)} (${kind})`
       )
     }
-  } else if (node.kind === N_CALL) {
+  } else if (node.kind === NodeKind.Call) {
     const callee = program.nodeCallees[node.id]
     if (callee !== null) {
       out.push(`  callee ${position(source, node.start)} ${callee.sourceName} -> @${callee.name}`)
     }
-  } else if (node.kind === N_NEW) {
+  } else if (node.kind === NodeKind.New) {
     // `checkNew` records the constructor it binds, a generic class's
     // instantiation included; a class with no constructor records none. The
     // class is the constructor's owner, not the node's type, which is the

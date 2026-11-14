@@ -194,7 +194,7 @@ export class Options {
   denyPanics: boolean
   /**
    * `--deny-retention`: every arena-retention warning in the program's own
-   * modules (NL9002, NL9003, NL9011, NL9016) is an error instead
+   * modules (NL9002, NL9003, NL9011, NL9016, NL9018, NL9019) is an error instead
    * (`Compilation.denyRetention`). Like `--deny-panics` it changes no byte of
    * the IR: it only decides whether the build is allowed to happen.
    */
@@ -256,6 +256,20 @@ export class Options {
    */
   panicSites: boolean
   /**
+   * WP55: the root storage of the whole program, by symbol, in module order,
+   * for a build that makes a page module. The module declaring the first one
+   * writes `nish_root_keep`, which hands every root's table to the runtime.
+   * Set by `Compilation.emit`.
+   */
+  rootSymbols: string[]
+  /**
+   * WP55: some module of the program declares root storage, so memory older
+   * than a call is reachable from a module constant as well as from the
+   * parameters, and `rootsHoldNoPointer` proves nothing. Set by
+   * `Compilation.analyze`, native and wasm builds alike.
+   */
+  holdsRoots: boolean
+  /**
    * WP37: the directories `--allow fs.read=<dir>` and `--allow fs.write=<dir>`
    * scope those capabilities to under `--sandbox`, each resolved to its
    * absolute, symlink-free path. Empty when the capability is granted whole
@@ -275,6 +289,14 @@ export class Options {
    * of holding the build to it (`Compilation.checkCapabilityLock`).
    */
   updateCapabilityLock: boolean
+  /**
+   * WP28: `--compat`, the dialect. The compatibility dialect is where a
+   * program written for a JavaScript engine will be met part way, and in this
+   * release it accepts nothing the strict dialect does not: no rule of the
+   * checker and no lowering reads this, so the flag changes no diagnostic and
+   * no byte of the IR (`tests/compat-erasure.js` holds that over the corpus).
+   */
+  compat: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -313,10 +335,13 @@ export class Options {
     this.sandbox = 0
     this.sandboxCapabilities = 0
     this.panicSites = false
+    this.rootSymbols = []
+    this.holdsRoots = false
     this.sandboxRead = []
     this.sandboxWrite = []
     this.sandboxExec = []
     this.updateCapabilityLock = false
+    this.compat = false
   }
 
   /**

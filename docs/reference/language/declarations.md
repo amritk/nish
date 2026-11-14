@@ -391,7 +391,8 @@ export const step = (): void => {
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of
-  these. A string, an array, a class, a `Map` or a `| null` is
+  these. A string, an array, a class, a `Map` or a `| null` (but `C | null`
+  for a class `C`, which is [root storage](#root-storage-an-object-graph-kept-between-calls)) is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
   (NL2686, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
@@ -472,6 +473,101 @@ export const step = (): void => {
   build's; a page reads them from `layout` and never spells one. A local
   `f32[]` is still a plain JavaScript array there: only module storage is a
   view.
+
+### Root storage: an object graph kept between calls
+
+**Module storage whose element is `C | null` for a class `C` is root
+storage**: each slot holds one object, and everything that object reaches —
+its fields, their arrays and strings, the objects they hold — outlives the
+call that built it (`tests/cases/root_storage`,
+`docs/wp55-persistent-root.md`). It is how a wasm module keeps a game, a
+document or any class instance across `init`, `step` and `draw`.
+
+```ts
+class World {
+  balls: Ball[]
+  tick: i32 = 0
+  constructor() {
+    this.balls = []
+  }
+}
+
+const world = new Array<World | null>(1)
+
+export const init = (): void => {
+  world[0] = new World()
+}
+
+export const step = (): void => {
+  const w = world[0]
+  if (w !== null) {
+    w.tick = w.tick + 1
+  }
+}
+```
+
+On a page module each root is a record of its data, its length and the
+descriptor of its class, gathered into one table the keep walks
+(`tests/cases/root_storage_page`, whose root is `head`, a list of `Node`):
+
+```llvm
+%nish.root = type { i8*, i32, i8* }
+@nish_storage_0_head.root = constant %nish.root { i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*), i32 1, i8* bitcast (%nish.trace* @nish.trace.0 to i8*) }
+@nish.roots = internal constant [1 x %nish.root*] [%nish.root* @nish_storage_0_head.root]
+
+define void @nish_root_keep(i64 %mark) {
+  call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+```
+
+- **Natively it is module storage and nothing more.** A native program never
+  hands its arena back between calls, so the graph simply stays.
+- **On a page module the loader keeps the graph and releases the rest.**
+  Where the loader of a program without root storage releases each export
+  call's arena, this one calls `nish_root_keep`. The runtime traces what the
+  roots reach from descriptors the compiler writes (`%nish.trace`, one per
+  class, string and array type the roots reach;
+  `tests/cases/root_storage_page`), slides it down over the garbage, rewrites
+  every pointer to it, and frees what is left. It does so only once the kept
+  region passes twice the live bytes and 64 KiB, so a call that changes a
+  little copies nothing, and memory stays bounded however long the page runs
+  (`node tests/run.js persist`: 100,000 steps with memory flat).
+- **What a root reaches is traceable.** A number, a `boolean`, an enum, a
+  string, an array, a class or a discriminated union of classes. Anything
+  else — a `Map`, a `Set`, an interface a class implements, a `Region`, a
+  `Secret`, a `CPtr`, a handle class or a C struct layout — is
+  `` Root storage `X` cannot keep C.f (T): the runtime moves what a root reaches between calls, … ``
+  (NL2766, `tests/wordings/nl2766_root_storage_map`).
+- **It is not exported**: the objects move, so a page has no layout to read.
+  `export const world = new Array<World | null>(1)` is
+  `` Root storage `X` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead ``
+  (NL2767, `tests/wordings/nl2767_root_storage_export`), and `layout` leaves
+  root storage out.
+- **No threads, no regions.** Each allocates from an arena of its own, which
+  a root could be left pointing into, so root storage in a program that
+  loads `nish/threads` or `nish:region` is
+  `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
+  (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
+- **No WASI loader.** A `--profile wasi` build with `--emit-dts` writes a
+  loader that releases the arena after every call, and only a page module
+  emits the `nish_root_keep` a loader calls instead, so root storage there is
+  `` Root storage `X` cannot be kept in a WASI build that writes a loader (`--emit-dts`): … ``
+  (NL2770, `tests/wordings/nl2770_root_storage_wasi_dts`).
+- **A freestanding module without a loader** (`--target wasm32` and no
+  `--emit-dts`) still emits `nish_root_keep(mark)`; the host that calls its
+  exports writes its own loader, and must call `nish_root_keep(mark)` where it
+  would call `nish_arena_release(mark)`, or what a root reaches is freed.
+- **Every function may store through a root**, so a program with root
+  storage does not prove a parameter-only allocation stays in its caller's
+  scope from the signature alone; the compiler's other proofs are unchanged.
 
 ## Type aliases
 
@@ -1258,7 +1354,9 @@ and their `.ll` goldens are byte-identical files.
   second namespace: the whole-program attribute analysis is keyed by symbol
   name, so two functions sharing one would be emitted with each other's
   attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag.
+  does not depend on the flag. A proposal to qualify a private function's
+  symbol by its module when it would clash is
+  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); the rule above holds until it ships.
 
 ## `main`
 
@@ -4902,28 +5000,39 @@ function owned(s: string): string {
 ```llvm
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %copy.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %copy.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
 ```
 
 - **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
   for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
   pointer that is dangling, already freed, or to a buffer with no NUL is
   undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
-  So the call is an `unchecked` [panic site](semantics-decisions.md#panic-sites) that is allowed
-  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
-  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
-  which is `ffi`.
-- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  It is an `unsafe` call to `--deny unsafe`, and the `CPtr` it reads came from
+  a `declare function`, which is `ffi`.
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](semantics-decisions.md#panic-sites) kind, as
+  [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)'s does:
+  `` `readCString` read a NULL pointer ``, exit 1
+  (`tests/cases/panics_ffi_read_cstring_null`). The parameter is `CPtr`, so
   an unnarrowed pointer is
   `` `readCString` expects an argument of type CPtr, got CPtr | null ``
-  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
-  compiler trusts is the declaration: a `declare function` whose result is
-  declared `CPtr` gets no check after the call, so a C function that may
-  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
-  through. Declare such a result `CPtr | null`.
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
+  `declare function` declared to answer `CPtr` may still answer `NULL`, so
+  the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
+  above. No proof removes the test, so `--deny-panics` refuses a call in its
+  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
   constructor and released with its owner, and refused inside a `using a =
@@ -4935,6 +5044,73 @@ if.end:
   a `nish_str_new`, which every runtime has, so `readCString` adds nothing to
   the link; whether the program links there is the `declare function`'s
   question, answered by the libc the target has.
+
+### `cErrno`: the errno a C call left
+
+**`cErrno(): i32`, from
+[`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping), answers the
+errno the most recent `declare function` call on this thread left, and 0
+before any.** In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+per-thread runtime slot immediately after it returns, before any result is
+marshalled; `cErrno()` reads the slot (`tests/cases/ffi_errno`,
+[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#cerrno-errno-after-a-foreign-call),
+[design](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md#10-s5-as-built-cerrno)):
+
+```ts
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10);
+  return cErrno() === 0 ? n : -1;
+};
+```
+
+```llvm
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+```
+
+- **Saved before anything else runs.** The copy of a `string` result, an arena
+  allocation or a `console.log` may call into libc and move errno, so the save
+  is the first instruction after the call, ahead of the `NULL` check of a
+  `string` result. A C function that sets errno and answers a string is read
+  correctly after the copy.
+- **Zeroed before, so a success reads 0.** `strtol` reports an out-of-range
+  number only through errno; with the zeroing, `cErrno()` after an in-range
+  call is 0 unless the callee set it. No setter is exposed.
+- **Per thread.** errno is per thread in every libc, and the slot is
+  `_Thread_local` under `--threads` (`thread_local(initialexec)` in the IR), so
+  a thread reads what its own last call left (`ffi_errno_threads`).
+- **Program-wide, and free when unnamed.** One `cErrno` anywhere makes every
+  `declare function` call in every module of the program pay the zero and the
+  save, and none of them is then a tail call. A program that never names it
+  emits none of it.
+- **Not covered:** a host-module import (`--host`) is not a C call; the close a
+  `using` handle runs at scope exit is the compiler's call, not the program's,
+  and is not captured.
+- **Not a global.** errno is a macro over a thread-local accessor in every
+  libc, so there is no `errno` symbol to declare, and `declare let errno: i32`
+  is the parser's
+  `` a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT` ``
+  (`reject_ffi_errno_global`).
+- **Refused:** an argument (`` `cErrno` expects exactly 0 arguments, got 1 ``,
+  `reject_ffi_errno_arg`), a call without the import (NL2456,
+  `reject_ffi_errno_import`), and a freestanding wasm32 build, which has no
+  operating system:
+  `` `cErrno` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_ffi_errno_wasm`). `--profile wasi` links wasi-libc and keeps it.
+- **It is `nish:unsafe` and an `unsafe` call** to `--deny unsafe`, like every
+  export of the module; it reads a defined value and is no panic site.
 
 ### A `u8[]` parameter: a buffer and its count
 

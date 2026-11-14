@@ -22,20 +22,7 @@
 import { outsideAsyncMessage } from "./async-check"
 import { CheckContext } from "./context"
 import { withoutSeparators } from "./lexer"
-import {
-  N_BINARY,
-  N_CALL,
-  N_FALSE,
-  N_IDENT,
-  N_MEMBER,
-  N_NUMBER,
-  N_PAREN,
-  N_STRING,
-  N_TEMPLATE,
-  N_TRUE,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { acceptStorageLength, checkStorage } from "./module-storage"
 import { ConstInfo } from "./program"
 import { StringBuilder } from "./strings"
@@ -302,11 +289,11 @@ const foldStorage = (ctx: CheckContext, info: ConstInfo): void => {
 
 const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   switch (expr.kind) {
-    case N_PAREN:
+    case NodeKind.Paren:
       return fold(ctx, info, expr.children[0], expected)
-    case N_STRING:
+    case NodeKind.String:
       return stringValue(expr.text)
-    case N_TEMPLATE:
+    case NodeKind.Template:
       if (expr.children.length === 1) {
         return stringValue(expr.children[0].text)
       }
@@ -316,19 +303,19 @@ const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): Co
         expr,
         "A module constant's initialiser must be a literal, another constant, or arithmetic over them"
       )
-    case N_TRUE:
+    case NodeKind.True:
       return boolValue(true)
-    case N_FALSE:
+    case NodeKind.False:
       return boolValue(false)
-    case N_NUMBER:
+    case NodeKind.Number:
       return foldNumber(ctx, info, expr, expected)
-    case N_IDENT:
+    case NodeKind.Ident:
       return foldIdentifier(ctx, info, expr)
-    case N_UNARY:
+    case NodeKind.Unary:
       return foldUnary(ctx, info, expr, expected)
-    case N_BINARY:
+    case NodeKind.Binary:
       return foldBinary(ctx, info, expr, expected)
-    case N_CALL:
+    case NodeKind.Call:
       return foldWrapping(ctx, info, expr, expected)
     default:
       return reject(
@@ -353,7 +340,7 @@ const foldWrapping = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: 
   const callee = expr.children[0]
   const args = expr.children[1].children
   let name = ""
-  if (scope !== null && callee.kind === N_IDENT) {
+  if (scope !== null && callee.kind === NodeKind.Ident) {
     const imported = scope.builtinImport(callee.text)
     name = imported === null ? "" : imported.canonical
   }
@@ -500,7 +487,7 @@ const foldBinary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
   const hint = foldsToBool(op) ? -1 : expected
   let a = new ConstValue(T_ERROR)
   let b = new ConstValue(T_ERROR)
-  if (left.kind === N_NUMBER && right.kind !== N_NUMBER) {
+  if (left.kind === NodeKind.Number && right.kind !== NodeKind.Number) {
     b = fold(ctx, info, right, hint < 0 ? T_I32 : hint)
     a = fold(ctx, info, left, hint < 0 ? b.type : hint)
   } else {
@@ -776,12 +763,12 @@ export class CaseValue {
  * whatever else it let through.
  */
 export const enumMemberValue = (expr: Node): CaseValue => {
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return isFractional(expr.text)
       ? new CaseValue(false, toI64(0))
       : new CaseValue(true, parseIntegerLiteral(expr.text))
   }
-  if (expr.kind === N_UNARY && expr.text === "-") {
+  if (expr.kind === NodeKind.Unary && expr.text === "-") {
     const operand = enumMemberValue(expr.children[0])
     return new CaseValue(operand.known, -operand.value)
   }
@@ -795,26 +782,26 @@ export const enumMemberValue = (expr: Node): CaseValue => {
  * kinds live. Anything else is a runtime value and belongs in an `if`.
  */
 export const caseValue = (ctx: CheckContext, expr: Node): CaseValue => {
-  if (expr.kind === N_PAREN) {
+  if (expr.kind === NodeKind.Paren) {
     return caseValue(ctx, expr.children[0])
   }
   // WP23: `case Kind.If:`. An enum member is a compile-time integer, and a
   // `switch` over a discriminant is the reason the language has enums at all.
-  if (expr.kind === N_MEMBER) {
+  if (expr.kind === NodeKind.Member) {
     return ctx.program.isEnumMember(ctx.table, expr)
       ? new CaseValue(true, toI64(ctx.program.nodeEnumValues[expr.id]))
       : new CaseValue(false, toI64(0))
   }
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return isFractional(expr.text)
       ? new CaseValue(false, toI64(0))
       : new CaseValue(true, parseIntegerLiteral(expr.text))
   }
-  if (expr.kind === N_UNARY && expr.text === "-") {
+  if (expr.kind === NodeKind.Unary && expr.text === "-") {
     const operand = caseValue(ctx, expr.children[0])
     return new CaseValue(operand.known, -operand.value)
   }
-  if (expr.kind === N_IDENT) {
+  if (expr.kind === NodeKind.Ident) {
     const constant = ctx.program.nodeConstants[expr.id]
     if (constant === null || (constant.type !== T_I32 && constant.type !== T_I64)) {
       return new CaseValue(false, toI64(0))

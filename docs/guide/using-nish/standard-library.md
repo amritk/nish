@@ -201,8 +201,13 @@ shown).
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
 | [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |
+| [`nish/release`](#nishrelease) | `releaseLatest` and `releaseCheckCached`: whether a newer release of a project on GitHub is out, asked at most once a day |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
+| [`nish/input`](#nishinput) | `StepInput`: what one fixed step reads from its player, the events since the last step and the keys held down, with no terminal, I/O or clock; `isDown` reads a key |
+| [`nish/raster`](#nishraster) | Drawing into a frame of `0xRRGGBB` pixels: colours, gradients, rectangles, anti-aliased discs, glows, 5×7 pixel text, trails and particles, for a terminal's framebuffer and a page's alike |
+| [`nish/synth`](#nishsynth) | Short sounds made from nothing: square, triangle and noise voices with a pitch slide and a decay, as `f64` samples |
+| [`nish/host/game`](#nishhostgame) | The frame, input, sound queue and samples a `wasm32` game shares with its page, as module storage |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -2090,6 +2095,44 @@ can only use what a released compiler ships, so it moves onto
 `nish/cli-args` once a release carries it. The example under
 `examples/api-cli/` is a whole client.
 
+## `nish/release`
+
+`nish/release` tells a command-line tool whether a newer release of it is out
+on GitHub: the check behind `nish upgrade` and the compiler's update notice.
+
+```ts
+import { releaseCheckCached } from "nish/release";
+
+const newer: string | null = releaseCheckCached(
+  "https://github.com/owner/tool", "1.2.0",
+  "/home/me/.cache/tool/latest", 86400000, 2000);
+if (newer !== null) {
+  console.error(`tool ${newer} is available (you have 1.2.0)`);
+}
+```
+
+`releaseLatest(base, timeoutMs)` asks `<base>/releases/latest` once and reads
+the version from where it redirects, without following it and without a
+token. It answers null for anything but a redirect to exactly
+`<base>/releases/tag/v<version>`: a server that is down, slow, refuses, or
+sends you to a login page. `releaseCheckCached` keeps the answer in the file
+you name, so a second call within `maxAgeMs` asks nothing; it believes the file
+only when it is a regular file you own that nobody else can write, and treats
+one dated in the future as stale.
+
+`releaseIsNewer(candidate, current)` is true only when both are semantic
+versions and the candidate is strictly newer, so a bad answer never proposes a
+downgrade. `releaseValidVersion(v)` says whether a version may be put in a URL,
+by `install.sh`'s rule: a digit first, then only letters, digits, `.`, `-`
+and `+`. `releaseFetchInstaller(rawBase, version, path, timeoutMs)` writes a
+release tag's `install.sh` to a file for you to run with `sh`; nothing fetched
+is piped into a shell.
+
+The base must be `https://`, or `http://` to this machine for a test server.
+The module is native only: it reaches the network and reads file owners. What
+it defends against is in its
+[security record](../../security/release.md).
+
 ## `nish/term`
 
 `nish/term` is for a program that draws the whole terminal, many times a
@@ -2356,6 +2399,161 @@ export const main = (): i32 => {
   const out = new PixelBytes(0);
   kittyFrame(fb, rect, 1, out);
   console.log(`${out.length > 0}`); // true: out.text() is ready to write
+  return 0;
+};
+```
+
+## `nish/input`
+
+`nish/input` names what one fixed step of a program reads from its player: the
+`TermEvent`s since the last step and the `KeyState` of which keys are held. It
+is pure, with no capability, no I/O and no clock, so a step that takes a
+`StepInput` compiles the same for a terminal, for `wasm32` behind a page, or
+for a test that scripts the keys. The events and key state are
+[`nish/term`](#nishterm)'s.
+
+A host owns one `StepInput` and points its `events` and `keys` at what it read
+each step; nothing is copied. A terminal program points them at the
+`TermInput` that [`nish/term-io`](terminal.md)'s `runTerminal` hands it.
+
+```ts nish:ok
+import { KEY_CHAR, KeyState } from "nish/term";
+import { StepInput } from "nish/input";
+
+const quits = (input: StepInput): boolean => input.isDown(KEY_CHAR, 113);
+
+export const main = (): i32 => {
+  const input = new StepInput(new KeyState());
+  console.log(quits(input));
+  return 0;
+};
+```
+
+## `nish/raster`
+
+`nish/raster` draws into a frame of `0xRRGGBB` pixels: an `Int32Array` read
+row by row, `width` pixels a row, `height` rows. Every draw takes the frame and
+its size first, clips to the frame, and never writes past the rows the array
+holds, so a frame too short for its size is safe. It is pure, with no
+capability, no I/O and no clock.
+
+The same draw fills either kind of frame, with no copy:
+
+- a terminal program's `Framebuffer` from [`nish/term`](#nishterm), whose
+  `pixels` array `rasterFrame` lends as the `Int32Array` a draw takes;
+- module storage, `const FRAME = new Int32Array(...)`, which is how a `wasm32`
+  module shares a frame with its page ([`nish/host/game`](#nishhostgame)).
+
+```ts nish:ok
+import { RASTER_SOLID, rasterDisc, rasterFrame, rasterGradient, rasterRect, rasterText } from "nish/raster";
+
+export const main = (): i32 => {
+  const width: i32 = 64;
+  const height: i32 = 32;
+  const pixels: i32[] = new Array<i32>(width * height);
+  pixels.fill(0);
+  const frame = rasterFrame(pixels);
+  rasterGradient(frame, width, height, 0x101830, 0x302040);
+  rasterRect(frame, width, height, 4, 20, 28, 24, 0xffffff, RASTER_SOLID);
+  const r: f64 = 6.0;
+  rasterDisc(frame, width, height, 48.0, 12.0, r, 0xff8000, 1.0);
+  rasterText(frame, width, height, 2, 2, 1, "HI", 0xffff00);
+  console.log(pixels[22 * width + 10] === 0xffffff);
+  return 0;
+};
+```
+
+Colours are `0xRRGGBB` integers: `rasterRgb` packs three channels, `rasterMix`
+moves one colour toward another, `rasterAdd` adds light, `rasterDim` darkens
+and `rasterHue` walks the rainbow. A weight of 0 to `RASTER_SOLID` (256) says
+how much of a colour a rectangle blends in. `RasterTrail` and `RasterParticles`
+are made once with a capacity and drawn every frame, so a frame allocates
+nothing. Text is the 5×7 font, one glyph a byte, and a byte outside printable
+ASCII draws as `?`.
+
+## `nish/synth`
+
+`nish/synth` makes short sounds out of arithmetic. `synthSilence` makes an array
+of zero samples, and each `synthTone` adds one voice into it: a square, triangle
+or noise wave whose pitch slides from `f0` to `f1` Hz and whose loudness falls
+away by `decay` a second. The sample rate is passed to every call, so one
+program can make sounds at whatever rate its player wants.
+
+```ts nish:ok
+import { SYNTH_SQUARE, SYNTH_TRIANGLE, synthSemitone, synthSilence, synthTone } from "nish/synth";
+
+export const main = (): i32 => {
+  const rate: i32 = 22050;
+  const out: f64[] = synthSilence(0.2, rate);
+  synthTone(out, rate, 0.0, 0.2, 440.0, 220.0, SYNTH_SQUARE, 0.25, 8.0);
+  synthTone(out, rate, 0.05, 0.1, synthSemitone(440.0, 7), synthSemitone(440.0, 7), SYNTH_TRIANGLE, 0.2, 12.0);
+  console.log(out.length);
+  return 0;
+};
+```
+
+The samples are not clipped: a voice stays within its volume, so voices whose
+volumes add up to at most 1 stay inside -1 to 1. Noise is a fixed sequence, so
+the same calls give the same samples on every run.
+
+## `nish/host/game`
+
+`nish/host/game` is the memory a game built with `--target wasm32` shares with
+the page that runs it. Each piece is module storage, which the page reads and
+writes in place through the loader's `views().storage`:
+
+| Storage | Written by | Holds |
+| --- | --- | --- |
+| `GAME_FRAME` | the game | up to 960×540 `0xRRGGBB` pixels, `width` a row |
+| `GAME_INFO` | the game | the frame's width and height, then the last sound's sample count and rate |
+| `GAME_INPUT` | the page | a [`nish/host/ring`](interop.md) of 7-word key, pointer and focus records |
+| `GAME_SOUNDS` | the game | a ring of sound ids to start |
+| `GAME_SAMPLES` | the game | one sound's samples, as `f32` |
+
+Each step, the game calls `gameReadInput` to drain the page's records into a
+[`nish/input`](#nishinput) `StepInput`, so it reads keys with the same
+`nish/term` constants a terminal program uses. It draws into `GAME_FRAME` with
+[`nish/raster`](#nishraster) and calls `gamePlaySound` for each sound to start.
+At start, the page calls an export of the game's once for each sound id, which
+makes the sound and writes it with `gameWriteSamples`. The page then copies the
+samples into an audio buffer. Each record's words, and the page's side of every
+piece, are listed in the module's comment and in the
+[library reference](../../reference/index.md).
+
+The input differs from a terminal's in two ways. Ctrl+C is an ordinary key
+(on a page it is copy), never `EVENT_QUIT`. The reader makes up no
+auto-repeat either: a page that wants held keys to repeat sends
+`ACTION_REPEAT` records itself.
+
+To run on a page, compile with `--target wasm32` and link with
+`scripts/build.sh --profile wasm-host` ([In a browser](interop.md#in-a-browser)),
+which exports the storage for the loader. Pin the memory with `--memory <MiB>`
+so the page's views of it never go stale: the storage alone is about 2.5 MB
+(the frame is 2 MB), so give it at least 4 MiB plus what the game allocates.
+The `GAME_*` names are the keys the page reads, so keep them for this module.
+When two modules declare storage of one name, the later one's is keyed by its
+symbol instead, and a program's own `GAME_FRAME` could move this module's off
+its key.
+
+```ts nish:ok
+import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth } from "nish/host/game";
+import { RASTER_SOLID, rasterRect } from "nish/raster";
+import { StepInput } from "nish/input";
+import { KEY_CHAR, KeyState } from "nish/term";
+
+const step = (input: StepInput, nowMs: f64): void => {
+  gameReadInput(input, nowMs);
+  if (input.isDown(KEY_CHAR, 32)) {
+    gamePlaySound(0);
+  }
+  rasterRect(GAME_FRAME, gameWidth(), gameHeight(), 0, 0, gameWidth(), gameHeight(), 0x101830, RASTER_SOLID);
+};
+
+export const main = (): i32 => {
+  const input = new StepInput(new KeyState());
+  gameSetSize(320, 180);
+  step(input, 0.0);
+  console.log(GAME_FRAME[0] === 0x101830);
   return 0;
 };
 ```
@@ -2683,9 +2881,9 @@ test vectors. A byte string is a `u8[]`.
 
 | Module | Main exports |
 | --- | --- |
-| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
+| `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`, and `digestInto(out, at)`, which writes the digest into your array) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
-| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
+| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes (`HmacSha256.digestInto(out, at)` writes the tag into your array and allocates nothing), and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, `bcryptHashN`/`bcryptVerifyN` for up to six at once at a width `bcryptCalibrate` picks, and `bcryptHash4`/`bcryptVerify4` for up to four: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
@@ -2800,11 +2998,23 @@ does and keeps no hold on `buf`, so the array is yours again once it returns.
 as a ring's `peek`, is handed over as it is. A chunked or compressed response, an `Http1TlsServer` slot, and a write still
 held back are copied as `write` copies them.
 
-Set `Http1Config.idleInput` and a slot lends its input and head buffers back
-too, whenever it has answered a request and holds no byte of the next: a server
-holding tens of thousands of keep-alive connections that each send a request
-now and then keeps those buffers only for the connections mid-request, for two
-pool operations a request. It is off by default. An `Http1Server` builds a
+A response with a `Content-Length` is finished once `write` or `sendBody` has
+taken its last byte, and one with no body (`Content-Length: 0`, a `HEAD`, a 204
+or a 304) once `respond` has queued its head: the next request on a keep-alive
+connection is answered whether or not you call `conn.end()`. A chunked body
+needs `end()`, which writes its last chunk, and so does a chunked response to
+an HTTP/1.0 client, which is sent unframed: without it the connection waits
+and the next request is never answered. Calling `end()` on any response stays
+correct; it answers 0 once the length is met and `H1_INVALID` while bytes are
+still owed.
+
+A slot lends its input and head buffers back too, whenever it has answered a
+request and holds no byte of the next: a server holding tens of thousands of
+keep-alive connections that each send a request now and then keeps those
+buffers only for the connections mid-request, for two pool operations a
+request, and an idle connection holds about 1.2 KB. That is
+`Http1Config.idleInput`, on by default; set it to `false` and each slot keeps
+its own buffers while it rests, about 1.9 KB more a connection. An `Http1Server` builds a
 slot's connection on the first accept into it and keeps it for the next, so a
 pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.

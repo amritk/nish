@@ -876,7 +876,7 @@ const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   lines.push(`static void nish_napi_exec_${name}(napi_env env, void *data) {`)
   lines.push("  (void)env; /* N-API forbids reaching the JS engine here: this runs off the loop thread. */")
   lines.push(`  ${work} *nish_w = (${work} *)data;`)
-  lines.push("  /* The arena is thread-local (WP20 T0), so the mark and the release are")
+  lines.push("  /* The arena is thread-local, so the mark and the release are")
   lines.push("   * both this worker's. A pool thread is reused, so the bracket is what")
   lines.push("   * keeps its arena flat across calls instead of growing for the process's")
   lines.push("   * whole life. */")
@@ -1340,7 +1340,7 @@ export const generateNapiShim = (
     lines.push("")
   }
   if (needsResult) {
-    lines.push("/* WP17: a `Result` as the object JS models it with — `{ ok, value }` or")
+    lines.push("/* A `Result` as the object JS models it with — `{ ok, value }` or")
     lines.push(" * `{ ok, error }`. The dead arm is never written, so it is never read. */")
     lines.push(
       "static napi_status nish_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out) {"

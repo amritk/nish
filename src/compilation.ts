@@ -53,7 +53,15 @@ import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
 import { analyzeFunctions, AnalysisUnit, FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
-import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
+import {
+  arenaBlockFindings,
+  arenaLoopFindings,
+  explainMemory,
+  keptMemoryFindings,
+  loopReachedFunctions,
+  mayKeepMemory,
+  MemoryReport,
+} from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
 import { Checker } from "./checker"
@@ -72,13 +80,13 @@ import {
   SECRET_SPECIFIER,
   unsafeModule,
 } from "./nish-modules"
-import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
-import { arenaJson } from "./arena-report"
+import { arenaJson, unboundedPassFindings } from "./arena-report"
 import {
   allCapabilities,
   argumentCapabilities,
@@ -200,6 +208,7 @@ import {
   voidTaskResultMessage,
   destinationEdits,
   threadsModuleName,
+  isThreadsModule,
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
@@ -384,7 +393,12 @@ export class EmittedModule {
 
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
-  code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016"
+  code === "NL9002" ||
+  code === "NL9003" ||
+  code === "NL9011" ||
+  code === "NL9016" ||
+  code === "NL9018" ||
+  code === "NL9019"
 
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of
@@ -979,7 +993,13 @@ export class Compilation {
         continue
       }
       const target = found.path
-      if (readFileSyncOrNull(target) === null) {
+      let missing = false
+      {
+        // The file's text is read only to see that it is there; the pass drops it.
+        using _a = arena()
+        missing = readFileSyncOrNull(target) === null
+      }
+      if (missing) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
@@ -1283,7 +1303,8 @@ export class Compilation {
     let dir = normalizePath(from)
     let steps = 0
     let searching = true
-    while (searching) {
+    // `steps` never passes the limit: the pass that reaches it stops the walk.
+    while (searching && steps <= PACKAGE_WALK_LIMIT) {
       if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
         const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name])
         if (readFileSyncOrNull(joinPath([candidate, "package.json"])) !== null) {
@@ -1405,6 +1426,9 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.recheckStorage()
     }
+    this.rejectRootWithArenas()
+    this.rejectRootInShim()
+    this.rejectRootInWasiLoader()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -1509,6 +1533,7 @@ export class Compilation {
     }
     this.factsSettled = true
     this.reportArenaLoops()
+    this.reportUnboundedPasses()
     this.denyRetention()
     this.checkParallel()
     this.keyEnumsBySymbol()
@@ -1860,7 +1885,8 @@ export class Compilation {
    * What the argument `arg` of grant entry `entry`, for capability `c`, is
    * resolved to, or null once it is refused (NL3045 to NL3047): a directory, against
    * the root package's directory `base`, to its real path; a program, found
-   * on `PATH` or as a path from `base`, to its real path; a host, checked to
+   * on `PATH` or as a path from `base`, to its real path, after an `exec:`
+   * prefix (`EXEC_GRANT`) is taken off; a host, checked to
    * be the numeric address `nish:net` takes, or a Unix socket's absolute path
    * for `unixConnect` and `unixListen`, as written.
    */
@@ -1886,9 +1912,13 @@ export class Compilation {
       return arg
     }
     if (c === capabilityIndex("process.spawn")) {
+      // `exec:` is read before the program is found, so a program whose name
+      // starts `exec:` is granted as a path (`./exec:x`), and `exec:` with
+      // nothing after it names no program.
+      const program = arg.startsWith(EXEC_GRANT) ? arg.slice(EXEC_GRANT.length) : arg
       let found: string | null = null
-      if (arg.length > 0) {
-        found = findProgram(arg, base)
+      if (program.length > 0) {
+        found = findProgram(program, base)
       }
       if (found === null) {
         this.sink.report(
@@ -2259,6 +2289,7 @@ export class Compilation {
       covered =
         relative ||
         texts.indexOf(`process.spawn=${literal.value}`) >= 0 ||
+        texts.indexOf(`process.spawn=${EXEC_GRANT}${literal.value}`) >= 0 ||
         (found !== null && values.indexOf(found) >= 0)
     } else if (!covered) {
       covered = !literal.value.startsWith("/") || beneathAny(normalizePath(literal.value), values)
@@ -2547,16 +2578,18 @@ export class Compilation {
 
   /**
    * `--deny-retention`: each arena-retention warning in a module of the root
-   * package becomes an error. The four rules are the ones whose finding is
+   * package becomes an error. The six rules are the ones whose finding is
    * memory nothing can reach that stays allocated: quadratic string building
    * (NL9002), an allocation dropped by an assignment (NL9003), a loop over a
-   * call that leaves its memory behind (NL9011) and an allocation dropped on
-   * every pass (NL9016). The error keeps the warning's text, which names the
+   * call that leaves its memory behind (NL9011), an allocation dropped on
+   * every pass (NL9016), a pass of an unbounded loop that keeps what it
+   * allocates (NL9018) and a function a loop runs that keeps an allocation on
+   * every call (NL9019). The error keeps the warning's text, which names the
    * rewrite, and its code, so a reader sees which rule refused the build. A
    * dependency's warnings stay warnings, as its panic sites stay outside the
    * no-panic scope: the program's author cannot change that code.
    *
-   * Run after `reportArenaLoops`, the last of the four to be found, and the
+   * Run after `reportUnboundedPasses`, the last of the six to be found, and the
    * warning it restates is dropped so the line is said once.
    */
   denyRetention(): void {
@@ -3024,12 +3057,16 @@ export class Compilation {
   }
 
   /**
-   * The one performance warning that needs the whole-program facts: a loop
-   * over a call that leaves arena memory behind, in a function that gets no
-   * automatic scope (`arenaLoopFindings`, escape.ts). It is reported here, at
-   * the end of checking, so that it reaches the report with every other
-   * warning, which the driver prints before it emits anything. The analysis is
-   * the one `emit` runs, memoised by `analyze`, so it is not paid twice.
+   * The performance warnings that need the whole-program facts: a loop over
+   * a call that leaves arena memory behind, in a function that gets no
+   * automatic scope (`arenaLoopFindings`, escape.ts), and a function of the
+   * root package that keeps an allocation on every call and is called directly
+   * by a pass of a loop that releases nothing (`keptMemoryFindings`), wherever
+   * that loop is: a dependency's event loop calls the program's handler. It
+   * is reported here, at the end of checking, so that it reaches the report
+   * with every other warning, which the driver prints before it emits
+   * anything. The analysis is the one `emit` runs, memoised by `analyze`, so
+   * it is not paid twice.
    */
   reportArenaLoops(): void {
     const facts = this.analyze()
@@ -3041,6 +3078,53 @@ export class Compilation {
           finding.node.end,
           finding.message
         )
+      }
+    }
+    const roots: AnalysisUnit[] = []
+    for (const unit of this.analysisUnits) {
+      if (this.inRootPackage(unit.program.source)) {
+        roots.push(unit)
+      }
+    }
+    if (!mayKeepMemory(roots, facts)) {
+      return
+    }
+    const reached = loopReachedFunctions(this.analysisUnits, this.table, facts)
+    for (const unit of roots) {
+      for (const finding of keptMemoryFindings(unit, this.table, facts, reached)) {
+        this.sink.reportPerformance(
+          unit.program.source,
+          finding.node.start,
+          finding.node.end,
+          finding.message
+        )
+      }
+    }
+  }
+
+  /**
+   * NL9018: an unbounded loop in the program's own code whose passes keep
+   * what they allocate (`unboundedPassFindings`, arena-report.ts). Only the
+   * root package's modules, the scope of `--explain-memory`: a dependency's
+   * loop is not the program author's to rewrite. A site another retention
+   * warning already reports, at the expression or statement that holds it, is
+   * left to that warning, so this runs after every one of them is in.
+   */
+  reportUnboundedPasses(): void {
+    const facts = this.analyze()
+    for (const unit of this.analysisUnits) {
+      const source = unit.program.source
+      if (!this.inRootPackage(source)) {
+        continue
+      }
+      const named: i32[] = []
+      for (const warning of this.sink.warnings) {
+        if (warning.source === source && isRetentionCode(codeFor("performance", warning.text))) {
+          named.push(warning.start)
+        }
+      }
+      for (const finding of unboundedPassFindings(unit, this.table, facts, named)) {
+        this.sink.reportPerformance(source, finding.node.start, finding.node.end, finding.message)
       }
     }
   }
@@ -3112,6 +3196,86 @@ export class Compilation {
       }
     }
     return this.entry()
+  }
+
+  /**
+   * WP55 §4.2: root storage in a program that also loads `nish/threads` or
+   * `nish:region`, each of which allocates from an arena of its own that a
+   * root could be left pointing into once it is freed.
+   */
+  rejectRootWithArenas(): void {
+    let arenas = false
+    for (const unit of this.modules) {
+      if (unit.checker.program.regionLibrary || isThreadsModule(unit.checker.program)) {
+        arenas = true
+      }
+    }
+    if (!arenas) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a program that loads \`nish/threads\` or \`nish:region\`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a build that writes a native shim
+   * (`--emit-napi`, `--emit-napi-async`, `--emit-header`). The shim releases
+   * the arena after every call that passes a string or an array
+   * (`src/interop-napi.ts`), which frees what a root reaches, and only a page
+   * module's loader keeps it instead.
+   */
+  rejectRootInShim(): void {
+    const opts = this.opts
+    if (opts.emitNapi.length === 0 && opts.emitNapiAsync.length === 0 && opts.emitHeader.length === 0) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a build that writes a native shim (\`--emit-napi\`, \`--emit-napi-async\` or \`--emit-header\`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module`
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * WP55 §4.2: root storage in a WASI build that writes a loader
+   * (`--emit-dts`). The loader releases the arena after every call, and only
+   * a page module (`buildsPageModule`) emits the `nish_root_keep` a loader
+   * calls in its place, so what a root reaches would be freed.
+   */
+  rejectRootInWasiLoader(): void {
+    const opts = this.opts
+    if (opts.emitDts.length === 0 || !isWasmBuild(opts) || buildsPageModule(opts)) {
+      return
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root && info.origin === unit.checker.program.source) {
+          this.sink.report(
+            info.origin,
+            info.decl.start,
+            info.decl.end,
+            `Root storage \`${info.name}\` cannot be kept in a WASI build that writes a loader (\`--emit-dts\`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (\`--target wasm32\`) or as an \`--emit-dts\` compile for the host`
+          )
+        }
+      }
+    }
   }
 
   /**
@@ -3344,6 +3508,39 @@ export class Compilation {
       }
     }
     return this.hasStorage()
+  }
+
+  /** WP55: whether any module declares root storage, whatever the target. */
+  holdsRoots(): boolean {
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.constantList) {
+        if (info.root) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  /**
+   * WP55: every root storage's symbol, in module order, when the build makes
+   * a page module, whose loader keeps what the roots reach between calls; a
+   * native build's arena is never released across calls, so it keeps nothing.
+   */
+  rootSymbols(): string[] {
+    const out: string[] = []
+    if (!buildsPageModule(this.opts)) {
+      return out
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const info of program.constantList) {
+        if (info.root && info.origin === program.source) {
+          out.push(info.storageSymbol)
+        }
+      }
+    }
+    return out
   }
 
   /**
@@ -3753,6 +3950,19 @@ export class Compilation {
         this.entry().checker.program.usesArgv = true
       }
     }
+    // WP27 S5: one module naming `cErrno` makes every foreign call capture.
+    let capturesErrno = false
+    for (const unit of this.modules) {
+      if (unit.checker.program.capturesErrno) {
+        capturesErrno = true
+      }
+    }
+    if (capturesErrno) {
+      for (const unit of this.modules) {
+        unit.checker.program.capturesErrno = true
+      }
+    }
+    this.opts.holdsRoots = this.holdsRoots()
     const facts = analyzeFunctions(units, this.table, this.opts, this.runtime)
     this.analysisUnits = units
     this.facts = facts
@@ -3872,7 +4082,8 @@ export class Compilation {
    * `fs.read`, `fs.write` or `process.spawn`, and each of them is granted it
    * with arguments, `--sandbox` confines the program to those arguments — the
    * granted directories become its Landlock roots, the granted programs (and
-   * their interpreters, marked `//` unless granted too) its exec allowlist. A
+   * their interpreters, marked `//` unless granted too; a program granted
+   * `exec:`, marked `///`) its exec allowlist. A
    * reach the root package makes itself, an `ffi` call, or a scope given on
    * the command line leaves the capability as it was.
    */
@@ -3904,6 +4115,7 @@ export class Compilation {
         continue
       }
       const values: string[] = []
+      const execs: string[] = []
       let reached = false
       let scoped = true
       let p = 0
@@ -3919,11 +4131,15 @@ export class Compilation {
             while (
               j < this.grantArgOwners.length &&
               j < this.grantArgCaps.length &&
-              j < this.grantArgValues.length
+              j < this.grantArgValues.length &&
+              j < this.grantArgTexts.length
             ) {
               if (this.grantArgOwners[j] === g && this.grantArgCaps[j] === c) {
                 named = true
                 addOnce(values, this.grantArgValues[j])
+                if (this.grantArgTexts[j].startsWith(`process.spawn=${EXEC_GRANT}`)) {
+                  addOnce(execs, this.grantArgValues[j])
+                }
               }
               j = j + 1
             }
@@ -3939,8 +4155,12 @@ export class Compilation {
       }
       // An interpreter the grant does not name itself is written with a
       // second leading `/`, the same file to Landlock, which the runtime keeps
-      // out of a spawn's reach by identity (SBX-1). Grant values and
-      // interpreters are real paths, so no other entry starts `//`.
+      // out of a spawn's reach by identity (SBX-1). A program granted
+      // `exec:` (under any of its grants) is written with two more, `///`,
+      // which POSIX itself reads as one: the runtime starts it without the
+      // one-exec filter, so its subtree reaches the whole allowlist. Grant
+      // values and interpreters are real paths, so no other entry starts
+      // `//`, and an interpreter's third character is never `/`.
       const granted = values.length
       if (c === capabilityIndex("process.spawn")) {
         let k = 0
@@ -3954,7 +4174,14 @@ export class Compilation {
       }
       let v = 0
       while (v < values.length) {
-        cli.push(v < granted ? values[v] : `/${values[v]}`)
+        const value = values[v]
+        if (v >= granted) {
+          cli.push(`/${value}`)
+        } else if (execs.indexOf(value) >= 0) {
+          cli.push(`//${value}`)
+        } else {
+          cli.push(value)
+        }
         v = v + 1
       }
     }
@@ -3973,6 +4200,7 @@ export class Compilation {
       this.narrowSandbox(facts)
     }
     this.opts.panicSites = this.guardsPanics()
+    this.opts.rootSymbols = this.rootSymbols()
     const units = this.analysisUnits
     const stems = this.outputStems()
     const copies: AnalysisUnit[] = this.libraryUnits(units)
@@ -4118,6 +4346,16 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
  */
 const normalizedGrant = (name: string, arg: string): string => `${name}=${normalizePath(arg)}`
 
+/**
+ * WP40 §2a: the prefix of a `process.spawn` grant's program that lets the
+ * program start others, `process.spawn=exec:<program>`. Under `--sandbox` a
+ * program granted without it gets exactly one exec, its own start
+ * (docs/wp37-os-sandbox.md §2a "One exec per spawn"); one granted with it,
+ * and everything it starts, may execute any file the exec allowlist holds,
+ * the loaders included, so it can run anything (docs/security/sandbox.md).
+ */
+const EXEC_GRANT: string = "exec:"
+
 /** Push `value` onto `list` unless it is there already. */
 const addOnce = (list: string[], value: string): void => {
   if (list.indexOf(value) < 0) {
@@ -4217,7 +4455,7 @@ const reservedPrefixText = (name: string): string => {
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 
 /** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
 const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0
@@ -4261,7 +4499,7 @@ const clashMessage = (
   const owner = sig.owner
   if (owner !== null) {
     const member =
-      sig.decl.kind === N_CONSTRUCTOR
+      sig.decl.kind === NodeKind.Constructor
         ? "is declared with a constructor"
         : `declares method \`${sig.decl.children[0].text}\``
     const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`

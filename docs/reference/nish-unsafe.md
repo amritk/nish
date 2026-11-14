@@ -2,10 +2,11 @@
 
 # nish\:unsafe
 
-Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves.
+Element access with no bounds check, signed arithmetic that wraps, a C string or struct read through a pointer nothing proves, and the errno a C call left.
 
 ```ts
 import {
+  cErrno,
   readCString,
   readStruct,
   uncheckedGet,
@@ -30,9 +31,15 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 
 <scalar-grid cols="2">
 
+<scalar-card title="c​Errno" icon="phosphor/regular/function" href="#cerrno">
+
+The errno the most recent `declare function` call on this thread left: a program that names `cErrno` zeroes errno just before every foreign call and saves it just after, before any result marshalling.
+
+</scalar-card>
+
 <scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
-The `NUL`-terminated bytes at `p`, copied into a new string by `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses.
+The `NUL`-terminated bytes at `p`, copied into a new string by `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses, after a `NULL` test that panics with `ffi-null`.
 
 </scalar-card>
 
@@ -84,12 +91,13 @@ for each name imported and an `unsafe call` line for each site.
 
 </scalar-callout>
 
-The global spelling is refused (NL2456): the seven are called only through an
+The global spelling is refused (NL2456): the eight are called only through an
 import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
 behaviour, which is the whole of the trade. There is no flag that turns the
 checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
-refuses each with exit 2. `readCString` and `readStruct` have no Node form, because their
-`CPtr` comes only from a `declare function`, which Node cannot call.
+refuses each with exit 2. `readCString`, `readStruct` and `cErrno` have no Node form,
+because their `CPtr` or errno comes only from a `declare function`, which Node
+cannot call.
 
 <scalar-detail title="Under Node">
 
@@ -103,11 +111,11 @@ refuses each with exit 2. `readCString` and `readStruct` have no Node form, beca
 <scalar-detail title="The no-panic scope">
 
 Under `--deny-panics` or `"nish".noPanic`,
-`uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
-sites, because the import has already said that an index out of range is
-the author's to rule out. `readStruct` is not: it tests its pointer and
+`uncheckedGet` and `uncheckedSet` are allowed `unchecked` sites, because
+the import has already said that an index out of range is the author's to
+rule out. `readCString` and `readStruct` are not: each tests its pointer and
 panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
-refuses it. The wrapping three are not sites at all: they are defined for
+refuses them. The wrapping three are not sites at all: they are defined for
 every pair.
 
 </scalar-detail>
@@ -116,11 +124,30 @@ Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unch
 
 ## Functions
 
+### cErrno
+
+The errno the most recent `declare function` call on this thread left:
+a program that names `cErrno` zeroes errno just before every foreign
+call and saves it just after, before any result marshalling. Native and
+`--profile wasi` only.
+
+```ts
+function cErrno(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+The saved errno; 0 before any foreign call, and 0 after one that
+  did not set it.
+
+</scalar-field>
+
 ### readCString
 
 The `NUL`-terminated bytes at `p`, copied into a new string by
 `@nish.ffi.str`, the scan-and-copy a `string` result of a
-`declare function` uses. It reads and allocates, and is native only.
+`declare function` uses, after a `NULL` test that panics with
+`ffi-null`. It reads and allocates, and is native only.
 
 ```ts
 function readCString(p: CPtr): string
@@ -128,8 +155,8 @@ function readCString(p: CPtr): string
 
 <scalar-field name="p" type="CPtr" required>
 
-A pointer from a `declare function`. Undefined behaviour unless
-  it points at a live C string.
+A pointer from a `declare function`; `NULL` panics. Undefined
+  behaviour unless it points at a live C string.
 
 </scalar-field>
 

@@ -51,6 +51,7 @@ import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/p
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import {
   budgetLabel,
+  HTTP1_SERVER_IDLE_BYTES,
   HTTP1_SERVER_START_BYTES,
   HTTP1_TLS_SERVER_START_BYTES,
   HTTP2_TLS_SERVER_START_BYTES,
@@ -61,7 +62,8 @@ import {
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
-import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
+import { linkCompiler } from "./self/compiler-cache.js"
+import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
@@ -105,6 +107,8 @@ import {
 const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
+// What the wasm page tests run a host module with an `enum` under: see tests/ts-transform.js.
+const TS_TRANSFORM = pathToFileURL(path.join(root, "tests", "ts-transform.js")).href
 /**
  * The compiler under test: stage1, `src/` linked by the seed once per run,
  * and every compile in this file is a spawn of it.
@@ -581,14 +585,17 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs but
-// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts), about
-// 200 s from the job's start with its setup steps (measured in docs/wp10-ci.md,
-// "Shards and time limits"). Shard 1 then runs every section after them that
-// is not dealt, and
-// the link programs a later section reads the output of (`LINK_READ_LATER`);
-// a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
-// sections, among them most of what follows the link programs in groups
-// marked `tail`, and the other link programs are dealt by their cost in
+// the dealt sections there (`DEALT_SECTIONS`: term-io, --emit-ts and the small
+// sections between the native run limit and the link programs) and the
+// golden cases' work past their IR check, which `caseShard` deals by position:
+// every shard compiles every case, since later sections read that compile, and
+// does the rest for its own eighth. Each dealt section before the link programs
+// runs in the one shard its cost deals it to. Shard 1 also runs every section
+// after the link programs that is not dealt, and the link programs a later
+// section reads the output of (`LINK_READ_LATER`); a `pinned` group
+// (`DEALT_SECTIONS`) runs in the shard it names. The dealt sections, among them
+// most of what follows the link programs in groups marked `tail`, and the
+// other link programs are dealt by their cost in
 // `tests/shard-costs.json` (see `linkShard`), and every shard but 1 stops once
 // its share is done. A filtered run (`node tests/run.js net_ --shard 2/3`)
 // deals only the programs its filter selects. What a shard leaves to
@@ -631,11 +638,16 @@ if (seed.error !== undefined) {
   }
   summarise()
 }
+// A run before that linked the same inputs left its binary in
+// `build/cache/compiler-under-test/` (`tests/self/compiler-cache.js` says what
+// the key covers), and copying it saves the minute the link takes.
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true })
+const underTest = linkCompiler(seed, path.join("src", "compile.ts"), NISH)
 if (
   !check(
-    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test`,
-    linkWith(seed, path.join("src", "compile.ts"), NISH) !== null,
+    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test` +
+      (underTest?.reused ? ` (kept from a run with the same inputs, key ${underTest.key})` : ""),
+    underTest !== null,
     "(the seed's report is on stderr above)"
   )
 ) {
@@ -648,7 +660,9 @@ if (
 // run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
 // cases are independent of each other and the sections after this one are not
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
-// case has finished before the next section starts, and the checks are
+// case has finished before the next section starts; in a sharded run every
+// shard still compiles every case for that reason, and does the rest of the
+// work only for the cases `caseShard` deals it. The checks are
 // reported in corpus order, which keeps the output the same at any width.
 // The filter is the first argument that is neither a flag nor the value of
 // one (`--shard 2/4`, `--jobs 4`).
@@ -701,6 +715,48 @@ const caseEnv = (file) => {
 }
 
 const selectedCases = cases.filter((name) => !only || name.includes(only))
+
+/**
+ * The shard that does a golden case's dealt work: everything after its IR is
+ * held to the golden -- `llvm-as`, the `--warn-portability`,
+ * `--emit-capabilities`, `--emit-panics`, `--emit-arena` and
+ * `--explain-memory` compiles, and the native link and run. Every shard still
+ * compiles every case and checks its IR, because that compile is what later
+ * sections read: `build/test/<name>.ll` (the arrays, crypto, runtime and
+ * bench blocks, and shard 1's checks after the link programs, most of them
+ * behind an `existsSync` that would skip silently) and `caseResults`. None of
+ * them reads what the dealt work writes. Section A took 59 s of shard 2 in run
+ * 43369900293 and 30 s with the deal (`docs/wp10-ci.md`, "Where the wall
+ * clock goes"); what is left is mostly the compiles every shard keeps.
+ *
+ * The deal is by position, the linked cases and the compiled-only ones apart,
+ * so each shard gets an eighth of each kind whatever the corpus's order. The
+ * first linked case with and without `--threads` stays in shard 1: it is the
+ * specimen the `runtime objects:` checks replay there (`keepSpecimen`), and
+ * an unsharded run keeps the same one. A rejection or a `.stdout` case has no
+ * dealt work. A filtered run deals only the cases it selects, as it does the
+ * link programs.
+ */
+const caseShard = (() => {
+  if (SHARDS === 1) {
+    return () => SHARD
+  }
+  const exists = (name, ext) => fs.existsSync(path.join(casesDir, `${name}.${ext}`))
+  const dealt = selectedCases.filter((name) => !exists(name, "err") && !exists(name, "stdout"))
+  const linked = dealt.filter((name) => exists(name, "out"))
+  const specimens = [false, true]
+    .map((threads) => linked.find((name) => caseArgs(name).includes("--threads") === threads))
+    .filter((name) => name !== undefined)
+  const shardOf = new Map(specimens.map((name) => [name, 1]))
+  for (const group of [linked, dealt.filter((name) => !exists(name, "out"))]) {
+    let next = 0
+    for (const name of group.filter((name) => !shardOf.has(name))) {
+      shardOf.set(name, (next % SHARDS) + 1)
+      next++
+    }
+  }
+  return (name) => shardOf.get(name) ?? SHARD
+})()
 
 /**
  * Makes, in `dir`, the files the WP44 file cases open and cannot make
@@ -936,7 +992,9 @@ const runCase = async (name) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
-  const done = { compiled: r, steps, panicFunctions: 0 }
+  const done = { compiled: r, steps, panicFunctions: 0, dealtTo: 0 }
+  // Whether this shard does the case's work past its IR check (`caseShard`).
+  const mine = caseShard(name) === SHARD
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -963,7 +1021,7 @@ const runCase = async (name) => {
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
     expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
-  if (fs.existsSync(side("portability"))) {
+  if (mine && fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
@@ -992,7 +1050,7 @@ const runCase = async (name) => {
       "the two .ll files differ"
     )
   }
-  if (fs.existsSync(side("caps.json"))) {
+  if (mine && fs.existsSync(side("caps.json"))) {
     // WP35: the capability report, compiled a second time for the same reason
     // the portability warnings are -- the flag is not in `.args`, because the
     // tools that compile `tests/cases/` with the last release would refuse it.
@@ -1055,6 +1113,10 @@ const runCase = async (name) => {
     actual === expected,
     `--- expected\n${expected}\n--- actual\n${actual}`
   )
+  if (!mine) {
+    done.dealtTo = caseShard(name)
+    return done
+  }
 
   if (HAS_LLVM_AS) {
     const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
@@ -1249,6 +1311,21 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     reported++
   }
 })
+// What this shard left to the others, per `caseShard`: each named once, by count.
+{
+  const byShard = new Map()
+  for (const run of caseRuns) {
+    if (run.dealtTo > 0) {
+      byShard.set(run.dealtTo, (byShard.get(run.dealtTo) ?? 0) + 1)
+    }
+  }
+  for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
+    delegate(
+      `llvm-as, the side compiles and the native run of ${count} golden case(s) whose IR this shard checked`,
+      shardJob(i)
+    )
+  }
+}
 // The bound on native runs, held to what it promises with a bound of half a
 // second, because the real one takes two minutes to prove. `runNative` is the
 // helper both case loops run their programs through, so a change that drops
@@ -1335,12 +1412,15 @@ const caseResults = caseRuns.map((run) => run.compiled)
 // The oracle above passes vacuously on a function it never finds, so the run
 // says how many it read: every golden with a clean function contributes, and
 // a symbol spelling the oracle stopped recognising would take this to zero.
+// A shard reads only the cases dealt to it (`caseShard`), about an eighth of
+// the corpus's 2,861 functions, so the floor is shared out the same way.
 if (only === undefined) {
   const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
+  const floor = Math.floor(500 / SHARDS)
   check(
     `--emit-panics: the IR oracle read ${read} functions with nothing left that can panic`,
-    read >= 500,
-    "fewer than 500: the oracle is no longer finding the functions it is handed"
+    read >= floor,
+    `fewer than ${floor}: the oracle is no longer finding the functions it is handed`
   )
 }
 
@@ -1394,6 +1474,293 @@ const runUnderPrelude = (entry, args, exported = "main", options = {}) =>
 /** A spawned run's status and both streams, for a failed check's message. */
 const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
 
+// A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
+// called with everything it has printed so far each time it prints, and the answer
+// comes once it exits, or once it has been killed after 10 s.
+const runWatched = (exe, args, onChunk) =>
+  new Promise((resolve) => {
+    const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let out = ""
+    let err = ""
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGKILL")
+    }, 10000)
+    child.stdout.on("data", (chunk) => {
+      out += chunk
+      onChunk(out, child)
+    })
+    child.stderr.on("data", (chunk) => {
+      err += chunk
+    })
+    child.on("close", (code, signal) => {
+      clearTimeout(timer)
+      resolve({ code, signal, out, err, timedOut })
+    })
+  })
+
+// `runWatched`, with `onPort(port)` called once the program prints `port <n>`; the
+// answer waits for that promise as well as the exit. A program that prints no port
+// is simply run, with `results` empty.
+const runWithPort = async (exe, args, onPort) => {
+  let talks = null
+  const r = await runWatched(exe, args, (out) => {
+    const port = /^port (\d+)\n/.exec(out)
+    if (talks === null && port !== null) {
+      talks = onPort(Number(port[1]))
+    }
+  })
+  return { ...r, results: await (talks ?? Promise.resolve([])) }
+}
+
+// ---- The deal: which shard runs what ------------------------------------------
+// The link programs and the dealt sections, and the shard each runs in. It sits
+// before the first dealt section, the `term-io` one below, because a section
+// that every shard used to repeat is dealt too: what decides where it runs has
+// to be known before it is reached.
+const linkDir = path.join(root, "tests", "link")
+const linkTests = fs.existsSync(linkDir)
+  ? fs
+      .readdirSync(linkDir)
+      .filter((d) => fs.existsSync(path.join(linkDir, d, "main.ts")))
+      .sort()
+  : []
+
+/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
+const INDEX_OF_ANY_REFUSALS = [
+  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
+  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
+]
+
+/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
+const TEXT_REFUSALS = [
+  ["std_text_split_empty_separator", "split: an empty separator"],
+  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
+  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
+  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
+  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
+  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
+]
+
+/**
+ * The link programs whose output a check after the loop reads: by path, from
+ * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
+ * those checks; a new check that reads another program's output adds its name
+ * here, or it reads nothing in a sharded run.
+ */
+const LINK_READ_LATER = [
+  "async_await_all_retain",
+  "net_tls_resume_bench",
+  "par_dst_short",
+  "par_map_idle",
+  "par_map_join_small",
+  "par_map_reclaim",
+  "par_map_release",
+  "range_export",
+  "range_export_dts",
+  "range_export_foreign",
+  "range_export_header",
+  "range_export_napi",
+  "range_export_napi_async",
+  "range_export_unproven",
+  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  ...TEXT_REFUSALS.map(([name]) => name),
+  "std_compress_node",
+  "std_json_conformance",
+  "std_json_tokenizer",
+  "std_json_typed",
+  "std_json_value",
+  "thread_channel_string_many",
+  "thread_scope_reclaim",
+  "thread_task_release",
+]
+/** Whether the run's filter selects a section gated on any of `words`. */
+const selects = (...words) => !only || words.some((word) => word.includes(only))
+/**
+ * The sections that are dealt like the link programs rather than run by every
+ * shard (`termIo`, `emitTs` and the small sections from `osHost` to `fix`,
+ * before the link programs) or by shard 1 alone (the rest, after them): each
+ * runs in the shard `sectionShard` names, and one
+ * after the link programs sits before the point where every other shard stops.
+ * A dealt section writes only under a directory of its own and reads nothing
+ * another section writes, since the shard it runs in may run no other section
+ * that the shard which used to run it did. The key is its cost's in
+ * `tests/shard-costs.json`; `selected` is the section's own filter gate, which
+ * is also whether it is dealt, so a section of several gated blocks selects
+ * the union of their words and each block keeps its own gate beside
+ * `dealtHere`.
+ *
+ * The groups marked `tail` were shard 1's own until their cost made it the
+ * longest shard by ten minutes: blocks of the sections after the link
+ * programs, each moved whole, with every name it declares and every
+ * directory it writes, to before the stop. Their blocks keep their own
+ * gates, too many to union, so a `tail` group is always selected; a
+ * filtered run sends every one of them to shard 1, as it sent the whole of
+ * what came after the link programs, and the deal counts them only in a
+ * whole run. `pinned` names the shard a group always runs in, whatever the
+ * deal: the job's steps after the suite that read its lines or its
+ * binaries run in that shard (`.github/workflows/ci.yml`, "The AVX2 path
+ * ran" and the six after it).
+ */
+const DEALT_SECTIONS = {
+  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io", "break") },
+  emitTs: { name: "the --emit-ts section", selected: selects("emit-ts") },
+  osHost: { name: "the host builtins section (os_host)", selected: selects("os_host") },
+  term: { name: "the nish:term section over a pipe and a pseudo-terminal", selected: selects("term") },
+  termWasi: { name: "the nish:term section under --profile wasi", selected: selects("term_wasi", "wasi") },
+  netTcp: { name: "the net_tcp section", selected: selects("net_tcp") },
+  netUnix: { name: "the net_unix section", selected: selects("net_unix") },
+  netMss: { name: "the net_mss section", selected: selects("net_mss", "wasi") },
+  fileWasi: {
+    name: "the file_ programs under --profile wasi",
+    selected: !only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only),
+  },
+  fnref: { name: "the fnref section", selected: selects("fnref", "fnref_debug_check") },
+  netTlsTcp: { name: "the net_tls_tcp section", selected: selects("net_tls_tcp") },
+  http2: { name: "the net_http2_cleartext section", selected: selects("net_http2_cleartext") },
+  tlsClient: { name: "the net_tls_client_tcp section", selected: selects("net_tls_client_tcp") },
+  diagnostics: { name: "the diagnostics section", selected: selects("diagnostics") },
+  performance: { name: "the performance section", selected: selects("performance") },
+  memAwfy: { name: "the mem_awfy section", selected: selects("mem_awfy") },
+  fix: {
+    name: "the tests/fix section",
+    // Every run takes it, whatever its filter, as it did before it was dealt.
+    selected: true,
+  },
+  selfHosting: {
+    name: "the WP14 self-hosting section",
+    selected: !only || "selfhost".includes(only) || only.includes("self"),
+  },
+  cryptoBench: { name: "the crypto-bench section", selected: selects("crypto-bench") },
+  sanitizers: {
+    name: "the runtime under the sanitizers and the fuzz targets' replays",
+    selected: selects("runtime_sanitize", "fuzz"),
+  },
+  nishRunner: { name: "the golden runner written in Nish", selected: selects("nish-runner") },
+  bench: {
+    name: "the WP9 bench section (the twins' table, json-compare, yaml-compare, instruction counts)",
+    selected: selects("bench", "wp9", "bench: the twins' reading", "json-compare", "yaml-compare", "instructions"),
+  },
+  runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
+  sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
+  fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
+  unboundedPass: {
+    name: "NL9018 on a request loop (--json, the flag, the http1 servers and their RSS)",
+    selected: selects("nl9018", "unbounded_pass"),
+  },
+  breakWeb: { name: "the docs hero terminal's game: its build, page and trigger", selected: selects("break-web") },
+  differential: { name: "the WP13 differential section", selected: selects("differential") },
+  p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
+  netStartup: { name: "the net servers' startup links", selected: true, tail: true },
+  threadWasi: { name: "thread_mutex_counter under wasi-threads", selected: true, tail: true },
+  cryptoChecks: {
+    name: "the crypto checks after the link programs (bcrypt, the variable-time scan, the wipes, ct_asm, the map hashes)",
+    selected: true,
+    tail: true,
+  },
+  arrayChecks: {
+    name: "the arrays, strings, memory, layout, division, overflow and rng sections",
+    selected: true,
+    tail: true,
+  },
+  runtimeChecks: {
+    name: "the region, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
+    selected: true,
+    tail: true,
+  },
+  simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
+  cliChecks: {
+    name: "the contract, interop, exit-code, secret, capabilities, run-command and compat-erasure sections",
+    selected: true,
+    tail: true,
+  },
+  releaseChecks: {
+    name: "the ambient, docs, package, release, seed and changelog sections",
+    selected: true,
+    tail: true,
+  },
+  cSymbols: { name: "the c-symbols section", selected: true, tail: true },
+  runCache: { name: "the nish run module cache and watch sections", selected: true, tail: true },
+}
+/**
+ * The shard each link program runs in, and the shard each of `DEALT_SECTIONS`
+ * runs in: a greedy deal by cost, so that the shards finish together.
+ * `tests/shard-costs.json` holds the seconds each piece took in a CI shard --
+ * `link` per program, one entry per dealt section under its key, and
+ * `shardOne` for what only shard 1 runs: every other section after the link
+ * programs and its job's steps after the suite. Shard 1 starts with that and
+ * its `LINK_READ_LATER` programs, a `pinned` group's shard with the group (its
+ * cost counts the steps after the suite that read it), and the rest go
+ * largest first, ties by name, each to the shard with the least so far (the
+ * lowest number of those tied). The
+ * deal reads nothing a run measures, so every shard of one CI run computes the
+ * same one.
+ *
+ * A program costs at least `linkFloor`, whether the table names it or not. The
+ * table's figure is a gap in a pooled log, which reads near 0 for a program
+ * that finished behind a slower one. In run 40820090678, 632 of the 806
+ * programs had 0 in the table or no entry; dealt at 0 they all went to the
+ * shard that was least loaded when they came up -- 634 programs to shard 2
+ * and 69 and 79 to shards 3 and 4 -- and the 482 of them that link cost 238 s
+ * between them there, about half a second each. A rejection (`expected.err`)
+ * compiles and stops, and costs a tenth of that.
+ *
+ * A filtered run deals only what its filter selects, and starts shard 1 at
+ * nothing, since the sections it alone runs are filtered too: dealt from the
+ * whole table, the 188 `net_` programs the macOS `runtime-net` job runs fell
+ * 1.3, 4.2, 7.4 and 7.6 minutes to its four shards rather than about 5 each.
+ */
+const { linkShard, sectionShard } = (() => {
+  const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8"))
+  const linkFloor = (name) => (fs.existsSync(path.join(linkDir, name, "expected.err")) ? 0.05 : 0.5)
+  const cost = (name) => Math.max(costs.link[name] ?? 0, linkFloor(name))
+  const shardOf = new Map()
+  const load = Array.from({ length: SHARDS }, () => 0)
+  load[0] = only ? 0 : costs.shardOne
+  const sections = new Map()
+  const items = []
+  for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
+    if (!section.selected) {
+      continue
+    }
+    const pinned = only && section.tail ? 1 : section.pinned
+    if (pinned !== undefined) {
+      const shard = Math.min(pinned, SHARDS)
+      sections.set(key, shard)
+      load[shard - 1] += only ? 0 : (costs[key] ?? 1)
+    } else {
+      items.push({ section: key, cost: costs[key] ?? 1 })
+    }
+  }
+  for (const name of linkTests) {
+    if (only && !name.includes(only)) {
+      continue
+    }
+    if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
+      shardOf.set(name, 1)
+      load[0] += cost(name)
+    } else {
+      items.push({ name, cost: cost(name) })
+    }
+  }
+  const label = (item) => item.name ?? item.section
+  items.sort((a, b) => b.cost - a.cost || label(a).localeCompare(label(b)))
+  for (const item of items) {
+    const least = load.indexOf(Math.min(...load))
+    load[least] += item.cost
+    if (item.section !== undefined) {
+      sections.set(item.section, least + 1)
+    } else {
+      shardOf.set(item.name, least + 1)
+    }
+  }
+  return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
+})()
+/** Whether this shard runs the dealt section `key`: the filter selects it and the deal gave it here. */
+const dealtHere = (key) => DEALT_SECTIONS[key].selected && SHARD === sectionShard(key)
+
 // ---- The host builtins, against the clock, the kernel and Node (WP34 N3) ----------
 //
 // What a golden cannot say about `Date.now`, `crypto.getRandomValues`,
@@ -1402,7 +1769,7 @@ const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}
 // `--link` into a directory of its own, so no check depends on what section A left
 // behind, and each claim is asked of the native binary and, where the TypeScript
 // reading is class A, of the same source under `runtime/nish.mjs`.
-if (!only || "os_host".includes(only)) {
+if (dealtHere("osHost")) {
   const osDir = path.join(buildDir, "os")
   fs.rmSync(osDir, { recursive: true, force: true })
   fs.mkdirSync(osDir, { recursive: true })
@@ -1659,265 +2026,6 @@ if (!only || "os_host".includes(only)) {
   )
 }
 
-// A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
-// called with everything it has printed so far each time it prints, and the answer
-// comes once it exits, or once it has been killed after 10 s.
-const runWatched = (exe, args, onChunk) =>
-  new Promise((resolve) => {
-    const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
-    let out = ""
-    let err = ""
-    let timedOut = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill("SIGKILL")
-    }, 10000)
-    child.stdout.on("data", (chunk) => {
-      out += chunk
-      onChunk(out, child)
-    })
-    child.stderr.on("data", (chunk) => {
-      err += chunk
-    })
-    child.on("close", (code, signal) => {
-      clearTimeout(timer)
-      resolve({ code, signal, out, err, timedOut })
-    })
-  })
-
-// `runWatched`, with `onPort(port)` called once the program prints `port <n>`; the
-// answer waits for that promise as well as the exit. A program that prints no port
-// is simply run, with `results` empty.
-const runWithPort = async (exe, args, onPort) => {
-  let talks = null
-  const r = await runWatched(exe, args, (out) => {
-    const port = /^port (\d+)\n/.exec(out)
-    if (talks === null && port !== null) {
-      talks = onPort(Number(port[1]))
-    }
-  })
-  return { ...r, results: await (talks ?? Promise.resolve([])) }
-}
-
-// ---- The deal: which shard runs what ------------------------------------------
-// The link programs and the dealt sections, and the shard each runs in. It sits
-// before the first dealt section, the `term-io` one below, because a section
-// that every shard used to repeat is dealt too: what decides where it runs has
-// to be known before it is reached.
-const linkDir = path.join(root, "tests", "link")
-const linkTests = fs.existsSync(linkDir)
-  ? fs
-      .readdirSync(linkDir)
-      .filter((d) => fs.existsSync(path.join(linkDir, d, "main.ts")))
-      .sort()
-  : []
-
-/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
-const INDEX_OF_ANY_REFUSALS = [
-  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
-]
-
-/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
-const TEXT_REFUSALS = [
-  ["std_text_split_empty_separator", "split: an empty separator"],
-  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
-  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
-  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
-  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
-  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
-]
-
-/**
- * The link programs whose output a check after the loop reads: by path, from
- * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
- * those checks; a new check that reads another program's output adds its name
- * here, or it reads nothing in a sharded run.
- */
-const LINK_READ_LATER = [
-  "async_await_all_retain",
-  "net_tls_resume_bench",
-  "par_dst_short",
-  "par_map_idle",
-  "par_map_join_small",
-  "par_map_reclaim",
-  "par_map_release",
-  "range_export",
-  "range_export_dts",
-  "range_export_foreign",
-  "range_export_header",
-  "range_export_napi",
-  "range_export_napi_async",
-  "range_export_unproven",
-  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
-  ...TEXT_REFUSALS.map(([name]) => name),
-  "std_compress_node",
-  "std_json_conformance",
-  "std_json_tokenizer",
-  "std_json_typed",
-  "std_json_value",
-  "thread_channel_string_many",
-  "thread_scope_reclaim",
-  "thread_task_release",
-]
-/** Whether the run's filter selects a section gated on any of `words`. */
-const selects = (...words) => !only || words.some((word) => word.includes(only))
-/**
- * The sections that are dealt like the link programs rather than run by every
- * shard (`termIo`, `emitTs`, before the link programs) or by shard 1 alone
- * (the rest, after them): each runs in the shard `sectionShard` names, and one
- * after the link programs sits before the point where every other shard stops.
- * A dealt section writes only under a directory of its own and reads nothing
- * another section writes, since the shard it runs in may run no other section
- * that the shard which used to run it did. The key is its cost's in
- * `tests/shard-costs.json`; `selected` is the section's own filter gate, which
- * is also whether it is dealt, so a section of several gated blocks selects
- * the union of their words and each block keeps its own gate beside
- * `dealtHere`.
- *
- * The groups marked `tail` were shard 1's own until their cost made it the
- * longest shard by ten minutes: blocks of the sections after the link
- * programs, each moved whole, with every name it declares and every
- * directory it writes, to before the stop. Their blocks keep their own
- * gates, too many to union, so a `tail` group is always selected; a
- * filtered run sends every one of them to shard 1, as it sent the whole of
- * what came after the link programs, and the deal counts them only in a
- * whole run. `pinned` names the shard a group always runs in, whatever the
- * deal: the job's steps after the suite that read its lines or its
- * binaries run in that shard (`.github/workflows/ci.yml`, "The AVX2 path
- * ran" and the six after it).
- */
-const DEALT_SECTIONS = {
-  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io", "break") },
-  emitTs: { name: "the --emit-ts section", selected: selects("emit-ts") },
-  selfHosting: {
-    name: "the WP14 self-hosting section",
-    selected: !only || "selfhost".includes(only) || only.includes("self"),
-  },
-  cryptoBench: { name: "the crypto-bench section", selected: selects("crypto-bench") },
-  sanitizers: {
-    name: "the runtime under the sanitizers and the fuzz targets' replays",
-    selected: selects("runtime_sanitize", "fuzz"),
-  },
-  nishRunner: { name: "the golden runner written in Nish", selected: selects("nish-runner") },
-  bench: {
-    name: "the WP9 bench section (the twins' table, json-compare, yaml-compare, instruction counts)",
-    selected: selects("bench", "wp9", "bench: the twins' reading", "json-compare", "yaml-compare", "instructions"),
-  },
-  runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
-  sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
-  fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
-  differential: { name: "the WP13 differential section", selected: selects("differential") },
-  p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
-  netStartup: { name: "the net servers' startup links", selected: true, tail: true },
-  threadWasi: { name: "thread_mutex_counter under wasi-threads", selected: true, tail: true },
-  cryptoChecks: {
-    name: "the crypto checks after the link programs (bcrypt, the variable-time scan, the wipes, ct_asm, the map hashes)",
-    selected: true,
-    tail: true,
-  },
-  arrayChecks: {
-    name: "the arrays, strings, memory, layout, division, overflow and rng sections",
-    selected: true,
-    tail: true,
-  },
-  runtimeChecks: {
-    name: "the region, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
-    selected: true,
-    tail: true,
-  },
-  simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
-  cliChecks: {
-    name: "the contract, interop, exit-code, secret, capabilities and run-command sections",
-    selected: true,
-    tail: true,
-  },
-  releaseChecks: {
-    name: "the ambient, docs, package, release, seed and changelog sections",
-    selected: true,
-    tail: true,
-  },
-  cSymbols: { name: "the c-symbols section", selected: true, tail: true },
-  runCache: { name: "the nish run module cache and watch sections", selected: true, tail: true },
-}
-/**
- * The shard each link program runs in, and the shard each of `DEALT_SECTIONS`
- * runs in: a greedy deal by cost, so that the shards finish together.
- * `tests/shard-costs.json` holds the seconds each piece took in a CI shard --
- * `link` per program, one entry per dealt section under its key, and
- * `shardOne` for what only shard 1 runs: every other section after the link
- * programs and its job's steps after the suite. Shard 1 starts with that and
- * its `LINK_READ_LATER` programs, a `pinned` group's shard with the group (its
- * cost counts the steps after the suite that read it), and the rest go
- * largest first, ties by name, each to the shard with the least so far (the
- * lowest number of those tied). The
- * deal reads nothing a run measures, so every shard of one CI run computes the
- * same one.
- *
- * A program costs at least `linkFloor`, whether the table names it or not. The
- * table's figure is a gap in a pooled log, which reads near 0 for a program
- * that finished behind a slower one. In run 40820090678, 632 of the 806
- * programs had 0 in the table or no entry; dealt at 0 they all went to the
- * shard that was least loaded when they came up -- 634 programs to shard 2
- * and 69 and 79 to shards 3 and 4 -- and the 482 of them that link cost 238 s
- * between them there, about half a second each. A rejection (`expected.err`)
- * compiles and stops, and costs a tenth of that.
- *
- * A filtered run deals only what its filter selects, and starts shard 1 at
- * nothing, since the sections it alone runs are filtered too: dealt from the
- * whole table, the 188 `net_` programs the macOS `runtime-net` job runs fell
- * 1.3, 4.2, 7.4 and 7.6 minutes to its four shards rather than about 5 each.
- */
-const { linkShard, sectionShard } = (() => {
-  const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8"))
-  const linkFloor = (name) => (fs.existsSync(path.join(linkDir, name, "expected.err")) ? 0.05 : 0.5)
-  const cost = (name) => Math.max(costs.link[name] ?? 0, linkFloor(name))
-  const shardOf = new Map()
-  const load = Array.from({ length: SHARDS }, () => 0)
-  load[0] = only ? 0 : costs.shardOne
-  const sections = new Map()
-  const items = []
-  for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
-    if (!section.selected) {
-      continue
-    }
-    const pinned = only && section.tail ? 1 : section.pinned
-    if (pinned !== undefined) {
-      const shard = Math.min(pinned, SHARDS)
-      sections.set(key, shard)
-      load[shard - 1] += only ? 0 : (costs[key] ?? 1)
-    } else {
-      items.push({ section: key, cost: costs[key] ?? 1 })
-    }
-  }
-  for (const name of linkTests) {
-    if (only && !name.includes(only)) {
-      continue
-    }
-    if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
-      shardOf.set(name, 1)
-      load[0] += cost(name)
-    } else {
-      items.push({ name, cost: cost(name) })
-    }
-  }
-  const label = (item) => item.name ?? item.section
-  items.sort((a, b) => b.cost - a.cost || label(a).localeCompare(label(b)))
-  for (const item of items) {
-    const least = load.indexOf(Math.min(...load))
-    load[least] += item.cost
-    if (item.section !== undefined) {
-      sections.set(item.section, least + 1)
-    } else {
-      shardOf.set(item.name, least + 1)
-    }
-  }
-  return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
-})()
-/** Whether this shard runs the dealt section `key`: the filter selects it and the deal gave it here. */
-const dealtHere = (key) => DEALT_SECTIONS[key].selected && SHARD === sectionShard(key)
-
 // ---- `nish:term`, over a pipe and a pseudo-terminal -------------------------------
 //
 // What a golden cannot say about stdin and the terminal, because the case runner
@@ -1926,7 +2034,7 @@ const dealtHere = (key) => DEALT_SECTIONS[key].selected && SHARD === sectionShar
 // nothing in it times `waitStdin` out, and `script` puts a pseudo-terminal under
 // `tests/cases/term_pty`, where raw mode takes and each way out (returning, a
 // panic, SIGTERM) leaves `stty -g` as it found it.
-if (!only || "term".includes(only)) {
+if (dealtHere("term")) {
   const termDir = path.join(buildDir, "term")
   fs.rmSync(termDir, { recursive: true, force: true })
   fs.mkdirSync(termDir, { recursive: true })
@@ -2723,7 +2831,7 @@ if (dealtHere("termIo")) {
 // where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
 // `waitStdin(0)`, which there polls for 10 ms rather than not at all.
-if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
+if (dealtHere("termWasi")) {
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasiDir = path.join(buildDir, "term_wasi")
     fs.rmSync(wasiDir, { recursive: true, force: true })
@@ -2788,7 +2896,7 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
 // moved it no further than the first. The section-GC check here is the other
 // half of the unit's budget: a program that calls no `nish:net` function links
 // none of runtime-net.c.
-if (!only || "net_tcp".includes(only)) {
+if (dealtHere("netTcp")) {
   const netDir = path.join(buildDir, "net")
   fs.rmSync(netDir, { recursive: true, force: true })
   fs.mkdirSync(netDir, { recursive: true })
@@ -3043,7 +3151,7 @@ if (!only || "net_set_option".includes(only)) {
 // the eight throws, naming itself, and the flag and the two pair kinds read as
 // the numbers a native build folds them to (`tests/cases/net_unix_calls`,
 // `net_unix_paths` and `net_unix_scm` are the native half).
-if (!only || "net_unix".includes(only)) {
+if (dealtHere("netUnix")) {
   const unixDir = path.join(buildDir, "net-prelude")
   fs.mkdirSync(unixDir, { recursive: true })
   const kindsEntry = path.join(unixDir, "unix-kinds.ts")
@@ -3136,7 +3244,7 @@ if (!only || "spawn_fds".includes(only)) {
 // the constant -1, with no runtime symbol for the freestanding link to miss,
 // and the `--profile wasi` build runs and prints that -1
 // (`tests/cases/net_mss` is the native half).
-if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+if (dealtHere("netMss")) {
   const mssDir = path.join(buildDir, "net-mss")
   fs.rmSync(mssDir, { recursive: true, force: true })
   fs.mkdirSync(mssDir, { recursive: true })
@@ -3193,7 +3301,7 @@ if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
 // same `.out` as its native run. `file_open_errors` is the one that showed a
 // gap: WASI resolves "" to the preopened directory, so the runtime refuses an
 // empty path, and a path holding a NUL, before it asks.
-if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only)) {
+if (dealtHere("fileWasi")) {
   const fileCases = [
     "file_read_at",
     "file_read_at_eof",
@@ -3645,7 +3753,7 @@ if (!only || "net_loop".includes(only)) {
 // forged call hands `g`'s dispatcher `dec`'s tag, a tag of the right signature
 // that the place pass proves `g` never holds. The debug binary must panic with
 // the set message; the speed IR, its golden, has no check to reach.
-if (selects("fnref", "fnref_debug_check")) {
+if (dealtHere("fnref")) {
   const fnrefDir = path.join(buildDir, "fnref-debug")
   fs.mkdirSync(fnrefDir, { recursive: true })
   const cases = fs
@@ -3975,7 +4083,7 @@ const linkProfile = (name, args = []) =>
 // its suite, and macOS's curl, built on LibreSSL 3.3, has no `--tls13-ciphers`;
 // Node carries its own OpenSSL on every platform. openssl is on CI's runners,
 // so a missing one is a failure here rather than a skip.
-if (!only || "net_tls_tcp".includes(only)) {
+if (dealtHere("netTlsTcp")) {
   const tlsDir = path.join(buildDir, "net-tls")
   fs.rmSync(tlsDir, { recursive: true, force: true })
   fs.mkdirSync(tlsDir, { recursive: true })
@@ -4182,7 +4290,7 @@ if (!only || "net_tls_tcp".includes(only)) {
 // `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
 // server prints one line per connection it closed; each must end with no error.
 // Either client missing is a skip, named, rather than a pass.
-if (!only || "net_http2_cleartext".includes(only)) {
+if (dealtHere("http2")) {
   const h2cDir = path.join(buildDir, "net-h2c")
   fs.rmSync(h2cDir, { recursive: true, force: true })
   fs.mkdirSync(h2cDir, { recursive: true })
@@ -4401,7 +4509,7 @@ if (!only || "net_tls_record_size_limit".includes(only)) {
 // both ways and a close under each suite and group, and closes first once,
 // for s_server to report the client's close_notify. openssl is on CI's runners, so
 // a missing one is a failure here rather than a skip.
-if (!only || "net_tls_client_tcp".includes(only)) {
+if (dealtHere("tlsClient")) {
   const dir = path.join(buildDir, "net-tls-client")
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
@@ -4787,7 +4895,7 @@ if (!only || "reject_computed_skip".includes(only)) {
 // ---- WP10: diagnostics ------------------------------------------------------------
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).
-if (!only || "diagnostics".includes(only)) {
+if (dealtHere("diagnostics")) {
   const mm = spawnSync(
     NISH,
     [path.join(casesDir, "reject_type_mismatch.ts"), "-o", path.join(buildDir, "diag_mismatch.ll")],
@@ -5278,7 +5386,7 @@ if (!only || "diagnostics".includes(only)) {
 // silences the class without changing one byte of the IR. The guard cases matter
 // most: a warning that fires where the compiler already did the right thing is what
 // teaches people to ignore a whole diagnostic class.
-if (!only || "performance".includes(only)) {
+if (dealtHere("performance")) {
   /** Compile one case to its own output file and hand back the whole result. */
   const compile = (name, out, extra = []) =>
     spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, out), ...extra], {
@@ -5501,6 +5609,172 @@ if (!only || "performance".includes(only)) {
     passDrop.stderr
   )
 
+  // NL9019: a function that keeps an allocation on every call, run on every
+  // pass of a loop that releases nothing. Each of the three is named at its
+  // declaration with the line of the first allocation it holds; `fixed` keeps
+  // nothing.
+  const kept = compile("perf_kept_memory", "perf_kept_memory_report.ll")
+  const keptLines = summaries(kept.stderr)
+  check(
+    "performance: a function that keeps an allocation per call and runs on every unreleased pass of a loop warns at its declaration",
+    kept.status === 0 &&
+      keptLines.length === 3 &&
+      positions(keptLines) === "9:1,17:1,23:1" &&
+      keptLines[0].includes(
+        "`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so " +
+          "the memory it keeps grows with every pass: the first allocation it holds is on line 12, where this " +
+          "analysis does not prove it dead when the function returns"
+      ) &&
+      keptLines[1].includes("`choose` keeps an allocation on every call") &&
+      keptLines[1].includes("the first allocation it holds is on line 18,") &&
+      keptLines[2].includes("`parts` keeps an allocation on every call") &&
+      keptLines[2].includes("the first allocation it holds is on line 25,"),
+    kept.stderr
+  )
+
+  // No guard exempts a direct callee of an unscoped pass, whatever object the
+  // call receives. A re-entrancy guard, a negated or compound condition, a
+  // counter, a per-item flag and a fresh receiver each pass warn; so do a
+  // once-guard cleared elsewhere, directly or through another name, work
+  // before the guard, a second way out before the store, a field the loop
+  // replaces itself, through a method, through a callee (`prepG`) or through
+  // a name for the holder made before the loop (`prepAlias`), and a
+  // once-guard on one object the loop never replaces (`warmOnce`), which the
+  // rule does not try to prove. This is also the control that fails if the
+  // reach walk stops finding loop calls at all.
+  const direct = compile("perf_kept_memory_direct", "perf_kept_memory_direct_report.ll")
+  const directLines = summaries(direct.stderr)
+  const directNames = [
+    "guarded",
+    "whenReady",
+    "untilDone",
+    "capped",
+    "mark",
+    "stamp",
+    "armedWork",
+    "loadedWork",
+    "early",
+    "gated",
+    "prep",
+    "prepNext",
+    "prepG",
+    "prepAlias",
+    "warmOnce",
+  ]
+  const directFirst = [27, 41, 52, 62, 74, 85, 96, 110, 121, 139, 165, 176, 187, 199, 215]
+  check(
+    "performance: NL9019 reports every direct callee of an unscoped pass that keeps an allocation, guarded or not",
+    direct.status === 0 &&
+      directLines.length === 15 &&
+      positions(directLines) ===
+        "21:1,35:1,46:1,57:1,68:1,79:1,90:1,104:1,119:1,130:1,159:1,170:1,181:1,193:1,209:1" &&
+      directLines.every(
+        (l, i) =>
+          l.includes(`\`${directNames[i]}\` keeps an allocation on every call`) &&
+          l.includes(`the first allocation it holds is on line ${directFirst[i]},`)
+      ),
+    direct.stderr
+  )
+
+  // A `let` result handed back after reassignment is the arena stage's own
+  // shape: it must stay clear of every retention rule, not only NL9019.
+  const reassign = compile("res_let_reassign", "res_let_reassign_report.ll", ["--json"])
+  // --json writes one object per warning to stdout; a line that is not one
+  // counts as a failure rather than as no warning.
+  const reassignCodes = reassign.stdout
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => {
+      try {
+        const o = JSON.parse(l)
+        return typeof o.code === "string" ? o.code : null
+      } catch {
+        return null
+      }
+    })
+  check(
+    "performance: res_let_reassign raises no NL9003, NL9016, NL9018 or NL9019",
+    reassign.status === 0 &&
+      reassignCodes.every((c) => c !== null && !["NL9003", "NL9016", "NL9018", "NL9019"].includes(c)),
+    reassign.stdout + reassign.stderr
+  )
+
+  // NL9018: a loop that nothing bounds -- a poll, `while (true)` -- keeps what
+  // each pass allocates, because each pass stores into a structure older than
+  // the loop and so gets no scope. The warning sits on the innermost loop that
+  // releases nothing (the counted `for` inside `rounds`, which nothing outside
+  // it bounds either), names the first site and counts the rest. A `while` that
+  // compares beside a call (`drain`), a `for...of` that pushes onto what it
+  // walks (`walk`), a condition that allocates (`probe`), a flag (`flag`), a
+  // top-level `||` (`accept`) and a walk whose body passes the array it walks
+  // to a call that pushes (`lent`), are unbounded too, and so is a pass that
+  // builds a temporary and then `continue`s (`skips`), even when the rest of
+  // the body breaks (`flagged`), from an `else` whose `if` breaks (`branches`)
+  // or by label (`labelled`). A `return` inside a `switch` still warns
+  // (`switched`): the leave walk stops at a `switch`. A walk also counts as
+  // unbounded when its array goes through a function reference (`passed`), is
+  // written by index (`stores`) or is given another name (`renames`). An
+  // unlabelled `break` from a loop inside a polled one ends only its own loop,
+  // so the polled loop runs it again: two levels (`nested`) and three, with the
+  // `break` in the middle loop (`deep`), both warn.
+  const unbounded = compile("perf_arena_unbounded_pass", "perf_arena_unbounded_pass_report.ll")
+  const unboundedLines = summaries(unbounded.stderr)
+  check(
+    "performance: a loop nothing bounds that keeps what each pass allocates warns once, naming the site and the arena block",
+    unbounded.status === 0 &&
+      unboundedLines.length === 19 &&
+      positions(unboundedLines) === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5" &&
+      unboundedLines[0].includes(
+        "this loop keeps what each pass allocates until the memory of `serve`'s caller is released, because the " +
+          "allocation on line 36 is stored into memory, where this analysis stops following it, and nothing bounds " +
+          "how many passes it runs, so the string built on line 34 piles up for as long as it runs. Move the " +
+          "per-pass work that builds it into a block inside the loop body that opens with `using a = arena()`, " +
+          "which the compiler refuses if anything allocated there could outlive the block"
+      ) &&
+      unboundedLines[1].includes("so the string built on line 50 piles up") &&
+      unboundedLines[2].includes("so the string built on line 62 and 1 more allocation pile up") &&
+      unboundedLines[3].includes("so the string built on line 75 piles up") &&
+      unboundedLines[4].includes("so the string built on line 85 piles up") &&
+      unboundedLines[5].includes("so the string built on line 97 piles up") &&
+      unboundedLines[6].includes("so the string built on line 106 piles up") &&
+      unboundedLines[7].includes("so the string built on line 118 piles up") &&
+      unboundedLines[8].includes("so the string built on line 135 piles up") &&
+      unboundedLines[9].includes("so the string built on line 153 piles up") &&
+      unboundedLines[10].includes("so the string built on line 169 piles up") &&
+      unboundedLines[11].includes("so the string built on line 187 piles up") &&
+      unboundedLines[12].includes("so the string built on line 199 piles up") &&
+      unboundedLines[13].includes("so the string built on line 212 piles up") &&
+      unboundedLines[14].includes("so the string built on line 229 piles up") &&
+      unboundedLines[15].includes("so the string built on line 243 piles up") &&
+      unboundedLines[16].includes("so the string built on line 255 piles up") &&
+      unboundedLines[17].includes("so the string built on line 273 piles up") &&
+      unboundedLines[18].includes("so the string built on line 287 piles up"),
+    unbounded.stderr
+  )
+  // Silent for the same temporary in a `using a = arena()` block, a counted
+  // `for`, ordering comparisons that call nothing (`while (i < n)`,
+  // `k < toI32(xs.length)`, `while (j >= 0 && j < n)`), walks whose
+  // body calls something that resizes some other array, of a local (`owned`) and
+  // of a field (`fielded`), a scoped pass, temporaries from which every path
+  // leaves the loop (`finds`), a temporary handed to a callee that keeps it
+  // (`posts`), a walk whose array goes to a call that only reads it (`reads`),
+  // temporaries left by an `if` with no `else`, by both arms of an `if` and by
+  // a labelled `break` (`leaves`), a labelled `break` out of a polled loop
+  // from a loop inside it (`exitsLabelled`), a `return` from such a loop
+  // (`exitsReturn`), an inner loop whose own passes are scoped (`innerScoped`),
+  // and a drop NL9016 already names, with its value on the target's line or the next:
+  // two warnings, both NL9016's.
+  const unboundedQuiet = compile("perf_arena_unbounded_quiet", "perf_arena_unbounded_quiet.ll")
+  const unboundedQuietLines = summaries(unboundedQuiet.stderr)
+  check(
+    "performance: NL9018 is silent for an arena block, a counted loop, a comparison that calls nothing, a walk whose body cannot extend what it walks, a scoped pass, a pass that leaves the loop or keeps what it builds, and a line NL9016 reports",
+    unboundedQuiet.status === 0 &&
+      unboundedQuietLines.length === 2 &&
+      positions(unboundedQuietLines) === "57:5,69:5" &&
+      unboundedQuietLines.every((l) => l.includes("`last` is given a new allocation on every pass")),
+    unboundedQuiet.stderr
+  )
+
   // The arithmetic rules. These are not advice about speed: each one is a
   // program that does not compute what it was written to compute, and the
   // message has to name the rewrite all the same.
@@ -5695,6 +5969,13 @@ if (!only || "performance".includes(only)) {
     // a local of the pass, an assignment of no allocation and a loop that runs
     // once: none of them drops a value on every pass, so NL9016 is silent.
     "perf_arena_pass_quiet",
+    // A function that keeps nothing past its call, one whose arena block
+    // releases it, one run only where each pass, block or scoped caller
+    // releases it, one no loop calls directly (two deep, behind a callee that
+    // answers memory, silent by design), a `getenv` result only handed to a
+    // callee, and a template handed on as an element of an array or object
+    // literal or joined in place: NL9019 is silent on each.
+    "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",
     // Every index proven through a hoisted `toI32(w.length)`, the spelling that
@@ -6041,7 +6322,7 @@ if (!only || "performance".includes(only)) {
 // that scope switched off, Storage 1 1000 peaks at 390 MB and List 1 100000 at
 // 49 MB, against under 2 MB for each. Like `mem_loop_scope_chunk`, the bound is
 // a ratio between two runs of one binary, so the runtime's footprint can move.
-if (!only || "mem_awfy".includes(only)) {
+if (dealtHere("memAwfy")) {
   if (has("clang")) {
     const dir = path.join(buildDir, "mem_awfy")
     const exe = path.join(dir, "harness")
@@ -6646,7 +6927,7 @@ if (!only || "arena_removed".includes(only)) {
 // come out untouched. A directory is a case with more than one file, for what
 // the command line decides: which files are named, and which may be rewritten.
 // `tests/fix/README.md` is the table.
-{
+if (dealtHere("fix")) {
   // A case's sidecar, trimmed, or `fallback` when it has none.
   const sidecar = (file, fallback) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : fallback)
   // A plain run exits 1 on an error and 0 on a program whose only diagnostics
@@ -7014,6 +7295,9 @@ if (!only || "arena_removed".includes(only)) {
 //                  flag, which must write the same modules byte for byte. It is here for
 //                  a program a case cannot be, one that imports `nish/threads`
 //   args           extra CLI flags (e.g. --strict-exports)
+//   ulimit         arguments to bash's `ulimit` that the program runs under (e.g.
+//                  `-n 1024`, so a program that uses up its descriptors meets the
+//                  limit fast whatever the host's hard limit; Linux and Darwin only)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
 //                  module with a golden is compared, so there is no missing one to write;
 //                  `--update-link-goldens` rewrites each golden that differs from what
@@ -7436,7 +7720,11 @@ const runLinkProgram = async (name) => {
   // The programs in flight share the repository root as their working
   // directory, and nothing in it: each writes only a directory of its own and
   // binds port 0 (see above, with net_prefork's one rebind).
-  const run = await runNative(`link/${name}`, exe, [])
+  const limits = fs.existsSync(side("ulimit")) ? read("ulimit").trim() : ""
+  const run =
+    limits === ""
+      ? await runNative(`link/${name}`, exe, [])
+      : await runNative(`link/${name} (ulimit ${limits})`, "bash", ["-c", `ulimit ${limits} && exec "$0"`, exe])
   if (run.death !== null) {
     expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
     return record
@@ -7812,7 +8100,7 @@ if (dealtHere("selfHosting")) {
   )
 
   // And the half of the parser the oracle cannot see: recovery. A failed
-  // parse is an `N_ERROR` node and a diagnostic, and the declaration after
+  // parse is a `NodeKind.Error` node and a diagnostic, and the declaration after
   // it still parses (docs/wp14-selfhost.md §3a D1).
   const astDumper = path.join(buildDir, "self", "dump_ast")
   const builtAst = spawnSync(NISH, [path.join(selfDir, "dump-ast.ts"), "--link", astDumper], {
@@ -11590,6 +11878,260 @@ if (dealtHere("fileServer")) {
   }
 }
 
+// ---- NL9018: an unbounded loop that keeps what each pass allocates ----------------
+// `perf_arena_unbounded_pass` pins the warning's text and positions in the
+// performance section; this one holds what a golden cannot say. The code a tool
+// reads (`--json`), that the flag silences it without moving a byte of the IR,
+// and the shape it was written for: a request loop on `std/net/http1-server`.
+// `tests/link/nl9018_server/leaky.ts` builds its reply text in the event loop
+// and warns; `flat.ts` builds it in a `using a = arena()` block and compiles
+// clean, refused nothing; `examples/file-server.ts`, which allocates nothing per
+// request in its own code, stays quiet.
+//
+// Then each server answers 2,000 requests on one keep-alive connection, one
+// at a time, and 20,000 more; its VmRSS is read from /proc after each batch.
+// Ten runs of each (Linux x64, `--profile speed`) read flat's at the same kB
+// after both batches and leaky's 1,252 kB higher after the second, every time.
+// The band is 256 kB, a fifth of what leaky gains, so flat must stay within it
+// and leaky must leave it: the second says the measure can see the pile the
+// warning names.
+if (dealtHere("unboundedPass")) {
+  const UNBOUNDED_RSS_BAND = 256
+  const srvDir = path.join(buildDir, "nl9018-server")
+  fs.rmSync(srvDir, { recursive: true, force: true })
+  fs.mkdirSync(srvDir, { recursive: true })
+  const nl9018Lines = (text) =>
+    text
+      .split("\n")
+      .filter(
+        (l) =>
+          /:\d+:\d+: performance: this loop keeps what each pass/.test(l) &&
+          l.includes("nothing bounds how many passes")
+      )
+  const caseCompile = (out, extra) =>
+    spawnSync(
+      NISH,
+      [path.join(casesDir, "perf_arena_unbounded_pass.ts"), "-o", path.join(srvDir, out), ...extra],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+
+  const plain = caseCompile("plain.ll", [])
+  const js = caseCompile("json.ll", ["--json"])
+  const objects = js.stdout
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => {
+      try {
+        return JSON.parse(l)
+      } catch {
+        return null
+      }
+    })
+  check(
+    'nl9018: --json reports each of perf_arena_unbounded_pass\'s nineteen warnings with "code":"NL9018"',
+    js.status === 0 &&
+      objects.length === 19 &&
+      objects.every((o) => o !== null && o.code === "NL9018" && o.severity === "performance") &&
+      objects.map((o) => `${o.line}:${o.column}`).join(",") === "33:3,49:5,61:3,74:3,84:3,97:3,105:3,117:3,134:3,149:3,165:3,181:3,196:10,209:3,228:3,242:3,254:3,271:5,285:5",
+    shown(js)
+  )
+  const off = caseCompile("off.ll", ["--no-warn-performance"])
+  check(
+    "nl9018: --no-warn-performance silences it and leaves the IR byte-identical",
+    plain.status === 0 &&
+      nl9018Lines(plain.stderr).length === 19 &&
+      off.status === 0 &&
+      !off.stderr.includes("performance:") &&
+      stripHeader(fs.readFileSync(path.join(srvDir, "off.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(srvDir, "plain.ll"), "utf8")),
+    `${plain.stderr}\n---\n${off.stderr}`
+  )
+
+  const serverDir = path.join(root, "tests", "link", "nl9018_server")
+  const build = (name, file, extra) => {
+    const out = path.join(srvDir, name)
+    fs.mkdirSync(out, { recursive: true })
+    return spawnSync(NISH, [file, "-o", out + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+    })
+  }
+  const leaky = build("leaky", path.join(serverDir, "leaky.ts"), [])
+  const leakyHits = nl9018Lines(leaky.stderr)
+  check(
+    "nl9018: a request loop on Http1Server that builds its reply text per request warns, at the event loop",
+    leaky.status === 0 &&
+      leakyHits.length === 1 &&
+      leakyHits[0].includes("leaky.ts:93:9: ") &&
+      leakyHits[0].includes("the string built on line 95 piles up") &&
+      leakyHits[0].includes("`using a = arena()`"),
+    shown(leaky)
+  )
+  const flat = build("flat", path.join(serverDir, "flat.ts"), [])
+  check(
+    "nl9018: the same loop with that work in a `using a = arena()` block compiles with no warning and no refusal",
+    flat.status === 0 && !flat.stderr.includes("performance:") && !flat.stderr.includes("error"),
+    shown(flat)
+  )
+  const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
+  check(
+    "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
+    fileServer.status === 0 && nl9018Lines(fileServer.stderr).length === 0,
+    shown(fileServer)
+  )
+
+  if (process.platform !== "linux") {
+    skip("nl9018: VmRSS is read from /proc, which only Linux has")
+  } else if (!HAS_CLANG) {
+    skip("nl9018: clang not on PATH, so the servers cannot be linked")
+  } else {
+    // Answers `counts` batches of requests on one keep-alive connection, one
+    // request in flight at a time, and gives the server's VmRSS in kB after
+    // each batch, or an error. The server is killed whatever happens.
+    const rssAfter = (exe, counts) =>
+      new Promise((resolve) => {
+        const server = spawn(exe, [], { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        let settled = false
+        const finish = (r) => {
+          if (settled) return
+          settled = true
+          clearTimeout(deadline)
+          server.kill("SIGKILL")
+          resolve(r)
+        }
+        const deadline = setTimeout(() => finish({ error: "no answer within 60 s" }), 60_000)
+        const rss = () => {
+          try {
+            return Number(/VmRSS:\s+(\d+) kB/.exec(fs.readFileSync(`/proc/${server.pid}/status`, "utf8"))?.[1] ?? -1)
+          } catch {
+            // The server is gone; -1 makes the batch an error, not an uncaught throw.
+            return -1
+          }
+        }
+        server.on("error", (e) => finish({ error: String(e) }))
+        server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
+        server.stdout.on("data", (d) => {
+          if (out.includes("\n")) return
+          out += d
+          if (!out.includes("\n")) return
+          const socket = net.connect(Number(out.trim()), "127.0.0.1")
+          const request = "GET / HTTP/1.1\r\nHost: x\r\n\r\n"
+          const readings = []
+          let batch = 0
+          let left = counts[0]
+          let pending = Buffer.alloc(0)
+          socket.on("error", (e) => finish({ error: String(e) }))
+          socket.on("connect", () => socket.write(request))
+          socket.on("data", (chunk) => {
+            pending = Buffer.concat([pending, chunk])
+            for (;;) {
+              const end = pending.indexOf("\r\n\r\n")
+              if (end < 0) return
+              const head = pending.subarray(0, end).toString("latin1")
+              const length = Number(/Content-Length: (\d+)/i.exec(head)?.[1] ?? -1)
+              if (!head.startsWith("HTTP/1.1 200 ") || length < 0) {
+                finish({ error: `unexpected response head: ${head}` })
+                return
+              }
+              if (pending.length < end + 4 + length) return
+              pending = pending.subarray(end + 4 + length)
+              left--
+              if (left === 0) {
+                const kb = rss()
+                if (kb < 0) {
+                  finish({ error: "could not read the server's VmRSS from /proc" })
+                  return
+                }
+                readings.push(kb)
+                batch++
+                if (batch === counts.length) {
+                  finish({ readings })
+                  return
+                }
+                left = counts[batch]
+              }
+              socket.write(request)
+            }
+          })
+        })
+      })
+    const peaks = {}
+    for (const name of ["leaky", "flat"]) {
+      const exe = path.join(srvDir, name, "server")
+      const linked = build(`${name}-exe`, path.join(serverDir, `${name}.ts`), [
+        "--link",
+        exe,
+        "--profile",
+        "speed",
+        "--no-warn-performance",
+      ])
+      if (!check(`nl9018: ${name}.ts links`, linked.status === 0, shown(linked))) {
+        continue
+      }
+      const r = await rssAfter(exe, [2000, 20000])
+      if (
+        check(
+          `nl9018: ${name}.ts answers 22,000 requests`,
+          r.error === undefined && r.readings.every((kb) => kb > 0),
+          JSON.stringify(r)
+        )
+      ) {
+        peaks[name] = r.readings
+      }
+    }
+    if (peaks.flat !== undefined && peaks.leaky !== undefined) {
+      const grew = (name) => peaks[name][1] - peaks[name][0]
+      check(
+        `nl9018: the arena-block server's RSS stays within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
+        grew("flat") <= UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks.flat[0]} kB after 2,000 requests, ${peaks.flat[1]} kB after 20,000 more`
+      )
+      check(
+        `nl9018: the warned server's RSS grows past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
+        grew("leaky") > UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks.leaky[0]} kB after 2,000 requests, ${peaks.leaky[1]} kB after 20,000 more`
+      )
+    }
+  }
+}
+
+// ---- break-web: the game behind the docs hero terminal ---------------------------
+// docs/site/site.js imports docs/site/break/shell.mjs on the hero terminal's
+// first key, and the shell imports break.mjs when asked for the game;
+// examples/break-web/build.mjs builds that directory and it is committed.
+// tests/break-web/check.mjs runs the terminal, the shell and the page side
+// under Node with a fake DOM, plays the built module against break_core_wasm's
+// frame hashes, runs --check and its negatives, and prints a line per check.
+if (dealtHere("breakWeb")) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // The count is pinned, as game-page's is: a check that goes missing is caught.
+  const BREAK_WEB_CHECKS = 145
+  const lines = res.stdout.split("\n")
+  const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = lines.find((line) => line.startsWith("checks: "))
+  check(
+    "break-web: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${results.length}` && results.length === BREAK_WEB_CHECKS,
+    shown(res)
+  )
+  for (const line of results) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`break-web: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+}
+
 // ---- WP13: differential -------------------------------------------------------------
 // Every whole program in tests/cases and tests/differential/corpus is compiled by the
 // compiler under test, linked, and run natively, and its JavaScript -- the frozen
@@ -11764,10 +12306,10 @@ if (dealtHere("p256Seams")) {
     })
   }
 
-  // #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
-  // and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
-  // `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
-  // 10,000 scalars. Neither inversion is exported, so the program reaches them
+  // #758: the scalar inverse by safegcd (`p256ScalarInverse`, which both
+  // signing paths and `p256Verify` use) against Fermat's a^(n-2), which the
+  // seam keeps as the reference, byte for byte, on the edges and a seeded
+  // corpus of 10,000 scalars. The inversion is not exported, so the program reaches it
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
   // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
@@ -11796,7 +12338,7 @@ if (dealtHere("p256Seams")) {
     const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
     check(
       "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
-      r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+      r.status === 0 && r.stdout === "gen-p256-table: 5632 limbs, as generated\n",
       shown(r)
     )
   }
@@ -11820,8 +12362,10 @@ if (dealtHere("netStartup")) {
   // pool sized for a busy day costs little before its first connection.
   // `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
   // socket and prints the arena bytes it took, which the ceiling
-  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
-  // they fit in one chunk, without which `Arena.used()` measures nothing.
+  // `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, then what
+  // one idle keep-alive connection holds after four requests, which
+  // `HTTP1_SERVER_IDLE_BYTES` holds, and whether both fit in one chunk, without
+  // which `Arena.used()` measures nothing.
   if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
     const dir = path.join(buildDir, "link", "net_http1_server.startup")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -11842,11 +12386,16 @@ if (dealtHere("netStartup")) {
     )
     if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
       const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
-      const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+      const [bytes, , chunk, idle] = String(run.stdout).trim().split(" ")
       check(
         "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
         run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
         `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+      )
+      check(
+        "net_http1_server: an idle keep-alive Http1Server connection holds at most HTTP1_SERVER_IDLE_BYTES",
+        run.status === 0 && chunk === "yes" && Number(idle) > 0 && Number(idle) <= HTTP1_SERVER_IDLE_BYTES,
+        `ceiling ${HTTP1_SERVER_IDLE_BYTES}\n${shown(run)}`
       )
     }
   }
@@ -14355,6 +14904,23 @@ if (dealtHere("arrayChecks")) {
       )
     }
 
+    // A vector store cannot write a class field either: `emitVectorAccess` tags it as
+    // the element data a scalar access of its lane type is (src/emit-arrays.ts).
+    // Untagged, `opt -O3` reloads `this.count` after every `store(v, this.out, i)` in
+    // `@Sink.fill`; tagged, it promotes the field to a register for the whole loop.
+    const vectorReloadLl = path.join(buildDir, "simd_store_field_reload.ll")
+    if (has("opt") && fs.existsSync(vectorReloadLl)) {
+      const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", vectorReloadLl])
+      const body = String(o.stdout).match(/define[^\n]*@Sink\.fill\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loop = body.slice(body.indexOf("\nwhile.body:"), body.indexOf("\nwhile.end:"))
+      const reloads = loop.match(/= load i32, ptr %this\b/g) ?? []
+      check(
+        "simd_store_field_reload: opt -O3 keeps the field in a register across the vector store",
+        o.status === 0 && body !== "" && loop.includes("store <16 x i8>") && reloads.length === 0,
+        o.status === 0 ? `field loads in the loop: ${reloads.length}\n${body}` : String(o.stderr)
+      )
+    }
+
     // A class-field store cannot write an array header, and the header's own `!tbaa`
     // subtree is what tells LLVM so (`headerTbaa`, src/tbaa.ts). Without it `opt -O3`
     // reloads `this.piles`'s `data` after `top.next = null` and again after
@@ -14697,14 +15263,19 @@ if (dealtHere("arrayChecks")) {
         run ? String(run.stdout) + String(run.stderr) : String(cc.stderr)
       )
     }
-    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array")
-    if (fs.existsSync(scopeExe)) {
-      const run = spawnSync(scopeExe)
-      const lines = String(run.stdout).trim().split("\n")
+    // Linked here from section A's compile rather than taken from its binary:
+    // every shard compiles every case, but only the shard `caseShard` deals the
+    // case to links it, and this block runs wherever its group was dealt.
+    const scopeLl = path.join(buildDir, "mem_scope_dynamic_array.ll")
+    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array_flat")
+    if (fs.existsSync(scopeLl)) {
+      const cc = linkNative(scopeExe, scopeLl, { driver: null, libm: true })
+      const run = cc.status === 0 ? spawnSync(scopeExe) : null
+      const lines = run === null ? [] : String(run.stdout).trim().split("\n")
       check(
         "mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
-        run.status === 0 && lines.length === 4 && lines[1] === lines[3],
-        String(run.stdout) + String(run.stderr)
+        run !== null && run.status === 0 && lines.length === 4 && lines[1] === lines[3],
+        run === null ? String(cc.stderr) : String(run.stdout) + String(run.stderr)
       )
     }
   }
@@ -17216,6 +17787,165 @@ if (dealtHere("simd")) {
             !/store i64 0,|@llvm\.memset/.test(plainCtr),
           `${real.why}${plain.why}nish_aes_ctr: ${zeros("nish_aes_ctr")}, nish_aes_ghash: ${zeros("nish_aes_ghash")} volatile zeros\n--- the twin's nish_aes_ctr:\n${plainCtr}`
         )
+      }
+    }
+  }
+
+  // runtime/runtime-aes.c's four kernels end with `nish_aes_clear`, which zeroes every vector
+  // register the caller does not keep and every caller-saved general one, so no round key, H
+  // power or keystream block outlives the call in a register (docs/security/crypto-aead.md,
+  // AEAD-4). Here each kernel's `clang -O2` assembly, on x86-64, x86-64 at x86-64-v3 and
+  // aarch64, must leave through the clear: every `ret`, and every tail jump, follows only the
+  // epilogue (pops, the stack pointer, `vzeroupper`) back to a run of zeroing idioms or to a
+  // call of `nish_aes_clear`, or is a jump to it, whose body must be nothing but zeroing
+  // idioms and its `ret`. What the exit runs must zero every vector
+  // register and caller-saved general register the rest of the body names; and a vector
+  // register stored to the stack must land in a buffer the kernel wipes after the store (both
+  // 8-byte halves stored zero: ctr's keystream, ghash's padded block), never a spill no clear
+  // reaches. A twin of the file with no call of `nish_aes_clear` must have every kernel
+  // refused, and a twin whose clear skips xmm0 and v0 must have nish_aes_block refused at the
+  // baseline: the reading is register-exact.
+  if (!only || "simd runtime-aes the AES kernels clear their registers".includes(only)) {
+    if (!HAS_CLANG) {
+      skip("runtime-aes.c: no clang to show its kernels clear their registers")
+    } else {
+      const clearDir = path.join(buildDir, "aes-clear")
+      fs.rmSync(clearDir, { recursive: true, force: true })
+      fs.mkdirSync(clearDir, { recursive: true })
+      const source = fs.readFileSync(path.join(root, "runtime", "runtime-aes.c"), "utf8")
+      const call = "  nish_aes_clear();\n"
+      const noClear = path.join(clearDir, "runtime-aes-no-clear.c")
+      fs.writeFileSync(noClear, source.replaceAll(call, ""))
+      const firstZeros = ['"pxor %%xmm0, %%xmm0\\n\\t', '"movi v0.16b, #0\\n\\t']
+      const partClear = path.join(clearDir, "runtime-aes-part-clear.c")
+      fs.writeFileSync(partClear, firstZeros.reduce((text, line) => text.replace(line, '"'), source))
+      const kernels = ["nish_aes_schedule", "nish_aes_block", "nish_aes_ctr", "nish_aes_ghash"]
+      const x86Names = { a: "rax", b: "rbx", c: "rcx", d: "rdx", si: "rsi", di: "rdi", bp: "rbp", sp: "rsp" }
+      /** A register operand by its whole register: `v3` for xmm3, ymm3, q3 or d3; `rax` for eax; `x5` for w5. */
+      const whole = (operand) => {
+        let m = /^%[xyz]mm(\d+)$/.exec(operand) ?? /^[vqdsh](\d+)(\.\w+)?$/.exec(operand)
+        if (m !== null) return `v${m[1]}`
+        if ((m = /^%r(\d+)[dwb]?$/.exec(operand)) !== null) return `r${m[1]}`
+        if ((m = /^%[re]?(a|b|c|d|si|di|bp|sp)[xlh]?$/.exec(operand)) !== null) return x86Names[m[1]]
+        if ((m = /^[xw](\d+)$/.exec(operand)) !== null) return `x${m[1]}`
+        return null
+      }
+      const callerSaved = new Set(["rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"])
+      for (let i = 0; i <= 17; i++) callerSaved.add(`x${i}`)
+      /** The registers one zeroing idiom clears, or null for any other instruction. */
+      const zeroes = (line) => {
+        if (line === "vzeroall") return Array.from({ length: 16 }, (_, i) => `v${i}`)
+        let m = /^pxor\s+(%xmm\d+), (%xmm\d+)$/.exec(line) ?? /^xorl\s+(%\w+), (%\w+)$/.exec(line)
+        if (m !== null && m[1] === m[2]) return [whole(m[1])]
+        if ((m = /^movi\s+(v\d+)\.16b, #0$/.exec(line)) !== null) return [m[1]]
+        if ((m = /^mov\s+(x\d+), xzr$/.exec(line)) !== null) return [m[1]]
+        return null
+      }
+      const epilogue = /^(popq\s|vzeroupper$|add\s+sp, sp, #|addq\s+\$\d+, %rsp$|ldp\s+x(19|2\d|30), x(2\d|30), \[sp|ldr\s+x(19|2\d|30), \[sp)/
+      /** The registers `body` points into its own frame: `mov x12, sp`, `add x9, sp, #16`, `leaq 8(%rsp), %rdi`. */
+      const frameBases = (body) =>
+        new Set(body.flatMap((line) => /^(?:mov|add|sub)\s+(x\d+), (?:sp|x29)\b/.exec(line)?.[1] ?? /^leaq\s+.*\(%r[sb]p(?:,[^)]*)?\), %(\w+)$/.exec(line)?.[1] ?? []))
+      /**
+       * The stack offsets a vector store writes, or null for any other instruction. A vector store
+       * through any other base writes memory the caller passed (the output, the GHASH state), which is
+       * the kernel's result, not a spill.
+       */
+      const vectorStore = (line, bases) => {
+        let m = /^v?mov\w*\s+%([xy])mm\d+, (-?\d*)\(%rsp\)$/.exec(line)
+        if (m !== null) return Array.from({ length: m[1] === "y" ? 4 : 2 }, (_, i) => Number(m[2] || 0) + 8 * i)
+        if ((m = /^str\s+q\d+, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        // Any other vector store to the stack or the frame (a pair, an unscaled or indexed offset, a
+        // register that points into the frame) is read as a spill no wipe reaches.
+        if (/^(v?mov\w*\s+%[xy]mm\d+, .*\(%r[sb]p(,[^)]*)?\)|st(r|p|ur)\s+[qd]\d+, .*\[(sp|x29)\b)/.test(line)) return [Number.NaN]
+        m = /^v?mov\w*\s+%[xy]mm\d+, .*\(%(\w+)(?:,[^)]*)?\)$/.exec(line) ?? /^st(?:r|p|ur)\s+[qd]\d+, .*\[(x\d+)\b/.exec(line)
+        return m !== null && bases.has(m[1]) ? [Number.NaN] : null
+      }
+      /** The stack offsets a zero store of 8 bytes clears, or null for any other instruction. */
+      const zeroStore = (line) => {
+        let m = /^movq\s+\$0, (-?\d*)\(%rsp\)$/.exec(line) ?? /^str\s+xzr, \[sp(?:, #(\d+))?\]$/.exec(line)
+        if (m !== null) return [Number(m[1] || 0)]
+        if ((m = /^stp\s+xzr, xzr, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        return null
+      }
+      /** What is wrong with each kernel of `file` on `target`, by name: an empty list when it clears. */
+      const read = (file, target) => {
+        const o = spawnSync(
+          "clang",
+          ["-O2", "-S", "-ffreestanding", `--target=${target.triple}`, ...(target.flags ?? []), "-I", path.join(root, "runtime"), file, "-o", "-"],
+          { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+        )
+        const lines = String(o.stdout).split("\n")
+        const out = new Map()
+        // The registers `nish_aes_clear` zeroes, when its body is zeroing idioms and a `ret`.
+        const clearBody = o.status === 0 ? functionBody(lines, "nish_aes_clear", target) : null
+        const clearZeroes = clearBody?.slice(0, -1).map(zeroes) ?? [null]
+        const cleared = /^retq?$/.test(clearBody?.at(-1) ?? "") && clearZeroes.every((regs) => regs !== null) ? new Set(clearZeroes.flat()) : new Set()
+        const toClear = /^(jmp|b|callq?|bl)\s+nish_aes_clear$/
+        for (const kernel of kernels) {
+          const body = o.status === 0 ? functionBody(lines, kernel, target) : null
+          if (body === null) {
+            out.set(kernel, [`no ${kernel} in the assembly${o.stderr ? `: ${o.stderr}` : ""}`])
+            continue
+          }
+          const faults = []
+          const clears = []
+          const inClear = new Set()
+          const bases = frameBases(body)
+          body.forEach((line, at) => {
+            const wiped = new Set(body.slice(at + 1).flatMap((later) => zeroStore(later) ?? []))
+            if ((vectorStore(line, bases) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
+            const tail = /^(jmp|b)\s+nish_aes_clear$/.test(line)
+            if (!tail && !/^retq?$/.test(line)) return
+            let i = at - 1
+            while (i >= 0 && epilogue.test(body[i])) i--
+            const zeroed = new Set()
+            if (tail || (i >= 0 && toClear.test(body[i]))) {
+              for (const reg of cleared) zeroed.add(reg)
+              if (!tail) i--
+            }
+            for (; i >= 0 && zeroes(body[i]) !== null; i--) {
+              for (const reg of zeroes(body[i])) zeroed.add(reg)
+              inClear.add(i)
+            }
+            clears.push({ at, zeroed })
+          })
+          if (clears.length === 0) faults.push("no ret and no jump to nish_aes_clear")
+          const used = new Set()
+          body.forEach((line, at) => {
+            if (inClear.has(at)) return
+            for (const operand of line.split(/[\s,()[\]{}]+/).slice(1)) {
+              const reg = whole(operand)
+              if (reg !== null && (reg.startsWith("v") || callerSaved.has(reg))) used.add(reg)
+            }
+          })
+          for (const { at, zeroed } of clears) {
+            const left = [...used].filter((reg) => !zeroed.has(reg))
+            if (left.length > 0) faults.push(`the ret at instruction ${at} leaves ${left.join(" ")} uncleared`)
+          }
+          out.set(kernel, faults)
+        }
+        return out
+      }
+      const show = (verdicts) => [...verdicts].map(([kernel, faults]) => `${kernel}: ${faults.length === 0 ? "clears" : faults.join("; ")}`).join("\n")
+      for (const target of [...CT_TARGETS, ctAtLevel("x86-64-v3")]) {
+        const name = ctTargetName(target)
+        const real = read("runtime/runtime-aes.c", target)
+        const bare = read(noClear, target)
+        check(
+          `runtime-aes.c on ${name}: the AES kernels clear their registers at clang -O2 (each ret or tail jump reaches, past the epilogue, a run of zeroing idioms or nish_aes_clear that covers every vector and caller-saved register the kernel names, and every vector stored to the stack lands in a wiped buffer), where a twin with no nish_aes_clear call has all four refused`,
+          source.split(call).length - 1 === kernels.length &&
+            [...real.values()].every((faults) => faults.length === 0) &&
+            [...bare.values()].every((faults) => faults.length > 0),
+          `--- runtime-aes.c:\n${show(real)}\n--- the twin with no clear:\n${show(bare)}`
+        )
+        if (target.level === undefined) {
+          const part = read(partClear, target)
+          check(
+            `runtime-aes.c on ${name}: a twin whose clear skips the first vector register has nish_aes_block refused`,
+            firstZeros.every((line) => source.includes(line)) && (part.get("nish_aes_block") ?? []).some((fault) => / v0( |$)/.test(fault)),
+            show(part)
+          )
+        }
       }
     }
   }
@@ -20823,6 +21553,53 @@ if (dealtHere("cliChecks")) {
         !skipMjs.includes("widest"),
       skipDts + skipMjs
     )
+    // WP58: a generic instance over a union is a struct the freestanding wasm
+    // profile cannot hand to JavaScript, so an export returning `Box<Shape>`
+    // is declined like any other runtime-backed result: commented with its
+    // reason in the declarations, absent from the loader, and the module's
+    // scalar export beside it still typed and loaded.
+    const unionBoxSrc = path.join(interopDir, "union_generic_dts.ts")
+    fs.writeFileSync(
+      unionBoxSrc,
+      [
+        "enum Kind {",
+        "  Circle,",
+        "  Square,",
+        "}",
+        "class Circle {",
+        "  readonly kind: Kind.Circle = Kind.Circle;",
+        "  r: i32 = 1;",
+        "}",
+        "class Square {",
+        "  readonly kind: Kind.Square = Kind.Square;",
+        "  side: i32 = 2;",
+        "}",
+        "type Shape = Circle | Square;",
+        "class Box<T> {",
+        "  value: T;",
+        "  constructor(value: T) {",
+        "    this.value = value;",
+        "  }",
+        "}",
+        "export const make = (n: i32): Box<Shape> => new Box<Shape>(n > 0 ? new Circle() : new Square());",
+        "export const twice = (n: i32): i32 => n * 2;",
+        "",
+      ].join("\n")
+    )
+    const unionBox = emit(unionBoxSrc, ["--emit-dts", sidecar("union_generic_dts", "d.ts")])
+    const unionBoxDts = unionBox.status === 0 ? fs.readFileSync(sidecar("union_generic_dts", "d.ts"), "utf8") : ""
+    const unionBoxMjs = unionBox.status === 0 ? fs.readFileSync(sidecar("union_generic_dts", "mjs"), "utf8") : ""
+    check(
+      "--emit-dts declines an export returning a generic instance over a union, with its reason",
+      unionBoxDts.includes(
+        "  // make(n: number): Box$un2.$Circle.$Square  -- not exported to JS: the result is `Box$un2.$Circle.$Square`, which needs the Nish runtime the freestanding wasm profile does not include"
+      ) &&
+        unionBoxDts.includes("  twice(n: number): number;") &&
+        unionBoxMjs.length > 0 &&
+        !unionBoxMjs.includes("make") &&
+        unionBoxMjs.includes("twice"),
+      `exit ${unionBox.status}\n${unionBox.stderr ?? ""}\n${unionBoxDts}${unionBoxMjs}`
+    )
     // WP30: the same widths as arrays, where the masks above have no
     // counterpart. An element never travels in a wasm value type -- it is a byte
     // in `data` that the typed array reads unsigned -- so a mask here would be
@@ -21605,6 +22382,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
+      "--compat",
       "--target",
       "--cpu",
       "--profile",
@@ -22012,8 +22790,8 @@ if (dealtHere("cliChecks")) {
       ["    checkSoleReferences(ctx, body, flow.sites)\n", ""],
       ["  const ref = results.refOf(need)\n", "  const ref = results.refOf(need).substring(0, 0)\n"],
       [
-        "    if (named.kind === N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
-        "    if (named.kind === N_CONDITIONAL && named.kind !== N_CONDITIONAL) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
+        "    if (named.kind === NodeKind.Conditional && named.kind !== NodeKind.Conditional) {\n      this.expression(named.children[0], ROLE_READ, state)\n",
       ],
     ]
     let mutated = live
@@ -23163,6 +23941,160 @@ if (dealtHere("cliChecks")) {
         badLink.stderr + stubEntries.join(", ")
       )
     }
+  }
+
+  // ---- WP28 S3: `--compat` erases to the strict dialect ---------------------------------
+  // The compatibility dialect is allowed to accept more programs as it grows and
+  // is never allowed to change one the strict dialect already has an answer for.
+  // `tests/compat-erasure.js` compiles every program in `tests/cases` with and
+  // without the flag and compares the two answers byte for byte; this section
+  // runs it over the whole corpus, then proves that it can fail.
+  //
+  // It closes this group rather than taking a key of its own in
+  // `DEALT_SECTIONS`: the group is a tail every shard deal already carries, and
+  // `scripts/shard-costs.mjs` knows a group by its first check.
+  if (!only || "compat-erasure".includes(only)) {
+    const erasureDir = path.join(buildDir, "compat-erasure")
+    const erasure = (compiler, filter, env = {}) =>
+      spawnSync(
+        process.execPath,
+        [
+          path.join(root, "tests", "compat-erasure.js"),
+          "--compiler",
+          compiler,
+          "--out",
+          path.join(erasureDir, filter === "" ? "corpus" : `self-${filter}`),
+          "--jobs",
+          String(LINK_JOBS),
+          ...(filter === "" ? [] : [filter]),
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, ...env }, maxBuffer: 64 * 1024 * 1024 }
+      )
+
+    const smoke = path.join(casesDir, "add_plain.ts")
+    const bare = spawnSync(NISH, [smoke, "--compat", "-o", path.join(buildDir, "compat-bare.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("compat-erasure: a bare `--compat` is accepted", bare.status === 0, bare.stderr)
+    const valuedOut = path.join(buildDir, "compat-valued.ll")
+    fs.rmSync(valuedOut, { force: true })
+    const valued = spawnSync(NISH, [smoke, "--compat=async", "-o", valuedOut], { cwd: root, encoding: "utf8" })
+    check(
+      "compat-erasure: `--compat=<value>` is a usage error that names the bare flag and writes no IR",
+      valued.status === 2 &&
+        valued.stderr.includes("`--compat` takes no value, and `--compat=async` gives it one") &&
+        valued.stderr.includes("write a bare `--compat`") &&
+        !fs.existsSync(valuedOut),
+      `exit ${valued.status}\n${valued.stderr}`
+    )
+
+    const corpus = erasure(NISH, "")
+    const counts =
+      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics, (\d+) cases with none\), (\d+) skipped$/m.exec(
+        corpus.stdout
+      )
+    const [positiveCount, fileCount, rejectCount, codedCount, uncodedCases, skippedCount] = (counts ?? []).slice(1).map(Number)
+    const rejectCases = cases.filter((name) => fs.existsSync(path.join(casesDir, `${name}.err`))).length
+    check(
+      "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
+      corpus.status === 0 && counts !== null,
+      corpus.stderr + corpus.stdout
+    )
+    // A run that compared nothing would agree with itself: the counts are the
+    // corpus's own, files were written and compared (a case that asks for
+    // `--emit-ast` prints instead), every reject case gave at least one coded
+    // diagnostic, and none was skipped.
+    check(
+      `compat-erasure: the run covered the corpus (${cases.length} cases) and skipped none`,
+      counts !== null &&
+        positiveCount === cases.length - rejectCases &&
+        rejectCount === rejectCases &&
+        fileCount > 0 &&
+        codedCount >= rejectCount &&
+        uncodedCases === 0 &&
+        skippedCount === 0,
+      corpus.stdout
+    )
+
+    // The negative test: a compiler that is the real one until it is handed
+    // `--compat`, and then changes one thing, named by COMPAT_TAMPER -- one line
+    // of the IR it wrote, one word of a diagnostic, or the code of one in its
+    // `--json` form. The runner has to catch each, and name where.
+    const tamperer = path.join(erasureDir, "tampering-nish.cjs")
+    fs.mkdirSync(erasureDir, { recursive: true })
+    fs.writeFileSync(
+      tamperer,
+      `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process")
+const fs = require("node:fs")
+const args = process.argv.slice(2)
+const r = spawnSync(${JSON.stringify(NISH)}, args, { maxBuffer: 64 * 1024 * 1024 })
+let [out, err] = [r.stdout.toString("latin1"), r.stderr.toString("latin1")]
+const mode = args.includes("--compat") ? process.env.COMPAT_TAMPER : undefined
+if (mode === "ir" && r.status === 0) {
+  const ll = args[args.indexOf("-o") + 1]
+  fs.writeFileSync(ll, fs.readFileSync(ll, "latin1").replace(/^define .*$/m, (line) => line + " ; tampered"), "latin1")
+}
+if (mode === "word" && !args.includes("--json")) {
+  err = err.replace("requires", "wants")
+}
+if (mode === "code" && args.includes("--json")) {
+  out = out.replace(/"code":"NL\\d+"/, '"code":"NL0000"')
+}
+process.stdout.write(out, "latin1")
+process.stderr.write(err, "latin1")
+process.exitCode = r.status ?? 1
+`,
+      { mode: 0o755 }
+    )
+    const positiveCase = "add_plain"
+    const rejectCase = "reject_type_mismatch"
+    for (const [mode, filter, phrase, caught, tamperedLine] of [
+      [
+        "ir",
+        positiveCase,
+        "one changed line of IR",
+        `compat-erasure: ${positiveCase}: --compat changed the file ${positiveCase}.ll, first at line `,
+        " ; tampered",
+      ],
+      [
+        "word",
+        rejectCase,
+        "one changed word of a diagnostic",
+        `compat-erasure: ${rejectCase}: --compat changed stderr, first at line 1\n`,
+        "Operator `+` wants two",
+      ],
+      [
+        "code",
+        rejectCase,
+        "one changed diagnostic code",
+        `compat-erasure: ${rejectCase} (--json): --compat changed stdout, first at line 1\n`,
+        '"code":"NL0000"',
+      ],
+    ]) {
+      const honest = erasure(tamperer, filter)
+      const tampered = erasure(tamperer, filter, { COMPAT_TAMPER: mode })
+      const shown = tampered.stderr.split("\n")
+      check(
+        `compat-erasure: the runner fails on ${phrase} under \`--compat\`, and shows both answers`,
+        honest.status === 0 &&
+          tampered.status === 1 &&
+          tampered.stderr.includes(caught) &&
+          shown.some((line) => line.startsWith("  without: ") && !line.includes(tamperedLine)) &&
+          shown.some((line) => line.startsWith("  with:    ") && line.includes(tamperedLine)) &&
+          !tampered.stdout.includes("byte-identical"),
+        `honest: exit ${honest.status}\n${honest.stderr}tampered: exit ${tampered.status}\n${tampered.stderr}`
+      )
+    }
+    // Nothing to compile with is the runner's own failure (exit 2), never a
+    // corpus that agrees.
+    const noCompiler = erasure(path.join(erasureDir, "no-such-compiler"), positiveCase)
+    check(
+      "compat-erasure: the runner refuses a compiler that is not there (exit 2) instead of agreeing with nothing",
+      noCompiler.status === 2 && noCompiler.stderr.includes("no compiler at"),
+      noCompiler.stderr
+    )
   }
 }
 
@@ -27507,6 +28439,649 @@ if (dealtHere("runCache")) {
       }
     }
   }
+
+  // `nish upgrade` and the update notice (src/upgrade.ts, std/release.ts,
+  // docs/security/release.md). A local server stands in for GitHub: its
+  // `/<name>/releases/latest` answers as the name says, and every request is
+  // logged so a check can say none was made. The notice is read through a
+  // pseudo-terminal (`script`), the only way stderr is a TTY here.
+  if (selects("upgrade", "nish/release", "update-notice")) {
+    if (!HAS_CLANG) {
+      skip("nish upgrade: clang not on PATH, so the release helper cannot be linked")
+    } else {
+      const upDir = path.join(buildDir, "upgrade")
+      fs.rmSync(upDir, { recursive: true, force: true })
+      fs.mkdirSync(upDir, { recursive: true })
+      const cacheHome = path.join(upDir, "cache")
+      const requests = path.join(upDir, "requests.log")
+      fs.writeFileSync(requests, "")
+      const serverJs = path.join(upDir, "server.cjs")
+      fs.writeFileSync(
+        serverJs,
+        `const http = require("http")
+const fs = require("fs")
+const log = process.argv[2]
+const server = http.createServer((req, res) => {
+  fs.appendFileSync(log, req.url + "\\n")
+  const at = \`http://127.0.0.1:\${server.address().port}\`
+  const [, name, ...rest] = req.url.split("/")
+  const tail = rest.join("/")
+  if (tail === "releases/latest") {
+    if (name === "newer") return res.writeHead(302, { Location: \`\${at}/newer/releases/tag/v99.0.0\` }).end()
+    if (name === "older") return res.writeHead(302, { Location: \`\${at}/older/releases/tag/v0.0.1\` }).end()
+    if (name === "elsewhere") return res.writeHead(302, { Location: \`\${at}/other/releases/tag/v99.0.0\` }).end()
+    if (name === "login") return res.writeHead(302, { Location: "https://example.com/login?v99.0.0" }).end()
+    if (name === "refuse") return res.writeHead(500).end("no")
+    if (name === "garbage") return res.writeHead(200).end("v99.0.0\\n<html>")
+    if (name === "slow") return
+  }
+  if (name === "raw" && tail.endsWith("/install.sh")) {
+    return res.writeHead(200).end('printf "%s\\\\n" "$@" > "$3/installed-with"\\n')
+  }
+  res.writeHead(404).end()
+})
+server.listen(0, "127.0.0.1", () => console.log(server.address().port))
+`,
+      )
+      const server = spawn(process.execPath, [serverJs, requests], { stdio: ["ignore", "pipe", "inherit"] })
+      const port = await new Promise((resolve) => server.stdout.once("data", (d) => resolve(String(d).trim())))
+      const origin = `http://127.0.0.1:${port}`
+      const asked = () => fs.readFileSync(requests, "utf8").split("\n").filter(Boolean)
+      const env = (name, extra = {}) => {
+        const e = {
+          ...process.env,
+          XDG_CACHE_HOME: cacheHome,
+          NISH_RELEASE_URL: `${origin}/${name}`,
+          NISH_RELEASE_RAW_URL: `${origin}/raw`,
+        }
+        delete e.CI
+        delete e.NISH_NO_UPDATE_CHECK
+        return { ...e, ...extra }
+      }
+      const up = (args, name = "newer", extra = {}, exe = NISH) =>
+        spawnSync(exe, ["upgrade", ...args], { encoding: "utf8", env: env(name, extra), timeout: 120000 })
+      try {
+        // The library's pure half, from a program: what a version is, which is newer, and what a redirect names.
+        const probe = path.join(upDir, "release_probe.ts")
+        fs.writeFileSync(
+          probe,
+          `import { releaseBaseAllowed, releaseCacheRead, releaseCompare, releaseIsNewer, releaseParseVersion, releaseTagFromLocation, releaseValidVersion } from "nish/release"
+
+export const main = (): number => {
+  const b = "https://github.com/o/r"
+  console.log(\`\${releaseValidVersion("0.40.0")} \${releaseValidVersion("1.0.0-rc.1+b.2")} \${releaseValidVersion("1.0.0/../x")} \${releaseValidVersion("0.40.0?x")} \${releaseValidVersion("1.0.0%2f")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0")} \${releaseCompare("0.10.0", "0.9.0")} \${releaseCompare("1.0.0+a", "1.0.0+b")}\`)
+  console.log(\`\${releaseIsNewer("0.40.0", "0.39.0")} \${releaseIsNewer("0.39.0", "0.39.0")} \${releaseIsNewer("0.38.0", "0.39.0")}\`)
+  const t = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0\`)
+  const other = releaseTagFromLocation(b, "https://github.com/o/other/releases/tag/v0.40.0")
+  const list = releaseTagFromLocation(b, \`\${b}/releases\`)
+  const escape = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0/../../x\`)
+  console.log(\`\${t === null ? "null" : t} \${other === null} \${list === null} \${escape === null}\`)
+  console.log(\`\${releaseBaseAllowed(b)} \${releaseBaseAllowed("http://127.0.0.1:8/x")} \${releaseBaseAllowed("http://example.com")} \${releaseBaseAllowed("http://127.0.0.1.example.com")}\`)
+  const bare = releaseTagFromLocation(b, b + "/releases/tag/0.40.0")
+  console.log(\`\${releaseParseVersion("1.0.0-01") === null} \${releaseParseVersion("1.0.0+01") !== null} \${bare === null} \${releaseBaseAllowed("http://localhost:@evil.example")} \${releaseBaseAllowed("http://localhost:8080")}\`)
+  console.log(\`\${releaseCacheRead(${JSON.stringify(path.join(upDir, "shared", "notice"))}) === null} \${releaseCacheRead(${JSON.stringify(path.join(upDir, "private", "notice"))}) !== null}\`)
+  console.log(\`\${releaseValidVersion("1.0.0#x")} \${releaseValidVersion("1.0.0 x")} \${releaseValidVersion("1.0.0\\tx")} \${releaseValidVersion("1.0.0\\nx")} \${releaseValidVersion("1.0.0%2e")}\`)
+  const query = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0?x\`)
+  const fragment = releaseTagFromLocation(b, \`\${b}/releases/tag/v0.40.0#x\`)
+  console.log(\`\${query === null} \${fragment === null}\`)
+  console.log(\`\${releaseIsNewer("garbage", "0.39.0")} \${releaseIsNewer("0.40.0", "garbage")} \${releaseIsNewer("x", "y")} \${releaseCompare("garbage", "0.1.0")} \${releaseCompare("0.1.0", "garbage")} \${releaseCompare("x", "y")}\`)
+  console.log(\`\${releaseCompare("1.0.0-rc.1", "1.0.0-rc.2")} \${releaseCompare("1.0.0-1", "1.0.0-a")} \${releaseCompare("1.0.0-alpha", "1.0.0-alpha.1")} \${releaseCompare("1.0.0-2", "1.0.0-10")} \${releaseCompare("1.0.0-rc.10", "1.0.0-rc.2")} \${releaseCompare("1.0.0-alpha.beta", "1.0.0-beta")}\`)
+  console.log(\`\${releaseCompare("1.0.0-9999999999999999", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-20000000000000000", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-a", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-10000000000000000", "1.0.0-10000000000000000")} \${releaseCompare("1.0.0-99", "1.0.0-100000000000000000")}\`)
+  return 0
+}
+`,
+        )
+        for (const [dir, mode] of [["shared", 0o775], ["private", 0o700]]) {
+          fs.mkdirSync(path.join(upDir, dir), { recursive: true })
+          fs.writeFileSync(path.join(upDir, dir, "notice"), "checked 1\nlatest 99.0.0\n", { mode: 0o600 })
+          fs.chmodSync(path.join(upDir, dir), mode)
+        }
+        const lib = spawnSync(NISH, ["run", probe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }) })
+        check(
+          "nish/release: versions, ordering, redirects and bases",
+          lib.status === 0 &&
+            lib.stdout ===
+              "true true false false false\n-1 1 0\ntrue false false\n0.40.0 true true true\ntrue true false false\ntrue true true false true\ntrue true\n" +
+                "false false false false false\ntrue true\nfalse false false -1 1 0\n-1 -1 -1 -1 1 -1\n-1 1 1 0 -1\n",
+          `${lib.status}: ${lib.stdout}${lib.stderr}`,
+        )
+
+        // The library's cache, from a program: written private and over a planted link, read only when
+        // believed, fresh for less than its age and never when dated ahead, and the cached check asking at most once.
+        const cacheDir = path.join(upDir, "libcache")
+        const cachePaths = {
+          good: path.join(cacheDir, "r", "good"),
+          link: path.join(cacheDir, "r", "link"),
+          groupWritable: path.join(cacheDir, "r", "group-writable"),
+          garbage: path.join(cacheDir, "r", "garbage"),
+          missing: path.join(cacheDir, "r", "missing"),
+          foreignFile: path.join(cacheDir, "foreign-file", "c"),
+          foreignDir: path.join(cacheDir, "foreign-dir", "c"),
+          fifo: path.join(cacheDir, "r", "fifo"),
+        }
+        fs.mkdirSync(path.join(cacheDir, "r"), { recursive: true, mode: 0o700 })
+        fs.mkdirSync(path.join(cacheDir, "s"), { mode: 0o700 })
+        fs.writeFileSync(cachePaths.good, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+        fs.symlinkSync(cachePaths.good, cachePaths.link)
+        fs.writeFileSync(cachePaths.groupWritable, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+        fs.chmodSync(cachePaths.groupWritable, 0o620)
+        fs.writeFileSync(cachePaths.garbage, "latest 1.0.0\nchecked 7\n", { mode: 0o600 })
+        // A private FIFO is this user's and writable by nobody else, so only the file-kind check refuses it.
+        const madeFifo = spawnSync("sh", ["-c", 'mkfifo -m 600 "$1"', "sh", cachePaths.fifo]).status === 0
+        const linkTarget = path.join(cacheDir, "s", "target")
+        fs.writeFileSync(linkTarget, "kept\n", { mode: 0o600 })
+        fs.symlinkSync(linkTarget, path.join(cacheDir, "s", "c"))
+        // Another user's file, or directory, needs root or sudo to make: the test makes them where it can.
+        const modeOf = (p) => fs.lstatSync(p).mode & 0o777
+        const privileged = (args) =>
+          process.getuid() === 0 ? spawnSync(args[0], args.slice(1)) : spawnSync("sudo", ["-n", ...args])
+        const canChown = process.platform === "linux" && privileged(["true"]).status === 0
+        if (canChown) {
+          fs.mkdirSync(path.dirname(cachePaths.foreignFile), { mode: 0o700 })
+          // World-readable, so only the owner check can refuse it: an unprivileged run reads it.
+          fs.writeFileSync(cachePaths.foreignFile, "checked 7\nlatest 1.0.0\n", { mode: 0o644 })
+          fs.mkdirSync(path.dirname(cachePaths.foreignDir), { mode: 0o755 })
+          fs.writeFileSync(cachePaths.foreignDir, "checked 7\nlatest 1.0.0\n", { mode: 0o600 })
+          privileged(["chown", "65534", cachePaths.foreignFile, path.dirname(cachePaths.foreignDir)])
+        }
+        try {
+          const cacheProbe = path.join(upDir, "release_cache_probe.ts")
+          const q = (p) => JSON.stringify(p)
+          fs.writeFileSync(
+            cacheProbe,
+            `import { ReleaseCache, releaseCacheFresh, releaseCacheParse, releaseCacheRead, releaseCacheWrite, releaseCheckCached, releaseFileTrusted } from "nish/release"
+
+  const show = (c: ReleaseCache | null): string => (c === null ? "null" : \`\${c.checkedMs}/\${c.latest}\`)
+  const orNull = (s: string | null): string => (s === null ? "null" : s)
+
+  export const main = (): number => {
+    const d = ${q(cacheDir)}
+    console.log(\`\${releaseCacheWrite(\`\${d}/w/c\`, "99.0.0", 1000)} \${show(releaseCacheRead(\`\${d}/w/c\`))} \${releaseCacheWrite(\`\${d}/s/c\`, "1.0.0", 3)} \${show(releaseCacheRead(\`\${d}/s/c\`))}\`)
+    const c = releaseCacheParse("checked 1000\\nlatest 99.0.0\\n")
+    if (c === null) {
+      return 1
+    }
+    const day: i64 = 86400000
+    console.log(\`\${releaseCacheFresh(c, 1010, day)} \${releaseCacheFresh(c, 1000 + day - 1, day)} \${releaseCacheFresh(c, 1000 + day, day)} \${releaseCacheFresh(c, 999, day)}\`)
+    console.log(\`\${show(releaseCacheParse("checked 5\\nlatest \\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0/../x\\n"))} \${show(releaseCacheParse("checked x\\nlatest 1.0.0\\n"))} \${show(releaseCacheParse("latest 1.0.0\\nchecked 5\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\nextra\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0\\n\\n"))} \${show(releaseCacheParse("checked 5\\nlatest 1.0.0"))}\`)
+    console.log(\`\${show(releaseCacheRead(${q(cachePaths.good)}))} \${show(releaseCacheRead(${q(cachePaths.link)}))} \${show(releaseCacheRead(${q(cachePaths.groupWritable)}))} \${show(releaseCacheRead(${q(cachePaths.garbage)}))} \${show(releaseCacheRead(${q(cachePaths.missing)}))} \${releaseFileTrusted(${q(cachePaths.good)})} \${releaseFileTrusted(${q(cachePaths.link)})}\`)
+    const newer = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const again = releaseCheckCached(${q(`${origin}/newer`)}, "0.39.0", \`\${d}/k/c\`, day, 5000)
+    const current = releaseCheckCached(${q(`${origin}/newer`)}, "99.0.0", \`\${d}/k/c\`, day, 5000)
+    const refused = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    const kept = releaseCacheRead(\`\${d}/f/c\`)
+    const refusedAgain = releaseCheckCached(${q(`${origin}/refuse`)}, "0.39.0", \`\${d}/f/c\`, day, 5000)
+    console.log(\`\${orNull(newer)} \${orNull(again)} \${orNull(current)} \${orNull(refused)} [\${kept === null ? "null" : kept.latest}] \${orNull(refusedAgain)}\`)
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignFile)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.foreignDir)})))
+    console.log(show(releaseCacheRead(${q(cachePaths.fifo)})))
+    return 0
+  }
+  `,
+          )
+          const lookupsOf = (name) => asked().filter((u) => u === `/${name}/releases/latest`).length
+          const [newerBefore, refuseBefore] = [lookupsOf("newer"), lookupsOf("refuse")]
+          // A writer waits on the FIFO, so a read that opened it would get a believable cache, not hang.
+          const fifoWriter = madeFifo
+            ? spawn("sh", ["-c", 'printf "checked 7\\nlatest 1.0.0\\n" > "$1"', "sh", cachePaths.fifo], { stdio: "ignore" })
+            : null
+          const cacheRun = spawnSync(NISH, ["run", cacheProbe], { encoding: "utf8", env: env("newer", { NISH_NO_UPDATE_CHECK: "1" }), timeout: 120000 })
+          if (fifoWriter !== null) fifoWriter.kill()
+          const cacheLines = (cacheRun.stdout || "").split("\n")
+          check(
+            "nish/release: the cache is written 0600 in a 0700 directory, and over a planted link without following it",
+            cacheRun.status === 0 &&
+              cacheLines[0] === "true 1000/99.0.0 true 3/1.0.0" &&
+              modeOf(path.join(cacheDir, "w", "c")) === 0o600 &&
+              modeOf(path.join(cacheDir, "w")) === 0o700 &&
+              fs.lstatSync(path.join(cacheDir, "s", "c")).isFile() &&
+              fs.readFileSync(linkTarget, "utf8") === "kept\n",
+            `${cacheRun.status}: ${cacheRun.stdout}${cacheRun.stderr}`,
+          )
+          check(
+            "nish/release: a cache is fresh for less than its age, never at it, and never when dated ahead",
+            cacheLines[1] === "true true false false",
+            cacheLines[1],
+          )
+          check(
+            "nish/release: a cache parses only as its two lines, with a valid or empty version and nothing after them",
+            cacheLines[2] === "5/ null null null null null 5/1.0.0",
+            cacheLines[2],
+          )
+          check(
+            "nish/release: a cache that is a symlink, group-writable, garbage or missing is not believed",
+            cacheLines[3] === "7/1.0.0 null null null null true false",
+            cacheLines[3],
+          )
+          check(
+            "nish/release: the cached check asks once, then answers from the cache; a failed one is kept as none",
+            cacheLines[4] === "99.0.0 99.0.0 null null [] null" &&
+              lookupsOf("newer") === newerBefore + 1 &&
+              lookupsOf("refuse") === refuseBefore + 1,
+            `${cacheLines[4]}; ${lookupsOf("newer") - newerBefore} and ${lookupsOf("refuse") - refuseBefore} lookups`,
+          )
+          if (madeFifo) {
+            check("nish/release: a private FIFO at the cache path is not believed", cacheLines[7] === "null", cacheLines[7])
+          } else {
+            skip("nish/release: a FIFO at the cache path: mkfifo failed")
+          }
+          if (canChown) {
+            // Each is readable by this run and otherwise private, so the owner check alone refuses it.
+            const readable = (p) => {
+              try {
+                return fs.readFileSync(p, "utf8") === "checked 7\nlatest 1.0.0\n"
+              } catch {
+                return false
+              }
+            }
+            check(
+              "nish/release: a world-readable cache file owned by another user is not believed",
+              cacheLines[5] === "null" && readable(cachePaths.foreignFile),
+              `${cacheLines[5]}; readable ${readable(cachePaths.foreignFile)}`,
+            )
+            check(
+              "nish/release: a cache in a directory owned by another user is not believed",
+              cacheLines[6] === "null" && readable(cachePaths.foreignDir),
+              `${cacheLines[6]}; readable ${readable(cachePaths.foreignDir)}`,
+            )
+          } else {
+            skip("nish/release: a cache owned by another user: making one needs root or passwordless sudo")
+          }
+        } finally {
+          if (canChown) privileged(["chown", "-R", String(process.getuid()), cacheDir])
+        }
+
+        // Refusals that need no network: a version that is not one, an unknown flag.
+        // The CLI's own `validVersion` (src/upgrade.ts) runs first, so it is held to the library's cases too.
+        for (const bad of [
+          "1.0.0/../x",
+          "0.40.0?x",
+          "v0.40.0",
+          "--yes",
+          "1.2",
+          "01.2.3",
+          "1.2.3.4",
+          "1.2.3-",
+          "1.0.0-01",
+          "1.0.0#x",
+          "1.0.0 x",
+          "1.0.0\tx",
+          "1.0.0\nx",
+          "1.0.0%2e",
+          "1.0.0%2f",
+        ]) {
+          const before = asked().length
+          const r = up([bad])
+          check(
+            `nish upgrade ${/\s/.test(bad) ? JSON.stringify(bad) : bad}: exit 2, before any network access`,
+            r.status === 2 && r.stderr.includes("usage: nish upgrade") && asked().length === before,
+            `${r.status}: ${r.stderr}`,
+          )
+        }
+        for (const flag of ["--help", "-h"]) {
+          const before = asked().length
+          const r = up([flag])
+          check(
+            `nish upgrade ${flag}: the usage on stdout, exit 0, no network access`,
+            r.status === 0 && r.stdout.startsWith("usage: nish upgrade") && r.stderr === "" && asked().length === before,
+            `${r.status}: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // Refused before any request, naming the override; a bad raw URL beside a good release URL too.
+        for (const [what, extra, named] of [
+          ["a release URL that is plain http to another host", { NISH_RELEASE_URL: "http://example.com/x" }, "NISH_RELEASE_URL"],
+          ["a loopback release URL that names another host after the colon", { NISH_RELEASE_URL: "http://localhost:@example.com/x" }, "NISH_RELEASE_URL"],
+          ["a raw URL that is plain http to another host, beside a good release URL", { NISH_RELEASE_RAW_URL: "http://example.com/x" }, "NISH_RELEASE_RAW_URL"],
+        ]) {
+          const before = asked().length
+          const r = up(["--check"], "newer", extra)
+          check(
+            `nish upgrade: ${what} is refused (exit 2), named, before any request`,
+            r.status === 2 && r.stderr.includes(`${named} must be`) && r.stdout === "" && asked().length === before,
+            `${r.status}: ${r.stderr}; ${asked().length - before} requests`,
+          )
+        }
+
+        // --check: current and latest, exit 0; no answer of any kind, exit 3 and nothing on stdout.
+        const checked = up(["--check"])
+        const version = spawnSync(NISH, ["--version"], { encoding: "utf8" }).stdout.trim().split(" ")[1]
+        check(
+          "nish upgrade --check: prints current and latest, exit 0",
+          checked.status === 0 && checked.stdout === `current ${version}\nlatest  99.0.0\n`,
+          `${checked.status}: ${checked.stdout}${checked.stderr}`,
+        )
+        // Each server but `down` (no server at all) is asked once; `slow` is ended by the lookup's 2 s limit.
+        for (const name of ["elsewhere", "login", "refuse", "garbage", "slow", "down"]) {
+          const before = asked().filter((u) => u === `/${name}/releases/latest`).length
+          const started = Date.now()
+          const r = up(["--check"], name, name === "down" ? { NISH_RELEASE_URL: "http://127.0.0.1:9/x" } : {})
+          const took = Date.now() - started
+          const reached = asked().filter((u) => u === `/${name}/releases/latest`).length - before
+          check(
+            `nish upgrade --check: a server that is ${name} gives exit 3 within the lookup's time`,
+            r.status === 3 &&
+              r.stdout === "" &&
+              took < 15000 &&
+              reached === (name === "down" ? 0 : 1) &&
+              (name !== "slow" || took >= 1900),
+            `${r.status} after ${took} ms, ${reached} requests: ${r.stdout}${r.stderr}`,
+          )
+        }
+        // A check that learns nothing leaves the cache as it was: a newer release it names is not forgotten.
+        const kept = path.join(cacheHome, "nish", "release", `notice-${version}`)
+        fs.mkdirSync(path.dirname(kept), { recursive: true, mode: 0o700 })
+        fs.writeFileSync(kept, "checked 1\nnewer 99.0.0\n", { mode: 0o600 })
+        const failed = up(["--check"], "refuse")
+        check(
+          "nish upgrade --check: a failed check keeps the newer release the cache names",
+          failed.status === 3 && fs.readFileSync(kept, "utf8") === "checked 1\nnewer 99.0.0\n",
+          `${failed.status}: ${fs.readFileSync(kept, "utf8")}`,
+        )
+
+        // npm's install and a checkout's: refused with the way to upgrade, exit 2, nothing fetched or changed.
+        const npmExe = path.join(upDir, "npm", "node_modules", "@amritk", "nish-linux-x64", "nish")
+        fs.mkdirSync(path.dirname(npmExe), { recursive: true })
+        fs.copyFileSync(NISH, npmExe)
+        fs.chmodSync(npmExe, 0o755)
+        const before = asked().length
+        const npm = up(["0.40.0"], "newer", {}, npmExe)
+        check(
+          "nish upgrade: an npm install prints the npm line and exits 2",
+          npm.status === 2 && npm.stderr.includes("npm install -g nish@0.40.0") && asked().length === before,
+          `${npm.status}: ${npm.stderr}`,
+        )
+        const source = up([])
+        check(
+          "nish upgrade: a build from a checkout refuses, exit 2",
+          source.status === 2 && source.stderr.includes("not installed by install.sh") && asked().length === before,
+          `${source.status}: ${source.stderr}`,
+        )
+
+        // A curl install: install.sh comes from the tag and is run with the version and the install directory.
+        const inst = path.join(upDir, "curl-install")
+        fs.mkdirSync(path.join(inst, "libexec"), { recursive: true })
+        fs.mkdirSync(path.join(inst, "bin"))
+        fs.mkdirSync(path.join(inst, "scripts"))
+        fs.copyFileSync(NISH, path.join(inst, "libexec", "nish"))
+        fs.chmodSync(path.join(inst, "libexec", "nish"), 0o755)
+        fs.writeFileSync(
+          path.join(inst, "bin", "nish"),
+          `#!/bin/sh\n# Written by install.sh.\nexec '${path.join(inst, "libexec", "nish")}' "$@"\n`,
+          { mode: 0o755 },
+        )
+        fs.cpSync(path.join(root, "std"), path.join(inst, "std"), { recursive: true })
+        fs.cpSync(path.join(root, "runtime"), path.join(inst, "runtime"), { recursive: true })
+        fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(inst, "scripts", "build.sh"))
+        fs.copyFileSync(path.join(root, "package.json"), path.join(inst, "package.json"))
+        const wrapper = path.join(inst, "bin", "nish")
+        const installedWith = path.join(inst, "installed-with")
+        const latest = up([], "newer", {}, wrapper)
+        check(
+          "nish upgrade: a curl install runs the tag's install.sh with the latest version and its directory",
+          latest.status === 0 &&
+            asked().includes("/raw/v99.0.0/install.sh") &&
+            fs.existsSync(installedWith) &&
+            fs.readFileSync(installedWith, "utf8") === `99.0.0\n--dir\n${inst}\n`,
+          `${latest.status}: ${latest.stderr}`,
+        )
+        fs.rmSync(installedWith, { force: true })
+        const older = up([], "older", {}, wrapper)
+        check(
+          "nish upgrade: with no version, an older latest installs nothing",
+          older.status === 0 && older.stderr.includes("up to date") && !fs.existsSync(installedWith),
+          `${older.status}: ${older.stderr}`,
+        )
+        const pinned = up(["0.1.0"], "newer", {}, wrapper)
+        check(
+          "nish upgrade 0.1.0: an explicit older version says it is a downgrade and installs it",
+          pinned.status === 0 &&
+            pinned.stderr.includes("downgrade") &&
+            fs.readFileSync(installedWith, "utf8") === `0.1.0\n--dir\n${inst}\n`,
+          `${pinned.status}: ${pinned.stderr}`,
+        )
+
+        // The notice, read through a terminal.
+        if (process.platform !== "linux" || !has("script")) {
+          skip("update notice: needs util-linux script for a terminal")
+        } else {
+          const cacheFile = path.join(cacheHome, "nish", "release", `notice-${version}`)
+          const notice = `nish 99.0.0 is available (you have ${version}); run \`nish upgrade\``
+          const plant = (checkedMs, newer = "99.0.0") => {
+            fs.rmSync(cacheFile, { force: true })
+            fs.mkdirSync(path.dirname(cacheFile), { recursive: true, mode: 0o700 })
+            fs.writeFileSync(cacheFile, `checked ${checkedMs}\nnewer${newer === "" ? "" : ` ${newer}`}\n`, { mode: 0o600 })
+          }
+          // `runAs` prefixes the command, to run it as another user.
+          const tty = (args, extra = {}, runAs = []) => {
+            const cmd = [...runAs, "script", "-qec", '"$NISH_UP_EXE" $NISH_UP_ARGS', "/dev/null"]
+            const r = spawnSync(cmd[0], cmd.slice(1), {
+              encoding: "utf8",
+              env: env("newer", { NISH_UP_EXE: NISH, NISH_UP_ARGS: args, ...extra }),
+              timeout: 60000,
+            })
+            return { status: r.status, out: (r.stdout || "").replace(/\r/g, "") }
+          }
+          const hello = path.join(upDir, "hello.ts")
+          fs.writeFileSync(hello, 'export const main = (): number => {\n  console.log("hi")\n  return 0\n}\n')
+          const lines = (out) => out.split("\n").filter((l) => l === notice).length
+          plant(Date.now())
+          const quiet = tty("--version", { NISH_NO_UPDATE_CHECK: "1" })
+          const shown = tty("--version")
+          check(
+            "update notice: nish --version on a terminal prints the line once, exit unchanged",
+            shown.status === 0 && lines(shown.out) === 1 && shown.out.replace(`${notice}\n`, "") === quiet.out,
+            JSON.stringify(shown),
+          )
+          const compiled = tty(`${hello} -o ${path.join(upDir, "hello.ll")}`)
+          check("update notice: a compile on a terminal prints the line once", compiled.status === 0 && lines(compiled.out) === 1, JSON.stringify(compiled))
+          for (const [what, args, extra] of [
+            ["NISH_NO_UPDATE_CHECK=1", "--version", { NISH_NO_UPDATE_CHECK: "1" }],
+            ["CI=true", "--version", { CI: "true" }],
+            ["--json", `--json ${hello} -o ${path.join(upDir, "hello.ll")}`, {}],
+            ["nish run", `run ${hello}`, {}],
+            ["a usage error", "--number-mode", {}],
+          ]) {
+            const r = tty(args, extra)
+            check(`update notice: not shown with ${what}`, lines(r.out) === 0, JSON.stringify(r))
+          }
+          const piped = spawnSync(NISH, ["--version"], { encoding: "utf8", env: env("newer") })
+          check("update notice: not shown when stderr is not a terminal", !piped.stderr.includes("available"), piped.stderr)
+
+          // A cache that is not to be believed: no line, whatever it says. Each run starts a check in the
+          // background; it asks the refusing server, so it never writes a cache over the next case's plant.
+          const refusing = { NISH_RELEASE_URL: `${origin}/refuse` }
+          const refuseLookups = () => asked().filter((u) => u === "/refuse/releases/latest").length
+          const refusedBefore = refuseLookups()
+          fs.rmSync(cacheFile, { force: true })
+          const planted = path.join(upDir, "planted")
+          fs.writeFileSync(planted, `checked ${Date.now()}\nnewer 99.0.0\n`, { mode: 0o600 })
+          fs.symlinkSync(planted, cacheFile)
+          const planting = fs.readFileSync(planted, "utf8")
+          check("update notice: a cache that is a symlink is not believed", lines(tty("--version", refusing).out) === 0)
+          check(
+            "update notice: the cache written over a planted link replaces the link and leaves its target alone",
+            !fs.lstatSync(cacheFile).isSymbolicLink() && fs.readFileSync(planted, "utf8") === planting && modeOf(cacheFile) === 0o600,
+            `${fs.lstatSync(cacheFile).isSymbolicLink()} ${modeOf(cacheFile).toString(8)}`,
+          )
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          check("update notice: a group-writable cache is not believed", lines(tty("--version", refusing).out) === 0)
+          plant(Date.now())
+          fs.chmodSync(path.dirname(cacheFile), 0o777)
+          check(
+            "update notice: a cache in a world-writable directory is not believed",
+            lines(tty("--version", refusing).out) === 0,
+          )
+          // That run made the directory 0700 and wrote the cache with no newer: plant again, and the next run believes it.
+          const dirMode = fs.statSync(path.dirname(cacheFile)).mode & 0o777
+          plant(Date.now())
+          const believed = tty("--version", refusing)
+          check(
+            "update notice: a world-writable cache directory is made 0700, so the next run believes it",
+            dirMode === 0o700 && lines(believed.out) === 1,
+            `${dirMode.toString(8)}; ${JSON.stringify(believed)}`,
+          )
+          // A private cache whose newer is not a version, an escape sequence or a path: no line, and no ESC.
+          let refusedRuns = 3
+          for (const [what, newer] of [
+            ["an escape sequence", "\x1b[31m9.9.9"],
+            ["a path", "1.0.0/../x"],
+          ]) {
+            plant(Date.now(), newer)
+            const r = tty("--version", refusing)
+            check(
+              `update notice: a private cache whose newer is ${what} is not believed`,
+              lines(r.out) === 0 && !r.out.includes("available") && !r.out.includes("\x1b"),
+              JSON.stringify(r),
+            )
+            refusedRuns++
+          }
+          // A private cache with a line after its two, or a checked time that is not one: no line.
+          for (const [what, text] of [
+            ["a third line", `checked ${Date.now()}\nnewer 99.0.0\nnewer 99.0.0\n`],
+            ["a checked time that is not a number", "checked x\nnewer 99.0.0\n"],
+          ]) {
+            plant(Date.now())
+            fs.writeFileSync(cacheFile, text, { mode: 0o600 })
+            const r = tty("--version", refusing)
+            check(`update notice: a private cache with ${what} is not believed`, lines(r.out) === 0, JSON.stringify(r))
+            refusedRuns++
+          }
+          // A private FIFO is this user's and writable by nobody else: only the regular-file pattern refuses it.
+          // A writer waits on it, so a run that opened it would read a believable cache, not hang.
+          fs.rmSync(cacheFile, { force: true })
+          if (spawnSync("sh", ["-c", 'mkfifo -m 600 "$1"', "sh", cacheFile]).status === 0) {
+            const writer = spawn("sh", ["-c", 'printf "checked %s\\nnewer 99.0.0\\n" "$2" > "$1"', "sh", cacheFile, String(Date.now())], {
+              stdio: "ignore",
+            })
+            spawnSync("sleep", ["0.5"])
+            const r = tty("--version", refusing)
+            writer.kill()
+            check("update notice: a private FIFO at the cache path is not believed", lines(r.out) === 0, JSON.stringify(r))
+            refusedRuns++
+          } else {
+            skip("update notice: a FIFO at the cache path: mkfifo failed")
+          }
+          // Another user's cache, readable and otherwise private: only the owner check (\`-O\`) refuses it.
+          if (canChown) {
+            plant(Date.now())
+            fs.chmodSync(cacheFile, 0o644)
+            privileged(["chown", "65534", cacheFile])
+            try {
+              const r = tty("--version", refusing)
+              check("update notice: a world-readable cache owned by another user is not believed", lines(r.out) === 0, JSON.stringify(r))
+              refusedRuns++
+            } finally {
+              privileged(["rm", "-f", cacheFile])
+            }
+          } else {
+            skip("update notice: a cache owned by another user: making one needs root or passwordless sudo")
+          }
+
+          // At most one network check a day: a fresh cache asks nothing, a stale or future one is refreshed once.
+          // Polls until `ok`, for at most `ms`. Waiting out a short `ms` for what must not happen ends early when it does.
+          const waitFor = (ok, ms = 20000) => {
+            const until = Date.now() + ms
+            while (!ok() && Date.now() < until) spawnSync("sleep", ["0.2"])
+            return ok()
+          }
+          const lookups = () => asked().filter((u) => u === "/newer/releases/latest").length
+          // The checks the refused caches above started have each asked, and so are done with the cache.
+          check(
+            "update notice: each refused cache started one check",
+            waitFor(() => refuseLookups() === refusedBefore + refusedRuns),
+            `${refuseLookups() - refusedBefore} lookups`,
+          )
+          // The check is detached: a run that starts one against a server that never answers is back before the
+          // lookup's 2 s limit could end it, and the check still asks.
+          const slowLookups = () => asked().filter((u) => u === "/slow/releases/latest").length
+          const slowBefore = slowLookups()
+          plant(Date.now())
+          fs.chmodSync(cacheFile, 0o620)
+          const startedAt = Date.now()
+          const detached = tty("--version", { NISH_RELEASE_URL: `${origin}/slow` })
+          const took = Date.now() - startedAt
+          check(
+            "update notice: a run that starts a check is not held by it",
+            detached.status === 0 && took < 2000 && waitFor(() => slowLookups() === slowBefore + 1),
+            `${took} ms; ${slowLookups() - slowBefore} lookups`,
+          )
+          plant(Date.now())
+          let base = lookups()
+          const fresh = fs.readFileSync(cacheFile, "utf8")
+          tty("--version")
+          tty("--version")
+          // A started check rewrites the cache before it asks, so an unchanged cache shows none started.
+          const unchanged = fs.readFileSync(cacheFile, "utf8") === fresh
+          check(
+            "update notice: two runs on a fresh cache make no network check",
+            unchanged && !waitFor(() => lookups() !== base, 3000),
+            `cache unchanged ${unchanged}; ${lookups() - base} lookups`,
+          )
+          for (const [what, when] of [
+            ["older than 24 h", Date.now() - 25 * 3600 * 1000],
+            ["dated in the future", Date.now() + 3600 * 1000],
+          ]) {
+            plant(when, "")
+            base = lookups()
+            tty("--version")
+            tty("--version")
+            const refreshed = waitFor(() => /newer 99\.0\.0/.test(fs.readFileSync(cacheFile, "utf8")))
+            // A second check, if the second run started one, would ask within the wait.
+            const second = waitFor(() => lookups() > base + 1, 3000)
+            check(
+              `update notice: a cache ${what} is refreshed by exactly one check`,
+              refreshed && !second && lookups() === base + 1 && modeOf(cacheFile) === 0o600,
+              `${lookups() - base} lookups, mode ${modeOf(cacheFile).toString(8)}; ${fs.readFileSync(cacheFile, "utf8")}`,
+            )
+          }
+          // This user's private cache in another user's directory. At 0755 only the directory half of the owner
+          // check refuses it; at 0777 the mode check does, and only the failed `chmod 700` keeps the run from
+          // writing its cache there and starting a check (REL-5). A started check rewrites the cache first, and
+          // then asks the server. Root may chmod any directory, so under root the run is made as uid 65534,
+          // which is given the cache's other directories (where the release helper is built) while the cache's
+          // own stays root's; otherwise sudo gives the cache's directory to 65534.
+          const asOther = process.getuid() === 0
+          if (canChown && (!asOther || has("setpriv"))) {
+            const dir = path.dirname(cacheFile)
+            const runAs = asOther ? ["setpriv", "--reuid=65534", "--regid=65534", "--clear-groups"] : []
+            const foreignLookups = () => asked().filter((u) => u === "/foreign/releases/latest").length
+            try {
+              if (asOther) privileged(["chown", "-R", "65534", cacheHome])
+              for (const mode of [0o755, 0o777]) {
+                plant(Date.now())
+                const before = fs.readFileSync(cacheFile, "utf8")
+                fs.chmodSync(dir, mode)
+                privileged(["chown", asOther ? "0" : "65534", dir])
+                if (asOther) privileged(["chown", "65534", cacheFile])
+                try {
+                  const r = tty("--version", { NISH_RELEASE_URL: `${origin}/foreign` }, runAs)
+                  const after = fs.readFileSync(cacheFile, "utf8")
+                  check(
+                    `update notice: a private cache in a ${mode.toString(8)} directory owned by another user is not believed or rewritten`,
+                    r.status === 0 && lines(r.out) === 0 && after === before,
+                    `${JSON.stringify(r)}; cache ${JSON.stringify(after)}`,
+                  )
+                } finally {
+                  privileged(["chown", "-R", asOther ? "65534" : String(process.getuid()), dir])
+                  fs.chmodSync(dir, 0o700)
+                }
+              }
+              const asking = waitFor(() => foreignLookups() > 0, 5000)
+              check("update notice: a cache in another user's directory starts no network check", !asking, `${foreignLookups()} lookups`)
+            } finally {
+              privileged(["chown", "-R", String(process.getuid()), cacheHome])
+            }
+          } else {
+            skip("update notice: a cache in another user's directory: needs root with setpriv, or passwordless sudo")
+          }
+        }
+      } finally {
+        server.kill()
+      }
+    }
+  }
 }
 
 // A filtered run's `tail` groups are shard 1's, and the line below names them.
@@ -28110,6 +29685,42 @@ if (!only || "net_http_server_deep".includes(only)) {
         `signal ${r.signal}\n${shown(r)}`
       )
     }
+  }
+}
+
+// The first `nish:net` call that makes a descriptor raises the soft
+// RLIMIT_NOFILE to the hard limit (runtime/runtime-net.c,
+// `nish_net_raise_nofile`; RT-54 in docs/security/runtime.md). The program
+// starts under a soft limit of 64 with the hard limit left as it was, makes a
+// listener, then holds 200 loop descriptors: without the raise its pollCreate
+// answers -24 near 61. A host whose hard limit is under 256 cannot show the
+// raise, so the section skips there. The verdict is the program's exit status
+// and its line, never a message of bash's.
+if (!only || "net_fd_limit".includes(only)) {
+  const hard = process.platform === "win32" ? null : spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" })
+  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  if (!HAS_CLANG || hard === null) {
+    skip("net_fd_limit: the raise is read under bash's ulimit, and this host has no clang or is Windows")
+  } else if (!(room >= 256)) {
+    skip(`net_fd_limit: the hard descriptor limit here is ${hard.stdout.trim()}, under the 256 the check needs`)
+  } else {
+    const dir = path.join(buildDir, "net_fd_limit")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "raise")
+    const c = spawnSync(NISH, [path.join(linkDir, "net_fd_limit", "raise.ts"), "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const r =
+      c.status === 0
+        ? spawnSync("bash", ["-c", 'ulimit -S -n 64 && exec "$0"', exe], { encoding: "utf8", timeout: 60000 })
+        : null
+    check(
+      "net_fd_limit: under a soft limit of 64, a program that has called tcpListen holds 200 more descriptors",
+      r !== null && r.status === 0 && r.stdout === "held 200 descriptors past a soft limit of 64\n",
+      r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+    )
   }
 }
 
@@ -28951,13 +30562,13 @@ if (!only || "sandbox dependency grants".includes(only)) {
     const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
     if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
     const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
-    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
-    const build = (fixture, flags) => {
+    /** Builds <from>/<fixture> (tests/link by default) with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags, from = linkDir) => {
       const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
       const exe = path.join(out, "app")
       const r = spawnSync(
         NISH,
-        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        [path.join(from, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
         { cwd: root, encoding: "utf8" }
       )
       if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
@@ -29159,6 +30770,447 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rBothSh.stdout === "sh-ran\n0\n",
         `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
       )
+      // SBX-1's residual, fixed (docs/security/sandbox.md): Landlock grants
+      // EXECUTE on the loader to the whole tree, so a granted program that
+      // executes a path from its arguments reached the loader and, through
+      // it, any binary. Under an exec allowlist a spawn's child now completes
+      // one exec, the granted program's own start, and nothing below it execs
+      // again. The granted program here is one this check builds, so that the
+      // checks run on every machine with clang; `find` and `env`, two tools of
+      // different shape, follow where the machine has them.
+      const once = "sandbox_dep_exec_once"
+      const onceTo = "sandbox_dep_exec_once_to"
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here, with `prefix` (`exec:`) before it. */
+      const withHelper = (fixture, grants, prefix = "", tag = "") => {
+        const copy = `${fixture}_helper${prefix === "" ? "" : "_exec"}${grants.length === 0 ? "" : "_more"}${tag}`
+        const to = path.join(dir, copy)
+        fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
+        fs.mkdirSync(path.join(to, "bin"), { recursive: true })
+        const src = path.join(to, "exec-args.c")
+        fs.writeFileSync(
+          src,
+          "#include <errno.h>\n#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n" +
+            "#include <sys/prctl.h>\n#include <sys/stat.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n" +
+            "#include <linux/filter.h>\n#include <linux/seccomp.h>\n" +
+            "int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n" +
+            // `--listener <flags>`: the errno of installing an allow-all
+            // seccomp filter with those flags (8 is NEW_LISTENER), 0 for none.
+            '  if (!strcmp(argv[1], "--listener") && argc > 2) {\n' +
+            "    struct sock_filter allow = BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);\n" +
+            "    struct sock_fprog prog = {1, &allow};\n    prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);\n" +
+            "    return syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, atoi(argv[2]), &prog) < 0 ? errno : 0;\n  }\n" +
+            // `--sigblk`: how many signals this program was started with blocked.
+            '  if (!strcmp(argv[1], "--sigblk")) {\n    int n = 0;\n    sigset_t now;\n' +
+            "    sigprocmask(SIG_BLOCK, 0, &now);\n    for (int sig = 1; sig < 65; sig++) n += sigismember(&now, sig) == 1;\n    return n;\n  }\n" +
+            // `--block <program...>`: that program, started with SIGUSR1 blocked.
+            '  if (!strcmp(argv[1], "--block") && argc > 2) {\n    sigset_t usr;\n    sigemptyset(&usr);\n' +
+            "    sigaddset(&usr, SIGUSR1);\n    sigprocmask(SIG_BLOCK, &usr, 0);\n    argv++;\n  }\n" +
+            // `--fds`: how many descriptors from 3 up this program was started
+            // with that are not regular files (a pipe, a seccomp listener).
+            '  if (!strcmp(argv[1], "--fds")) {\n    int n = 0;\n    struct stat st;\n' +
+            "    for (int fd = 3; fd < 1024; fd++) n += !fstat(fd, &st) && !S_ISREG(st.st_mode);\n    return n;\n  }\n" +
+            '  execv(argv[1], argv + 1);\n  perror("exec-args");\n  return 111;\n}\n'
+        )
+        const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
+        const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
+        manifest.nish.capabilities.dependencies.pkg_runner = [`process.spawn=${prefix}./bin/exec-args`, ...grants]
+        fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
+        return cc.status === 0 ? copy : null
+      }
+      const helped = withHelper(once, [])
+      const hAllow = helped === null ? null : build(helped, ["--sandbox"], dir)
+      const hOpen = helped === null ? null : build(helped, [], dir)
+      const helper = helped === null ? "" : fs.realpathSync(path.join(dir, helped, "bin", "exec-args"))
+      const hList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(helped === null ? "" : ir(helped))
+      const hLoaders = hList === null ? [] : hList[1].split("\\00").filter((p) => p.startsWith("//"))
+      if (hAllow === null || hOpen === null || hLoaders.length === 0 || ungrantedCc.status !== 0) {
+        skip(
+          `sandbox dependency grants: clang could not build the granted exec-args helper or the ungranted program, or the helper has no ELF loader on the allowlist (${hLoaders.length}); one exec per spawn is not checked`
+        )
+      } else {
+        const loader = hLoaders[0].slice(1)
+        // One check per spawn builtin: each reaches `nish_spawn_start` with
+        // its own file actions. `sync`, `fds` and `spawn` leave the child's
+        // stdout on the check's pipe; a captured run answers the byte count.
+        // 111 is the helper's status when its exec fails.
+        for (const [how, builtin, held, ran] of [
+          ["sync", "spawnSync", "111\n", "sbx-1\n0\n"],
+          ["piped", "spawnPiped", "111 0\n", "0 6\n"],
+          ["within", "spawnPipedWithin", "111 0\n", "0 6\n"],
+          ["fds", "spawnWithFds", "111\n", "sbx-1\n0\n"],
+          ["spawn", "spawn", "111\n", "sbx-1\n0\n"],
+        ]) {
+          const rHeld = run(hAllow, [how, helper, loader, ungranted])
+          const rRan = run(hOpen, [how, helper, loader, ungranted])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              rHeld.stdout === held &&
+              rRan.status === 0 &&
+              rRan.stdout === ran,
+            `${helper} ${loader} ${ungranted}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        const rSelf = run(hAllow, ["sync", helper, helper])
+        const rSelfPlain = run(hOpen, ["sync", helper, helper])
+        check(
+          "sandbox dependency grants: a granted program cannot exec itself again (SBX-1)",
+          rSelf.status === 0 &&
+            rSelf.stdout === "111\n" &&
+            rSelf.stderr.includes("exec-args: ") &&
+            rSelfPlain.status === 0 &&
+            rSelfPlain.stdout === "0\n",
+          `${said(rSelf)}\n--- without --sandbox\n${said(rSelfPlain)}`
+        )
+        // The granted program still starts, and starts again: no state of one
+        // spawn (the filter, the listener) is left on the program's thread.
+        const rPlainStart = run(hAllow, ["sync", helper])
+        check(
+          "sandbox dependency grants: a granted program that execs nothing runs as before",
+          rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
+          said(rPlainStart)
+        )
+        // The rule the one exec rests on: a second listener anywhere in the
+        // subtree is refused (EBUSY, 16). The kernel lets the newest filter's
+        // "continue" stand for every filter's, so a granted program with a
+        // listener of its own would answer its children's execs itself. 8 is
+        // NEW_LISTENER; 25 adds TSYNC and TSYNC_ESRCH, the one other spelling
+        // the kernel takes it in (Linux 5.7). Without `--sandbox` the same
+        // call succeeds, which is what makes the EBUSY this filter's; where it
+        // does not (an older kernel, a launcher's own listener above the
+        // suite) that spelling is not judged.
+        const listeners = [8, 25].map((flags) => [
+          flags,
+          run(hAllow, ["sync", helper, "--listener", String(flags)]),
+          run(hOpen, ["sync", helper, "--listener", String(flags)]),
+        ])
+        const judged = listeners.filter(([, , plain]) => plain.status === 0 && plain.stdout === "0\n")
+        if (judged.length === 0 || judged[0][0] !== 8) {
+          skip(
+            `sandbox dependency grants: this machine installs no seccomp listener without --sandbox either (${listeners.map(([flags, , plain]) => `${flags}: ${plain.stdout.trim()}`).join(", ")}); the refusal of a second listener is not checked`
+          )
+        } else {
+          check(
+            "sandbox dependency grants: a granted program cannot install a seccomp listener of its own (SBX-1)",
+            judged.every(([, held]) => held.status === 0 && held.signal === null && held.stdout === "16\n"),
+            listeners
+              .map(([flags, held, plain]) => `flags ${flags}\n${said(held)}\n--- without --sandbox\n${said(plain)}`)
+              .join("\n")
+          )
+        }
+        // The two threads a spawn runs on block every signal, so the program's
+        // handlers never run in their private descriptor table; the child is
+        // handed the calling thread's mask, not theirs. Here the program is
+        // started with SIGUSR1 blocked and its child counts what it was
+        // started with blocked: that one signal, with `--sandbox` as without.
+        for (const [how, builtin] of [
+          ["sync", "spawnSync"],
+          ["spawn", "spawn"],
+        ]) {
+          const rMask = run(helper, ["--block", hAllow, how, helper, "--sigblk"])
+          const rMaskPlain = run(helper, ["--block", hOpen, how, helper, "--sigblk"])
+          const rNone = run(hAllow, [how, helper, "--sigblk"])
+          const maskShown = `${said(rMask)}\n--- without --sandbox\n${said(rMaskPlain)}\n--- nothing blocked\n${said(rNone)}`
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} starts with the caller's signal mask (SBX-1)`,
+            rMask.status === 0 && rMask.stdout === "1\n" && rMaskPlain.stdout === "1\n" && rNone.stdout === "0\n",
+            maskShown
+          )
+        }
+        // A kernel that takes the filter and not the "continue" answer (Linux
+        // 5.0 to 5.4), read on this one: the runtime built with
+        // -DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1 has that answer fail, and with
+        // =2 the error answer after it too, which leaves killing the child.
+        // The child holds the listener as well until its exec commits, so a
+        // supervisor that only closed its own copy would leave the child in
+        // its exec and the spawn waiting for good: the run's timeout would end
+        // it with a signal. Each spawn answers its refusal instead, the second
+        // one too, and the program goes on.
+        const refusedLine =
+          "nish: --sandbox: cannot hold a spawned program to one exec, so the spawn is refused (EINVAL)\n"
+        // The two paths answer different numbers through `spawn`: ENOSYS (38)
+        // is the child's own failed exec, as `posix_spawn` reports it, and
+        // ECHILD (10) the child killed and reaped.
+        for (const [sim, how, errno] of [
+          [1, "fails the child's exec", 38],
+          [2, "kills and reaps the child", 10],
+        ]) {
+          const exe = path.join(dir, `no-continue-${sim}`)
+          const rt = runtimeObjects([`-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=${sim}`])
+          const from = path.join(dir, `${helped}-sandbox`)
+          const lls = fs.readdirSync(from).filter((f) => f.endsWith(".ll"))
+          const l =
+            rt.error !== null
+              ? { status: 1, stdout: "", stderr: rt.error }
+              : spawnSync(
+                  "clang",
+                  ["-Wno-override-module", "-O2", ...lls.map((f) => path.join(from, f)), ...rt.objects, "-o", exe],
+                  { cwd: root, encoding: "utf8" }
+                )
+          const rSync = l.status === 0 ? run(exe, ["sync", helper]) : null
+          const rSpawn = l.status === 0 ? run(exe, ["spawn", helper]) : null
+          check(
+            `sandbox dependency grants: a spawn whose exec cannot be answered "continue" is refused and does not hang: the supervisor ${how} (SBX-1)`,
+            rSync !== null &&
+              rSync.status === 0 &&
+              rSync.signal === null &&
+              rSync.stdout === "-1\n" &&
+              rSync.stderr === refusedLine &&
+              rSpawn.status === 0 &&
+              rSpawn.signal === null &&
+              rSpawn.stdout === `-${errno}\n` &&
+              rSpawn.stderr === refusedLine,
+            l.status === 0 ? `${said(rSync)}\n--- spawn\n${said(rSpawn)}` : shown(l)
+          )
+        }
+        // What the granted program is started holding. The sandbox makes a
+        // pipe, a seccomp listener and the checked file's descriptor for each
+        // spawn, in a descriptor table where the lowest free numbers are the
+        // ones the child's redirects name; here 0 and 2 are free as well,
+        // closed by the shell that starts the program. The helper answers how
+        // many descriptors from 3 up it holds that are not regular files: the
+        // one `spawnWithFds` hands it (this check's stdout pipe) and no other,
+        // with `--sandbox` as without. A runner may hand every process it
+        // starts descriptors of its own (CI's does); the helper started by the
+        // shell alone counts those, and each expectation is that count more.
+        const closed = 'exec "$@" <&- 2>&-'
+        const mine = run("/bin/sh", ["-c", closed, "sh", helper, "--fds"]).status
+        for (const [how, builtin, held] of [
+          ["sync", "spawnSync", `${mine}\n`],
+          ["piped", "spawnPiped", `${mine} 0\n`],
+          ["within", "spawnPipedWithin", `${mine} 0\n`],
+          ["fds", "spawnWithFds", `${mine + 1}\n`],
+          ["spawn", "spawn", `${mine}\n`],
+        ]) {
+          const rFds = run("/bin/sh", ["-c", closed, "sh", hAllow, how, helper, "--fds"])
+          const rFdsPlain = run("/bin/sh", ["-c", closed, "sh", hOpen, how, helper, "--fds"])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} is started with no descriptor of the sandbox's, stdin and stderr closed (SBX-1)`,
+            rFds.status === 0 && rFds.signal === null && rFds.stdout === held && rFdsPlain.stdout === held,
+            `inherited from the runner: ${mine}\n${said(rFds)}\n--- without --sandbox\n${said(rFdsPlain)}`
+          )
+        }
+        // The child of `to` dies before its exec: this package has no
+        // `fs.write`, so Landlock refuses the stdout file the child opens.
+        // The spawn answers its error and does not wait for an exec that
+        // never comes (the run's timeout would end it with a signal).
+        const rDied = run(hAllow, ["to", helper])
+        const rMissing = run(hAllow, ["spawn", "sbx-1-no-such-program"])
+        check(
+          "sandbox dependency grants: a spawn whose child dies before its exec answers the error and does not hang (SBX-1)",
+          rDied.status === 0 &&
+            rDied.signal === null &&
+            rDied.stdout === "-1\n" &&
+            rMissing.status === 0 &&
+            rMissing.stdout === "-2\n",
+          `${said(rDied)}\n--- a program that is not there\n${said(rMissing)}`
+        )
+        // `spawnSyncTo` has a file action of its own, the child's open of the
+        // stdout file, which needs a write scope and so ABI 3 under strict
+        // `--sandbox` (as the fs.write=<dir> checks above).
+        const helpedTo = abi < 3 ? null : withHelper(onceTo, ["fs.write=./out"])
+        if (helpedTo === null) {
+          skip(
+            `sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3) or clang could not build the helper; one exec per spawn is not checked through spawnSyncTo`
+          )
+        } else {
+          const tAllow = build(helpedTo, ["--sandbox"], dir)
+          const tOpen = build(helpedTo, [], dir)
+          const tHelper = fs.realpathSync(path.join(dir, helpedTo, "bin", "exec-args"))
+          const heldOut = path.join(dir, helpedTo, "out", "held.txt")
+          const ranOut = path.join(dir, helpedTo, "out", "ran.txt")
+          const rHeld = run(tAllow, [heldOut, tHelper, loader, ungranted])
+          const rRan = run(tOpen, [ranOut, tHelper, loader, ungranted])
+          const text = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+          check(
+            "sandbox dependency grants: a program granted to spawnSyncTo cannot hand the loader an ungranted binary (SBX-1)",
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.stdout === "111\n" &&
+              text(heldOut) === "" &&
+              rRan !== null &&
+              rRan.status === 0 &&
+              rRan.stdout === "0\n" &&
+              text(ranOut) === "sbx-1\n",
+            `${said(rHeld)}\n${heldOut}: ${JSON.stringify(text(heldOut))}\n--- without --sandbox\n${said(rRan)}\n${ranOut}: ${JSON.stringify(text(ranOut))}`
+          )
+        }
+        // The machine's own tools. `find -exec` forks and execs per match and
+        // `env` execs in place; each is checked only where its control run,
+        // without `--sandbox`, does run the ungranted program through the
+        // loader, so a tool that is missing or of another shape is a SKIP.
+        // What says the tool itself started, and that its own exec is what
+        // failed, is no message of the tool's (GNU's and uutils' differ): it is
+        // the line `find -print` writes before its `-exec`, and the status 126
+        // or 127 POSIX gives `env` for a utility it could not invoke. A refused
+        // spawn answers -1 and prints neither.
+        const oAllow = build(once, ["--sandbox"])
+        const oOpen = build(once, [])
+        for (const [tool, argv] of [
+          ["find", ["find", ungranted, "-maxdepth", "0", "-print", "-exec", loader, ungranted, ";"]],
+          ["env", ["env", loader, ungranted]],
+        ]) {
+          const lines = (r) => r.stdout.split("\n")
+          const rRan = realOnPath(tool) === null ? null : run(oOpen, ["sync", ...argv])
+          if (rRan === null || rRan.status !== 0 || !lines(rRan).includes("sbx-1")) {
+            skip(
+              `sandbox dependency grants: \`${tool}\` is not on PATH here or did not run the loader without --sandbox (${said(rRan)}); one exec per spawn is not checked through it`
+            )
+            continue
+          }
+          const rHeld = run(oAllow, ["sync", ...argv])
+          check(
+            `sandbox dependency grants: a granted ${tool} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              !lines(rHeld).includes("sbx-1") &&
+              (tool === "find"
+                ? lines(rHeld).length === 3 && lines(rHeld)[0] === ungranted && /^\d+$/.test(lines(rHeld)[1])
+                : /^12[67]\n$/.test(rHeld.stdout)),
+            `${argv.join(" ")}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        // Another program the same grant names is no more reachable from a
+        // granted one than an ungranted program is.
+        const rOther = realOnPath("env") === null || realOnPath("true") === null ? null : run(oOpen, ["sync", "env", "true"])
+        if (rOther === null || rOther.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOther)}); a granted program's exec of another granted program is not checked`
+          )
+        } else {
+          const rOtherHeld = run(oAllow, ["sync", "env", "true"])
+          const rTrueStill = run(oAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: a granted program cannot exec another granted program (SBX-1)",
+            rOtherHeld !== null &&
+              rOtherHeld.status === 0 &&
+              // `env` started, and its exec of `true` is what failed.
+              /^12[67]\n$/.test(rOtherHeld.stdout) &&
+              rTrueStill.stdout === "0\n",
+            `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+        // WP40 §2a: a program granted `process.spawn=exec:<program>` keeps
+        // its subtree's reach of the allowlist (docs/security/sandbox.md,
+        // "Limits"). The compiler marks it `///` and the runtime starts it
+        // without the one-exec filter, through the same identity check: it
+        // runs another granted program and, through the loader, an ungranted
+        // binary, where the same helper granted plainly gets 111 (above). A
+        // program granted both ways is granted `exec:`. The loader named
+        // directly is refused still, and without `--sandbox` the runs agree.
+        // Beside the `exec:` grant, a second program granted plainly is held
+        // to its one exec all the same when it is a copy, a file of its own;
+        // a hard link is the `exec:` program under another name, and the
+        // runtime, which decides by file identity, starts it unheld.
+        for (const [grants, how, second] of [
+          [[], "granted exec:", null],
+          [["process.spawn=./bin/exec-args"], "granted exec: and plainly", null],
+          [["process.spawn=./bin/exec-copy"], "granted exec: beside a copy granted plainly", "copy"],
+          [["process.spawn=./bin/exec-link"], "granted exec: beside a hard link granted plainly", "link"],
+        ]) {
+          const freed = withHelper(once, grants, "exec:", second === null ? "" : `_${second}`)
+          if (freed !== null && second !== null) {
+            const from = path.join(dir, freed, "bin", "exec-args")
+            const to = path.join(dir, freed, "bin", `exec-${second}`)
+            fs.rmSync(to, { force: true })
+            if (second === "copy") {
+              fs.copyFileSync(from, to)
+              fs.chmodSync(to, 0o755)
+            } else {
+              fs.linkSync(from, to)
+            }
+          }
+          const fAllow = freed === null ? null : build(freed, ["--sandbox"], dir)
+          const fOpen = freed === null ? null : build(freed, [], dir)
+          if (fAllow === null || fOpen === null) {
+            skip(`sandbox dependency grants: clang could not build the exec-args helper ${how}; exec: is not checked`)
+            continue
+          }
+          const fHelper = fs.realpathSync(path.join(dir, freed, "bin", "exec-args"))
+          const fList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(freed))
+          const fEntries = fList === null ? [] : fList[1].split("\\00")
+          const rLoaderOnce = run(fAllow, ["sync", fHelper, loader, ungranted])
+          const rLoaderOpen = run(fOpen, ["sync", fHelper, loader, ungranted])
+          const rSelfOnce = run(fAllow, ["sync", fHelper, fHelper])
+          const rDirect = run(fAllow, ["sync", loader, ungranted])
+          check(
+            `sandbox dependency grants: a program ${how} starts the loader with an ungranted binary, and itself (WP40 §2a)`,
+            fEntries.includes(`//${fHelper}`) &&
+              !fEntries.includes(fHelper) &&
+              rLoaderOnce.status === 0 &&
+              rLoaderOnce.signal === null &&
+              rLoaderOnce.stdout === "sbx-1\n0\n" &&
+              rLoaderOpen.stdout === "sbx-1\n0\n" &&
+              rSelfOnce.status === 0 &&
+              rSelfOnce.stdout === "0\n" &&
+              rDirect.status === 0 &&
+              rDirect.stdout === "-1\n",
+            `${fEntries.join(" ")}\n${said(rLoaderOnce)}\n--- without --sandbox\n${said(rLoaderOpen)}\n--- itself\n${said(rSelfOnce)}\n--- the loader directly\n${said(rDirect)}`
+          )
+          if (second !== null) {
+            const fSecond = fs.realpathSync(path.join(dir, freed, "bin", `exec-${second}`))
+            const rSecondOnce = run(fAllow, ["sync", fSecond, loader, ungranted])
+            const rSecondOpen = run(fOpen, ["sync", fSecond, loader, ungranted])
+            const unheld = second === "link"
+            check(
+              unheld
+                ? "sandbox dependency grants: a hard link of a program granted exec:, granted plainly, is that program and starts unheld (WP40 §2a)"
+                : "sandbox dependency grants: a program granted plainly beside another's exec: grant is held to its one exec (WP40 §2a)",
+              fEntries.includes(fSecond) &&
+                rSecondOnce !== null &&
+                rSecondOnce.status === 0 &&
+                rSecondOnce.signal === null &&
+                (unheld
+                  ? rSecondOnce.stdout === "sbx-1\n0\n"
+                  : rSecondOnce.stdout === "111\n" && rSecondOnce.stderr.includes("exec-args: ")) &&
+                rSecondOpen !== null &&
+                rSecondOpen.stdout === "sbx-1\n0\n",
+              `${fEntries.join(" ")}\n${said(rSecondOnce)}\n--- without --sandbox\n${said(rSecondOpen)}`
+            )
+          }
+        }
+        check(
+          "sandbox dependency grants: an allowlist with no exec: grant marks nothing /// (WP40 §2a)",
+          !hList[1].split("\\00").some((p) => p.startsWith("///")),
+          hList[1]
+        )
+        // The grant written in a checked-in manifest, with the machine's own
+        // tools: `env`, granted `exec:`, runs `true`, granted plainly, where
+        // the plain `env` of sandbox_dep_exec_once could not (above). `true`
+        // run on its own only shows the plain grant still starts; it execs
+        // nothing, so the hold on a plain grant beside an `exec:` one is
+        // checked with the built helper's copy (above), not here.
+        const optin = "sandbox_dep_exec_optin"
+        const rOptinOpen = rOther === null || rOther.stdout !== "0\n" ? null : run(build(optin, []), ["sync", "env", "true"])
+        if (realOnPath("env") !== null && realOnPath("env") === realOnPath("true")) {
+          // A multicall coreutils (uutils) is one file for both, which the
+          // grant then names both ways, so `true` is `exec:` too and the
+          // allowlist has no plain entry for it to check.
+          skip(
+            `sandbox dependency grants: \`env\` and \`true\` are one file here (${realOnPath("env")}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOptinOpen)}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else {
+          const xAllow = build(optin, ["--sandbox"])
+          const rOptin = run(xAllow, ["sync", "env", "true"])
+          const rTrueHeld = run(xAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: env granted exec: runs another granted program (WP40 §2a)",
+            rOptin !== null &&
+              rOptin.status === 0 &&
+              rOptin.stdout === "0\n" &&
+              rTrueHeld.stdout === "0\n" &&
+              /@\.sandbox\.exec = [^"]*c"[^"]*\/\/\/[^"\\]*env\\00/.test(ir(optin)),
+            `${said(rOptin)}\n--- true\n${said(rTrueHeld)}\n${ir(optin)}`
+          )
+        }
+      }
     }
   }
 }
@@ -29275,6 +31327,16 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
     ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
     ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_guard", "a load a too-short loop guard does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_resized", "a load after a call that shrinks the array its guard proved", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_unfloored", "a load under `i <= n - 16` with `i` not known non-negative", "3\n", "index out of range: 18446744073709551615 >= 20"],
+    ["simd_access_oob_loop_pop", "a load after a `pop` in the loop its hoisted guard proved", "1\n", "index out of range: 4 >= 4"],
+    ["simd_access_oob_alias_pop", "a load after its array shrinks through a second handle", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_field_swap", "a load of a field array a method replaced after the guard", "4\n", "index out of range: 3 >= 2"],
+    ["simd_access_oob_strict", "a load a strict guard one lane short does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_below", "a load `i <= n - 2` with `n < xs.length` does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
+    ["simd_access_oob_huge_offset", "a load at `i + c` whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
+    ["simd_access_oob_huge_literal", "a load at a literal whose last lane is past INT_MAX", "1\n", "index out of range: 2147483640 >= 3"],
   ]
   for (const [name, what, stdout, words] of oobCases) {
     const exe = buildCaseIn(simdDir, name)
@@ -32841,7 +34903,7 @@ if (!only || "host-import-window".includes(only)) {
       )
       if (linked.status === 0) {
         fs.writeFileSync(at("round-trip.mjs"), "// Driven by tests/run.js's host-import-window section: every export through the\n// loader, against the page's own host.ts.\nimport { readFileSync } from \"node:fs\"\nimport * as host from \"./host.ts\"\nimport { loadSync } from \"./main.mjs\"\n\nconst bytes = readFileSync(new URL(\"./main.wasm\", import.meta.url))\nconst out = []\nconst m = loadSync(bytes, { host, onPanic: () => {} })\nfor (const name of [\"u8s\", \"u16s\", \"u32s\", \"i32s\", \"f32s\", \"f64s\", \"whole\", \"stored\", \"stored\"]) out.push(`${name} ${m[name]()}`)\nfor (const name of [\"past\", \"wraps\"]) {\n  const fresh = loadSync(bytes, { host, onPanic: () => {} })\n  try {\n    out.push(`${name} ok ${fresh[name]()}`)\n  } catch (e) {\n    out.push(`${name} ${e.constructor.name} ${e.message}`)\n  }\n}\nconsole.log(out.join(\"\\n\"))")
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -32920,7 +34982,7 @@ if (!only || "host-import-text".includes(only)) {
         loader.split("\n").filter((line) => line.includes("text(")).join("\n")
       )
       if (linked.status === 0) {
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -33043,7 +35105,7 @@ if (!only || "host-import-text".includes(only)) {
     const reading = spawnSync(NISH, [at("reading.ts"), "--host", at("host.ts"), "--emit-ts", readingDir], { cwd: root, encoding: "utf8" })
     const readingRan =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(readingDir, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(readingDir, "entry.ts")], {
             cwd: readingDir,
             encoding: "utf8",
           })
@@ -33408,7 +35470,7 @@ if (!only || "host-import".includes(only)) {
             "console.log(refused)",
           ].join("\n")
         )
-        const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("round-trip.mjs")], {
+        const run = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("round-trip.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -33486,7 +35548,7 @@ if (!only || "host-import".includes(only)) {
     })
     const ran =
       reading.status === 0
-        ? spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", path.join(emitted, "entry.ts")], {
+        ? spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", path.join(emitted, "entry.ts")], {
             cwd: emitted,
             encoding: "utf8",
           })
@@ -33691,6 +35753,32 @@ if (!only || "host-import".includes(only)) {
         `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
       )
     }
+    // IR that only declares the root keep, as every --runtime-decls module
+    // does, has no root storage: it links main's bytes, with the runtime's own
+    // nish_reset_arena and nish_free_arena (scripts/build.sh keys
+    // NISH_WASM_ROOTS on the IR defining nish_reset_arena).
+    if (wasmBytes) {
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === "examples/arrays.ts")
+      const ll = wasmHostCompile(path.join(dir, "declares-keep"), "arrays")
+      const got = {}
+      if (ll !== null) {
+        fs.appendFileSync(ll, "\ndeclare void @nish_runtime_root_keep(i64, i8*, i32)\n")
+      }
+      for (const [part, profile] of [
+        ["wasm", "wasm"],
+        ["host", "wasm-host"],
+      ]) {
+        const out = path.join(dir, "declares-keep", `arrays.${profile}.wasm`)
+        const linked = ll === null ? { status: 1, stdout: "", stderr: "compile failed" } : wasmHostLink([ll, "runtime/runtime-wasm.c"], ["-o", out, "--profile", profile])
+        got[part] = linked.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(linked)
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        "host-import: examples/arrays.ts whose IR declares nish_runtime_root_keep links main's --profile wasm and wasm-host .wasm",
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+    }
   }
 }
 
@@ -33710,8 +35798,11 @@ if (!only || "module-storage".includes(only)) {
     const dir = path.join(buildDir, "module-storage")
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
-    for (const name of fs.readdirSync(path.join(root, "tests", "module-storage"))) {
-      fs.copyFileSync(path.join(root, "tests", "module-storage", name), path.join(dir, name))
+    // Files only: tests/module-storage/persist/ holds the persist section's programs.
+    for (const entry of fs.readdirSync(path.join(root, "tests", "module-storage"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        fs.copyFileSync(path.join(root, "tests", "module-storage", entry.name), path.join(dir, entry.name))
+      }
     }
     const at = (name) => path.join(dir, name)
     const compiled = spawnSync(
@@ -33758,7 +35849,7 @@ if (!only || "module-storage".includes(only)) {
           ].join("\n")
         )
         const drive = (wasm) =>
-          spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
+          spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), "grow"], {
             cwd: dir,
             encoding: "utf8",
           })
@@ -33803,7 +35894,7 @@ if (!only || "module-storage".includes(only)) {
             "",
           ].join("\n")
         )
-        const reading = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+        const reading = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
           cwd: dir,
           encoding: "utf8",
         })
@@ -34007,7 +36098,7 @@ if (!only || "wasm-host-panic".includes(only)) {
         const drive = (wasm, what) => {
           const res = spawnSync(
             process.execPath,
-            ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
+            ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at(wasm), at(`${wasm}.sites.json`), what],
             { cwd: dir, encoding: "utf8" }
           )
           return { res, lines: res.status === 0 ? res.stdout.trim().split("\n") : [] }
@@ -34249,7 +36340,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive.mjs"), at("main.wasm")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive.mjs"), at("main.wasm")], {
         cwd: dir,
         encoding: "utf8",
       })
@@ -34318,7 +36409,7 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
           "",
         ].join("\n")
       )
-      const res = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", at("drive-ts.mjs")], {
+      const res = spawnSync(process.execPath, ["--import", TS_TRANSFORM, "--no-warnings", at("drive-ts.mjs")], {
         cwd: dir,
         encoding: "utf8",
       })
@@ -34345,6 +36436,462 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
     }
   }
+}
+
+// ---- persist: root storage kept across export calls (docs/wp55-persistent-root.md) --
+// Two modules with root storage, built for a page and driven from Node through
+// the loader `--emit-dts` writes (tests/persist/drive.mjs; the programs live in
+// tests/module-storage/persist/): world.ts, whose
+// every step adds, drops and renames objects the root reaches and leaves
+// garbage, and director.ts, whose root is the real break director. Each runs
+// 100,000 steps; the driver checks the answers and that linear memory and the
+// kept heap stay flat after warm-up; the director also runs its first 40,000
+// steps beside an instance whose keep does nothing and must match it frame for
+// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
+// call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// cycles, one object two root storages and two slots share, arrays of arrays
+// and empty arrays and strings through a compaction at least every third call
+// (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
+// layouts a wrong offset or stride would corrupt silently: an array of records
+// kept in place, a union and a nullable-union field, a `(C | null)[]` and
+// `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
+// to pack the list to 8 bytes a node, so a run whose keep never compacts fails.
+// A sixth, tests/module-storage/persist/forge.ts, plays a hostile page (WH-10,
+// docs/security/wasm-host.md): it points a root slot or a pointer field at a
+// fake cell past the arena, or sets an array's len (and cap) to 2^40, then
+// forces a compaction, which must throw a NishPanic and leave the fake's bytes
+// as written. Before the fix the compactor rewrote the fake's field for the
+// first two and walked the len into a bare out-of-bounds trap.
+// Each also links under plain `--profile wasm`, where runtime-wasm.c is built
+// without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
+// union is fine in a page build's `.d.ts` but refused once a C header is asked
+// for, which has no spelling for it; and root storage whose class is declared
+// after the `const` still gets that class's descriptor.
+if (!only || "persist".includes(only)) {
+  const unionDir = path.join(buildDir, "persist-union")
+  fs.rmSync(unionDir, { recursive: true, force: true })
+  fs.mkdirSync(unionDir, { recursive: true })
+  const unionArgs = ["tests/module-storage/persist/union-field.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "u.d.ts"), "-o", `${unionDir}/`]
+  const dtsOnly = spawnSync(NISH, unionArgs, { cwd: root, encoding: "utf8" })
+  check("persist: a union field in a class compiles with --emit-dts alone", dtsOnly.status === 0, shown(dtsOnly))
+  const withHeader = spawnSync(NISH, [...unionArgs, "--emit-header", path.join(unionDir, "u.h")], { cwd: root, encoding: "utf8" })
+  check(
+    "persist: the same union field is refused once --emit-header asks for a C layout",
+    withHeader.status !== 0 && withHeader.stderr.includes("which holds a union no sidecar can describe"),
+    shown(withHeader)
+  )
+  const late = spawnSync(
+    NISH,
+    ["tests/module-storage/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const lateIr = late.status === 0 ? fs.readFileSync(path.join(unionDir, "late-class.ll"), "utf8") : ""
+  check(
+    "persist: root storage whose class is declared after the const gets the class's trace descriptor and the keep",
+    lateIr.includes("@nish.trace.0 = internal constant %nish.trace { i32 0,") &&
+      lateIr.includes("define void @nish_root_keep(i64 %mark)"),
+    shown(late)
+  )
+  // Root storage with no string, no round_init and no tagged panic still links
+  // runtime-wasm.c (its keep, resets and arena): the IR's own nish_reset_arena
+  // is what asks for it. The panic tags are stripped to leave nothing else.
+  const bumpWhy = wasmHostTools()
+  if (bumpWhy !== null) {
+    skip(`persist: ${bumpWhy}`)
+  } else {
+    const bump = spawnSync(
+      NISH,
+      ["tests/module-storage/persist/bump.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "bump.d.ts"), "-o", `${unionDir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    const bareLl = path.join(unionDir, "bump-bare.ll")
+    if (bump.status === 0) {
+      const ir = fs.readFileSync(path.join(unionDir, "bump.ll"), "utf8")
+      fs.writeFileSync(
+        bareLl,
+        ir
+          .replace(/, !nish\.site !\{i32 \d+\}/g, "")
+          .split("\n")
+          .filter((line) => !/^; nish\.sites? /.test(line))
+          .join("\n")
+      )
+    }
+    for (const profile of ["wasm", "wasm-host"]) {
+      const out = path.join(unionDir, `bump.${profile}.wasm`)
+      const linked = bump.status === 0 ? wasmHostLink([bareLl], ["-o", out, "--profile", profile]) : bump
+      let got = shown(linked)
+      if (linked.status === 0) {
+        try {
+          const { exports: e } = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(out)), {})
+          e.init()
+          const mark = e.nish_arena_mark()
+          e.step()
+          e.nish_root_keep(mark)
+          e.step()
+          e.nish_root_keep(mark)
+          got = e.step()
+        } catch (err) {
+          got = String(err)
+        }
+      }
+      check(
+        `persist: root storage with no string, round_init or panic site links runtime-wasm.c under --profile ${profile} and keeps its root`,
+        got === 3,
+        String(got)
+      )
+    }
+  }
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`persist: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "persist")
+    fs.rmSync(dir, { recursive: true, force: true })
+    for (const [stem, source, steps, says] of [
+      ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
+      ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
+      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
+      ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
+      ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
+    ]) {
+      const out = path.join(dir, stem)
+      fs.mkdirSync(out, { recursive: true })
+      const compiled = spawnSync(
+        NISH,
+        [source, "--target", "wasm32", "--emit-dts", path.join(out, `${stem}.d.ts`), "-o", `${out}/`],
+        { cwd: root, encoding: "utf8" }
+      )
+      check(`persist: ${source} compiles for wasm32 with --emit-dts`, compiled.status === 0, shown(compiled))
+      if (compiled.status !== 0) {
+        continue
+      }
+      const loader = fs.readFileSync(path.join(out, `${stem}.mjs`), "utf8")
+      check(
+        `persist: ${stem}'s loader hands each call's arena to nish_root_keep, not nish_arena_release`,
+        loader.includes("raw.nish_root_keep(mark)") && !loader.includes("raw.nish_arena_release("),
+        loader
+      )
+      check(
+        `persist: ${stem}'s loader keeps the panic kind a failed keep recorded and only marks a bare trap`,
+        /raw\.nish_root_keep\(mark\);\s*\} catch \(e\) \{\s*if \(state\.dead === null\) \{\s*state\.dead = new NishPanic\([^;]*"trap", -1\);\s*\}\s*throw e;/.test(loader),
+        loader
+      )
+      const lls = fs
+        .readdirSync(out)
+        .filter((f) => f.endsWith(".ll"))
+        .map((f) => path.join(out, f))
+      const wasm = path.join(out, `${stem}.wasm`)
+      const plain = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", path.join(out, `${stem}-plain.wasm`), "--profile", "wasm"])
+      check(`persist: ${stem} links under --profile wasm, which defines nish_runtime_root_keep too`, plain.status === 0, shown(plain))
+      const linked = wasmHostLink([...lls, path.join(root, "runtime", "runtime-wasm.c")], ["-o", wasm, "--profile", "wasm-host"])
+      check(`persist: ${stem} links under --profile wasm-host`, linked.status === 0, shown(linked))
+      if (linked.status !== 0) {
+        continue
+      }
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, steps], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `persist: ${stem} ${says}`,
+        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: ${steps} steps`),
+        shown(ran)
+      )
+    }
+  }
+}
+
+// ---- nish/page/frame: the framebuffer presenter and the fixed-step loop ------------
+// tests/page-frame/check.mjs runs runtime/page-frame.mjs under Node against fake
+// WebGPU, WebGL 2 and Canvas 2D objects and prints a line per check. A real
+// browser is not run here: tests/page-frame/smoke-manual.cjs is the manual
+// Chromium smoke a change to the presenter is tried with.
+if (!only || "page-frame".includes(only)) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "page-frame", "check.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // Each line is `ok <name>` or `not ok <name>\t<detail>`, and the last
+  // `checks: <n>`: a run that stopped early prints fewer lines than it counts,
+  // or no count at all. The count is pinned, so a check that goes missing
+  // (a block skipped, a loop that ran short) is caught too; a check added or
+  // removed moves it.
+  const PAGE_FRAME_CHECKS = 114
+  const out = res.stdout.split("\n")
+  const lines = out.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = out.find((line) => line.startsWith("checks: "))
+  check(
+    "page-frame: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${lines.length}` && lines.length === PAGE_FRAME_CHECKS,
+    shown(res)
+  )
+  for (const line of lines) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`page-frame: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "page-frame")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "nish-page-frame.d.mts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, createPresenter, runFixedStep } from "./nish-page-frame.mjs"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement, pixels: Int32Array): Promise<number> => {",
+      "  const presenter = await createPresenter(canvas, {",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string) => console.warn(from, to, reason),",
+      "  })",
+      "  presenter.resize(canvas.clientWidth, canvas.clientHeight, devicePixelRatio)",
+      "  const loop = runFixedStep({",
+      "    stepsPerSecond: 60,",
+      "    maxStepsPerFrame: 4,",
+      "    step: () => undefined,",
+      "    render: (alpha: number, frameMs: number) => presenter.present(pixels, 4, 2),",
+      "  })",
+      "  const reasons: string[] = presenter.attempts.map((a) => `${a.backend}: ${a.reason}`)",
+      "  const now: HTMLCanvasElement = presenter.canvas",
+      "  loop.stop()",
+      "  presenter.destroy()",
+      "  return loop.refreshHz + loop.fps + reasons.length + now.width",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, noUnusedParameters: false },
+      include: [],
+      files: ["nish-page-frame.d.mts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("page-frame: a page type-checks against runtime/page-frame.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  check(
+    "page-frame: npm pack ships runtime/page-frame.mjs and runtime/page-frame.d.ts",
+    packed.includes("runtime/page-frame.mjs") && packed.includes("runtime/page-frame.d.ts"),
+    shown(pack)
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/frame"]
+  check(
+    "page-frame: package.json exports ./page/frame",
+    exported !== undefined &&
+      exported.types === "./runtime/page-frame.d.ts" &&
+      exported.default === "./runtime/page-frame.mjs",
+    JSON.stringify(exported)
+  )
+}
+
+// ---- nish/page/game: a nish/host/game module run on a page ------------------------
+// examples/game-starter/build.mjs links the starter game; tests/game-page/check.mjs
+// runs it under runtime/page-game.mjs in Node, with the fake canvases, clock, audio
+// and listeners of tests/page-frame/fakes.mjs, and prints a line per check.
+// tests/game-page/smoke-manual.cjs is the manual Chromium smoke.
+if (!only || "game-page".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`game-page: ${why}`)
+  } else {
+    const out = path.join(buildDir, "game-starter")
+    // A build of this test's own, so an older one without the build's marker is no obstacle.
+    fs.rmSync(out, { recursive: true, force: true })
+    const built = spawnSync("node", ["examples/game-starter/build.mjs", "--nish", NISH, "--out", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    // The count is pinned, as page-frame's is: a check that goes missing is caught.
+    const GAME_PAGE_CHECKS = 73
+    /** Runs tests/game-page/check.mjs over the build in `dir`: its result lines, and whether all of them ran. */
+    const runChecks = (dir) => {
+      const res = spawnSync(process.execPath, [path.join(root, "tests", "game-page", "check.mjs"), dir], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lines = res.stdout.split("\n")
+      const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+      const counted = lines.find((line) => line.startsWith("checks: "))
+      const complete = res.status === 0 && counted === `checks: ${results.length}` && results.length === GAME_PAGE_CHECKS
+      return { res, results, complete }
+    }
+    if (check("game-page: examples/game-starter/build.mjs links the starter game", built.status === 0, shown(built))) {
+      const { res, results, complete } = runChecks(out)
+      check("game-page: the checks ran to the end", complete, shown(res))
+      for (const line of results) {
+        const ok = line.startsWith("ok ")
+        const rest = ok ? line.slice(3) : line.slice(7)
+        const tab = rest.indexOf("\t")
+        check(`game-page: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+      }
+    }
+
+    // The starter as a user has it: copied out of the repository beside an
+    // installed nish package (node_modules/nish, here a link to this checkout)
+    // and its node_modules/.bin/nish, built with a bare `node build.mjs`.
+    const away = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-starter-"))
+    // A copy with no package anywhere above it.
+    const alone = fs.mkdtempSync(path.join(os.tmpdir(), "nish-game-alone-"))
+    try {
+      const copy = path.join(away, "my-game")
+      fs.cpSync(path.join(root, "examples", "game-starter"), copy, {
+        recursive: true,
+        filter: (from) => path.basename(from) !== "dist",
+      })
+      fs.mkdirSync(path.join(away, "node_modules", ".bin"), { recursive: true })
+      fs.symlinkSync(root, path.join(away, "node_modules", "nish"), "dir")
+      // A shim, not a link: the compiler finds std/ and runtime/ from the path it was run by.
+      const bin = path.join(away, "node_modules", ".bin", "nish")
+      fs.writeFileSync(bin, `#!/bin/sh\nexec '${path.resolve(NISH)}' "$@"\n`, { mode: 0o755 })
+      const copied = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+      if (check("game-page: the starter copied out of the repository builds against the installed package", copied.status === 0,
+        shown(copied))) {
+        // What it built runs: every check the in-repo build passes, over dist/.
+        const { res, results, complete } = runChecks(path.join(copy, "dist"))
+        check(
+          "game-page: the copied starter's dist/ passes every check",
+          complete && results.every((line) => line.startsWith("ok ")),
+          [...results.filter((line) => !line.startsWith("ok ")), shown(res)].join("\n")
+        )
+        const again = spawnSync(process.execPath, ["build.mjs"], { cwd: copy, encoding: "utf8" })
+        check("game-page: build.mjs rebuilds into the dist/ it wrote", again.status === 0, shown(again))
+      }
+
+      // --out is emptied, so build.mjs refuses one it does not own, saying why,
+      // and leaves it as it was; and a flag it does not know, or with no value.
+      const foreign = path.join(away, "foreign")
+      fs.mkdirSync(path.join(foreign, "nish"), { recursive: true })
+      fs.writeFileSync(path.join(foreign, "notes.txt"), "mine\n")
+      fs.writeFileSync(path.join(away, "a-file"), "mine\n")
+      const bare = path.join(alone, "my-game")
+      fs.cpSync(copy, bare, { recursive: true, filter: (from) => path.basename(from) !== "dist" })
+      for (const [what, args, cwd, says] of [
+        ["an --out holding the game", ["--out", away], copy, "holds the game, the package or the working directory"],
+        ["an --out at the root", ["--out", path.parse(away).root], copy, "holds the game, the package or the working directory"],
+        ["an --out at the working directory", ["--out", "."], copy, "holds the game, the package or the working directory"],
+        ["an --out holding files it did not write", ["--out", foreign], copy, "holds files this build did not write"],
+        ["an --out that is a file", ["--out", path.join(away, "a-file")], copy, "is a file; name a directory"],
+        ["a flag with no value", ["--out"], copy, "--out needs a value"],
+        ["a flag it does not know", ["--ouput", "elsewhere"], copy, "unknown argument --ouput"],
+        ["a directory without the nish package", [], bare, "the nish package is not installed here"],
+      ]) {
+        const refused = spawnSync(process.execPath, ["build.mjs", ...args], { cwd, encoding: "utf8" })
+        check(
+          `game-page: build.mjs refuses ${what}, saying so`,
+          refused.status === 1 && refused.stderr.includes(says),
+          shown(refused)
+        )
+      }
+      check(
+        "game-page: and the refusals left every directory as it was",
+        fs.existsSync(path.join(copy, "game.ts")) &&
+          fs.existsSync(path.join(foreign, "notes.txt")) &&
+          fs.existsSync(path.join(foreign, "nish")) &&
+          fs.readFileSync(path.join(away, "a-file"), "utf8") === "mine\n" &&
+          !fs.existsSync(path.join(copy, "elsewhere")) &&
+          !fs.existsSync(path.join(bare, "dist"))
+      )
+    } finally {
+      fs.rmSync(away, { recursive: true, force: true })
+      fs.rmSync(alone, { recursive: true, force: true })
+    }
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "game-page")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-game.d.ts"), path.join(dir, "page-game.d.ts"))
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "page-frame.d.ts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, DEFAULT_KEYS, DEFAULT_TOUCH, type Game, startGame } from "./page-game.js"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement): Promise<number> => {",
+      '  const game: Game = await startGame(canvas, new URL("./game.wasm", document.baseURI), {',
+      "    seed: 7,",
+      '    keys: [...DEFAULT_KEYS, "w"],',
+      '    touch: { zones: DEFAULT_TOUCH.zones, tap: " " },',
+      "    stepsPerSecond: 120,",
+      "    maxStepsPerFrame: 4,",
+      "    sound: { muted: true },",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string, fresh: HTMLCanvasElement) => console.warn(from, to, reason, fresh),",
+      "    loader: { load: async (source: WebAssembly.Module) => source },",
+      "    imports: {},",
+      "    onError: (error: unknown) => console.error(error),",
+      "    signal: new AbortController().signal,",
+      '    loaderUrl: new URL("./game.mjs", document.baseURI),',
+      "  })",
+      "  game.muted = false",
+      "  const running: boolean = game.running",
+      "  const now: HTMLCanvasElement = game.presenter.canvas",
+      "  game.stop()",
+      "  await startGame(canvas, \"game.wasm\", { touch: false, sound: false })",
+      "  return game.fps + game.refreshHz + now.width + (game.module === null || !running ? 0 : 1)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: false, noUnusedParameters: false },
+      include: [],
+      files: ["page-game.d.ts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("game-page: a page type-checks against runtime/page-game.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  // ... and what examples/game-starter/build.mjs reads from the installed package.
+  const shipped = [
+    "runtime/page-game.mjs",
+    "runtime/page-game.d.ts",
+    "runtime/page-frame.mjs",
+    "runtime/page.mjs",
+    "runtime/runtime-wasm.c",
+    "scripts/build.sh",
+  ]
+  check(
+    "game-page: npm pack ships nish/page/game, its imports and what build.mjs links with",
+    shipped.every((f) => packed.includes(f)),
+    `missing: ${shipped.filter((f) => !packed.includes(f)).join(", ")}\n${shown(pack)}`
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/game"]
+  check(
+    "game-page: package.json exports ./page/game",
+    exported !== undefined && exported.types === "./runtime/page-game.d.ts" && exported.default === "./runtime/page-game.mjs",
+    JSON.stringify(exported)
+  )
 }
 
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
@@ -36257,7 +38804,7 @@ if (fs.existsSync(threadsLl)) {
 // A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
 // the bit travels through callers, modules and packages like every other: here
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
-// module with no unsafe call, each of the seven exports, and a dependency that
+// module with no unsafe call, each of the eight exports, and a dependency that
 // imports `nish:unsafe` when the entry package does not.
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")
@@ -36274,7 +38821,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
       "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
     "each.ts":
-      "import { readCString, readStruct, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      "import { cErrno, readCString, readStruct, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
       '"nish:unsafe";\n\n' +
       "declare class Rec {\n  n: i32\n}\n\n" +
       "declare function cbuf(): CPtr | null;\n\n" +
@@ -36285,7 +38832,8 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
       'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n' +
       "export const rec = (): i32 => {\n  const p = cbuf();\n  if (p === null) {\n    return 0;\n  }\n" +
-      "  const r: Rec = readStruct(p);\n  return r.n;\n};\n",
+      "  const r: Rec = readStruct(p);\n  return r.n;\n};\n" +
+      "export const err = (): i32 => cErrno();\n",
     // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
     "package.json":
       '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
@@ -36364,10 +38912,11 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     ["mul", "wrappingMul"],
     ["str", "readCString"],
     ["rec", "readStruct"],
+    ["err", "cErrno"],
   ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
   check(
-    "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call",
-    exportsSeen.length === 7,
+    "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 8,
     `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
   )
 

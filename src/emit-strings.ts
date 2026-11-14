@@ -22,11 +22,11 @@ import {
 import { unwrapBoundsParens } from "./bounds"
 import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
-import { emitPanicTail, panicTailCallees } from "./emit-builtins"
+import { emitFfiNullTest, emitPanicTail, panicTailCallees } from "./emit-builtins"
 import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
-import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FunctionSig } from "./program"
 import { irEscape } from "./strings"
 import { isFloat, isForeignBuffer, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
@@ -118,7 +118,7 @@ export const emitTemplate = (emitter: Emitter, expr: Node): string => {
   let first = true
   for (const part of parts) {
     const value =
-      part.kind === N_TEMPLATE_TEXT ? emitter.stringConstant(part.text) : emitToString(emitter, part)
+      part.kind === NodeKind.TemplateText ? emitter.stringConstant(part.text) : emitToString(emitter, part)
     acc = first ? value : emitConcat(emitter, acc, value)
     first = false
   }
@@ -497,7 +497,10 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
  */
 export const foreignStringIsNulFree = (arg: Node): boolean => {
   const inner = unwrapBoundsParens(arg)
-  return inner.kind === N_NULL || (inner.kind === N_STRING && inner.text.indexOf(String.fromCharCode(0)) < 0)
+  return (
+    inner.kind === NodeKind.Null ||
+    (inner.kind === NodeKind.String && inner.text.indexOf(String.fromCharCode(0)) < 0)
+  )
 }
 
 /** The runtime symbols a checked string argument to C calls, for the attribute pass. */
@@ -527,7 +530,7 @@ export const emitForeignString = (
   index: i32
 ): string => {
   const fn = emitter.fn
-  if (unwrapBoundsParens(arg).kind === N_NULL) {
+  if (unwrapBoundsParens(arg).kind === NodeKind.Null) {
     return "null"
   }
   if (foreignStringIsNulFree(arg)) {
@@ -722,8 +725,9 @@ const foreignCopy = (newStr: string): string => {
 /**
  * The NUL-terminated bytes at `value`, an `i8*` that is not null, copied into
  * the arena by the module's `@nish.ffi.str`: a `declare function`'s `string`
- * result once it is known not to be `NULL`, and `readCString`'s argument
- * (WP27 S3.3), which a `CPtr` type keeps from being null.
+ * result, and `readCString`'s argument (WP27 S3.3), each once its caller's
+ * `NULL` test (`emitFfiNullTest`, or `string | null`'s branch) has passed.
+ * The copy makes no test of its own, so neither path tests twice.
  */
 export const emitCStringCopy = (emitter: Emitter, value: string): string => {
   const copy = emitter.useRuntime("nish_str_new")
@@ -741,19 +745,16 @@ export const emitCStringCopy = (emitter: Emitter, value: string): string => {
  * see says the C function never answers it.
  */
 export const emitForeignStringResult = (emitter: Emitter, callee: FunctionSig, value: string): string => {
-  const fn = emitter.fn
-  const nullable = emitter.table.isNullable(callee.returnType)
-  const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
-  const nullBlock = fn.newBlock(nullable ? "ffi.none" : "ffi.null")
-  const someBlock = fn.newBlock("ffi.copy")
-  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${someBlock.label}`)
-  if (!nullable) {
-    fn.placeBlock(nullBlock)
+  if (!emitter.table.isNullable(callee.returnType)) {
     const message = `\`${callee.sourceName}\` returned NULL for a \`string\` result; declare it \`string | null\``
-    emitPanicTail(emitter, emitter.stringConstant(message))
-    fn.placeBlock(someBlock)
+    emitFfiNullTest(emitter, value, message)
     return emitCStringCopy(emitter, value)
   }
+  const fn = emitter.fn
+  const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
+  const nullBlock = fn.newBlock("ffi.none")
+  const someBlock = fn.newBlock("ffi.copy")
+  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${someBlock.label}`)
   const join = fn.newBlock("ffi.join")
   fn.placeBlock(someBlock)
   const copied = emitCStringCopy(emitter, value)
