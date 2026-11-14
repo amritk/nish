@@ -128,7 +128,7 @@ lands it (§9).
 
 | # | Invariant | The check |
 | --- | --- | --- |
-| I1 | **Zero cost unused.** A program with no `Dyn` emits the IR it emits today, and the same sidecars. | `node tests/nish-cmp.js` over the corpus (its IR and its sidecars), in every stage's PR: no corpus program that compiles today moves. A stage's only `DECLARED` entries are `file: "exit"` entries for its own new positive programs, which the 0.39.0 seed refuses ("a program the reference refuses and the candidate accepts is a language change", `tests/nish-cmp.js:41`–`44`; WP51's entries are the form). Each is named in its stage's list in §9, with the `tests/differential/goldens/unfrozen.txt` line `node tests/differential/goldens.js --update` writes for it (`.claude/selfhost.md`, "The goldens"). Stage 4 does not touch `std/`; adopting `Dyn` there would move `std/` IR and add `DECLARED` entries, so it is left to later work (§11), outside this work package's I1. |
+| I1 | **Zero cost unused.** A program with no `Dyn` emits the IR it emits today, and the same sidecars. | `node tests/nish-cmp.js` over the corpus (its IR and its sidecars), in every stage's PR: no corpus program that compiles today moves. A stage's only `DECLARED` entries are `file: "exit"` entries for its own new positive programs, which the 0.39.0 seed refuses ("a program the reference refuses and the candidate accepts is a language change", `tests/nish-cmp.js:41`–`44`; WP51's entries are the form). Each is named in its stage's list in §9; a new `tests/cases` program among them that exports `main` (the programs `discoverPrograms`, `tests/differential/lib.js:89`–`122`, collects; never a cookbook program) also takes the `tests/differential/goldens/unfrozen.txt` line `node tests/differential/goldens.js --update` writes for it (`.claude/selfhost.md`, "The goldens"). Stage 4 does not touch `std/`; adopting `Dyn` there would move `std/` IR and add `DECLARED` entries, so it is left to later work (§11), outside this work package's I1. |
 | I2 | **Never slower than the hand program.** A call through a `Dyn<I>` costs what the hand `kind` + `switch` costs over the same set, within the noise band. Not yet met in every case by either form. Stage 2's register form is 0.72x in geomean and 2.21x on one case (§3.6); the stored form is 1.11x, 1.18x on arrays (§3.4). Both stages are gated. | Stage 2: the §3.6 programs (`s2/`: strategy, periodic and aperiodic at K = 2, 4, 8, 13, 16, and `reg2`, all of which stage 2 can build) rebuilt with K real classes, `class C0 implements Base` to `C{K-1}`, each with its own `m` (§12.11's `gen.mjs` changed to emit them in place of its functions `g0`..), and `Dyn<Base>` for the `surface` variant, rerun against the hand programs with `python3 bench.py groups.json 7` (§12.7: best of 7, interleaved), which must print `checksums ok` (a mismatch fails the run), and **the stage 2 gate** (§8): the geomean of the 15 cases inside the band or below it, and no case above 1.25x, or stage 2 does not land; §3.3 and §3.5 hold the tag in a side array, a stored place stage 2 refuses, so they are not stage 2's check. A `tests/run.js` IR check that the dispatcher of a set of one is the direct call. Stage 3: the §3.4 rows rerun against its build and **the stage 3 gate** (§8): the geomean of the ten array rows inside the ±2.6% band and no array row above 1.25x, or stage 3 does not land. |
 | I3 | **The escape proof survives.** A `Dyn` call whose set agrees on keeping places its arguments as the hand call does; one whose set disagrees is refused. | `.memory` goldens for case A (stack) and case C (stack, the keeper outside the set), and a negative test for case B (§4, §9). |
 | I4 | **No leak, no growth.** Peak RSS is flat at 1x, 10x and 100x a loop's length, and valgrind finds 0 bytes lost. | The §4 programs rerun by stage 2's PR; valgrind over every variant, case A, B and C and the registry forms, as this note ran it (`v/run.sh`, §12.10: 183 binaries, 0 bytes in use at exit, 0 errors); stage 3 adds a 1M-slot array at 1x/10x/100x and an `NISH_ASAN` run (LeakSanitizer and the tagged word, §10). |
@@ -176,7 +176,11 @@ compiles of it is a `Dyn<Shape>` local, parameter or return, for example
 - **An interface may declare method signatures** (stage 1). A signature has
   no body; a getter or a setter, an optional `m?()` and a type parameter
   `m<T>()` in an interface stay refused (NL2048, its words narrowed to name
-  the plain signature, §9 stage 1), and a body stays the parse error it is
+  the plain signature, §9 stage 1), as does a `static` or `readonly` one;
+  `abstract`, `async` and the generator `*` keep the errors they get today,
+  and a visibility word is read and dropped, as it is on an interface field
+  (§9 stage 1). A signature with no return type, or with a parameter that has
+  no type, is refused (§9 stage 1). A body stays the parse error it is
   today (`` an interface holds only annotated fields ``: the parser reads a
   signature up to its separator and never reads a body there,
   `parseMethodSignature`, `src/parser.ts:2969`). Fields and signatures may
@@ -1366,7 +1370,16 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
   `noteSignature`'s loop, `:570`; `src/structs.ts:1328`; `src/dump.ts:218`;
   `hasMethods`, `src/members.ts:739`–`740`) see an interface as today;
   `hasMethods`'s NL2556 caller reads the new list beside it; `checkImplements` (`src/structs.ts:1231`)
-  and `implementsDeclaration` (`src/generics.ts:3201`) read methods. NL2778
+  reads methods. `implementsDeclaration` (`src/generics.ts:3201`) compares
+  interface names only, so it needs no change. Because the list is not in
+  `methodIndex`, `hasMember` (`src/program.ts:1224`–`1226`, which reads
+  `fieldIndex`, `methodIndex` and `methodTemplates`) cannot see it, and the
+  duplicate check the field collector makes (`src/structs.ts:659`–`664`)
+  would let `m(): i32; m(): f64;` and `m: i32; m(): i32;` through. The
+  collector therefore checks each signature's name against the interface's
+  fields and the signatures before it, and a field's name against the
+  signatures, and reports the words a duplicate field gets today:
+  `` Duplicate member `m` in interface `Shape` ``. NL2778
   takes the family's words (`src/structs.ts:1259`, `:1265`): `` Class
   `Circle` does not implement `Shape`: it lacks method `area(): i32` `` and
   `` ...: method `area` is `(): f64` in `Circle` but `(): i32` in `Shape` ``;
@@ -1447,28 +1460,67 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
   `reject_iface_method_optional` (`area?(): i32;`, NL2048), `reject_iface_method_on_plain`
   (NL2774), `reject_implements_method_missing` and
   `reject_implements_method_signature` (NL2778), `reject_iface_as_own_type_arg`
-  (NL2780, written and inferred) and `reject_iface_method_literal` (NL2556,
-  the interface words).
+  (NL2780, written and inferred), `reject_iface_method_literal` (NL2556,
+  the interface words), `reject_iface_method_modifier`,
+  `reject_iface_method_no_return`, `reject_iface_method_param_untyped` (all
+  below) and `reject_iface_method_duplicate` (`m(): i32; m(): f64;` and
+  `m: i32; m(): i32;`, the duplicate words above). The positive
+  `iface_method_sig_generic` (round trip) declares a generic interface with a
+  signature, `interface Container<T> { get(): T }`, and a class
+  `Box implements Container<i32>`. A generic interface is collected late,
+  from `finishPendingStructs` (`src/checker.ts:847`), so its signatures are
+  recorded and checked on that path as well.
 - NL2048 narrows. Stage 1 admits a plain signature, `m(params): R;`, and NL2048
   keeps refusing every other method form the parser reads in an interface: an
-  accessor, an optional `m?()`, a type parameter `m<T>()`, and each modifier
-  `parseMemberModifiers` (`src/parser.ts:2331`–`2371`) reads before one:
-  `static`, `readonly`, `abstract`, `async`, a visibility (`public`,
-  `private`, `protected`) and the generator `*`. Each is NL2048 with the
-  words below, the modifier named in place of "that way" (`` cannot declare
-  `area` as `static` ``); the negative `reject_iface_method_modifier` covers
-  `static area(): i32;` and `async area(): i32;`. Its words become
+  accessor, an optional `m?()`, a type parameter `m<T>()`, and a `static` or
+  `readonly` one, with the modifier named in place of "that way"
+  (`` cannot declare `area` as `static` ``). The negative
+  `reject_iface_method_modifier` covers `static area(): i32;` and
+  `readonly area(): i32;`. The other modifiers `parseMemberModifiers`
+  (`src/parser.ts:2331`–`2371`) reads never reach NL2048, and stage 1 leaves
+  them as they are:
+  - `abstract area(): i32;` is `` Abstract classes are not supported ``
+    (`refuseMembers`, `src/statements.ts:1136`).
+  - `async area(): i32;` is `` Only a top-level function or an arrow may be
+    `async`: a method, a field or a constructor cannot, because a task never
+    keeps a `this` `` (`rejectFunctionModifiers`,
+    `src/validator.ts:535`–`557`).
+  - `*area(): i32;` is the parse error `` an interface holds only annotated
+    fields ``.
+  - `public`, `private` and `protected` set no flag (`src/parser.ts:2367`),
+    so `public area(): i32;` is admitted as the plain signature, just as
+    `public x: i32;` is admitted as a plain interface field today. `--emit-ts`
+    writes it without the word.
+
+  NL2048's words become
   `` Interface `Shape` cannot declare `area` that way: an interface method is
-  a plain signature, `area(params): R;`, with no accessor, `?` or type
-  parameters ``, and `src/codes.ts`'s NL2048 entry is rewritten to match. A
+  a plain signature, `area(params): R;`, with no accessor, `static`,
+  `readonly`, `?` or type parameters ``, and `src/codes.ts`'s NL2048 entry is rewritten to match. A
   body never reaches the checker: `parseMethodSignature`
   (`src/parser.ts:2969`–`2987`) pushes an empty body and eats only `;` or `,`
   (`eatMemberSeparator`, `:2811`), so the `{` falls to `` an interface holds
-  only annotated fields `` (`this.fail` at `:2903` and `:2932`). Stage 1 leaves the parser alone: a body
-  stays that parse error, `tests/wordings/parser_refusals.txt` gains no entry,
-  and the parser oracle sees no change. Only the comment above the call
-  (`:2934`–`2935`, "for the checker to refuse (NL2048)") is rewritten to say
-  the checker admits a plain signature.
+  only annotated fields `` (`this.fail` at `:2903` and `:2932`). A body
+  stays that parse error. The comment above the call (`:2934`–`2935`, "for
+  the checker to refuse (NL2048)") is rewritten to say the checker admits a
+  plain signature.
+- A signature's types are required, as they are on a class method:
+  - No return type, `area();`: NL2096. `refuseAtChild`
+    (`src/statements.ts:980`–`986`) hands a member to `refuseMemberAtChild`
+    (`:1012`) only when its owner is a `NodeKind.Class`; stage 1 widens that
+    test to `NodeKind.Interface`, and the words name the owner's kind:
+    `` Method `area` of interface `Shape` needs an explicit return type
+    annotation ``. The negative is `reject_iface_method_no_return`.
+  - A parameter with no type, `area(x): i32;`: the parse error every other
+    bodiless signature gets today (`declare function f(x): i32;` and
+    `type F = (x) => i32` both report it): `` a type annotation is required ``
+    (`parseTypeAnnotation`, `src/parser.ts:2225`), at the `)`. Today
+    `parseMethodSignature` reads its parameters with `parseParameters(false,
+    false)` (`src/parser.ts:2978`), the untyped form an arrow argument uses,
+    so the signature reaches NL2048. Stage 1 passes `typed` as `true`. This
+    is stage 1's one parser change: the words already exist, so
+    `tests/wordings/parser_refusals.txt` gains no entry, and
+    `node tests/parser-oracle.js` runs in the stage's PR. The negative is
+    `reject_iface_method_param_untyped`.
 - Tests that flip, each updated in stage 1's PR:
   - `tests/wordings/nl2048_interface_method.ts` declares `area(): i32;`,
     which stage 1 admits: it is retargeted to `area<T>(of: T): i32;`, a type
@@ -1487,8 +1539,11 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
     `docs/reference/` pages that quote NL2048, move with it.
   - Header comments that say an interface is fields only are rewritten to
     say what each test still refuses: `tests/cases/reject_iface_method.ts:1`,
-    `reject_iface_member_unsupported.ts:1`, `reject_iface_accessor.ts:2`, and
-    `tests/parser-oracle.js:1216`.
+    `reject_iface_member_unsupported.ts:1` and `reject_iface_accessor.ts:2`.
+  - `tests/parser-oracle.js:1216` does not say "fields only": it says the
+    checker refuses a method signature (NL2048). Stage 1 admits a plain one,
+    so the comment is rewritten to say the checker admits a plain signature
+    and refuses the other forms.
   - `.claude/typescript.md:90`–`92` ("An `interface` is a struct with fields
     only") is rewritten to admit a method signature (§6).
 - Stage 2 and stage 4 flip no existing test: no test under `tests/` names
@@ -1500,13 +1555,20 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
   signatures and `<T extends I>`", why "the 0.39.0 seed refuses an interface
   method signature with NL2048, so only the candidate compiles the program
   (WP60 stage 1)", for `tests/cases/iface_method_sig.ts`,
+  `tests/cases/iface_method_sig_generic.ts`,
   `tests/cases/gen_constraint_iface_method.ts` and the stage's cookbook
   program `docs/cookbook/iface-method-sig.ts`. `gen_constraint_iface_method_class`
   declares no method and compiles under the seed, so it takes no entry; if
   the seed's IR for it differs from the candidate's, the stage has moved a
-  program and does not land. Each of the three gains its `unfrozen.txt` line
-  (`cases/iface_method_sig added after R6: no rewriter to freeze it with`,
-  as `node tests/differential/goldens.js --update` writes it).
+  program and does not land. `unfrozen.txt` lines go only to the new
+  `tests/cases` programs that export `main`, the ones
+  `discoverPrograms` (`tests/differential/lib.js:89`–`122`) collects:
+  `iface_method_sig` and `iface_method_sig_generic`, each with its line
+  (`cases/iface_method_sig added after R6: no rewriter to freeze it with`, as
+  `node tests/differential/goldens.js --update` writes it). The
+  `gen_constraint_iface_method` pair is written in `gen_constraint`'s
+  test style, with no exported `main`, so `discoverPrograms` skips it, and
+  a cookbook program is never collected.
 - Docs: LANGUAGE.md "Interfaces" and "Constraints", and its NL2048 quotes
   (`:6230`, `:16102`); IR_COOKBOOK "A constrained type parameter"
   (`docs/IR_COOKBOOK.md:620`); guide `classes-and-interfaces.md` (`:4`, `:78`,
@@ -1556,11 +1618,13 @@ stage 2 gate (§8).**
   a forged tag (built from hand IR, as WP51's tag-check test is); a `-g` check
   that gdb prints the class name.
 - Invariants: I1, with `file: "exit"` entries (why "the 0.39.0 seed has no
-  `nish:dyn`, so only the candidate compiles the program (WP60 stage 2)") and
-  `unfrozen.txt` lines for `dyn_call`, `dyn_set_of_one`, `dyn_eq`,
-  `dyn_return`, `dyn_escape_a`, `dyn_escape_c` and the stage's cookbook
-  program `docs/cookbook/dyn-call.ts`; `dyn_set_of_one_direct` uses no `Dyn`
-  and takes none; I2 (§3.6's programs rebuilt on
+  `nish:dyn`, so only the candidate compiles the program (WP60 stage 2)")
+  for `dyn_call`, `dyn_set_of_one`, `dyn_eq`, `dyn_return`, `dyn_escape_a`,
+  `dyn_escape_c` and the stage's cookbook program `docs/cookbook/dyn-call.ts`;
+  `dyn_set_of_one_direct` uses no `Dyn` and takes none. `unfrozen.txt` lines
+  go to the six `tests/cases` programs, each of which exports `main` (a
+  round trip or a `.memory` golden runs it), and not to the cookbook
+  program; I2 (§3.6's programs rebuilt on
   `Dyn<Base>`, under the stage 2 gate, band stated in the PR, or the stage
   does not land); I3; I4 (the §4 programs rerun, valgrind over them); I6
   (`tests/run.js performance`, the self-host build time and `build/nish`'s
@@ -1621,10 +1685,10 @@ on the stage 3 gate (§8), after stage 2.**
   admitted by stage 3``), which `--require-coverage` reads; its
   `src/codes.ts` entry stays, as every retired rule's does (`src/codes.ts:13`).
 - Invariants: I1, with `file: "exit"` entries (why "the 0.39.0 seed has no
-  `nish:dyn`, so only the candidate compiles the program (WP60 stage 3)") and
-  `unfrozen.txt` lines for `dyn_field`, `dyn_field_two`,
+  `nish:dyn`, so only the candidate compiles the program (WP60 stage 3)")
+  and `unfrozen.txt` lines for `dyn_field`, `dyn_field_two`,
   `dyn_field_set_of_one`, `dyn_array`, `dyn_map_value`, `dyn_nullable`,
-  `dyn_result` and `dyn_spawn`; I2 for stored places: §3.4's rows rerun against the
+  `dyn_result` and `dyn_spawn`, each a round trip that exports `main`; I2 for stored places: §3.4's rows rerun against the
   compiler's word, and the stage 3 gate (§8: the array geomean inside the
   band, no array row above 1.25x), or the stage does not land; I4 (RSS at 1x/10x/100x for a 1M-element array, valgrind
   and an `NISH_ASAN` run); I5 (the layout probe above).
@@ -1643,8 +1707,8 @@ on the stage 3 gate (§8), after stage 2.**
   need `DECLARED` entries, outside I1 as the brief states it (§11).
 - Invariants: I1. If NL2079 is lifted, its new positive case (a class
   implementing an imported interface, which the seed refuses with NL2079)
-  takes a `file: "exit"` entry and its `unfrozen.txt` line, named in the
-  stage's PR; an AI.md idiom program is a doc snippet, not a corpus program,
+  takes a `file: "exit"` entry and, since it exports `main`, its
+  `unfrozen.txt` line, named in the stage's PR; an AI.md idiom program is a doc snippet, not a corpus program,
   and takes none.
 - Docs: AI.md's `Dyn` idiom and when to use `<T extends I>`; the guide page's
   library section; `docs/reference/` regenerated if NL2079's words move.
