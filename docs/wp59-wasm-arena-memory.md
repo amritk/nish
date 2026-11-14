@@ -64,7 +64,7 @@ Every reader of the module's memory from the JavaScript side, at `d38a94b0`:
 | an export's array result | `:1168` (`arrayOut`), `:1184` (`copyBack`) | reads, or writes back, an arena array's elements | **yes** |
 | an export's string result | `:1178` (`stringOut`) | a `{ i64 len, bytes }` header, read before the mark is released | **yes**, or static data |
 | a host import's string argument | `:1388` (`text`); `src/emit-strings.ts:636`–`:643` (`emitHostString`) | `(p, n)` of any string the module holds | **yes** for a built string, static data for a literal |
-| a host import's window | `:1363` (`win`); `src/emit-strings.ts:652`–`:684` (`emitHostWindow`) | a whole-memory view plus the data offset of *any* array | **yes** for a local array, no for storage |
+| a host import's window | `:1363` (`win`); `src/emit-strings.ts:652`–`:682` (`emitHostWindow`) | a whole-memory view plus the data offset of *any* array | **yes** for a local array, no for storage |
 | a panic's message | `:912` (`panicText`) | `Uint8Array(memory.buffer, msg, len)` | **yes** for a built `panic(msg)` string |
 | the arena bracket | `:1011` | calls `nish_root_keep(mark)` or `nish_arena_release(mark)` | not read by JavaScript |
 
@@ -241,9 +241,10 @@ The two alternatives each keep "no copies" and each lose something else:
   helper that reads memory 1. That costs every array access in every
   program, not just a crossing, and the helper is a call where a load was.
 - **S-type:** module storage gets a type of its own that cannot be converted
-  to `T[]`, so its memory is known statically. That is a language change,
-  and it breaks every program that passes a storage array to a function
-  taking `T[]`, which `std/host/ring` does.
+  to an ordinary array, so its memory is known statically. That is a
+  language change, and it breaks every program that passes a storage array
+  to a function taking an array: every function in `std/host/ring` takes
+  the ring as an `Int32Array` (`std/host/ring.ts:44`).
 
 S-copy changes neither the language nor any IR outside the crossings. It is
 the proposal, unless S3's numbers say no (§8).
@@ -351,13 +352,12 @@ release that builds it:
 - the emitter and loader changes in `src/interop-wasm.ts` and
   `src/emit-strings.ts` are code the compiler *writes*, not code it is
   written in;
-- the inline assembly lives in `runtime/runtime-wasm.c`, which the seed does
-  not compile `src/` with;
+- the inline assembly lives in `runtime/runtime-wasm.c`, the runtime a
+  `wasm-host` module links, not in the compiler's source;
 - the rewrite is a script.
 
-CI's `bootstrap` job builds `src/` with the seed. That build uses the `wasi`
-profile and the native one, not `wasm-host`, so it never runs the new link
-step.
+The compiler itself is never a `wasm-host` module, so building `src/` never
+runs the new link step.
 
 Only S-tag's helper or S-type would change what `src/` can be written in. If
 the owner chooses S-type (§8), `src/` may not use the new storage type until
