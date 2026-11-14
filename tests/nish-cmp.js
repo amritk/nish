@@ -529,6 +529,7 @@ const pageMath = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
   )
 const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
+const DESTRUCTURING = "Destructuring declarations over objects and arrays"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -6518,6 +6519,20 @@ const DECLARED = [
     file: "exit",
     changelog: UNION_GENERICS,
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/destructure_array.ts",
+    "tests/cases/destructure_for_of.ts",
+    "tests/cases/destructure_object.ts",
+    "tests/cases/destructure_out_of_range.ts",
+    "tests/cases/destructure_stack.ts",
+    "tests/cases/destructure_zero_cost.ts",
+    "docs/cookbook/decl-destructure.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: DESTRUCTURING,
+    why: "the program declares names with an object or array pattern, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
 ]
 
