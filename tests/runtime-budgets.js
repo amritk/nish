@@ -659,14 +659,15 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * their scalar, SSE2 and AVX2 paths, the UTF-8 step the JSON text class takes, and the
  * resolver with its CPUID question and `NISH_SIMD` pin.
  *
- * Measured **1,808 bytes** on 2026-11-14 with clang 18.1.3 on linux-x64, all of it
- * `.text`: the scalar path 137, the SSE2 path 711, the AVX2 path 231, the UTF-8 step
+ * Measured **1,891 bytes** on 2026-11-14 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 137, the SSE2 path 735, the AVX2 path 290, the UTF-8 step
  * 238, the plain class's scalar path 49 and SSE2 path 110, the resolver 249 and the
  * four entry points 83. It was 1,525 before the SSE2 path checked a text block's
- * UTF-8 whole (+283: the SSE2 path 265 to 711 with the check, the cut-sequence
- * back-off and the resume, 26, now inlined into it; the AVX2 path 368 to 231, which
- * hands text past a high byte to the SSE2 path instead of stepping it itself), for
- * 116 to 66 Ir a JSON text run on twitter.json, 8.3% of the document's tokenize Ir
+ * UTF-8 whole (+366: the SSE2 path 265 to 735 with the check, the cut-sequence
+ * back-off and the resume, 26, now inlined into it; the AVX2 path 368 to 290, which
+ * hands text past a high byte to the SSE2 path, 62 of it the out-of-line hand-off
+ * that takes the run back once a block is ASCII again), for 116 to 67 Ir a JSON text
+ * run on twitter.json, 8.1% of the document's tokenize Ir
  * (docs/wp7-runtime.md). It was 1,303 with three classes; the
  * fourth, the writer's plain bytes, added 222: its own paths 159, its entry point 21
  * and the resolver's second pointer 45 (the resolver 204 to 249), less 3 from the

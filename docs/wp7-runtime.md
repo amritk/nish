@@ -193,7 +193,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,816 (`RUNTIME_AES_TEXT_BUDGET`) | 2,709 (2026-11-13) |
 | `runtime/runtime-sha256.c` | The SHA-256 block on SHA-NI or the ARMv8 SHA-256 instructions: `nish_sha256_compress` and `nish_sha256_hw` | 512 (`RUNTIME_SHA256_TEXT_BUDGET`) | 495 (2026-10-30) |
 | `runtime/runtime-chacha20.c` | ChaCha20's keystream, eight blocks at once on AVX2 or four on NEON: `nish_chacha20_xor` and `nish_chacha20_hw` | 3,840 (`RUNTIME_CHACHA20_TEXT_BUDGET`) | 3,771 (2026-11-03) |
-| `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 2,048 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,808 (2026-11-14) |
+| `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 2,048 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,891 (2026-11-14) |
 | `runtime/runtime-checksum.c` | CRC-32 on PCLMULQDQ folding (x86-64) or the CRC32 instructions (AArch64), the nibble-table tail and `nish_crc32_hw` ([wp38](wp38-simd.md) CRC); Adler-32 on SSSE3 or NEON and `nish_adler32_hw` (wp38 S8) | 1,280 (`RUNTIME_CHECKSUM_TEXT_BUDGET`) | 1,153 (2026-11-11) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
@@ -246,7 +246,6 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-29 | `wallClockNanos`: `runtime-os.c` 2,822 → 2,828 (2,380 → 2,386 alone), the two clocks sharing `nish_clock_nanos` | os 3,072 |
 | 2026-10-29 | `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (#992): `runtime-os.c` 2,828 → 3,174, `nish_put_file_mode` 253, its two callers 12 each, `nish_mkdir_mode` 72 | os 3,328 |
 | 2026-10-29 | `spawnPiped`: `runtime-os.c` 3,174 → 4,450. `nish_spawn_piped` 1,082 (the poll loop that writes stdin while it drains both outputs, the 16 MiB cap and its kill, SIGPIPE blocked on the calling thread), `nish_pipe` 109 (`pipe2` with `O_CLOEXEC`, both ends moved off 0–2), and `nish_spawn_start` 284 → 365 for the three `dup2` actions and the check that each was recorded; the rest is the shared helpers' growth | os 4,608 |
-| 2026-11-14 | a JSON string's text checked as UTF-8 sixteen bytes at a time (#1584): `runtime-bytes.c` 1,525 → 1,808. The SSE2 path 265 → 711 (the block check `nish_run_bad_sse2`, the cut-sequence back-off `nish_run_cut` and the resume, all inlined), the AVX2 path 368 → 231 (past a high byte it hands the run to the SSE2 path). The text kernel on twitter.json goes from 116 to 66 Ir a run, the document's tokenize from 12.33M to 11.30M Ir (−8.3%); citm −1.1%, the held-out 4%-non-ASCII API payload −2.0%, a 242-byte body −0.9%, canada unchanged. Shared 16- and 32-byte code measured 2,729 bytes and slowed citm 3.8%, so the ASCII loops stay as they were | bytes 2,048 |
 | 2026-10-30 | `runtime-shm.c` (2,539; 2,576 with `-DNISH_THREADS=1`, where the handle table is thread-local), wp47; its own unit so a program that imports neither `nish/sync/shm` nor `nish/sync/ring` links none of it | shm 2,816 |
 | 2026-10-30 | `runtime-checksum.c` (718), wp38 CRC: the PCLMULQDQ folding kernel 514, its byte tail 58, the resolver 121 and the entry point 25 | checksum 768 |
 | 2026-10-30 | the `fs.read=<dir>` / `fs.write=<dir>` scopes, wp37 stage 2: `runtime-sandbox.c` 2,264 → 2,545. One Landlock rule per scope directory (`nish_sb_rule`, `nish_sb_scope`), the strict refusal and the best-effort line for a directory gone since the build, and the root rule granting only what is granted whole. Raised to the next 256-byte boundary above the measurement: the rules are built inside the ruleset this file already makes | sandbox 2,560 |
@@ -263,6 +262,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-11-12 | `udpBind` flag 4, QUIC steering by connection ID across a prefork group (WP39 G6, docs/h3-multicore.md): `runtime-net.c` 4,731 → 4,879. A seven-instruction classic BPF program (a DCID byte 0 from offset 1 or 6 by the header form, modulo the group count) copied from static data with the count patched in, attached in `nish_net_bound` beside flag 4 of `tcpListenFlags`, and the flag word's checks in `nish_udp_bind`; built on the stack the program measured 4,893 | net 5,120 |
 | 2026-11-13 | `process.spawn=exec:<program>` ([wp40](wp40-dependency-capabilities.md) §2a, [security/sandbox.md](security/sandbox.md)): `runtime-sandbox.c` 4,409 → 4,507. Each marked identity records whether it is a kept interpreter or a program granted `exec:`, and a spawn of the latter is started by the supervisor without the one-exec filter, through `nish_sb_start`, the `posix_spawn` call the spawner now shares. Under the ceiling, which stands | sandbox 4,608 |
 | 2026-11-13 | AEAD-4 ([crypto-aead.md](security/crypto-aead.md)): `runtime-aes.c` 2,532 → 2,709. `nish_aes_clear`, which zeroes the vector registers and the caller-saved general ones as each kernel leaves, is one out-of-line function of 95 bytes the four kernels tail-call (4 or 5 bytes each); GHASH 1,082 → 1,155 is that jump and its middle operands packed two to a register, which ended a spill at `x86-64-v3`. Inlined into each kernel, the clear measured 2,977 | aes 2,816 |
+| 2026-11-14 | a JSON string's text checked as UTF-8 sixteen bytes at a time (#1584): `runtime-bytes.c` 1,525 → 1,891. The SSE2 path 265 → 735 (the block check `nish_run_bad_sse2`, the cut-sequence back-off `nish_run_cut` and the resume, all inlined), the AVX2 path 368 → 290 (past a high byte it hands the run to the SSE2 path, and a 62-byte out-of-line hand-off takes it back once a block is ASCII again, by tail calls both ways). The text kernel on twitter.json goes from 116 to 67 Ir a run, the document's tokenize from 12.33M to 11.33M Ir (−8.1%); citm −1.1%, the held-out 4%-non-ASCII API payload −1.9%, a 242-byte body −0.8%, canada unchanged. Without the hand-back, a long ASCII string with one early accent ran 19% slower than before; with it, 1.9%. Shared 16- and 32-byte code measured 2,729 bytes and slowed citm 3.8%, so the ASCII loops stay as they were | bytes 2,048 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -410,13 +410,13 @@ at a time, and the bytes a JSON writer copies without an escape, sixteen at a
 time. The compiler calls its kernels in place of four private walkers of
 `std/bytes.ts`, as it calls `runtime-simd.c`'s in place of `indexOfAny`'s, and
 each has a scalar path of its own, so there is no branch back to the Nish
-walker. Its 1,808 bytes are the first three classes' scalar path 137, SSE2 path
-711 and AVX2 path 231, the UTF-8 step 238, the writer class's own scalar path
+walker. Its 1,891 bytes are the first three classes' scalar path 137, SSE2 path
+735 and AVX2 path 290, the UTF-8 step 238, the writer class's own scalar path
 49 and SSE2 path 110, the resolver 249 and the four entry points 83. The SSE2
 path checks a text block that holds a high byte as UTF-8 whole, so a string
 with accented or CJK text steps sixteen bytes at a time rather than one
-sequence; the AVX2 path hands a run to it at its first high byte, and
-otherwise keeps its ASCII loop.
+sequence; the AVX2 path hands a run to it at its first high byte, takes it
+back once a block is ASCII again, and otherwise keeps its ASCII loop.
 
 It is a tenth unit rather than more of `runtime-simd.c` by the same rule as
 the AES unit: folded in, the two measured 1,960 bytes against that file's

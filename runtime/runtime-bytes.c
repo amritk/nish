@@ -258,12 +258,16 @@ static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to)
   return nish_plain_scalar(cls, p, i, to);
 }
 
-static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
+/* Sixteen bytes a block. With `yield` set, a block with no stop at all ends
+   the walk with `~i`, its start complemented, so the AVX2 path can take back
+   a run that has gone back to ASCII; a run's end is never negative. */
+__attribute__((noinline)) static int64_t nish_run_sse2(int cls, const uint8_t *p, int64_t from, int64_t to, int yield) {
   int64_t i = from;
   while (to - i >= 16) {
     __m128i v = _mm_loadu_si128((const __m128i *)(p + i));
     unsigned m = nish_run_stops_sse2(cls, v);
     if (m == 0) {
+      if (yield) return ~i;
       i += 16;
       continue;
     }
@@ -287,6 +291,10 @@ static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to
   return nish_run_scalar(cls, p, i, to);
 }
 
+static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
+  return nish_run_sse2(cls, p, from, to, 0);
+}
+
 __attribute__((target("avx2"))) static inline unsigned nish_run_stops_avx2(int cls, __m256i v) {
   if (cls == NISH_RUN_BLANK) {
     __m256i in = _mm256_or_si256(
@@ -305,6 +313,19 @@ __attribute__((target("avx2"))) static inline unsigned nish_run_stops_avx2(int c
   return (unsigned)_mm256_movemask_epi8(_mm256_or_si256(stop, v));
 }
 
+__attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint8_t *p, int64_t from, int64_t to);
+
+/* Past UTF-8 the base path's block check takes the run, text that has one
+   multi-byte sequence tending to have more, until a block of it is ASCII
+   again and the AVX2 path takes it back. Out of line and reached by tail
+   calls both ways, so the ASCII loop saves no registers and the stack does
+   not grow with the number of sequences. */
+__attribute__((noinline, target("avx2"))) static int64_t nish_run_avx2_utf8(int cls, const uint8_t *p, int64_t from, int64_t to) {
+  int64_t i = nish_run_sse2(cls, p, from, to, 1);
+  if (i >= 0) return i;
+  __attribute__((musttail)) return nish_run_avx2(cls, p, ~i, to);
+}
+
 /* Thirty-two bytes a block, then the base path for what is left. */
 __attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint8_t *p, int64_t from, int64_t to) {
   int64_t i = from;
@@ -316,9 +337,7 @@ __attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint
     }
     int64_t at = i + __builtin_ctz(m);
     if (cls != NISH_RUN_TEXT || p[at] < 0x80) return at;
-    /* Past UTF-8 the base path's block check takes the rest of the run:
-       text that has one multi-byte sequence tends to have more. */
-    return nish_run_base(cls, p, at, to);
+    __attribute__((musttail)) return nish_run_avx2_utf8(cls, p, at, to);
   }
   return nish_run_base(cls, p, i, to);
 }
