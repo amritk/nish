@@ -676,6 +676,13 @@ const cases = fs
   .map((f) => f.slice(0, -3))
   .sort()
 
+/**
+ * Whether a case's `.panics` lists its panicking runs (one argv per line, for
+ * the overflow differential of the `acc_` section) rather than holding the
+ * `--emit-panics` golden every other case's `.panics` is.
+ */
+const panicsListsRuns = (name) => name.startsWith("acc_")
+
 /** The `.args` of a case as the compiler is handed them, or `[]`. */
 const caseArgs = (name) => {
   const file = path.join(casesDir, `${name}.args`)
@@ -1149,7 +1156,7 @@ const runCase = async (name) => {
       listedIr === fs.readFileSync(outLl, "utf8") && oracle.failures.length === 0,
       oracle.failures.length > 0 ? oracle.failures.join("\n") : "the two .ll files differ"
     )
-    if (fs.existsSync(side("panics"))) {
+    if (!panicsListsRuns(name) && fs.existsSync(side("panics"))) {
       const want = fs.readFileSync(side("panics"), "utf8").trim()
       const got = listText.split(`${root}/`).join("").trim()
       expect(
@@ -16346,6 +16353,119 @@ if (dealtHere("arrayChecks")) {
         effectsText.split("\nrec.exit:").length === 3
     )
     check("acc_soundness: each of its six sums is a loop", looped("acc_soundness") === 6, String(looped("acc_soundness")))
+
+    // The overflow differential: every run a `tests/cases/acc_*.panics` lists
+    // (one argv per line; blank lines and `#` comments ignored) prints the same
+    // stdout and stderr, byte for byte, and ends the same way from the loop as
+    // from the recursion `--no-elision` keeps. The hand-pinned checks above say
+    // what the panic is; this says the loop changed nothing a run shows. Later
+    // stages add a case by adding its `.panics`, never a line here.
+    const diffDir = path.join(buildDir, "acc-diff")
+    fs.mkdirSync(diffDir, { recursive: true })
+    const accPanicRuns = (text) =>
+      text
+        .split("\n")
+        .map((line) => line.replace(/#.*/, "").trim())
+        .filter(Boolean)
+        .map((line) => line.split(/\s+/))
+    // Builds `src` as is and `refSrc` with `refFlags` (`src` and `--no-elision`
+    // but for the negatives below), and runs each of `runs` under both.
+    // `refused` is why nothing was compared: `"no-run"` (none listed),
+    // `"build"` (a side did not compile or link), `"no-loop"` (the default
+    // build has no `rec.head`, so no loop is under test) or `"reference-loop"`
+    // (the reference has one, so it is no recursion to compare against).
+    // Otherwise each run answers whether both sides showed the same and
+    // whether they panicked.
+    const accDiff = (label, src, runs, refSrc = src, refFlags = ["--no-elision"]) => {
+      if (runs.length === 0) {
+        return { refused: "no-run", detail: "its .panics names no run", runs: [] }
+      }
+      const exes = []
+      for (const [side, from, extra] of [
+        ["default", src, []],
+        ["reference", refSrc, refFlags],
+      ]) {
+        const base = path.join(diffDir, `${label}${side === "reference" ? "-reference" : ""}`)
+        const built = spawnSync(NISH, [from, "-o", `${base}.ll`, ...extra], { cwd: root, encoding: "utf8" })
+        if (built.status !== 0) {
+          return { refused: "build", detail: `${side} build: ${built.stderr}`, runs: [] }
+        }
+        const hasLoop = fs.readFileSync(`${base}.ll`, "utf8").includes("\nrec.head:")
+        if (side === "default" && !hasLoop) {
+          return { refused: "no-loop", detail: "the default build has no rec.head loop", runs: [] }
+        }
+        if (side === "reference" && hasLoop) {
+          return { refused: "reference-loop", detail: "the reference build has a rec.head loop", runs: [] }
+        }
+        const linked = linkNative(base, `${base}.ll`)
+        if (linked.status !== 0) {
+          return { refused: "build", detail: `${side} link: ${linked.stderr}`, runs: [] }
+        }
+        exes.push(base)
+      }
+      const text = (r) => `exit ${r.status} ${r.signal ?? ""}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
+      return {
+        refused: null,
+        detail: "",
+        runs: runs.map((argv) => {
+          const [loop, recursion] = exes.map((exe) => spawnSync(exe, argv, { timeout: 60000 }))
+          const same =
+            loop.status === recursion.status &&
+            loop.signal === recursion.signal &&
+            loop.stdout.equals(recursion.stdout) &&
+            loop.stderr.equals(recursion.stderr)
+          return {
+            argv,
+            same,
+            // A panic is an exit status; a timeout or a signal is not one.
+            panicked: typeof loop.status === "number" && loop.status !== 0,
+            detail: `--- loop\n${text(loop)}\n--- --no-elision\n${text(recursion)}`,
+          }
+        }),
+      }
+    }
+    for (const file of fs.readdirSync(casesDir).filter((f) => f.endsWith(".panics") && panicsListsRuns(f))) {
+      const name = file.slice(0, -".panics".length)
+      const runs = accPanicRuns(fs.readFileSync(path.join(casesDir, file), "utf8"))
+      const diff = accDiff(name, path.join(casesDir, `${name}.ts`), runs)
+      check(`${name}: the overflow differential compares its .panics runs`, diff.refused === null, diff.detail)
+      for (const run of diff.runs) {
+        check(
+          `${name} ${run.argv.join(" ")}: panics the same as its --no-elision build, byte for byte`,
+          run.same && run.panicked,
+          run.detail
+        )
+      }
+    }
+    // The differential can fail. A reference built from acc_soundness, whose
+    // case 0 divides by zero where acc_overflow's adds past MAX, gives a pair
+    // that exits 1 both ways and differs on stderr; a run that exits 0, a
+    // build with no loop, a reference built without `--no-elision` (a loop on
+    // both sides) and a `.panics` of comments alone are each failed or
+    // refused. Judged by the verdict, not its text.
+    const overflowSrc = path.join(casesDir, "acc_overflow.ts")
+    const divergent = accDiff("divergent", overflowSrc, [["0"]], path.join(casesDir, "acc_soundness.ts"))
+    const exitsZero = accDiff("exits-zero", overflowSrc, [[]])
+    const noLoop = accDiff("no-loop", path.join(casesDir, "acc_ineligible.ts"), [["0"]])
+    const noRun = accDiff("no-run", overflowSrc, accPanicRuns("# none\n\n  # still none\n"))
+    const refLoop = accDiff("reference-loop", overflowSrc, [["0"]], overflowSrc, [])
+    for (const [what, ok, detail] of [
+      [
+        "a pair that panics differently is a difference",
+        divergent.refused === null && divergent.runs.length === 1 && !divergent.runs[0].same && divergent.runs[0].panicked,
+        divergent.detail + divergent.runs.map((r) => r.detail).join("\n"),
+      ],
+      [
+        "a run that exits 0 fails",
+        exitsZero.refused === null && exitsZero.runs.length === 1 && exitsZero.runs[0].same && !exitsZero.runs[0].panicked,
+        exitsZero.detail + exitsZero.runs.map((r) => r.detail).join("\n"),
+      ],
+      ["a default build with no rec.head is refused", noLoop.refused === "no-loop", noLoop.detail],
+      ["a reference build with a rec.head is refused", refLoop.refused === "reference-loop", refLoop.detail],
+      ["a .panics of comments and blank lines alone is refused", noRun.refused === "no-run", noRun.detail],
+    ]) {
+      check(`acc_ overflow differential: ${what}`, ok, detail)
+    }
     check(
       "acc_ineligible: no sum it holds, in either number mode, becomes a loop",
       looped("acc_ineligible") === 0 && looped("acc_ineligible_f64") === 0
