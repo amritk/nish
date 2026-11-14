@@ -55,6 +55,7 @@ cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
 cases/arr_filter added after R6: no rewriter to freeze it with
 cases/arr_find_index added after R6: no rewriter to freeze it with
+cases/arr_foreach added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
@@ -290,6 +291,8 @@ cases/fnref_row_map_set added after R6: no rewriter to freeze it with
 cases/fnref_row_nullish added after R6: no rewriter to freeze it with
 cases/fnref_row_push_nullable added after R6: no rewriter to freeze it with
 cases/fnref_stores added after R6: no rewriter to freeze it with
+cases/foreach_mutate added after R6: no rewriter to freeze it with
+cases/foreach_nested added after R6: no rewriter to freeze it with
 cases/generic_interface_class_arg added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/hygiene_quiet added after R6: no rewriter to freeze it with
@@ -315,6 +318,7 @@ cases/map_extras_get_or_insert added after R6: no rewriter to freeze it with
 cases/map_extras_reserve added after R6: no rewriter to freeze it with
 cases/map_extras_walk added after R6: no rewriter to freeze it with
 cases/map_fingerprint_miss added after R6: no rewriter to freeze it with
+cases/map_foreach added after R6: no rewriter to freeze it with
 cases/map_fused_generic added after R6: no rewriter to freeze it with
 cases/map_fused_guard_has added after R6: no rewriter to freeze it with
 cases/map_fused_guard_not_has added after R6: no rewriter to freeze it with
@@ -619,6 +623,7 @@ cases/secret_wipe_o2 added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_inferred added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_inferred_plain added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_plain added after R6: no rewriter to freeze it with
+cases/set_foreach added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
 cases/set_iter added after R6: no rewriter to freeze it with
 cases/set_iter_keys added after R6: no rewriter to freeze it with

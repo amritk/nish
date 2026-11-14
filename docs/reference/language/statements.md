@@ -49,14 +49,14 @@ for (const { x, y } of points) { ... }
 - **An object pattern** reads a class or interface value. Each entry is a
   field's name, `x`, or a field renamed, `y: py`; the name's type is the
   field's. A missing field is `` Cannot destructure field `z`: Point has no
-  such field `` (NL2776, `reject_destructure_field`).
+  such field `` (NL2778, `reject_destructure_field`).
 - **An array pattern** reads an array. Each name is one element read by its
   position, with the bounds check of `xs[i]`; a hole, `[a, , c]`, skips a
   position. An element past the end panics, `index out of range: 5 >= 3`
   (`destructure_out_of_range`), where TypeScript would bind `undefined`: a
   name in Nish always holds a value of its type.
 - **A `for...of` head** destructures each element of an array
-  (`destructure_for_of`). Over a `Set` or an iterator it is NL2783
+  (`destructure_for_of`). Over a `Set` or an iterator it is NL2785
   (`reject_destructure_for_of_set`). Over a `Map` it is NL2375, the
   refusal any `for...of` over a `Map` gets, before the pattern is read: a
   `Map`'s entries are `[key, value]` pairs of two types, a tuple, which this
@@ -82,21 +82,21 @@ Refused, each with its own diagnostic and test:
 
 | Pattern | Diagnostic | Test |
 | --- | --- | --- |
-| `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object`, `reject_destructure_assignment_renamed` |
-| `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default`, `reject_destructure_default_array`, `reject_destructure_for_of_default` |
-| `[a, ...rest]`, `{ x, ...others }` | NL2773 | `reject_destructure_rest`, `reject_destructure_for_of_rest` |
-| `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested`, `reject_destructure_nested_object`, `reject_destructure_for_of_nested` |
-| `{ ["x"]: a }`, `{ "x": a }` | NL2775 | `reject_destructure_key`, `reject_destructure_key_computed` |
-| `{ default: d }` (a keyword key) | NL2776, the key is read as a field's name and no class has that field | `reject_destructure_key_keyword` |
-| `{ norm }` where `norm` is a method | NL2776, call it instead | `reject_destructure_method` |
+| `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2773 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object`, `reject_destructure_assignment_renamed` |
+| `{ x = 0 }`, `[a = 1]` (a default) | NL2774 | `reject_destructure_default`, `reject_destructure_default_array`, `reject_destructure_for_of_default` |
+| `[a, ...rest]`, `{ x, ...others }` | NL2775 | `reject_destructure_rest`, `reject_destructure_for_of_rest` |
+| `{ p: { x } }`, `[[a]]` (nested) | NL2776 | `reject_destructure_nested`, `reject_destructure_nested_object`, `reject_destructure_for_of_nested` |
+| `{ ["x"]: a }`, `{ "x": a }` | NL2777 | `reject_destructure_key`, `reject_destructure_key_computed` |
+| `{ default: d }` (a keyword key) | NL2778, the key is read as a field's name and no class has that field | `reject_destructure_key_keyword` |
+| `{ norm }` where `norm` is a method | NL2778, call it instead | `reject_destructure_method` |
 | `const { x }: Other = p` (an annotation the receiver does not match) | NL2185 ``Cannot initialize Other variable `{ x }` with Point`` | `reject_destructure_annotated` |
 | a name never read | NL2712, rename it ``{ y: _y }`` (a shorthand) or `_a` | `reject_destructure_unread` |
-| a value that may be absent, `Point \| null` or a `V \| undefined` from `Map.get` | NL2777, narrow it first | `reject_destructure_nullable`, `reject_destructure_undefined` |
-| a `Map` | NL2778, read each value with `get` | `reject_destructure_map` |
-| a `string` | NL2779, read each character by its index | `reject_destructure_string` |
-| an object pattern over a number | NL2780 | `reject_destructure_object_of_number` |
-| an array pattern over an object or a `Set` | NL2781 | `reject_destructure_array_of_object`, `reject_destructure_set` |
-| `let { x }: Point;` (no initializer) | NL2782 | `reject_destructure_uninitialized` |
+| a value that may be absent, `Point \| null` or a `V \| undefined` from `Map.get` | NL2779, narrow it first | `reject_destructure_nullable`, `reject_destructure_undefined` |
+| a `Map` | NL2780, read each value with `get` | `reject_destructure_map` |
+| a `string` | NL2781, read each character by its index | `reject_destructure_string` |
+| an object pattern over a number | NL2782 | `reject_destructure_object_of_number` |
+| an array pattern over an object or a `Set` | NL2783 | `reject_destructure_array_of_object`, `reject_destructure_set` |
+| `let { x }: Point;` (no initializer) | NL2784 | `reject_destructure_uninitialized` |
 | a parameter, `({ x }: Point) => x` | `Destructured parameters are not supported` | `reject_param_destructured` |
 | a module constant | `Destructured constants are not supported` | `reject_const_destructured` |
 

@@ -1,4 +1,4 @@
-// NL2776: a method is not a field; the diagnostic says to call it.
+// NL2778: a method is not a field; the diagnostic says to call it.
 class Point {
   x: number
   constructor(x: number) {

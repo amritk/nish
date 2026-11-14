@@ -353,6 +353,26 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
 }
 
 /**
+ * The concise body of an arrow whose answer is `void`, `(x) => log(x)` handed
+ * to `forEach`: an expression statement, as TypeScript reads it, so a call
+ * that answers nothing is legal there and whatever the body answers is
+ * dropped. An arrow that writes `: void` itself is held to `tsc`'s rule too:
+ * its body may answer nothing else.
+ */
+export const checkVoidConciseBody = (ctx: CheckContext, body: Node, scope: Scope, written: boolean): void => {
+  ctx.statementExpression = body
+  const got = checkExpression(ctx, body, scope, -1)
+  ctx.statementExpression = null
+  rejectDiscardedResult(ctx, body, got, scope)
+  if (written && got !== T_VOID && got !== T_ERROR) {
+    ctx.error(
+      body,
+      `Return type mismatch: function returns void but expression is ${ctx.table.typeName(got)}`
+    )
+  }
+}
+
+/**
  * Each `let`/`const` of a list, declared in `scope`. Shared with a `for`
  * initializer. A destructuring pattern's names are declarators of the list
  * (`Parser.lowerPattern`), after its head; one whose receiver the head
@@ -1252,8 +1272,8 @@ const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
 
 /**
  * The slots of a local's destructuring pattern no type decides: a default
- * (NL2772), a rest (NL2773), a nested pattern (NL2774) and a key that is not
- * a field's name (NL2775). Each is refused where it is written.
+ * (NL2774), a rest (NL2775), a nested pattern (NL2776) and a key that is not
+ * a field's name (NL2777). Each is refused where it is written.
  */
 const refusePattern = (ctx: CheckContext, pattern: Node): void => {
   for (const slot of pattern.children) {

@@ -1,0 +1,1 @@
+The callback of `forEach` on a `Map` takes 3 parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead

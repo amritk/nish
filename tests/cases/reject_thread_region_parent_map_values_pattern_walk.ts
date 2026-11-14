@@ -1,7 +1,7 @@
 // A pattern in a walk's body leaves the walk under the region rule: the parent
 // may not walk a table a task reads before the join, whatever the body binds.
 // A pattern head cannot carry the walk itself: over a `Map` it is NL2375 and
-// over its `values()` NL2783, before the region rule is reached.
+// over its `values()` NL2785, before the region rule is reached.
 import { scope } from "nish/threads";
 
 class Cell {

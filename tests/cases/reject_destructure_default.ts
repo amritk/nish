@@ -1,4 +1,4 @@
-// NL2772: a missing name has no default to take.
+// NL2774: a missing name has no default to take.
 class Point {
   x: number
   y: number

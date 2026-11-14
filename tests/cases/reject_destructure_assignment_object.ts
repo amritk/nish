@@ -1,4 +1,4 @@
-// NL2771: an object pattern on the left of `=` is not a declaration either.
+// NL2773: an object pattern on the left of `=` is not a declaration either.
 class Point {
   x: number
   constructor(x: number) {

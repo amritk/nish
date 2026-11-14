@@ -8,6 +8,9 @@ The global `Map` and `Set` (docs/wp32-map.md).
 import {
   Map,
   Set,
+  forEachElement,
+  forEachEntry,
+  forEachValue,
 } from "nish/collections";
 ```
 
@@ -29,6 +32,24 @@ seen.size  // 4, and seen.has("or") is true
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="for​Each​Element" icon="phosphor/regular/function" href="#foreachelement">
+
+Calls `f` with each element of `s`, in insertion order: what `s.forEach(f)` compiles to.
+
+</scalar-card>
+
+<scalar-card title="for​Each​Entry" icon="phosphor/regular/function" href="#foreachentry">
+
+Calls `f` with the value and the key of each entry of `m`, in insertion order: what `m.forEach(f)` compiles to when `f` takes two parameters.
+
+</scalar-card>
+
+<scalar-card title="for​Each​Value" icon="phosphor/regular/function" href="#foreachvalue">
+
+Calls `f` with the value of each entry of `m`, in insertion order: what `m.forEach(f)` compiles to when `f` takes one parameter.
+
+</scalar-card>
 
 <scalar-card title="Map" icon="phosphor/regular/cube" href="#map">
 
@@ -97,6 +118,86 @@ and, where found, `valueAt` (§3.2), and an iterator is not a value, so a
 `for...of` over one is lowered to `walkOpen`, `walkNext`, `keyAt` or
 `valueAt`, and `walkClose` (§6.2). The rest of this file is refused by name
 outside it.
+
+## Functions
+
+### forEachElement
+
+Calls `f` with each element of `s`, in insertion order: what `s.forEach(f)`
+compiles to. The walk is a `for...of` over `s`, with its rule for elements
+the callback adds or deletes.
+
+```ts
+function forEachElement<T>(
+  s: Set<T>,
+  f: (value: T) => void,
+): void
+```
+
+<scalar-field name="s" type="Set&lt;T&gt;" required>
+
+the set walked; the callback may change it.
+
+</scalar-field>
+
+<scalar-field name="f" type="(value: T) =&gt; void" required>
+
+called once per live element.
+
+</scalar-field>
+
+### forEachEntry
+
+Calls `f` with the value and the key of each entry of `m`, in insertion
+order: what `m.forEach(f)` compiles to when `f` takes two parameters. It is
+the walk a `for...of` over `m.keys()` makes, and reads the value from the
+entry the walk is on, so each entry costs no probe. An entry the callback
+adds is visited and one it deletes is not, as `Map.prototype.forEach` does.
+Placed after `storedKey` so that no earlier line moved.
+
+```ts
+function forEachEntry<K, V>(
+  m: Map<K, V>,
+  f: (value: V, key: K) => void,
+): void
+```
+
+<scalar-field name="m" type="Map&lt;K, V&gt;" required>
+
+the table walked; the callback may change it.
+
+</scalar-field>
+
+<scalar-field name="f" type="(value: V, key: K) =&gt; void" required>
+
+called once per live entry, with its value and then its key.
+
+</scalar-field>
+
+### forEachValue
+
+Calls `f` with the value of each entry of `m`, in insertion order: what
+`m.forEach(f)` compiles to when `f` takes one parameter. The walk is
+`forEachEntry`'s.
+
+```ts
+function forEachValue<K, V>(
+  m: Map<K, V>,
+  f: (value: V) => void,
+): void
+```
+
+<scalar-field name="m" type="Map&lt;K, V&gt;" required>
+
+the table walked; the callback may change it.
+
+</scalar-field>
+
+<scalar-field name="f" type="(value: V) =&gt; void" required>
+
+called once per live entry, with its value.
+
+</scalar-field>
 
 ## Classes
 

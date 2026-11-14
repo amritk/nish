@@ -1,4 +1,4 @@
-// NL2781: an array pattern reads an array.
+// NL2783: an array pattern reads an array.
 class Point {
   x: number
   y: number

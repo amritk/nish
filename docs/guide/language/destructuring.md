@@ -107,7 +107,7 @@ to write it instead:
   A module constant is a compile-time value the compiler folds into each
   use, so there is no receiver at run time for a pattern to read.
 
-```ts nish:err-body NL2773
+```ts nish:err-body NL2775
 const [first, ...rest] = [1, 2, 3];
 console.log(`${first}`);
 ```

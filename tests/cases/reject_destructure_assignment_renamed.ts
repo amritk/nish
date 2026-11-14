@@ -1,4 +1,4 @@
-// NL2771: a renaming object pattern on the left of `=` is not a declaration.
+// NL2773: a renaming object pattern on the left of `=` is not a declaration.
 class Point {
   x: number
   y: number

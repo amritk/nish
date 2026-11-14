@@ -1,4 +1,4 @@
-// NL2775: a key that is not a field's name.
+// NL2777: a key that is not a field's name.
 class Point {
   x: number
   y: number

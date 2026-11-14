@@ -33,8 +33,8 @@
  * `lib.es2022`'s**, which a program is checked against: a second declaration
  * would clash with it, so the interfaces at the foot of this file merge into
  * lib's, adding Nish's documentation and no signature narrower than lib's.
- * `nish`'s surface is lib's less what it defers — no `entries`, no `forEach`,
- * no `for...of` over a `Map` itself — with `keys()` and `values()` admitted
+ * `nish`'s surface is lib's less what it defers — no `entries`, no `for...of`
+ * over a `Map` itself — with `keys()` and `values()` admitted
  * only as the iterable of a `for...of`, and `get`'s `V | undefined` only as a
  * `const`'s initialiser, the left of `??` or an operand of `=== undefined`,
  * none of which `tsc` can know (docs/LANGUAGE.md -> `Map` and `Set`).
@@ -6056,8 +6056,9 @@ interface StringConstructor {
  * arguments in this version"); the type arguments are written out, except that
  * a `const` or `let` annotated with the type takes them from the annotation,
  * and a bare `new Map()` is refused: "`Map` is generic: it must be written with
- * its type arguments". The members are JavaScript's, less `entries` and
- * `forEach` (there is no destructuring, and a method cannot take a function);
+ * its type arguments". The members are JavaScript's, less `entries` (there
+ * is no destructuring); `forEach(f)` is the `for...of` walk with `f`, an arrow
+ * or a top-level function of the value and optionally the key, inlined;
  * anything else is refused as if it did not exist. `set` answers the receiver,
  * so calls chain.
  *

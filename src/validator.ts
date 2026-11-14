@@ -313,7 +313,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       // A computed key is the property's second child, where a string key
       // would be. Its expression is not swept: `[Symbol.iterator]` is one
       // refusal, not two. A destructuring pattern's entry has no second
-      // child: its key is dropped, and the checker refuses it (NL2775).
+      // child: its key is dropped, and the checker refuses it (NL2777).
       if ((node.flags & FLAG_COMPUTED) !== 0 && node.children.length > 1) {
         ctx.error(node.children[1], computedNameForbidden())
         visit(ctx, node.children[0], inTypePosition)

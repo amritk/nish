@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 775 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 777 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5583,22 +5583,22 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` or `Set` in this version has no `entries` or `forEach`, because a `[key, value]` pair is a two-type tuple and a method cannot take a function
+…`: a `Map` or `Set` in this version has no `entries`, because a `[key, value]` pair is a two-type tuple; `forEach((value, key) => ...)` visits each key with its value
 ```
 
-[`nl2356_map_foreach.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_foreach.ts):
+[`nl2356_map_entries.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_entries.ts):
 
 ```ts
-// NL2356: `forEach` on the global `Map`; a method cannot take a function.
+// NL2356: `entries` on the global `Map`; a `[key, value]` pair is a two-type tuple.
 export const main = (): i32 => {
   const m = new Map<string, i32>();
-  m.forEach(0);
+  m.entries();
   return 0;
 };
 ```
 
 ```text
-`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`, because a `[key, value]` pair is a two-type tuple and a method cannot take a function
+`entries` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries`, because a `[key, value]` pair is a two-type tuple; `forEach((value, key) => ...)` visits each key with its value
 ```
 
 ## NL2357
@@ -5639,7 +5639,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear
+…`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach
 ```
 
 [`nl2359_map_internal_member.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2359_map_internal_member.ts):
@@ -5653,7 +5653,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-Unknown member `live` on `Set<i32>`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear
+Unknown member `live` on `Set<i32>`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach
 ```
 
 ## NL2360
@@ -14759,13 +14759,63 @@ Root storage `player` cannot be kept in a WASI build that writes a loader (`--em
 The message of an error contains:
 
 ```text
+… parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead
+```
+
+[`nl2771_map_foreach_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_map_foreach_arity.ts):
+
+```ts
+// NL2771: A `Map`'s `forEach` callback takes the value, or the value and its key;
+// JavaScript's third parameter, the map, is refused.
+export const main = (): i32 => {
+  const m = new Map<string, i32>()
+  m.set("a", 1)
+  m.forEach((v, k, all) => console.log(`${k}${v}${all.size}`))
+  return 0
+}
+```
+
+```text
+The callback of `forEach` on a `Map` takes 3 parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead
+```
+
+## NL2772
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names
+```
+
+[`nl2772_set_foreach_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2772_set_foreach_arity.ts):
+
+```ts
+// NL2772: A `Set`'s `forEach` callback takes the element alone; JavaScript passes it
+// twice, and the set third, and Nish refuses the second parameter.
+export const main = (): i32 => {
+  const s = new Set<i32>()
+  s.add(1)
+  s.forEach((v, again) => console.log(v + again))
+  return 0
+}
+```
+
+```text
+The callback of `forEach` on a `Set` takes 2 parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names
+```
+
+## NL2773
+
+The message of an error contains:
+
+```text
 Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
 ```
 
-[`nl2771_destructure_assignment.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_destructure_assignment.ts):
+[`nl2773_destructure_assignment.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_assignment.ts):
 
 ```ts
-// NL2771: a pattern on the left of `=` is not a declaration.
+// NL2773: a pattern on the left of `=` is not a declaration.
 export const main = (): void => {
   let a = 1
   let b = 2
@@ -14778,10 +14828,10 @@ export const main = (): void => {
 Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
 ```
 
-[`nl2771_destructure_assignment_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_destructure_assignment_object.ts):
+[`nl2773_destructure_assignment_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_assignment_object.ts):
 
 ```ts
-// NL2771: an object pattern on the left of `=` is not a declaration either.
+// NL2773: an object pattern on the left of `=` is not a declaration either.
 class Point {
   x: number
   constructor(x: number) {
@@ -14800,10 +14850,10 @@ export const main = (): void => {
 Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
 ```
 
-[`nl2771_destructure_assignment_renamed.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_destructure_assignment_renamed.ts):
+[`nl2773_destructure_assignment_renamed.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_assignment_renamed.ts):
 
 ```ts
-// NL2771: an object pattern on the left of `=`, renamed.
+// NL2773: an object pattern on the left of `=`, renamed.
 class Point {
   x: number
   constructor(x: number) {
@@ -14822,7 +14872,7 @@ export const main = (): void => {
 Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
 ```
 
-## NL2772
+## NL2774
 
 The message of an error contains:
 
@@ -14830,10 +14880,10 @@ The message of an error contains:
 A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take
 ```
 
-[`nl2772_destructure_default.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2772_destructure_default.ts):
+[`nl2774_destructure_default.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2774_destructure_default.ts):
 
 ```ts
-// NL2772: a missing name has no default to take.
+// NL2774: a missing name has no default to take.
 class Point {
   x: number
   y: number
@@ -14852,7 +14902,7 @@ export const main = (): void => {
 A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take
 ```
 
-## NL2773
+## NL2775
 
 The message of an error contains:
 
@@ -14860,10 +14910,10 @@ The message of an error contains:
 A rest element in a destructuring pattern is not supported; read each element you need by name
 ```
 
-[`nl2773_destructure_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_rest.ts):
+[`nl2775_destructure_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2775_destructure_rest.ts):
 
 ```ts
-// NL2773: a rest element would copy the array's tail.
+// NL2775: a rest element would copy the array's tail.
 export const main = (): void => {
   const [a, ...rest] = [1, 2, 3]
   console.log(a + rest.length)
@@ -14874,7 +14924,7 @@ export const main = (): void => {
 A rest element in a destructuring pattern is not supported; read each element you need by name
 ```
 
-## NL2774
+## NL2776
 
 The message of an error contains:
 
@@ -14882,10 +14932,10 @@ The message of an error contains:
 A nested destructuring pattern is not supported; bind the inner value to a name and destructure that
 ```
 
-[`nl2774_destructure_nested.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2774_destructure_nested.ts):
+[`nl2776_destructure_nested.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2776_destructure_nested.ts):
 
 ```ts
-// NL2774: a pattern inside a pattern.
+// NL2776: a pattern inside a pattern.
 export const main = (): void => {
   const [[a]] = [[1]]
   console.log(a)
@@ -14896,7 +14946,7 @@ export const main = (): void => {
 A nested destructuring pattern is not supported; bind the inner value to a name and destructure that
 ```
 
-## NL2775
+## NL2777
 
 The message of an error contains:
 
@@ -14904,10 +14954,10 @@ The message of an error contains:
 A destructuring key must be a field's name, not a computed or quoted key
 ```
 
-[`nl2775_destructure_key.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2775_destructure_key.ts):
+[`nl2777_destructure_key.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2777_destructure_key.ts):
 
 ```ts
-// NL2775: a key that is not a field's name.
+// NL2777: a key that is not a field's name.
 class Point {
   x: number
   y: number
@@ -14926,7 +14976,7 @@ export const main = (): void => {
 A destructuring key must be a field's name, not a computed or quoted key
 ```
 
-## NL2776
+## NL2778
 
 The message of an error contains:
 
@@ -14934,10 +14984,10 @@ The message of an error contains:
 Cannot destructure field `…
 ```
 
-[`nl2776_destructure_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2776_destructure_field.ts):
+[`nl2778_destructure_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2778_destructure_field.ts):
 
 ```ts
-// NL2776: a field the receiver does not have.
+// NL2778: a field the receiver does not have.
 class Point {
   x: number
   y: number
@@ -14956,7 +15006,7 @@ export const main = (): void => {
 Cannot destructure field `z`: Point has no such field
 ```
 
-## NL2777
+## NL2779
 
 The message of an error contains:
 
@@ -14964,10 +15014,10 @@ The message of an error contains:
 …, which may be absent; narrow it first, as in `if (p !== null)`
 ```
 
-[`nl2777_destructure_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2777_destructure_nullable.ts):
+[`nl2779_destructure_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2779_destructure_nullable.ts):
 
 ```ts
-// NL2777: a value that may be absent.
+// NL2779: a value that may be absent.
 class Point {
   x: number
   y: number
@@ -14989,7 +15039,7 @@ export const main = (): void => {
 Cannot destructure Point | null, which may be absent; narrow it first, as in `if (p !== null)`
 ```
 
-## NL2778
+## NL2780
 
 The message of an error contains:
 
@@ -14997,10 +15047,10 @@ The message of an error contains:
 A `Map` cannot be destructured; read each value with `get`
 ```
 
-[`nl2778_destructure_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2778_destructure_map.ts):
+[`nl2780_destructure_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2780_destructure_map.ts):
 
 ```ts
-// NL2778: a Map has no fields to read.
+// NL2780: a Map has no fields to read.
 export const main = (): void => {
   const m = new Map<string, number>()
   const { size } = m
@@ -15012,7 +15062,7 @@ export const main = (): void => {
 A `Map` cannot be destructured; read each value with `get`
 ```
 
-## NL2779
+## NL2781
 
 The message of an error contains:
 
@@ -15020,10 +15070,10 @@ The message of an error contains:
 A `string` cannot be destructured; read each character by its index
 ```
 
-[`nl2779_destructure_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2779_destructure_string.ts):
+[`nl2781_destructure_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2781_destructure_string.ts):
 
 ```ts
-// NL2779: a string's characters are read by index.
+// NL2781: a string's characters are read by index.
 export const main = (): void => {
   const [c] = "ab"
   console.log(c)
@@ -15034,7 +15084,7 @@ export const main = (): void => {
 A `string` cannot be destructured; read each character by its index
 ```
 
-## NL2780
+## NL2782
 
 The message of an error contains:
 
@@ -15042,10 +15092,10 @@ The message of an error contains:
 An object pattern reads a class or interface value, got …
 ```
 
-[`nl2780_destructure_object_of_number.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2780_destructure_object_of_number.ts):
+[`nl2782_destructure_object_of_number.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2782_destructure_object_of_number.ts):
 
 ```ts
-// NL2780: an object pattern reads a class or interface value.
+// NL2782: an object pattern reads a class or interface value.
 export const main = (): void => {
   const n = 3
   const { x } = n
@@ -15057,7 +15107,7 @@ export const main = (): void => {
 An object pattern reads a class or interface value, got i32
 ```
 
-## NL2781
+## NL2783
 
 The message of an error contains:
 
@@ -15065,10 +15115,10 @@ The message of an error contains:
 An array pattern reads an array, got …
 ```
 
-[`nl2781_destructure_array_of_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2781_destructure_array_of_object.ts):
+[`nl2783_destructure_array_of_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2783_destructure_array_of_object.ts):
 
 ```ts
-// NL2781: an array pattern reads an array.
+// NL2783: an array pattern reads an array.
 class Point {
   x: number
   y: number
@@ -15087,7 +15137,7 @@ export const main = (): void => {
 An array pattern reads an array, got Point
 ```
 
-## NL2782
+## NL2784
 
 The message of an error contains:
 
@@ -15095,10 +15145,10 @@ The message of an error contains:
 A destructuring declaration must be initialized
 ```
 
-[`nl2782_destructure_uninitialized.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2782_destructure_uninitialized.ts):
+[`nl2784_destructure_uninitialized.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2784_destructure_uninitialized.ts):
 
 ```ts
-// NL2782: a pattern has nothing to read without a value.
+// NL2784: a pattern has nothing to read without a value.
 export const main = (): void => {
   let { x }
   console.log(x)
@@ -15109,7 +15159,7 @@ export const main = (): void => {
 A destructuring declaration must be initialized
 ```
 
-## NL2783
+## NL2785
 
 The message of an error contains:
 
@@ -15117,10 +15167,10 @@ The message of an error contains:
 A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body
 ```
 
-[`nl2783_destructure_for_of_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2783_destructure_for_of_set.ts):
+[`nl2785_destructure_for_of_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2785_destructure_for_of_set.ts):
 
 ```ts
-// NL2783: a destructuring head walks an array only.
+// NL2785: a destructuring head walks an array only.
 export const main = (): void => {
   const s = new Set<string>()
   for (const [c] of s) {

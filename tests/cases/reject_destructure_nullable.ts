@@ -1,4 +1,4 @@
-// NL2777: a value that may be absent.
+// NL2779: a value that may be absent.
 class Point {
   x: number
   y: number

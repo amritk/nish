@@ -1218,13 +1218,14 @@ const isCapture = (ctx: CheckContext, local: Local | null): boolean => {
  */
 const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
   const mode = ctx.arrowMode()
+  const arrow = ctx.current
   let message = noCaptureMessage(mode, target.text)
   if (mode === CAPTURE_TASK) {
     message = taskCaptureWriteMessage(target.text)
   } else if (mode === CAPTURE_PARALLEL) {
     message = captureWriteMessage(target.text, captureWriteRemedy(ctx.program, target))
   } else if (mode === CAPTURE_CALL) {
-    message = callCaptureWriteMessage(target.text)
+    message = callCaptureWriteMessage(target.text, arrow !== null && arrow.forEachCallback)
   }
   refuseOnce(ctx, target, message)
   return T_ERROR

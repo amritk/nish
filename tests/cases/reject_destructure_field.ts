@@ -1,4 +1,4 @@
-// NL2776: a field the receiver does not have.
+// NL2778: a field the receiver does not have.
 class Point {
   x: number
   y: number

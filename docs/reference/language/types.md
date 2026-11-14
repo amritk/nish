@@ -1132,7 +1132,7 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 
 `try` is refused by Nish on its own, a destructuring pattern only ever
 declares fresh names rather than storing to a variable (a destructuring
-assignment is NL2771, [Destructuring declarations](statements.md#destructuring-declarations)),
+assignment is NL2773, [Destructuring declarations](statements.md#destructuring-declarations)),
 and an arrow may read a local it captures but never
 assign it (NL2586, [Function parameters](declarations.md#function-parameters)), so no loop
 that compiles stores through any of them. A loop that holds a
