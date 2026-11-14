@@ -152,11 +152,12 @@ export const main = (): void => {
 };
 ```
 
-A union is still not a `Set` element or a `Map` key, and a store of a bare
-variant into a generic instance's union field, `b.value = new Square(1)`, is
-refused as into any union field ([Declare what you store](#declare-what-you-store)).
-A union does not meet a constraint such as `<T extends HasKind>`, and an
-instance over a union is not a class typed JSON writes:
+A store of a bare variant into a generic instance's union field,
+`b.value = new Square(1)`, is refused as into any union field
+([Declare what you store](#declare-what-you-store)). A union does not meet a
+constraint such as `<T extends HasKind>`, and an instance over a union is not
+a class typed JSON writes. And a union is still not a `Set` element or a `Map`
+key:
 
 ```ts nish:err NL2353
 enum Kind {

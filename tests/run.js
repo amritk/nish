@@ -21456,6 +21456,53 @@ if (dealtHere("cliChecks")) {
         !skipMjs.includes("widest"),
       skipDts + skipMjs
     )
+    // WP58: a generic instance over a union is a struct the freestanding wasm
+    // profile cannot hand to JavaScript, so an export returning `Box<Shape>`
+    // is declined like any other runtime-backed result: commented with its
+    // reason in the declarations, absent from the loader, and the module's
+    // scalar export beside it still typed and loaded.
+    const unionBoxSrc = path.join(interopDir, "union_generic_dts.ts")
+    fs.writeFileSync(
+      unionBoxSrc,
+      [
+        "enum Kind {",
+        "  Circle,",
+        "  Square,",
+        "}",
+        "class Circle {",
+        "  readonly kind: Kind.Circle = Kind.Circle;",
+        "  r: i32 = 1;",
+        "}",
+        "class Square {",
+        "  readonly kind: Kind.Square = Kind.Square;",
+        "  side: i32 = 2;",
+        "}",
+        "type Shape = Circle | Square;",
+        "class Box<T> {",
+        "  value: T;",
+        "  constructor(value: T) {",
+        "    this.value = value;",
+        "  }",
+        "}",
+        "export const make = (n: i32): Box<Shape> => new Box<Shape>(n > 0 ? new Circle() : new Square());",
+        "export const twice = (n: i32): i32 => n * 2;",
+        "",
+      ].join("\n")
+    )
+    const unionBox = emit(unionBoxSrc, ["--emit-dts", sidecar("union_generic_dts", "d.ts")])
+    const unionBoxDts = unionBox.status === 0 ? fs.readFileSync(sidecar("union_generic_dts", "d.ts"), "utf8") : ""
+    const unionBoxMjs = unionBox.status === 0 ? fs.readFileSync(sidecar("union_generic_dts", "mjs"), "utf8") : ""
+    check(
+      "--emit-dts declines an export returning a generic instance over a union, with its reason",
+      unionBoxDts.includes(
+        "  // make(n: number): Box$un2.$Circle.$Square  -- not exported to JS: the result is `Box$un2.$Circle.$Square`, which needs the Nish runtime the freestanding wasm profile does not include"
+      ) &&
+        unionBoxDts.includes("  twice(n: number): number;") &&
+        unionBoxMjs.length > 0 &&
+        !unionBoxMjs.includes("make") &&
+        unionBoxMjs.includes("twice"),
+      `exit ${unionBox.status}\n${unionBox.stderr ?? ""}\n${unionBoxDts}${unionBoxMjs}`
+    )
     // WP30: the same widths as arrays, where the masks above have no
     // counterpart. An element never travels in a wasm value type -- it is a byte
     // in `data` that the typed array reads unsigned -- so a mask here would be

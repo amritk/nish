@@ -2589,15 +2589,15 @@ The best rewrite of `sha256Compress` tried (`run.mjs --variant locals+maj+nested
 <!-- union-result:begin -->
 ## A union as a `Result`'s success (WP58 S1)
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `bench/union-result/union.ts` returns `Result<Shape, string>`, where `Shape` is a discriminated union; `wrapper.ts` is the same program written the way it had to be before a union could be a type argument, `Result<ShapeWrapper, string>` with the union in a class field. A success allocates the 24-byte result and the 8-byte variant; the wrapper adds its own 8 bytes, so it allocates a fifth more and its resident set grows with it. The union enters the result with a bitcast, so it costs nothing over the variant.
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bench/union-result/union.ts` returns `Result<Shape, string>`, where `Shape` is a discriminated union; `wrapper.ts` is the same program written the way it had to be before a union could be a type argument, `Result<ShapeWrapper, string>` with the union in a class field. A success allocates the 24-byte result and the 8-byte variant; the wrapper adds its own 8 bytes, so it allocates a quarter more and its resident set grows with it. The union enters the result with a bitcast, so it costs nothing over the variant.
 
 4,000,000 calls of `parse`, 11 interleaved rounds, medians; `node bench/union-result/run.mjs`.
 
 | variant | wall ms | vs wrapper | bytes per success | peak resident KiB |
 | --- | ---: | ---: | ---: | ---: |
-| union | 70.1 | 0.77x | 32 | 124060 |
-| union2 | 71.1 | 0.78x | 32 | 124060 |
-| wrapper | 90.7 | 1.00x | 40 | 153116 |
+| union | 67.8 | 0.80x | 32 | 124128 |
+| union2 | 61.6 | 0.73x | 32 | 124128 |
+| wrapper | 84.9 | 1.00x | 40 | 153184 |
 
-Noise band (union against its byte-identical copy union2): wall 7.0%, peak resident 0.0%.
+Noise band (union against its byte-identical copy union2): wall 6.6%, peak resident 0.0%.
 <!-- union-result:end -->

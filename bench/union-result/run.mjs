@@ -94,7 +94,7 @@ const lines = [
     "discriminated union; `wrapper.ts` is the same program written the way it had to be " +
     "before a union could be a type argument, `Result<ShapeWrapper, string>` with the union " +
     "in a class field. A success allocates the 24-byte result and the 8-byte variant; the " +
-    "wrapper adds its own 8 bytes, so it allocates a fifth more and its resident set grows " +
+    "wrapper adds its own 8 bytes, so it allocates a quarter more and its resident set grows " +
     "with it. The union enters the result with a bitcast, so it costs nothing over the variant.",
   "",
   `4,000,000 calls of \`parse\`, ${rounds} interleaved rounds, medians; ` +
