@@ -157,7 +157,9 @@ rewrite.
   an explicit `dyn`-style opt-in at the use site, built on interfaces — which
   is what `implements` now is — rather than on a class hierarchy. It needs a
   vtable and function pointers, and both are refused today for the reasons §2
-  gives, so it is a work package of its own and not a follow-up to this one.
+  gives, so it is a work package of its own and not a follow-up to this one:
+  [WP60](wp60-dyn-dispatch.md) designs it over interfaces, with a tag in
+  place of a vtable.
 - **Interface inheritance.** `interface A extends B` is still refused ("list
   every field"). A prefix rule between two interfaces would be the natural
   generalisation of §3 and costs nothing structurally; it is left out because

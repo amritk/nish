@@ -1334,7 +1334,8 @@
                   "/wp51-function-references": { "type": "page", "title": "WP51: References to capture-free top-level functions", "filepath": "docs/roadmap/wp51-function-references.md" },
                   "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
                   "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
-                  "/wp57-module-scoped-names": { "type": "page", "title": "WP57: Module-scoped names", "filepath": "docs/roadmap/wp57-module-scoped-names.md" }
+                  "/wp57-module-scoped-names": { "type": "page", "title": "WP57: Module-scoped names", "filepath": "docs/roadmap/wp57-module-scoped-names.md" },
+                  "/wp60-dyn-dispatch": { "type": "page", "title": "WP60: Dynamic dispatch over interfaces", "filepath": "docs/roadmap/wp60-dyn-dispatch.md" }
                 }
               },
               "/done/..": {

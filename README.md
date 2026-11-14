@@ -470,8 +470,9 @@ spelling, a flag's name and the IR any of them lowers to can change between
 minor releases. [CHANGELOG.md](CHANGELOG.md) says what changed in each, and
 the [roadmap](docs/roadmap/index.md) says what is built and what is next.
 
-There is no dynamic dispatch (classes have no inheritance, so every method
-call names one function) and no reference counting: memory is the arena, the
+There is no dynamic dispatch yet (classes have no inheritance, so every method
+call names one function; [WP60](docs/wp60-dyn-dispatch.md) proposes it over
+interfaces) and no reference counting: memory is the arena, the
 stack and `nish:region`. Generic type aliases, closures stored as values (an
 arrow written as a call's argument may read the caller's `const` locals and
 parameters, but is never stored) and `try`/`catch` are refused by design, each
