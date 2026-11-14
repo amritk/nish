@@ -32003,6 +32003,31 @@ instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
 `` attempt to compute with overflow in a constant ``, and
 `const OVER: i32 = wrappingAdd(2147483647, 1)` folds to `-2147483648`.
 
+#### A self-recursive sum: one loop, one deferred check
+
+A checked `+` stops LLVM's tail-recursion elimination: it folds
+`return x + f(...)` into a loop and an accumulator only when the `+` is a plain
+`add`. So the compiler writes that loop itself (`src/accumulate.ts` chooses
+the functions, `src/emit-accumulate.ts` writes them, with the proof). A
+function qualifies when it is a plain `i32` function of its module and every
+`return` that recurses is `X + self(args)`, or `self(args) + Y` with `Y` a
+number or a parameter, at least one `return` does not, and the body is only
+blocks, `if`, declarations, expression statements and `return`s.
+
+Each parameter becomes a `phi` of `rec.head`, a step evaluates `X` and the
+arguments in the source's order and branches back, and three `i64` `phi`s
+carry the sum of every `X` so far and the least and greatest sum recorded
+before each step. The base adds its own value and panics, with the same
+`attempt to add with overflow`, exactly when some add of the recursion would
+have: when a recorded sum lies outside `[T - MAX, T - MIN]`, `T` being the
+total. In `fib`, `fib(n - 1)` stays a call and `fib(n - 2)` is the back edge.
+`--no-elision` and a debug or wasm-panic-site build keep the recursion
+(`tests/cases/acc_fib`, `acc_tree`, `acc_shapes`, `acc_overflow`,
+`acc_ineligible`).
+
+<!-- cookbook:begin opt-recursion-loop -->
+<!-- cookbook:end opt-recursion-loop -->
+
 ### `--target`
 
 The module carries `target datalayout` and `target triple` (the strings
