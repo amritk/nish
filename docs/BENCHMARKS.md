@@ -567,6 +567,7 @@ On citm, the escape scan does not make serialize faster outside its band: most s
 Instructions per document under callgrind: citm_catalog.json 14.13M → 10.74M (−24.0%); `bench/json-api`'s page of twenty users 188,879 → 162,647 (−13.9%). After the change, `keyQuoted` is about a quarter of either profile, `JsonWriter.i64` 30% of citm's, and `jsonWriterPutString` (escaping the string values) a third of the API page's.
 
 Wall clock, against main at `f8e21091`. In `bench/json-compare`, serialize on citm ran 548,213 and 554,908 ns/doc at the minimum in two runs, against main's 767,648 (**1.38x to 1.40x** at the minimum). The bands, each the build against its byte-identical copy on the minimums, were 8.8%, 5.8% and 0.2%. In `node bench/json-api/run.mjs --base <main's nish>` (18 interleaved rounds), the page took 8,676 against 11,149 ns at the minimum (**1.29x**) and 9,710 against 11,856 ns at the median (**1.22x**); the noise band, main against its own copy, was 2.3% on the minimums and 1.6% on the medians.
+Main's profile and the re-measure: in progress (#1603).
 <!-- json-encode-keys:end -->
 
 <!-- json-value-ranges:begin -->
