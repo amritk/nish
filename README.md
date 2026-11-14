@@ -67,9 +67,9 @@ for (const side of sides) {
 }
 ```
 
-The IR is readable. `examples/add.ts`, `a + b` on two `i32`s, compiles to a
-checked add: an overflow panics instead of wrapping, and a sum the compiler
-proves fits is a plain `add nsw`.
+The IR is readable. `examples/add.ts`, `a + b` on two `number`s (32-bit
+integers by default), compiles to a checked add: an overflow panics instead
+of wrapping, and a sum the compiler proves fits is a plain `add nsw`.
 
 ```llvm
 define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
@@ -178,9 +178,17 @@ so what you never call is dropped at the link:
 ```ts
 import { Suite } from "nish/testing";
 
-export const main = (): number => {
-  const t = new Suite("stats");
-  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+const sumOf = (xs: i32[]): i32 => {
+  let total = 0;
+  for (const x of xs) {
+    total = total + x;
+  }
+  return total;
+};
+
+export const main = (): i32 => {
+  const t = new Suite("sums");
+  t.eqI32("four numbers", sumOf([3, 9, 4, 9]), 25);
   return t.done();          // prints the report; 0 when nothing failed
 };
 ```
@@ -232,8 +240,8 @@ algorithms in Nish, C and Rust and records wall time, size and memory in
 
 Nish never embeds a JavaScript engine; JavaScript calls Nish. A program
 builds to a wasm module or a Node addon with generated `.d.ts` types, the
-addon borrows typed arrays without a copy, and `--emit-header` writes C prototypes for a C
-host. Read [Calling Nish from other languages](docs/guide/using-nish/interop.md)
+addon borrows typed arrays without a copy, and `--emit-header` writes C
+prototypes for a C host. Read [Calling Nish from other languages](docs/guide/using-nish/interop.md)
 and [Browser games](docs/guide/using-nish/browser-games.md).
 
 ## The compiler in a browser
