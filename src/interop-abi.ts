@@ -1105,6 +1105,9 @@ export const acceptsSidecars = (
   if (!refuseUnions(compilation, fns, laysOut)) {
     ok = false
   }
+  if (!refuseStringEnums(compilation, fns)) {
+    ok = false
+  }
   // The clashes come in pairs, and the test on the second of each is what
   // proves both reads.
   const clashes = cNameClashes(compilation.table, cDeclared)
@@ -1182,6 +1185,58 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[], laysOut
     return false
   }
   return true
+}
+
+/**
+ * Refuses a string enum in a parameter or result of an external function. A
+ * string enum is its member's ordinal natively and its string in TypeScript,
+ * and no sidecar can say which a host should pass: neither is the C, N-API or
+ * wasm spelling of the type yet (docs/LANGUAGE.md, String enums). True when
+ * there is none; otherwise the first is reported.
+ */
+const refuseStringEnums = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
+  const table = compilation.table
+  for (const fn of fns) {
+    const sig = fn.sig
+    let what = ""
+    if (holdsStringEnum(table, sig.returnType)) {
+      what = `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
+    }
+    let i = 0
+    while (what.length === 0 && i < sig.paramTypes.length && i < sig.paramNames.length) {
+      if (holdsStringEnum(table, sig.paramTypes[i])) {
+        what = `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[i]}\` is \`${table.typeName(sig.paramTypes[i])}\``
+      }
+      i = i + 1
+    }
+    if (what.length > 0) {
+      const at = sigNameNode(sig)
+      compilation.sink.report(
+        fn.unit.source,
+        at.start,
+        at.end,
+        `${what}, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version,` +
+          " so take or return a `string` and convert with `String(r)` and a `switch`"
+      )
+      return false
+    }
+  }
+  return true
+}
+
+/** A string enum, or one of its member types, anywhere in `type`: itself, an element, a nullable's value or a `Result` arm. */
+const holdsStringEnum = (table: TypeTable, type: i32): boolean => {
+  if (type < 0) {
+    return false
+  }
+  if (table.enumStrings(type) !== null) {
+    return true
+  }
+  const kind = table.kindOf(type)
+  if (kind === K_RESULT) {
+    return holdsStringEnum(table, table.okOf(type)) || holdsStringEnum(table, table.errOf(type))
+  }
+  return (kind === K_ARRAY || kind === K_NULLABLE) && holdsStringEnum(table, table.refOf(type))
 }
 
 /** The first class or interface `unit` declares with a field that holds a union, or null. */

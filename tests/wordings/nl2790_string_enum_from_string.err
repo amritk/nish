@@ -1,0 +1,1 @@
+`"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin`

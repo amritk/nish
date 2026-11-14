@@ -1,0 +1,1 @@
+A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared

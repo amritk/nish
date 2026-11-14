@@ -1,0 +1,1 @@
+String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal

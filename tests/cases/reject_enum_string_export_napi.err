@@ -1,0 +1,1 @@
+`everyone` returns `Role[]`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch`

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 953
+export const RULE_COUNT: i32 = 954
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -929,6 +929,8 @@ const diagnosticRules = (): string[] => [
   "NL2382",
   "`set` copies from an array of the receiver's element type, so it expects ",
   "NL2396",
+  "which holds a string enum: a string enum has no C, N-API or wasm spelling",
+  "NL4019",
   " runs answers the region's root, which must be memory it allocated, and ",
   "NL2614",
   ": `static` members are not supported (use a top-level function or const)",

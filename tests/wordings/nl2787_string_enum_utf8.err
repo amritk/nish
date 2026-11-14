@@ -1,0 +1,1 @@
+Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8

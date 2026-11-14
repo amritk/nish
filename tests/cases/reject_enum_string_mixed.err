@@ -1,0 +1,1 @@
+Enum members must be numeric literals in Nish, or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings)
