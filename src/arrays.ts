@@ -41,7 +41,9 @@ import {
   arrayMethodTemplate,
   arrayMethodTemplateCount,
   collectionForEachLocal,
-  collectionForEachTemplate,
+  FOR_EACH_ELEMENT,
+  FOR_EACH_ENTRY,
+  FOR_EACH_VALUE,
   isSortModule,
   SORT_LOCAL,
 } from "./std-modules"
@@ -611,7 +613,10 @@ export const checkCollectionForEach = (
     )
     return T_ERROR
   }
-  const template = isMap ? collectionForEachTemplate(arity === 2 ? 0 : 1) : collectionForEachTemplate(2)
+  let template = FOR_EACH_ELEMENT
+  if (isMap) {
+    template = arity === 2 ? FOR_EACH_ENTRY : FOR_EACH_VALUE
+  }
   return checkAsTemplateCall(ctx, call, access, args, collectionForEachLocal(template), scope)
 }
 

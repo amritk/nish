@@ -24,7 +24,9 @@ const SORT_LOCAL: string = "Array.prototype.sort" [exported]
 const FLOAT_REM_LOCAL: string = "%" [exported]
 const ARRAY_SPECIFIER: string = "nish/array" [exported]
 const ARRAY_LOCAL_PREFIX: string = "Array.prototype."
-const COLLECTION_FOR_EACH_COUNT: i32 = 3 [exported]
+const FOR_EACH_ENTRY: string = "forEachEntry" [exported]
+const FOR_EACH_VALUE: string = "forEachValue" [exported]
+const FOR_EACH_ELEMENT: string = "forEachElement" [exported]
 const INDEXED_SUFFIX: string = "Indexed"
 function stdModuleName(specifier: string): string -> @stdModuleName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -139,9 +141,6 @@ function rewrittenArrayMethod(local: string): string -> @rewrittenArrayMethod [e
   stackSites=0 stackLocals=0
   callee +0:10 isCollectionForEachLocal -> @isCollectionForEachLocal
   callee +0:56 arrayMethodOfLocal -> @arrayMethodOfLocal
-function collectionForEachTemplate(k: i32): string -> @collectionForEachTemplate [exported]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function collectionForEachLocal(template: string): string -> @collectionForEachLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_eq

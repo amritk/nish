@@ -68,9 +68,10 @@ import {
   arrayMethodLocal,
   arrayMethodTemplate,
   arrayMethodTemplateCount,
-  COLLECTION_FOR_EACH_COUNT,
   collectionForEachLocal,
-  collectionForEachTemplate,
+  FOR_EACH_ELEMENT,
+  FOR_EACH_ENTRY,
+  FOR_EACH_VALUE,
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
@@ -489,18 +490,22 @@ export class Checker {
    * loaded it.
    */
   importCollectionForEach(): void {
-    for (let k: i32 = 0; k < COLLECTION_FOR_EACH_COUNT; k++) {
-      const template = collectionForEachTemplate(k)
-      this.program.imports.push(
-        new ImportBinding(
-          COLLECTIONS_SPECIFIER,
-          template,
-          collectionForEachLocal(template),
-          this.program.file,
-          this.program.file
-        )
+    this.importCollectionTemplate(FOR_EACH_ENTRY)
+    this.importCollectionTemplate(FOR_EACH_VALUE)
+    this.importCollectionTemplate(FOR_EACH_ELEMENT)
+  }
+
+  /** Imports the `nish/collections` template `template` under its dotted local (`collectionForEachLocal`). */
+  importCollectionTemplate(template: string): void {
+    this.program.imports.push(
+      new ImportBinding(
+        COLLECTIONS_SPECIFIER,
+        template,
+        collectionForEachLocal(template),
+        this.program.file,
+        this.program.file
       )
-    }
+    )
   }
 
   /**

@@ -405,9 +405,9 @@ const isRetentionCode = (code: string): boolean =>
 /**
  * Whether an import emits nothing and names nothing the program wrote: one of
  * the `nish/array` templates the checker gives a module for each array-method
- * name it calls, or of the `nish/collections` ones it gives for `forEach`
- * (`importArrayMethods`, under a dotted local), that no call instantiated, or
- * that bound no template. The `--emit-checked` dump leaves it
+ * name it calls (`importArrayMethods`), or of the `nish/collections` ones it
+ * gives for `forEach` (`importCollectionForEach`), each under a dotted local,
+ * that no call instantiated or that bound no template. The `--emit-checked` dump leaves it
  * out, and `std/array.ts` is unused when every `nish/array` import is one. An
  * import the program wrote is never unused, called or not, because the
  * emitted TypeScript still names it.

@@ -335,18 +335,13 @@ export const rewrittenArrayMethod = (local: string): string => {
 }
 
 /**
- * How many `nish/collections` templates a `.forEach(...)` call may become:
- * `forEachEntry` and `forEachValue` for a `Map`, `forEachElement` for a `Set`.
+ * The `nish/collections` templates a `.forEach(...)` call may become:
+ * `forEachEntry` for a `Map` callback of a value and a key, `forEachValue` for
+ * one of a value alone, and `forEachElement` for a `Set`.
  */
-export const COLLECTION_FOR_EACH_COUNT: i32 = 3
-
-/** The `k`th template `COLLECTION_FOR_EACH_COUNT` counts: a literal, so a loop over them allocates nothing. */
-export const collectionForEachTemplate = (k: i32): string => {
-  if (k === 0) {
-    return "forEachEntry"
-  }
-  return k === 1 ? "forEachValue" : "forEachElement"
-}
+export const FOR_EACH_ENTRY: string = "forEachEntry"
+export const FOR_EACH_VALUE: string = "forEachValue"
+export const FOR_EACH_ELEMENT: string = "forEachElement"
 
 /**
  * The local name a `nish/collections` `forEach` template is imported under
@@ -354,7 +349,7 @@ export const collectionForEachTemplate = (k: i32): string => {
  * can take it.
  */
 export const collectionForEachLocal = (template: string): string =>
-  template === "forEachElement" ? `Set.prototype.${template}` : `Map.prototype.${template}`
+  template === FOR_EACH_ELEMENT ? `Set.prototype.${template}` : `Map.prototype.${template}`
 
 /** Whether an import under `local` is one the checker gave a module for a `Map` or `Set` `forEach` call. */
 export const isCollectionForEachLocal = (local: string): boolean =>

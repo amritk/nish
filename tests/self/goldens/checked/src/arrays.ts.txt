@@ -47,7 +47,9 @@ import arrayMethodLocal from "./std-modules" -> function @arrayMethodLocal
 import arrayMethodTemplate from "./std-modules" -> function @arrayMethodTemplate
 import arrayMethodTemplateCount from "./std-modules" -> function @arrayMethodTemplateCount
 import collectionForEachLocal from "./std-modules" -> function @collectionForEachLocal
-import collectionForEachTemplate from "./std-modules" -> function @collectionForEachTemplate
+import FOR_EACH_ELEMENT from "./std-modules" -> const FOR_EACH_ELEMENT
+import FOR_EACH_ENTRY from "./std-modules" -> const FOR_EACH_ENTRY
+import FOR_EACH_VALUE from "./std-modules" -> const FOR_EACH_VALUE
 import isSortModule from "./std-modules" -> function @isSortModule
 import SORT_LOCAL from "./std-modules" -> const SORT_LOCAL
 import zeroFilledReferenceMessage from "./fnrefs" -> function @zeroFilledReferenceMessage
@@ -439,7 +441,7 @@ function checkCallbackMethod(ctx: CheckContext, call: Node, access: Node, args: 
 function checkCollectionForEach(ctx: CheckContext, call: Node, access: Node, args: Node, isMap: boolean, scope: Scope): i32 -> @checkCollectionForEach [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
-  calls: CheckContext.error callbackArity checkAsTemplateCall checkBuiltinArity collectionForEachLocal collectionForEachTemplate nish_panic_index nish_str_concat nish_str_from_i32
+  calls: CheckContext.error callbackArity checkAsTemplateCall checkBuiltinArity collectionForEachLocal nish_panic_index nish_str_concat nish_str_from_i32
   pointer ctx: size=344 writesThrough=true captured=true passedTo=checkBuiltinArity#0 callbackArity#0 CheckContext.error#0 checkAsTemplateCall#0
   pointer call: size=40 writesThrough=true captured=true passedTo=checkBuiltinArity#1 checkAsTemplateCall#1
   pointer access: size=40 writesThrough=false captured=false passedTo=checkAsTemplateCall#2
@@ -450,11 +452,9 @@ function checkCollectionForEach(ctx: CheckContext, call: Node, access: Node, arg
   local +3:9 arity: i32 (const)
   callee +3:17 callbackArity -> @callbackArity
   callee +5:5 CheckContext.error -> @CheckContext.error
-  local +13:9 template: string (const)
-  callee +13:28 collectionForEachTemplate -> @collectionForEachTemplate
-  callee +13:77 collectionForEachTemplate -> @collectionForEachTemplate
-  callee +14:10 checkAsTemplateCall -> @checkAsTemplateCall
-  callee +14:55 collectionForEachLocal -> @collectionForEachLocal
+  local +13:7 template: string (let)
+  callee +17:10 checkAsTemplateCall -> @checkAsTemplateCall
+  callee +17:55 collectionForEachLocal -> @collectionForEachLocal
 function checkArraySlice(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkArraySlice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

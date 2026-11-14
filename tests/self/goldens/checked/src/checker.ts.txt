@@ -64,9 +64,10 @@ import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
 import arrayMethodLocal from "./std-modules" -> function @arrayMethodLocal
 import arrayMethodTemplate from "./std-modules" -> function @arrayMethodTemplate
 import arrayMethodTemplateCount from "./std-modules" -> function @arrayMethodTemplateCount
-import COLLECTION_FOR_EACH_COUNT from "./std-modules" -> const COLLECTION_FOR_EACH_COUNT
 import collectionForEachLocal from "./std-modules" -> function @collectionForEachLocal
-import collectionForEachTemplate from "./std-modules" -> function @collectionForEachTemplate
+import FOR_EACH_ELEMENT from "./std-modules" -> const FOR_EACH_ELEMENT
+import FOR_EACH_ENTRY from "./std-modules" -> const FOR_EACH_ENTRY
+import FOR_EACH_VALUE from "./std-modules" -> const FOR_EACH_VALUE
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
 import FLOAT_REM_LOCAL from "./std-modules" -> const FLOAT_REM_LOCAL
 import MATH_SPECIFIER from "./std-modules" -> const MATH_SPECIFIER
@@ -145,6 +146,7 @@ struct Checker (class) size=24 align=8 exported
   method importSort -> @Checker.importSort
   method importArrayMethods -> @Checker.importArrayMethods
   method importCollectionForEach -> @Checker.importCollectionForEach
+  method importCollectionTemplate -> @Checker.importCollectionTemplate
   method qualifySymbols -> @Checker.qualifySymbols
   method declareAlias -> @Checker.declareAlias
   method nameTaken -> @Checker.nameTaken
@@ -358,16 +360,23 @@ function Checker.importArrayMethods(this: Checker): void -> @Checker.importArray
   callee +10:34 CheckedProgram.isCollections -> @CheckedProgram.isCollections
   callee +11:9 Checker.importCollectionForEach -> @Checker.importCollectionForEach
 function Checker.importCollectionForEach(this: Checker): void -> @Checker.importCollectionForEach [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: ImportBinding.constructor collectionForEachLocal collectionForEachTemplate nish_alloc_struct nish_array_grow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Checker.importCollectionTemplate
+  calls: Checker.importCollectionTemplate
+  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.importCollectionTemplate#0 Checker.importCollectionTemplate#0 Checker.importCollectionTemplate#0
+  stackSites=0 stackLocals=0
+  callee +0:5 Checker.importCollectionTemplate -> @Checker.importCollectionTemplate
+  callee +1:5 Checker.importCollectionTemplate -> @Checker.importCollectionTemplate
+  callee +2:5 Checker.importCollectionTemplate -> @Checker.importCollectionTemplate
+function Checker.importCollectionTemplate(this: Checker, template: string): void -> @Checker.importCollectionTemplate [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: template
+  calls: ImportBinding.constructor collectionForEachLocal nish_alloc_struct nish_array_grow
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -2:14 k: i32 (let)
-  local -1:13 template: string (const)
-  callee -1:24 collectionForEachTemplate -> @collectionForEachTemplate
-  callee +1:9 new ImportBinding -> @ImportBinding.constructor
-  callee +4:11 collectionForEachLocal -> @collectionForEachLocal
+  callee +1:7 new ImportBinding -> @ImportBinding.constructor
+  callee +4:9 collectionForEachLocal -> @collectionForEachLocal
 function Checker.qualifySymbols(this: Checker): void -> @Checker.qualifySymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
