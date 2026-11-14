@@ -745,7 +745,9 @@ const inOptionalChain = (node: Node): boolean => {
  * are not written: the pattern is, as it was in the source.
  */
 const writtenChildren = (node: Node): i32 =>
-  node.kind === NodeKind.VarDecl && node.children[0].kind === NodeKind.BindingPattern ? 3 : node.children.length
+  node.kind === NodeKind.VarDecl && node.children[0].kind === NodeKind.BindingPattern
+    ? 3
+    : node.children.length
 
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */
 const hasEffect = (node: Node): boolean => {

@@ -363,7 +363,13 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
 }
 
 /** One `let`/`const` declarator binding `name`, declared in `scope`. */
-const checkDeclarator = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, name: string): void => {
+const checkDeclarator = (
+  ctx: CheckContext,
+  decl: Node,
+  scope: Scope,
+  mutable: boolean,
+  name: string
+): void => {
   const annotation = decl.children[1]
   // The annotation is resolved first, so that a refused initializer still
   // leaves the variable its declared type (see below).
@@ -378,16 +384,7 @@ const checkDeclarator = (ctx: CheckContext, decl: Node, scope: Scope, mutable: b
   if (initializer.kind === NodeKind.Empty) {
     ctx.error(decl, `Variable \`${name}\` must be initialized`)
     const origin = declaredOrigin(ctx, annotation, initializer, scope)
-    declareLocal(
-      ctx,
-      scope,
-      decl,
-      decl.children[0],
-      name,
-      declared < 0 ? T_ERROR : declared,
-      mutable,
-      origin
-    )
+    declareLocal(ctx, scope, decl, decl.children[0], name, declared < 0 ? T_ERROR : declared, mutable, origin)
     return
   }
   // WP32: a `const` is one of the places a maybe may go, and a `let` is not,
@@ -527,7 +524,10 @@ const patternReceiverFits = (ctx: CheckContext, pattern: Node, type: i32, at: No
   const shown = ctx.table.typeName(type)
   const info = structOf(ctx, type)
   if (ctx.table.isNullable(type) || ctx.table.isMaybe(type)) {
-    ctx.error(at, `Cannot destructure ${shown}, which may be absent; narrow it first, as in \`if (p !== null)\``)
+    ctx.error(
+      at,
+      `Cannot destructure ${shown}, which may be absent; narrow it first, as in \`if (p !== null)\``
+    )
   } else if (type === T_STRING) {
     ctx.error(at, "A `string` cannot be destructured; read each character by its index")
   } else if (info !== null && isMapOwner(info)) {
@@ -543,7 +543,13 @@ const patternReceiverFits = (ctx: CheckContext, pattern: Node, type: i32, at: No
 }
 
 /** Every name a pattern binds directly, declared as a `type`. */
-const declarePatternNames = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, type: i32): void => {
+const declarePatternNames = (
+  ctx: CheckContext,
+  decl: Node,
+  scope: Scope,
+  mutable: boolean,
+  type: i32
+): void => {
   for (let i = 3; i < decl.children.length; i++) {
     const named = decl.children[i]
     declareLocal(ctx, scope, named, named.children[0], named.children[0].text, type, mutable, null)
@@ -1236,11 +1242,17 @@ const refusePattern = (ctx: CheckContext, pattern: Node): void => {
     const name = slot.kind === NodeKind.Property ? slot.children[0] : slot
     const flags = slot.flags | name.flags
     if ((flags & FLAG_REST) !== 0) {
-      ctx.error(slot, "A rest element in a destructuring pattern is not supported; read each element you need by name")
+      ctx.error(
+        slot,
+        "A rest element in a destructuring pattern is not supported; read each element you need by name"
+      )
     } else if ((flags & FLAG_COMPUTED) !== 0) {
       ctx.error(slot, "A destructuring key must be a field's name, not a computed or quoted key")
     } else if (name.kind === NodeKind.BindingPattern) {
-      ctx.error(name, "A nested destructuring pattern is not supported; bind the inner value to a name and destructure that")
+      ctx.error(
+        name,
+        "A nested destructuring pattern is not supported; bind the inner value to a name and destructure that"
+      )
     } else if ((flags & FLAG_DEFAULT) !== 0) {
       ctx.error(
         slot,
