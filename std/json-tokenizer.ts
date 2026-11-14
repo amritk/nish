@@ -330,6 +330,29 @@ const jsonTokIsBlank = (b: i32): boolean =>
 
 const jsonTokIsDigit = (b: i32): boolean => b >= JSON_TOK_DIGIT_0 && b <= JSON_TOK_DIGIT_9
 
+/** `numberDigits` for a number whose exponent ran past `JSON_TOK_EXPONENT_CAP`: more than any 19. */
+const JSON_TOK_NUMBER_WALK: i32 = 2147483647
+
+/** The most digits an integral number's `numberMantissa` holds that are sure to fit an `i64`. */
+const JSON_TOK_EXACT_DIGITS: i32 = 18
+
+/**
+ * The eight bytes at `i`, the first in the low byte. The caller has checked
+ * `i + 8 <= src.length`; the test here repeats it so each index is proved.
+ */
+const jsonTokLoad8 = (src: u8[], i: i32): u64 => {
+  if (i < 0 || i >= JSON_TOK_END_CEILING || i + 8 > toI32(src.length)) {
+    return toU64(0)
+  }
+  return (
+    (toU64(src[i]) | (toU64(src[i + 1]) << toU64(8))) |
+    ((toU64(src[i + 2]) << toU64(16)) | (toU64(src[i + 3]) << toU64(24))) |
+    (((toU64(src[i + 4]) << toU64(32)) | (toU64(src[i + 5]) << toU64(40))) |
+      ((toU64(src[i + 6]) << toU64(48)) | (toU64(src[i + 7]) << toU64(56))))
+  )
+}
+
+
 /**
  * The first index at or after `i` that is not a blank, or `end`. The run is
  * read straight out of `src`, bounded by both `end` and the array's length,
@@ -559,6 +582,12 @@ export class JsonTokenizer {
   private integerValue: i64
   /** The integral number `unsignedScan` read last. */
   private unsignedValue: u64
+  /**
+   * The current number's digits, the integer part's and then the fraction's,
+   * read as one integer, as `number()` scanned them. It has wrapped when
+   * `numberDigits` is past 19, and is not read then.
+   */
+  private numberMantissa: u64
   /** One byte per open container, `JSON_TOK_IN_OBJECT` or `JSON_TOK_IN_ARRAY`, `maxDepth` long. */
   private stack: u8[]
   /**
@@ -598,11 +627,20 @@ export class JsonTokenizer {
   errorAt: i32
   /** The current string's or key's length once decoded; shorter than its raw length exactly when it holds an escape. */
   private stringBytes: i32
+  /** The current number's exponent less the count of its fraction's digits, so its value is `numberMantissa × 10^numberScale`. */
+  private numberScale: i32
+  /**
+   * How many digits `numberMantissa` holds, leading zeros included, or
+   * `JSON_TOK_NUMBER_WALK` when the exponent ran past `JSON_TOK_EXPONENT_CAP`.
+   */
+  private numberDigits: i32
   /**
    * Whether the current number is written with neither a fraction nor an
    * exponent: the spelling, so `1.0` is not. `isIntegral()` reads the value.
    */
   integral: boolean
+  /** Whether the current number starts with `-`. */
+  private numberNegative: boolean
 
   /**
    * A tokenizer over `src[off, off + len)` held to `limits`. A negative limit
@@ -636,6 +674,10 @@ export class JsonTokenizer {
     this.integral = false
     this.integerValue = toI64(0)
     this.unsignedValue = toU64(0)
+    this.numberMantissa = toU64(0)
+    this.numberScale = 0
+    this.numberDigits = 0
+    this.numberNegative = false
     this.reset(src, off, len)
   }
 
@@ -857,45 +899,93 @@ export class JsonTokenizer {
     const src: u8[] = this.src
     const end: i32 = this.maxNumberBytes >= this.end - at ? this.end : at + this.maxNumberBytes + 1
     let i: i32 = at
-    if (jsonTokByteAt(src, i, end) === JSON_TOK_MINUS) {
+    const negative: boolean = jsonTokByteAt(src, i, end) === JSON_TOK_MINUS
+    if (negative) {
       i += 1
     }
+    const digitsAt: i32 = i
     const first: i32 = jsonTokByteAt(src, i, end)
-    if (first === JSON_TOK_DIGIT_0) {
-      i += 1
-    } else if (first >= JSON_TOK_DIGIT_1 && first <= JSON_TOK_DIGIT_9) {
-      i = jsonTokSkipDigits(src, i + 1, end)
-    } else {
+    if (first < JSON_TOK_DIGIT_0 || first > JSON_TOK_DIGIT_9) {
       return this.numberRefused(first < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
     }
-    let integral = true
-    if (jsonTokByteAt(src, i, end) === JSON_TOK_DOT) {
-      integral = false
+    // The integer part's digits and then the fraction's are folded into one
+    // `u64` as they are passed, eight at a time while eight bytes remain. It
+    // wraps on a long run, which needs no count: the digits are counted from
+    // the indices once the runs end, and `numberF64` reads the mantissa only
+    // when there are 19 or fewer. A leading `0` is its whole integer part.
+    const n: i32 = toI32(src.length)
+    const to: i32 = end < n ? end : n
+    let mantissa: u64 = toU64(0)
+    let fractionAt: i32 = -1
+    let run: boolean = first !== JSON_TOK_DIGIT_0
+    if (!run) {
+      i += 1
+    }
+    while (true) {
+      while (run && i >= 0 && i < JSON_TOK_END_CEILING && i + 8 <= to && i + 8 <= n) {
+        const word: u64 = jsonTokLoad8(src, i)
+        if (!jsonTokEightDigits(word)) {
+          break
+        }
+        mantissa = mantissa * toU64(100000000) + jsonTokParseEight(word)
+        i += 8
+      }
+      while (run && i >= 0 && i < to && i < n) {
+        const digit: i32 = toI32(src[i]) - JSON_TOK_DIGIT_0
+        if (digit < 0 || digit > 9) {
+          break
+        }
+        mantissa = mantissa * toU64(10) + toU64(digit)
+        i += 1
+      }
+      if (fractionAt >= 0 || jsonTokByteAt(src, i, end) !== JSON_TOK_DOT) {
+        break
+      }
       i += 1
       const digit: i32 = jsonTokByteAt(src, i, end)
       if (!jsonTokIsDigit(digit)) {
         return this.numberRefused(digit < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
       }
-      i = jsonTokSkipDigits(src, i + 1, end)
+      fractionAt = i
+      run = true
     }
+    let integral: boolean = fractionAt < 0
+    let digits: i32 = integral ? i - digitsAt : i - digitsAt - 1
+    let scale: i32 = integral ? 0 : fractionAt - i
     const e: i32 = jsonTokByteAt(src, i, end)
     if (e === JSON_TOK_LOWER_E || e === JSON_TOK_UPPER_E) {
       integral = false
       i += 1
       const sign: i32 = jsonTokByteAt(src, i, end)
-      if (sign === JSON_TOK_PLUS || sign === JSON_TOK_MINUS) {
+      const minus: boolean = sign === JSON_TOK_MINUS
+      if (minus || sign === JSON_TOK_PLUS) {
         i += 1
       }
       const digit: i32 = jsonTokByteAt(src, i, end)
       if (!jsonTokIsDigit(digit)) {
         return this.numberRefused(digit < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
       }
-      i = jsonTokSkipDigits(src, i + 1, end)
+      // Accumulated until it reaches the cap; a digit after that sends
+      // `numberF64` to `parseFloat`, which reads any exponent.
+      let exponent: i32 = 0
+      while (i >= 0 && i < end && i < n && jsonTokIsDigit(toI32(src[i]))) {
+        if (exponent < JSON_TOK_EXPONENT_CAP) {
+          exponent = exponent * JSON_TOK_TEN + toI32(src[i]) - JSON_TOK_DIGIT_0
+        } else {
+          digits = JSON_TOK_NUMBER_WALK
+        }
+        i += 1
+      }
+      scale += minus ? -exponent : exponent
     }
     if (i - at > this.maxNumberBytes) {
       return this.fail(JSON_TOK_ERR_NUMBER_LIMIT, at + this.maxNumberBytes)
     }
     this.integral = integral
+    this.numberMantissa = mantissa
+    this.numberScale = scale
+    this.numberDigits = digits
+    this.numberNegative = negative
     return this.emit(JSON_TOK_NUMBER, at, i)
   }
 
@@ -1194,6 +1284,11 @@ export class JsonTokenizer {
    * the bound for a positive number is one less.
    */
   private integerScan(): boolean {
+    if (this.numberDigits <= JSON_TOK_EXACT_DIGITS) {
+      // Below 10^18, so `number()`'s mantissa is the magnitude and fits.
+      this.integerValue = -toI64(this.numberMantissa)
+      return true
+    }
     const src: u8[] = this.src
     const end: i32 = this.tokEnd
     const negative: boolean = jsonTokByteAt(src, this.tokStart, end) === JSON_TOK_MINUS
@@ -1378,6 +1473,36 @@ export class JsonTokenizer {
     if (this.kind !== JSON_TOK_NUMBER) {
       return 0
     }
+    if (this.numberDigits > JSON_TOK_FAST_DIGITS) {
+      return this.numberWalk()
+    }
+    const mantissa: u64 = this.numberMantissa
+    const scale: i32 = this.numberScale
+    let value: f64 = 0
+    if (mantissa !== toU64(0)) {
+      if (mantissa <= toU64(1) << toU64(53) && scale >= -JSON_TOK_FAST_EXPONENT && scale <= JSON_TOK_FAST_EXPONENT) {
+        // Clinger: both operands are exact doubles, so one rounding. An
+        // integer of up to 15 digits is below 2^53 and needs no power at all.
+        if (scale === 0) {
+          value = toF64(mantissa)
+        } else {
+          const power: f64 = jsonTokPowerOfTen(scale < 0 ? -scale : scale)
+          value = scale < 0 ? toF64(mantissa) / power : toF64(mantissa) * power
+        }
+      } else {
+        value = jsonTokEiselLemire(mantissa, scale)
+      }
+    }
+    return this.numberNegative ? -value : value
+  }
+
+  /**
+   * `numberF64` for a number `number()` could not read into 19 digits: it
+   * walks the text again, skipping leading zeros, so `0.000…0001` of many
+   * zeros still takes the fast path, and hands more than 19 significant digits
+   * or an exponent past the cap to `numberSlow`.
+   */
+  private numberWalk(): f64 {
     const src: u8[] = this.src
     const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
@@ -1589,10 +1714,37 @@ const jsonTokPowerOfTen = (n: i32): f64 => {
  * half of a product is built from four 32-bit limb products, none of which
  * overflows, and the carry into it is found by comparison rather than by the
  * sum wrapping.
+ *
+ * `jsonTokEightDigits` and `jsonTokParseEight` are upstream's
+ * `is_made_of_eight_digits_fast` and `parse_eight_digits_unrolled`, from
+ * include/fast_float/ascii_number.h at the same commit. They do rely on a
+ * wrap, which a `u64` keeps under Node too (docs/LANGUAGE.md, "Unsigned
+ * integers").
  */
 
 /** A `u64` from its two 32-bit halves. */
 const jsonTokW64 = (hi: u32, lo: u32): u64 => (toU64(hi) << toU64(32)) | toU64(lo)
+
+/** Whether all eight bytes of `word` are ASCII digits: fast_float's `is_made_of_eight_digits_fast`. */
+const jsonTokEightDigits = (word: u64): boolean => {
+  const high: u64 = jsonTokW64(0xf0f0f0f0, 0xf0f0f0f0)
+  const six: u64 = jsonTokW64(0x06060606, 0x06060606)
+  return ((word & high) | (((word + six) & high) >> toU64(4))) === jsonTokW64(0x33333333, 0x33333333)
+}
+
+/**
+ * The eight digits of `word`, the first the most significant, as an integer:
+ * fast_float's `parse_eight_digits_unrolled`. Pairs, then fours, then the
+ * eight are combined by three multiplies, and every product wraps as fast_float's does.
+ */
+const jsonTokParseEight = (word: u64): u64 => {
+  const mask: u64 = jsonTokW64(0x000000ff, 0x000000ff)
+  const v: u64 = word - jsonTokW64(0x30303030, 0x30303030)
+  const pairs: u64 = v * toU64(10) + (v >> toU64(8))
+  const low: u64 = (pairs & mask) * jsonTokW64(0x000f4240, 0x00000064)
+  const high: u64 = ((pairs >> toU64(16)) & mask) * jsonTokW64(0x00002710, 0x00000001)
+  return ((low + high) >> toU64(32)) & jsonTokW64(0, 0xffffffff)
+}
 
 /**
  * The high 64 bits of the 128-bit product `a × b`. Each limb product is at
