@@ -202,6 +202,11 @@ crosses to C, then the exact rules.
   function reference is the tag `0` ([Function references](#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](#enums)).
+- **A record's type has a name.** Its fields are declared once, in an
+  `interface` or a `class`; an inline object type, `{ x: i32 }`, is refused
+  wherever a type is written, and `type` only renames a type that already
+  exists ([Interfaces and object literals](#interfaces-and-object-literals),
+  [Type aliases](#type-aliases)).
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](#result-and-error-handling)).
@@ -2199,7 +2204,10 @@ program twice, with one golden between them.
   declared class or interface, or another alias
   (`tests/cases/type_alias_ir`). Everything is refused exactly where it would
   be in an annotation, so `type Bad = any` is `` `any` is forbidden `` and not
-  a rule of its own.
+  a rule of its own, and an object type, `type Point = { x: i32; y: i32 }`,
+  is the syntax error an inline object type is anywhere else
+  (`tests/cases/reject_type_object_literal_alias`): declare
+  `interface Point` instead.
 - **Order does not matter.** An alias may name a class, an interface or an
   alias declared further down the file, because resolution is by need rather
   than in source order — the rule module constants follow. A cycle is
@@ -6326,6 +6334,17 @@ interface Pair { first: number; second: number; }
 const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 ```
 
+- **A record type is always a declared name.** There is no inline object
+  type: `(p: { x: i32 }) => p.x` is
+  `` syntax error: expected a type name, found `{` `` (NL0001), and so is the
+  same type after `type Point =`, in a field, a return type or a type
+  argument (`tests/cases/reject_type_object_literal_param`,
+  `reject_type_object_literal_alias`, `_field`, `_return`, `_type_arg`).
+  A record type is identified by its declaration, not by its fields: two
+  interfaces that declare the same fields are two types, and a value of one
+  is refused where the other is wanted, the only widening being a class to an
+  interface it `implements` ([Types](#types)). So a record's fields are declared
+  once, in an `interface` or a `class`, and every annotation names it.
 - An interface is a struct type with the same layout rules as a class, with
   fields only: a method, or an accessor signature `get x(): i32`, is
   `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``

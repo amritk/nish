@@ -9,20 +9,25 @@ Every claim about today's code is anchored at commit `798636cb`, on `main`.
 Read [Typed JSON](LANGUAGE.md#typed-json-nishjson-typed) first: it is what the
 generated classes are for.
 
-**WP61 (proposed)**, "Typed JSON, constraints and coercion in one pass"
-(`docs/wp61-json-typed-checks.md`), is on its own branch and still under
-review while this note is written. It adds two options to a class's
-`static readonly json` literal:
+**WP61 (proposed)**, ["Typed JSON, constraints and coercion in one
+pass"](wp61-json-typed-checks.md), is the design this note builds on. It adds
+two options to a class's `static readonly json` literal:
 
 - `constraints`, a schema's validation keywords under their own names,
   checked inside `jsonDecode`'s one pass;
 - `coerce: true`, a per-class mode in which the decode always answers `OK`
-  with a correct instance.
+  with a correct instance. Its "The mode, and the guarantee" also defines
+  the mode's transitivity and how `jsonDecodeUnion` coerces; its "The stop's
+  mechanism, and what stays readable" defines `stopped` and
+  `repair(code, at)`. A
+  generated class uses all of these as WP61 defines them and adds nothing to
+  them.
 
 WP61 names this package as its generator and has no generator stage of its
 own. WP61 decides what the class can *say*; WP62 decides how a schema becomes
 the class, keyword by keyword, and what of the schema survives. WP61 is cited
-here by **section heading**, not number, because it is still moving. Every
+here by **section heading**, not number, because its numbering may still
+move. Every
 rule this note relies on that WP61 does not state is stated here, as WP62's
 own:
 
@@ -311,7 +316,7 @@ typed JSON changes. WP62's first stage, S1, makes them, before any generator
 code lands. They go in WP62, not WP61, for two reasons:
 
 - WP62 is their first user;
-- WP61's scope is constraints and coercion, and WP61 is already in review.
+- WP61's scope is constraints and coercion, and its design has already merged as a proposal.
 
 §10 question 1 asks the owner whether to move them into WP61 instead. Each
 follows the checklist of `docs/ARCHITECTURE.md` → "How to add a construct":

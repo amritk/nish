@@ -289,6 +289,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 57 | Module-scoped names: a private function's symbol qualified by its module when it would clash | [wp57](wp57-module-scoped-names.md) |
 | 59 | The wasm arena in a second, unexported memory: the page holds only module storage and an exchange area | [wp59](wp59-wasm-arena-memory.md) |
 | 60 | Dynamic dispatch over interfaces: `Dyn<I>`, a tag and a pointer, a call lowered to a `switch` of direct calls | [wp60](wp60-dyn-dispatch.md) |
+| 61 | Typed JSON, constraints and coercion in one pass: `constraints` checked and opt-in `coerce` applied inside `jsonDecode`'s one walk; the schema-to-class generator is WP62 | [wp61](wp61-json-typed-checks.md) |
 | 62 | Nish classes from a JSON Schema: `nish schema` writes typed JSON classes keeping every keyword as a type, a WP61 constraint or JSDoc, or refusing it | [wp62](wp62-json-schema-classes.md) |
 
 A package's plan said where its work would be done, which for everything up
