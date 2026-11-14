@@ -1219,6 +1219,8 @@ const quicRebind = byFinding(
  * names its title; each entry's `why` says which fix moved the file.
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+/** The changelog words of the stage that writes a typed object's keys as one copy (#1580). */
+const JSON_KEYS_QUOTED = "a typed object's keys as one pre-escaped copy"
 
 /** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
 const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
@@ -6518,7 +6520,30 @@ const DECLARED = [
     file: "exit",
     changelog: UNION_GENERICS,
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
-  })),
+  })),  ...byFinding(JSON_KEYS_QUOTED)(
+    "JsonWriter gains `keyQuoted`, the compiler's `jsonEncode` of a class calls it with each key quoted and escaped as a string constant, and `i32` and `i64` count their digits by compares rather than divides, so nish/json moves in every program linking it and a module encoding a class moves where it writes a key",
+    {
+      "bench/http-app-carrier.ts": ["json.ll"],
+      "bench/http1-request/main.ts": ["json.ll"],
+      "bench/http1-server.ts": ["json.ll"],
+      "bench/json-compare/main.ts": ["json.ll"],
+      "bench/json-value/main.ts": ["json.ll"],
+      "bench/json-writer/main.ts": ["json.ll"],
+      "docs/cookbook/json-fields.ts": ["json.ll"],
+      "docs/cookbook/json-presence.ts": ["json.ll"],
+      "docs/cookbook/json-typed.ts": ["json.ll"],
+      "docs/cookbook/json-value.ts": ["json.ll"],
+      "docs/cookbook/json-writer.ts": ["json-writer.ll", "json.ll"],
+      "examples/api-cli/main.ts": ["json.ll", "main.ll"],
+      "examples/http-app/main.ts": ["json.ll"],
+      "examples/http-get-json.ts": ["json.ll"],
+      "examples/merge-patch.ts": ["json.ll"],
+    }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the API-page benchmark is new in this stage: its encoder and nish/json move as above, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks",
+    { "bench/json-api/main.ts": ["json-typed.ll", "json.ll", "main.ll"] }
+  ),
 ]
 
 /**
