@@ -271,16 +271,16 @@ function checkDeclarator(ctx: CheckContext, decl: Node, scope: Scope, mutable: b
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 declareLocal#2 CheckContext.error#1 declareLocal#2
   pointer scope: size=56 writesThrough=true captured=true passedTo=declaredOrigin#3 declareLocal#1 checkExpression#2 typedArraySpelling#2 declareLocal#1 declaredOrigin#3 literalIndexName#1 holdMembers#1
   stackSites=0 stackLocals=0
-  local -80:9 annotation: Node (const)
-  local -76:7 declared: i32 (let)
-  callee -74:16 isMaybeAnnotation -> @isMaybeAnnotation
-  callee -73:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
-  callee -72:9 resolveType -> @resolveType
-  local -70:9 initializer: Node (const)
-  callee -68:5 CheckContext.error -> @CheckContext.error
-  local -67:11 origin: TypeOrigin | null (const)
-  callee -67:20 declaredOrigin -> @declaredOrigin
-  callee -66:5 declareLocal -> @declareLocal
+  local -71:9 annotation: Node (const)
+  local -67:7 declared: i32 (let)
+  callee -65:16 isMaybeAnnotation -> @isMaybeAnnotation
+  callee -64:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
+  callee -63:9 resolveType -> @resolveType
+  local -61:9 initializer: Node (const)
+  callee -59:5 CheckContext.error -> @CheckContext.error
+  local -58:11 origin: TypeOrigin | null (const)
+  callee -58:20 declaredOrigin -> @declaredOrigin
+  callee -57:5 declareLocal -> @declareLocal
   local -52:7 want: i32 (let)
   callee -49:25 TypeTable.isMaybe -> @TypeTable.isMaybe
   local -44:9 initType: i32 (const)
@@ -360,13 +360,13 @@ function patternReceiverFits(ctx: CheckContext, pattern: Node, type: i32, at: No
   callee +2:7 TypeTable.isNullable -> @TypeTable.isNullable
   callee +2:37 TypeTable.isMaybe -> @TypeTable.isMaybe
   callee +3:5 CheckContext.error -> @CheckContext.error
-  callee +5:5 CheckContext.error -> @CheckContext.error
-  callee +6:31 isMapOwner -> @isMapOwner
-  callee +7:5 CheckContext.error -> @CheckContext.error
-  callee +8:57 TypeTable.isStruct -> @TypeTable.isStruct
-  callee +9:5 CheckContext.error -> @CheckContext.error
-  callee +10:39 TypeTable.isArray -> @TypeTable.isArray
-  callee +11:5 CheckContext.error -> @CheckContext.error
+  callee +8:5 CheckContext.error -> @CheckContext.error
+  callee +9:31 isMapOwner -> @isMapOwner
+  callee +10:5 CheckContext.error -> @CheckContext.error
+  callee +11:57 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +12:5 CheckContext.error -> @CheckContext.error
+  callee +13:39 TypeTable.isArray -> @TypeTable.isArray
+  callee +14:5 CheckContext.error -> @CheckContext.error
 function declarePatternNames(ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, type: i32): void -> @declarePatternNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via declareLocal
@@ -837,9 +837,9 @@ function refusePattern(ctx: CheckContext, pattern: Node): void -> @refusePattern
   local +1:11 name: Node (const)
   local +2:11 flags: i32 (const)
   callee +4:7 CheckContext.error -> @CheckContext.error
-  callee +6:7 CheckContext.error -> @CheckContext.error
-  callee +8:7 CheckContext.error -> @CheckContext.error
-  callee +10:7 CheckContext.error -> @CheckContext.error
+  callee +9:7 CheckContext.error -> @CheckContext.error
+  callee +11:7 CheckContext.error -> @CheckContext.error
+  callee +16:7 CheckContext.error -> @CheckContext.error
 function isMemberList(node: Node, i: i32): boolean -> @isMemberList
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
