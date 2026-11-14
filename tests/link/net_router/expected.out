@@ -29,6 +29,13 @@ PASS  a shorter target it misses is the tree's, pairs and all
 PASS  one deeper than any route is 404
 PASS  and one a segment short is 404 too
 PASS  as is an empty last segment
+PASS  a trailing slash after a pair is 404
+PASS  a trailing slash after one segment is 404
+PASS  two bare slashes are 404
+PASS  a repeated slash inside a pair is 404
+PASS  a leading repeated slash is 404
+PASS  segments past one beyond the deepest are 404
+PASS  and a static-length path past it too
 PASS  methods of 1, 3, 4, 7, 8, 9 and 32 bytes each answer their own route
 PASS  a prefix or an extension of a known method is another method
 PASS  and so is one of a known length that differs in its first or last byte
@@ -183,4 +190,4 @@ PASS  the same route with a query past the longest
 PASS  is answered by the tree
 PASS  a table grown past them files the ninth (17 of 17)
 PASS  and all nine still answer their own index
-router: 185 passed, 0 failed, 0 skipped
+router: 192 passed, 0 failed, 0 skipped

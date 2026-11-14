@@ -139,6 +139,13 @@ export const routerChecks = (): i32 => {
   t.eqStr("one deeper than any route is 404", answer(split, "GET", "/a/b/c/d/e/f"), `${ROUTER_NOT_FOUND}`);
   t.eqStr("and one a segment short is 404 too", answer(split, "GET", "/abc"), `${ROUTER_NOT_FOUND}`);
   t.eqStr("as is an empty last segment", answer(split, "GET", "/a/"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a trailing slash after a pair is 404", answer(split, "GET", "/ab/cd/"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a trailing slash after one segment is 404", answer(split, "GET", "/ab/"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("two bare slashes are 404", answer(split, "GET", "//"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a repeated slash inside a pair is 404", answer(split, "GET", "/ab//cd"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a leading repeated slash is 404", answer(split, "GET", "//ab"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("segments past one beyond the deepest are 404", answer(split, "GET", "/a/b/c/d"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("and a static-length path past it too", answer(split, "GET", "/a/b/c/d/e/f/g/h"), `${ROUTER_NOT_FOUND}`);
 
   // Methods either side of seven bytes, the longest compared as one word:
   // each is told from its prefixes, its extensions and its neighbours of one

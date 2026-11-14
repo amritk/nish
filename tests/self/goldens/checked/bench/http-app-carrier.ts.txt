@@ -34116,12 +34116,13 @@ import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 unsafe import 66:10 uncheckedGet from "nish:unsafe"
 unsafe import 66:24 wrappingAdd from "nish:unsafe"
-unsafe call 790:20 wrappingAdd (node 3414)
-unsafe call 1055:21 wrappingAdd (node 4909)
-unsafe call 1058:9 uncheckedGet (node 4947)
-unsafe call 1058:32 uncheckedGet (node 4953)
-unsafe call 1061:9 wrappingAdd (node 4967)
-unsafe call 1057:39 wrappingAdd (node 4935)
+unsafe call 793:20 wrappingAdd (node 3414)
+unsafe call 825:22 wrappingAdd (node 3649)
+unsafe call 1062:21 wrappingAdd (node 4919)
+unsafe call 1066:9 uncheckedGet (node 4945)
+unsafe call 1066:32 uncheckedGet (node 4951)
+unsafe call 1069:9 wrappingAdd (node 4965)
+unsafe call 1070:9 wrappingAdd (node 4978)
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
 const ROUTER_TOO_LONG: i32 = -3 [exported]
@@ -34570,7 +34571,7 @@ function routerSameBytes(a: u8[], at: i32, b: u8[], from: i32, length: i32): boo
   stackSites=0 stackLocals=0
   local +0:9 stop: i32 (const)
   local +1:7 j: i32 (let)
-  local +2:12 i: i32 (let)
+  local +2:7 i: i32 (let)
 function routerHex(c: i32): i32 -> @nish.routerHex
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
