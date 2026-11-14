@@ -144,17 +144,15 @@
     )
 
   /**
-   * The name, unpacked: it reads "NISH" and then each initial unfolds into its
-   * word. The row is drawn twice in one grid cell: a hidden copy, never
-   * animated, holds the unfolded name's height, so a narrow screen where it
-   * wraps onto more lines than "NISH" takes does not push the page down as it
-   * opens. A screen reader gets the whole phrase once, from the label, rather
-   * than eight fragments.
+   * The name, unpacked: "NISH", whose initials open into their words while it
+   * is hovered or focused (a tap focuses it). A hidden copy, always open, in
+   * the same grid cell holds the open name's height, so opening never pushes
+   * the page down. A screen reader gets the phrase once, from the label.
    */
   const unpackedName = () =>
     el(
       "p.nish-hero__name",
-      { "aria-label": "Nish: Native Instruction Static Host" },
+      { "aria-label": "Nish: Native Instruction Static Host", tabindex: "0" },
       nameRow("span.nish-hero__name-row"),
       nameRow("span.nish-hero__name-row.nish-hero__name-row--ghost")
     )
