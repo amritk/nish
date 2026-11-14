@@ -54,7 +54,23 @@
 // Every one of these adds panics with `OVERFLOW_ADD`, and nothing the
 // recursion does between its base and the failing add can be observed: the
 // adds are all it does. Each step's `X` and arguments run where the recursion
-// runs them.
+// runs them — all but `Y` in a step `self(args) + Y`, which the recursion
+// reads after its call returns and the loop reads before it goes round. That
+// is one value only because `Y` is a number or a parameter, which the
+// recursion cannot assign: the argument is the recorder's, in the header of
+// `recordAccumulation` (`src/accumulate.ts`).
+//
+// Methods (issue #1612). A method is a function whose first parameter is
+// `this`, and its step `X + r.m(args)` is the call `m(r, args)`: the
+// receiver is evaluated first, then the arguments, as `emitMethodCall` does,
+// and loops back as the header's `this`. Nish binds every method call
+// statically, so `r.m` is this body whatever `r` holds, and the loop is the
+// same function called with another first argument. Fields are not
+// parameters: `X` may read or write fields of `this` or of anything else,
+// and it runs where the recursion runs it, before the receiver and the
+// arguments, with nothing deferred past it but the checked adds, which touch
+// no memory. A field is never `Y`, so nothing reads memory after the call it
+// skips.
 //
 // What runs between the header and its test. Where the header's own code
 // only computes (`onlyComputes`), the test is folded into the branch that
@@ -79,7 +95,7 @@ import { FunctionFacts } from "./attributes"
 import { internalError } from "./ice"
 import { IRBlock, IRFunction, paramValue } from "./ir"
 import { Node } from "./nodes"
-import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig } from "./program"
+import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig, ROLE_METHOD } from "./program"
 
 /** One function's loop while its body is emitted: the header and every edge back into it. */
 export class RecursionLoop {
@@ -414,10 +430,17 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   if (!callFirst) {
     x = emitter.emitExpression(other)
   }
+  // A method's self call passes its receiver first, as `emitMethodCall` does:
+  // the receiver is the loop's `this`.
   const args: string[] = []
+  let first = 0
+  if (acc.sig.role === ROLE_METHOD) {
+    args.push(emitter.emitExpression(call.children[0].children[0]))
+    first = 1
+  }
   const written = call.children[1].children
   for (let i = 0; i < written.length; i++) {
-    args.push(emitter.emitArgument(written[i], acc.sig, i))
+    args.push(emitter.emitArgument(written[i], acc.sig, i + first))
   }
   if (callFirst) {
     x = emitter.emitExpression(other)
