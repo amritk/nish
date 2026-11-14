@@ -106,20 +106,36 @@ ovf.ok.2:
   br label %if.end
 
 if.end:
+  %37 = load i32, i32* %r.addr, align 4
+  %38 = icmp eq i32 %37, 0
+  br i1 %38, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %39 = load i32, i32* %total.addr, align 4
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %39, i32 1)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  store i32 %41, i32* %total.addr, align 4
+  br label %if.end.1
+
+if.end.1:
   br label %forof.inc
 
 forof.inc:
-  %37 = load i64, i64* %forof.idx, align 8
-  %38 = add i64 %37, 1
-  store i64 %38, i64* %forof.idx, align 8
+  %43 = load i64, i64* %forof.idx, align 8
+  %44 = add i64 %43, 1
+  store i64 %44, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %39 = load i32, i32* %total.addr, align 4
-  ret i32 %39
+  %45 = load i32, i32* %total.addr, align 4
+  ret i32 %45
 
 ovf.fail:
-  %ovf.op = phi i32 [ 2, %forof.body ], [ 0, %ovf.ok ], [ 2, %if.then ]
+  %ovf.op = phi i32 [ 2, %forof.body ], [ 0, %ovf.ok ], [ 2, %if.then ], [ 0, %if.then.1 ]
   call void @nish_panic_overflow(i32 %ovf.op)
   unreachable
 }

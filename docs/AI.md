@@ -2023,7 +2023,7 @@ export const main = (): i32 => {
   the ordinal exists to avoid: compare members, or write `String(r)` once.
   Mixing string and numeric members is NL1043, a member without a value
   NL1064, a template or computed value NL1065/NL1066, two members of one string
-  NL2786. A `Role | null` is NL2010, as for every enum. There is no
+  NL2786, a value that is not valid UTF-8 NL2787. A `Role | null` is NL2010, as for every enum. There is no
   `Role.parse` yet: test `s === String(Role.Admin)` per member, or decode it
   with typed JSON.
 

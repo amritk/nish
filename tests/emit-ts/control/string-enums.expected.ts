@@ -1,13 +1,14 @@
 // A string enum becomes a `const` object whose members are their strings, the
 // value `tsc` gives each one, and a type of the same name. `String(r)` is then
 // the identity, and prints what the native program reads from its table.
-import { idx } from "nish/runtime"
+import { idx, strLen } from "nish/runtime"
 import type { i32 } from "nish/runtime"
 export const Role = {
   Admin: "admin",
   Guest: "guest",
   Empty: "",
   Cafe: "café",
+  Quote: "a\"b\\c\n\u0001",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
@@ -55,6 +56,9 @@ export const main = (): number => {
   console.log(`${admin === Role.Admin} ${idx(all, 1) !== Role.Admin}`)
   const l: Level = Level.High
   console.log(String(l))
+  // A member that needs escaping is quoted back into the same string.
+  const q = String(Role.Quote)
+  console.log(`${strLen(q)} ${q === "a\"b\\c\n\u0001"}`)
   const tickets: Ticket[] = [new Badge(), new Pass()]
   for (const t of tickets) {
     console.log(`${describe(t)} ${String(t.kind)}`)

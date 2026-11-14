@@ -6,6 +6,7 @@ export enum Role {
   Guest = "guest",
   Empty = "",
   Cafe = "café",
+  Quote = "a\"b\\c\n\u0001",
 }
 
 enum Level { Low = "low", High = "high" }
@@ -51,6 +52,9 @@ export const main = (): number => {
   console.log(`${admin === Role.Admin} ${all[1] !== Role.Admin}`)
   const l: Level = Level.High
   console.log(String(l))
+  // A member that needs escaping is quoted back into the same string.
+  const q = String(Role.Quote)
+  console.log(`${q.length} ${q === "a\"b\\c\n\u0001"}`)
   const tickets: Ticket[] = [new Badge(), new Pass()]
   for (const t of tickets) {
     console.log(`${describe(t)} ${String(t.kind)}`)

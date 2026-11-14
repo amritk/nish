@@ -4,8 +4,12 @@
 -20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
 -20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
 -20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
+-20 8 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
 -20 33 guest {"role":"guest","roles":["admin"],"past":null,"grants":{}} false
 -20 53 guest {"role":"guest","roles":[],"past":null,"grants":{}} false
+-20 43 guest {"role":"guest","roles":[],"past":["admin"],"grants":{}} false
+-20 43 guest {"role":"guest","roles":[],"past":["admin"],"grants":{}} false
+{"role":"a\"b\\c\n\u0001","roles":[],"past":null,"grants":{}} 0 true
 0 circle {"kind":"circle","r":1} true
 0 square {"kind":"square","side":2} true
 0 blob {"kind":"amoeba"} true

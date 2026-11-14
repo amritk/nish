@@ -3931,13 +3931,6 @@ const stringCallFix = (ctx: CheckContext, call: Node, global: boolean, scope: Sc
 }
 
 /**
- * `String(r)` where `r` is a string enum: the member's string, which is the
- * one conversion such an enum has (docs/LANGUAGE.md, Enums). Any other
- * argument keeps `String` an unknown function, with the template literal the
- * language converts by as the fix; the argument is checked first, because
- * only its type says which this is.
- */
-/**
  * The refusal for a string enum where a `string` was wanted, or the reverse,
  * naming what to write instead; or `null` when neither side is one. `got` is
  * the type of `node`, the value refused.
@@ -3973,6 +3966,13 @@ const stringEnumComparison = (
   return `Cannot compare a \`${ctx.table.typeName(type)}\` with a string using \`${op}\`: an enum value is not its string, so compare it with a member, such as \`${member}\``
 }
 
+/**
+ * `String(r)` where `r` is a string enum: the member's string, which is the
+ * one conversion such an enum has (docs/LANGUAGE.md, Enums). Any other
+ * argument keeps `String` an unknown function, with the template literal the
+ * language converts by as the fix; the argument is checked first, because
+ * only its type says which this is.
+ */
 const checkEnumString = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   const callee = call.children[0]
   const arg = call.children[1].children[0]

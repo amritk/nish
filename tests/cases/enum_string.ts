@@ -28,6 +28,9 @@ export const test = (): i32 => {
     if (r !== Role.Guest) {
       total = total * 10;
     }
+    if (r === Role.Admin) {
+      total = total + 1;
+    }
   }
   return total;
 };

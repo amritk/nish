@@ -307,7 +307,7 @@ interned, and two types are the same type exactly when they are the same
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
-  a `type` alias or a numeric `enum` declared or imported in the module
+  a `type` alias or an `enum` (numeric or string) declared or imported in the module
   ([Type aliases](#type-aliases), [Enums](#enums)), one of that enum's
   members as a type, `Kind.If` ([Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
@@ -2614,7 +2614,8 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
   ```
 
   `String` takes a string enum's value and nothing else; on any other
-  argument it is `` Unknown function `String` `` (NL2247).
+  argument it is `` Unknown function `String` `` (NL2247,
+  `reject_string_call_non_enum`).
 - **A member's value is a string literal, written once.** Every member of a
   string enum has an initializer:
   `` String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal ``
@@ -13671,7 +13672,7 @@ export const main = (): i32 => {
   (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
   array of maps are refused as well (`json_reject_set_field`,
   `json_reject_map_array`). A `Map` keyed by a string enum is refused with
-  the rest: a map's keys are read and written as `string`s, and a string
+  the rest (`json_reject_map_key_enum_string`): a map's keys are read and written as `string`s, and a string
   enum is not one. An enum that mixes strings and numbers is not one the
   language declares at all (NL1043, `json_reject_enum_mixed`), an enum is
   never `| null`, numeric or string, so a `Role | null` field is refused where

@@ -162,7 +162,7 @@ interned, and two types are the same type exactly when they are the same
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
-  a `type` alias or a numeric `enum` declared or imported in the module
+  a `type` alias or an `enum` (numeric or string) declared or imported in the module
   ([Type aliases](declarations.md#type-aliases), [Enums](declarations.md#enums)), one of that enum's
   members as a type, `Kind.If` ([Enums](declarations.md#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is

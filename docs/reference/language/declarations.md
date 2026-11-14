@@ -993,7 +993,8 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
   ```
 
   `String` takes a string enum's value and nothing else; on any other
-  argument it is `` Unknown function `String` `` (NL2247).
+  argument it is `` Unknown function `String` `` (NL2247,
+  `reject_string_call_non_enum`).
 - **A member's value is a string literal, written once.** Every member of a
   string enum has an initializer:
   `` String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal ``

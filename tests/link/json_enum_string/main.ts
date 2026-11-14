@@ -14,6 +14,7 @@ enum Role {
   Owner = "owner",
   Anon = "",
   Cafe = "café",
+  Quote = "a\"b\\c\n\u0001",
 }
 
 class User {
@@ -50,6 +51,19 @@ const user = (text: string): void => {
   console.log(`${code} ${d.errorAt} ${String(u.role)} ${w.text()} ${w.text() === text}`);
 };
 
+// A member whose string needs escaping: the encoder escapes it, and the
+// decoder reads the escaped form back as that member.
+const quoted = (): void => {
+  const u = new User();
+  u.role = Role.Quote;
+  const w = new JsonWriter(new Array<u8>(512), 0);
+  jsonEncode(w, u);
+  const text = w.text();
+  const back = new User();
+  const code = jsonDecode(decoder(text), back);
+  console.log(`${text} ${code} ${back.role === Role.Quote}`);
+};
+
 export const main = (): i32 => {
   user(`{"role":"admin","roles":["owner","guest",""],"past":null,"grants":{"a":"admin"}}`);
   user(`{"role":"café","roles":[],"past":["admin"],"grants":{}}`);
@@ -58,9 +72,14 @@ export const main = (): i32 => {
   // No member's string, a prefix of one, and a value that is not a string.
   user(`{"role":"root","roles":[],"past":null,"grants":{}}`);
   user(`{"role":"admi","roles":[],"past":null,"grants":{}}`);
+  user(`{"role":"admins","roles":[],"past":null,"grants":{}}`);
   user(`{"role":0,"roles":[],"past":null,"grants":{}}`);
   user(`{"role":"guest","roles":["admin","nobody"],"past":null,"grants":{}}`);
   user(`{"role":"guest","roles":[],"past":null,"grants":{"x":"Admin"}}`);
+  // A non-member and a non-string element in the `| null` array.
+  user(`{"role":"guest","roles":[],"past":["admin","root"],"grants":{}}`);
+  user(`{"role":"guest","roles":[],"past":["admin",1],"grants":{}}`);
+  quoted();
   figure(`{"kind":"circle","r":1}`);
   figure(`{"kind":"square","side":2}`);
   figure(`{"kind":"amoeba"}`);

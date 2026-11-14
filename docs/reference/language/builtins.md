@@ -4670,7 +4670,7 @@ export const main = (): i32 => {
   (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
   array of maps are refused as well (`json_reject_set_field`,
   `json_reject_map_array`). A `Map` keyed by a string enum is refused with
-  the rest: a map's keys are read and written as `string`s, and a string
+  the rest (`json_reject_map_key_enum_string`): a map's keys are read and written as `string`s, and a string
   enum is not one. An enum that mixes strings and numbers is not one the
   language declares at all (NL1043, `json_reject_enum_mixed`), an enum is
   never `| null`, numeric or string, so a `Role | null` field is refused where
