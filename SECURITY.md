@@ -75,7 +75,7 @@ The full model for each area is in its record. In summary:
   just because you compiled it, but the program you then run is yours to
   trust.
 - **The holes the language asks for by name**: an out-of-range
-  [`uncheckedGet` or `uncheckedSet`](README.md#where-it-is-not-safe), each a
+  [`uncheckedGet` or `uncheckedSet`](docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping), each a
   call a module reaches only by importing it from `nish:unsafe`, a wrap of
   signed arithmetic, which only the `nish:unsafe` `wrapping*` calls make, and
   what an interop host does with a pointer it is given. A dependency that

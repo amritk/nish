@@ -24,7 +24,7 @@ It says which functions hold secrets and which of them are wiped, as every
 | `std/net/quic.ts` | `QuicConnection`: `receive`, `receiveWindow`, `sign`, `takeDatagram`, `takeDatagramInto`, `readStream`, `writeStream`, `nextStreamEvent`, `openStream`, `streamRead`, `streamWrite`, `streamReset`, `streamStopSending`, `sendDatagram`, `readDatagram`, `close`, `release`, `reset`, `acceptRetry`, `deadline`, `handleTimer`, `updateKeys`; `quicStatelessResetToken` |
 | `std/net/quic-stream.ts` | `QuicStreams`: `onStream`, `onReset`, `onStopSending`, `onMaxStreamData`, `onStreamDataBlocked`, `onMaxData`, `onMaxStreams`, `open`, `write`, `read`, `resetStream`, `stopSending`, `putNextChunk`, `putNextControl`, `chunkAcked`, `chunkLost`, `controlAcked`, `controlLost`, `nextEvent` |
 | `std/net/quic-datagram.ts` | `QuicDatagramQueue`: `push`, `pop`, `putFrame` |
-| `std/net/quic-recovery.ts` | `QuicRecovery`: `onPacketSent`, `onAck`, `deadline`, `onTimeout`, `discardSpace`, `evictOldest`, `pacerDelay`, `onPaced`; `QuicSentPackets` |
+| `std/net/quic-recovery.ts` | `QuicRecovery`: `onPacketSent`, `onAck`, `deadline`, `onTimeout`, `discardSpace`, `evictOldest`, `pacerDelay`, `onPaced`, and the CUBIC controller it runs when asked; `quicRecoveryCbrt`; `QuicSentPackets` |
 | `std/net/quic-listener.ts` | `QuicListener`: `handleWindow`, and `handle` over it (Version Negotiation, Retry and its token, the stateless reset), and `release`; `QuicListenerAnswer.wipe`; `quicListenerTakePaced`, `quicListenerPaceTime`, `quicListenerTakeFlight`, `quicListenerReceiveSegments` |
 
 Out of scope: the primitives they call, `nish/crypto/aes`,
@@ -254,6 +254,72 @@ replays of Q2 (`net_quic_conn_replay`, `net_quic_lifecycle_replay` and their
   last ACK-eliciting packet, so a client whose NAT rebound in that gap
   answers from its new port and the connection follows; the buffer, not a
   new setting, stays the memory bound of a stream's send side.
+
+### Congestion control
+
+`QuicServerConfig.congestion` picks the controller every connection runs:
+`QUIC_RECOVERY_NEWRENO` (0, RFC 9002 Appendix B) or `QUIC_RECOVERY_CUBIC`
+(1, RFC 9438); `QUIC_RECOVERY_DEFAULT` names CUBIC, and the relay example
+passes it. Any other value fails
+`quicConnConfigFits`, so a server never starts on a controller it does not
+have. Both share slow start, the recovery period, the 2400-byte floor and
+persistent congestion; CUBIC replaces what happens in congestion avoidance
+and on a congestion event. Its properties are pinned in
+`tests/link/net_quic_recovery` (`cubic.ts`, and its `_f64` twin), each window
+recomputed by `cubic_model.py` beside it, an integer port of the module
+that guards the arithmetic (`python3 tests/link/net_quic_recovery/cubic_model.py`);
+the RFC-level checks are the hand-derived K = 5000 ms and W(1000) = 169280.
+
+- **The arithmetic is integer and the same on every machine.** W_cubic(t)
+  is W_max + 2 × size × (t − K)³ / (5 × 10⁹) bytes with t in milliseconds
+  (C = 0.4 segments/s³); K comes from `quicRecoveryCbrt`, a bisection with
+  no floating point, so `--number-mode f64` builds give the same windows.
+  K and every t − K are clamped to ±40 s, so the cube times twice the
+  largest UDP payload stays inside an `i64` (2 × 65535 × 40000³ < 2⁶³); the
+  clamp is reached only after a fall of about 30 MB.
+- **What a peer controls is what it always did.** A congestion event keeps
+  0.7 of the window (β, §4.6) and, under fast convergence, plateaus W_max at
+  0.85 of a window that fell below the last W_max (§4.7); the Reno-friendly
+  estimate W_est grows with α = 0.53 of a datagram a round trip until W_est
+  reaches cwnd_prior, then one (§4.3); a step toward the curve is at
+  most half the window a round trip (§4.4's target bound). A peer can still
+  shrink the window by not acknowledging, and widen it only by
+  acknowledging, which QUIC-7's skipped numbers bound as before.
+- **An idle sender does not bank growth** (§5.8, the app-limited rule). A
+  window with less than half of it in flight is not grown, and the time it
+  sat so is added to the epoch, so the curve resumes where it stopped
+  rather than leaping ahead; persistent congestion and a new path start
+  CUBIC over from slow start with no epoch.
+
+**The default is CUBIC.** `bench/quic-goodput.ts` measures goodput
+through a userspace shim on a virtual clock: a 20 Mbit/s bottleneck with a
+drop-tail queue of one bandwidth-delay product (125,000 bytes), 25 ms each
+way, 1% of datagrams lost at random each way, and a client that acknowledges
+every second datagram or after 25 ms. Each of 41 seeds runs NewReno then
+CUBIC with the same seed; the spread across seeds is the variance across
+loss draws, not a noise floor (no wall clock is read). In kbit/s:
+
+| Transfer | Controller | Median | Quartiles | Range | CUBIC first |
+| --- | --- | ---: | --- | --- | --- |
+| 125,000 B (1 BDP) | NewReno | 3537 | 2732..4029 | 1034..4029 | |
+| 125,000 B (1 BDP) | CUBIC | 3547 | 2612..4029 | 1696..4029 | 17 of 41 |
+| 4,000,000 B (32 BDP) | NewReno | 2257 | 2054..2490 | 1706..3574 | |
+| 4,000,000 B (32 BDP) | CUBIC | 2658 | 2312..3325 | 1897..5121 | 41 of 41 |
+| 16,000,000 B (128 BDP) | NewReno | 2066 | 2011..2153 | 1890..2477 | |
+| 16,000,000 B (128 BDP) | CUBIC | 2357 | 2282..2533 | 2038..2696 | 40 of 41 |
+
+The rule applied: CUBIC becomes the default if, on the longer transfers, its
+median lies above NewReno's upper quartile, a win outside the spread of loss
+draws. It does on both: 2658 against 2490 at 32 BDP (+18%), where it finishes
+first on every seed, and 2357 against 2153 at 128 BDP (+14%), first on 40 of
+41. On the BDP-sized transfer the two are level, medians 0.3% apart and well
+inside either's quartiles, since slow start carries most of a one-BDP
+transfer and the two share it; CUBIC loses nothing there. NewReno's median
+on the long transfers matches the Mathis estimate for 1% loss at 50 ms
+(about 2.3 Mbit/s), which says the shim is sane. `congestion` has no
+default value: a server passes `QUIC_RECOVERY_DEFAULT`, or names a
+controller. What the shim leaves out: the handshake crosses it at no delay,
+and nothing is paced against the bottleneck.
 
 ### Q4: streams, datagrams and the slot
 

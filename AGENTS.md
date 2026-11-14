@@ -45,11 +45,10 @@ per stage, and the stage to do next.
 For a contributor, or an agent asked to "pick up WP50":
 
 1. Open the package's page, `docs/roadmap/wpN-*.md`. The work is the item
-   under **Next**; if that item is an *(open question)*, ask the maintainer
-   instead of starting.
-2. Read the section of the design note that **Next** links, the package's
-   plan in `.claude/plans/` if it has one, and the open pull requests and
-   issues that name the package, so the work is not done twice.
+   under **Next**; if that item is an *(open question)*, ask before
+   starting.
+2. Read the section of the design note that **Next** links, and the open
+   pull requests and issues that name the package, so the work is not done twice.
 3. In the pull request that lands the stage, tick its box on the page, move
    **Next** on, update the page's "Done" count and its row in
    [`docs/roadmap/index.md`](./docs/roadmap/index.md), and update that
@@ -237,7 +236,7 @@ assumed:
   as the release-note heading. `node scripts/changelog-gen.mjs --check-subject`
   is the same rule `pr-title.yml` enforces. A break (`type!` or a
   `BREAKING CHANGE:` trailer) moves the minor, because the project stays on
-  0.x until the maintainer says otherwise: do not propose or cut 1.0.0, and do not
+  0.x: do not propose or cut 1.0.0, and do not
   add a `Release-As:` trailer. The stability rule at the head of
   [LANGUAGE.md](./docs/LANGUAGE.md) says what counts as a break in the
   language.

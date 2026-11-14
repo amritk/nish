@@ -283,6 +283,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |
 | 52 | Fast rebuilds for `nish run` | [wp52](wp52-run-rebuilds.md) |
 | 53 | Buffers and handles across `declare function` | [wp53](wp53-ffi-buffers-handles.md) |
+| 54 | `async` on wasm, with the page as the executor: proposed, for a service that runs on Workers | [wp54](wp54-async-wasm.md) |
 | 55 | An object graph a WebAssembly module keeps between calls | [wp55](wp55-persistent-root.md) |
 | 56 | Generators whose memory stays flat: a string builder, and a scope per file | [wp56](wp56-flat-memory-generators.md) |
 | 57 | Module-scoped names: a private function's symbol qualified by its module when it would clash | [wp57](wp57-module-scoped-names.md) |
