@@ -264,6 +264,52 @@ PASS  numberF64 of a power below the table
 PASS  numberF64(1e308), the largest power in the table
 PASS  numberF64 of a power above the table
 PASS  numberF64(1.7976931348623159e308) rounds up to an infinity
+PASS  numberF64(123456789012345) is parseFloat's bits
+PASS  numberF64(1234567890123456) is parseFloat's bits
+PASS  numberF64(-123456789012345) is parseFloat's bits
+PASS  numberF64(-1234567890123456) is parseFloat's bits
+PASS  numberF64(0.123456789012345) is parseFloat's bits
+PASS  numberF64(0.1234567890123456) is parseFloat's bits
+PASS  numberF64(12345678) is parseFloat's bits
+PASS  numberF64(123456789) is parseFloat's bits
+PASS  numberF64(-12345678) is parseFloat's bits
+PASS  numberF64(-123456789) is parseFloat's bits
+PASS  numberF64(0.12345678) is parseFloat's bits
+PASS  numberF64(0.123456789) is parseFloat's bits
+PASS  numberF64(-0.12345678) is parseFloat's bits
+PASS  numberF64(-0.123456789) is parseFloat's bits
+PASS  numberF64(9.12345678) is parseFloat's bits
+PASS  numberF64(9.123456789) is parseFloat's bits
+PASS  numberF64(12345678.12345678) is parseFloat's bits
+PASS  numberF64(123456789.123456789) is parseFloat's bits
+PASS  numberF64(1234567890123456789) is parseFloat's bits
+PASS  numberF64(0.12345678e3) is parseFloat's bits
+PASS  numberF64(0.123456789E-3) is parseFloat's bits
+PASS  numberF64(1234567812345678e-8) is parseFloat's bits
+PASS  numberF64(1234567.5) is parseFloat's bits
+PASS  numberF64([1234567 ]) is parseFloat's bits
+PASS  numberF64([12345678,9]) is parseFloat's bits
+PASS  numberF64({"a":123456789}) is parseFloat's bits
+PASS  numberF64(0.00000000000000000001234) is parseFloat's bits
+PASS  numberF64(123456789012345678901234567890) is parseFloat's bits
+PASS  numberF64(1.2345678901234567890123e5) is parseFloat's bits
+PASS  numberF64(9007199254740993.000000001) is parseFloat's bits
+PASS  numberF64(1e99999) is parseFloat's bits
+PASS  numberF64(1e100000) is parseFloat's bits
+PASS  numberF64(1e-999999) is parseFloat's bits
+PASS  numberF64(1e1000000) is parseFloat's bits
+PASS  numberI64 of 18 digits
+PASS  numberI64 of -18 digits
+PASS  numberI64 of 19 digits
+PASS  numberI64 of -19 digits
+PASS  a window ending after 5 of 16 digits
+PASS  a window ending after 9 of 16 digits
+PASS  a window of 9 digits from the middle
+PASS  a window ending after 8 fraction digits
+PASS  a window ending on a dot is not a number
+PASS  a slash in an eight-byte digit window
+PASS  a colon in an eight-byte digit window
+PASS  a slash after eight digits
 PASS  isU64(0)
 PASS  numberU64(0)
 PASS  isU64(1)
@@ -468,4 +514,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 470 passed, 0 failed, 0 skipped
+std/json-tokenizer: 516 passed, 0 failed, 0 skipped

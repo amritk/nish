@@ -235,6 +235,9 @@ export const main = (): i32 => {
 - `engines.nish` is the lowest compiler version the package needs, written
   `>=X.Y.Z` or `>=X.Y`. An older compiler refuses the package and says which version it
   asked for.
+- The [`package.json` reference](../../reference/config/package-json.md)
+  lists every field Nish reads in a package's manifest, and the error each
+  mistake in one gets.
 - A program compiles one copy of each package. If two of your dependencies
   bring in two different copies of `hash`, the compiler refuses the second and
   names both directories.
