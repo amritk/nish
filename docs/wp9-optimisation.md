@@ -117,8 +117,8 @@ was measured for. The `opt_nsw` golden now pins that default.
 
 ### Self-recursive checked sums as a loop
 
-A function whose recursive returns are `X + self(args)` over the checked `i32`
-`+` (fib, a tree sum) is emitted as one loop (`src/accumulate.ts` records it,
+A function whose recursive returns are `X + self(args)` over a checked `+`
+(fib, a tree sum) is emitted as one loop (`src/accumulate.ts` records it,
 `src/emit-accumulate.ts` writes it). LLVM's tail-recursion elimination does
 this only for a plain `add`; `llvm.sadd.with.overflow` and its branch defeat
 it, which is what made fib 1.68x Rust after #426. The loop's header carries
@@ -162,9 +162,32 @@ warm-ups, interleaved, two rounds:
 - **AWFY `List`**, whose `Element.length` now loops: median 174.8 / 177.7 ms
   → 175.6 / 170.4 ms (`List 10 1500`), no change outside the band.
 
+Every integer width whose `+` is checked qualifies (issue #1612): `i32` and
+`i64`, the signed types `emitIntBinary` checks. An `i64` sum is the same loop
+at `i64`; the proof only needs the width's MAX and MIN, since two addends in
+[0, MAX] sum to at most 2^w - 2, which is negative at that width exactly when
+it passes MAX. `u8`..`u64` stay recursion: their `+` wraps, a plain `add`
+LLVM's tail-recursion elimination already folds (`tests/cases/acc_width_unsigned`).
+fib and treesum are `i32` programs, and main's compiler and this one give them
+byte-identical IR, so the rounds below measure only the machine. 15 runs after
+2 warm-ups, interleaved, two rounds, minimum / median ms:
+
+- **fib(40)**: main 237/242 and 227/237, branch 233/240 and 229/238
+  (0.93x / 0.89x of Rust, then 0.92x / 0.91x). main's two runs differ by 2 %
+  at the median, the band. No change, as expected.
+- **treesum `fn`**: medians main 336 / 319, branch 304 / 258. main's own
+  spread is 5 %, and the second round's branch median sits 19 % below
+  main's, outside it. That is noise, not the change: main's compiler and
+  this one give treesum byte-identical IR, so the two binaries are the same
+  program.
+- **treesum `method`**: medians main 301 / 213, branch 218 / 275. main's own
+  median moved 41 % between rounds, and both branch rounds sit inside that
+  band. No change.
+
 `tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
 effects, the soundness shapes (permuted arguments, a nested split, a panic
-other than overflow while one is pending) and the sums that stay recursion; `--no-elision` drops the records, so the soundness differential
+other than overflow while one is pending) and the sums that stay recursion;
+`--no-elision` drops the records, so the soundness differential
 compares each such function with its plain recursive self.
 
 ### `dereferenceable(24)` on array parameters and returns
