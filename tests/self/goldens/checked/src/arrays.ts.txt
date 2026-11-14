@@ -46,6 +46,10 @@ import PAR_SPAWN from "./program" -> const PAR_SPAWN
 import arrayMethodLocal from "./std-modules" -> function @arrayMethodLocal
 import arrayMethodTemplate from "./std-modules" -> function @arrayMethodTemplate
 import arrayMethodTemplateCount from "./std-modules" -> function @arrayMethodTemplateCount
+import collectionForEachLocal from "./std-modules" -> function @collectionForEachLocal
+import FOR_EACH_ELEMENT from "./std-modules" -> const FOR_EACH_ELEMENT
+import FOR_EACH_ENTRY from "./std-modules" -> const FOR_EACH_ENTRY
+import FOR_EACH_VALUE from "./std-modules" -> const FOR_EACH_VALUE
 import isSortModule from "./std-modules" -> function @isSortModule
 import SORT_LOCAL from "./std-modules" -> const SORT_LOCAL
 import zeroFilledReferenceMessage from "./fnrefs" -> function @zeroFilledReferenceMessage
@@ -57,7 +61,7 @@ import T_ERROR from "./types" -> const T_ERROR
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
 import TypeTable from "./types" -> struct TypeTable
-const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice"
+const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice"
 const ARRAY_LEVEL: string = "[]" [exported]
 const MAP_LEVEL: string = "<>" [exported]
 const UNNAMED: string = ""
@@ -434,6 +438,23 @@ function checkCallbackMethod(ctx: CheckContext, call: Node, access: Node, args: 
   callee +13:10 checkAsTemplateCall -> @checkAsTemplateCall
   callee +18:5 arrayMethodLocal -> @arrayMethodLocal
   callee +18:22 arrayMethodTemplate -> @arrayMethodTemplate
+function checkCollectionForEach(ctx: CheckContext, call: Node, access: Node, args: Node, isMap: boolean, scope: Scope): i32 -> @checkCollectionForEach [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkBuiltinArity
+  calls: CheckContext.error callbackArity checkAsTemplateCall checkBuiltinArity collectionForEachLocal nish_panic_index nish_str_concat nish_str_from_i32
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkBuiltinArity#0 callbackArity#0 CheckContext.error#0 checkAsTemplateCall#0
+  pointer call: size=40 writesThrough=true captured=true passedTo=checkBuiltinArity#1 checkAsTemplateCall#1
+  pointer access: size=40 writesThrough=false captured=false passedTo=checkAsTemplateCall#2
+  pointer args: size=40 writesThrough=true captured=false passedTo=checkBuiltinArity#3 checkAsTemplateCall#3
+  pointer scope: size=56 writesThrough=true captured=true passedTo=callbackArity#2 checkAsTemplateCall#5
+  stackSites=0 stackLocals=0
+  callee +0:8 checkBuiltinArity -> @checkBuiltinArity
+  local +3:9 arity: i32 (const)
+  callee +3:17 callbackArity -> @callbackArity
+  callee +5:5 CheckContext.error -> @CheckContext.error
+  local +13:7 template: string (let)
+  callee +17:10 checkAsTemplateCall -> @checkAsTemplateCall
+  callee +17:55 collectionForEachLocal -> @collectionForEachLocal
 function checkArraySlice(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkArraySlice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

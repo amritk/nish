@@ -184,6 +184,12 @@ export class FunctionSig {
    */
   capturesForCall: boolean
   /**
+   * Whether this lifted arrow is the callback of a `forEach` the checker
+   * rewrote (`rewrittenArrayMethod`), whose capture-write refusal names the
+   * `for...of` loop that may assign what the arrow cannot.
+   */
+  forEachCallback: boolean
+  /**
    * WP33 R2: the typed-array name the return type is spelled with, or `""`
    * (`annotationSpelling` in `src/arrays.ts`). It is read where the signature
    * is collected, in the module that declares it, because that is the one
@@ -349,6 +355,7 @@ export class FunctionSig {
     this.captures = []
     this.captureHost = null
     this.capturesForCall = false
+    this.forEachCallback = false
     this.returnSpelling = ""
     this.keepsLength = []
     this.defaults = []

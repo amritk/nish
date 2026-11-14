@@ -2008,6 +2008,21 @@ const DECLARED = [
     changelog: module,
     why: `the program imports ${module}, which the seed's standard library does not have, so only the candidate compiles it`,
   })),
+  // forEach on an array, a Map or a Set is new, so the seed refuses the
+  // programs that call it.
+  ...[
+    "tests/cases/arr_foreach.ts",
+    "tests/cases/map_foreach.ts",
+    "tests/cases/set_foreach.ts",
+    "tests/cases/foreach_mutate.ts",
+    "tests/cases/foreach_nested.ts",
+    "docs/cookbook/map-foreach.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "forEach on arrays, Map and Set",
+    why: "the program calls forEach on an array, a Map or a Set, which the seed refuses by name, so only the candidate compiles it",
+  })),
   // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
   // refused by reachability, after every module is checked.
   ...["tests/link/package_wasm_hostless/main.ts", "tests/link/wasm_hostless_own/main.ts"].map((program) => ({

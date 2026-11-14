@@ -463,8 +463,8 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: +0:5
   escaping: sig
-  calls: DebugInfo.beginFunction Emitter.captureParamAttributes Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue captureParamName closeAccumulation emitAtomicBody emitChannelSendBody emitConstructorPrologue emitEmptyDispatcher emitLockBody emitParamRangeChecks emitRegionBody emitShmWindowBody emitTagCheck emitWipeBody emitsAsLoop functionAttributes incomingName isAtomicMethod isChannelSend isLockMethod isRegionIntrinsic isShmWindowIntrinsic nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq openAccumulation paramAttributes paramValue privateAbi regionRoleIn returnAttributes secretRoleOf shmWindowRole suspends transformAsync unpackReturnedResult
-  pointer this: size=392 writesThrough=true captured=true passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 emitsAsLoop#0 Emitter.llvmAbi#0 Emitter.captureParamAttributes#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 emitParamRangeChecks#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 openAccumulation#0 emitTagCheck#0 emitEmptyDispatcher#0 emitWipeBody#0 emitRegionBody#0 emitShmWindowBody#0 emitLockBody#0 emitChannelSendBody#0 emitAtomicBody#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 closeAccumulation#0 Emitter.emitScopeExit#0 transformAsync#0
+  calls: DebugInfo.beginFunction Emitter.captureParamAttributes Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitExpression Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue captureParamName closeAccumulation emitAtomicBody emitChannelSendBody emitConstructorPrologue emitEmptyDispatcher emitLockBody emitParamRangeChecks emitRegionBody emitShmWindowBody emitTagCheck emitWipeBody emitsAsLoop functionAttributes incomingName isAtomicMethod isChannelSend isLockMethod isRegionIntrinsic isShmWindowIntrinsic nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq openAccumulation paramAttributes paramValue privateAbi regionRoleIn returnAttributes secretRoleOf shmWindowRole suspends transformAsync unpackReturnedResult
+  pointer this: size=392 writesThrough=true captured=true passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 emitsAsLoop#0 Emitter.llvmAbi#0 Emitter.captureParamAttributes#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 emitParamRangeChecks#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 openAccumulation#0 emitTagCheck#0 emitEmptyDispatcher#0 emitWipeBody#0 emitRegionBody#0 emitShmWindowBody#0 emitLockBody#0 emitChannelSendBody#0 emitAtomicBody#0 Emitter.emitBlock#0 Emitter.emitExpression#0 Emitter.emitReturnValue#0 closeAccumulation#0 Emitter.emitScopeExit#0 transformAsync#0
   pointer sig: size=200 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 emitsAsLoop#1 FunctionSig.isCompileTime#0 Emitter.captureParamAttributes#1 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 openAccumulation#1 emitTagCheck#1 secretRoleOf#0 emitWipeBody#1 isRegionIntrinsic#1 emitRegionBody#1 regionRoleIn#1 isShmWindowIntrinsic#1 emitShmWindowBody#1 shmWindowRole#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1 suspends#0 transformAsync#1
   stackSites=0 stackLocals=0
   local -1:11 facts: FunctionFacts (const)
@@ -532,15 +532,16 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   callee +140:16 isAtomicMethod -> @isAtomicMethod
   callee +141:7 emitAtomicBody -> @emitAtomicBody
   callee +143:7 Emitter.emitBlock -> @Emitter.emitBlock
-  callee +145:7 Emitter.emitReturnValue -> @Emitter.emitReturnValue
-  local +148:11 acc: RecursionLoop | null (const)
-  callee +150:7 closeAccumulation -> @closeAccumulation
-  callee +153:10 IRBlock.terminated -> @IRBlock.terminated
-  callee +153:10 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee +154:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee +155:7 IRFunction.emit -> @IRFunction.emit
-  callee +157:9 suspends -> @suspends
-  callee +158:7 transformAsync -> @transformAsync
+  callee +145:7 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +147:7 Emitter.emitReturnValue -> @Emitter.emitReturnValue
+  local +150:11 acc: RecursionLoop | null (const)
+  callee +152:7 closeAccumulation -> @closeAccumulation
+  callee +155:10 IRBlock.terminated -> @IRBlock.terminated
+  callee +155:10 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee +156:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee +157:7 IRFunction.emit -> @IRFunction.emit
+  callee +159:9 suspends -> @suspends
+  callee +160:7 transformAsync -> @transformAsync
 function Emitter.isStackSite(this: Emitter, node: Node): boolean -> @Emitter.isStackSite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionFacts.isStackSite

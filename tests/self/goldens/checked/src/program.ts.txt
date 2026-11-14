@@ -89,10 +89,11 @@ struct FunctionSig (class) size=200 align=8 exported
   field captures: Local[] index=24 offset=144
   field captureHost: FunctionSig | null index=25 offset=152
   field capturesForCall: boolean index=26 offset=160
-  field returnSpelling: string index=27 offset=168
-  field keepsLength: i32[] index=28 offset=176
-  field defaults: FieldInfo | null[] index=29 offset=184
-  field restIndex: i32 index=30 offset=192
+  field forEachCallback: boolean index=27 offset=161
+  field returnSpelling: string index=28 offset=168
+  field keepsLength: i32[] index=29 offset=176
+  field defaults: FieldInfo | null[] index=30 offset=184
+  field restIndex: i32 index=31 offset=192
   constructor -> @FunctionSig.constructor
   method requiredArity -> @FunctionSig.requiredArity
   method defaultOf -> @FunctionSig.defaultOf

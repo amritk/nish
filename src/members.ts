@@ -13,6 +13,7 @@ import {
   ARRAY_LEVEL,
   checkArrayMethod,
   checkArrayProperty,
+  checkCollectionForEach,
   checkNewArray,
   MAP_LEVEL,
   peelSpelling,
@@ -405,6 +406,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   if (isWalkIterable(ctx, info, expr, access)) {
     return checkWalkIterable(ctx, expr, info, access, args, scope)
+  }
+  if (access.text === "forEach" && isCollectionStruct(info) && !ctx.program.isCollections()) {
+    return checkCollectionForEach(ctx, expr, access, args, isMapOwner(info), scope)
   }
   if (refuseCollectionMember(ctx, info, access, true)) {
     return T_ERROR // WP32: only the JavaScript members of a `Map` or `Set`
@@ -1176,7 +1180,9 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
  * Answers true when it reported one. What a program sees is JavaScript's
  * surface less what this version defers: `keys()` and `values()` are
  * iterators, legal only as the iterable of a `for...of` (`checkWalkIterable`),
- * and `entries` and `forEach` wait for destructuring and function values. A call of `get` is not a method of the class at all (`checkMapGet`). Every other member is the table's own and
+ * and `entries` waits for destructuring. A call of `get` is not a method of
+ * the class at all (`checkMapGet`), and neither is one of `forEach`
+ * (`checkCollectionForEach`). Every other member is the table's own and
  * is refused as if it did not exist, which under `tsc` it does not.
  */
 const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, call: boolean): boolean => {
@@ -1192,12 +1198,12 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
     return false
   }
   const shown = ctx.table.typeName(info.type)
-  if (isMap && name === "get") {
+  if ((isMap && name === "get") || name === "forEach") {
     if (call) {
-      return false // `checkMapGet`
+      return false // `checkMapGet`, `checkCollectionForEach`
     }
     // Not a method of the class, so the ordinary path would not know to say so.
-    ctx.errorAtProperty(at, `Unknown field \`get\` on class \`${shown}\` (it is a method; call it)`)
+    ctx.errorAtProperty(at, `Unknown field \`${name}\` on class \`${shown}\` (it is a method; call it)`)
     return true
   }
   if (name === "keys" || name === "values") {
@@ -1205,16 +1211,16 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
     ctx.errorAtProperty(at, `\`${spelled}\` of \`${shown}\`${iteratorPlaceReason(ctx, at, call)}`)
     return true
   }
-  if (name === "entries" || name === "forEach") {
+  if (name === "entries") {
     ctx.errorAtProperty(
       at,
-      `\`${name}\` is not available on \`${shown}\`: a \`Map\` or \`Set\` in this version has no \`entries\` or \`forEach\`, because there is no destructuring and a method cannot take a function`
+      `\`entries\` is not available on \`${shown}\`: a \`Map\` or \`Set\` in this version has no \`entries\`, because there is no destructuring; \`forEach((value, key) => ...)\` visits each key with its value`
     )
     return true
   }
   ctx.errorAtProperty(
     at,
-    `Unknown member \`${name}\` on \`${shown}\`: a \`Map\` has size, get, set, has, delete and clear, and a \`Set\` has size, add, has, delete and clear`
+    `Unknown member \`${name}\` on \`${shown}\`: a \`Map\` has size, get, set, has, delete, clear and forEach, and a \`Set\` has size, add, has, delete, clear and forEach`
   )
   return true
 }

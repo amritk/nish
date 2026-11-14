@@ -244,6 +244,20 @@ function checkReturnValue(ctx: CheckContext, value: Node, scope: Scope): void ->
   callee +4:5 CheckContext.error -> @CheckContext.error
   callee +6:49 TypeTable.typeName -> @TypeTable.typeName
   callee +6:95 TypeTable.typeName -> @TypeTable.typeName
+function checkVoidConciseBody(ctx: CheckContext, body: Node, scope: Scope, written: boolean): void -> @checkVoidConciseBody [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: body
+  calls: CheckContext.error TypeTable.typeName checkExpression nish_str_concat rejectDiscardedResult
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkExpression#0 rejectDiscardedResult#0 CheckContext.error#0
+  pointer body: size=40 writesThrough=true captured=true passedTo=checkExpression#1 rejectDiscardedResult#1 CheckContext.error#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 rejectDiscardedResult#3
+  stackSites=0 stackLocals=0
+  local +1:9 got: i32 (const)
+  callee +1:15 checkExpression -> @checkExpression
+  callee +3:3 rejectDiscardedResult -> @rejectDiscardedResult
+  callee +5:5 CheckContext.error -> @CheckContext.error
+  callee +7:72 TypeTable.typeName -> @TypeTable.typeName
 function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): void -> @checkVariableList
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

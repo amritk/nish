@@ -1325,7 +1325,7 @@ function liftArrowArgument(ctx: CheckContext, call: Node, template: TemplateInfo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseOnce
   escaping: index
-  calls: CheckContext.textOf answerAnnotation argumentLead argumentOf asyncArgumentMessage captureMode functionTypeHereMessage isVoidSpawnTemplate liftArrow mentionsUnbound nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 promiseArgument promisesAnswer refuseOnce resolveInTemplate resolveType unifyAnnotation unwrapTypeParens
+  calls: CheckContext.textOf answerAnnotation argumentLead argumentOf asyncArgumentMessage captureMode functionTypeHereMessage isVoidSpawnTemplate liftArrow mentionsUnbound nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 promiseArgument promisesAnswer refuseOnce resolveInTemplate resolveType rewrittenArrayMethod unifyAnnotation unwrapTypeParens
   pointer ctx: size=344 writesThrough=true captured=true passedTo=refuseOnce#0 refuseOnce#0 refuseOnce#0 resolveType#1 unifyAnnotation#0 refuseOnce#0 refuseOnce#0 resolveType#1 refuseOnce#0 liftArrow#0 unifyAnnotation#0
   pointer call: size=40 writesThrough=false captured=false passedTo=argumentLead#0 argumentOf#0
   pointer template: size=64 writesThrough=false captured=false passedTo=resolveInTemplate#0 resolveInTemplate#0 isVoidSpawnTemplate#0 captureMode#0
@@ -1380,10 +1380,13 @@ function liftArrowArgument(ctx: CheckContext, call: Node, template: TemplateInfo
   callee +93:59 isVoidSpawnTemplate -> @isVoidSpawnTemplate
   callee +97:5 refuseOnce -> @refuseOnce
   callee +101:14 CheckContext.textOf -> @CheckContext.textOf
-  local +105:9 fn: FunctionSig | null (const)
-  callee +105:14 liftArrow -> @liftArrow
-  callee +105:65 captureMode -> @captureMode
-  callee +109:3 unifyAnnotation -> @unifyAnnotation
+  local +105:9 callee: Node (const)
+  local +106:9 forEach: boolean (const)
+  callee +106:53 rewrittenArrayMethod -> @rewrittenArrayMethod
+  local +107:9 fn: FunctionSig | null (const)
+  callee +107:14 liftArrow -> @liftArrow
+  callee +107:65 captureMode -> @captureMode
+  callee +111:3 unifyAnnotation -> @unifyAnnotation
 function captureMode(template: TemplateInfo): i32 -> @captureMode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isExposeTemplate isRegionRunner parallelRole
@@ -1405,10 +1408,10 @@ function arrowDisplayName(arrow: Node): string -> @arrowDisplayName
   stackSites=1 stackLocals=1
   local +0:9 names: string[] (const)
   local +1:14 param: Node (const)
-function liftArrow(ctx: CheckContext, arrow: Node, types: i32[], returnType: i32, outer: Scope, mode: i32): FunctionSig | null -> @liftArrow
+function liftArrow(ctx: CheckContext, arrow: Node, types: i32[], returnType: i32, outer: Scope, mode: i32, forEach: boolean): FunctionSig | null -> @liftArrow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  escaping: mode outer returnType
+  escaping: forEach mode outer returnType
   calls: FunctionBindings.constructor FunctionSig.constructor Instantiation.constructor Instantiation.shareTablesOf Local.constructor Scope.constructor Scope.declare StringMap.size annotationSpelling arrowDisplayName arrowElsewhereMessage checkSignatureBody nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 refuseOnce unknownOrigin
   pointer ctx: size=344 writesThrough=true captured=true passedTo=refuseOnce#0 annotationSpelling#0 annotationSpelling#0 refuseOnce#0 checkSignatureBody#0
   pointer arrow: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 arrowDisplayName#0 FunctionSig.constructor#3
@@ -1449,8 +1452,8 @@ function liftArrow(ctx: CheckContext, arrow: Node, types: i32[], returnType: i32
   local +41:9 savedStatement: Node | null (const)
   local +42:9 savedAwaitStatement: Node | null (const)
   local +43:9 savedFunctions: FunctionBindings (const)
-  callee +51:26 new FunctionBindings -> @FunctionBindings.constructor
-  callee +63:3 checkSignatureBody -> @checkSignatureBody
+  callee +52:26 new FunctionBindings -> @FunctionBindings.constructor
+  callee +64:3 checkSignatureBody -> @checkSignatureBody
 function refuseOnce(ctx: CheckContext, node: Node, message: string): void -> @refuseOnce [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorOnce
