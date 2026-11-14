@@ -14596,6 +14596,25 @@ if (dealtHere("arrayChecks")) {
         run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
       )
     }
+    // A pattern is the reads it stands for: after `opt -O2` each
+    // `<form>_pattern` body is its `<form>_plain` twin's, byte for byte.
+    const zero = path.join(buildDir, "destructure_zero_cost.ll")
+    if (has("opt") && fs.existsSync(zero)) {
+      const o2 = spawnSync("opt", ["-O2", "-S", zero, "-o", "-"], { encoding: "utf8" })
+      const body = (name) => {
+        const m = new RegExp(`^define [^\\n]*@${name}\\([^]*?^\\}`, "m").exec(o2.stdout)
+        // Inlining mints alias scopes per function; their ids are not the body.
+        return m ? m[0].replace(`@${name}(`, "@F(").replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N") : null
+      }
+      for (const form of ["object", "array", "for", "local"]) {
+        const pattern = body(`${form}_pattern`)
+        check(
+          `destructure_zero_cost: after opt -O2, ${form}_pattern compiles to the body of ${form}_plain`,
+          o2.status === 0 && pattern !== null && pattern === body(`${form}_plain`),
+          o2.status === 0 ? `${pattern}\n----\n${body(`${form}_plain`)}` : o2.stderr
+        )
+      }
+    }
   }
 
   if (!only || "arrays".includes(only) || only.startsWith("arr")) {

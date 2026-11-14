@@ -699,9 +699,9 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via classifyElementHolder
   escaping: ref
-  calls: ParentTable.parentOf StructInfo.method argumentUse classifyArgumentUse classifyElementHolder classifyElementUse classifyMemberUse enclosingBlock isAssignmentOperator isStringPassthrough nish_panic_index nish_str_eq storesInlineElements unwrapParens use yieldsInteriorPointer
-  pointer unit: size=16 writesThrough=false captured=false passedTo=yieldsInteriorPointer#0 classifyElementUse#0 classifyMemberUse#0 classifyArgumentUse#0 classifyElementHolder#0 classifyElementHolder#0 enclosingBlock#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=yieldsInteriorPointer#1 classifyMemberUse#1 classifyArgumentUse#1 storesInlineElements#1 storesInlineElements#1 storesInlineElements#1 classifyElementHolder#1 classifyElementHolder#1
+  calls: ParentTable.parentOf StructInfo.method argumentUse classifyArgumentUse classifyElementHolder classifyElementUse classifyMemberUse classifyPatternUse enclosingBlock isAssignmentOperator isStringPassthrough nish_panic_index nish_str_eq storesInlineElements unwrapParens use yieldsInteriorPointer
+  pointer unit: size=16 writesThrough=false captured=false passedTo=yieldsInteriorPointer#0 classifyElementUse#0 classifyMemberUse#0 classifyArgumentUse#0 classifyElementHolder#0 classifyElementHolder#0 enclosingBlock#0 classifyPatternUse#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=yieldsInteriorPointer#1 classifyMemberUse#1 classifyArgumentUse#1 storesInlineElements#1 storesInlineElements#1 storesInlineElements#1 classifyElementHolder#1 classifyElementHolder#1 classifyPatternUse#1
   pointer ref: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 program: CheckedProgram (const)
@@ -742,11 +742,26 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   callee +98:14 classifyElementHolder -> @classifyElementHolder
   callee +107:14 classifyElementHolder -> @classifyElementHolder
   callee +107:80 enclosingBlock -> @enclosingBlock
-  callee +110:14 use -> @use
+  callee +110:14 classifyPatternUse -> @classifyPatternUse
   callee +113:14 use -> @use
   callee +116:14 use -> @use
   callee +119:14 use -> @use
-  callee +121:12 use -> @use
+  callee +122:14 use -> @use
+  callee +124:12 use -> @use
+function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse -> @classifyPatternUse
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  sharedWrite: via classifyUse
+  calls: classifyUse nish_panic_index use
+  pointer unit: size=16 writesThrough=false captured=false passedTo=classifyUse#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=classifyUse#1
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 kind: i32 (let)
+  local +1:7 i: i32 (let)
+  local +3:11 found: ParamUse (const)
+  callee +3:19 classifyUse -> @classifyUse
+  callee +7:14 use -> @use
+  callee +11:10 use -> @use
 function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse -> @classifyMemberUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: ParentTable.parentOf argumentUse arrayMethodName isArrayWriteMethod isAssignmentTarget isInlineField isStringMethodCall nish_panic_index nish_str_eq resultMethodName use

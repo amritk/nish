@@ -13736,7 +13736,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @pick(%struct.Point* noundef nonnull align 8 dereferenceable(8) %p) #1 {
+define internal noundef i32 @pick(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #1 {
 entry:
   %pattern.143.addr = alloca %struct.Point*, align 8
   %x.addr = alloca i32, align 4
@@ -13765,7 +13765,7 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @third(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %xs) #1 {
+define internal noundef i32 @third(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
   %pattern.223.addr = alloca %struct.nish_array*, align 8
   %a.addr = alloca i32, align 4

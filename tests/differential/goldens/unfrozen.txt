@@ -202,6 +202,7 @@ cases/destructure_for_of added after R6: no rewriter to freeze it with
 cases/destructure_object added after R6: no rewriter to freeze it with
 cases/destructure_out_of_range added after R6: no rewriter to freeze it with
 cases/destructure_stack added after R6: no rewriter to freeze it with
+cases/destructure_zero_cost added after R6: no rewriter to freeze it with
 cases/deterministic_bits added after R6: no rewriter to freeze it with
 cases/deterministic_parse added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with

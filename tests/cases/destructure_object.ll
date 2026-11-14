@@ -1,45 +1,20 @@
 %struct.Point = type { i32, i32 }
 %struct.Size = type { i32, i32 }
 %struct.Box = type { i32, i32, i8* }
-%struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"box\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
-@nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
-
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
-entry:
-  %size.p7 = add i64 %size, 7
-  %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  %off = load i64, i64* %off.ptr, align 8
-  %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
-  %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
-  br i1 %fits, label %fast, label %slow
-
-fast:
-  store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %buf = load i8*, i8** %buf.ptr, align 8
-  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
-  ret i8* %obj
-
-slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
-  ret i8* %grown
-}
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
@@ -61,7 +36,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @area(%struct.Size* noundef nonnull align 8 dereferenceable(8) %s) #1 {
+define internal noundef i32 @area(%struct.Size* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
   %pattern.533.addr = alloca %struct.Size*, align 8
   %w.addr = alloca i32, align 4
@@ -101,6 +76,8 @@ entry:
   %Box.obj = alloca %struct.Box, align 8
   %label.addr = alloca i8*, align 8
   %w.addr = alloca i32, align 4
+  %Box.obj.1 = alloca %struct.Box, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4)
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %0 = load %struct.Point*, %struct.Point** %p.addr, align 8
@@ -147,13 +124,12 @@ ovf.ok.1:
   %26 = call i8* @nish_str_from_i32(i32 %25)
   %27 = call i8* @nish_str_concat(i8* %24, i8* %26)
   call void @nish_print(i8* %27)
-  %28 = call i8* @nish_alloc_struct(i64 16)
-  %29 = bitcast i8* %28 to %struct.Box*
-  call void @Box.constructor(%struct.Box* %29, i32 6, i32 7, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  %30 = bitcast %struct.Box* %29 to %struct.Size*
-  %31 = call i32 @area(%struct.Size* %30)
-  %32 = call i8* @nish_str_from_i32(i32 %31)
-  call void @nish_print(i8* %32)
+  call void @Box.constructor(%struct.Box* %Box.obj.1, i32 6, i32 7, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %28 = bitcast %struct.Box* %Box.obj.1 to %struct.Size*
+  %29 = call i32 @area(%struct.Size* %28)
+  %30 = call i8* @nish_str_from_i32(i32 %29)
+  call void @nish_print(i8* %30)
+  call void @nish_arena_release(i64 %arena.mark)
   ret void
 
 ovf.fail:
@@ -170,10 +146,8 @@ entry:
 
 attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #1 = { nounwind "probe-stack"="inline-asm" }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
-attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!6, !7, !8, !9, !10}
 !0 = !{!"nish TBAA"}
