@@ -1,6 +1,6 @@
 // A numeric enum becomes a `const` object with the checker's member values and
 // a type of the same name, and a member written as a type becomes the type of
-// that member. Nish has no string enums, so every value is a number.
+// that member. The string enum's fixture is `string-enums.ts`.
 import type { i32 } from "nish/runtime"
 export const Shape = {
   Circle: 0,
