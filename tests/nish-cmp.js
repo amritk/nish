@@ -530,7 +530,7 @@ const pageMath = (why, filesByProgram) =>
   )
 const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const DESTRUCTURING = "Destructuring declarations over objects and arrays"
-const STRING_ENUMS = "add string enums, decoded and encoded by typed JSON"
+const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
