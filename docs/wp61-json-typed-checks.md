@@ -106,7 +106,7 @@ fails at `this.tok.tokStart`. That stays the default.
   `TAG = -26` (`:411` to `:442`). **The next free code is -27.** The
   tokenizer's own codes are -1 to -13 (`std/json-tokenizer.ts:132` to `:156`).
   Its limits, `JsonLimits`, are nesting depth, bytes in one string, bytes in
-  one number and bytes in the whole window (`:90`).
+  one number and bytes in the whole window (`std/json-tokenizer.ts:182`).
 
 **The checker half**, `src/json-typed.ts`:
 
@@ -297,8 +297,12 @@ keyword across unchanged:
 
 - `minLength` and `maxLength` count code points.
 - `pattern` is ECMA-262 and unanchored. `nish/regex` is JavaScript syntax
-  (`std/regex.ts:19`) and `test` searches, so a pattern means the same in
-  both.
+  (`std/regex.ts:19`) and `test` searches, so a pattern it accepts means the
+  same in both. It does not accept all of ECMA-262: backreferences and
+  lookaround are refused, and `std/regex.ts:27` to `:40` records where `\p{…}`
+  and the `i` flag differ. A pattern outside that subset is refused at
+  compile time, never run with another meaning. WP62 must likewise refuse a
+  schema `pattern` that uses it.
 - `exclusiveMinimum` and `exclusiveMaximum` are numbers, not draft-04's
   booleans.
 - `format` is checked, not just annotated. A class that names a format asks
@@ -360,6 +364,34 @@ no variant is the obvious default.
   give the field its default, `null`, and are recorded as `TAG`.
 - A tag that names a variant decodes the object as that variant's coerce
   class. Its own fields then convert and default by the rules below.
+
+**The top-level union entry never fails either.** `jsonDecodeUnion(d, prev)`
+(`std/json-typed.ts:1647`) is in coercion mode when the union's variants are
+coerce classes. A union mixing coerce and strict variants is refused, by the
+transitivity rule above. It answers as follows:
+
+- **A tag that names a variant** decodes as today: into `prev` when it is
+  that variant, or into a new object of that variant made by its
+  constructor. The fields then coerce.
+- **Otherwise it returns `prev`, reset in place to its own variant's
+  defaults.** This covers a missing tag, a tag no variant names, a top-level
+  value that is not an object, and a stop before the tag was read.
+  - `reason` is `TAG`, or the stop's code, with `errorAt` at the problem.
+  - Since the tag may be any key, some of `prev`'s fields may already have
+    been read when the tag turns out bad. The reset runs after the object
+    closes, so none of them survives.
+
+`prev` is the right default for three reasons:
+
+- it is already an instance of one of the variants, so the answer is a
+  correct `T`;
+- the reset allocates nothing;
+- no variant is privileged by its place in the declaration. "The first
+  variant's defaults" would make reordering a union change what a bad body
+  decodes to.
+
+It is also what `jsonDecode` does with `out`: the caller's object is the
+starting point, and a body that says nothing usable resets it.
 
 **One walk.** Each conversion and each default happens at the value or the
 object it concerns:
@@ -509,7 +541,8 @@ Two key-level rules also hold in coercion mode:
 `maxMapKeys`.
 
 - **What stops.** The decoder records the stop and reads no further. Every
-  later read is a no-op, as after a strict failure today.
+  later read is a no-op, by the same sticky `failed` that ends a strict
+  decode today. §5.5 gives the mechanism.
 - **Which fields keep their values.** Each open object then runs its
   after-the-loop block, which gives every field not yet read its default. The
   field whose value was cut off takes its default too. Fields already read
@@ -578,11 +611,43 @@ A new diagnostic covers each of these:
   when that default is an instance of the declared type
   (`helpers/src/get-default-value.ts:211`).
 
-### 5.5 What went wrong stays readable
+### 5.5 The stop's mechanism, and what stays readable
 
-An `OK` answer in coercion mode does not mean that the body matched the
-class. Two new fields on `JsonDecoder` say what happened. `reset` clears both,
-and neither costs anything on the path where nothing goes wrong:
+**Inside the decode, `failed` is still the stop.** Today every read is
+bounded by one sticky field:
+
+- `fail` records a code only while `failed` is `OK` (`std/json-typed.ts:659`);
+- `take` returns at once once `failed` is not `OK` (`:683`), and so does
+  every read built on it;
+- the generated code branches on `failed` through `jsonDecoderOk`
+  (`src/emit-json.ts:390`), for example in `emitJsonEnumCheck` (`:1040`).
+
+Coercion mode keeps that machinery exactly and changes only what reaches it:
+
+- **A stop goes through `fail`, as today.** A tokenizer error, a
+  `JsonLimits` limit, the depth limit and `maxMapKeys` set `failed`. From
+  then on `take`, `skipValue` (`:852`) and every generated `failed` branch
+  read nothing, as after a strict failure.
+- **A value-level problem does not.** A coerce class's parts call a new
+  method, `repair(code, at)`, for `TYPE`, `RANGE`, `CONSTRAINT`,
+  `DUPLICATE` and `TAG`, in place of `wrongType` and the readers' own
+  `fail` calls. `repair` records the problem in `reason` and the log (§5.6),
+  and the part steps over the value or defaults the field. `failed` stays
+  `OK`, so reading goes on.
+- **The answer is translated once, at the return.** The coerce part of
+  `jsonDecode` ends with an epilogue that copies `failed` into a new field,
+  `stopped`, records the stop as `reason` if no earlier problem was, and
+  sets `failed` back to `OK`. Before the epilogue, each open object's
+  after-the-loop block has run; in a coerce part it stores the defaults of
+  unread fields whatever `failed` says, and it reads nothing.
+
+**Why the strict path does not move.** `fail`, `take` and `skipValue` are
+unchanged. `repair` and the epilogue are emitted only into a coerce class's
+parts, which a strict class never calls (§5.1, transitivity). A strict
+class's IR is byte-identical (§6); only `JsonDecoder`'s layout grows.
+
+After the `OK`, three new fields on `JsonDecoder` say what happened. `reset`
+clears them, and none costs anything on the path where nothing goes wrong:
 
 - `reason: i32` is the first problem's code: the code the strict decode would
   have failed with. That is `JSON_DECODE_TYPE`, `RANGE`, `CONSTRAINT`,
@@ -591,15 +656,17 @@ and neither costs anything on the path where nothing goes wrong:
   `JSON_DECODE_OK` when the body needed no conversion and no default.
 - `errorAt` is the offset of the first problem, as in strict mode.
   `failedKeyword` is set as in §4.2 when that problem is a constraint.
+- `stopped: i32` is the stop's code, or `OK` when the whole body was read. A
+  caller can tell "reading stopped" from "a value was defaulted" without
+  decoding `reason`.
 
-`failed` stays `JSON_DECODE_OK` in coercion mode. A program that checks
-`d.failed` sees success, which is the mode's contract. A program that must
-reject imperfect input checks `d.reason`. A caller can tell "reading stopped"
-from "a value was defaulted" by the code alone: a stop is a tokenizer code or
-`MAP_LIMIT`.
+`failed` is `JSON_DECODE_OK` when `jsonDecode` returns in coercion mode. A
+program that checks `d.failed` sees success, which is the mode's contract. A
+program that must reject imperfect input checks `d.reason`, or `d.stopped`
+for a cut-off body only.
 
-`reason` and `errorAt` are kept whatever §5.6 decides, so the first problem
-can always be read.
+`reason`, `errorAt` and `stopped` are kept whatever §5.6 decides, so the
+first problem and the stop can always be read.
 
 ### 5.6 The repair log: its shape, and whether it is always on
 
@@ -655,12 +722,20 @@ decode with the log kept against decode without it:
 - **Measures:** `Ir/doc` under callgrind, and interleaved wall clock, 7 rounds
   or more, reported as minimums. The noise band comes from timing two
   byte-identical copies of the same binary under the same interleaving.
-- **Rule:** keeping the log may not cost **more than 1% `Ir/doc` on either
-  workload, clean or dirty, nor put a wall-clock median outside the
-  byte-identical-copy band**. If it does, the log is opt-in: `repairs: true`
-  in the class's literal compiles the log's stores into that class's parts.
-  Otherwise it is always on for every coerce class, and `repairs` is not an
-  option.
+- **Rule.** The owner's rule is that a log which is "reasonably slower" to
+  keep becomes an option. This note reads "reasonably slower" concretely:
+  - the gate is measured on the **clean** workloads only;
+  - keeping the log may not cost **more than 1% `Ir/doc`** on either clean
+    workload, nor put a clean wall-clock median outside the
+    byte-identical-copy band. The 1% is the proxy for a noise band, since
+    callgrind's `Ir` has none.
+
+  If it does, the log is opt-in: `repairs: true` in the class's literal
+  compiles the log's stores into that class's parts. Otherwise it is always
+  on for every coerce class, and `repairs` is not an option.
+- **The dirty workloads are reported, not gated.** Their extra stores are the
+  log doing its job: a repair that is recorded costs the stores that record
+  it. The figures are written down beside the clean ones.
 
 This rule is part of S2's exit criteria (§11). The measured figures and the
 outcome are written into this note.
@@ -683,7 +758,7 @@ ported later would be listed in `THIRD_PARTY_NOTICES.md` per
 | A boolean is a token table, never truthiness: `true yes y on 1` and `false no n off 0 ""`, trimmed and lower-cased (`generate-validation-expression.ts:293`). | Never truthiness either; only `true`, `false`, `1` and `0` are recommended (§5.2; §9, question 5). |
 | A union value that already matches a branch is kept uncoerced (`helpers/src/coercion-runtime.ts:122`). | A tag picks the variant, so the matching variant always wins uncoerced. A bad tag gives the default (§5.1). |
 | A repair is reported with the path, keyword and params it would have been rejected with (`repair-runtime.ts:30`). | The repair log: offset, code, keyword and action, with the path computed on demand (§5.6). |
-| `parse-vs-coerce.differential.test.ts`: where the checking mode accepts, the repairing mode must return the same value. | S2's differential test: where strict decode accepts, coercion returns the identical object and an empty log (§11). |
+| `validation/src/parse-vs-coerce.differential.test.ts`: wherever `coerceX` accepts a value, `parseX` returns the same value. | S2's differential test: where strict decode accepts, coercion returns the identical object and an empty log (§11). |
 | Every bound is emitted as the negated pass condition, so `NaN` fails a constrained number (`validation/src/validators/AGENTS.md:32`). | The same for `f64` bounds (§4.1). |
 
 ## 6. Zero cost when unused, and the performance target
@@ -698,8 +773,8 @@ the class's mode, both of which are empty for such a class.
   `tests/self/goldens/checked/` and the nish-cmp corpus (`tests/nish-cmp.js`)
   already catch. This is how the `presence` option landed.
 - **New decoder fields** move `JsonDecoder`'s layout: `failedKeyword`,
-  `reason`, the conversion tokenizer and the repair log (§5.6). The S1 and
-  S2 PRs state any
+  `reason`, `stopped`, the conversion tokenizer and the repair log (§5.5,
+  §5.6). The S1 and S2 PRs state any
   corpus program whose IR moves in nish-cmp's `DECLARED` entries. The
   conversion tokenizer is made only when a coerce class is decoded.
 
@@ -748,7 +823,9 @@ simdjson, yyjson, RapidJSON, serde and Go over twitter, citm and canada:
   other statics.
 - **`jsonDecodeUnion`.** In strict mode, a variant's constraints are checked
   as its fields are read, after the tag has chosen the variant. In coercion
-  mode a union field must be `| null`; a bad tag gives it `null` (§5.1).
+  mode a union field must be `| null`, and a bad tag gives it `null`. A
+  top-level `jsonDecodeUnion` returns `prev` reset to its variant's defaults
+  (§5.1).
 - **Reuse.**
   - Strict mode: a decode that fails a constraint leaves the object as a
     failed decode does today: it "leaves what it read" (the header,
@@ -928,7 +1005,7 @@ offset, and unconstrained IR is unmoved.
   constraints (§5.1, §5.4);
 - the conversions of §5.2;
 - the defaults of §5.3, including the stop on malformed JSON and on limits;
-- `reason`;
+- `repair`, the coerce epilogue, `reason` and `stopped` (§5.5);
 - the repair log and `jsonPointerAt` (§5.6), with the measurement that
   decides whether it is always on;
 - LANGUAGE.md, the guide, and the `json.md` entry of §8.
@@ -945,7 +1022,8 @@ offset, and unconstrained IR is unmoved.
 - **Fallbacks:** each case of §5.3 (no conversion, out of range, a failed
   constraint, `null` into a non-null field, a missing key, an array element
   and a map value problem, a duplicate key, a missing or unknown union tag)
-  shows the default, `reason`, `errorAt` and the log's entry. `null` is
+  shows the default, `reason`, `errorAt` and, when the log is kept, its
+  entry. `null` is
   tested on both sides: a non-null field takes its default, a `| null`
   field keeps `null` and logs nothing. The reused-object cases show that no value survives from an
   earlier decode.
@@ -957,7 +1035,8 @@ offset, and unconstrained IR is unmoved.
   defaults, `reason` the limit's code, and work bounded as in strict mode.
 - **The differential invariant:** for every body in the strict tests that
   strict decode accepts, the coerce twin returns the identical object, with
-  `reason` = `OK` and `repairCount` = 0. Coercion may only change what strict
+  `reason` = `OK`, `stopped` = `OK` and, when the log is kept,
+  `repairCount` = 0. Coercion may only change what strict
   refuses. mjst pins the same property between its checking and repairing
   modes (§5.7).
 - **A seeded fuzz:** bodies built by a fixed PRNG from valid ones, with
@@ -966,8 +1045,20 @@ offset, and unconstrained IR is unmoved.
   strictly, so the instance is correct; and the work, counted in tokenizer
   steps, must stay under a bound linear in the body. A failure prints its
   seed.
-- **The log:** the cap (`maxRepairs` entries kept, every repair counted) and
-  `jsonPointerAt` on each entry of a nested body.
+- **The log, when it is kept:** the cap (`maxRepairs` entries kept, every
+  repair counted) and `jsonPointerAt` on each entry of a nested body. If
+  §5.6 makes the log opt-in, these tests use a class with `repairs: true`,
+  and a class without it is shown to write no entry.
+- **The stop is a stop:** for each limit, and for a syntax error, a body
+  that goes on well past the stop point answers `OK` with `stopped` set.
+  The tokenizer's read offset after the decode is no further than where
+  the stop left it: no byte past the stop point was consumed. A field that
+  only a later byte could set holds its default.
+- **The top-level union:** `jsonDecodeUnion` over a missing tag, an unknown
+  tag found after other keys, a non-object and a truncated body each
+  returns `prev`, with every field at its variant's default and `reason`
+  and `errorAt` set. A tag naming another variant returns a new object of
+  that variant, its fields coerced.
 - **Diagnostics:** the new ones of §5.1 and §5.4, each with a negative test.
 - **Byte-identical IR:** the golden for classes that do not opt in.
 
@@ -979,10 +1070,10 @@ offset, and unconstrained IR is unmoved.
 - the limits hold;
 - unopted IR is unmoved;
 - **the log's default settled by §5.6's rule.** If keeping it costs more
-  than 1% `Ir/doc` on either workload, clean or dirty, or a wall-clock median
+  than 1% `Ir/doc` on either clean workload, or a clean wall-clock median
   falls outside the byte-identical-copy band, the log ships opt-in
-  (`repairs: true`); otherwise it ships always on. The figures are written
-  into §5.6.
+  (`repairs: true`); otherwise it ships always on. The clean and dirty
+  figures are both written into §5.6.
 
 ### S3: the guide page and the benchmarks
 
