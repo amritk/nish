@@ -95,19 +95,23 @@ What a server did, for a log line or a test; `serveOn` fills it as it runs.
 
 <scalar-callout type="info">
 
-`serve` runs `nish/net/handler`'s readiness loop as an `async` function:
-it awaits the loop's descriptor, so the program's other tasks run while no
-socket is ready. Each whole request it takes is handed to `handle` in a
-task of its own, spawned with the request's slot, and the task's
-allocations — the request it reads, the response it builds, whatever the
-handler makes on the way — live in the task's region and go when it ends.
+`serve` drives `nish/net/http1-server`'s connections from a readiness loop
+of its own, as an `async` function: it awaits the loop's descriptor, so
+the program's other tasks run while no socket is ready. It routes each
+request at its head, gathers its body, and hands the whole request to
+`handle` in a task of its own, spawned with the request's slot; the
+task's allocations — the request it reads, the response it builds,
+whatever `handle` makes on the way — live in the task's region and go
+when it ends.
 
 </scalar-callout>
 
 <scalar-detail title="The task reads its own copy">
 
-The task copies the request's head and
-body out of the server's slot into its own memory before `handle` runs,
+Until it is answered, a request's head is
+the connection parser's own buffer, read in place. The task copies the
+head and body into its own memory before `handle` runs, as `spawn` runs it
+that far at once,
 and when `handle` answers it writes the status, the content type and the
 body back into the slot's fixed buffers, in bulk, and wakes the
 loop. The loop then sends the answer and frees the slot. Nothing the task
@@ -120,7 +124,7 @@ allocates outside the arena for a task and its region is not measured.
 
 <scalar-detail title="Answers keep request order">
 
-The handler reads a connection's next
+The server reads a connection's next
 request only once the one before it is answered, so at most one request
 per connection is in flight, and pipelined requests are answered in the
 order they came: a later request's task starts only after the earlier one
@@ -131,9 +135,9 @@ is answered, so it can never finish first.
 <scalar-detail title="A pipelined burst goes out in one write">
 
 The loop answers what the
-tasks wrote and takes what the handler queued until neither moves, so a
-handler that answers without waiting serves a whole burst in one turn.
-The handler holds each answer's send while the next request on its
+tasks wrote and takes what the connections queued until neither moves, so
+a `handle` that answers without waiting serves a whole burst in one turn.
+The loop holds each answer's send while the next request on its
 connection is queued and the output has room, and the loop flushes once
 before it parks: one write per connection per turn, and no wake byte for a
 task that answers while the loop runs.
@@ -174,7 +178,7 @@ the request to refuse; the loop answers it from the request it holds
 
 <scalar-field name="returns" type="Response">
 
-a response the server answers as `HttpHandler.refuse` does
+a response the server answers with 404, or 405 and an `Allow` field naming the methods its path has
 
 </scalar-field>
 
@@ -289,7 +293,7 @@ class Request
 | Member | |
 | --- | --- |
 | `new Request(raw: HttpRequest)` | A request over `raw`, which it keeps. |
-| `raw: HttpRequest` | The request as the handler parsed it, copied into the task: its spans, its head and its body. |
+| `raw: HttpRequest` | The request as the server parsed it, copied into the task: its spans, its head and its body. |
 | `route: i32` | The index `Router.add` answered for the route, or a negative `ROUTER_*` code. |
 | `header(name: string): string` | The value of the first header field named `name`. |
 | `method(): string` | The method. |
