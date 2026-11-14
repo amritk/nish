@@ -1046,6 +1046,22 @@
                   }
                 }
               },
+              "/config": {
+                "type": "group",
+                "title": "Configuration files",
+                "children": {
+                  "/package-json": {
+                    "type": "page",
+                    "title": "package.json",
+                    "filepath": "docs/reference/config/package-json.md"
+                  },
+                  "/capabilities-lock": {
+                    "type": "page",
+                    "title": "nish-capabilities.lock.json",
+                    "filepath": "docs/reference/config/capabilities-lock.md"
+                  }
+                }
+              },
               "/standard-library": {
                 "type": "page",
                 "title": "Standard library modules",

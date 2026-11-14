@@ -2,7 +2,7 @@
 
 # Library reference
 
-Every module a Nish program can import, one page each, generated from the doc comments of its source. The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish and grouped here by area. The language specification and the compiler's own command line and diagnostics are references too.
+Every module a Nish program can import, one page each, generated from the doc comments of its source. The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish and grouped here by area. The language specification, the compiler's own command line and diagnostics, and the configuration files it reads are references too.
 
 <scalar-grid cols="2">
 
@@ -81,6 +81,12 @@ Every command, flag and exit code of `nish`.
 <scalar-card title="Diagnostics" icon="phosphor/regular/warning-circle" href="diagnostics.md">
 
 Every diagnostic code, what it means and a program that provokes it.
+
+</scalar-card>
+
+<scalar-card title="Configuration files" icon="phosphor/regular/brackets-curly" href="config/package-json.md">
+
+Every field Nish reads in `package.json`, and the capability lockfile it writes.
 
 </scalar-card>
 
