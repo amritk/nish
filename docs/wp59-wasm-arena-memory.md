@@ -123,7 +123,8 @@ The obvious design would have codegen give each load and store a memory
 index: memory 0 for storage and memory 1 for the arena. LLVM 18 cannot do
 that, and a wasm memory cannot be chosen per pointer at run time.
 
-What I tried (`llc`, `clang` and `llvm-mc` 18.1.3):
+What I tried (`llc`, `clang` and `llvm-mc` 18.1.3). §12.1 gives each input,
+command and its output, so the run can be repeated:
 
 - `llc -march=wasm32 -mattr=help` lists `multimemory - Enable multiple
   memories.` The flag exists.
@@ -143,7 +144,9 @@ What I tried (`llc`, `clang` and `llvm-mc` 18.1.3):
 - What does work is the bulk and size instructions:
   - `llvm-mc` assembles `memory.size 1` (`3f 01`) and `memory.copy 1, 0`
     (`fc 0a 01 00`);
-  - the intrinsic `llvm.wasm.memory.size.i32(i32 1)` emits `memory.size 1`;
+  - clang's `__builtin_wasm_memory_size(1)` and
+    `__builtin_wasm_memory_grow(1, n)` emit `memory.size 1` and
+    `memory.grow 1`;
   - inline assembly in C works. This compiles with `--target=wasm32
     -mmultimemory -mbulk-memory -O2` to `memory.copy 1, 0`:
 
@@ -162,35 +165,34 @@ most. The memory that moves out is the one the page reads.
 `--export-memory`, `--import-memory`, `--initial-memory`, `--max-memory`,
 `--shared-memory` and `--stack-first`, and nothing that declares a second.
 An object that uses `memory.copy 1, 0` links without complaint, but the
-module it makes is invalid. Node refuses it: "Compiling function #0:"g"
+module it makes is invalid. Node refuses it: "Compiling function #0:"to_page"
 failed: memory index 1 exceeds number of declared memories (1)".
 
-A rewrite after the link fixes that in about 30 lines of JavaScript. It walks
-the sections, appends a memory `{ flags 0x00, min 1 }` to the memory section
-(id 5), and points the export named `memory` at index 1 in place of 0. On a
-test module with three functions:
+A rewrite after the link fixes that in 37 lines of JavaScript (§12.2). It
+walks the sections, appends a memory to the memory section (id 5), and points
+the export named `memory` at index 1 in place of 0. The new memory's limits
+are arguments: `{ flags 0x00, min }` grows, and `{ flags 0x01, min, max }`
+with `min = max` is fixed (§4.2 says which a build gets). The test module has
+four functions:
 
 - `to_page`: `memory.copy 1, 0`;
 - `ld1`: `memory.size 1`;
+- `grow1`: `memory.grow 1`;
 - `st0`: an `i32.store` to memory 0.
 
-The module grew from 174 bytes to 176. `st0(1024, 42)` left byte 1024 of the
-exported memory at 0, so memory 0 was out of the page's sight.
-`to_page(0, 1024, 4)` made bytes 0 to 3 of the exported memory `42, 0, 0, 0`.
-The exports were `memory, to_page, ld1, st0`. It ran the same under Node
-v22.23.4 and v24.22.1.
+The module grew from 333 bytes to 335 (growable) or 336 (fixed). The
+following held under Node v22.23.4 and headless Chromium 153.0.8010.12
+(§12.3):
 
-A hand-built module checked the other direction. It had two memories, a
-store and a load through memory index 1 (memarg flag `0x42`), and exported
-only memory 0. It ran under:
-
-- Node v22.23.4 (V8 12.4);
-- Node v24.22.1 (V8 13.6);
-- headless Chromium 153.0.8010.12.
-
-In each, `f()` answered 42, the exported memory's byte 0 stayed 0, and the
-exports were `memory, f`. Node 22's `--v8-options` shows
-`--experimental-wasm-multi-memory` on by default.
+- the exports were `memory, to_page, ld1, grow1, st0`;
+- `st0(1024, 42)` left byte 1024 of the exported memory at 0, so memory 0
+  was out of the page's sight;
+- `to_page(0, 1024, 4)` made bytes 0 to 3 of the exported memory
+  `42, 0, 0, 0`;
+- growable, `grow1(1)` answered the old size, 1, and detached the page's old
+  `memory.buffer`;
+- fixed at 2 pages, `grow1(1)` answered `-1`, `memory.grow(1)` from
+  JavaScript threw `RangeError`, and the old buffer stayed attached.
 
 The rewrite belongs in `scripts/build.sh`'s `wasm-host` link, directly after
 `wasm-ld` and before the optional `wasm-opt` (`:1066`). Until the rewrite
@@ -229,10 +231,11 @@ The runtime keeps the region list as an `internal` table that the module
 which owns storage writes beside its layout. Static memory holds no pointer
 from the page's side, so copying never carries an address across.
 
-This keeps WP50 §5's contract: offsets, `views()`, rings and "a view stays
-valid for the module's whole life". It gives up §5's title, "no copies", for
-storage. The cost scales with the bytes of exported storage per crossing. It
-is measured, not guessed (§9, S3).
+This keeps WP50 §5's offsets, `views()` and rings. A view's lifetime is the
+same as today in each build: whole-life under `--memory <MiB>`, and rebuilt
+after a grow without it (§4.2). It gives up §5's title, "no copies", for
+storage. The cost scales with the bytes of exported storage per crossing;
+§5.7 estimates it, and S3 measures it (§9).
 
 The two alternatives each keep "no copies" and each lose something else:
 
@@ -248,6 +251,44 @@ The two alternatives each keep "no copies" and each lose something else:
 
 S-copy changes neither the language nor any IR outside the crossings. It is
 the proposal, unless S3's numbers say no (§8).
+
+### 4.2 How memory 1 is sized, and what a grow does
+
+WP50 §5 promises a view that is never detached only under
+`--profile wasm-host --memory <MiB>`, which links memory 0 with
+`--initial-memory = --max-memory` (`scripts/build.sh:1025`–`:1029`). Without
+the flag, the page compares `memory.buffer` with the one it built its views
+over and calls `views()` again when it changes (`docs/wp50-wasm-host.md`
+§5.2). WP59 keeps both rules and applies them to memory 1.
+
+**The rewrite sizes memory 1 from the layout.** The rewrite reads every
+exported storage's `{ at, length × stride }` from the same `.data` exports the
+loader's `layout` reads (`scripts/build.sh:1016`). Call the highest end of
+those regions *mirror top*. Memory 1's minimum is
+
+  ceil((mirror top + exchange size) / 64 KiB) pages.
+
+A mirror keeps the offset it has in memory 0, wherever `wasm-ld` placed it,
+past 64 KiB or not. The bytes of memory 1 below the lowest mirror are never
+written. They are at most the size of memory 0's static data and stack.
+
+**Under `--memory <MiB>`, memory 1 is fixed too.** The rewrite gives it
+`{ flags 0x01, min, max }` with `min = max`, so `memory.buffer` is one
+`ArrayBuffer` for the module's whole life and WP50's contract holds for every
+view over memory 1 (§12.3: `memory.grow` from JavaScript throws `RangeError`,
+and `memory.grow 1` answers `-1`). The exchange area then has a fixed size. A
+crossing that does not fit panics with "exchange area full" through WP50 §6's
+panic path, as the arena panics with "out of memory". It never grows or writes
+short. Memory 0 keeps its `<MiB>`, so the module's footprint is `<MiB>` plus
+memory 1's pages. The size of the exchange area, and whether `<MiB>` should
+count both memories, are owner decisions (§8.3).
+
+**Without `--memory`, memory 1 grows.** It has a minimum and no maximum. The
+exchange area grows with `memory.grow 1`, which detaches the page's
+`memory.buffer`, as an arena grow does today (§12.3). The page keeps WP50
+§5.2's identity check and calls `views()` again. That happens less often than
+today, because an arena grow is now in memory 0 and detaches nothing the page
+holds. Only a crossing larger than any before it grows memory 1.
 
 ## 5. How values cross, and what each copy costs
 
@@ -307,10 +348,52 @@ The cost is two copies of the window, and only for a non-storage window.
 
 ### 5.6 Exchange area lifetime
 
-The exchange area is reset with the arena bracket. Its high-water mark is
-grown with `memory.grow 1` and never shrinks, just as the arena's chunks
-never return. S1 checks that `llvm.wasm.memory.grow` takes index 1, as
-`memory.size` does.
+The exchange area is reset with the arena bracket. Without `--memory`, its
+high-water mark is grown with `memory.grow 1` and never shrinks, just as the
+arena's chunks never return. Under `--memory` it is fixed (§4.2).
+`__builtin_wasm_memory_grow(1, n)` emits `memory.grow 1` (§12.1), and it
+answers `-1` on a fixed memory (§12.3).
+
+### 5.7 What the copies cost, estimated
+
+Every copy is a `memory.copy` from memory 0 to memory 1 or back. §12.4
+measured it against a copy inside memory 0, and against a JavaScript call to
+an export that does one instruction. Both runs were on one 4-core 2.1 GHz Xeon
+under Node v22.23.4, best of 5. These are hot-cache figures, the fast end of
+the range. Cold data is slower.
+
+| Bytes | memory 0 → 1 | memory 0 → 0 |
+| --- | --- | --- |
+| 64 | 4.1–4.2 ns | 4.1–4.4 ns |
+| 1 KiB | 8.3–8.9 ns | 8.4–8.9 ns |
+| 16 KiB | 79–83 ns | 79–82 ns |
+| 64 KiB | 1.16–1.20 µs | 1.19 µs |
+| 1 MiB | 15.7–19.6 µs | 15.7–19.4 µs |
+
+A trivial export call costs 2.4–2.5 ns. Crossing memories costs what copying
+within one does: the price is the bytes, not the second memory. The two runs
+differ by up to 1.25× (at 1 MiB). Runs on a shared cloud machine move more
+than that from one session to the next, so read every figure here as good to
+within 2×.
+
+Worked examples, at bytes per crossing × crossings per call:
+
+| Case | Bytes copied per call | Estimate |
+| --- | --- | --- |
+| a 1 KiB string result (§5.3) | 1 KiB × 1 | 8–9 ns |
+| a 4 KiB array argument, 1,024 `i32` (§5.1) | 4 KiB × 1 | between the 1 KiB and 16 KiB rows: 8–83 ns |
+| a 16 KiB local array lent as a window (§5.5) | 16 KiB × 2 | 160–170 ns |
+| an export over 64 KiB of exported storage (§4.1) | 64 KiB × 2 (in at entry, out at return) | 2.3–2.4 µs |
+| the same export calling one host import | 64 KiB × 4 | 4.6–4.8 µs |
+| the same export calling a host import 1,000 times | 64 KiB × 2,002 | 2.3–2.4 ms |
+
+The copies of a value that crosses (the first three rows) cost the same order
+as the JavaScript that reads or writes that value today. The storage sync
+does not. An export over 64 KiB of storage pays about a thousand times a bare
+call, every call, whether or not anything changed. An import called in a loop
+multiplies that. So the storage sync is the one cost that can decide §8.1,
+and §10.3 is how it would be cut. S3 replaces every figure here with a
+measurement of real modules (§9).
 
 ## 6. Engines, and the fallback
 
@@ -323,7 +406,7 @@ cross-checked against the web-features `wasm-multi-memory` entry:
 | Chrome / Edge | 120 (2023-12-05) | Chromium 153 ran the two-memory test module (§3.2) |
 | Firefox | 125 (2024-04-16) | |
 | Safari, Safari iOS | **not supported in stable** | Safari Technology Preview 250 (WebKit blog, 2026-08-13): "Added support for multiple memories in a single WebAssembly module"; WebKit bug 277743 is fixed. web-features: "Baseline availability blocked since April 2024 by Safari". |
-| Node.js | 22.0 | `package.json` requires `>=22.18.0`. CI pins 26.13.1. Node 22.23.4 and 24.22.1 ran both test modules. |
+| Node.js | 22.0 | `package.json` requires `>=22.18.0`. CI pins 26.13.1. Node 22.23.4 ran the test module (§12.3). |
 | Deno | 1.38 | |
 | Wasmtime | 15 | |
 | Wasmer | 7.3 | |
@@ -374,6 +457,13 @@ the release after it ships.
      a 15-byte module that declares two memories. This doubles an embedded (W6) loader's
      bytes;
    - single memory the default until Safari ships, with two memories opt-in.
+3. **The exchange area under `--memory <MiB>`** (§4.2). It is fixed, so its
+   size is a promise about the largest value that can cross one call. The
+   options:
+   - a default (1 MiB, say), with a flag beside `--memory` to change it;
+   - a share of `<MiB>`, so `<MiB>` stays the module's whole footprint;
+   - memory 1 the same size as memory 0, so no crossing can outgrow it, at
+     double the memory.
 
 S1 and S2 can land behind a build flag before either is decided. S3 makes it
 the default and waits on both.
@@ -401,7 +491,10 @@ Tests:
 - a built module that `WebAssembly.validate`s and instantiates under the
   Node CI pins;
 - `WebAssembly.Module.exports(m)` lists one memory;
-- `memory.grow 1` grows the exported memory;
+- without `--memory`, `memory.grow 1` grows the exported memory and the
+  page's views are rebuilt; under `--memory`, memory 1 declares `min = max`,
+  `memory.grow 1` answers `-1`, and a view made at instantiation is never
+  detached;
 - `node tests/run.js c-symbols`;
 - with the flag off, no IR or module byte moves.
 
@@ -424,6 +517,8 @@ Tests:
   - a window over storage and over a local array, written by the import and
     read after;
   - a panic text past 4 KiB, cut at a character;
+  - under `--memory`, a value larger than the exchange area panics with
+    "exchange area full";
   - a ring pushed by the page between calls and inside an import;
 - `nish-cmp` `DECLARED` entries for the IR that moves.
 
@@ -518,3 +613,328 @@ What lands:
   memory an access names is not known statically.
 - Dropping WH-10's bounds from the two-memory build.
 - Shared memory or threads.
+
+## 12. Appendix: the experiment, re-runnable
+
+Every claim in §3.1, §3.2, §4.2, §5.6 and §5.7 comes from the runs below. Each
+input is printed in full, and each command is followed by what it printed.
+The toolchain was `llc`, `clang`, `llvm-mc` and `wasm-ld` 18.1.3, Node v22.23.4 and headless Chromium 153.0.8010.12, on a 4-core Intel
+Xeon @ 2.10 GHz. Put the files in one empty directory and run the commands
+from it.
+
+### 12.1 What LLVM 18 does with a second memory
+
+`as.ll` and `var.ll` load through address space 2 and address space 1.
+`as.c` is the same load from C. `idx1.s` and `idx2.s` try two spellings of a
+memory index on a load; `llvm-mc` takes neither.
+`bulk.s` uses the instructions that take a memory index in LLVM 18. `mod.c` is
+the module §3.2 runs.
+
+`as.ll`:
+
+```llvm
+target triple = "wasm32-unknown-unknown"
+define i32 @ld2(ptr addrspace(2) %p) {
+  %v = load i32, ptr addrspace(2) %p
+  ret i32 %v
+}
+```
+
+`var.ll`:
+
+```llvm
+target triple = "wasm32-unknown-unknown"
+define i32 @ld1(ptr addrspace(1) %p) {
+  %v = load i32, ptr addrspace(1) %p
+  ret i32 %v
+}
+```
+
+`as.c`:
+
+```c
+int ld(__attribute__((address_space(2))) int *p) { return *p; }
+```
+
+`idx1.s`:
+
+```asm
+ld:
+  .functype ld (i32) -> (i32)
+  local.get 0
+  i32.load 1, 0
+  end_function
+```
+
+`idx2.s`:
+
+```asm
+ld:
+  .functype ld (i32) -> (i32)
+  local.get 0
+  i32.load 0 1
+  end_function
+```
+
+`bulk.s`:
+
+```asm
+f:
+  .functype f (i32, i32, i32) -> (i32)
+  memory.size 1
+  local.get 0
+  local.get 1
+  local.get 2
+  memory.copy 1, 0
+  end_function
+```
+
+`mod.c`:
+
+```c
+/* memory 0 is the program's; memory 1, once the rewrite adds it, the page's. */
+void to_page(int dst, int src, int n) {
+  __asm__ volatile("local.get %0\n\tlocal.get %1\n\tlocal.get %2\n\tmemory.copy 1, 0"
+                   :: "r"(dst), "r"(src), "r"(n) : "memory");
+}
+int ld1(void) { return __builtin_wasm_memory_size(1); }
+int grow1(int n) { return __builtin_wasm_memory_grow(1, n); }
+void st0(int *p, int v) { *p = v; }
+```
+
+The commands and their output:
+
+```text
+$ llc -march=wasm32 -mattr=help 2>&1 | grep multimemory
+  multimemory         - Enable multiple memories.
+$ llc -mattr=+multimemory as.ll -o - | grep i32.load
+	i32.load	0
+$ llc -mattr=+multimemory var.ll -o /dev/null 2>&1 | head -1
+LLVM ERROR: Encountered an unlowerable load from the wasm_var address space
+$ clang --target=wasm32 -mmultimemory -O2 -S as.c -o - | grep i32.load
+	i32.load	0
+$ llvm-mc -triple=wasm32 -mattr=+multimemory idx1.s -o /dev/null 2>&1 | head -1
+idx1.s:4:15: error: invalid operand for instruction
+$ llvm-mc -triple=wasm32 -mattr=+multimemory idx2.s -o /dev/null 2>&1 | head -1
+idx2.s:4:14: error: Expected ,, instead got: 1
+$ llvm-mc -triple=wasm32 -mattr=+multimemory,+bulk-memory -show-encoding bulk.s | grep memory
+	memory.size	1                       # encoding: [0x3f,0x01]
+	memory.copy	1, 0                    # encoding: [0xfc,0x0a,0x01,0x00]
+$ clang --target=wasm32 -mmultimemory -mbulk-memory -O2 -S mod.c -o - | grep memory\\.
+	memory.copy	1, 0
+	memory.size	1
+	memory.grow	1
+$ wasm-ld --help | grep -E -- '^  --(export|import|initial|max|shared)-memory|--stack-first'
+  --export-memory=<value> Export the module's memory with the passed name
+  --export-memory         Export the module's memory with the default name of "memory"
+  --import-memory=<module>,<name>
+  --import-memory         Import the module's memory from the default module of "env" with the name "memory".
+  --initial-memory=<value>
+  --max-memory=<value>    Maximum size of the linear memory
+  --shared-memory         Use shared linear memory
+  --stack-first           Place stack at start of linear memory rather than after data
+```
+
+### 12.2 The rewrite
+
+`rewrite.mjs` appends memory 1 to the memory section and points the export
+named `memory` at it. With one page count, memory 1 is growable; with two, its
+maximum is fixed.
+
+`rewrite.mjs`:
+
+```js
+// node rewrite.mjs in.wasm out.wasm <min-pages> [<max-pages>]
+// Appends memory 1 and points the export named `memory` at it.
+import { readFileSync, writeFileSync } from "node:fs"
+const [, , input, output, min, max] = process.argv
+const b = readFileSync(input)
+const leb = (v) => { const o = []; do { let x = v & 0x7f; v >>>= 7; if (v) x |= 0x80; o.push(x) } while (v); return o }
+const uleb = (buf, i) => { let v = 0, s = 0, x; do { x = buf[i++]; v |= (x & 0x7f) << s; s += 7 } while (x & 0x80); return [v >>> 0, i] }
+const out = [b.subarray(0, 8)]
+let p = 8
+while (p < b.length) {
+  const id = b[p]
+  const [size, start] = uleb(b, p + 1)
+  let body = b.subarray(start, start + size)
+  p = start + size
+  if (id === 5) { // memory section: a count, then each memory's limits
+    const [count, rest] = uleb(body, 0)
+    const limits = max === undefined ? [0x00, ...leb(+min)] : [0x01, ...leb(+min), ...leb(+max)]
+    body = Buffer.from([...leb(count + 1), ...body.subarray(rest), ...limits])
+  }
+  if (id === 7) { // export section: name, kind, index
+    body = Buffer.from(body)
+    let [n, i] = uleb(body, 0)
+    for (; n > 0; n--) {
+      const [len, at] = uleb(body, i)
+      const name = body.subarray(at, at + len).toString()
+      const kind = body[at + len]
+      const [index, next] = uleb(body, at + len + 1)
+      if (kind === 2 && name === "memory") {
+        if (index !== 0 || next !== at + len + 2) throw new Error("`memory` is not memory 0")
+        body[at + len + 1] = 1
+      }
+      i = next
+    }
+  }
+  out.push(Buffer.from([id, ...leb(body.length)]), body)
+}
+writeFileSync(output, Buffer.concat(out))
+```
+
+### 12.3 Linking, rewriting and running the module
+
+`run.mjs` stores 42 at address 1024 of memory 0, copies four bytes to address
+0 of memory 1, reads both through the exported memory, then grows memory 1
+from wasm and from JavaScript. `chromium.mjs` runs the same steps in headless
+Chromium through the preinstalled Playwright.
+
+`run.mjs`:
+
+```js
+// node run.mjs mod.wasm
+import { readFileSync } from "node:fs"
+const bytes = readFileSync(process.argv[2])
+const { instance } = await WebAssembly.instantiate(bytes)
+const e = instance.exports
+const page = () => new Uint8Array(e.memory.buffer)
+console.log("bytes", bytes.length, "exports", Object.keys(e).join(", "))
+e.st0(1024, 42)
+console.log("after st0(1024, 42): page[1024] =", page()[1024])
+e.to_page(0, 1024, 4)
+console.log("after to_page(0, 1024, 4): page[0..3] =", [...page().subarray(0, 4)].join(", "))
+const before = e.memory.buffer
+console.log("ld1() =", e.ld1(), "pages; grow1(1) =", e.grow1(1), "; ld1() =", e.ld1())
+console.log("old buffer detached:", before.byteLength === 0)
+try { e.memory.grow(1); console.log("memory.grow(1) from JS: ok") } catch (x) { console.log("memory.grow(1) from JS:", x.constructor.name) }
+```
+
+`chromium.mjs`:
+
+```js
+// node chromium.mjs grow.wasm fixed.wasm — the same checks in headless Chromium
+import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
+const { chromium } = createRequire(import.meta.url)("playwright")
+const browser = await chromium.launch()
+const page = await browser.newPage()
+console.log("chromium", browser.version())
+for (const f of process.argv.slice(2)) {
+  const out = await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    const { instance: { exports: e } } = await WebAssembly.instantiate(bytes)
+    e.st0(1024, 42); const a = new Uint8Array(e.memory.buffer)[1024]
+    e.to_page(0, 1024, 4); const b = [...new Uint8Array(e.memory.buffer, 0, 4)].join(", ")
+    return `${Object.keys(e).join(", ")} | page[1024] = ${a} | page[0..3] = ${b} | grow1(1) = ${e.grow1(1)}`
+  }, readFileSync(f).toString("base64"))
+  console.log(f, "|", out)
+}
+await browser.close()
+```
+
+The commands and their output:
+
+```text
+$ clang --target=wasm32 -mmultimemory -mbulk-memory -O2 -nostdlib -Wl,--no-entry -Wl,--export=to_page,--export=ld1,--export=grow1,--export=st0 mod.c -o linked.wasm
+$ node run.mjs linked.wasm 2>&1 | grep -o 'CompileError.*'
+CompileError: WebAssembly.instantiate(): Compiling function #0:"to_page" failed: memory index 1 exceeds number of declared memories (1) @+109]
+$ node rewrite.mjs linked.wasm grow.wasm 1 && node rewrite.mjs linked.wasm fixed.wasm 2 2 && wc -c linked.wasm grow.wasm fixed.wasm
+ 333 linked.wasm
+ 335 grow.wasm
+ 336 fixed.wasm
+1004 total
+$ node run.mjs grow.wasm
+bytes 335 exports memory, to_page, ld1, grow1, st0
+after st0(1024, 42): page[1024] = 0
+after to_page(0, 1024, 4): page[0..3] = 42, 0, 0, 0
+ld1() = 1 pages; grow1(1) = 1 ; ld1() = 2
+old buffer detached: true
+memory.grow(1) from JS: ok
+$ node run.mjs fixed.wasm
+bytes 336 exports memory, to_page, ld1, grow1, st0
+after st0(1024, 42): page[1024] = 0
+after to_page(0, 1024, 4): page[0..3] = 42, 0, 0, 0
+ld1() = 2 pages; grow1(1) = -1 ; ld1() = 2
+old buffer detached: false
+memory.grow(1) from JS: RangeError
+$ node chromium.mjs grow.wasm fixed.wasm
+chromium 153.0.8010.12
+grow.wasm | memory, to_page, ld1, grow1, st0 | page[1024] = 0 | page[0..3] = 42, 0, 0, 0 | grow1(1) = 1
+fixed.wasm | memory, to_page, ld1, grow1, st0 | page[1024] = 0 | page[0..3] = 42, 0, 0, 0 | grow1(1) = -1
+```
+
+### 12.4 The cost of a copy
+
+`bench.c` copies `n` bytes `reps` times, from memory 0 to memory 1 (`cross`) or
+within memory 0 (`same`; the empty `asm` keeps clang from merging the copies).
+`bench.mjs` times both at five sizes, best of 5. `call.mjs` times a JavaScript
+call to `ld1`, a one-instruction export, using `fixed.wasm` from §12.3. Memory
+0 is fixed at 8 MiB and memory 1 at 32 pages, so neither grows while timed.
+
+`bench.c`:
+
+```c
+/* `reps` copies of n bytes from memory 0 to memory 1 (cross), or within memory 0 (same). */
+void cross(int dst, int src, int n, int reps) {
+  for (int i = 0; i < reps; i++)
+    __asm__ volatile("local.get %0\n\tlocal.get %1\n\tlocal.get %2\n\tmemory.copy 1, 0"
+                     :: "r"(dst), "r"(src), "r"(n) : "memory");
+}
+void same(int dst, int src, int n, int reps) {
+  for (int i = 0; i < reps; i++) { __builtin_memcpy((char *)dst, (char *)src, n); __asm__ volatile("" ::: "memory"); }
+}
+```
+
+`bench.mjs`:
+
+```js
+// node bench.mjs bench2.wasm — ns per copy and GB/s, best of 5 runs
+import { readFileSync } from "node:fs"
+const { instance: { exports: e } } = await WebAssembly.instantiate(readFileSync(process.argv[2]))
+const SRC = 4 << 20
+for (const n of [64, 1024, 16384, 65536, 1048576]) {
+  const reps = Math.max(200, Math.floor((1 << 30) / n / 4))
+  const row = [`${n} B`]
+  for (const [name, f, dst] of [["0->1", e.cross, 0], ["0->0", e.same, 2 << 20]]) {
+    f(dst, SRC, n, 100)
+    let best = Infinity
+    for (let k = 0; k < 5; k++) { const t = process.hrtime.bigint(); f(dst, SRC, n, reps); best = Math.min(best, Number(process.hrtime.bigint() - t) / reps) }
+    row.push(`${name}: ${best.toFixed(1)} ns, ${(n / best).toFixed(1)} GB/s`)
+  }
+  console.log(row.join(" | "))
+}
+```
+
+`call.mjs`:
+
+```js
+// node call.mjs fixed.wasm — ns per JS→wasm call of a one-instruction export, best of 5
+import { readFileSync } from "node:fs"
+const { instance: { exports: e } } = await WebAssembly.instantiate(readFileSync(process.argv[2]))
+const N = 10_000_000; let best = Infinity, s = 0
+for (let k = 0; k < 5; k++) { const t = process.hrtime.bigint(); for (let i = 0; i < N; i++) s += e.ld1(); best = Math.min(best, Number(process.hrtime.bigint() - t) / N) }
+console.log(`ld1(): ${best.toFixed(1)} ns per call (${s > 0})`)
+```
+
+The commands and their output, two runs each:
+
+```text
+$ clang --target=wasm32 -mmultimemory -mbulk-memory -O2 -nostdlib -Wl,--no-entry -Wl,--export=cross,--export=same -Wl,--initial-memory=8388608,--max-memory=8388608 bench.c -o bench1.wasm && node rewrite.mjs bench1.wasm bench2.wasm 32 32
+$ node bench.mjs bench2.wasm
+64 B | 0->1: 4.1 ns, 15.6 GB/s | 0->0: 4.4 ns, 14.7 GB/s
+1024 B | 0->1: 8.9 ns, 114.7 GB/s | 0->0: 8.9 ns, 114.9 GB/s
+16384 B | 0->1: 83.4 ns, 196.4 GB/s | 0->0: 81.7 ns, 200.6 GB/s
+65536 B | 0->1: 1200.6 ns, 54.6 GB/s | 0->0: 1193.1 ns, 54.9 GB/s
+1048576 B | 0->1: 19573.0 ns, 53.6 GB/s | 0->0: 19449.4 ns, 53.9 GB/s
+$ node bench.mjs bench2.wasm
+64 B | 0->1: 4.2 ns, 15.4 GB/s | 0->0: 4.1 ns, 15.6 GB/s
+1024 B | 0->1: 8.3 ns, 123.9 GB/s | 0->0: 8.4 ns, 121.4 GB/s
+16384 B | 0->1: 79.0 ns, 207.3 GB/s | 0->0: 79.0 ns, 207.5 GB/s
+65536 B | 0->1: 1156.8 ns, 56.7 GB/s | 0->0: 1185.0 ns, 55.3 GB/s
+1048576 B | 0->1: 15694.1 ns, 66.8 GB/s | 0->0: 15719.9 ns, 66.7 GB/s
+$ node call.mjs fixed.wasm
+ld1(): 2.4 ns per call (true)
+$ node call.mjs fixed.wasm
+ld1(): 2.5 ns per call (true)
+```

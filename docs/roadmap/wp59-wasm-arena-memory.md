@@ -15,7 +15,7 @@ S1, the second memory: [§3](https://github.com/amritk/nish/blob/main/docs/wp59-
 
 ## Waiting on a decision
 
-How storage crosses (a mirror synced at the edges of a call, a memory bit per array, or a storage type of its own), and how a page that must run in Safari gets a single-memory module ([§8](https://github.com/amritk/nish/blob/main/docs/wp59-wasm-arena-memory.md#8-decisions-for-the-owner)).
+How storage crosses (a mirror synced at the edges of a call, a memory bit per array, or a storage type of its own), how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` ([§8](https://github.com/amritk/nish/blob/main/docs/wp59-wasm-arena-memory.md#8-decisions-for-the-owner)).
 
 ## Not planned
 
