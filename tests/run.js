@@ -16368,27 +16368,34 @@ if (dealtHere("arrayChecks")) {
         .map((line) => line.replace(/#.*/, "").trim())
         .filter(Boolean)
         .map((line) => line.split(/\s+/))
-    // Builds `src` as is and `refSrc` (`src` itself but for the negative below)
-    // with `--no-elision`, and runs each of `runs` under both. `refused` is why nothing was compared: `"no-run"` (none
-    // listed), `"build"` (a side did not compile or link) or `"no-loop"` (the
-    // default build has no `rec.head`, so no loop is under test). Otherwise each
-    // run answers whether both sides showed the same and whether they panicked.
-    const accDiff = (label, src, runs, refSrc = src) => {
+    // Builds `src` as is and `refSrc` with `refFlags` (`src` and `--no-elision`
+    // but for the negatives below), and runs each of `runs` under both.
+    // `refused` is why nothing was compared: `"no-run"` (none listed),
+    // `"build"` (a side did not compile or link), `"no-loop"` (the default
+    // build has no `rec.head`, so no loop is under test) or `"reference-loop"`
+    // (the reference has one, so it is no recursion to compare against).
+    // Otherwise each run answers whether both sides showed the same and
+    // whether they panicked.
+    const accDiff = (label, src, runs, refSrc = src, refFlags = ["--no-elision"]) => {
       if (runs.length === 0) {
         return { refused: "no-run", detail: "its .panics names no run", runs: [] }
       }
       const exes = []
       for (const [side, from, extra] of [
         ["default", src, []],
-        ["--no-elision", refSrc, ["--no-elision"]],
+        ["reference", refSrc, refFlags],
       ]) {
-        const base = path.join(diffDir, `${label}${extra.length ? "-reference" : ""}`)
+        const base = path.join(diffDir, `${label}${side === "reference" ? "-reference" : ""}`)
         const built = spawnSync(NISH, [from, "-o", `${base}.ll`, ...extra], { cwd: root, encoding: "utf8" })
         if (built.status !== 0) {
           return { refused: "build", detail: `${side} build: ${built.stderr}`, runs: [] }
         }
-        if (extra.length === 0 && !fs.readFileSync(`${base}.ll`, "utf8").includes("\nrec.head:")) {
+        const hasLoop = fs.readFileSync(`${base}.ll`, "utf8").includes("\nrec.head:")
+        if (side === "default" && !hasLoop) {
           return { refused: "no-loop", detail: "the default build has no rec.head loop", runs: [] }
+        }
+        if (side === "reference" && hasLoop) {
+          return { refused: "reference-loop", detail: "the reference build has a rec.head loop", runs: [] }
         }
         const linked = linkNative(base, `${base}.ll`)
         if (linked.status !== 0) {
@@ -16433,13 +16440,15 @@ if (dealtHere("arrayChecks")) {
     // The differential can fail. A reference built from acc_soundness, whose
     // case 0 divides by zero where acc_overflow's adds past MAX, gives a pair
     // that exits 1 both ways and differs on stderr; a run that exits 0, a
-    // build with no loop and a `.panics` of comments alone are each failed or
+    // build with no loop, a reference built without `--no-elision` (a loop on
+    // both sides) and a `.panics` of comments alone are each failed or
     // refused. Judged by the verdict, not its text.
     const overflowSrc = path.join(casesDir, "acc_overflow.ts")
     const divergent = accDiff("divergent", overflowSrc, [["0"]], path.join(casesDir, "acc_soundness.ts"))
     const exitsZero = accDiff("exits-zero", overflowSrc, [[]])
     const noLoop = accDiff("no-loop", path.join(casesDir, "acc_ineligible.ts"), [["0"]])
     const noRun = accDiff("no-run", overflowSrc, accPanicRuns("# none\n\n  # still none\n"))
+    const refLoop = accDiff("reference-loop", overflowSrc, [["0"]], overflowSrc, [])
     for (const [what, ok, detail] of [
       [
         "a pair that panics differently is a difference",
@@ -16452,6 +16461,7 @@ if (dealtHere("arrayChecks")) {
         exitsZero.detail + exitsZero.runs.map((r) => r.detail).join("\n"),
       ],
       ["a default build with no rec.head is refused", noLoop.refused === "no-loop", noLoop.detail],
+      ["a reference build with a rec.head is refused", refLoop.refused === "reference-loop", refLoop.detail],
       ["a .panics of comments and blank lines alone is refused", noRun.refused === "no-run", noRun.detail],
     ]) {
       check(`acc_ overflow differential: ${what}`, ok, detail)
