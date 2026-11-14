@@ -32026,6 +32026,79 @@ total. In `fib`, `fib(n - 1)` stays a call and `fib(n - 2)` is the back edge.
 `acc_ineligible`).
 
 <!-- cookbook:begin opt-recursion-loop -->
+```ts
+const fib = (n: i32): i32 => {
+  if (n < 2) {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+export const test = (): i32 => fib(30)
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+
+define internal noundef i32 @fib(i32 noundef %n.in) #0 {
+entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %11, %if.end ]
+  %rec.sum = phi i64 [ 0, %entry ], [ %17, %if.end ]
+  %rec.min = phi i64 [ 0, %entry ], [ %14, %if.end ]
+  %rec.max = phi i64 [ 0, %entry ], [ %16, %if.end ]
+  %0 = icmp slt i32 %n, 2
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = sext i32 %n to i64
+  %2 = add i64 %rec.sum, %1
+  %3 = sub i64 %2, 2147483647
+  %4 = add i64 %2, 2147483648
+  %5 = icmp slt i64 %rec.min, %3
+  %6 = icmp sgt i64 %rec.max, %4
+  %7 = or i1 %5, %6
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %8 = trunc i64 %2 to i32
+  ret i32 %8
+
+if.end:
+  %9 = sub nsw i32 %n, 1
+  %10 = call i32 @fib(i32 %9)
+  %11 = sub nsw i32 %n, 2
+  %12 = sext i32 %10 to i64
+  %13 = icmp slt i64 %rec.sum, %rec.min
+  %14 = select i1 %13, i64 %rec.sum, i64 %rec.min
+  %15 = icmp sgt i64 %rec.sum, %rec.max
+  %16 = select i1 %15, i64 %rec.sum, i64 %rec.max
+  %17 = add i64 %rec.sum, %12
+  br label %rec.head
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test() #0 {
+entry:
+  %0 = tail call i32 @fib(i32 30)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
 <!-- cookbook:end opt-recursion-loop -->
 
 ### `--target`
