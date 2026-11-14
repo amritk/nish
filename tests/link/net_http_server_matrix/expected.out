@@ -1,0 +1,33 @@
+PASS  h2c: CONNECT is answered 501
+PASS  h2c: OPTIONS * is answered 204, with no allow
+PASS  h2c: 100 fields past the pseudo-headers are answered 431
+PASS  h2c: a declared body past maxBody 1000 is answered 413, then the stream reset NO_ERROR
+PASS  h2c: an undeclared one is answered 413 when it passes it, then the stream reset NO_ERROR
+PASS  h2c: no screen answer carries alt-svc
+PASS  h2c: the program took none of them
+PASS  h2c: an answer given on a later turn is sent
+PASS  h2c: a response past maxResponseFields is dropped
+PASS  h2c: nothing of it is written, and the stream is reset INTERNAL_ERROR
+PASS  h2c: a window of one byte carries /hello one byte per frame, to its end
+PASS  h3: CONNECT answered
+PASS  h3: CONNECT is answered 501
+PASS  h3: OPTIONS * is answered 204, with no allow
+PASS  h3: 100 fields past the pseudo-headers are answered 431
+PASS  h3: a declared body past maxBody 1000 is answered 413, its sending stopped H3_NO_ERROR
+PASS  h3: an undeclared one is answered 413 when it passes it, its sending stopped H3_NO_ERROR
+PASS  h3: the program took none of them
+PASS  h3: an answer given on a later turn is sent
+PASS  h3: a response past maxResponseFields is dropped
+PASS  h3: nothing of it is written, and the stream is reset H3_INTERNAL_ERROR
+PASS  h3: no alt-svc on an HTTP/3 response
+PASS  h3: a window of one byte carries /hello one byte at a time, to its end
+PASS  HTTP/1.1 with an HTTP/3 listener: alt-svc names its port
+PASS  HTTP/1.1: OPTIONS * is answered 204 with alt-svc and no allow
+PASS  HTTP/1.1: a program's own alt-svc is kept, once
+PASS  HTTP/2 over TLS: a screen answer carries alt-svc
+PASS  HTTP/2 over TLS: a program's own alt-svc is kept, once
+PASS  HTTP/1.1 with no HTTP/3 listener: no alt-svc
+PASS  altSvcMaxAge 0 with no HTTP/3 listener: alt-svc: clear
+PASS  altSvcMaxAge 0 with one: alt-svc: clear
+PASS  altSvcPort: alt-svc names it, not the socket's
+http server matrix: 32 passed, 0 failed, 0 skipped

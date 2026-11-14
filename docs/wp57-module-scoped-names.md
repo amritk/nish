@@ -6,8 +6,7 @@ would change still holds:
 across the whole program, and where this note and LANGUAGE.md disagree,
 LANGUAGE.md wins. The stages are in §8 and on
 [the roadmap page](roadmap/wp57-module-scoped-names.md). S2 waits on a
-decision (§6). The plan that tracks the stages is
-[`.claude/plans/wp57-module-scoped-names.plan.md`](../.claude/plans/wp57-module-scoped-names.plan.md).
+decision (§6).
 
 Every claim about today's compiler is anchored at commit `0bf1ddbb`, on
 `main`. Read [wp5-modules.md](wp5-modules.md) first: whole-program compilation

@@ -497,6 +497,11 @@ same world, pools and instance list.
    a string or array that the loader decodes or copies *inside* the bracket
    (§7). An import receives windows that are lent for the call only.
 
+The rules keep the module's own stores from reaching the arena. The page still
+can: it holds the one memory, arena included.
+[WP59](wp59-wasm-arena-memory.md) proposes a second memory, not exported, for
+the arena.
+
 Together the two rules mean the arena's mark is the same at the end of every
 call as at its start. That is a property of the types, not of the program's
 care: no rewrite of the program can break it while it still compiles. In fixed
@@ -1011,6 +1016,7 @@ Each would be its own note, on its own measurement:
   page, which then calls an export with the result. Later, WP49's lowering of
   an `async` function to a fixed-size state machine could run on wasm with the
   page as its executor: it resolves the promise and calls a resume export.
-  That would let module code write `await gpuReady()`. It is its own note.
+  That would let module code write `await gpuReady()`. It is its own note,
+  [wp54-async-wasm.md](wp54-async-wasm.md), proposed.
 - **Regions on freestanding wasm.** §6 shows the driven module does not need
   them.

@@ -554,6 +554,12 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+/** The changelog line of the stage that folds a JSON number's digits as `number()` scans them. */
+const NUMBER_ONE_PASS = "Parse a JSON number in one pass"
+const numberOnePass = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: NUMBER_ONE_PASS, why }))
+  )
 const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
 const taggedUnions = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1981,6 +1987,13 @@ const DECLARED = [
       why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
     })
   ),
+  // WP39 G5: the goodput bench picks CUBIC, new in std/net/quic-recovery.
+  {
+    program: "bench/quic-goodput.ts",
+    file: "exit",
+    changelog: "CUBIC congestion control for QUIC",
+    why: "the program imports QUIC_RECOVERY_CUBIC from nish/net/quic-recovery, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+  },
   // nish/raster, nish/synth and nish/host/game are new std modules, so the
   // seed refuses the programs that import them.
   ...[
@@ -4604,6 +4617,23 @@ const DECLARED = [
       "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
     }
   ),
+  ...numberOnePass(
+    "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
+    {
+      "bench/json-tokenizer/main.ts": ["main.h"],
+      "bench/json-value/main.ts": ["main.h"],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.h"],
+      "docs/cookbook/json-value.ts": ["json-value.h"],
+      "tests/link/std_json_conformance/main.ts": ["main.h"],
+      "tests/link/std_json_equal/main.ts": ["main.h"],
+      "tests/link/std_json_number/main.ts": ["main.h"],
+      "tests/link/std_json_pointer/main.ts": ["main.h"],
+      "tests/link/std_json_value/main.ts": ["main.h"],
+      "tests/link/std_json_value_ranges/main.ts": ["main.h"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json-tokenizer.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-tokenizer.ll"],
+    }
+  ),
   {
     program: "tests/cases/caps_process_spawn_piped_within.ts",
     file: "exit",
@@ -6356,6 +6386,51 @@ const DECLARED = [
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
+  // g7-facade: `nish/net/http-server` is new, so the 0.38.0 seed refuses every program that imports it.
+  ...[
+    "tests/link/net_http_server/main.ts",
+    "tests/link/net_http_server_bad_limit/main.ts",
+    "tests/link/net_http_server_bad_param/main.ts",
+    "tests/link/net_http_server_bad_watch/main.ts",
+    "tests/link/net_http_server_caps/main.ts",
+    "tests/link/net_http_server_carriers/main.ts",
+    "tests/link/net_http_server_end_short/main.ts",
+    "tests/link/net_http_server_end_unstarted/main.ts",
+    "tests/link/net_http_server_foreign/main.ts",
+    "tests/link/net_http_server_h1_fields/main.ts",
+    "tests/link/net_http_server_h1_head/main.ts",
+    "tests/link/net_http_server_h1_slots/main.ts",
+    "tests/link/net_http_server_h1_twice/main.ts",
+    "tests/link/net_http_server_h2_connect/main.ts",
+    "tests/link/net_http_server_h2_head/main.ts",
+    "tests/link/net_http_server_h2_refused/main.ts",
+    "tests/link/net_http_server_h2_slots/main.ts",
+    "tests/link/net_http_server_h2_twice/main.ts",
+    "tests/link/net_http_server_h2c/main.ts",
+    "tests/link/net_http_server_h3_head/main.ts",
+    "tests/link/net_http_server_h3_slots/main.ts",
+    "tests/link/net_http_server_h3_twice/main.ts",
+    "tests/link/net_http_server_h3_webtransport/main.ts",
+    "tests/link/net_http_server_lifecycle/main.ts",
+    "tests/link/net_http_server_matrix/main.ts",
+    "tests/link/net_http_server_start_fields/main.ts",
+    "tests/link/net_http_server_start_length/main.ts",
+    "tests/link/net_http_server_start_refused/main.ts",
+    "tests/link/net_http_server_start_status/main.ts",
+    "tests/link/net_http_server_start_twice/main.ts",
+    "tests/link/net_http_server_take_none/main.ts",
+    "tests/link/net_http_server_timeouts/main.ts",
+    "tests/link/net_http_server_unbegun/main.ts",
+    "tests/link/net_http_server_wait_tls/main.ts",
+    "tests/link/net_http_server_write_long/main.ts",
+    "tests/link/net_http_server_write_unstarted/main.ts",
+    "tests/link/net_http_server_write_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "handler for HTTP/1.1, 2 and 3 with Alt-Svc",
+    why: "`nish/net/http-server` is a new module, which the 0.38.0 seed does not have, so only the candidate compiles the program",
+  })),
   {
     program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
     file: "exit",
