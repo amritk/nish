@@ -139,7 +139,26 @@ the header comment of `src/emit-accumulate.ts`.
 - **Tree sum** (a depth-20 tree of class nodes, summed 60 times, `return
   t.value + sum(t.left) + sum(t.right)`): median 318 ms → 191 ms, 15
   interleaved runs; two copies of the new binary differ by 191 against
-  179 ms, so the band is about 6 %.
+  179 ms, so the band is about 6 %. The program is `bench/treesum.ts`'s `fn`
+  kernel.
+
+A method qualifies as well when it belongs to a non-generic, non-atomic class
+of its module and its self call is `r.m(args)` on a receiver of that class
+(issue #1612): Nish has no inheritance and no interface methods, so the call
+is statically bound, and the receiver is the loop's first parameter, a
+`%this` phi. `TreeNode.sum()`, the same walk as a method, is `bench/treesum.ts`'s
+`method` kernel. Main's compiler against this one, 15 runs of each after 2
+warm-ups, interleaved, two rounds:
+
+- **`method` kernel**: median 269.6 / 223.4 ms → 263.3 / 208.3 ms. The `fn`
+  kernel, which both compilers already looped, moved 319.1 / 275.3 →
+  319.0 / 258.8 ms in the same rounds, so the band here is about 7 % and the
+  method's gain (2 % and 7 %) is inside it: the walk is bound by its loads,
+  and the call it saves was cheap.
+- **fib(40)** does not move: 0.92x / 0.89x of Rust before, 0.92x / 0.92x
+  after (`bench/run.mjs --only fib --runs 15 --warmup 2`).
+- **AWFY `List`**, whose `Element.length` now loops: median 174.8 / 177.7 ms
+  → 175.6 / 170.4 ms (`List 10 1500`), no change outside the band.
 
 `tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
 effects, the soundness shapes (permuted arguments, a nested split, a panic
