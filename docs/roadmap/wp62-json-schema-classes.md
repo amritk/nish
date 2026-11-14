@@ -15,7 +15,7 @@ S1: [§12](https://github.com/amritk/nish/blob/main/docs/wp62-json-schema-classe
 
 ## Waiting on a decision
 
-[§10](https://github.com/amritk/nish/blob/main/docs/wp62-json-schema-classes.md#10-decisions-for-the-owner): whether WP62 replaces WP61's generator stage, a reverse generator, `readOnly`/`writeOnly`, unknown and `x-*` keywords, nullable `boolean` and type-discriminated unions, presence flags, field-name style, and where the generator lives.
+[§10](https://github.com/amritk/nish/blob/main/docs/wp62-json-schema-classes.md#10-decisions-for-the-owner): whether WP62 replaces WP61's generator stage, a reverse generator, `readOnly`/`writeOnly`, unknown and `x-*` keywords, nullable `boolean` and type-discriminated unions, presence flags, field-name style, where the generator lives, and whether `format` is checked by default.
 
 ## Not planned
 
