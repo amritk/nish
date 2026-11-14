@@ -46,7 +46,7 @@
 
 import { Operands, splice, Walk } from "./emit-ts-edits"
 import { FLAG_EXPORTED, Node, NodeKind } from "./nodes"
-import { jsonQuote, StringBuilder } from "./strings"
+import { addJsonQuoted, StringBuilder } from "./strings"
 
 /** The control row's rewrite of `node`, or `null` to leave it to the next row. */
 export const controlRow = (walk: Walk, node: Node, operands: Operands): string | null => {
@@ -211,8 +211,12 @@ const enumText = (walk: Walk, node: Node): string | null => {
     const index = info.members.get(member.children[0].text, -1)
     // A string member is written as its string, the value `tsc` gives it;
     // a numeric one as the integer the checker folded.
-    const value = info.isString ? jsonQuote(info.memberStrings[index]) : `${info.memberValues[index]}`
-    sb.add(`${member.children[0].text}: ${value}`)
+    if (info.isString) {
+      sb.add(`${member.children[0].text}: `)
+      addJsonQuoted(sb, info.memberStrings[index])
+    } else {
+      sb.add(`${member.children[0].text}: ${info.memberValues[index]}`)
+    }
     sb.add(text.substring(member.end, i + 1 < members.length ? members[i + 1].start : node.end))
     i = i + 1
   }

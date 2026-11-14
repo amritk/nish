@@ -358,8 +358,6 @@ export class TypeTable {
    */
   memberEnums: i32[]
   memberTables: i32[][]
-  /** The enum `enumMemberOf` last looked up and its `memberTables` index: runs ask for one enum. */
-  lastMemberEnum: i32
   /**
    * Every string enum, and `stringEnumTexts[i]` the strings of `stringEnums[i]`'s
    * members by ordinal: the table `String(r)` loads from and typed JSON matches
@@ -369,6 +367,8 @@ export class TypeTable {
   stringEnumTexts: string[][]
   /** The member names of `stringEnums[i]`, by ordinal, for a refusal that names one. */
   stringEnumNames: string[][]
+  /** The enum `enumMemberOf` last looked up and its `memberTables` index: runs ask for one enum. */
+  lastMemberEnum: i32
   lastMemberAt: i32
   /**
    * `nish:secret`: the struct id of every `Secret<T>` instance -> the id of

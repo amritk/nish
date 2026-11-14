@@ -1196,32 +1196,45 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[], laysOut
  */
 const refuseStringEnums = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
   const table = compilation.table
-  for (const fn of fns) {
-    const sig = fn.sig
-    let what = ""
+  // The loop only finds the first offender, so it allocates nothing; the
+  // message is built once, after it. `param` is the parameter, or -1 for the
+  // result.
+  let found = -1
+  let param = -1
+  let f = 0
+  while (found < 0 && f < fns.length) {
+    const sig = fns[f].sig
     if (holdsStringEnum(table, sig.returnType)) {
-      what = `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
+      found = f
     }
     let i = 0
-    while (what.length === 0 && i < sig.paramTypes.length && i < sig.paramNames.length) {
+    while (found < 0 && i < sig.paramTypes.length && i < sig.paramNames.length) {
       if (holdsStringEnum(table, sig.paramTypes[i])) {
-        what = `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[i]}\` is \`${table.typeName(sig.paramTypes[i])}\``
+        found = f
+        param = i
       }
       i = i + 1
     }
-    if (what.length > 0) {
-      const at = sigNameNode(sig)
-      compilation.sink.report(
-        fn.unit.source,
-        at.start,
-        at.end,
-        `${what}, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version,` +
-          " so take or return a `string` and convert with `String(r)` and a `switch`"
-      )
-      return false
-    }
+    f = f + 1
   }
-  return true
+  if (found < 0) {
+    return true
+  }
+  const fn = fns[found]
+  const sig = fn.sig
+  const what =
+    param < 0
+      ? `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
+      : `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[param]}\` is \`${table.typeName(sig.paramTypes[param])}\``
+  const at = sigNameNode(sig)
+  compilation.sink.report(
+    fn.unit.source,
+    at.start,
+    at.end,
+    `${what}, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version,` +
+      " so take or return a `string` and convert with `String(r)` and a `switch`"
+  )
+  return false
 }
 
 /** A string enum, or one of its member types, anywhere in `type`: itself, an element, a nullable's value or a `Result` arm. */
