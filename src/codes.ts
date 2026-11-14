@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 930
+export const RULE_COUNT: i32 = 932
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -313,6 +313,8 @@ const diagnosticRules = (): string[] => [
   "NL2698",
   "` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead",
   "NL2767",
+  " parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names",
+  "NL2772",
   "`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer",
   "NL2473",
   "` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested",
@@ -329,6 +331,8 @@ const diagnosticRules = (): string[] => [
   "NL2599",
   " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`",
   "NL2371",
+  " parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead",
+  "NL2771",
   "--emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const",
   "NL4012",
   "` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new ",
@@ -371,6 +375,8 @@ const diagnosticRules = (): string[] => [
   "NL2756",
   "` is set again while it may still hold a `Secret`: a `Secret` field is set once, in its class's constructor, and the key it held would be lost unwiped",
   "NL2543",
+  "`: a `Map` or `Set` in this version has no `entries`, because there is no destructuring; `forEach((value, key) => ...)` visits each key with its value",
+  "NL2356",
   "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
   "NL2456",
   "A `Secret` cannot be indexed or be an index: either reads key material outside `expose`, and an index that depends on a key is a cache-timing channel",
@@ -451,8 +457,6 @@ const diagnosticRules = (): string[] => [
   "NL3050",
   "` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body",
   "NL2474",
-  "`: a `Map` or `Set` in this version has no `entries`, because there is no destructuring; `forEach((value, key) => ...)` visits each key with its value",
-  "NL2356",
   "` has a type parameter's type, so a default cannot be one value: the type is the caller's, and TypeScript refuses a constant for it too",
   "NL2596",
   ": a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record",
@@ -525,6 +529,8 @@ const diagnosticRules = (): string[] => [
   "NL2643",
   '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`',
   "NL2669",
+  "`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach",
+  "NL2359",
   "`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)",
   "NL2764",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
@@ -647,8 +653,6 @@ const diagnosticRules = (): string[] => [
   "NL2759",
   "` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on",
   "NL2672",
-  "`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach",
-  "NL2359",
   ", and a handle starts as `0`, the handle that names nothing: every other one is given out by the page",
   "NL2670",
   "; a function name must be unique across the program, and an instantiation is named after its template",

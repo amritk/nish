@@ -1379,12 +1379,17 @@ export const callLetCaptureMessage = (name: string): string =>
   "function, whose value is the one the arrow is handed; bind the value to a `const` before the call, " +
   `\`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
 
-/** The refusal for an assignment to a name an arrow given to an ordinary function's parameter captures. */
-export const callCaptureWriteMessage = (name: string): string =>
+/**
+ * The refusal for an assignment to a name an arrow given to an ordinary
+ * function's parameter captures; a `forEach` callback is pointed at the
+ * `for...of` loop it stands for.
+ */
+export const callCaptureWriteMessage = (name: string, forEach: boolean): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: an arrow argument is handed ` +
   "what it captures as an argument when the call is made, so an assignment would change only its own copy; " +
   "make the arrow answer the value and assign it after the call, or write through an object the function " +
-  "holds (`box.n = v`, `list.push(v)`)"
+  "holds (`box.n = v`, `list.push(v)`)" +
+  (forEach ? `; a \`forEach\` is a \`for...of\` loop, whose body may assign \`${name}\`, so write that loop instead` : "")
 
 /** The refusal for a function parameter of the function around an arrow, which the arrow calls or names. */
 export const functionParamCaptureMessage = (name: string): string =>
