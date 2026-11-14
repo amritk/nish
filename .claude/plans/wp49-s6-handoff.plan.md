@@ -74,9 +74,30 @@ stages:
       - id: build-measure
         content: "Before (main) and after (the branch), interleaved in one container: profile.sh Ir per request with frames on plaintext and json, run.sh --only plaintext / json / db, VmHWM on the three serve probes, examples/http-app /health and /notes/17 Ir; figures with the band in the PR body and a Measured trailer. No judged or recorded cell (the other db tests included) worse than main by more than its band"
         status: pending
+  - id: router
+    title: "perf(net): cut Router.match's instructions per request for every route kind"
+    goal: Router.match costs fewer instructions per request on fixed routes, parametrised routes and 404s alike — none worse beyond noise — measured on examples/http-app (/health, /notes/17, a 404), a 44-route router and the async TFB entry, with every match result, parameter and limit unchanged; merged independently of the hand-off build.
+    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_router && node tests/run.js net_serve && node tests/run.js tfb_async_entry && node tests/run.js tfb_async_db && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && node docs/check-links.mjs && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && bash bench/techempower/profile.sh --only plaintext && bash bench/techempower/profile.sh --only json (main and the branch, interleaved)
+    status: pending
+    todos:
+      - id: router-profile
+        content: "Profile Router.match and walk under callgrind on main (examples/http-app /health, /notes/17 and a 404; a 44-route router; the async TFB entry's plaintext and json) and attribute their ~530 Ir per request by line and callee before changing code. Explicit uses targetIs; #1514 measured a fixed-path table at 506 → 491 on /health, nothing on /notes/17 and 527 → 570 on a 404, and dropped it — a design that makes 404s or parametrised routes slower is out"
+        status: pending
+      - id: router-cut
+        content: "Remove the general per-match cost the profile names (method dispatch, segment scanning, per-node comparisons, param bookkeeping, bounds checks the prover cannot discharge, or what the profile names instead) so every route kind gains; same matches, same precedence, same params, same RouterLimits and the same negative diagnostics. No benchmark-only path; nothing in bench/techempower/"
+        status: pending
+      - id: router-tests
+        content: "Pin behaviour with tests that fail on a wrong match: fixed vs parametrised precedence, trailing slash, methods, 404 and 405 if Router has them, every RouterLimits bound; keep net_router_negative_* unchanged. Show the exact LLVM IR for every TypeScript snippet added to the tests"
+        status: pending
+      - id: router-measure
+        content: "Before (main) and after (branch), interleaved in one container: Ir per match for each route kind on http-app and the 44-route router, profile.sh Ir per request on plaintext and json with Router's frames; figures with the noise band in the PR body and a Measured trailer"
+        status: pending
+      - id: router-docs
+        content: "docs/security/router.md (the match path's findings, before/after tests or recorded open), the http-router guide page if a user sees anything change, docs/reference via scripts/gen-reference.mjs, regenerated tests/self/goldens/checked, nish-cmp DECLARED entries in the PR title's words"
+        status: pending
   - id: regate
     title: "docs(runtime): re-measure WP49 stage 6's gate after the hand-off build"
-    goal: run.sh, unchanged, re-measures every judged and recorded cell on main after the build merged, docs/BENCHMARKS.md carries a new section with before (main before the build) and after, and WP49 §6, §10, the status line and docs/roadmap/wp49-async-server.md read stage 6 built if and only if every judged cell is inside the band.
+    goal: run.sh, unchanged, re-measures every judged and recorded cell on main after the build and router stages merged, docs/BENCHMARKS.md carries a new section with before (main before the build) and after, and WP49 §6, §10, the status line and docs/roadmap/wp49-async-server.md read stage 6 built if and only if every judged cell is inside the band.
     verification: npm run lint && node docs/check-links.mjs && bash bench/techempower/run.sh --only plaintext && bash bench/techempower/run.sh --only json && bash bench/techempower/run.sh --only db (foreground, on main at the build's merge, and on the pre-build main SHA)
     status: pending
     todos:
@@ -113,17 +134,16 @@ figure; the 7,848 vs 4,814 baseline predates #1493.
   spawns, and both draft spike PRs are closed then.
   - Neither spike moves plaintext by more than its band against main → stop
     and report; nothing is built.
-  - The chosen spike's projection (main's gap minus its saved Ir) still leaves
-    plaintext outside the band and the remainder is Router → the lead reports
-    that with the frame table and **asks the owner** whether a Router fast path
-    joins the build. Until then it is out of scope.
+  - Router: the owner added a Router stage (2026-11-14 06:25Z), run in
+    parallel; the decide step no longer asks about it.
   - B chosen and it makes `Request.raw` read-only or a view → **ask the owner**
     before `build` spawns.
 
 ## Stage order
 
-`spike-a` ∥ `spike-b` → (`remeasure`, only if needed) → decide → `build` →
-`regate` (on main after `build` merges). Spikes never merge, so their shared
+`spike-a` ∥ `spike-b` → (`remeasure`, only if needed) → decide → `build`;
+`router` in parallel with all of them; `regate` on main after `build` and
+`router` both merge. Spikes never merge, so their shared
 files (`std/net/serve.ts`) are not a conflict.
 
 ### spike-a
@@ -136,7 +156,11 @@ files (`std/net/serve.ts`) are not a conflict.
 **Owns:** nothing — measures three existing heads and sends one table.
 
 ### build
-**Owns:** `std/net/serve.ts`, `std/net/handler.ts`, `runtime/runtime-async.c`, `runtime/async.{mjs,d.mts}` if touched (the kqueue path lives in runtime-async.c), `src/emit-async.ts`, `src/async-check.ts`, (B only: `src/check*.ts`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/cookbook/**`), `tests/link/net_serve*/**`, `tests/cases/**` (new cases only), `tests/runtime-budgets.js`, `docs/wp7-runtime.md`, `docs/security/{serve,async}.md`, `docs/security/README.md`, `docs/guide/using-nish/{async-server,http-router}.md`, `docs/reference/**`, `tests/self/goldens/checked/**`, `tests/differential/goldens/**`, `tests/nish-cmp.js`, `scalar.config.json`. Not `bench/techempower/**`, not `std/net/router.ts` unless the owner adds a Router fast path.
+**Owns:** `std/net/serve.ts`, `std/net/handler.ts`, `runtime/runtime-async.c`, `runtime/async.{mjs,d.mts}` if touched (the kqueue path lives in runtime-async.c), `src/emit-async.ts`, `src/async-check.ts`, (B only: `src/check*.ts`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/cookbook/**`), `tests/link/net_serve*/**`, `tests/cases/**` (new cases only), `tests/runtime-budgets.js`, `docs/wp7-runtime.md`, `docs/security/{serve,async}.md`, `docs/security/README.md`, `docs/guide/using-nish/async-server.md`, `docs/reference/**`, `tests/self/goldens/checked/**`, `tests/differential/goldens/**`, `tests/nish-cmp.js`, `scalar.config.json`. Not `bench/techempower/**`, not `std/net/router.ts` (the router stage's).
+
+### router
+Added by the owner at 06:25Z on 2026-11-14, after spike-a's upper bound left Router as most of the projected remainder. Runs in parallel with the spikes and the build; merges on its own.
+**Owns:** `std/net/router.ts`, `tests/link/net_router*/**`, `tests/cases/**` (new router cases only), `docs/security/router.md`, `docs/guide/using-nish/http-router.md`. Shared generated files (`docs/reference/**`, `tests/self/goldens/checked/**`) are regenerated, and `tests/nish-cmp.js` keeps both sides' DECLARED entries: whichever of router and build merges second syncs with `npm run sync-main`.
 
 ### regate
 **Owns:** `docs/BENCHMARKS.md` (outside generated blocks), `docs/wp49-async-server.md`, `docs/roadmap/wp49-async-server.md`
