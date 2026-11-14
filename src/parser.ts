@@ -75,7 +75,9 @@ import {
   Node,
   NodeKind,
   awaitsInitializer,
+  isPlainSlot,
   patternReceiverName,
+  patternSlotName,
 } from "./nodes"
 import {
   TOK_AMP,
@@ -2258,10 +2260,10 @@ export class Parser {
     for (let i = 0; i < pattern.children.length; i++) {
       const slot = pattern.children[i]
       const object = slot.kind === NodeKind.Property
-      const name = object ? slot.children[0] : slot
-      if (name.kind !== NodeKind.Ident || slot.flags !== 0 || name.flags !== 0) {
+      if (!isPlainSlot(slot)) {
         continue
       }
+      const name = patternSlotName(slot)
       const read = this.node(object ? NodeKind.Member : NodeKind.Index, slot.start, slot.end)
       const base = this.node(NodeKind.Ident, slot.start, slot.end)
       base.text = receiver

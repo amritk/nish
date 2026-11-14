@@ -44,7 +44,7 @@
 
 import { isSortInstance } from "./arrays"
 import { Operands, splice, Walk } from "./emit-ts-edits"
-import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
+import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind, PATTERN_NAMES_AT } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 import { STORAGE_NAMESPACE } from "./emit-ts-storage"
@@ -645,7 +645,7 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
  */
 const patternChecks = (walk: Walk, decl: Node, t: string): string => {
   let checks = ""
-  for (let i = 3; i < decl.children.length; i++) {
+  for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
     const read = decl.children[i].children[2]
     if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
       checks = `${checks}${walk.helperName("idx")}(${t}, ${read.children[1].text}), `
@@ -657,7 +657,11 @@ const patternChecks = (walk: Walk, decl: Node, t: string): string => {
 /** `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t, 2), t))(xs)`. */
 const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
   // A `for...of` head's has no value of its own: `checkedPatternHead`.
-  if (node.children[0].kind !== NodeKind.BindingPattern || node.children[2].kind === NodeKind.Empty) {
+  if (
+    node.children[0].kind !== NodeKind.BindingPattern ||
+    node.children[0].text !== "[" ||
+    node.children[2].kind === NodeKind.Empty
+  ) {
     return null
   }
   const t = walk.temporary()
@@ -681,7 +685,7 @@ const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string 
     return null
   }
   const decl = head.children[0].children[0]
-  if (decl.children[0].kind !== NodeKind.BindingPattern) {
+  if (decl.children[0].kind !== NodeKind.BindingPattern || decl.children[0].text !== "[") {
     return null
   }
   const t = walk.temporary()

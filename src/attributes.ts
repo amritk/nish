@@ -98,7 +98,7 @@ import {
 } from "./emit-util"
 import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
-import { FLAG_CONST, FLAG_OBJECT_SPREAD, Node, NodeKind } from "./nodes"
+import { FLAG_CONST, FLAG_OBJECT_SPREAD, Node, NodeKind, PATTERN_NAMES_AT } from "./nodes"
 import { Options } from "./options"
 import {
   CaptureTarget,
@@ -1338,7 +1338,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
  */
 const classifyPatternUse = (unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse => {
   let kind = USE_NONE
-  let i = 3
+  let i = PATTERN_NAMES_AT
   while (i < decl.children.length) {
     const found = classifyUse(unit, table, decl.children[i].children[2].children[0])
     if (found.kind === USE_WRITE || (found.kind === USE_READ && kind !== USE_WRITE)) {

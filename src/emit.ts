@@ -196,7 +196,7 @@ import {
   SHA256_KERNEL,
 } from "./kernels"
 import { StringMap, StringSet } from "./map"
-import { FLAG_USING, Node, NodeKind, nodeName } from "./nodes"
+import { FLAG_USING, Node, NodeKind, PATTERN_NAMES_AT, nodeName } from "./nodes"
 import { Options } from "./options"
 import { TbaaCache } from "./tbaa"
 import { irEscapeInto, StringBuilder } from "./strings"
@@ -1566,7 +1566,7 @@ export class Emitter {
    * receiver is the element, stored each pass.
    */
   emitPatternNames(decl: Node): void {
-    for (let i = 3; i < decl.children.length; i++) {
+    for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
       this.emitVariableDeclaration(decl.children[i])
     }
   }

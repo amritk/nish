@@ -222,7 +222,7 @@ export enum NodeKind {
   // child the IDENT or pattern it binds (FLAG_COMPUTED for a key that is not
   // a plain name). `...r` is FLAG_REST and `a = 1` FLAG_DEFAULT on the slot,
   // kept so the checker can refuse each by name. A local `const`/`let` and a
-  // `for...of` head take a flat one (`src/destructure.ts`); a parameter's,
+  // `for...of` head take a flat one (`Parser.lowerPattern`); a parameter's,
   // a module constant's and a `catch` binding's are refused (NL2192, NL2191).
   BindingPattern = 73,
 
@@ -668,6 +668,26 @@ export const nodeName = (kind: NodeKind): string => {
  * can name it.
  */
 export const patternReceiverName = (pattern: Node): string => `pattern.${pattern.start}`
+
+/**
+ * Where a destructuring declarator's names start: after its pattern,
+ * annotation and initializer, `Parser.lowerPattern` appends one declarator
+ * per name it binds.
+ */
+export const PATTERN_NAMES_AT: i32 = 3
+
+/** What a pattern slot binds: an object entry's child, or an array slot itself. */
+export const patternSlotName = (slot: Node): Node =>
+  slot.kind === NodeKind.Property ? slot.children[0] : slot
+
+/**
+ * Whether a pattern slot binds a plain name, with no default, rest or
+ * computed key: the slots `Parser.lowerPattern` gives a declarator.
+ */
+export const isPlainSlot = (slot: Node): boolean => {
+  const name = patternSlotName(slot)
+  return name.kind === NodeKind.Ident && slot.flags === 0 && name.flags === 0
+}
 
 /**
  * Whether a declarator's initializer is an `await`, parenthesised or not: a

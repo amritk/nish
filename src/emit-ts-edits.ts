@@ -62,7 +62,7 @@ import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
 import { isBuiltinSpecifier, isExecutorCall, isNetExport, nishExport } from "./nish-modules"
-import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind } from "./nodes"
+import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind, PATTERN_NAMES_AT } from "./nodes"
 import { CheckedProgram, Instantiation, STRUCT_INTERFACE } from "./program"
 import { sourceOrder } from "./script"
 import { StringBuilder } from "./strings"
@@ -746,7 +746,7 @@ const inOptionalChain = (node: Node): boolean => {
  */
 const writtenChildren = (node: Node): i32 =>
   node.kind === NodeKind.VarDecl && node.children[0].kind === NodeKind.BindingPattern
-    ? 3
+    ? PATTERN_NAMES_AT
     : node.children.length
 
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */

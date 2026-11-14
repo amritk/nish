@@ -19,7 +19,7 @@ import { AwaitEdge, FunctionSig } from "./program"
 import { recordRegionCall } from "./region-rules"
 import { Scope } from "./symbols"
 import { T_BOOL, T_ERROR, T_I32, T_I64, T_STRING, T_VOID, isNumeric } from "./types"
-import { Node, NodeKind } from "./nodes"
+import { Node, NodeKind, isPlainSlot } from "./nodes"
 
 /** `awaitAll`'s arity, WP24 §9.3's fixed-arity join. */
 const AWAIT_ALL_MIN: i32 = 2
@@ -432,8 +432,8 @@ export const isAwaitAllShape = (decl: Node): boolean => {
   if (pattern.kind !== NodeKind.BindingPattern || pattern.text !== "[" || pattern.children.length === 0) {
     return false
   }
-  for (const name of pattern.children) {
-    if (name.kind !== NodeKind.Ident || name.flags !== 0) {
+  for (const slot of pattern.children) {
+    if (!isPlainSlot(slot)) {
       return false
     }
   }

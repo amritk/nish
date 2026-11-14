@@ -75,7 +75,10 @@ import {
   Node,
   NodeKind,
   awaitsInitializer,
+  isPlainSlot,
   patternReceiverName,
+  patternSlotName,
+  PATTERN_NAMES_AT,
 } from "./nodes"
 import { JSON_OPTIONS, jsonOptionsShapeMessage } from "./json-typed"
 import { caseValue } from "./constants"
@@ -496,10 +499,10 @@ const checkPatternNames = (
     return
   }
   const info = structOf(ctx, type)
-  for (let i = 3; i < decl.children.length; i++) {
+  for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
     const named = decl.children[i]
     const read = named.children[2]
-    if (info !== null && read.kind === NodeKind.Member && info.fieldIndex.get(read.text, -1) < 0) {
+    if (info !== null && read.kind === NodeKind.Member && info.field(read.text) === null) {
       ctx.error(
         named,
         `Cannot destructure field \`${read.text}\`: ${ctx.table.typeName(type)} has no such field`
@@ -521,21 +524,20 @@ const patternReceiverFits = (ctx: CheckContext, pattern: Node, type: i32, at: No
   if (type === T_ERROR) {
     return false
   }
-  const shown = ctx.table.typeName(type)
   const info = structOf(ctx, type)
   if (ctx.table.isNullable(type) || ctx.table.isMaybe(type)) {
     ctx.error(
       at,
-      `Cannot destructure ${shown}, which may be absent; narrow it first, as in \`if (p !== null)\``
+      `Cannot destructure ${ctx.table.typeName(type)}, which may be absent; narrow it first, as in \`if (p !== null)\``
     )
   } else if (type === T_STRING) {
     ctx.error(at, "A `string` cannot be destructured; read each character by its index")
   } else if (info !== null && isMapOwner(info)) {
     ctx.error(at, "A `Map` cannot be destructured; read each value with `get`")
   } else if (pattern.text === "{" && (info === null || !ctx.table.isStruct(type))) {
-    ctx.error(at, `An object pattern reads a class or interface value, got ${shown}`)
+    ctx.error(at, `An object pattern reads a class or interface value, got ${ctx.table.typeName(type)}`)
   } else if (pattern.text === "[" && !ctx.table.isArray(type)) {
-    ctx.error(at, `An array pattern reads an array, got ${shown}`)
+    ctx.error(at, `An array pattern reads an array, got ${ctx.table.typeName(type)}`)
   } else {
     return true
   }
@@ -550,7 +552,7 @@ const declarePatternNames = (
   mutable: boolean,
   type: i32
 ): void => {
-  for (let i = 3; i < decl.children.length; i++) {
+  for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
     const named = decl.children[i]
     declareLocal(ctx, scope, named, named.children[0], named.children[0].text, type, mutable, null)
   }
@@ -563,8 +565,8 @@ const declarePatternNames = (
  */
 const declareRefusedSlots = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean): void => {
   for (const slot of decl.children[0].children) {
-    const name = slot.kind === NodeKind.Property ? slot.children[0] : slot
-    if (name.kind === NodeKind.Ident && (slot.flags !== 0 || name.flags !== 0)) {
+    const name = patternSlotName(slot)
+    if (name.kind === NodeKind.Ident && !isPlainSlot(slot)) {
       declareLocal(ctx, scope, name, name, name.text, T_ERROR, mutable, null)
     }
   }
@@ -1239,7 +1241,7 @@ const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
  */
 const refusePattern = (ctx: CheckContext, pattern: Node): void => {
   for (const slot of pattern.children) {
-    const name = slot.kind === NodeKind.Property ? slot.children[0] : slot
+    const name = patternSlotName(slot)
     const flags = slot.flags | name.flags
     if ((flags & FLAG_REST) !== 0) {
       ctx.error(
