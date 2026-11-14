@@ -13,8 +13,8 @@ D2). It is WP39's E5
 ([docs/wp39-http-server.md](../../docs/wp39-http-server.md)).
 
 **It is not submitted.** Sending an entry to TechEmpower/FrameworkBenchmarks
-puts a public number on the project, so whether and when to do it is the
-owner's call (WP39 D1). The entry is run and measured from this directory,
+puts a public number on the project, so whether and when to do it is an
+open question (WP39 D1). The entry is run and measured from this directory,
 and nothing here is sent upstream: no pull request against
 TechEmpower/FrameworkBenchmarks, and no rank claimed from a run whose load
 generator shares the server's machine.
@@ -171,7 +171,7 @@ request, it is answered 503.
   Each row is a lookup of its own id, but one statement carries many rows, and
   a request that is alone in its turn gets one statement carrying all of its
   rows. TFB's rules forbid bulk-selecting a request's rows in one query, so
-  whether this complies is **unresolved**. It is the owner's call, made before
+  whether this complies is **unresolved**. It is an open question, settled before
   any submission, and this stage does not make it. If the answer is no, the
   fallback is a pipelined one-statement-per-row mode: each id is its own
   `select id, randomnumber from world where id = $1`, many of them in flight

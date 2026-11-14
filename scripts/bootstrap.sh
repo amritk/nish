@@ -155,7 +155,7 @@ install=$stages
 build_to=$stages
 [ "$verify" -eq 1 ] && build_to=3
 
-# The published npm package ships bin/, runtime/, scripts/ and std/ but not
+# The published npm package ships bin/, runtime/, scripts/build.sh and std/ but not
 # src/ -- and, since 0.6.0, no compiler of its own at all -- so say which file
 # is missing rather than failing inside the compiler.
 if [ ! -f src/compile.ts ]; then

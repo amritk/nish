@@ -46,9 +46,9 @@ notice that lists the files it was taken from.
 The fourth is `std/json-tokenizer.ts`, whose decimal-to-double conversion
 (`jsonTokEiselLemire`), table of powers of five and eight-digit reads
 (`jsonTokEightDigits`, `jsonTokParseEight`) are adapted from fast_float,
-and the fifth is `scripts/gen-json-pow5.mjs`, which regenerates that table and
-ships because `package.json`'s `files` names `scripts/`. The package carries
-`std/LICENSE-fast-float` beside them. fast_float is offered under Apache-2.0,
+and the fifth is `scripts/gen-json-pow5.mjs`, which regenerates that table in
+the repository; it does not ship. The package carries
+`std/LICENSE-fast-float` beside the tokenizer. fast_float is offered under Apache-2.0,
 MIT or the Boost Software License 1.0, and this repository takes the Boost
 licence, as it does Zmij's, so as with Zmij a program built with `nish/json` needs
 no notice of its own.

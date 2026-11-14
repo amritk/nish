@@ -1880,6 +1880,13 @@ const DECLARED = [
       why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
     })
   ),
+  // WP39 G5: the goodput bench picks CUBIC, new in std/net/quic-recovery.
+  {
+    program: "bench/quic-goodput.ts",
+    file: "exit",
+    changelog: "CUBIC congestion control for QUIC",
+    why: "the program imports QUIC_RECOVERY_CUBIC from nish/net/quic-recovery, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+  },
   // nish/raster, nish/synth and nish/host/game are new std modules, so the
   // seed refuses the programs that import them.
   ...[
