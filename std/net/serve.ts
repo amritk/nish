@@ -1,6 +1,7 @@
 /**
  * `nish/net/serve` — an HTTP/1.1 server for an `async` program: one task and
- * one region per request, answers in request order.
+ * one region per request, answers in request order. (WP49 stage 6 spike A:
+ * prototyping a per-connection task in place of a spawn per request.)
  *
  *     import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve"
  *     import { Router, RouterLimits } from "nish/net/router"
