@@ -55,7 +55,8 @@
  * **What is unchecked.** `routerSameBytes` reads with `nish:unsafe`'s
  * `uncheckedGet`, after one check that both ranges are inside their arrays;
  * a range that is not compares unequal, as a byte that differs does. It is
- * the one byte compare a lookup makes: the method against each known one,
+ * the one byte compare a lookup makes: a method of more than seven bytes
+ * against each known one (a shorter one is one packed word, `routerMethodKey`),
  * a path against a static route's, a segment against a label. Every other
  * read is checked.
  *
