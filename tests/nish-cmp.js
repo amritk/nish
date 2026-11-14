@@ -1274,7 +1274,7 @@ const RECURSION_LOOP_WHY =
 const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop"
 const RECURSION_METHOD_WHY =
   "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
-const RECURSION_WIDTH = "Emit self-recursive checked sums of every checked integer width as a loop"
+const RECURSION_WIDTH = "Emit self-recursive checked i64 sums as a loop"
 const RECURSION_WIDTH_WHY =
   "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`"
 
