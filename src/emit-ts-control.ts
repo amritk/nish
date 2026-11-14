@@ -35,8 +35,10 @@
 //   not count; `caught` rethrows anything that is not a propagation.
 // - `enum E { A, B = 5 }` becomes `const E = { A: 0, B: 5 } as const;` and
 //   `type E = (typeof E)[keyof typeof E];`, with the checker's member values,
-//   and a member as a type, `E.A`, becomes `(typeof E.A)`. Nish has numeric
-//   enums only, so there is no string member to write.
+//   and a member as a type, `E.A`, becomes `(typeof E.A)`. A string enum,
+//   `enum R { A = "a" }`, writes each member as its string, `{ A: "a" }`:
+//   that is the value `tsc` gives the member, and what `String(R.A)` and
+//   typed JSON answer natively.
 // - `Arena.used()` and `Arena.mark()` become the runtime's `arenaUsed` and
 //   `arenaMark`.
 // - A `Result` annotation asks for the runtime's `Result`, so the output
@@ -44,7 +46,7 @@
 
 import { Operands, splice, Walk } from "./emit-ts-edits"
 import { FLAG_EXPORTED, Node, NodeKind } from "./nodes"
-import { StringBuilder } from "./strings"
+import { jsonQuote, StringBuilder } from "./strings"
 
 /** The control row's rewrite of `node`, or `null` to leave it to the next row. */
 export const controlRow = (walk: Walk, node: Node, operands: Operands): string | null => {
@@ -207,7 +209,10 @@ const enumText = (walk: Walk, node: Node): string | null => {
   while (i < members.length) {
     const member = members[i]
     const index = info.members.get(member.children[0].text, -1)
-    sb.add(`${member.children[0].text}: ${info.memberValues[index]}`)
+    // A string member is written as its string, the value `tsc` gives it;
+    // a numeric one as the integer the checker folded.
+    const value = info.isString ? jsonQuote(info.memberStrings[index]) : `${info.memberValues[index]}`
+    sb.add(`${member.children[0].text}: ${value}`)
     sb.add(text.substring(member.end, i + 1 < members.length ? members[i + 1].start : node.end))
     i = i + 1
   }

@@ -1382,6 +1382,13 @@ export class EnumInfo {
   members: StringMap
   memberNames: string[]
   memberValues: i32[]
+  /**
+   * A string enum: every member is a string literal, its value is its
+   * ordinal, and `memberStrings` holds the strings in that order, which is
+   * the table `String(r)` and typed JSON read.
+   */
+  isString: boolean
+  memberStrings: string[]
 
   constructor(name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean) {
     this.name = name
@@ -1393,6 +1400,15 @@ export class EnumInfo {
     this.members = new StringMap()
     this.memberNames = []
     this.memberValues = []
+    this.isString = false
+    this.memberStrings = []
+  }
+
+  /** A string member: its value is the next ordinal and `text` its string. */
+  addStringMember(name: string, text: string): void {
+    this.isString = true
+    this.memberStrings.push(text)
+    this.addMember(name, this.memberValues.length)
   }
 
   addMember(name: string, value: i32): void {

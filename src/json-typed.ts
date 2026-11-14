@@ -156,7 +156,7 @@ const jsonStringLiteral = (node: Node): string => {
  * `"\ud800"` in the source is stored as its three bytes) and nothing past
  * U+10FFFF.
  */
-const jsonIsUtf8 = (s: string): boolean => {
+export const jsonIsUtf8 = (s: string): boolean => {
   const n = s.length
   let i = 0
   while (i < n) {

@@ -61,7 +61,8 @@ import {
   Node,
   NodeKind,
 } from "./nodes"
-import { StringSet } from "./map"
+import { StringMap, StringSet } from "./map"
+import { jsonIsUtf8 } from "./json-typed"
 import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
 import {
@@ -633,12 +634,39 @@ export class Checker {
       this.ctx.table.nameOf(type),
       isExported(stmt)
     )
+    // Phase 0 has seen to it that a string enum's members are all string
+    // literals, so its first member says which kind this is.
+    const isString = members.children[0].children[1].kind === NodeKind.String
+    const strings = new StringMap()
     let next = toI64(0)
     for (const member of members.children) {
       const memberName = member.children[0].text
       if (info.hasMember(memberName)) {
         this.ctx.error(member.children[0], `Duplicate member \`${memberName}\` in enum \`${name}\``)
         return
+      }
+      if (isString) {
+        // A string member is its ordinal, so two members of one string would
+        // be two values `tsc` reads as one: the string has to name one member.
+        const text = member.children[1].text
+        if (strings.has(text)) {
+          const first = info.memberNames[strings.get(text, 0)]
+          this.ctx.error(
+            member.children[1],
+            `Enum member \`${name}.${memberName}\` repeats the string of \`${name}.${first}\`: each member of a string enum has its own string, because the string is how JSON and \`String\` name the member`
+          )
+          return
+        }
+        if (!jsonIsUtf8(text)) {
+          this.ctx.error(
+            member.children[1],
+            `Enum member \`${name}.${memberName}\` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8`
+          )
+          return
+        }
+        strings.set(text, info.memberNames.length)
+        info.addStringMember(memberName, text)
+        continue
       }
       let value = next
       const initializer = member.children[1]
