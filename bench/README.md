@@ -1,6 +1,6 @@
 # Nish benchmark suite
 
-Seven programs, each written four times with the same data layout and the same
+Nine programs, each written four times with the same data layout and the same
 expression order (so the floating-point results agree bit for bit): Nish
 (`.ts`), C (`.c`, `clang -O3`), Go (`.go`, `go build`) and Rust (`.rs`,
 `rustc -C opt-level=3 -C panic=abort -C codegen-units=1`). `bench/run.mjs`
@@ -52,6 +52,7 @@ Build products go to `build/bench/`.
 | `vec3` | a `Vec3` class with methods called in a tight loop, no allocation in the loop | `--number-mode f64` | 5e7 iterations | position and energy |
 | `result` | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency | | 2e8 calls | `15873` |
 | `math` | ten kernels, each its own row (`math/<kernel>`, the kernel named on the command line): `Math.atan2`, `tan` and `hypot` (Nish's from `std/math.ts`, a port of fdlibm; libm in C and Rust, Go's own `math` package in the Go column), `Math.sign` on `i32` and `f64`, `Math.imul`, and float `Math.round`, `min` and `max` with JavaScript's -0 and NaN, and `f32ToBits`; inputs walk a 4096-entry table seeded with NaN, ±0, ±Infinity and the round-half edges, and every result is folded through its f32 bits | `--number-mode f64` | 2e7 libm calls, 1.6e8 for the rest | one line per kernel |
+| `treesum` | two kernels, each its own row: `treesum/fn` walks the tree with a free function, `return t.value + sum(t.left) + sum(t.right)` (the self-recursive checked sum [wp9](../docs/wp9-optimisation.md#self-recursive-checked-sums-as-a-loop) measured), and `treesum/method` with a `TreeNode.sum()` method that tests each child for `null` before it calls; the twins use a heap node with two nullable children (`malloc`, `&TreeNode{…}`, `Box`) and the same recursion | | depth 20 (2^20 − 1 nodes), 60 passes | one line per kernel |
 
 Every size is chosen so the C version runs for at least a quarter of a second
 on the reference machine (a 2.1 GHz Xeon virtual machine): fib(35) and a
@@ -427,13 +428,13 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the twenty-one programs: the
-seven above, the four map layout prototypes, the three `Map` measurements and
+`bench/instructions.json` holds one count for each of the twenty-two programs: the
+first eight above (`treesum` is not counted), the four map layout prototypes, the three `Map` measurements and
 the seven AWFY ports. `npm test`
 fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all twenty-one and print them against the baseline
+node bench/run.mjs --instructions            # count all twenty-two and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
@@ -512,7 +513,7 @@ If one does not, it exits 2 and names the count it misread.
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
 version and the commit, and leaves the sizes and the tolerance alone. The
 file-level `commit` and `valgrind` describe every count, so only an update of
-all twenty-one restamps them. `--update --only Queens` stamps a `commit` and
+all twenty-two restamps them. `--update --only Queens` stamps a `commit` and
 `valgrind` on the Queens entry alone, and the next full update clears them. Those two
 are edited by hand. A pull request that runs `--update` shows the table it
 printed, the old count against the new one for every benchmark it moves, and
