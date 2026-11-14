@@ -11,6 +11,7 @@ Pick the shape by what the work is:
 | a fold: a sum, a count, a maximum | [`parallelReduce`](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
 | a few unlike jobs at once | [`scope` + `spawn`](#different-tasks-at-once-using-s--scope) |
 | a shared counter, minimum, maximum or flag | [`AtomicI32` / `AtomicI64`](#counting-without-a-lock-atomici32-and-atomici64) |
+| many shared counters: a histogram, a count per route | [`AtomicI32Array` / `AtomicI64Array`](#many-counters-in-one-buffer-atomici32array-and-atomici64array) |
 | a shared structure that tasks update | [`Mutex<T>`](#sharing-a-value-mutext) |
 | a pipeline: tasks that produce values for one that consumes them | [`Channel<T>`](#passing-values-channelt) |
 
@@ -903,6 +904,71 @@ export const main = (): i32 => {
   return seen[0];
 };
 ```
+
+## Many counters in one buffer: `AtomicI32Array` and `AtomicI64Array`
+
+When there are many counters, or they are hot, keep them in one atomic array:
+`new AtomicI32Array(n)` is `n` atomic `i32`s side by side in one buffer, each
+starting at `0`. Every method of `AtomicI32` has a twin that takes the
+element's index first, so `hits.add(r, 1)` adds 1 to counter `r` in one
+indivisible step. This counts requests and bytes per route from a parallel
+function:
+
+```ts nish:ok
+import { AtomicI32Array, AtomicI64Array, parallelFrom } from "nish/threads";
+
+const ROUTES: i32 = 4; // 0 = /, 1 = /login, 2 = /api, 3 = anything else
+
+export const main = (): i32 => {
+  const hits = new AtomicI32Array(ROUTES);  // one counter per route, one buffer
+  const bytes = new AtomicI64Array(ROUTES); // bytes served per route
+  const routes: i32[] = [0, 2, 2, 1, 2, 3, 0, 2];
+  const sizes: i64[] = [512, 90, 120, 300, 80, 64, 512, 100];
+  const seen = parallelFrom(routes.length, (i): i32 => {
+    hits.add(routes[i], 1);        // one indivisible add on element routes[i]
+    bytes.add(routes[i], sizes[i]);
+    return routes[i];
+  });
+  for (let r = 0; r < hits.length; r++) {
+    console.log(`route ${r}: ${hits.load(r)} hits, ${bytes.load(r)} bytes`);
+  }
+  return seen.length - routes.length; // 0
+};
+```
+
+It prints:
+
+```text
+route 0: 2 hits, 1024 bytes
+route 1: 1 hits, 300 bytes
+route 2: 4 hits, 390 bytes
+route 3: 1 hits, 64 bytes
+```
+
+- **The methods**: `load(i)`, `store(i, v)`, `add(i, n)`, `sub(i, n)`,
+  `min(i, v)`, `max(i, v)`, `exchange(i, v)` and
+  `compareExchange(i, expected, desired)`, each doing to element `i` what
+  `AtomicI32`'s does to its counter. `length` says how many elements there
+  are; it is fixed when the array is made.
+- **An index out of range stops the program**, as it does for any array:
+  `index out of range: 16 >= 16`, exit status 1.
+- **The rules are the atomic's.** Only call its methods; don't touch it in the
+  scope's block once the first task is spawned; scopes opened by one `using`
+  don't share one; make the updates commute. An `AtomicI64Array` holds `i64`s
+  with the same ±2^53 limit under Node, so give it `i64` values, as `sizes`
+  is above.
+
+**When to choose it over `AtomicI32[]`.** An `AtomicI32[]` is one object per
+counter, each its own allocation, so sixteen counters end up spread over
+several cache lines, and the cores that update them pass those lines back and
+forth. An `AtomicI32Array(16)` is sixteen adjacent `i32`s in 64 contiguous
+bytes, the layout Rust's `[AtomicI32; 16]` has. Binning 3.2 million values
+into 16 bins on four cores (`bench/par-histogram-atomic.ts`) runs about twice
+as fast on the array as on sixteen `AtomicI32`s. Use an `AtomicI32` for one
+counter, or for counters that belong to different objects. And a tally no other
+core touches is cheaper still: when you can, count into a task's own local
+array and add it to the shared one once, at the task's end, as the example
+above does.
 
 ## Passing values: `Channel<T>`
 

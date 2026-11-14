@@ -4301,7 +4301,8 @@ const atomicMemberMessage = (name: string): string =>
 
 const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
   `\`${table.typeName(type)}\` is a class of \`nish/threads\`, and its objects are made only as the module ` +
-  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
+  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, " +
+  "`new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
   "An object literal would be a plain record under Node, with none of the methods the class is used through"
 
 const lockNotUsingMessage = (name: string, mutex: string): string =>

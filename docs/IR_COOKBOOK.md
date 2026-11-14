@@ -2875,6 +2875,92 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end thread-atomic -->
 
+### `nish/threads`: an atomic array
+
+`AtomicI32Array` and `AtomicI64Array` hold their length and one array,
+`values`, which no program may name (docs/LANGUAGE.md, "Atomic arrays"). The
+elements are the array's buffer, one allocation, so sixteen `i32`s are 64 contiguous
+bytes. Each method is an instance in `nish/threads`'s module, as an
+atomic's is, whose body the emitter writes: the element's address, checked as
+an array index is checked, and then the one sequentially consistent
+instruction an `AtomicI32` method is, on that element. The bounds check is an
+ordinary one, so the optimizer may drop it once the caller's index is proven
+in range:
+
+```llvm
+define noundef i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture %this, i32 noundef %i, i32 noundef %delta) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32Array, %struct.AtomicI32Array* %this, i32 0, i32 1
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !24
+  %2 = sext i32 %i to i64
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %5 = icmp ult i64 %2, %4
+  br i1 %5, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %2, i64 %4)
+  unreachable
+
+bounds.ok:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 %2
+  %10 = atomicrmw add i32* %9, i32 %delta seq_cst, align 4
+  ret i32 %10
+}
+```
+
+The other methods differ only in the last instruction, which is the
+`AtomicI32` method's. No element is an object of its own, so there is no
+element pointer to load between the buffer and the `atomicrmw`. Below, the
+caller; every instance, exactly as emitted, is in
+`tests/link/thread_atomic_array/threads.ll`.
+
+<!-- cookbook:begin thread-atomic-array -->
+```ts
+import { AtomicI32Array } from "nish/threads"
+
+export const count = (bins: AtomicI32Array, x: i32): i32 => {
+  bins.add(x & 15, 1)
+  return bins.load(0)
+}
+```
+
+```llvm
+%struct.AtomicI32Array = type { i32, %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish.AtomicI32Array.constructor(%struct.AtomicI32Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.load(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef) #0
+declare void @nish.AtomicI32Array.store(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.sub(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.min(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.max(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.exchange(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.compareExchange(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+
+define noundef i32 @count(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture %bins, i32 noundef %x) #0 {
+entry:
+  %0 = and i32 %x, 15
+  %1 = call i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* %bins, i32 %0, i32 1)
+  %2 = call i32 @nish.AtomicI32Array.load(%struct.AtomicI32Array* %bins, i32 0)
+  ret i32 %2
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end thread-atomic-array -->
+
 ### `nish/threads`: a channel of scalars
 
 A `Channel<T>` holds one `i64` word, `state`, that the runtime owns
