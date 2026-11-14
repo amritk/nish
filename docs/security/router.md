@@ -26,8 +26,10 @@ passed, and only when every pair fits. Nothing was found to fix or left open.
 A route with no parameter and no `*` is also filed in an exact-path table that
 `match` reads before the tree (WP49 stage 6). The table answers only the route
 the tree would have answered (ROUTE-10), a lookup in it reads the path once
-and at most eight slots whatever the client sends (ROUTE-11), and its one
-unchecked comparison reads inside ranges already checked (ROUTE-12).
+and at most eight slots whatever the client sends (ROUTE-11), and the one
+unchecked comparison reads only inside ranges it has just checked (ROUTE-12).
+A method of up to seven bytes is found by one packed word, which tells two
+methods apart exactly when their bytes differ (ROUTE-13).
 Two properties a reader might assume are not provided, by design, and are
 recorded as accepted: dot segments are not removed (ROUTE-8) and the path is
 matched before it is decoded (ROUTE-9).
@@ -36,7 +38,7 @@ matched before it is decoded (ROUTE-9).
 
 | File | Functions |
 | --- | --- |
-| `std/net/router.ts` | `RouterLimits`; `Router` (`add`, `splitPattern`, `childFor`, `addChild`, `growStatic`, `fileStatic`, `methodIndex`, `match`, `matchTree`, `enter`, `staticRoute`, `descend`, `walk`, `endpointFor`, and the accessors `routes`, `nodeCount`, `paramCount`, `staticCount`, `lastVisited`); `routerDecode`; the helpers `routerLimit`, `routerTchar`, `routerSegmentKind`, `routerSameName`, `routerLabelIsText`, `routerSameBytes`, `routerSameRange`, `routerHashOf`, `routerHashWith`, `routerSlot`, `routerOutside`, `routerNoRoute`, `routerHex` |
+| `std/net/router.ts` | `RouterLimits`; `Router` (`add`, `splitPattern`, `childFor`, `addChild`, `growStatic`, `fileStatic`, `methodIndex`, `match`, `matchTree`, `enter`, `staticRoute`, `descend`, `answer`, `walk`, `endpointFor`, and the accessors `routes`, `nodeCount`, `paramCount`, `staticCount`, `lastVisited`); `routerDecode`; the helpers `routerLimit`, `routerTchar`, `routerSegmentKind`, `routerSameName`, `routerLabelIsText`, `routerSameBytes`, `routerMethodKey`, `routerHashOf`, `routerHashWith`, `routerSlot`, `routerOutside`, `routerNoRoute`, `routerHex` |
 
 Out of scope: the carriers that hand the router its method and target
 (`docs/security/http1-codec.md`, `http2.md`, `http3.md`), which have already refused
@@ -60,7 +62,8 @@ from `add`, or a panic in the constructor for a limit out of range.
 Rows ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, each
 checked and found to hold; they are recorded so that the audit can see what
 was tried. ROUTE-8 and ROUTE-9 are accepted. ROUTE-10 to ROUTE-12 are what the
-exact-path table adds to the surface, checked the same way. None is counted as
+exact-path table adds to the surface, and ROUTE-13 what the packed method
+compare adds, checked the same way. None is counted as
 fixed or open in the index.
 
 | Id | Severity | Where | Description | Disposition |
@@ -75,8 +78,9 @@ fixed or open in the index.
 | ROUTE-8 | Low | `match` | Dot segments (`.` and `..`) and empty segments are matched as bytes, not removed as RFC 3986 §5.2.4 removes them, so `/public/../admin` reaches a `/public/*` route with `../admin` as its pair, not an `/admin` route. A program that guards a prefix by its route, and serves files from a parameter, must refuse such a parameter itself. | **Accepted.** Normalising would make the route a target reaches differ from the bytes it spells. Refusing dot segments in a parameter is the caller's job today; the static-file stage that will normalise the path it serves (`docs/wp43-http-app-layer.md`) is planned, not built. The guide says so: a decoded parameter can hold `/`, `..` and NUL. |
 | ROUTE-9 | Low | `match`, `routerDecode` | The path is matched before it is decoded, so `/%61dmin` does not reach an `/admin` route, while a proxy that decodes first would send it there. | **Accepted.** Decoding first would let `%2F` split a segment, which is the worse confusion; a pattern refuses `%`, so no route can be spelled encoded. RFC 3986 §6.2.2.2 makes `%61` and `a` equivalent, so a server behind a decoding proxy routes on what it receives. |
 | ROUTE-10 | Medium if it failed | `staticRoute`, `fileStatic` | The exact-path table must not answer a route the tree would not: a static route beside a parameter or a `*`, the same path under another method, a trailing slash, another case, an escape, a path that is a prefix of a filed one, two routes filed in one run of slots. | **Holds.** A slot answers only when its route's method is the request's and its stored path is the request's path byte for byte, to the first `?`; the hash chooses where to look and decides nothing. The tree tries a literal first at every segment, so the route it reaches for such a path is that one, with no pairs. Anything else, a 405 and a 404 included, is the tree's answer unchanged. `matchTree` is the tree alone, and the test asks both. |
-| ROUTE-11 | Medium if it failed | `staticRoute`, `fileStatic`, `growStatic` | A client must not be able to make the table slow: paths chosen to collide, a very long path, many requests. | **Holds.** The client adds nothing to the table: it holds only routes `add` filed, at most `maxRoutes`. A lookup reads the path once, and only when the target is no longer than the longest filed path, then at most `ROUTER_PROBES` (8) slots, stopping at the first empty one; each slot costs a comparison of at most that length. `add` keeps four slots a route and files a route only within eight slots of its home, leaving it to the tree otherwise, so no run a lookup follows is longer. The hash is not keyed and need not be: a chosen path can reach a full run. What a miss costs is stated plainly: a target no longer than the longest static route that the table does not hold now pays one hash pass over its path and up to eight slots, each a length compare and at most one byte comparison of that length, and then the same tree walk it paid before the table existed. That is more than before by a bounded amount the server's own routes set, never by one the client sets; a target longer than the longest static route pays nothing new. |
-| ROUTE-12 | High if it failed | `routerSameRange`, `enter`, `staticRoute` | The comparison that reads without a bounds check (`nish:unsafe`) must not read outside either array. | **Holds.** It has one caller, `staticRoute`, which compares a path `add` pushed into the private `staticPaths` (only `add` writes it, and nothing removes a byte) with a range of the target of the same length that `enter` has already checked, panicking on one outside its array; it compares only when the lengths are equal, so the read ends at the path's end. The method compare in `enter` reads the public `methodBytes`, `methodStart` and `methodEnd`, which a program can rewrite, so it stays checked (`routerSameBytes`). |
+| ROUTE-11 | Medium if it failed | `staticRoute`, `fileStatic`, `growStatic` | A client must not be able to make the table slow: paths chosen to collide, a very long path, many requests. | **Holds.** The client adds nothing to the table: it holds only routes `add` filed, at most `maxRoutes`. A lookup reads the path once, and only when the target is no longer than the longest filed path, then at most `ROUTER_PROBES` (8) slots, stopping at the first empty one; each slot costs a comparison of at most that length. `add` keeps four slots a route and files a route only within eight slots of its home, leaving it to the tree otherwise, so no run a lookup follows is longer. The hash is not keyed and need not be: a chosen path can reach a full run. What a miss costs is stated plainly: a target no longer than the longest static route that the table does not hold now pays one hash pass over its path and up to eight slots, each a length compare and at most one byte comparison of that length, and then the tree walk, which starts from the segments that same pass recorded and so reads no byte of the path again. That is more than before by a bounded amount the server's own routes set, never by one the client sets; a target longer than the longest static route pays nothing new. |
+| ROUTE-12 | High if it failed | `routerSameBytes`, `routerMethodKey`, `enter`, `staticRoute`, `walk` | The comparison and the method packing that read without a bounds check (`nish:unsafe`) must not read outside either array, whatever the ranges its caller hands it. | **Holds.** `routerSameBytes` checks first that both ranges, `a[at .. at + length)` and `b[from .. from + length)`, start at 0 or past it and end inside their arrays, written as `length > a.length - at` so that no sum can overflow, and compares unequal otherwise; only then does it read, with two cursors that run from those starts to `at + length`, which the check has put inside `a`. A negative length puts `at + length` below `at`, so the loop reads nothing and the closing test, that the cursor reached `at + length`, compares it unequal too. So no caller can make it read outside an array, and none relies on another's check: `staticRoute` hands it the private `staticPaths` and a target range `enter` checked, `walk` a label and a segment, and `enter` the public `methodBytes`, `methodStart` and `methodEnd`, which a program can rewrite. `routerMethodKey` reads the same way: it checks first that its range is one to seven bytes, starts at 0 or past it and ends inside `bytes` (again `length > bytes.length - at`), returns 0 otherwise, and only then reads with one cursor from `at` to `at + length`. Before this stage the compare was checked and the unchecked one (`routerSameRange`) relied on its one caller's checks; now the check travels with the read. |
+| ROUTE-13 | Medium if it failed | `routerMethodKey`, `enter`, `add` | A method of one to seven bytes is matched by comparing one 64-bit word, its bytes and its length packed by `routerMethodKey`, with each known method's word, which `add` stores in the private `methodKey`. Two different methods must never share a word, a method must not match a prefix or an extension of itself, and no request may reach a route by a method `add` was not given. | **Holds.** The key puts byte `k` of the method in bits `8k` to `8k + 7` and the length in the top byte, so a key of up to seven bytes is a one-to-one encoding of the bytes and their count: methods of different lengths differ in the top byte, and of one length in the byte where they differ. 0 is no packed method's key (the length byte is at least 1), and a method that is not packed, longer than seven bytes or a range outside its buffer, takes the byte compare of ROUTE-12 instead, as every method did before. `methodKey` is private and written only by `add`, beside the public arrays it is made from; a program that rewrites `methodBytes` after `add` (an `@internal` field) changes what the byte compare reads and not the key, so for a method of up to seven bytes the table keeps answering the method `add` was given. |
 
 `add`'s refusals are the program's, not the attacker's, and are listed under
 the properties below.
@@ -194,5 +198,18 @@ bytes)".
 above pass, and a target range that ends past its array panics before any
 read, the table's included (`link/net_router_negative_range: exits with 1 and
 stdout matches expected.out`: a static route's own path, asked for with one
-byte more than the buffer holds); the comparison's two callers are named in the module's header, under
-"What is unchecked".
+byte more than the buffer holds); the comparison's callers are named in the module's header, under
+"What is unchecked", and it checks its own ranges before it reads, so a
+method range inside a larger buffer is compared on that range alone: "a
+method mid-buffer is read from its range alone, short or long".
+
+**The packed method compare** (ROUTE-13): "methods of 1, 3, 4, 7, 8, 9 and 32
+bytes each answer their own route", either side of the seven a word holds; "a
+prefix or an extension of a known method is another method" (`GE`, `OPTION`,
+`OPTIONSX`, `PROPFIN`, `PROPFINDX`, `AA`, each a 405); "and so is one of a
+known length that differs in its first or last byte". A static miss on a
+target no longer than the longest static route is the tree's answer, from the
+split the table's pass made: "a shorter target it misses is the tree's, pairs
+and all", "one deeper than any route is 404". Each answers as it did before
+the packed compare: the same checks against the previous router print the
+same lines.

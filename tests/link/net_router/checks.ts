@@ -128,6 +128,60 @@ export const routerChecks = (): i32 => {
   slashed.add("GET", "/a/");
   t.eqStr("/a/ alone does not answer /a", answer(slashed, "GET", "/a"), `${ROUTER_NOT_FOUND}`);
 
+  // A target no longer than the longest static route that the table does not
+  // hold is answered by the tree from the split the table's pass made, at any
+  // depth, the segments past the deepest route included.
+  const split = new Router(new RouterLimits());
+  const longStatic: i32 = split.add("GET", "/abcdefghijklmnop");
+  const pair: i32 = split.add("GET", "/:p/:q");
+  t.eqStr("the static route is the table's", answer(split, "GET", "/abcdefghijklmnop"), `${longStatic}`);
+  t.eqStr("a shorter target it misses is the tree's, pairs and all", answer(split, "GET", "/ab/cd?/x/y"), `${pair} [ab] [cd]`);
+  t.eqStr("one deeper than any route is 404", answer(split, "GET", "/a/b/c/d/e/f"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("and one a segment short is 404 too", answer(split, "GET", "/abc"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("as is an empty last segment", answer(split, "GET", "/a/"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a trailing slash after a pair is 404", answer(split, "GET", "/ab/cd/"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a trailing slash after one segment is 404", answer(split, "GET", "/ab/"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("two bare slashes are 404", answer(split, "GET", "//"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a repeated slash inside a pair is 404", answer(split, "GET", "/ab//cd"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("a leading repeated slash is 404", answer(split, "GET", "//ab"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("segments past one beyond the deepest are 404", answer(split, "GET", "/a/b/c/d"), `${ROUTER_NOT_FOUND}`);
+  t.eqStr("and a static-length path past it too", answer(split, "GET", "/a/b/c/d/e/f/g/h"), `${ROUTER_NOT_FOUND}`);
+
+  // Methods either side of seven bytes, the longest compared as one word:
+  // each is told from its prefixes, its extensions and its neighbours of one
+  // length, and a method is found wherever it sits in its buffer.
+  const verbs = new Router(new RouterLimits());
+  const one: i32 = verbs.add("A", "/v");
+  const get: i32 = verbs.add("GET", "/v");
+  const gets: i32 = verbs.add("GETS", "/v");
+  const options: i32 = verbs.add("OPTIONS", "/v");
+  const propfind: i32 = verbs.add("PROPFIND", "/v");
+  const proppatch: i32 = verbs.add("PROPPATCH", "/v");
+  const widest: i32 = verbs.add("ABCDEFGHIJKLMNOPQRSTUVWXYZ-!#$%&", "/v");
+  t.eqStr(
+    "methods of 1, 3, 4, 7, 8, 9 and 32 bytes each answer their own route",
+    `${answer(verbs, "A", "/v")} ${answer(verbs, "GET", "/v")} ${answer(verbs, "GETS", "/v")} ${answer(verbs, "OPTIONS", "/v")} ${answer(verbs, "PROPFIND", "/v")} ${answer(verbs, "PROPPATCH", "/v")} ${answer(verbs, "ABCDEFGHIJKLMNOPQRSTUVWXYZ-!#$%&", "/v")}`,
+    `${one} ${get} ${gets} ${options} ${propfind} ${proppatch} ${widest}`,
+  );
+  t.eqStr(
+    "a prefix or an extension of a known method is another method",
+    `${answer(verbs, "GE", "/v")} ${answer(verbs, "OPTION", "/v")} ${answer(verbs, "OPTIONSX", "/v")} ${answer(verbs, "PROPFIN", "/v")} ${answer(verbs, "PROPFINDX", "/v")} ${answer(verbs, "AA", "/v")}`,
+    `${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED}`,
+  );
+  t.eqStr(
+    "and so is one of a known length that differs in its first or last byte",
+    `${answer(verbs, "HET", "/v")} ${answer(verbs, "GEU", "/v")} ${answer(verbs, "OPTIONT", "/v")} ${answer(verbs, "QROPFIND", "/v")} ${answer(verbs, "PROPFINE", "/v")} ${answer(verbs, "ABCDEFGHIJKLMNOPQRSTUVWXYZ-!#$%'", "/v")}`,
+    `${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED} ${ROUTER_METHOD_NOT_ALLOWED}`,
+  );
+  const framedVerbs: u8[] = httpFieldBytes("xxGETSyy PROPFINDzz");
+  const framedTarget: u8[] = httpFieldBytes("/v");
+  const noRoom: i32[] = [];
+  t.eqStr(
+    "a method mid-buffer is read from its range alone, short or long",
+    `${verbs.match(framedVerbs, toI32(2), toI32(5), framedTarget, toI32(0), toI32(2), noRoom)} ${verbs.match(framedVerbs, toI32(2), toI32(6), framedTarget, toI32(0), toI32(2), noRoom)} ${verbs.match(framedVerbs, toI32(9), toI32(17), framedTarget, toI32(0), toI32(2), noRoom)}`,
+    `${get} ${gets} ${propfind}`,
+  );
+
   // An empty segment in a pattern is an empty literal: it matches an empty
   // segment of the target and nothing else, and a parameter never does.
   const gap = new Router(new RouterLimits());
