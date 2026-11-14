@@ -12,7 +12,7 @@
 
 ## Next
 
-Stage 1: [§9](https://github.com/amritk/nish/blob/main/docs/wp60-dyn-dispatch.md#9-if-it-ships-stages). `src/` itself can use `Dyn` one release after it ships ([§5.4](https://github.com/amritk/nish/blob/main/docs/wp60-dyn-dispatch.md#54-the-rolling-freeze)).
+Stage 1: [§9](https://github.com/amritk/nish/blob/main/docs/wp60-dyn-dispatch.md#9-stages). `src/` itself can use `Dyn` one release after it ships ([§5.4](https://github.com/amritk/nish/blob/main/docs/wp60-dyn-dispatch.md#54-the-rolling-freeze)).
 
 ## Not planned
 
