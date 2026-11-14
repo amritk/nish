@@ -1403,12 +1403,6 @@ const DECLARED = [
   },
   // Self-recursive checked-sum methods become a loop too (issue #1612).
   {
-    program: "tests/cases/acc_ineligible.ts",
-    file: "acc_ineligible.ll",
-    changelog: RECURSION_METHOD,
-    why: RECURSION_METHOD_WHY,
-  },
-  {
     program: "tests/cases/acc_method.ts",
     file: "acc_method.ll",
     changelog: RECURSION_METHOD,

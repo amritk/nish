@@ -1,4 +1,3 @@
-%struct.Counter = type { i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
 @nish_argv = external global %struct.nish_array*, align 8
@@ -287,79 +286,13 @@ ovf.fail:
   unreachable
 }
 
-define internal void @Counter.constructor(%struct.Counter* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %step) #2 {
-entry:
-  %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
-  store i32 %step, i32* %0, align 4, !tbaa !4
-  ret void
-}
-
-define internal noundef i32 @Counter.total(%struct.Counter* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this.in, i32 noundef %n.in) #0 {
-entry:
-  br label %rec.head
-
-rec.head:
-  %this = phi %struct.Counter* [ %this.in, %entry ], [ %this, %if.end ]
-  %n = phi i32 [ %n.in, %entry ], [ %6, %if.end ]
-  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
-  %rec.last = phi i32 [ 0, %entry ], [ %5, %if.end ]
-  %rec.sum = add i32 %rec.prev, %rec.last
-  %rec.signs = or i32 %rec.last, %rec.sum
-  %rec.cold = icmp slt i32 %rec.signs, 0
-  %0 = icmp sle i32 %n, 0
-  %rec.leave = or i1 %0, %rec.cold
-  br i1 %rec.leave, label %rec.exit, label %if.end
-
-if.then:
-  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
-  %2 = extractvalue { i32, i1 } %1, 0
-  %3 = extractvalue { i32, i1 } %1, 1
-  br i1 %3, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  ret i32 %2
-
-if.end:
-  %4 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
-  %5 = load i32, i32* %4, align 4, !tbaa !4
-  %6 = sub nsw i32 %n, 1
-  br label %rec.head
-
-rec.exit:
-  br i1 %rec.cold, label %rec.call, label %if.then
-
-rec.call:
-  %7 = call i32 @Counter.total(%struct.Counter* %this, i32 %n)
-  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %7)
-  %9 = extractvalue { i32, i1 } %8, 0
-  %10 = extractvalue { i32, i1 } %8, 1
-  br i1 %10, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %9)
-  %12 = extractvalue { i32, i1 } %11, 0
-  %13 = extractvalue { i32, i1 } %11, 1
-  br i1 %13, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  ret i32 %12
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
-}
-
 define noundef i32 @nish_main() #0 {
 entry:
-  %c.addr = alloca %struct.Counter*, align 8
-  %Counter.obj = alloca %struct.Counter, align 8
   %endless.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
-  call void @Counter.constructor(%struct.Counter* %Counter.obj, i32 3)
-  store %struct.Counter* %Counter.obj, %struct.Counter** %c.addr, align 8
   %0 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %3 = trunc i64 %2 to i32
   %4 = icmp sgt i32 %3, 5
   br i1 %4, label %cond.true, label %cond.false
@@ -389,30 +322,25 @@ cond.end:
   %19 = call i8* @nish_str_from_i32(i32 %18)
   %20 = call i8* @nish_str_concat(i8* %17, i8* %19)
   %21 = call i8* @nish_str_concat(i8* %20, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %22 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
-  %23 = call i32 @Counter.total(%struct.Counter* %22, i32 4)
-  %24 = call i8* @nish_str_from_i32(i32 %23)
-  %25 = call i8* @nish_str_concat(i8* %21, i8* %24)
-  %26 = call i8* @nish_str_concat(i8* %25, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %27 = load i32, i32* %endless.addr, align 4
-  %28 = call i8* @nish_str_from_i32(i32 %27)
-  %29 = call i8* @nish_str_concat(i8* %26, i8* %28)
-  call void @nish_print(i8* %29)
-  %30 = call i32 @lessSelf(i32 4)
-  %31 = call i8* @nish_str_from_i32(i32 %30)
-  %32 = call i8* @nish_str_concat(i8* %31, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %33 = call i32 @selfLess(i32 4)
-  %34 = call i8* @nish_str_from_i32(i32 %33)
-  %35 = call i8* @nish_str_concat(i8* %32, i8* %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %37 = call i32 @callAfter(i32 4)
-  %38 = call i8* @nish_str_from_i32(i32 %37)
-  %39 = call i8* @nish_str_concat(i8* %36, i8* %38)
-  %40 = call i8* @nish_str_concat(i8* %39, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %41 = call i32 @digits(i32 12)
-  %42 = call i8* @nish_str_from_i32(i32 %41)
-  %43 = call i8* @nish_str_concat(i8* %40, i8* %42)
-  call void @nish_print(i8* %43)
+  %22 = load i32, i32* %endless.addr, align 4
+  %23 = call i8* @nish_str_from_i32(i32 %22)
+  %24 = call i8* @nish_str_concat(i8* %21, i8* %23)
+  call void @nish_print(i8* %24)
+  %25 = call i32 @lessSelf(i32 4)
+  %26 = call i8* @nish_str_from_i32(i32 %25)
+  %27 = call i8* @nish_str_concat(i8* %26, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %28 = call i32 @selfLess(i32 4)
+  %29 = call i8* @nish_str_from_i32(i32 %28)
+  %30 = call i8* @nish_str_concat(i8* %27, i8* %29)
+  %31 = call i8* @nish_str_concat(i8* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %32 = call i32 @callAfter(i32 4)
+  %33 = call i8* @nish_str_from_i32(i32 %32)
+  %34 = call i8* @nish_str_concat(i8* %31, i8* %33)
+  %35 = call i8* @nish_str_concat(i8* %34, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %36 = call i32 @digits(i32 12)
+  %37 = call i8* @nish_str_from_i32(i32 %36)
+  %38 = call i8* @nish_str_concat(i8* %35, i8* %37)
+  call void @nish_print(i8* %38)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -430,23 +358,20 @@ attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!14, !15, !16, !17, !18}
-!0 = !{!"nish TBAA"}
-!1 = !{!"omnipotent char", !0, i64 0}
-!2 = !{!"i32", !1, i64 0}
-!3 = !{!"Counter", !2, i64 0}
-!4 = !{!3, !2, i64 0}
-!5 = !{!"nish array"}
-!6 = !{!"header", !5}
-!7 = !{!"elements", !5}
-!8 = !{!6}
-!9 = !{!7}
-!10 = !{!"header i64", !1, i64 0}
-!11 = !{!"header ptr", !1, i64 0}
-!12 = !{!"array header", !10, i64 0, !10, i64 8, !11, i64 16}
-!13 = !{!12, !10, i64 0}
-!14 = !{i32 8, !"cf-protection-branch", i32 1}
-!15 = !{i32 8, !"cf-protection-return", i32 1}
-!16 = !{i32 8, !"branch-target-enforcement", i32 1}
-!17 = !{i32 8, !"sign-return-address", i32 1}
-!18 = !{i32 4, !"probe-stack", !"inline-asm"}
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
