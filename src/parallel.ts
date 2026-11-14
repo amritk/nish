@@ -1389,7 +1389,9 @@ export const callCaptureWriteMessage = (name: string, forEach: boolean): string 
   "what it captures as an argument when the call is made, so an assignment would change only its own copy; " +
   "make the arrow answer the value and assign it after the call, or write through an object the function " +
   "holds (`box.n = v`, `list.push(v)`)" +
-  (forEach ? `; a \`forEach\` is a \`for...of\` loop, whose body may assign \`${name}\`, so write that loop instead` : "")
+  (forEach
+    ? `; a \`forEach\` is a \`for...of\` loop, whose body may assign \`${name}\`, so write that loop instead`
+    : "")
 
 /** The refusal for a function parameter of the function around an arrow, which the arrow calls or names. */
 export const functionParamCaptureMessage = (name: string): string =>

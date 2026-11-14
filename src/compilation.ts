@@ -3927,10 +3927,7 @@ export class Compilation {
     }
     for (const other of this.modules) {
       for (const imp of other.checker.program.imports) {
-        if (
-          imp.specifier === specifier &&
-          !isUnusedArrayImport(imp.specifier, imp.localName, imp.template)
-        ) {
+        if (imp.specifier === specifier && !isUnusedArrayImport(imp.specifier, imp.localName, imp.template)) {
           return false
         }
       }
