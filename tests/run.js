@@ -12115,7 +12115,7 @@ if (dealtHere("breakWeb")) {
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 145
+  const BREAK_WEB_CHECKS = 147
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))
@@ -26709,17 +26709,23 @@ if (dealtHere("releaseChecks")) {
       "the two darwin rows have different attachedSince values, so a claim about `the darwin pair` no longer has one answer: give each asset its own pattern in versionClaims above"
     )
 
-    const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"]
+    const proseDocs = [
+      "CONTRIBUTING.md",
+      "docs/INSTALL.md",
+      "docs/wp10-ci.md",
+      "docs/wp12-release.md",
+      "docs/wp19-stage0-retirement.md",
+    ]
     const staleProse = []
     let proseClaims = 0
     for (const doc of proseDocs) {
-      const text = fs.readFileSync(path.join(root, "docs", doc), "utf8")
+      const text = fs.readFileSync(path.join(root, doc), "utf8")
       for (const [shape, re, asset] of versionClaims) {
         const want = rows.find((t) => t.asset === asset)?.attachedSince
         for (const m of text.matchAll(new RegExp(re, "g"))) {
           proseClaims += 1
           if (m[1] !== want) {
-            staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`)
+            staleProse.push(`${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`)
           }
         }
       }
@@ -29649,6 +29655,40 @@ if (!only || "thread_stack".includes(only)) {
           room.stderr ===
             "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
         said(room)
+      )
+    }
+  }
+}
+
+// `nish/net/http-server` answers a deep HTTP/1.1 pipeline without the stack
+// growing per request. tests/link/net_http_server/deep.ts holds a request,
+// reads twenty-five thousand `OPTIONS *` behind it in one burst, then answers
+// it; each screened request behind it used to be driven one call deeper, and
+// under `ulimit -s 512` that faulted inside the burst. The default 8 MiB stack
+// hides the fault, so the program runs here, under the small one, and the
+// link harness (which runs it under the default) does not run it.
+if (!only || "net_http_server_deep".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("net_http_server_deep: the stack is set by a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "net_http_server_deep")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "deep")
+    const src = path.join(linkDir, "net_http_server", "deep.ts")
+    const c = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+    if (c.status !== 0) {
+      check("net_http_server_deep: tests/link/net_http_server/deep.ts compiles and links", false, shown(c))
+    } else {
+      const r = spawnSync("bash", ["-c", 'ulimit -S -s 512 && exec "$0"', exe], {
+        cwd: path.join(linkDir, "net_http_server"),
+        encoding: "utf8",
+        timeout: 60000,
+      })
+      check(
+        "net_http_server_deep: twenty-five thousand pipelined OPTIONS * behind a held request are answered on a 512 KiB stack",
+        r.status === 0 && r.stdout.includes("PASS  and every OPTIONS * behind it") && !r.stdout.includes("FAIL"),
+        `signal ${r.signal}\n${shown(r)}`
       )
     }
   }

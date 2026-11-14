@@ -2,7 +2,7 @@
  * `nish/net/quic-recovery` — QUIC loss detection and congestion control
  * (RFC 9002): the packets each packet number space has in flight, the
  * round-trip estimate, loss by packet and by time threshold, the probe
- * timeout with its backoff, NewReno, and a pacer. Sans-IO: it never sees a
+ * timeout with its backoff, NewReno or CUBIC, and a pacer. Sans-IO: it never sees a
  * byte of a packet, only packet numbers, sizes and the caller's clock.
  *
  *     import { QuicRecovery, QUIC_RECOVERY_TIMEOUT_PTO } from "nish/net/quic-recovery";
@@ -50,6 +50,18 @@
  * only if, when it arrived, the bytes in flight were at least half the
  * window.
  *
+ * **Congestion control.** `controller` picks it, once, before the first
+ * packet: `QUIC_RECOVERY_NEWRENO` (Appendix B, the default) or
+ * `QUIC_RECOVERY_CUBIC` (RFC 9438). Both share slow start, recovery
+ * periods, persistent congestion's collapse to the minimum window and the
+ * rule above for a window not in use. CUBIC keeps 0.7 of the window at a
+ * congestion event rather than half, then grows along W(t) = W_max + C ×
+ * (t − K)³ with C 0.4, concave up to the window it lost at and convex past
+ * it, never below what Reno would have reached (its Reno-friendly region),
+ * and with fast convergence. Its arithmetic is integers in bytes and
+ * milliseconds, and K's cube root is found by bisection, so two machines
+ * given the same events reach the same window to the byte.
+ *
  * **ECN** (§7.1, B.7; RFC 9000 §13.4.2 and its Appendix A.4). A caller that
  * marks its packets ECT(0) asks `ecnCodepoint()` what to mark with, says so
  * with `onEctSent` for every packet it marked, and hands an ACK_ECN frame's
@@ -77,7 +89,7 @@
  * timeout, at a rate that halves each time, until the idle timeout ends the
  * connection.
  *
- * Written from RFC 9002 §5 to §7 and its Appendices A and B, in this
+ * Written from RFC 9002 §5 to §7 and its Appendices A and B, and RFC 9438, in this
  * module's own structure; nothing here is ported from another
  * implementation. Private names carry the `quicRecovery` prefix
  * (`docs/wp26-stdlib.md` §3e).
@@ -180,8 +192,74 @@ const QUIC_RECOVERY_MICROS: i64 = 1000
  */
 const QUIC_RECOVERY_PACER_WINDOW: i64 = 4294967296
 
+/** The congestion controller of RFC 9002 §7 and Appendix B: NewReno. */
+export const QUIC_RECOVERY_NEWRENO: i32 = 0
+/** The congestion controller of RFC 9438: CUBIC, with its Reno-friendly region and fast convergence. */
+export const QUIC_RECOVERY_CUBIC: i32 = 1
+/**
+ * The controller a server runs unless it has a reason to pick: CUBIC. It
+ * beat NewReno outside the spread across loss draws on transfers of 32 and
+ * 128 bandwidth-delay products and finished level on one
+ * (`bench/quic-goodput.ts`; the figures are in docs/security/quic.md).
+ * It holds the same value as `QUIC_RECOVERY_CUBIC`, written out rather than
+ * aliased so the default reads as a choice of its own.
+ */
+export const QUIC_RECOVERY_DEFAULT: i32 = 1
+
+/**
+ * CUBIC's longest span in milliseconds: K and every `t − K` its curve is
+ * read at are clamped to ±40 s. A cube of it times twice the largest UDP
+ * payload stays inside an `i64` (2 × 65535 × 40000³ < 2^63), and K reaches
+ * it only after a fall of 25600 datagrams, 30 MB at 1200 bytes. What the
+ * clamp costs: 40 s past K, W(t) stops at W_max + 25600 datagrams, so a
+ * window that far past its last loss grows only as fast as W_est.
+ */
+const QUIC_RECOVERY_CUBIC_SPAN: i64 = 40000
+/**
+ * C (0.4 segments/s³) on milliseconds: W(t) = W_max + 2 × size × (t − K)³ / 5 × 10⁹
+ * bytes, `size` the datagram size and t in milliseconds (RFC 9438 §4.2).
+ */
+const QUIC_RECOVERY_CUBIC_SCALE: i64 = 5000000000
+
 /** The larger of two times or durations. */
 const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
+
+/** `x` clamped to −`QUIC_RECOVERY_CUBIC_SPAN` .. `QUIC_RECOVERY_CUBIC_SPAN`. */
+const quicRecoveryCubicClamp = (x: i64): i64 => {
+  if (x > QUIC_RECOVERY_CUBIC_SPAN) {
+    return QUIC_RECOVERY_CUBIC_SPAN
+  }
+  return x < -QUIC_RECOVERY_CUBIC_SPAN ? -QUIC_RECOVERY_CUBIC_SPAN : x
+}
+
+/**
+ * The integer cube root of `x`, the largest r with r³ <= x, for 0 <= x <=
+ * `QUIC_RECOVERY_CUBIC_SPAN`³, found by bisection over 0 .. the span: 16
+ * steps, the same answer on every machine, no floating point.
+ *
+ * @param x The cube, 0 to 40000³.
+ * @returns Its root, 0 to 40000.
+ */
+export const quicRecoveryCbrt = (x: i64): i64 => {
+  let lo: i64 = 0
+  let hi: i64 = QUIC_RECOVERY_CUBIC_SPAN
+  if (x <= lo) {
+    return lo
+  }
+  if (x >= hi * hi * hi) {
+    return hi
+  }
+  // lo³ <= x < hi³ holds at every step.
+  while (hi - lo > 1) {
+    const mid: i64 = (lo + hi) / 2
+    if (mid * mid * mid <= x) {
+      lo = mid
+    } else {
+      hi = mid
+    }
+  }
+  return lo
+}
 
 /**
  * The ack-eliciting packets one space sent, in a ring of `capacity` slots
@@ -546,6 +624,33 @@ export class QuicRecovery {
   ssthresh: i64 = 0
   /** congestion_recovery_start_time (B.2), or -1 outside recovery. */
   recoveryStart: i64 = -1
+  /**
+   * The congestion controller, `QUIC_RECOVERY_NEWRENO` or `QUIC_RECOVERY_CUBIC`, which the caller
+   * sets once, before the first packet; `reset` keeps it.
+   */
+  controller: i32 = 0
+  /** CUBIC's W_max (RFC 9438 §4.2) in bytes: the window its curve plateaus at, 0 before the first congestion event. */
+  cubicMax: i64 = 0
+  /** CUBIC's K in milliseconds: how long after `cubicEpoch` the curve reaches `cubicMax`. */
+  cubicK: i64 = 0
+  /** When CUBIC's congestion avoidance stage began (t = 0 of its curve), in milliseconds, or -1 outside one. */
+  cubicEpoch: i64 = -1
+  /** CUBIC's W_est (§4.3) in bytes: the window Reno's AIMD with β 0.7 would have reached since `cubicEpoch`. */
+  cubicEst: i64 = 0
+  /** What `cubicEst`'s last step truncated: the numerator of a fraction of 17 × the window then. */
+  cubicEstCarry: i64 = 0
+  /**
+   * What the window's last step toward the curve truncated: the numerator of a fraction of the
+   * window then, so steps smaller than a byte add up instead of being lost (RFC 9438's cwnd_cnt).
+   */
+  cubicCarry: i64 = 0
+  /** CUBIC's cwnd_prior (§4.6): the window just before the last reduction, in bytes. */
+  cubicPrior: i64 = 0
+  /**
+   * When the window last stopped being used (§5.8) during a congestion avoidance stage, or -1: the
+   * curve's epoch moves on by the time it was idle, so it resumes where it stood.
+   */
+  cubicIdle: i64 = -1
   /** The pacer's credit in bytes (§7.7), and the time it was last topped up in microseconds, or -1. */
   pacerBudget: i64 = 0
   /**
@@ -648,6 +753,14 @@ export class QuicRecovery {
     this.congestionWindow = QUIC_RECOVERY_INITIAL_WINDOW
     this.ssthresh = QUIC_MAX_VARINT
     this.recoveryStart = -1
+    this.cubicMax = 0
+    this.cubicK = 0
+    this.cubicEpoch = -1
+    this.cubicEst = 0
+    this.cubicEstCarry = 0
+    this.cubicCarry = 0
+    this.cubicPrior = 0
+    this.cubicIdle = -1
     this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
     this.pacerTime = -1
     this.pacerRtt = QUIC_RECOVERY_INITIAL_RTT * QUIC_RECOVERY_MICROS
@@ -970,8 +1083,11 @@ export class QuicRecovery {
     }
     this.detectLoss(sp, now)
     this.packetsLost(sp, now)
+    if (this.controller === QUIC_RECOVERY_CUBIC) {
+      this.cubicInUse(inUse, now)
+    }
     for (let k: i32 = 0; k < sp.ackedCount; k += 1) {
-      this.packetAcked(sp, sp.ackedSlot(k), inUse)
+      this.packetAcked(sp, sp.ackedSlot(k), inUse, now)
     }
     this.ptoCount = 0
     return sp.ackedCount
@@ -1192,6 +1308,9 @@ export class QuicRecovery {
     if (newest >= 0 && this.persistentCongestion(sp)) {
       this.congestionWindow = this.minimumWindow()
       this.recoveryStart = -1
+      // CUBIC starts over from slow start (RFC 9438 §4.8): its next stage is a new epoch.
+      this.cubicEpoch = -1
+      this.cubicIdle = -1
       this.persistentCongestions = this.persistentCongestions + 1
     }
     for (let k: i32 = 0; k < sp.lostCount; k += 1) {
@@ -1250,32 +1369,144 @@ export class QuicRecovery {
     return this.recoveryStart >= 0 && sentTime <= this.recoveryStart
   }
 
-  /** OnCongestionEvent (B.6): halve the window, once per recovery period. */
+  /**
+   * OnCongestionEvent (B.6), once per recovery period: NewReno halves the
+   * window. CUBIC (RFC 9438 §4.6, §4.7) keeps 0.7 of it, and remembers
+   * where it was as W_max, or 0.85 of that when it is below the W_max
+   * before (fast convergence), so a flow losing ground leaves room sooner.
+   */
   private congestionEvent(sentTime: i64, now: i64): void {
     if (this.inRecovery(sentTime)) {
       return
     }
     this.recoveryStart = now
-    this.ssthresh = this.congestionWindow / 2
+    const cwnd: i64 = this.congestionWindow
+    if (this.controller === QUIC_RECOVERY_CUBIC) {
+      this.cubicMax = cwnd < this.cubicMax ? (cwnd * 17) / 20 : cwnd
+      this.cubicPrior = cwnd
+      this.cubicEpoch = -1
+      this.cubicIdle = -1
+      this.ssthresh = (cwnd * 7) / 10
+    } else {
+      this.ssthresh = cwnd / 2
+    }
     this.congestionWindow = quicRecoveryMax(this.ssthresh, this.minimumWindow())
     this.congestionEvents = this.congestionEvents + 1
   }
 
   /**
    * OnPacketAcked (B.5) for slot `s`: in slow start the window grows by the
-   * packet's size, in congestion avoidance by datagramSize × size / window; not at
-   * all for a packet sent during recovery, or when `inUse` says the window
-   * was not being used (§7.8).
+   * packet's size; in congestion avoidance NewReno's by datagramSize × size / window,
+   * CUBIC's as `cubicAcked` says. Not at all for a packet sent during
+   * recovery, or when `inUse` says the window was not being used (§7.8).
    */
-  private packetAcked(sp: QuicSentPackets, s: i32, inUse: boolean): void {
+  private packetAcked(sp: QuicSentPackets, s: i32, inUse: boolean, now: i64): void {
     if (!inUse || this.inRecovery(sp.timeAt(s))) {
       return
     }
     const size: i64 = toI64(sp.sizeAt(s))
     if (this.congestionWindow < this.ssthresh) {
       this.congestionWindow = this.congestionWindow + size
+    } else if (this.controller === QUIC_RECOVERY_CUBIC) {
+      this.cubicAcked(size, now)
     } else {
       this.congestionWindow = this.congestionWindow + (this.datagramSize * size) / this.congestionWindow
+    }
+  }
+
+  /**
+   * CUBIC's congestion avoidance (RFC 9438 §4.2 to §4.5) for `size` bytes
+   * newly acknowledged at `now`. The first acknowledgement of a stage starts
+   * its epoch: K = ∛((W_max − cwnd) / C), or 0 with W_max taken as cwnd
+   * when the window is already past it (after slow start). W_est then grows
+   * as Reno's would with β 0.7, by α = 3(1 − β)/(1 + β) = 9/17 datagram a
+   * window of acknowledgements, and by 1 once it has passed cwnd_prior. If
+   * the curve W(t) is below W_est the window is W_est (the Reno-friendly
+   * region); otherwise it moves toward W(t + RTT), held within cwnd ..
+   * 1.5 × cwnd, by (target − cwnd) × size / cwnd: concave below W_max, convex
+   * past it. Integers throughout; W_est and the window each carry what their
+   * division truncated, so a step under a byte is deferred, never dropped.
+   */
+  private cubicAcked(size: i64, now: i64): void {
+    const cwnd: i64 = this.congestionWindow
+    if (this.cubicEpoch < 0) {
+      this.cubicEpoch = now
+      this.cubicIdle = -1
+      this.cubicEst = cwnd
+      this.cubicEstCarry = 0
+      this.cubicCarry = 0
+      if (this.cubicMax > cwnd) {
+        this.cubicK = this.cubicSpan(this.cubicMax - cwnd)
+      } else {
+        this.cubicK = 0
+        this.cubicMax = cwnd
+      }
+    }
+    const alpha: i64 = this.cubicEst >= this.cubicPrior ? 17 : 9
+    const num: i64 = alpha * size * this.datagramSize + this.cubicEstCarry
+    const den: i64 = 17 * cwnd
+    this.cubicEst = this.cubicEst + num / den
+    this.cubicEstCarry = num % den
+    const t: i64 = now - this.cubicEpoch
+    if (this.cubicWindow(t) < this.cubicEst) {
+      this.congestionWindow = quicRecoveryMax(cwnd, this.cubicEst)
+      return
+    }
+    const ceiling: i64 = cwnd + cwnd / 2
+    const curve: i64 = this.cubicWindow(t + this.smoothedRtt)
+    const target: i64 = quicRecoveryMax(cwnd, curve > ceiling ? ceiling : curve)
+    // The window only grows within a stage, so the carry, below the window
+    // it was a fraction of, stays below the one it is added against.
+    const step: i64 = (target - cwnd) * size + this.cubicCarry
+    this.congestionWindow = cwnd + step / cwnd
+    this.cubicCarry = step % cwnd
+  }
+
+  /**
+   * W_cubic(t) (RFC 9438 §4.2) in bytes, `t` milliseconds into the epoch:
+   * W_max + C × (t − K)³ in datagrams, which is W_max + 2 × size × (t − K)³ /
+   * 5 × 10⁹ in bytes and milliseconds, with t − K clamped to ±40 s. The
+   * division truncates toward zero.
+   */
+  private cubicWindow(t: i64): i64 {
+    const d: i64 = quicRecoveryCubicClamp(t - this.cubicK)
+    return this.cubicMax + (2 * this.datagramSize * (d * d * d)) / QUIC_RECOVERY_CUBIC_SCALE
+  }
+
+  /**
+   * K (RFC 9438 §4.2) for a fall of `drop` bytes below W_max: ∛(drop / C) in
+   * datagrams and seconds, which is ∛(drop × 5 × 10⁹ / (2 × size)) in
+   * milliseconds, rounded down; a fall too deep for the cube to fit is 40 s.
+   */
+  private cubicSpan(drop: i64): i64 {
+    const two: i64 = 2 * this.datagramSize
+    const span: i64 = QUIC_RECOVERY_CUBIC_SPAN
+    // drop >= span³ × 2 × size / (5 × 10⁹), which is 25600 × size, has K at the span or past it.
+    if (drop >= 25600 * this.datagramSize) {
+      return span
+    }
+    return quicRecoveryCbrt((drop * QUIC_RECOVERY_CUBIC_SCALE) / two)
+  }
+
+  /**
+   * The application-limited rule (RFC 9438 §5.8) at an acknowledgement:
+   * while the window is not in use it does not grow (`packetAcked`), and the
+   * time it spends so is taken out of the curve, so a stage resumes where it
+   * stood rather than at the point the clock has reached.
+   */
+  private cubicInUse(inUse: boolean, now: i64): void {
+    if (this.cubicEpoch < 0) {
+      return
+    }
+    if (!inUse) {
+      if (this.cubicIdle < 0) {
+        this.cubicIdle = now
+      }
+      return
+    }
+    if (this.cubicIdle >= 0) {
+      this.cubicEpoch = this.cubicEpoch + (now - this.cubicIdle)
+      this.cubicIdle = -1
     }
   }
 

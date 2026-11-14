@@ -1100,7 +1100,7 @@ so `rfc5280::nc::permitted-dns-match-noncritical` is accepted where limbo
 expects a refusal. limbo's own `webpki::nc::permitted-dns-match-noncritical`
 holds the same shape and expects it accepted, and the constraint binds
 either way, so a wrong flag never widens what a path may name. Refusing it
-is the owner's call between the two profiles; until then it is listed in
+is an open choice between the two profiles; until then it is listed in
 `tests/link/crypto_pki_limbo/divergences.ts`. Low for the reason it was:
 what is lost is catching a CA that misissues.
 

@@ -16,7 +16,7 @@
 If you are **writing a Nish program**, read `docs/AI.md` first. It is the whole
 language as rules, written for one pass, with the TypeScript reflexes that get
 rejected listed before anything else. If you are **working on the compiler**,
-read `AGENTS.md` and `.claude/orientation.md` instead.
+read `CONTRIBUTING.md` instead.
 
 Verify, never guess: `nish program.ts --json` prints one flat JSON object per
 diagnostic on stdout and is the only authority on whether a program is legal.
@@ -42,14 +42,7 @@ the compiler.
 - [Architecture](https://raw.githubusercontent.com/amritk/nish/main/docs/ARCHITECTURE.md): the pipeline, side tables, how to add a construct, the ABI contracts, attribute soundness rules, the test harness.
 - [Benchmarks](https://raw.githubusercontent.com/amritk/nish/main/docs/BENCHMARKS.md): wall time, binary size and peak memory against C and Rust, with the exact build commands.
 
-## Working on the compiler
-
-- [Agent guide](https://raw.githubusercontent.com/amritk/nish/main/AGENTS.md): the repository's rules for AI agents — the machine-readable surfaces, how to trust a test run, the house rules.
-- [Orientation](https://raw.githubusercontent.com/amritk/nish/main/.claude/orientation.md): the one compiler and the seed that builds it, the code map, the commands, the seven things that are always true.
-- [Documentation index](https://raw.githubusercontent.com/amritk/nish/main/docs/README.md): every reference and design note, one line each.
-
 ## Optional
 
-- [Master plan](https://raw.githubusercontent.com/amritk/nish/main/docs/MASTER_PLAN.md): vision, design rules, work packages, contributor conventions.
-- [Self-hosting](https://raw.githubusercontent.com/amritk/nish/main/docs/wp14-selfhost.md): the compiler written in its own language, and how it builds itself to a fixed point.
 - [Changelog](https://raw.githubusercontent.com/amritk/nish/main/CHANGELOG.md): generated from the commits; what changed in each release.
+- [Contributing](https://raw.githubusercontent.com/amritk/nish/main/CONTRIBUTING.md): for work on the compiler itself — building it from source, the tests, the conventions.

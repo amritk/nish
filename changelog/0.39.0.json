@@ -12,7 +12,7 @@
       "type": "perf",
       "scope": "bench",
       "breaking": false,
-      "title": "measure the async TFB entry against the explicit one on plaintext, json and db (WP49 stage 6)",
+      "title": "measure the async TFB entry against the explicit one on plaintext, json and db",
       "body": "bench/techempower/run.sh now times the async TechEmpower entries against the explicit ones on plaintext, json and the five database tests. The noise band on each test is the spread between the explicit entry and a byte-identical copy of itself. The database tests run against a throwaway local Postgres, with the server, Postgres and wrk pinned to separate CPUs. The script reports the server's peak RSS, and it gives a band line and an inside/outside verdict for each test. A cell with non-2xx answers is never called inside. This is a relative A/B on one machine, not a TechEmpower rank.\n\nThe first recorded run, on a 4-CPU Xeon, finds the async entries outside the band:\n- plaintext: about −87%;\n- json: −7% to −12%, at five of six concurrencies;\n- db: −42% to −91% on /db, queries, updates and fortunes.\ncached-queries comes in at −12% to 0%.\n\ndocs/BENCHMARKS.md records the tables, the strace evidence and the causes as far as the evidence goes:\n- serve writes once per answer, where the explicit loop writes once per 16 pipelined answers, and it holds one request in flight per connection;\n- the executor pays a fixed cost per wait (a dup, an epoll_ctl add and delete, and a close);\n- the async Postgres pool keeps one query in flight per connection and sleep-polls its claim.\n\ndocs/wp49-async-server.md marks stage 5 complete (parts 1 to 8) and stage 6 open, with its gate not yet met. The fixes follow in their own stages.",
       "metrics": [
         "async vs explicit medians of 3 rounds of 10 s; plaintext -87 to -90% (band 0.4-2.6%, 18.1% at c=256), json -1.5 to -12.4% (band 0.1-10.2%), /db -42 to -91% (band 1.2-2.9%)"
@@ -96,7 +96,7 @@
       "type": "feat",
       "scope": "interop",
       "breaking": false,
-      "title": "examples/wasm-arena and the ten-minute Chromium soak (WP50 stage 6)",
+      "title": "examples/wasm-arena and the ten-minute Chromium soak",
       "body": "examples/wasm-arena is WP50's acceptance example: a TypeScript page driving a Nish WebAssembly module. sim.ts is a fixed-step simulation of a few hundred bodies in module-storage pools. client.ts imports it, drains the input ring once per tick, builds the instance list in module storage, and hands generated WGSL to a gpuCreateShader host import. page.ts writes input words through views made once, runs frame(dtMs) from requestAnimationFrame, and uploads the instances with queue.writeBuffer, with a WebGL 2 fallback.\n\nThe native replay compiles the same sim.ts with --deterministic and replays the page's recorded input. The page build compiles sim.ts without the flag, because client.ts imports a host module and the flag refuses host imports (NL3054). The bits agree regardless: on a page module, sin, cos and float % route through std/math, sqrt is exact, and sim.ts canonicalises NaN in its hash. The tests/run.js wasm-arena section holds the native, wasm32-under-Node and --emit-ts hashes equal on a scripted replay, so npm test covers the claim without a browser.\n\nA new Interop job, \"chrome wasm-arena soak (ten minutes)\", runs the page in the pinned Playwright Chromium for ten minutes with scripted input. It fails unless:\n- linear memory and the arena mark stay flat;\n- used heap after a forced GC at minute one and minute ten is within 256 KiB, and the sampled allocation is under 1 KiB a frame;\n- the page's state hash equals a native replay of the same input;\n- the renderer is WebGPU on SwiftShader;\n- a WebTransport datagram overwritten before its write settles echoes the bytes written (§5.3);\n- loadSync compiles a module just under 8 MiB on the main thread and is refused just over it (§8).\n\nSmoke learns `// smoke: skip <reason>` for a browser page's entry.",
       "metrics": [
         "CI soak in Chromium 141.0.7390.37, WebGPU on google / swiftshader: 36,005 frames, 36,002 ticks in 600 s; memory.buffer.byteLength 4,194,304 throughout; arena mark 89,616 after every frame; used heap after GC 1,217,736 -> 1,220,780 bytes (+3,044, band +/-262,144); 221.6 sampled bytes a frame (band 1,024); page and native hash a132e446aaf8a4f4; datagram copied at write; loadSync 8,384,512 B ok in 6.4 ms, 8,392,704 B refused (RangeError)",
@@ -123,7 +123,7 @@
       "scope": "roadmap",
       "breaking": false,
       "title": "publish the roadmap, one page per work package",
-      "body": "The project's state was spread over MASTER_PLAN.md's tables and the status\nlines of fifty notes, many of them behind the code, and none of it was on\nthe site. docs/roadmap/ is now where it lives: an overview with the\nmilestones, the order of the open work, what waits on the owner and every\npackage's progress, and one page per package, named as its note is, with a\nbox per stage, the stage to do next and the note section that specifies it.\nEvery state was checked against the tree, and the pages are routed under\n/roadmap with a link in the site's header.\n\nMASTER_PLAN.md keeps the vision, the design rules and the package index and\npoints to the roadmap for state and order. The stale notes are corrected\n(WP20, WP33, WP34, WP38, WP39, WP42, WP43, WP46, WP49), and WP50 is marked\nlanded. check-links fails on a note with no roadmap page or a roadmap page\nwith no route. CLAUDE.md, the orientation, AGENTS.md and the PR template say\nhow to pick up a package from its page and that a PR landing a stage ticks\nits box.",
+      "body": "The project's state was spread over MASTER_PLAN.md's tables and the status\nlines of fifty notes, many of them behind the code, and none of it was on\nthe site. docs/roadmap/ is now where it lives: an overview with the\nmilestones, the order of the open work, what waits on the maintainer and every\npackage's progress, and one page per package, named as its note is, with a\nbox per stage, the stage to do next and the note section that specifies it.\nEvery state was checked against the tree, and the pages are routed under\n/roadmap with a link in the site's header.\n\nMASTER_PLAN.md keeps the vision, the design rules and the package index and\npoints to the roadmap for state and order. The stale notes are corrected\n(WP20, WP33, WP34, WP38, WP39, WP42, WP43, WP46, WP49), and WP50 is marked\nlanded. check-links fails on a note with no roadmap page or a roadmap page\nwith no route. CLAUDE.md, the orientation, AGENTS.md and the PR template say\nhow to pick up a package from its page and that a PR landing a stage ticks\nits box.",
       "metrics": [],
       "refs": [],
       "tests": [],
@@ -201,7 +201,7 @@
       "type": "perf",
       "scope": "net",
       "breaking": false,
-      "title": "serve answers pipelined requests in one write (WP49 stage 6, part 3)",
+      "title": "serve answers pipelined requests in one write",
       "body": "serve used to answer a burst of pipelined requests one request per loop turn, with one write for each answer. Under wrk's 16-deep plaintext pipeline, every connection paid for 16 turns and 16 system calls.\n\nserve now opts its HttpHandler into deferred sends with `deferSends()`:\n- While a connection's output still has room, it is not draining, its write is not held, and no request on it is parked, the handler puts the send off and records the connection as owed.\n- `flush()`, which serve calls once per turn and `wait()` calls before it polls, then writes each owed connection once.\n- serve takes every queued request on a connection before it parks. An answering task no longer writes the wake byte while the loop is awake.\n\nA handler that never calls `deferSends()` sends each answer as soon as it ends, exactly as before. That covers the explicit HttpHandler loop, upstream and the Postgres carrier, and `wait()` keeps its timeout for them. One change reaches every handler: a write the socket could not take whole stays armed for writing after a flush empties the output. Before, the rest of such a response could stall.\n\n`ServeStats.sends` and `HttpHandler.sends()` count the sends.\n\nThe security records are HANDLER-13 and SERVE-16; both hold. A parked request that a flush lets in is recorded as not pinned by a test.",
       "metrics": [
         "wrk with the server on CPU 0 and medians of 3 rounds of 10 s. On plaintext pipelined 16 deep, async rose to 7.7x/5.9x/5.4x/2.7x its base at c=256/1024/4096/16384, against an entry vs entry-copy band of 3.7/3.0/4.4/7.7%. On json, async against the explicit entry moved from -8.6/-13.9/-1.0/-8.4/-13.2/-22.2% to -20.5/-0.8/-8.3/-5.7/-23.3/-13.6% at c=16/32/64/128/256/512. That is mixed, with bands up to 13.9%, and is recorded open. The explicit entry is unchanged."
@@ -357,7 +357,7 @@
       "type": "perf",
       "scope": "net",
       "breaking": false,
-      "title": "the async Postgres pool pipelines queries across tasks (WP49 stage 6, part 5)",
+      "title": "the async Postgres pool pipelines queries across tasks",
       "body": "PgAsyncPool can now share a connection among many tasks.\n\n`pgAsyncSeat` takes a seat on the least-seated connection, waiting in a FIFO queue when every connection is at its depth (8 by default). Each seated task sends its statement with its own Sync. That statement is prepared once per connection under a name and re-prepared after a re-dial, so many statements from different tasks are in flight on one connection at once. `pgAsyncTurn` waits for the task's answer to come round, in send order, and `pgAsyncDone` gives the seat back.\n\nA waiting claim or seat is woken when a connection or seat is released, through a socket pair opened on first wait, instead of sleep-polling 1–16 ms. A task cancelled while queued leaves the queue. A task cancelled with its answer unread has that answer read past, so the statements behind it are not disturbed. If that answer cannot be read past (too large, a ParameterStatus, a transaction left open), the statements behind it fail and the connection closes, as before (PG-43). The startup is bounded by `connectWaitMs`.\n\nThe async TechEmpower database entry moves onto the seated pool. It re-dials a closed slot with a bounded backoff.\n\nThe security record adds PG-39 to PG-44 to docs/security/postgres.md:\n- the wake accounting, whose two fixes (a woken waiter spinning on an unread wake byte, and a wake lost while one was pending) are each pinned by a test section that fails without it;\n- the password held for re-dials;\n- the wake pairs' descriptor cost, up to `size` + 129 socket pairs.",
       "metrics": [
         "the async /db entry, median of 3 rounds of wrk on one machine, rises from about 11k to about 30k req/s at c=64. The explicit entry is at about 108k, so async stays about 3.5–4x behind it at c≥64. /fortunes at c≥64 is slower than the previous async pool (22219 vs 25985 at c=64, 16481 vs 23373 at c=256), with the cause unmeasured and recorded open. The explicit entry is unchanged."
@@ -440,7 +440,7 @@
       "type": "perf",
       "scope": "bench",
       "breaking": false,
-      "title": "the async TFB entry measured against the explicit one after the serve and pool fixes (WP49 stage 6)",
+      "title": "the async TFB entry measured against the explicit one after the serve and pool fixes",
       "body": "WP49 stage 6's gate (docs/wp49-async-server.md §6, the condition on D1) was re-measured on main at e523e14. That is after serve learned to answer a pipelined burst in one write (#1378) and the async Postgres pool learned to pipeline queries across tasks (#1379). The gate is still not met: the async entry is outside the explicit entry's noise band on plaintext, json and db. Stage 6 is recorded as \"measured, gate not met\", and D1's condition does not hold yet. This change measures and records only; no code changes.\n\ndocs/BENCHMARKS.md gains a dated section with every table, band, delta, verdict, RSS figure and strace table. The first measurement (#1367) stays as the before.\n\nWhat remains:\n- plaintext: the send gap is closed. The async entry makes about one sendto per burst, as the explicit one does. The rest is user-space CPU per request, which is unprofiled.\n- json: the cause is open.\n- db: the async entry falls as connections rise while the explicit one climbs. The cause is not traced; the candidates are the pool's depth, one Sync per statement, and task turns.\n- /updates is at or above the explicit entry. /fortunes is outside everywhere.\n\nThe db verdict rests on c=64 and c=256. At c=16 the two identical explicit builds landed in different modes, so that cell cannot be judged. run.sh's \"inside\" rule is one-sided, so an async result above the entry counts as inside.\n\nThis is a relative A/B on one machine, not a TechEmpower rank (D6).\n\nMeasured: async vs explicit, medians of 3 interleaved 10 s rounds on one 4-core VM.\n- plaintext: −33.3/−32.0/−38.3/−70.9%* at c=256/1024/4096/16384 (bands 2.6/1.4/0.1/8.3%; * = read errors). The first measurement was about −87%.\n- json: −2.5/−4.1/−6.2/−7.4/−6.3/−17.1% at c=16/32/64/128/256/512 (bands 1.1/1.0/0.9/2.2/0.5/2.5%).\n- /db: −74.2/−79.4% at c=64/256 (bands 3.1/5.7%).\n- All outside the band.",
       "metrics": [],
       "refs": [
@@ -495,7 +495,7 @@
       "scope": "runtime",
       "breaking": false,
       "title": "read a file a window at a time with fileOpen, fileReadAt, fileSize and fileClose",
-      "body": "Four builtins, global and exported by `nish:fs`, read a regular file through a buffer the program owns. Memory follows the window rather than the file, and a file past 2^31 − 1 bytes is readable.\n\n`fileOpen(path)` answers a plain `i32` descriptor or a negated Linux errno. It opens with `O_RDONLY | O_CLOEXEC | O_NONBLOCK`, and anything that is not a regular file is refused: a directory is -21, anything else -22. `fileReadAt(fd, buf, off, len, pos)` is a positional `pread` into `buf[off, off + len)`. The window is bounds-checked as `netRead`'s is. A negative `pos`, or a `pos + len` past 2^63 − 1, answers -22. A negative or closed descriptor answers -9. `fileSize` answers an `i64`, and `fileClose` is never retried. Errors map by errno name to Linux's numbers on every platform; any code outside the documented set is -5.\n\nAll four are `fs.read`, refused in `scope()` tasks and under `--deny fs.read`. Under Node they answer byte for byte as natively. `--profile wasi` links them through `runtime-os.c`. A freestanding `wasm32` build is refused at check time (NL2718). `runtime-wasm.c` defines them answering -38, so a `--profile wasm` link never fails; this adds 105 bytes to every such module.\n\nRecords the owner's answers to WP44's Q1–Q9 (every recommendation accepted), ticks F1 and F2, and adds security record RT-50.",
+      "body": "Four builtins, global and exported by `nish:fs`, read a regular file through a buffer the program owns. Memory follows the window rather than the file, and a file past 2^31 − 1 bytes is readable.\n\n`fileOpen(path)` answers a plain `i32` descriptor or a negated Linux errno. It opens with `O_RDONLY | O_CLOEXEC | O_NONBLOCK`, and anything that is not a regular file is refused: a directory is -21, anything else -22. `fileReadAt(fd, buf, off, len, pos)` is a positional `pread` into `buf[off, off + len)`. The window is bounds-checked as `netRead`'s is. A negative `pos`, or a `pos + len` past 2^63 − 1, answers -22. A negative or closed descriptor answers -9. `fileSize` answers an `i64`, and `fileClose` is never retried. Errors map by errno name to Linux's numbers on every platform; any code outside the documented set is -5.\n\nAll four are `fs.read`, refused in `scope()` tasks and under `--deny fs.read`. Under Node they answer byte for byte as natively. `--profile wasi` links them through `runtime-os.c`. A freestanding `wasm32` build is refused at check time (NL2718). `runtime-wasm.c` defines them answering -38, so a `--profile wasm` link never fails; this adds 105 bytes to every such module.\n\nRecords the maintainer's answers to WP44's Q1–Q9 (every recommendation accepted), ticks F1 and F2, and adds security record RT-50.",
       "metrics": [],
       "refs": [
         "docs/wp44-streaming-files.md",
@@ -525,7 +525,7 @@
       "type": "docs",
       "scope": "runtime",
       "breaking": false,
-      "title": "stream a file through an HTTP/1.1 example with flat memory (WP44 F3)",
+      "title": "stream a file through an HTTP/1.1 example with flat memory",
       "body": "examples/file-server.ts answers every request with one file. It opens the file once, at start-up, and sends it 64 KiB at a time: fileReadAt fills the window, then Http1Connection.write sends it. On H1_AGAIN or a partial take it keeps the connection's i64 position and resumes at H1_WRITE. A short read before the planned size aborts the connection, since Content-Length is already sent. HEAD gets the head without reading the file.\n\ntests/run.js's file-server section serves a window-sized file and a 64 MiB one to a reader that stalls. It checks each body's SHA-256 against the file, and holds the server's two peak RSS figures (VmHWM) within 256 kB of each other. The networking guide shows the pump. WP44 is done: four of four stages landed.\n\nMeasured: VmHWM 1,888-1,896 kB serving 64 KiB and 1,892-1,896 kB serving 64 MiB (1,024 windows), 10 runs each, Linux x64, --profile speed; spread 8 kB, band 256 kB; an 8 MiB window reads 10,024 kB\nRefs: docs/wp44-streaming-files.md#10-stages-once-the-questions-are-settled\nTests: tests/run.js file-server\n\nFixes #710",
       "metrics": [],
       "refs": [],
@@ -566,7 +566,7 @@
       "type": "feat",
       "scope": "checker",
       "breaking": false,
-      "title": "references to capture-free top-level functions in fields, locals, arrays and returns (WP51 stage 1)",
+      "title": "references to capture-free top-level functions in fields, locals, arrays and returns",
       "body": "* feat(checker): resolve a function type outside a parameter to a function reference type (WP51 stage 1, WIP)\n\nA function type written for a field, local, element, return or alias now\nresolves to an i32 tag type interned by its signature, rather than being\nrefused. Stores, calls and dispatchers follow.\n\n* wip(checker): reference places and dispatchers\n\n* wip(codegen): dispatcher debug check and empty trap\n\n* wip(checker): refuse zero-filled references, fix untyped receivers in the place pass\n\n* wip(checker): §2.2 and §5.2 refusals, codes and wordings\n\n* wip: wasm host reachability for reference fields\n\n* wip: generic sites, arrow capture, function element names\n\n* wip: fnref negatives, opaque-reference refusal, case outputs\n\n* wip: rss pins, debug check\n\n* wip: cross-module link program\n\n* wip: emit-ts writes reference calls as written\n\n* wip: -g describes references\n\n* wip: lint:dead\n\n* wip: register differential goldens\n\n* wip: self goldens\n\n* wip: docs, NL2729 scalar args, ffi wording\n\n* wip: nish-cmp declarations\n\n* fix(checker): widen a function reference read out of a Map\n\nA reference read back through Map.get is Op | undefined, a maybe the place\npass did not follow, so a call through it trapped and an escape join through\nit went unchecked. Such a read now widens its place to every function of its\nsignature.\n\nTests: tests/link/fnref_map, tests/link/reject_fnref_escape_join_map\n\n* test(self): regenerate the fnref-places golden\n\n* refactor(checker): share the reference-type and table-growth helpers\n\nThe reference pass now uses the checker's referenceTypeOf and grows a\nmodule's tables through one RefModule method, rather than its own copies.\n\n* test(self): regenerate the goldens of the shared reference helpers\n\n* docs: tick WP51 stage 1 and move its Next to stage 2\n\n* refactor(checker): renumber the function-reference codes after main's NL2718\n\nmain took NL2718 for the freestanding wasm32 file read, so the\nfunction-reference diagnostics move up one, to NL2719-NL2731.\n\n* fix(checker): refuse a function reference as a Map value, and pin each store row\n\nA `Map` value is not yet a place whose functions the compiler tracks, so\n`Map<K, F>` with a function-reference value is refused (NL2732); keep the\nreferences in an array and store the index. A written function type with\na rest, optional or defaulted parameter is refused (NL2723). A host-visible\nclass reached through `Result` or a maybe now counts as holding a\nreference. Each store row of the place table has its own test.\n\nTests: tests/cases/fnref_row_assign, fnref_row_index_store, fnref_row_generic_class, fnref_row_nullish, fnref_row_interface, reject_fnref_map, reject_fnref_host_result, reject_fnref_type_optional, reject_fnref_type_rest\n\n* test(self): regenerate goldens and declare the store-row programs to nish-cmp\n\n* fix(checker): refuse a guard helper as a function reference, and keep src under the perf ratchet\n\nA function taking a Mutex guard can no longer be passed as a value\n(NL2733): the guard's lifetime is the call, and a reference would let it\noutlive the lock. The compiler's own sources drop the bounds checks,\npadding and in-loop allocations this branch had added, so the perf\nbaseline only falls.\n\nTests: tests/wordings/nl2733_fnref_guard, tests/cases/reject_mutex_guard_helper_closure\n\n* refactor(checker): renumber the function-reference codes after main's NL2719-NL2724\n\n* docs: regenerate the diagnostic reference after the merge\n\n* fix(checker): read a captured reference parameter's place from its host, and refuse a transitive keeper in the escape join\n\nA reference parameter an arrow captures was read from the arrow's own copy\nof it, a place no store reaches, so a call through it trapped; it is now\nlooked up from the arrow's host outwards. The escape join reads a member's\npointer `outlives` fact, as escape analysis does, so a member that keeps an\nargument by passing it on to a function that keeps it is seen as keeping it.\nAn array of references is refused as a `Map` value like a reference (NL2738).\n\nTests: tests/cases/fnref_capture_param, fnref_capture_method, fnref_capture_ctor, reject_fnref_escape_join_transitive, reject_fnref_map_array\n\n* test(checker): declare the captured-parameter reference cases to nish-cmp\n\nThe 0.38.0 seed refuses a function type outside a parameter, so only the\ncandidate compiles fnref_capture_param, _method and _ctor.\n\n* fix(checker): close the round-3 review items on function references\n\nA `Map` value that holds a function reference inside a nullable, a `Maybe`\nor a `Result`, not only an array, is now refused (NL2738). An escape join\nwhose keeper only passes a string to a user function now says so, rather than\nclaiming the function keeps it. A member with no facts counts as a keeper.\nA callback over an array of references is pinned by a test. The unrelated\nedits to `symbols.ts`, `compile.ts` and `checkConstraints` are reverted.\n\nTests: tests/cases/reject_fnref_map_nullable, tests/cases/reject_fnref_escape_join_string, tests/cases/fnref_array_callback\n\n* fix(checker): keep checkConstraints' argument in a local\n\nRestores `const arg = args[i]`, which keeps src/generics.ts within its\nNL9007 baseline in tests/perf-baseline.json.",
       "metrics": [],
       "refs": [],
@@ -618,7 +618,7 @@
       "type": "docs",
       "scope": "runtime",
       "breaking": false,
-      "title": "profile the async TFB entry against the explicit one on plaintext, json and db (WP49 stage 6)",
+      "title": "profile the async TFB entry against the explicit one on plaintext, json and db",
       "body": "Adds bench/techempower/profile.sh, which builds the explicit and async\nTechEmpower entries with -g and measures one request of each: instructions\nper request with callgrind (counting switched on only for a wrk window),\nthe top user-space frames with perf cpu-clock:u, system calls per request\nwith strace -c, and CPU per request from /proc. BENCHMARKS.md gains the\nmethod, the tables and the top frames, and WP49 §6 replaces its \"not\nprofiled\" bullets with the causes the profile ranks for each test.\n\nOn plaintext and json the HTTP codec costs the same on both sides; the\nasync entry's extra instructions are serve's byte-at-a-time copies of the\nrequest and answer, the HttpHandler layer, serve's pass over every slot\nafter each turn, the task per request and Router.match. On /db the largest\nsingle cost is pgAsyncRead zero-filling an 8 KiB buffer per answer, and the\nextra system calls come from two waits per statement.",
       "metrics": [
         "Ir per request, explicit → async: plaintext (c=256, 16 pipelined) 5,419 → 11,662; json (c=64) 6,614 → 13,153; /db (c=64) 11,017 → 37,229; system calls per request on /db 2.10 → 24.01 (callgrind and strace, one machine, main at 0e338d83)"
@@ -639,7 +639,7 @@
       "type": "perf",
       "scope": "runtime",
       "breaking": false,
-      "title": "close the async serve gap on plaintext and json (WP49 stage 6)",
+      "title": "close the async serve gap on plaintext and json",
       "body": "serve's task copies the request head and body out of its slot and its answer back in bulk, caches content types already sent, and keeps free slots, answered tasks and running tasks in lists instead of scanning every slot each turn. A Response.length that is negative, past the response cap or past the body is now answered 500 instead of panicking. The answered bytes are unchanged; the explicit entry and the runtime are untouched.\n\nThe async entry is still outside the entry vs entry-copy band at plaintext c=256 and 4096 and json c=128 and 512; the trim stage takes the remaining per-task cost.",
       "metrics": [
         "async plaintext +20% / +20% / +33% at c=256 / 1024 / 4096 (band 11.8 / 6.4 / 11.3%); json -1.1..+3.8% vs entry, inside at c=16..64 and 256, outside at c=128 and 512 (band 0.4-14.3%); Ir/req -22% plaintext, -16% json, -8% /db"
@@ -784,7 +784,7 @@
       "type": "perf",
       "scope": "net",
       "breaking": false,
-      "title": "close the async Postgres pool gap on /db (WP49 stage 6)",
+      "title": "close the async Postgres pool gap on /db",
       "body": "The async Postgres pool copies each answer in bulk instead of zero-filling\na fresh 8 KiB buffer per answer and copying it a byte at a time, hands every\nfree seat to the tasks queued for it in one loop turn, yields for its turn\nbefore parking, and wakes only as many waiters as there are seats a task can\ntake now. The async TFB entry batches the ids of concurrent /db requests\ninto one statement, as the explicit entry's batcher already does, so the two\nentries keep the same query strategy; whether TFB's rules allow that for\neither entry is recorded as open in bench/techempower/README.md.\n\n/db at 64 connections is still outside the entry vs entry-copy band; what is\nleft is serve's and the task's, which the trim stage takes next.",
       "metrics": [
         "async /db 2.2-4.8x main's req/s; Ir per request 37,240 → 17,515 and system calls per request 23.8 → 2.4 at c=64 (callgrind, strace); against the explicit entry -10.8% at c=64 (band 5.3%)"
@@ -848,7 +848,7 @@
       "type": "fix",
       "scope": "runtime",
       "breaking": false,
-      "title": "refuse a granted program's interpreter as a spawn target under --sandbox (WP37, SBX-1)",
+      "title": "refuse a granted program's interpreter as a spawn target under --sandbox (SBX-1)",
       "body": "Under --sandbox, a dependency granted process.spawn=<program> can now start only that program. The exec allowlist must grant EXECUTE on each granted program's ELF loader and #! interpreter, because the kernel opens them to start it; until now a dependency could also spawn that loader directly and have it run any binary on the machine (SBX-1, High). The compiler now marks an interpreter the grant does not name itself with a second leading slash in @.sandbox.exec (the same file to the kernel, so the Landlock rules and nish_sandbox's signature are unchanged). The runtime records each marked file's identity before confinement and refuses a spawn whose target is one of them with EACCES. The target is resolved as posix_spawnp would resolve it and executed through the descriptor that was checked (/proc/self/fd/N), so a symlink, a hardlink or a name swapped between the check and the exec cannot reach the loader. A program the grant names explicitly stays spawnable even when it is also another's interpreter.\n\nSpawning under --sandbox with a marked entry now needs /proc mounted, best-effort mode included; a #! script sees /proc/self/fd/N as $0. SBX-1 is recorded fixed in docs/security/sandbox.md, and CodeQL's new cpp/path-injection alert on the PATH lookup is triaged as not a defect in docs/security/runtime.md. WP37 moves to 4 of 8; its remaining stages are deferred.",
       "metrics": [],
       "refs": [
@@ -930,7 +930,7 @@
       "id": "design-note-for-one-handler-across-http-1",
       "type": "docs",
       "breaking": false,
-      "title": "design note for one handler across HTTP/1.1, 2 and 3 (WP39 G7)",
+      "title": "design note for one handler across HTTP/1.1, 2 and 3",
       "body": "docs/http-one-handler.md designs a façade, std/net/http-server.ts, that answers one handler over Http1Server, Http2TlsServer, a cleartext HTTP/2 carrier (std/net/http2-cleartext.ts, prior knowledge only, over the unmodified http2.ts) and Http3Server, without editing any existing carrier.\n\nIt fixes the API, where Alt-Svc is added and how ma=0 clears it, what each version still refuses (plain CONNECT, OPTIONS *, oversized heads), and every memory bound under the bump arena: heads and spans allocated at their caps, bodies tiered with abandoned doublings counted, a per-connection request cap, and the HTTP/1.1 head limits tied to maxHead at listen time. The test matrix and the two security records the implementation adds are named.\n\nRefs: docs/wp39-http-server.md#3-part-b-a-general-purpose-server-every-version\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -946,7 +946,7 @@
       "id": "design-note-for-quic-on-more-than-one",
       "type": "docs",
       "breaking": false,
-      "title": "design note for QUIC on more than one core (WP39 G6)",
+      "title": "design note for QUIC on more than one core",
       "body": "docs/h3-multicore.md designs how prefork workers sharing one UDP port keep each QUIC connection on the process that owns it, so a peer that changes address is not hashed to another worker and reset.\n\nEvery server-issued connection ID carries the owning worker's index in byte 0. A classic BPF program attached with SO_ATTACH_REUSEPORT_CBPF steers each datagram by that byte, modulo the worker count N, so a packet's worker depends on its DCID alone and never on the client's address. The supervisor binds the UDP group first and carries N to the runtime in udpBind's flag bits 8-15 and to each worker in --nish-prefork-udp=<fd>,<N>. Workers take their index and N through QuicServerConfig, range-checked 0 <= k < N <= 255. UDP GRO is refused on a steered socket, because one coalesced flow can hold several connections. A refused attach falls back to one worker before any TCP listener is bound.\n\nMeasured: cBPF steering 64/64 to the named socket, out-of-range indices fall back to the 4-tuple hash, unprivileged attach works; eBPF needs CAP_BPF (estimates are labelled as such in the note).\nRefs: docs/wp39-http-server.md#3-part-b-a-general-purpose-server-every-version\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -963,7 +963,7 @@
       "type": "test",
       "scope": "runtime",
       "breaking": false,
-      "title": "the sessions server on regions holds memory flat over 2,000,000 requests (WP46 stage 3)",
+      "title": "the sessions server on regions holds memory flat over 2,000,000 requests",
       "body": "WP46's proof. The §1 sessions server is rewritten so each session lives in\na region of its own: `regionWith` makes it, `enterWith` serves it, and the\ncache `free`s it on eviction. `tests/link/region_sessions_soak` serves\n2,000,000 requests through one keep-alive `Http1Connection` at 1,000 live\nsessions. Past a warm-up of eight turnovers of the live set, it asserts that\n`Arena.mark()` never moves and that anonymous resident memory stays within\nthe relay soak's 512 KiB. It then runs the same checks over the baseline's\narena-only cache and requires them to fail, so the test can fail.\n\nThe warm-up covers the cache's `Map`: a delete leaves a dead entry until a\nrebuild compacts the table. `bench/wp46-memory/run.mjs` now runs the baseline,\na copy of it for the noise band, and the region server in interleaved rounds.\nThe design note records the figures in §7.1. WP34 N9's per-match half is\nclosed, and WP46 is landed, 4 of 4. The soak reads memory through WP44's\nfile builtins, which the 0.38.0 seed does not know, so nish-cmp declares its\nexit difference.\n\nMeasured: 1,000 live: regions 438 ns/request vs 452 (0.97x, band 3.2%),\nanonymous memory flat at 761,856 B where the baseline grows 42.5 MB to\n337.7 MB over 2,000,000 requests. 100,000 live: 613 vs 549 ns/request (1.12x,\noutside the 4.6% band), memory flat past warm-up.",
       "metrics": [],
       "refs": [
@@ -1001,7 +1001,7 @@
       "type": "perf",
       "scope": "net",
       "breaking": false,
-      "title": "serve the TechEmpower json and plaintext entry on every core (WP39 E5)",
+      "title": "serve the TechEmpower json and plaintext entry on every core",
       "body": "bench/techempower/main.ts now runs one worker per core on one SO_REUSEPORT port through nish/net/prefork, the way the database entry already does. The worker count comes from the available parallelism; NISH_WORKERS or an explicit count forces it, and one worker keeps the old single-process path so run.sh can compare one against many on the same build.\n\ntests/link/tfb_entry keeps the verifier's header and body checks and the flat Arena.used() pin, and adds a section that proves two distinct worker processes answer on the one port, and that SIGTERM stops both and the supervisor exits 0 within its grace period. Hosts without Linux or a second CPU skip that section with a reason.\n\nMeasured: one process vs one worker a core on a 4-vCPU Xeon @ 2.10 GHz VM (server pinned to 2 CPUs, wrk on the other 2), interleaved rounds with a byte-identical twin for the noise band: 1.7x to 2.3x requests per second on /plaintext and /json across the TFB concurrency levels, every cell outside its noise band (figures in docs/BENCHMARKS.md).\nRefs: docs/BENCHMARKS.md#techempower-json-and-plaintext\nTests: tests/link/tfb_entry\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -1035,7 +1035,7 @@
       "type": "perf",
       "scope": "runtime",
       "breaking": false,
-      "title": "ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+      "title": "ship the SSSE3 and NEON Adler-32 kernels",
       "body": "adler32Update now runs a vector kernel in the runtime: SSSE3 on x86-64 and NEON on little-endian AArch64.\n- The kernel is chosen once per process. x86-64 reads cpuid leaf 1 for SSSE3; NEON is AArch64's baseline.\n- NISH_ADLER32=soft (exact match) pins the Nish loop.\n- Every other target, and wasm, keeps the Nish loop.\n\nIt uses the seam CRC-32 uses. adlerUpdate checks its window, then branches on nish_adler32_hw() between nish_adler32_update in runtime/runtime-checksum.c and the private adler32Walk, which is the former loop. The two arms join at a phi, so the answer at the edges is still the std file's. The kernels work in 32-byte blocks and reduce mod 65521 after at most 173 blocks (5,536 bytes), inside the 32-bit bound from an unreduced seed.\n\nMeasured: shipped adler32Update, default over NISH_ADLER32=soft, 6.80x at 64 KiB and 6.33x at 1 MiB on an x86-64 Xeon with SSSE3 (bench/adler32.mjs --self). The bar was 20%.\nRefs: docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear, docs/security/compress.md\nTests: tests/simd/adler32.c, tests/link/std_compress_adler_paths, tests/link/std_compress_adler_diff\nFixes #1079",
       "metrics": [],
       "refs": [],
@@ -1052,7 +1052,7 @@
       "type": "docs",
       "scope": "bench",
       "breaking": false,
-      "title": "HTTP/2 and HTTP/3 figures from the h2load harness (WP39 G8)",
+      "title": "HTTP/2 and HTTP/3 figures from the h2load harness",
       "body": "docs/BENCHMARKS.md gains an HTTP/2 and HTTP/3 section: bench/h2load.mjs driving tests/link/net_interop_server with h2load for HTTPS/1.1 and HTTP/2 over TLS, and with the server's own QUIC client for HTTP/3, the build against itself in five interleaved rounds so the spread is the noise band. It names the machine, the build commit, compiler and profile, the command that reproduces it, and why the HTTP/3 row is not an h2load figure.\n\nThe levels are about twice the older table in bench/README.md for the same harness; that table names no machine, compiler or commit, so the section records the gap without attributing it, shows a second run reproducing its own levels to about 15%, and tells readers not to compare the two tables.\n\nMeasured: 4-vCPU Xeon @ 2.10 GHz KVM guest, build 747126db (0.38.0 seed, speed), 5 rounds: HTTPS/1.1 88.8k req/s (noise band 0.787-1.187), HTTP/2 over TLS 177.3k (0.704-1.173), HTTP/3 in-process 29.0k (0.920-1.566).\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -1086,7 +1086,7 @@
       "type": "perf",
       "scope": "runtime",
       "breaking": false,
-      "title": "trim the async request path's instructions per request (WP49 stage 6)",
+      "title": "trim the async request path's instructions per request",
       "body": "The router matches a route in one pass over the path, comparing whole\nsegments, and hands the path's end to the handler instead of the handler\nscanning for it again. serve copies a request's header spans as one set and\nits head by its recorded length, skips the copy of an empty body or empty\nparams, and copies an answer that fits its slot with one set. A Response\nwhose length exceeds its body is pinned to answer 500 and keep serving.\nAnswered bytes are unchanged.\n\nThe explicit /db entry shares the router and handler, so it got cheaper too\n(-1.7% Ir per request); the explicit plaintext and json entries moved by\nunder 0.4%.\n\nThe async entry is still outside the entry vs entry-copy band on plaintext at\nevery concurrency and on json at several. What remains per request is about\n750 instructions of task memory in runtime/runtime-async.c (not the per-wait\nsystem calls #1374 ruled out) and about 2,100 in the layered serve, handler\nand router hand-off, which needs a redesign rather than a trim.",
       "metrics": [
         "async Ir per request -6.5% plaintext (9,096 → 8,507), -10.9% json, -8.5% db; explicit db -1.7%, plaintext and json explicit within 0.4% (callgrind, profile.sh); plaintext c=256 async vs entry -26.9% (band 6.9%), /db c=64 inside its band on this run"
@@ -1132,7 +1132,7 @@
       "type": "feat",
       "scope": "cli",
       "breaking": false,
-      "title": "the review tier of fix in --json (WP33 R5)",
+      "title": "the review tier of fix in --json",
       "body": "A portability warning whose site has a rewrite that makes both readings\nagree now carries it under a new `--json` key, `review`: a sibling of\n`fix` with the same edit-list shape, printed after it and only when there\nare edits. `fix` keeps its meaning (every edit in it is safe to apply\nblind), every existing `--json` line is unchanged, and `nish --fix` never\napplies a review edit. An agent applies one from `--json` and checks the\nsite, as docs/AI.md describes.\n\nNL8006 (integer `/`) is the first row with one: the quotient wrapped in its\ntype's own conversion, `toI32(a / b)` (or `toU8`, `toU16`, `toU32`), and\n`q /= d` rewritten to `q = toI32(q / d)`. Applied, the program compiles to\nbyte-identical IR with the warning gone and prints the same under Node.\nThere is no edit in a generic body, for `/=` on anything but a plain name,\non a ranged target, with a divisor that holds a `/` or a comment before the\noperator, for `i64`/`u64`, where operand types differ, or where the module\nbinds the conversion's name. NL8007 and NL8008 get none: no rewrite reads\nthe same under Node without warning again or costing an instruction.\n\nThe range proof now carries a quotient's range through a conversion to its\nown type, so a hand-written `toI32(a / 4) + 1` skips the overflow check\n`a / 4 + 1` already skipped. No nish-cmp corpus program moves.",
       "metrics": [],
       "refs": [
@@ -1155,7 +1155,7 @@
       "type": "feat",
       "scope": "net",
       "breaking": false,
-      "title": "record_size_limit on the TLS server (WP39 G3)",
+      "title": "record_size_limit on the TLS server",
       "body": "The TLS 1.3 server reads a client's record_size_limit (RFC 8449) and never sends a protected record whose plaintext passes it: the limit less one for the content type, never above 2^14, applied to every record sealed after EncryptedExtensions (the rest of the flight, NewSessionTicket, application data, KeyUpdate and alerts). When the client offers the extension the server answers with its own limit in EncryptedExtensions. A value under 64 is refused with illegal_parameter, a malformed body with decode_error, a duplicate as any duplicate extension is; a value above 16385 is clamped. The limit is off under QUIC, where records do not apply.\n\nAt a client's limit of 64 each record carries 63 bytes of content for 22 bytes of header and tag; at 2^14 the overhead is 0.13%.\n\nTests: tests/link/net_tls_record_size_limit (and its f64 twin) read the record lengths off the wire at limits of 64 and 512, with and without padding, for the flight and a write; the fullest record is exactly the limit. An openssl s_client -record_size_limit interop runs where OpenSSL has the option and skips with that reason otherwise.\nRefs: docs/security/tls.md\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -1172,7 +1172,7 @@
       "type": "feat",
       "scope": "codegen",
       "breaking": false,
-      "title": "declare class as a C struct layout, passed by pointer (WP27 S4.1)",
+      "title": "declare class as a C struct layout, passed by pointer",
       "body": "A `declare class` now describes a C struct: its fields are laid out in\ndeclaration order at C's natural alignment, never reordered, with pointer\nfields sized for the target, so the compiler computes the same offsets and\nsize clang does. `new Name()` zero-fills every byte, padding included. A\n`declare function` parameter typed as a layout class takes a pointer to it,\nborrowed for the call: C may read and write it while the call runs and must\nnot keep it.\n\nA layout field is u8, u16, u32, u64, i32, i64, f32, f64, CPtr, CPtr | null\nor another layout nested by value. `number` is refused by any spelling,\nsince its width would follow --number-mode. A layout never crosses by value,\nnever sits in an array, and never appears, directly or held by another type,\nin an exported signature, so no header, .d.ts or N-API binding describes one;\na build whose target is not fixed (--emit-dts, a page module) refuses it.\nThe design is docs/wp27-ffi.md §9; S4.2, copying a C-owned struct out of a\nCPtr, follows.",
       "metrics": [],
       "refs": [
@@ -1253,7 +1253,7 @@
       "type": "feat",
       "scope": "checker",
       "breaking": false,
-      "title": "function references as arguments, `| null` and `Map` values (WP51 stage 2)",
+      "title": "function references as arguments, `| null` and `Map` values",
       "body": "A function reference can now be passed to a function-typed parameter, be `| null`, and be a `Map` value. Each call through one still compiles to a `switch` dispatcher over the functions that can reach that place, followed by a direct call; no indirect call is emitted.\n\n- Arguments: a local or parameter holding a reference may be passed to an inline function-typed parameter. The call is instantiated once per call site, through an arrow that calls the reference.\n  - A field or element argument is refused with \"read it into a `const` first\" (NL2741).\n  - So is a local that a later argument assigns (NL2743), because JavaScript reads the argument before the call and this lowering would read it after.\n  - The runners that check the body they are handed (`expose`, `exposeWith`, `parallelMap`, `parallelMapInto`, `parallelReduce`, `spawn`, `region`, `enterWith`) refuse a reference (NL2734).\n- `S | null` for a function type S is the one scalar `| null`:\n  - Tag 0 is `null`, and `new Array<S | null>(n)` reads `null` in every slot.\n  - A call needs a narrowing test first (NL2740, NL2742).\n  - A nullable reference is aligned to its 4-byte tag, and `-g` names tag 0 `null`.\n- `Map` values may be a reference, an array of references, or a nullable of either. NL2738 is retired.\n  - A call through `get` dispatches over the functions stored into the map.\n  - A function-typed `Map` key stays refused.\n- Each new place joins the per-place pass, including `push`, `for…of` over arrays and `Map` values, `??`, `?:` and assignment expressions.\n- The escape-join refusal (NL2736) covers every new place. `fnref_place_set` has argument, nullable and `Map` variants, each keeping `P` on the stack with flat peak RSS at 1x and 10x.\n- A reference inside a `Result` arm is refused (NL2744).\n- Stage 1 follow-ups (#1417):\n  - `<`, `>` and arithmetic on a reference are pinned on their generic codes.\n  - The defaulted-parameter refusal is pinned.\n  - `JSON.stringify` of a reference gives the function-reference wording.\n  - The `nish:` builtin note no longer says no function is a value.\n  - The guide documents gdb's two-step into a reference call and `skip -rfu '^\\$ref\\.'`.\n\nFixes #1417",
       "metrics": [],
       "refs": [
@@ -1282,7 +1282,7 @@
       "type": "feat",
       "scope": "net",
       "breaking": false,
-      "title": "cleartext HTTP/2 with prior knowledge (WP39 G7)",
+      "title": "cleartext HTTP/2 with prior knowledge",
       "body": "nish/net/http2-cleartext serves HTTP/2 over plain TCP to a client that starts with the connection preface (h2c with prior knowledge; no Upgrade: h2c, which RFC 9113 dropped), on the existing sans-IO http2.ts core, which it does not modify. It reads the 24-byte preface itself, across as many reads as it takes, and closes a connection whose preface is wrong at the first mismatching byte without writing anything. No frame buffer is borrowed before the preface is whole, slots are fixed at construction, and a warmed request allocates nothing. expire() closes a slot whose preface is still incomplete past prefaceTimeout and spares one whose preface has arrived.\n\nIt is the cleartext carrier the one-handler façade (docs/http-one-handler.md) builds on, and what h2load and a proxy's upstream speak. Cleartext means no confidentiality; docs/security/http2-cleartext.md records the scope.\n\nTests: tests/link/net_http2_cleartext covers the exchange, prefaces split at bytes 1, 10 and 23, every refusal, slot exhaustion, expire on incomplete and complete prefaces, a flat Arena over warmed requests, and curl and h2load where they speak HTTP/2; net_http2_cleartext_bad_slots and _bad_timeout pin the panics.\nRefs: docs/http-one-handler.md\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -1299,7 +1299,7 @@
       "type": "feat",
       "scope": "net",
       "breaking": false,
-      "title": "Postgres over TLS in the carrier (WP39 E6)",
+      "title": "Postgres over TLS in the carrier",
       "body": "PgConfig gains tls (PG_TLS_DISABLE, the default; PG_TLS_REQUIRE; PG_TLS_VERIFY_FULL), tlsRootsPath and tlsServerName. With TLS asked for, the carrier sends an SSLRequest, reads exactly one answer byte once all eight request bytes are out, and on S runs nish/net/tls/client on the program's loop without blocking: TLS 1.3 only, verify-full checking the chain against the roots and the host name, require encrypting without verifying. Any answer but S fails the query with PG_ERR_TLS before the StartupMessage leaves; bytes a peer sends after its S go to the record layer and fail the handshake, so nothing reaches the backend parser in the clear. Every path that is not the carrier — PgConnection built directly, pgAsyncConnect, a hand-driven PgPool — panics on a non-zero tls rather than connecting in cleartext. PG-9 is fixed for the carrier; the other paths refuse.\n\nTests: tests/link/std_postgres_tls pins the SSLRequest bytes, the N path, bytes after S and after N, verify-full refusals (unknown CA, wrong name) with their alerts, and require; the _connection_panic, _pool_panic, _unix_panic and _roots_panic programs pin the refusals; postgres-live runs verify-full, require and the refusals against a TLS-enabled PostgreSQL with a CA minted in the job.\nRefs: docs/security/postgres.md\nPart of #1433",
       "metrics": [],
       "refs": [],
@@ -1447,7 +1447,7 @@
         "goodput 9522 (± 6) and 9369 (± 31) kbps, crosstraffic 3356 (± 196) and 3034 (± 466) kbps, quic-go and ngtcp2, five transfers each on the 10 Mbps link"
       ],
       "refs": [
-        "docs/wp34-hosting-cs.md"
+        "docs/wp34-network-stack.md"
       ],
       "tests": [
         ".github/workflows/interop.yml (quic-interop-runner)"
@@ -1465,7 +1465,7 @@
       "scope": "bench",
       "breaking": false,
       "title": "WP28 spike S6 — try/catch by landing pads against a Result desugaring",
-      "body": "The two candidate lowerings of `try`/`catch` measured on the same three shapes: a hot loop that never throws, a parser that fails one record in 1000, 100 and 10, and a call chain that unwinds 1, 8 and 32 frames. Each shape is the `Result` program the desugaring would produce and hand-written LLVM IR using `invoke` and `landingpad` on the Itanium unwinder, with a small two-phase personality in bench/wp28-s6/unwind.c. run.mjs assembles every `.ll`, builds both sides at the release profile, runs them interleaved, checks the outputs agree and prints time, noise band and section sizes.\n\nThe README recommends the `Result` desugaring for C5, for the owner to accept. The recommendation rests on targets: WASI and the freestanding profile have no unwinder, and the wasm backend drops the `catch` without a diagnostic. On time, the two are inside the noise band where nothing throws, and a failure costs about 770 ns plus 135 ns a frame by landing pads against about 2 ns plus 1.2 ns a frame by `Result`. One row goes the other way and is recorded: the inlined parser is faster with landing pads because the three-word `Result` return blocks inlining.\n\nThe generated self-goldens for the four new bench programs are added. The roadmap tick and the note's §7 land with the stage that records the spikes.",
+      "body": "The two candidate lowerings of `try`/`catch` measured on the same three shapes: a hot loop that never throws, a parser that fails one record in 1000, 100 and 10, and a call chain that unwinds 1, 8 and 32 frames. Each shape is the `Result` program the desugaring would produce and hand-written LLVM IR using `invoke` and `landingpad` on the Itanium unwinder, with a small two-phase personality in bench/wp28-s6/unwind.c. run.mjs assembles every `.ll`, builds both sides at the release profile, runs them interleaved, checks the outputs agree and prints time, noise band and section sizes.\n\nThe README recommends the `Result` desugaring for C5, for the maintainer to accept. The recommendation rests on targets: WASI and the freestanding profile have no unwinder, and the wasm backend drops the `catch` without a diagnostic. On time, the two are inside the noise band where nothing throws, and a failure costs about 770 ns plus 135 ns a frame by landing pads against about 2 ns plus 1.2 ns a frame by `Result`. One row goes the other way and is recorded: the inlined parser is faster with landing pads because the three-word `Result` return blocks inlining.\n\nThe generated self-goldens for the four new bench programs are added. The roadmap tick and the note's §7 land with the stage that records the spikes.",
       "metrics": [
         "outlined parser 0.94x with no failures (inside the band in a second run), inside the band at 1 in 1000, landing pads 1.53x slower at 1 in 100; inlined parser 0.67x and 0.71x; hot loop inside the band in both builds"
       ],
@@ -1487,7 +1487,7 @@
       "type": "feat",
       "scope": "net",
       "breaking": false,
-      "title": "steer QUIC packets to the owning process (WP39 G6)",
+      "title": "steer QUIC packets to the owning process",
       "body": "Prefork workers can now share one UDP port for QUIC. The kernel hands each datagram to the worker whose index is byte 0 of the destination connection ID, so a connection stays with its worker when the client's address or port changes.\n\nudpBind takes a new flag 4 that attaches a classic-BPF SO_ATTACH_REUSEPORT_CBPF program reading DCID byte 0 modulo the group count (bits 8-15, 1 to 255). QuicServerConfig gains workerIndex and workerCount; with a valid pair every server-issued connection ID (first SCID, NEW_CONNECTION_ID, Retry SCID) carries the worker index, and a listener drops a sibling worker's short header instead of sending a stateless reset that would end the sibling's connection. PreforkConfig.listenUdp binds one steered socket per worker before the TCP listeners and hands it over with --nish-prefork-udp=<fd>,<N>, read by preforkUdpListener and preforkUdpCount; if the kernel refuses the attach, the supervisor runs one worker on a plain socket and says so on stderr.\n\nEvery QuicServerConfig literal now sets workerIndex: -1 and workerCount: 0 (Nish interfaces have no optional fields). The new security record docs/security/quic-multicore.md (QM-1 to QM-5) covers the UDP path; the guide's networking page has a multi-core QUIC section.",
       "metrics": [],
       "refs": [
@@ -1510,7 +1510,7 @@
       "type": "test",
       "scope": "net",
       "breaking": false,
-      "title": "compare one worker against one worker in the TechEmpower gate and re-baseline (WP49 stage 6)",
+      "title": "compare one worker against one worker in the TechEmpower gate and re-baseline",
       "body": "Since #1448 the explicit TechEmpower entry forks one worker a core when it\nis given no count, and run.sh gives it none. Read from /proc while they\nserve, entry, entry-copy and async are each one process with one thread on\nCPU 0: the default counts the CPUs the process may run on, and run.sh pins\nevery server to one. So the gate was already like for like and only its\ncomments change; with NISH_WORKERS above 1 the entry refuses to start and\nthe run exits 1.\n\nmain is re-measured and re-profiled as the before for the stage 6 fixes: 7\nof the 11 judged cells are outside the band.",
       "metrics": [
         "async vs entry, 3 rounds, band in brackets: plaintext -27.6% (18.3%), -21.7% (8.5%), -31.3% (1.2%) at 256, 1024, 4096; json -1.1% (3.0%), -0.1% (0.5%), -1.1% (2.9%), -11.6% (7.8%), -13.0% (1.6%), -13.1% (4.7%) at 16 to 512, 8 s rounds; db -9.1% (2.3%), +6.3% (1.6%) at 64, 256, 2 s rounds. Ir per request, async against explicit: plaintext 7,848 against 4,814, json 9,276 against 5,962"
@@ -1533,8 +1533,8 @@
       "type": "docs",
       "scope": "cli",
       "breaking": false,
-      "title": "record x86-64-v4 and the AArch64 --cpu levels as measured, not built (WP38)",
-      "body": "WP38's last box: the --cpu levels after x86-64-v3, each measured on its own machine against S2's bar. None is built, so --cpu still accepts x86-64-v3 alone and src/ is unchanged. WP38 is now Landed, 10 of 10.\n\n- x86-64-v4, on an AVX-512 Xeon: against the baseline, spectral is +15% to +18% and vec3 stays inside the copy's spread. Against x86-64-v3, which already ships, spectral is 3.6% to 7.4% slower and nothing else gains. Decided 2026-11-12 (owner): it is not built, because a level must add something over the one already shipped.\n- armv8.2-a and armv8.4-a+crypto, on CI's ubuntu-24.04-arm runner: both are within 0.3% of the baseline on nbody, vec3 and spectral. The assembly is the baseline's apart from pointer-authentication hints.\n\nbench/simd-s0.mjs takes --level (repeatable) and times every level in the same rotating rounds as the baseline and its byte-identical copy.",
+      "title": "record x86-64-v4 and the AArch64 --cpu levels as measured, not built",
+      "body": "WP38's last box: the --cpu levels after x86-64-v3, each measured on its own machine against S2's bar. None is built, so --cpu still accepts x86-64-v3 alone and src/ is unchanged. WP38 is now Landed, 10 of 10.\n\n- x86-64-v4, on an AVX-512 Xeon: against the baseline, spectral is +15% to +18% and vec3 stays inside the copy's spread. Against x86-64-v3, which already ships, spectral is 3.6% to 7.4% slower and nothing else gains. Decided 2026-11-12 (maintainer): it is not built, because a level must add something over the one already shipped.\n- armv8.2-a and armv8.4-a+crypto, on CI's ubuntu-24.04-arm runner: both are within 0.3% of the baseline on nbody, vec3 and spectral. The assembly is the baseline's apart from pointer-authentication hints.\n\nbench/simd-s0.mjs takes --level (repeatable) and times every level in the same rotating rounds as the baseline and its byte-identical copy.",
       "metrics": [],
       "refs": [
         "docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear",
@@ -1553,7 +1553,7 @@
       "type": "feat",
       "scope": "codegen",
       "breaking": false,
-      "title": "readStruct copies a C-owned struct out of a CPtr (WP27 S4.2)",
+      "title": "readStruct copies a C-owned struct out of a CPtr",
       "body": "`readStruct(p)` in `nish:unsafe` copies the struct a `CPtr` points at into a\nfresh, Nish-owned `declare class` instance, so the result never aliases C\nmemory: C may free or overwrite the original and the copy keeps its values.\nThe layout comes from the context type (`const lc: Lconv = readStruct(p)`),\nsince a type argument is never written at a call site. A NULL pointer is\ntested before the copy and panics with the `ffi-null` kind, so\n`--deny-panics` refuses the call; the copy is the caller's allocation, held\nby the arena like `new`, and it lowers the same on wasm32, where the layout\nis sized for 4-byte pointers. The call needs the `unsafe` capability and has\nno Node form. With S4.1 this completes WP27 S4.",
       "metrics": [],
       "refs": [
@@ -1577,11 +1577,11 @@
       "type": "docs",
       "breaking": false,
       "title": "tick WP34's finished stages and WP39's G1 and G2",
-      "body": "WP34's roadmap page goes from 9 of 18 to 15 of 19: the constant-time\ndisassembly (K2 to K4), the faster P-256 (K5, split so 64-bit limbs stay\nopen), secp256r1 on the TLS server (T1), the HTTP/1.1 interop and the open\ntimeouts (T2, H1, H2), the interop runner's congestion cases (Q3) and DATA\ndown past 1,164 bytes (A1). Next names what remains: the cs waves, in the cs\nrepository.\n\nThe design note's status rows and lane tables say the same, and name what is\nstill open: 64-bit limbs, AEAD-4, --cpu, H3-5 and #1485. On the WP39 page and\nnote only the G1 and G2 rows change; that page's Done count is left to the\nWP39 work and is five short until then.",
+      "body": "WP34's roadmap page goes from 9 of 18 to 15 of 19: the constant-time\ndisassembly (K2 to K4), the faster P-256 (K5, split so 64-bit limbs stay\nopen), secp256r1 on the TLS server (T1), the HTTP/1.1 interop and the open\ntimeouts (T2, H1, H2), the interop runner's congestion cases (Q3) and DATA\ndown past 1,164 bytes (A1). Next names what remains: the port's waves, which live\noutside this repository.\n\nThe design note's status rows and lane tables say the same, and name what is\nstill open: 64-bit limbs, AEAD-4, --cpu, H3-5 and #1485. On the WP39 page and\nnote only the G1 and G2 rows change; that page's Done count is left to the\nWP39 work and is five short until then.",
       "metrics": [],
       "refs": [
-        "docs/roadmap/wp34-hosting-cs.md",
-        "docs/wp34-hosting-cs.md"
+        "docs/roadmap/wp34-network-stack.md",
+        "docs/wp34-network-stack.md"
       ],
       "tests": [],
       "commits": [
@@ -1596,7 +1596,7 @@
       "type": "feat",
       "scope": "cli",
       "breaking": false,
-      "title": "a bare --compat that accepts nothing, and the erasure invariant that holds it (WP28 S3)",
+      "title": "a bare --compat that accepts nothing, and the erasure invariant that holds it",
       "body": "`--compat` now parses. It is the dialect flag of the compatibility-mode proposal with no feature behind it yet: it admits no construct and changes no lowering, and `--compat=<anything>` is a usage error. `--help`, the CLI guide page and LANGUAGE.md's flag list say so.\n\nWhat holds it to that is a new test, tests/compat-erasure.js, wired into the suite as the `compat-erasure` section: every positive tests/cases program is compiled with and without the flag and its output compared byte for byte, and every `reject_*` case must reject with the same exit code, diagnostic code and words. A self-test feeds the harness a compiler wrapper that alters one IR line, one diagnostic word and one code under `--compat` and expects each to be caught by name. The harness compares each case under its own `.args` and `.env`; the suite's second compiles with other flags are not yet compared.\n\nThis is spike S3 of docs/wp28-compatibility-mode.md §7.1 and the acceptance test the next stage, C0, is held to.",
       "metrics": [
         "1044 positive cases byte-identical, 2696 reject cases rejected alike, 0 skipped; the harness alone 36 to 43 s over three runs on 4 jobs"
@@ -1642,7 +1642,7 @@
       "type": "feat",
       "scope": "codegen",
       "breaking": false,
-      "title": "cErrno, errno zeroed before and saved after a foreign call (WP27 S5)",
+      "title": "cErrno, errno zeroed before and saved after a foreign call",
       "body": "`cErrno()` in `nish:unsafe` reads the errno the most recent `declare function`\ncall left on this thread. In a program that names it anywhere, the compiler\nsets errno to 0 immediately before every foreign call and copies it into a\nthread-local runtime slot immediately after, before a string result is\ncopied or anything else runs, so the runtime's own allocation cannot disturb\nit and a C function that reports failure only through errno (strtol out of\nrange) can be checked. The runtime reads errno in C, so each libc keeps its\nown definition and the compiler never names `__errno_location` or `__error`;\n`declare let errno` stays refused. A program that never names `cErrno` emits\nexactly the IR it did before. A freestanding wasm32 build refuses it. With\nS4, this completes WP27: Calling C is landed, 5 of 5.",
       "metrics": [],
       "refs": [
@@ -1666,7 +1666,7 @@
       "type": "perf",
       "scope": "net",
       "breaking": false,
-      "title": "a whole answer drives its connection once (WP49 stage 6)",
+      "title": "a whole answer drives its connection once",
       "body": "HttpHandler.sendFields drove the slot after the body and again after the\nend. It now puts the body and lets end make the one pass, so serve and\nevery program that answers with send, sendFields or empty takes one fewer\ntrip through the carrier per answer. A connection that closes in that pass\nnow answers HANDLER_SENT where the two-pass path answered HANDLER_DROPPED,\nas end always has. serveTask still copies its request: the region rules\nrefuse a task that reads the server's, and docs/security/serve.md records\nwhy and how long each side lives.",
       "metrics": [
         "async /plaintext 7898 -> 7729 Ir/request (-2.1%), async /json 9278 -> 9163 (-1.2%), one callgrind run each; explicit /json 5962 unchanged, explicit /plaintext 4821 vs 4833 on identical code; a 1-2% Ir change is below every run.sh band, so no throughput cell is evidence either way"
@@ -1691,7 +1691,7 @@
       "type": "perf",
       "scope": "runtime",
       "breaking": false,
-      "title": "recycle a finished task's frame and region instead of freeing them (WP49 stage 6)",
+      "title": "recycle a finished task's frame and region instead of freeing them",
       "body": "A spawned task that ends now hands its region back with its node. The next\nspawn of the same async function on that node makes no region, and when it\nfits the chunk the last one left (at most 64 KiB, and 16 MiB across all\nfree nodes) it asks malloc for nothing, so a request's task on an async\nserver costs no malloc, free or region teardown. What a wait asks of the\nkernel is unchanged. The kept chunk is not zeroed, as arena memory never\nis; docs/security/async.md, ASYNC-20, records why nothing can read or point\ninto it. The runtime-async.c text budget moves from 3,840 to 4,096 bytes\n(3,910 measured).",
       "metrics": [
         "async /plaintext 7,872 -> 7,353 Ir/request (-6.6%), /json 9,276 -> 8,783 (-5.3%), callgrind, repeatable to a few Ir; syscalls/request unchanged (0.135 -> 0.134, 2.107 -> 2.108); req/s moved inside run-to-run noise (entry itself +-10% between runs)"

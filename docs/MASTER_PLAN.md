@@ -263,28 +263,31 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 31 | Ranged integers | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | [wp32](wp32-map.md) |
 | 33 | The round trip to TypeScript | [wp33](wp33-round-trip.md) |
-| 34 | Hosting cs: the network stack | [wp34](wp34-hosting-cs.md) |
+| 34 | The network stack | [wp34](wp34-network-stack.md) |
 | 35 | The capability report | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | [wp36](wp36-capability-policy.md) |
 | 37 | The OS sandbox | [wp37](wp37-os-sandbox.md) |
 | 38 | SIMD | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | [wp39](wp39-http-server.md) |
 | 40 | Dependency capabilities: per-dependency grants in the root manifest | [wp40](wp40-dependency-capabilities.md) |
-| 41 | A wide multiply, measured and declined | [wp41](wp41-mul-wide.md) |
+| 41 | A wide multiply, measured and declined; no note kept | — |
 | 42 | A multi-core server from pre-forked processes | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | [wp43](wp43-http-app-layer.md) |
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | [wp44](wp44-streaming-files.md) |
 | 45 | Name resolution for `nish:net`: a DNS stub resolver | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | [wp47](wp47-shared-memory.md) |
-| 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | [wp48](wp48-compressed-references.md) |
+| 48 | Compressed 32-bit references: measured and not built; no note kept | — |
 | 49 | `async`/`await` on the server, and the TechEmpower top | [wp49](wp49-async-server.md) |
 | 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | [wp50](wp50-wasm-host.md) |
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |
 | 52 | Fast rebuilds for `nish run` | [wp52](wp52-run-rebuilds.md) |
 | 53 | Buffers and handles across `declare function` | [wp53](wp53-ffi-buffers-handles.md) |
+| 54 | `async` on wasm, with the page as the executor: proposed, for a service that runs on Workers | [wp54](wp54-async-wasm.md) |
+| 55 | An object graph a WebAssembly module keeps between calls | [wp55](wp55-persistent-root.md) |
 | 56 | Generators whose memory stays flat: a string builder, and a scope per file | [wp56](wp56-flat-memory-generators.md) |
 | 57 | Module-scoped names: a private function's symbol qualified by its module when it would clash | [wp57](wp57-module-scoped-names.md) |
+| 59 | The wasm arena in a second, unexported memory: the page holds only module storage and an exchange area | [wp59](wp59-wasm-arena-memory.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -391,7 +394,7 @@ Which milestones are met is on the [roadmap](roadmap/index.md#milestones).
 
 ### What remains
 
-**Nish stays on 0.x until its owner declares 1.0, and no date is set.** Until
+**Nish stays on 0.x until 1.0 is declared, and no date is set.** Until
 then a release may change the language, and a break moves the minor. The rule
 for after 1.0 is written at the head of [LANGUAGE.md](LANGUAGE.md) so that it
 is not invented under pressure: a minor may add a rule or turn a refusal into
@@ -430,7 +433,7 @@ major. Whether it happens at all is still wp22 §10's open question.
 #### Next, and every package's state
 
 The order of the work, what each package has built and what it has left,
-and what waits on the owner are on the [roadmap](roadmap/index.md), one
+and its open questions are on the [roadmap](roadmap/index.md), one
 page per package with a box per stage. A pull request that lands a stage
 ticks its box there.
 

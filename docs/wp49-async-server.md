@@ -5,7 +5,7 @@
 recycling (#1493) and the cached response head (#1457), and still outside the
 band on `plaintext` 256/1024/4096 and `json` 512 (`json` 128 and `db` 64 now
 inside); what is left needs a redesign of the serve/handler/router hand-off,
-an owner's decision (§6, §10).** The language half — `async`,
+an open question (§6, §10).** The language half — `async`,
 `await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
 and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
@@ -18,7 +18,7 @@ The anchors below are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays
 normative; the API in this note beyond what it states is a proposal and is not
 compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
-the owner's (§9). The owner accepted D1 on 2026-11-01, on one condition: an
+in §9. D1 was accepted on 2026-11-01, on one condition: an
 `await` never blocks the process, and `async` costs the server nothing it
 would not pay written by hand. §6's gate is how that condition is checked.
 
@@ -506,7 +506,7 @@ and 4,096 is still outside (−34.5%, −24.1%, −25.7%), and so is `json` at 5
   match, and a 404 costs about 40 more.
 
 The rest of the gap is in how the serve, handler and router hand-off is shaped.
-Closing it is a design decision for the owner, so stage 6 stays open.
+Closing it is an open design decision, so stage 6 stays open.
 
 ## 7. A non-blocking call from a handler today, without `async`
 
@@ -600,7 +600,7 @@ The renames are a breaking change (`refactor!`). The project stays on 0.x,
 so this moves the minor version. 35 files under `std/`, `src/`, `examples/`,
 `docs/` and `tests/` name the two old module paths.
 
-## 9. Decisions for the owner
+## 9. Decisions
 
 | | Question | Recommendation |
 | --- | --- | --- |
@@ -1042,6 +1042,7 @@ body. Lifting that needs facts per function value, in `src/region-rules.ts`.
   connection (§6 item 2), and heavy CPU work goes to a job worker over
   `nish/sync/ring` (`examples/prefork-jobs.ts`).
 - `async` iterators and `for await`.
-- `async` on `--profile wasm`.
+- `async` on `--profile wasm`: [wp54-async-wasm.md](wp54-async-wasm.md),
+  proposed, with the page as the executor.
 - The handler over HTTP/2 and HTTP/3 (WP43). `serve` starts on HTTP/1.1, as
   the handler did.

@@ -1880,6 +1880,13 @@ const DECLARED = [
       why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
     })
   ),
+  // WP39 G5: the goodput bench picks CUBIC, new in std/net/quic-recovery.
+  {
+    program: "bench/quic-goodput.ts",
+    file: "exit",
+    changelog: "CUBIC congestion control for QUIC",
+    why: "the program imports QUIC_RECOVERY_CUBIC from nish/net/quic-recovery, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+  },
   // nish/raster, nish/synth and nish/host/game are new std modules, so the
   // seed refuses the programs that import them.
   ...[
@@ -1949,7 +1956,7 @@ const DECLARED = [
   // SSSE3 or NEON kernel, the walk on the other arm.
   {
     file: "checksum.ll",
-    changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+    changelog: "Ship the SSSE3 and NEON Adler-32 kernels",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
   // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it
@@ -6270,6 +6277,51 @@ const DECLARED = [
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
+  // g7-facade: `nish/net/http-server` is new, so the 0.38.0 seed refuses every program that imports it.
+  ...[
+    "tests/link/net_http_server/main.ts",
+    "tests/link/net_http_server_bad_limit/main.ts",
+    "tests/link/net_http_server_bad_param/main.ts",
+    "tests/link/net_http_server_bad_watch/main.ts",
+    "tests/link/net_http_server_caps/main.ts",
+    "tests/link/net_http_server_carriers/main.ts",
+    "tests/link/net_http_server_end_short/main.ts",
+    "tests/link/net_http_server_end_unstarted/main.ts",
+    "tests/link/net_http_server_foreign/main.ts",
+    "tests/link/net_http_server_h1_fields/main.ts",
+    "tests/link/net_http_server_h1_head/main.ts",
+    "tests/link/net_http_server_h1_slots/main.ts",
+    "tests/link/net_http_server_h1_twice/main.ts",
+    "tests/link/net_http_server_h2_connect/main.ts",
+    "tests/link/net_http_server_h2_head/main.ts",
+    "tests/link/net_http_server_h2_refused/main.ts",
+    "tests/link/net_http_server_h2_slots/main.ts",
+    "tests/link/net_http_server_h2_twice/main.ts",
+    "tests/link/net_http_server_h2c/main.ts",
+    "tests/link/net_http_server_h3_head/main.ts",
+    "tests/link/net_http_server_h3_slots/main.ts",
+    "tests/link/net_http_server_h3_twice/main.ts",
+    "tests/link/net_http_server_h3_webtransport/main.ts",
+    "tests/link/net_http_server_lifecycle/main.ts",
+    "tests/link/net_http_server_matrix/main.ts",
+    "tests/link/net_http_server_start_fields/main.ts",
+    "tests/link/net_http_server_start_length/main.ts",
+    "tests/link/net_http_server_start_refused/main.ts",
+    "tests/link/net_http_server_start_status/main.ts",
+    "tests/link/net_http_server_start_twice/main.ts",
+    "tests/link/net_http_server_take_none/main.ts",
+    "tests/link/net_http_server_timeouts/main.ts",
+    "tests/link/net_http_server_unbegun/main.ts",
+    "tests/link/net_http_server_wait_tls/main.ts",
+    "tests/link/net_http_server_write_long/main.ts",
+    "tests/link/net_http_server_write_unstarted/main.ts",
+    "tests/link/net_http_server_write_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "handler for HTTP/1.1, 2 and 3 with Alt-Svc",
+    why: "`nish/net/http-server` is a new module, which the 0.38.0 seed does not have, so only the candidate compiles the program",
+  })),
   {
     program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
     file: "exit",

@@ -53,7 +53,7 @@ argument 3: --help
   profile, unless you pass `--profile`), and every run after that starts the
   binary it already linked. Under `debug`, the link compiles only the modules
   your edit changed: a one-line edit to a 5,000-line server rebuilds in about
-  a second and a half on a 4-core machine, against about five seconds for the
+  a second and a half on four cores, against about five seconds for the
   first link.
 - **What `nish run` caches**, under `$XDG_CACHE_HOME/nish`, or `~/.cache/nish`
   when that is unset:

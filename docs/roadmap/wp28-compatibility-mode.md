@@ -22,7 +22,7 @@
 
 Waiting on the proposal's acceptance and the questions of its §10. WP33's R6 is this package; R5's review tier, the stage before it, is built.
 
-## Waiting on a decision
+## Open questions
 
 Whether to accept compatibility mode, and its open questions: whether `async` belongs in it, a per-dependency ceiling, what the interop emitters do with a compat program. Spec: [§7.3 The stages](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md#73-the-stages), [§10 Open](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md#10-open).
 

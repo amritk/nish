@@ -9,18 +9,18 @@
 - [x] Stage 5: the executor, async `fetch` over TLS, `serve`, the async Postgres pool, cancellation, tasks reaching their spawner's objects ([#1343](https://github.com/amritk/nish/pull/1343))
 - [x] Stage 6: the async TechEmpower entries, measured ([#1367](https://github.com/amritk/nish/pull/1367))
 - [ ] Stage 6: the gate, the async entries within the explicit ones' noise band on `plaintext`, `json` and `db`
-- [ ] Submit to TechEmpower *(owner's decision)*
+- [ ] Submit to TechEmpower *(open question)*
 
 ## Next
 
 Meet stage 6's gate: [the measurement](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6) has the async entries outside the band.
 
-## Waiting on a decision
+## Open questions
 
 D6: whether and when to submit, shared with WP39 E9.
 
 ## Not planned
 
-Promises as values, `for await`, `async` on the wasm profile.
+Promises as values, `for await`. `async` on the wasm profile is [WP54](wp54-async-wasm.md)'s, proposed.
 
 [All work packages](index.md)

@@ -1,6 +1,6 @@
 # Security record: HTTP/1.1 — the parser, the server and its carriers, WebSocket
 
-The record of WP34's lane H1: `nish/net/http1-codec` (the incremental request parser
+The record of `nish/net/http1-codec` (the incremental request parser
 and the response writers), `nish/net/http1-server` (the server side of a
 connection, and its two carriers: plain TCP on `nish:net` and TLS on
 `nish/net/tls-tcp` with ALPN `http/1.1`) and `nish/net/websocket` (RFC 6455

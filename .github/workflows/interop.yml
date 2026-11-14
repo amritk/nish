@@ -1,4 +1,4 @@
-# The interop job (decision S2 of docs/wp34-hosting-cs.md): the Nish interop
+# The interop job (decision S2 of docs/wp34-network-stack.md): the Nish interop
 # server against independent implementations, beside `npm test` rather than
 # inside it. Each `tests/link/net_*` case proves its lane against recorded
 # exchanges replayed byte for byte; this proves that live third-party peers

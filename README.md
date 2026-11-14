@@ -17,106 +17,61 @@
 
 ---
 
-Nish parses source with its own lexer and parser, rejects everything dynamic
-(`any`, prototypes, `eval`, exceptions, a garbage collector), and emits
-textual LLVM IR (`.ll`). LLVM's own toolchain (`clang` / `llc`) then optimises
-and produces native binaries for x86_64, ARM64, or WebAssembly. The compiler
-is itself written in Nish, in `src/`, and ships as a native binary with no
-runtime dependency.
+You write `.ts` files with the syntax you already know. Nish checks that every
+value has one fixed type and memory layout, refuses everything dynamic
+(`any`, prototypes, `eval`, exceptions), and emits LLVM IR that `clang` turns
+into a small native binary for x86_64, ARM64 or WebAssembly. The compiler is
+itself written in Nish.
 
 ```
-TypeScript source ──▶ AST ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang/llc ──▶ native binary
-              (src/parser.ts)  (src/checker.ts)      (src/emit*.ts)         + runtime/runtime.c + runtime-os.c
+TypeScript source ──▶ lexer + parser ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang ──▶ native binary
 ```
-
-If it compiles, every value has one fixed, known memory layout; binaries are
-a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
 > [!CAUTION]
-> **Do not use Nish in production.** It is a very early, pre-alpha
-> experiment in how far a static subset of TypeScript can go when it is
-> compiled straight to native code, not a tool to build on yet. Expect
-> miscompilations, crashes, missing features and diagnostics that are wrong
-> or confusing. The compiler, the runtime and the standard library,
-> cryptography included, have had one audit by the project itself
-> ([docs/security/](docs/security/README.md)), which fixed what it found and
-> left findings open. No one independent has reviewed them. Nothing it
-> produces should handle data, money or systems you care about. To report a
-> vulnerability, see [SECURITY.md](SECURITY.md).
+> **Nish is pre-alpha. Do not use it in production.** Expect
+> miscompilations, crashes, missing features and confusing diagnostics. Until
+> 1.0 the language, the flags and the output change without notice, often
+> between minor releases: pin an exact version and read the
+> [changelog](CHANGELOG.md) before you upgrade. The code, cryptography
+> included, has had no independent review ([security records](docs/security/README.md)).
 
-> [!WARNING]
-> **Everything still changes.** Until 1.0, the language, the CLI flags and the
-> IR the compiler emits all change without notice, often from one minor
-> release to the next. Every commit compiles, tests and bootstraps itself (see
-> [Project status](#project-status) for what is done and what is next), but
-> nothing here is frozen. If you try it anyway, pin an exact version rather
-> than a range, expect to fix your source when you move to a newer one, and
-> read [CHANGELOG.md](CHANGELOG.md) before you upgrade.
-
----
-
-## Quickstart
-
-Requirements: clang (LLVM 18) + lld, to produce binaries; per-OS install
-commands are in [docs/INSTALL.md](docs/INSTALL.md).
+## A taste
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 ```
 
-The script needs only `sh`, `curl` and `tar`. It installs the prebuilt
-compiler into `~/.nish` and puts it on your `PATH` in your shell's startup
-file (zsh, bash, fish, or `~/.profile`); `--no-modify-path` leaves that file
-alone.
-
-**Or with npm**, which needs Node.js 22.18+:
-
-```bash
-npm install -g nish            # or per project: npm i -D nish
-npx nish --version             # or run it without installing
-```
-
-npm fetches the prebuilt native compiler for your machine alongside it.
-
-> [!NOTE]
-> **From a release tarball rather than the registry, install the pair.** The
-> main package is a launcher and carries no compiler: installed on its own it
-> has nothing to hand over to and says so, exiting 3.
-> The same is true on a platform this project publishes no binary for — musl,
-> FreeBSD, 32-bit anything — which since 0.6.0 gets a diagnostic naming the four
-> that do rather than the TypeScript compiler under Node that used to ship
-> beside it. [docs/INSTALL.md](docs/INSTALL.md) §2 has the table of what is
-> built for what, and what is left for a platform outside it.
-
-> [!TIP]
-> Building from source works just as well: `git clone`, `npm ci`,
-> `bash scripts/fetch-seed.sh`, `npm run build`, then `build/nish ...` wherever this README says `nish`.
-> The build is a bootstrap: the previous release's `nish` (the seed, fetched
-> by `scripts/fetch-seed.sh`, or named with `NISH_BOOTSTRAP=<path>`) compiles
-> `src/`, and that compiler compiles `src/` again into `build/nish`.
-
 `hello.ts`:
 
 ```ts
-export const main = (): number => {
+export const main = (): i32 => {
   console.log("hello from Nish");
-  return 0;                          // the process exit code
+  return 0;                     // the process exit code
 };
 ```
 
 ```bash
-nish hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
-./hello                            # hello from Nish
-nish hello.ts -o hello.ll     # IR only
-nish run hello.ts             # build into a cache and run it: a script, still native
+nish run hello.ts               # build into a cache and run it
+nish hello.ts --link hello      # a native binary, about 4.7 KB
+nish hello.ts -o hello.ll       # just the LLVM IR
 ```
 
-The IR is readable as is. `examples/add.ts` compiles to:
+A short program can skip `main` and read like a script:
+
+```ts
+const square = (n: i32): i32 => n * n
+
+const sides = [3, 4, 5]
+for (const side of sides) {
+  console.log(square(side))
+}
+```
+
+The IR is readable. `examples/add.ts`, `a + b` on two `number`s (32-bit
+integers by default), compiles to a checked add: an overflow panics instead
+of wrapping, and a sum the compiler proves fits is a plain `add nsw`.
 
 ```llvm
-declare extern_weak void @nish_panic_overflow(i32 noundef) #1
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
-
 define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b)
@@ -131,519 +86,198 @@ ovf.fail:
   call void @nish_panic_overflow(i32 0)
   unreachable
 }
-
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
 ```
 
-Nothing bounds `a` and `b`, so the `+` is checked: an overflow panics with
-`attempt to add with overflow` rather than wrapping or being undefined, and a
-sum the compiler proves fits is a plain `add nsw` instead
-([Semantics decisions](docs/LANGUAGE.md#semantics-decisions)).
+Next step: [Your first program](docs/guide/getting-started/first-program.md).
 
-`--plain` drops the attributes and alignment hints and leaves
-`define i32 @add(i32 %a, i32 %b)` with the same body. Every construct's IR
-is in [docs/IR_COOKBOOK.md](docs/IR_COOKBOOK.md).
+## Contents
 
----
+- [Install](#install)
+- [The language](#the-language)
+- [Memory without a garbage collector](#memory-without-a-garbage-collector)
+- [The standard library](#the-standard-library)
+- [Threads and async](#threads-and-async)
+- [The command line](#the-command-line)
+- [Performance and binary size](#performance-and-binary-size)
+- [Interop](#interop)
+- [The compiler in a browser](#the-compiler-in-a-browser)
+- [Documentation](#documentation)
+- [Project status](#project-status)
+- [Contributing, security and license](#contributing-security-and-license)
+
+## Install
+
+The install script needs only `sh`, `curl` and `tar`, and puts the prebuilt
+compiler in `~/.nish`. With Node.js 22.18+ there is also npm:
+
+```bash
+npm install -g nish
+```
+
+Linking binaries needs clang (LLVM 18) and lld. Per-OS commands, the supported
+platforms and building from source are in
+[Installation](docs/guide/getting-started/installation.md).
 
 ## The language
 
-New to Nish? The [user guide](docs/guide/index.md) teaches the language page
-by page, from installing it to threads, with every example compiled by
-`npm test`.
+The TypeScript you know, held to one rule: every value's type and layout is
+known at compile time.
 
-Threads come from one import, `nish/threads`: parallel maps and reduces,
-scoped tasks, a `Mutex` that owns its data, atomics and channels, with data
-races and deadlocks refused at compile time.
-[Which one to reach for](docs/guide/using-nish/threads.md) is the guide's
-threads page.
+- **Types:** `number`, fixed-width integers (`i32`, `u8`, `i64`, ...), ranged
+  `integer<Lo, Hi>`, `f64`, `boolean`, `string`, arrays, `Map` and `Set`,
+  classes, interfaces, enums, discriminated unions and `T | null`.
+- **Code:** arrow functions, generics by monomorphisation, modules and
+  packages, `for...of`, exhaustive `switch`, `async`/`await`.
+- **Errors:** `Result<T, E>` with `orReturn()` (Rust's `?`), and `panic` for
+  what a caller should not handle. No `throw`, no unwinding.
+- **Refused, with the idiom to use instead:** `any`, `unknown`, `var`, `==`,
+  `try`, `typeof`, `instanceof`, prototypes, closures stored as values.
 
-The full reference is [docs/LANGUAGE.md](docs/LANGUAGE.md); every rule
-there cites the test case that proves it. If an **AI** is writing the program —
-or you want the whole language in one pass rather than as a reference to browse
-— read [docs/AI.md](docs/AI.md) instead: the same rules, ordered by which
-TypeScript reflex they reject, with every example compiled by `npm test`. Both
-ship in the npm package, and [llms.txt](llms.txt) indexes them.
+Some answers differ from JavaScript on purpose: signed overflow and integer
+division by zero panic, and `.length` counts UTF-8 bytes.
 
-| Feature | Summary | Reference |
-|:---|:---|:---|
-| Types | `number` (`i32` by default, `double` with `--number-mode f64`), `i32`, `i64`, unsigned `u8`/`u16`/`u32`/`u64`, `f32`, `f64`, ranged `integer<Lo, Hi>`, `boolean`, `string`, `T[]` and `readonly T[]`, classes, interfaces, `T \| null`, `void`; 1:1 LLVM mapping, no implicit conversions | [Types](docs/LANGUAGE.md#types) |
-| Enums, aliases and unions | numeric `enum`s as a distinct type, with members usable as types (`Kind.Circle`); `type` aliases; discriminated unions `Circle \| Square` of classes or interfaces tagged by an enum-member field, narrowed by testing the tag; all exportable across modules | [Enums](docs/LANGUAGE.md#enums), [Type aliases](docs/LANGUAGE.md#type-aliases), [Discriminated unions](docs/LANGUAGE.md#discriminated-unions) |
-| Functions and modules | annotated signatures, calls in any order, default and rest parameters, `export`/named relative `import`, packages by name, whole-program attribute facts, `export const main` as the entry (or, in an entry with no `main`, statements at the top level that run as one), `internal` linkage for everything not exported; a parameter may have a function type, and each function or arrow passed to it compiles to its own instantiation with a direct call, never a function pointer, while the arrow may read the caller's `const` locals and parameters | [Declarations](docs/LANGUAGE.md#declarations), [Top-level code](docs/LANGUAGE.md#top-level-code), [Default and rest parameters](docs/LANGUAGE.md#default-and-rest-parameters), [Function parameters](docs/LANGUAGE.md#function-parameters) |
-| Async functions | `async` functions and arrows returning `Promise<T>`, `await` on a direct call, `spawn` and `awaitAll` from `nish:async`, `export async function main`; each compiles to a frame and a resume switch sized at link time, with no promise ever a value | [Async functions](docs/LANGUAGE.md#async-functions-async-and-await) |
-| Control flow | `if`/`else`, `while`, `do`, `for`, `for...of` (arrays, `Map` keys and values, `Set`), `switch` (exhaustive over a union's tag, a clause may fall into the next), `break`/`continue`, labelled or not, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
-| Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), shifts and bitwise operators, numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `??` on a `T \| null` and a `?.` chain that ends in `??`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
-| Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
-| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`/`pop`, `set`/`fill`, `sort`, `map`/`filter`/`some`/`every`/`findIndex`/`slice`, `for...of`; arrays of records stored contiguously and fixed-length array fields inline | [Arrays](docs/LANGUAGE.md#array-literals) |
-| `Map` and `Set` | the global `Map<K, V>` and `Set<T>`, insertion-ordered, one probe per `get`/`set`/`has`/`delete`; `get` is `V \| undefined` and narrowed as TypeScript does | [`Map` and `Set`](docs/LANGUAGE.md#map-and-set) |
-| Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout; no inheritance | [Classes](docs/LANGUAGE.md#classes) |
-| Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
-| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `using a = arena()` frees a batch the compiler has checked nothing outlives, and `Arena.mark`/`Arena.used` read the arena; a long-running program frees a batch that outlives one call with `nish:region` | [`using a = arena()`](docs/LANGUAGE.md#using-a--arena), [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
-| `T \| null` | for class, interface, array and string types; `=== null`, a `??` default, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
-| Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding: `panic(message)` ends the process | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
-| Threads | `nish/threads`: `parallelMap`/`parallelReduce`, scoped tasks (`using s = scope()`), `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>`; data races and deadlocks refused at compile time | [Data parallelism](docs/LANGUAGE.md#data-parallelism-nishthreads) |
-| Builtins | `console.log`, `Math.*` as LLVM intrinsics (JavaScript's `pow`, `round`, `min`/`max` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, files, directories, subprocesses, the environment and the clock; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io` / `nish:net` / `nish:term`, which is the same builtin under a name nothing can shadow; `nish:unsafe` (unchecked access, defined wrapping), `nish:secret` (`Secret<T>`, key material the checker keeps in and wipes), `nish:region`, `nish:simd` (128-bit vector lanes) and `nish:async` (`spawn`, `awaitAll`) are reached only by import | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
-| Calling C | `declare function` binds a C symbol, `CPtr` holds an opaque C pointer, and a handle class bound with `using` is closed at every exit of its block | [Calling C](docs/LANGUAGE.md#calling-c) |
-| Capabilities and policies | the compiler reports which capabilities (`fs.read`, `net`, `process.spawn`, `ffi`, `unsafe`, ...) every function, module and package reaches, with the call chain; `--allow`/`--deny` and `package.json` refuse a program that reaches one it is not granted, a dependency gets none it is not given, and a capability lockfile fails a build when a dependency reaches a new one. `--deny-panics` or `noPanic` refuses every panic site the compiler cannot prove away | [Capabilities](docs/LANGUAGE.md#capabilities), [The no-panic scope](docs/LANGUAGE.md#the-no-panic-scope) |
-| Rejected | `any`, `unknown`, `var`, `==`, `?.` outside a `??` chain, generic type aliases, a promise as a value (`.then`, `Promise.all`), `try`, `throw`, `typeof`, `instanceof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
+Start with [Coming from TypeScript](docs/guide/getting-started/from-typescript.md),
+then the language pages: [types](docs/guide/language/types.md),
+[functions](docs/guide/language/functions.md),
+[classes and interfaces](docs/guide/language/classes-and-interfaces.md),
+[unions](docs/guide/language/unions.md),
+[generics](docs/guide/language/generics.md),
+[errors](docs/guide/language/errors.md) and
+[modules](docs/guide/language/modules.md). The normative rules are in the
+[language reference](docs/LANGUAGE.md); writing Nish with an AI, start from
+[docs/AI.md](docs/AI.md) and [llms.txt](llms.txt).
 
-Semantics that differ from JavaScript on purpose: signed integer overflow
-panics unless the compiler proves the operation fits (`wrappingAdd`,
-`wrappingSub` and `wrappingMul` from `nish:unsafe` wrap two's-complement; the
-unsigned widths wrap either way), integer division by zero panics instead of
-yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
-`toI32` saturates, `Math.min`/`max` take two arguments. The reasons are in the
-[FAQ](docs/FAQ.md); [docs/wp13-differential.md](docs/wp13-differential.md)
-lists everything the differential test suite found that still differs from
-Node.
+## Memory without a garbage collector
 
-### The standard library
+There is no GC and no `free`, so use-after-free and double free cannot be
+written. The compiler places each value: on the stack when it provably dies
+with its function, in an arena scope the compiler opens and releases for you,
+or in a region you free in a long-running program. Array indexes are
+bounds-checked unless a proof shows they are in range, `null` is a separate
+type that must be narrowed, and the only ways around a check are imports you
+ask for by name (`nish:unsafe`).
 
-[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import.
-[`std/testing`](std/testing.ts) is a test runner, so a compiled program can
-check itself and return an exit code with no Node involved. For text there is
-[`std/text`](std/text.ts) (`trim`, `splitLines`, `splitWhitespace`,
-`replaceAll`) and [`std/regex`](std/regex.ts), regular expressions in
-JavaScript syntax whose search time is linear in the input. For data there is
-`std/json` (plus a tokenizer, typed decoding and a value tree), `std/yaml`,
-`std/base64` and `std/bytes`. Programs also get `std/cli` for arguments,
-`std/random` (a seeded `Rng`), `std/map`, `std/collections`, `std/threads`,
-`std/sqlite` (SQLite, the database in a file) and `std/term` (raw-mode
-terminal I/O and styling, with pixel graphics in `std/term-pixels`).
-`nish/crypto/*` holds the primitives: SHA-1/2, HMAC, PBKDF2, HKDF,
-ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, bcrypt and X.509,
-with secret material held as a wiped `Secret<T>`. `nish/net/*` holds the
-protocols built on them: TLS 1.3, QUIC, HTTP/1.1, HTTP/2 (HPACK), HTTP/3
-(QPACK), WebSocket (server and client), WebTransport, a URL parser, an HTTP router, a prefork
-server and a sans-IO PostgreSQL client. The [standard
-library](docs/guide/using-nish/standard-library.md) guide page walks through
-them, and the [`std/` README](std/README.md) lists every module.
+Read [Memory](docs/guide/language/memory.md) and
+[Regions](docs/guide/language/regions.md).
+
+## The standard library
+
+[`std/`](std/README.md) is Nish written in Nish, compiled with your program,
+so what you never call is dropped at the link:
+
+- **Data and text:** JSON, YAML, regular expressions with linear-time search,
+  base64, bytes, text helpers, sorting and collections.
+- **Programs:** a test runner, argument parsing, terminal I/O, SQLite, a
+  seeded random generator.
+- **Crypto:** SHA-1/2, HMAC, HKDF, PBKDF2, ChaCha20-Poly1305, AES-GCM, X25519,
+  Ed25519, P-256 and P-384 ECDSA, RSA, bcrypt and X.509, with keys held as a
+  wiped `Secret<T>`.
+- **Network:** TLS 1.3, HTTP/1.1, HTTP/2, HTTP/3 and QUIC, WebSocket,
+  WebTransport, an HTTP router and client, DNS and PostgreSQL.
 
 ```ts
 import { Suite } from "nish/testing";
 
-export const main = (): number => {
-  const t = new Suite("stats");
-  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+const sumOf = (xs: i32[]): i32 => {
+  let total = 0;
+  for (const x of xs) {
+    total = total + x;
+  }
+  return total;
+};
+
+export const main = (): i32 => {
+  const t = new Suite("sums");
+  t.eqI32("four numbers", sumOf([3, 9, 4, 9]), 25);
   return t.done();          // prints the report; 0 when nothing failed
 };
 ```
 
-A library module is source, not a built artifact, so it compiles with the
-program that imports it and the whole-program pass sees straight through it
-([docs/wp21-packages.md](docs/wp21-packages.md)): `nish/<module>` resolves to
-`std/<module>.ts` beside the running compiler, and what you import but never
-call is dropped at the link. A function can be *passed* as a typed parameter.
-Each call site is specialised into a direct call. A function is never a stored
-value, so a suite is an object with methods rather than a registry of
-`test("name", () => ...)` closures.
+Tour it in [The standard library](docs/guide/using-nish/standard-library.md);
+there are guide pages for an [API server](docs/guide/using-nish/api-server.md),
+an [HTTP client](docs/guide/using-nish/http-client.md),
+[PostgreSQL](docs/guide/using-nish/postgres.md),
+[SQLite](docs/guide/using-nish/sqlite.md),
+[password hashing](docs/guide/using-nish/password-hashing.md) and
+[more](docs/guide/index.md).
 
-The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),
-which is this repository's test harness written in the language it tests:
-`readdirSync` finds the cases, `spawnSyncTo` captures each compile and each run,
-and the IR is diffed against the golden line by line. `npm run test:nish` runs it
-over the whole corpus.
+## Threads and async
 
-[`tests/nish/cli.ts`](tests/nish/cli.ts) is the other half of that idea, pointed
-at the compiler's own promises rather than at its output: `--help` on stdout with
-exit 0 against the same text on stderr with exit 2, one flat `--json` object per
-diagnostic with a stable code, and each documented exit-code band. It reads those
-objects with `std/json` and takes the version it expects out of `package.json`, so
-a release cannot leave the expectation behind (`npm run test:cli` runs it
-against `build/nish`).
+`nish/threads` gives parallel maps and reduces, scoped tasks, a `Mutex` that
+owns its data, atomics and channels, with data races and deadlocks refused at
+compile time. `async` functions compile to a frame and a resume switch, with
+no promise ever a value.
 
----
+Read [Threads](docs/guide/using-nish/threads.md),
+[Async](docs/guide/language/async.md) and
+[An async server](docs/guide/using-nish/async-server.md).
 
-## Memory safety
-
-There is no garbage collector and no `free`, so the bugs that need one cannot
-be written. What is left — an index out of range, a null dereference — is
-checked, and every way to give a check up is a flag you pass or a builtin you
-call on purpose.
-
-| Bug class | What Nish does | Reference |
-|:---|:---|:---|
-| Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
-| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)`, `s.slice(a, b)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` (or, for `slice`, `slice out of range: [<a>, <b>) of length <len>`) and exits 1. Where a flow-sensitive proof shows the index is already in range — a loop condition, a length guard, a hoisted `const n = a.length`, an unsigned index — **no check is emitted at all**, and the checks that survive inside a loop say so as a `performance` warning naming the guard that would remove them | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic`, `arr_bounds_proven` |
-| Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts, and `?.` appears only in a chain that ends in a `??` default — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
-| Uninitialised memory | `new Array<T>(n)` zero-fills and rejects pointer element types, because a zeroed pointer would be a null nobody declared; class fields are definitely assigned | [Classes](docs/LANGUAGE.md#classes), `tests/cases/arr_new_zeroed` |
-| Unwinding past a release | There is none. Every function is `nounwind`; a failure a caller should handle is a `Result<T, E>` and one it should not is `panic(message)` — stderr, exit 1 | [Result](docs/LANGUAGE.md#result-and-error-handling) |
-
-### What happens when the proof fails
-
-This is where designs actually differ. Asked to place a value it cannot show
-dies with its frame, Rust refuses to compile it, Go falls back to the garbage
-collector, and Zig hands the question back to you and an allocator. Nish
-leaves the value in the arena, where it stays until `main` returns.
-
-So [`src/escape.ts`](src/escape.ts) and the whole-program fact
-fixpoint are optimisations and nothing else: a refusal costs memory and never
-correctness, and no program is rejected for a lifetime reason. The compiler
-says so out loud where the cost is real: assigning an allocation to a local
-that already holds one drops the old value where nothing can free it *and*
-costs the whole function its arena scope, and that is a `performance`
-diagnostic naming both rewrites ([Diagnostics](docs/LANGUAGE.md#diagnostics-and-debugging-flags), on by
-default, never fatal). That is the
-trade the whole memory design rests on — the arena discipline a compiler pass
-or a frame loop would otherwise be written around by hand, moved into the
-compiler. `tests/cases/mem_*` pin the placements, and `Arena.used()` either
-side of a 100000-iteration loop is how the suite checks that a scope really
-does recycle.
-
-### Which language is this like
-
-Not any one of them; it is more useful to say which piece came from where.
-
-| Concern | Closest to | Not |
-|:---|:---|:---|
-| Lifetimes | Go's escape analysis, over a Zig-style arena discipline the compiler writes for you | Rust: no ownership, no borrow checker, no lifetime annotations |
-| Bounds and panics | Rust with `panic=abort` | C |
-| Null | Kotlin and C# nullable reference types: flow narrowing, not a wrapper type | Rust's `Option<T>` |
-| Errors | Rust: `Result<T, E>`, and `orReturn()` is `?` | exceptions, or Go's second return value |
-| Signed overflow | Rust's debug profile: a checked panic, in every build, unless the compiler proves the operation fits; Rust's `wrapping_add` as an imported call to opt out at one site | C, where it is undefined |
-| Syntax | TypeScript | |
-
-The older relative is region inference as in Cyclone and MLKit: regions the
-compiler infers, bracketed by a mark and a release, which is exactly what the
-arena scopes and the call-site reclaim are. This version is deliberately
-weaker: one global arena, per-function granularity, no region polymorphism.
-
-### Where it is not safe
-
-> [!CAUTION]
-> Two holes, each of them asked for by name.
-
-- **`uncheckedGet` and `uncheckedSet`** from `nish:unsafe` read and write an
-  element with no bounds check, after which an out-of-range index at that site
-  is undefined behaviour. A module reaches them only through the import, so
-  every module that gives up a check says so at its top and every site is a
-  call (`tests/cases/unsafe_get_set`). That is a different thing from the
-  proof above: the proof removes a check the compiler showed was never going
-  to fire, and changes nothing about what the program means
-  ([`nish:unsafe`](docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)).
-  No flag turns the checks off for a whole program.
-- **Interop** hands a pointer to a C, wasm or N-API host, and what happens to
-  it there is the host's business
-  ([wp8-interop.md](docs/wp8-interop.md)).
-
-Memory-safe like Go, allocated like Zig, errors like Rust, nulls like Kotlin,
-overflow checked like Rust's debug builds — with two C-shaped holes you have to ask for by name. What it
-buys is the output: no GC, no runtime, and the sizes under
-[Performance and binary size](#performance-and-binary-size).
-
----
-
-## Command line
+## The command line
 
 ```
-usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
-       nish run [flags] <file.ts> [args ...]  build, cache and run it
-       nish -v, --version | -h, --help
+nish <file.ts> [more.ts ...] [flags]    compile to LLVM IR (--link for a binary)
+nish run [flags] <file.ts> [args ...]   build, cache and run it
+nish --help                              every flag, the exit codes, examples
 ```
 
-`nish --help` prints every flag, grouped by what it is for (Build, Check,
-Capabilities, Interop, Inspect, Code generation), then the exit codes and a
-few examples; it is coloured on a terminal and plain when piped, under
-`NO_COLOR` or when a coding agent runs it. An unknown flag is refused in one
-line that points at `--help`. [The CLI](docs/guide/using-nish/cli.md) walks
-through the flags you will reach for. Among them: `--link` builds a native
-binary, and `--fix` applies the compiler's safe fixes in place.
-`--allow`/`--deny` refuse a program that reaches more than a capability
-policy grants, and `--update-capability-lock` records what each dependency
-reaches. `--deny-panics` refuses any panic the compiler cannot prove away.
-`--emit-ts` writes the program out as plain TypeScript instead of IR.
+Errors arrive all at once as `file:line:col` with a caret, or as JSON with a
+stable code for editors. `--fix` applies safe fixes, `--allow`/`--deny` refuse
+a program that reaches more capabilities (files, network, processes) than you
+grant, and `--emit-ts` writes the program back out as plain TypeScript.
 
-Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
-a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
-compiler error (please
-[report it](https://github.com/amritk/nish/issues/new/choose) with the input and
-the command line).
-A compile that fails reports every error it found (statement by statement,
-declaration by declaration), in source order, up to 20 before `...and N more
-errors`; `--json` gives editors and tools the same list as
-`{"file","line","column","endLine","endColumn","severity","code","message"}`
-objects, one per line, where `code` is a stable identifier for the rule
-(`NL1013`, `NL2231`) and is what to match on rather than the prose. Failures
-with no source position — an unusable C toolchain, an internal error — are JSON
-objects too, so `--json` never leaves a caller with an empty stdout.
-`--help` prints on stdout and exits `0`; only a usage *error* goes to stderr
-with `2`. `-g` adds a DWARF line table and variables to the IR so
-`gdb`/`lldb` step through the `.ts` source of a `--link`ed binary
-([docs/wp10-ci.md](docs/wp10-ci.md)).
-Multi-file programs: `nish examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
-prints `49`.
-
-**`nish run` is the scripting shape.** `nish run tool.ts a b` compiles
-`tool.ts`, links it into a cache, and starts it with `a b` as its arguments.
-Its stdin, stdout and stderr are the program's, and its exit status is the
-program's once it starts (`128 + n` for a signal). The options before the file
-are the compiler's (`--number-mode f64`, `--profile speed`, `-g`), and
-everything after it is the program's, `--help` included. Nothing is
-interpreted: every run compiles, which takes milliseconds, and links only when
-the IR, the recipe or the runtime is new, so the first run of an edit pays for
-one `--profile debug` link (the default here, and the fast one) and every run
-after that starts the cached binary. The cache is `$XDG_CACHE_HOME/nish/run`,
-or `~/.cache/nish/run`. Each entry is one program, so `rm -rf` of it is always
-safe. Beside it, `nish/runtime` keeps the C runtime compiled once per profile,
-`-g`, `--threads` and C compiler, so a link (a run's or `--link`'s) compiles
-only the program's own modules, each in parallel; removing it costs one
-recompile of the runtime. `-o`, `--link`, `--target`, the `--emit-*` sidecars and
-`--profile wasi` write something a run keeps to itself, so they are usage
-errors there, and performance warnings are not printed, because stderr belongs
-to the program.
-
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c -ffp-contract=off -o app`
-(a program that uses threads, the host calls or `nish:net` also names
-`runtime/runtime-parallel.c`, `runtime-host.c` or `runtime-net.c`; the
-`overriding the module target triple` warning is harmless: the IR is
-target-neutral unless you pass `--target`; `-Wno-override-module` silences
-it), or step by step with `llvm-as`, `llc -O2 -filetype=obj`, and
-`opt -S -O2` to watch `mem2reg` turn the `alloca` locals into registers.
-`opt` and `llc` only vectorise when the module carries a data layout, so
-pass `--target host` (or a triple) when you inspect optimised IR by hand;
-`--link` never needs it because clang supplies the layout. Cross-compile
-with `--target aarch64-unknown-linux-gnu` / `wasm32-wasi` plus
-`clang --target=...`, or with `llc -mtriple=...`.
-
----
+Read [The CLI](docs/guide/using-nish/cli.md) and
+[Sandboxing](docs/guide/using-nish/sandbox.md).
 
 ## Performance and binary size
 
-Rust-class output is the goal: no GC, no embedded engine, aliasing and
-purity facts handed to LLVM up front, and a link step that strips everything
-unused. `examples/add.ts` + `examples/main.c` + the runtime
-(`runtime/runtime.c`, which `scripts/build.sh` pairs with the other four units), x86_64 Linux, glibc
-dynamically linked (`npm run size-report`):
+No GC, no embedded engine, and every LLVM attribute the compiler emits is a
+proved guarantee. `hello.ts` links to about 4.7 KB; a freestanding wasm
+module can be a few hundred bytes. The benchmark suite runs the same
+algorithms in Nish, C and Rust and records wall time, size and memory in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
-| Profile | Bytes | What it does |
-|:---|---:|:---|
-| `debug` | 15,072 | `clang` defaults: no optimisation, symbols kept. |
-| `speed` | 4,528 | `-O3 -flto`, section GC, unwind tables off, stripped. Rust `--release`. |
-| `size` | 4,512 | `-Oz -flto`, plus hidden visibility and no stack protector. Rust `opt-level="z"`. |
-| `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
-| `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
+## Interop
 
-`hello.ts` with `--link` is 4,712 bytes. The runtime is seventeen translation units
-with a measured ceiling each, so that the core does not grow every time the
-language reaches further into the operating system, and section GC drops
-whatever a program does not call: `runtime.c` is the 1,723 bytes every program
-touches (one chunked bump arena with O(1) reset and mark/release, string
-parsing, `Math.random`, `process.argv`, array growth, the panic paths),
-`runtime-text.c` the 1,787 bytes of strings and JavaScript-exact number
-formatting, which a wasm module links too, `runtime-os.c` the 1,530 bytes
-that wrap a system call (exit, files, directories, subprocesses, the
-environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
-`runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c`,
-`runtime-sha256.c`, `runtime-chacha20.c`, `runtime-term.c`, `runtime-bytes.c`, `runtime-checksum.c`, `runtime-sandbox.c`, `runtime-shm.c` and `runtime-region.c` hold threads, the copies that cross between
-their arenas, the host calls (wall clock, entropy, signals), `nish:net`'s sockets,
-the vector text search, AES-GCM, SHA-256's block, ChaCha20's keystream, `nish:term`'s stdin and terminal, the
-byte-class runs JSON steps over, the CRC-32 kernels, `--sandbox`'s confinement, the shared-memory regions of `nish/sync/shm` and the regions a program frees one at a time — see
-[docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
-budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
-stay `readnone`.
-
-Memory is the part that usually costs a compiled-JavaScript design its
-speed, so it is done statically ([docs/wp6-memory.md](docs/wp6-memory.md)):
-a `new`, object literal or array literal that provably never outlives its
-function is an `alloca` (LLVM's SROA then turns its fields into registers);
-what does reach the arena is bumped inline (a load, an add, a compare and a
-store); a function whose arena temporaries all die with it brackets its body
-with `nish_arena_mark` / `nish_arena_release`, so hot loops keep the arena
-flat. Every LLVM attribute the compiler emits (`nounwind`, `willreturn`,
-`readnone`/`readonly`, `noundef`, `zeroext`, `nonnull`, `noalias`,
-`nocapture`, `dereferenceable`) is a proved guarantee, never a hint; the
-rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#attribute-soundness-rules).
-
-The benchmark suite (`bench/`: fib, n-body, spectral norm, sieve, string
-building, a `Vec3` method loop, each in Nish, C and Rust with identical
-algorithms and a shared checksum) is run by `node bench/run.mjs`, which
-writes [docs/BENCHMARKS.md](docs/BENCHMARKS.md): wall time, binary size and
-peak memory per column, plus the exact build commands. The analysis of every
-gap, and what `nsw` and PGO (`scripts/build.sh --pgo-generate` /
-`--pgo-use`) bought when overflow was still undefined, is in [docs/wp9-optimisation.md](docs/wp9-optimisation.md);
-the rules of the game are in [bench/README.md](bench/README.md).
-
----
-
-## Interop: export, do not embed
-
-Nish never embeds a JavaScript engine (see the [FAQ](docs/FAQ.md#why-not-embed-a-javascript-engine-for-npm-packages)).
-The supported direction is Node importing Nish:
-
-```
-[ Node / Bun process ]  imports  [ Nish .wasm or .node addon ]
-  I/O, HTTP, npm packages          math, parsing, data transforms, hot loops
-                 cross the boundary once per batch, not once per element
-```
-
-- `scripts/build.sh --profile wasm` produces a module `WebAssembly.instantiate`
-  loads directly (`examples/node-host.mjs`); exports use the plain C ABI.
-  Add `runtime/runtime-wasm.c` (arena + arrays, no libc) when a function
-  takes or returns an array.
-- `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
-  with argument type checks (`examples/node-addon.mjs`).
-- Buffers cross as typed arrays: an Nish `Int32Array` / `Float64Array` /
-  `BigInt64Array` parameter (the spellings of `i32[]` / `f64[]` / `i64[]`,
-  one layout) is a JS typed array on both paths. The addon borrows it
-  (zero-copy; writes are visible in JS), the wasm loader that `--emit-dts`
-  writes next to the `.d.ts` copies it into the module's memory and results
-  back out; strings cross the addon as copies (`examples/arrays.ts`).
-- `--emit-header` writes C prototypes (`int32_t add(int32_t a, int32_t b);`,
-  `double sumF64(const nish_array *xs);`) next to `runtime/nish.h`, the
-  public runtime ABI (arena, strings, arrays, `nish_reset_arena`,
-  `nish_arena_mark` / `nish_arena_release` for a host that manages batches).
-- `--emit-ts <dir>` writes the program back out as TypeScript that Node 22.18+
-  runs with type stripping, one file per module plus an `entry.ts`, importing
-  its builtins from `nish/runtime`; overflow and bounds checks stay, as
-  helpers (`docs/guide/using-nish/to-typescript.md`).
-- An N-API call costs about 30 ns and a wasm call about 2 ns before any work
-  is done; one call with a 1M-element `Float64Array` runs at 0.5 ns/element
-  (`node bench/ffi.mjs`), so pass whole buffers, not elements.
-
-Details: [docs/wp8-interop.md](docs/wp8-interop.md).
-
----
+Nish never embeds a JavaScript engine; JavaScript calls Nish. A program
+builds to a wasm module or a Node addon with generated `.d.ts` types, the
+addon borrows typed arrays without a copy, and `--emit-header` writes C
+prototypes for a C host. Read [Calling Nish from other languages](docs/guide/using-nish/interop.md)
+and [Browser games](docs/guide/using-nish/browser-games.md).
 
 ## The compiler in a browser
 
-`src/` is an Nish program, so the compiler compiles itself to
-WebAssembly like any other one:
+The compiler compiles itself to WebAssembly, about 140 KB gzipped, and checks
+and emits IR in a Web Worker with no server. [web/README.md](web/README.md)
+has the playground.
 
-```bash
-nish src/compile.ts --link web/nish.wasm --profile wasi
-node web/compile.mjs web/nish.wasm examples/add.ts     # the IR, from a Web Worker
-```
+## Documentation
 
-That module is about 480 KB (140 KB gzipped) and lexes, checks and emits IR
-with no server in the loop; `web/index.html` is a playground built on it and
-`web/wasi.mjs` is the in-memory filesystem it runs against. It stops at the
-IR — `clang` and `wasm-ld` are not in a page — so `--link` and `--profile` are
-refused there. [web/README.md](web/README.md) has the rest.
-
----
-
-## Self-hosting
-
-`src/` is the compiler, and the only one: lexer, parser, checker and emitter,
-written in Nish, with no `typescript` package underneath. It compiles its own
-source to a fixed point:
-
-```
-IR(stage1, src/) == IR(stage2, src/)     byte for byte, and stage3 == stage2
-```
-
-The chain starts from a seed, the previous release's `nish` binary, the way
-Rust and Go build themselves: stage1 is `src/` built by the seed, stage2 is
-`src/` built by stage1 and is what gets installed, and stage3, built by
-stage2, has to reproduce stage2 file for file. `scripts/bootstrap.sh --verify`
-asserts both equalities, and `npm test` re-proves them on every run. Compiling
-the whole compiler costs it **91 ms and 86 MB**; the TypeScript compiler it
-replaced took 786 ms and 178 MB for the same input.
-
-```bash
-bash scripts/fetch-seed.sh          # the last release, into build/seed/
-npm run build                       # seed -> stage1 -> stage2 = build/nish
-build/nish hello.ts --link hello    # -o, --link, --profile, its own directories
-```
-
-Because the seed is the last release, `src/` may only *use* in its own
-source what that release compiles. A new construct is implemented in `src/`
-and becomes usable inside `src/` from the next release on — the rolling
-freeze CI's `bootstrap` job checks. Until R6 there was a second compiler, the
-TypeScript one, stage0, which seeded every bootstrap and served as the
-oracle each phase of `src/` was compared against; it was deleted once the
-self-hosted compiler did everything it did
-([wp19](docs/wp19-stage0-retirement.md)).
-Details, and the subset `src/` is written in, are in
-[docs/wp14-selfhost.md](docs/wp14-selfhost.md).
-
----
+| Read | For |
+|:---|:---|
+| [The user guide](docs/guide/index.md) | Learning Nish page by page, every example compiled by the test suite |
+| [Installation](docs/guide/getting-started/installation.md) | Platforms, LLVM, WASI, building from source |
+| [Language reference](docs/LANGUAGE.md) | Every rule, each citing the test that proves it |
+| [docs/AI.md](docs/AI.md), [llms.txt](llms.txt) | The whole language in one pass, for people and models writing it |
+| [`std/` README](std/README.md) | Every standard library module |
+| [FAQ](docs/FAQ.md) | Why the design is the way it is |
+| [IR cookbook](docs/IR_COOKBOOK.md) | The exact IR of every construct |
+| [Roadmap](docs/roadmap/index.md) | What is built and what is next |
+| [Changelog](CHANGELOG.md) | What changed in each release |
 
 ## Project status
 
-Pre-alpha, as above, and **not for production use**. The milestones below
-say what compiles, not what has been hardened: the one security audit so far
-was the project's own ([docs/security/](docs/security/README.md), with findings
-still open), and there is no compatibility promise. M4 is the
-milestone that freezes the language reference and tags a release. Until it
-lands, a construct's spelling, a flag's name and the IR any of them lowers
-to are all still free to change.
+Pre-alpha and on 0.x, with no compatibility promise: a construct's spelling,
+a flag's name and the IR either lowers to can change between minor releases.
+Every commit compiles, tests and rebuilds the compiler with itself. The
+[roadmap](docs/roadmap/index.md) has what is built and what is next.
 
-| Milestone | Contents | State |
-|:---|:---|:---|
-| M1 "Programs" | pipeline prep, validator, control flow, strings, modules, CI | done |
-| M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
-| M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw` (since removed)/PGO, differential testing against Node | done |
-| M4 "1.0" | frozen language reference, tagged release | not scheduled: the project stays on 0.x until its owner declares 1.0 |
-| M5 "Self-hosting" | `src/`: the compiler, written in Nish, compiling itself | done |
-| M6 "One compiler" | the TypeScript twin deleted; `src/` built by the last release, the seed | done |
+## Contributing, security and license
 
-Not in the language yet, in the order they are likely to land: optional
-reference counting for objects that must outlive an arena reset, and dynamic
-dispatch — which would be a trait object over an interface, since inheritance
-was removed ([docs/wp25-inheritance.md](docs/wp25-inheritance.md)) and every
-method call names one symbol today.
-Generic functions, classes, interfaces and methods compile — each
-instantiation becomes its own specialised function or struct
-([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic type aliases,
-closures as values (an arrow written as a call's argument may read the
-caller's `const` locals and parameters, but is never stored) and `try`/`catch` are refusals
-rather than gaps, each with the message and the idiom to use instead
-([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
-Release engineering (`--version`, exit codes, npm packaging, tag-driven
-releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
-[docs/wp12-release.md](docs/wp12-release.md). The plan itself is
-[docs/MASTER_PLAN.md](docs/MASTER_PLAN.md), and what is built and what is next is
-the [roadmap](docs/roadmap/index.md).
-
----
-
-## Contributing
-
-```bash
-npm ci
-bash scripts/fetch-seed.sh   # the last release into build/seed/, once
-npm run build            # seeded bootstrap into build/nish (NISH_BOOTSTRAP=<nish> names the seed)
-npm test                 # build + goldens, llvm-as, native round trips, runtime, layout, memory, interop, bench checksums, differential
-node tests/run.js locals # only cases whose name contains "locals"
-npm run test:update      # write missing .ll goldens for new cases
-npm run test:diff        # every whole program natively and under Node (runtime/shim.mjs), compared byte for byte
-node tests/differential/fuzz.js --stage1 --count 200   # random integer programs, the released seed's IR against HEAD's; prints the seed
-npm run check            # tsc --noEmit: an ambient type-check of src/, std/ and tests/nish/
-npm run lint             # Biome style lint (advisory, never a compile gate)
-npm run smoke            # build and run every example with a main
-scripts/bootstrap.sh --verify   # the whole chain, with IR(stage1) == IR(stage2) and stage3 == stage2 asserted
-node bench/run.mjs       # the benchmark suite; rewrites docs/BENCHMARKS.md (about 3 minutes)
-docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks the links
-```
-
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (the pipeline, side tables,
-the add-a-construct checklist, ABI guard tests) and the conventions in
-[docs/MASTER_PLAN.md §7](docs/MASTER_PLAN.md#7-conventions-for-every-agent):
-every construct ships with a golden `.ll`, an `llvm-as` pass, a native round
-trip, a negative test, and its LANGUAGE.md and cookbook entries; no attribute
-without a proof; layout changes touch `src/runtime.ts` and `runtime/runtime.c` together.
-CI runs the suite on Ubuntu with LLVM 18, and the bootstrap and the CLI
-contract on every platform a release ships a compiler for, macOS and ARM Linux
-included ([docs/wp10-ci.md](docs/wp10-ci.md)). The documentation index is
-[docs/README.md](docs/README.md). Coding guidelines for contributors and
-coding agents are in [AGENTS.md](AGENTS.md) and [`.claude/`](.claude/).
-
----
-
-## Security
-
-Report a vulnerability privately, through GitHub's **Security → Report a
-vulnerability**, never in a public issue. [SECURITY.md](SECURITY.md) has the
-reporting channel, the supported versions and the threat model.
-[docs/security/](docs/security/README.md) holds the audit record of every area
-and the list of findings still open.
-
----
-
-## License
-
-MIT, see [LICENSE](LICENSE). Third-party code in the repository keeps its own
-licence; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Contributing:** building the compiler, the tests and the conventions are in
+  [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Security:** report a vulnerability privately through GitHub's **Security →
+  Report a vulnerability**, never in a public issue; see
+  [SECURITY.md](SECURITY.md). The audit records are in
+  [docs/security/](docs/security/README.md).
+- **License:** MIT, see [LICENSE](LICENSE). Third-party code keeps its own
+  licence; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -1,6 +1,6 @@
 /**
  * The relay: WebTransport datagrams in, UDP out, one upstream socket per
- * session. A port of the session half of cs's `services/relay/src/main.rs`
+ * session. A port of the session half of the Rust relay's `services/relay/src/main.rs`
  * (`Limits`, `SessionSlot`, `serve` and `pump`) onto `nish/net/http3-server`
  * and `nish/net/webtransport`, with the same caps, timeouts, close codes and
  * reasons.
@@ -90,6 +90,7 @@ import { h3Count } from "nish/net/http3-frame"
 import { Http3Server, Http3Wheel, H3_SERVER_WHEEL } from "nish/net/http3-server"
 import { QuicServerConfig } from "nish/net/quic"
 import { quicPacketCopy } from "nish/net/quic-packet"
+import { QUIC_RECOVERY_DEFAULT } from "nish/net/quic-recovery"
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec"
 import {
   WT_CLOSED,
@@ -210,6 +211,7 @@ export const relayQuicConfig = (chain: u8[][], resetKey: u8[], retryKey: u8[]): 
   retryTokenKey: retryKey,
   workerIndex: toI32(-1),
   workerCount: toI32(0),
+  congestion: QUIC_RECOVERY_DEFAULT,
 })
 
 /** The HTTP/3 configuration: one WebTransport session a connection, and a field section a CONNECT fits. */

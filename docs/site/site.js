@@ -144,17 +144,14 @@
     )
 
   /**
-   * The name, unpacked: it reads "NISH" and then each initial unfolds into its
-   * word. The row is drawn twice in one grid cell: a hidden copy, never
-   * animated, holds the unfolded name's height, so a narrow screen where it
-   * wraps onto more lines than "NISH" takes does not push the page down as it
-   * opens. A screen reader gets the whole phrase once, from the label, rather
-   * than eight fragments.
+   * "NISH", whose initials open into words while hovered or focused (a tap
+   * focuses it). A hidden open copy in the same grid cell holds the height.
+   * A screen reader reads the label once: an img role, as a p's is not read.
    */
   const unpackedName = () =>
     el(
       "p.nish-hero__name",
-      { "aria-label": "Nish: Native Instruction Static Host" },
+      { role: "img", "aria-label": "Nish: Native Instruction Static Host", tabindex: "0" },
       nameRow("span.nish-hero__name-row"),
       nameRow("span.nish-hero__name-row.nish-hero__name-row--ghost")
     )
@@ -230,8 +227,8 @@
 
   /**
    * The hero's terminal: a hidden input whose first use imports the shell
-   * (examples/break-web). Hovered or focused it is held, with a prompt under
-   * the loop's output, or alone ("blank") if none is on screen.
+   * (examples/break-web). When the hero's one run ends, a prompt waits under
+   * the output; the shell's own line takes its place.
    */
   const terminal = (bar, code) => {
     const input = el("input.nish-hero__input", {
@@ -244,56 +241,9 @@
     const ready = el("span.nish-hero__ready", {}, el("b", {}, "$ "), el("i"))
     code.append(ready)
     const term = el("div.nish-hero__window.nish-hero__terminal", {}, bar, code, input)
+    term.addEventListener("click", () => getSelection().isCollapsed && input.focus())
     const lines = [] // entered while the shell loads
     let shell = null
-    // A click, like a key, keeps the hold for good.
-    let kept = false
-    let hovered = false
-    // Leaving blurs the input only if hovering focused it.
-    let byHover = false
-    const hold = () => {
-      if (term.hasAttribute("data-held")) {
-        return
-      }
-      // nish-hero-cmd types from 43%; nish-hero-show fades by 86%.
-      const at = code.getAnimations?.()[0]?.effect.getComputedTiming().progress
-      term.style.minHeight = `${term.getBoundingClientRect().height}px`
-      term.setAttribute("data-held", at < 0.43 || at >= 0.85 ? "blank" : "")
-    }
-    const release = () => {
-      if (!kept && shell === null && !hovered && document.activeElement !== input) {
-        term.removeAttribute("data-held")
-        term.style.minHeight = ""
-      }
-    }
-    term.addEventListener("click", () => {
-      if (getSelection().isCollapsed) {
-        kept = true
-        byHover = false
-        input.focus()
-      }
-    })
-    // A mouse focuses the input only when no other field has focus.
-    term.addEventListener("pointerenter", (event) => {
-      // Not mid-drag, where focus would end the page's selection.
-      if (event.pointerType === "mouse" && event.buttons === 0) {
-        hovered = true
-        hold()
-        if (document.activeElement === document.body) {
-          byHover = true
-          input.focus({ preventScroll: true })
-        }
-      }
-    })
-    term.addEventListener("pointerleave", () => {
-      hovered = false
-      byHover && shell === null ? input.blur() : release()
-    })
-    input.addEventListener("focus", hold)
-    input.addEventListener("blur", () => {
-      byHover = false
-      release()
-    })
     const first = (event) => {
       if (event.key === "Enter" && !event.isComposing) {
         lines.push(input.value)
@@ -310,7 +260,6 @@
         .catch(() => {
           lines.length = 0
           shell = null
-          release()
         })
     }
     input.addEventListener("input", first)

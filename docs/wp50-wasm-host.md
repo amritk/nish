@@ -1,7 +1,7 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stages 1 to 6 built.** The owner accepted every
-recommendation in §13, with Q1 revised: the functions a page supplies are an
+**Status: accepted, 2026-11-06; stages 1 to 6 built.** Every
+recommendation in §13 was accepted, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
 loader's `loadSync` and `nish/vite`. Stage 2 is built: host modules
@@ -36,18 +36,18 @@ job, the ten-minute Chromium soak (§10). The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design. Stages 1 to 6 are built.
 
-cs, a browser arena shooter, is moving the bulk of its client into Nish
+The motivating program is a browser arena shooter moving the bulk of its client into Nish
 compiled to WebAssembly: the fixed-step simulation (the same source the native
 game server compiles), prediction, reconciliation and interpolation, the
 snapshot codec, map decoding, geometry and the per-frame instance list, and the
 WGSL and GLSL text it generates at start-up. The TypeScript that stays is the
-page: menus, the title screen, the `window.cs` test hook, and a thin layer over
+page: menus, the title screen, a test hook on `window`, and a thin layer over
 WebGPU, WebGL 2, Web Audio, WebTransport and input. The page calls into the
 module every frame, and the module calls out to the page for anything the
 browser owns.
 
 This note is the Nish half of that boundary. It is
-[wp34](wp34-hosting-cs.md) §8's **N8** (host imports on wasm) and the
+[wp34](wp34-network-stack.md) §8's **N8** (host imports on wasm) and the
 host-driven half of **N9**, which [wp46](wp46-long-running-memory.md) left
 open. It keeps [wp27](wp27-ffi.md) and [wp53](wp53-ffi-buffers-handles.md)'s
 rules (buffers lent for the call, write-through, typed handles), and it changes
@@ -105,7 +105,7 @@ Two more facts the design leans on:
 ```
 
 There is one linear memory, sized at instantiation and never grown in the mode
-cs uses. The page makes its typed-array views over it once, at start-up. Every
+the game client uses. The page makes its typed-array views over it once, at start-up. Every
 crossing on a per-frame path is a number or a window `(view, at, n)` into that
 memory: nothing is copied and nothing is allocated in JavaScript.
 
@@ -117,7 +117,7 @@ byte-identical (Q5).
 
 ## 3. W1. Imports: an `import` from the page's own TypeScript
 
-**Decided by the owner, 2026-11-06** (Q1 as revised). The functions the page
+**Accepted (2026-11-06)** (Q1 as revised). The functions the page
 supplies are written once, in an ordinary TypeScript module the page owns, and
 the Nish module imports them the way any TypeScript module would:
 
@@ -497,6 +497,11 @@ same world, pools and instance list.
    a string or array that the loader decodes or copies *inside* the bracket
    (§7). An import receives windows that are lent for the call only.
 
+The rules keep the module's own stores from reaching the arena. The page still
+can: it holds the one memory, arena included.
+[WP59](wp59-wasm-arena-memory.md) proposes a second memory, not exported, for
+the arena.
+
 Together the two rules mean the arena's mark is the same at the end of every
 call as at its start. That is a property of the types, not of the program's
 care: no rewrite of the program can break it while it still compiles. In fixed
@@ -691,7 +696,7 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   ([the Chromium change](https://chromium.googlesource.com/chromium/src/+/d1a1a8fdd9b28feaf5d3accc0578092444a1083e);
   [the intent to deprecate the limit](https://groups.google.com/a/chromium.org/g/blink-dev/c/nJw2zwaiJ2s)).
   Firefox and Safari have no such limit. For size, this means `loadSync` is
-  safe for any module cs will ship: §10's example is kilobytes, and cs's
+  safe for any module the game client will ship: §10's example is kilobytes, and the
   whole client would have to grow by three orders of magnitude to reach the
   limit. The loader's documentation states the 8 MB figure, and stage 6 runs
   `loadSync` in Chromium to confirm the limit has not come back. In CI's
@@ -956,7 +961,7 @@ module, and `--gc-sections` drops whatever a program does not use.
 | `--deterministic` (§9) | nothing without the flag, apart from Q7's fix of a link that fails today |
 | `--profile wasm-host` (§2, §10) | nothing: `--profile wasm` is unchanged, byte for byte |
 
-## 13. Questions for the owner, answered 2026-11-06
+## 13. Questions, answered 2026-11-06
 
 | | Question | Recommendation, accepted unless the row says otherwise |
 | --- | --- | --- |
@@ -965,11 +970,11 @@ module, and `--gc-sections` drops whatever a program does not use.
 | **Q3** | Module storage as §5.1 has it: top-level fixed-length arrays of pointer-free elements, zero-filled, no initialiser, and no top-level `let`. Scalars live in a length-one record | **Yes.** A scalar `let` would add a second kind of global for a convenience the record already gives |
 | **Q4** | Refuse binding or passing an element of a module-storage record array (`const p = instances[i]`), so that the TS reading can lay module storage out in one `ArrayBuffer` that the page views identically in both readings | **Yes.** The alternative is a page with two code paths, one per reading |
 | **Q5** | A new `--profile wasm-host` (explicit exports, fixed memory, the panic import, `--inline`), or change `--profile wasm` in place. In place, explicit exports would shrink every module by 26–68%, but break hosts that call runtime exports by hand, as `web/bytes-worker.mjs` calls `nish_alloc_array`. Also: for growable memory, buffer identity as the generation counter, or a counter word in memory? | **A new profile, and buffer identity.** `--profile wasm` can adopt the export list later as its own change |
-| **Q6** | Host handles as values only (§4), or also handle classes over a `HostHandle` field, for a resource scoped to a block? | **Values only now.** Add the class form when cs has a block-scoped host resource |
+| **Q6** | Host handles as values only (§4), or also handle classes over a `HostHandle` field, for a resource scoped to a block? | **Values only now.** Add the class form when a program has a block-scoped host resource |
 | **Q7** | `--deterministic` as §9 has it: the capability policy plus `std/math.ts` transcendentals on every target and canonical NaN bits. Separately, should `std/math.ts` be the lowering of `sin`, `cos`, `exp`, `log`, `pow` and `%` on freestanding wasm even without the flag? | **Yes to both.** The second fixes a link that fails today and costs nothing that works today |
 | **Q8** | CI for the claims: an `ubuntu-24.04-arm` runner for the aarch64 column of the float corpus, and WebGPU in headless Chromium (`--enable-unsafe-webgpu` on SwiftShader). If WebGPU proves unavailable on the runner, may W9 fall back to WebGL 2 `bufferSubData`? | **The arm runner, yes.** WebGPU is required. If SwiftShader cannot provide it, stage 6 stops and asks rather than switching APIs. Revised at stage 6: the page falls back to WebGL 2 `bufferSubData` where no adapter answers. SwiftShader provides WebGPU on a localhost page (§10): CI's pinned Chromium 141.0.7390.37 drew the ten-minute soak with WebGPU on `google / swiftshader`, so the fallback is for browsers, and the soak asserts the renderer and adapter it ran |
 | **Q9** | A panic's site: a number plus an `x.sites.json` sidecar, or `path:line:col` strings inside the module? | **The number.** File names cost bytes in every download and help only a developer, who has the sidecar |
-| **Q10** | Inline bytes: the decimal array literal (smallest of the inline forms after compression, +25% over the separate file under brotli), opt-in through `--inline` | **Yes**, opt-in. cs decides per build whether a separate fetch is worth the bytes |
+| **Q10** | Inline bytes: the decimal array literal (smallest of the inline forms after compression, +25% over the separate file under brotli), opt-in through `--inline` | **Yes**, opt-in. The program decides per build whether a separate fetch is worth the bytes |
 | **Q11** | The ten-minute soak runs in the `interop` workflow beside the QUIC and TLS jobs, not in `npm test` | **Yes.** It needs a browser and ten minutes, and `npm test`'s shards should not wait on either |
 
 ## 14. Stages
@@ -993,9 +998,9 @@ entry, and the `docs/guide/using-nish/interop.md` browser section as the
 surface grows. The `docs/security/` record comes with stage 3, because the
 loader's import adapters and the `nish.panic` import are a builtin surface
 that reads another process's input (the page's), and with stage 4 if it adds a
-`runtime/*.c` unit. Goldens are regenerated, never edited. cs can use a stage
+`runtime/*.c` unit. Goldens are regenerated, never edited. A program can use a stage
 only once a release carries it, so a Release PR is worth cutting after stage 3
-(the first stage cs can build a client against) and again after stage 6.
+(the first stage a client can be built against) and again after stage 6.
 
 ## Not in this work package
 
@@ -1007,10 +1012,11 @@ Each would be its own note, on its own measurement:
 - **JavaScript Promise Integration (JSPI).**
 - **Closures**, and so callbacks from the page into anything but an export.
 - **`async` on wasm.** NL2652 stays, and nothing here waits for it. Every
-  promise cs has (a fetch, a datagram read, adapter set-up) is awaited by the
+  promise the game client has (a fetch, a datagram read, adapter set-up) is awaited by the
   page, which then calls an export with the result. Later, WP49's lowering of
   an `async` function to a fixed-size state machine could run on wasm with the
   page as its executor: it resolves the promise and calls a resume export.
-  That would let module code write `await gpuReady()`. It is its own note.
+  That would let module code write `await gpuReady()`. It is its own note,
+  [wp54-async-wasm.md](wp54-async-wasm.md), proposed.
 - **Regions on freestanding wasm.** §6 shows the driven module does not need
   them.
