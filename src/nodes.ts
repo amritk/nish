@@ -698,6 +698,33 @@ export const bindsHiddenReceiver = (decl: Node): boolean =>
 /** Whether `decl` is one of the name declarators `Parser.lowerPattern` wrote. */
 export const isPatternName = (decl: Node): boolean => (decl.flags & FLAG_PATTERN_NAME) !== 0
 
+/**
+ * Where the names of the pattern whose head is `list.children[at]`
+ * (`patternOf`) start in `list`: at the head itself where it is a name read
+ * directly (`isPatternName`), else just after the hidden receiver.
+ */
+export const patternNamesStart = (list: Node, at: i32): i32 =>
+  isPatternName(list.children[at]) ? at : at + 1
+
+/**
+ * One past the last name of the pattern whose head is `list.children[at]`:
+ * the names `Parser.lowerPattern` wrote after it, up to the next declarator
+ * that is not one of them (the next pattern's head, or a plain declarator).
+ * A pattern with no names, `const [] = f()`, ends where its names would
+ * start, so a walk over its names never reaches the next pattern's.
+ */
+export const patternNamesEnd = (list: Node, at: i32): i32 => {
+  let i = at + 1
+  while (
+    i < list.children.length &&
+    isPatternName(list.children[i]) &&
+    patternOf(list.children[i]) === null
+  ) {
+    i = i + 1
+  }
+  return i
+}
+
 /** What a pattern slot binds: an object entry's child, or an array slot itself. */
 export const patternSlotName = (slot: Node): Node =>
   slot.kind === NodeKind.Property ? slot.children[0] : slot

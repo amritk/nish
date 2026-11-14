@@ -99,6 +99,10 @@ to write it instead:
   `Map.get` returns: narrow it first, as in `if (p !== null)`.
 - **A `Map`, a `Set` or a `string`**: read a `Map` with `get`, a `Set` with
   `has` or a `for...of`, a `string` by index.
+- **A method**, `{ norm }`: a pattern reads fields; call the method.
+- **A pattern over `awaitAll`** that is not one plain name per call: an
+  object pattern, a hole or a default. Name each answer, `_b` for one you do
+  not read ([Async functions](async.md)).
 - **Parameters and module constants**: destructure inside the function body.
   A module constant is a compile-time value the compiler folds into each
   use, so there is no receiver at run time for a pattern to read.

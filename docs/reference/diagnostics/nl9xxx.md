@@ -9,7 +9,25 @@ The 19 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promis
 The message of a warning `--no-warn-performance` turns off contains:
 
 ```text
-…allocates a dynamically sized array on every iteration of this loop
+…allocates a dynamically sized array on every iteration of this loop…
+```
+
+[`nl9001_pattern_loop_allocation.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9001_pattern_loop_allocation.ts):
+
+```ts
+// NL9001: a pattern over an array allocated on every iteration names the pattern as written.
+export const main = (): number => {
+  let total = 0;
+  for (let i = 1; i < 4; i++) {
+    const [a, b] = new Array<i32>(i + 1);
+    total += a + b;
+  }
+  return total;
+};
+```
+
+```text
+`[a, b]` allocates a dynamically sized array on every iteration of this loop and nothing keeps it past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, or open the loop body with `using a = arena()`
 ```
 
 ## NL9002

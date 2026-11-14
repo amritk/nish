@@ -301,6 +301,20 @@ function isAwaitAllShape(decl: Node): boolean -> @isAwaitAllShape [exported]
   local +9:9 init: Node (const)
   callee +9:16 unwrapParens -> @unwrapParens
   callee +10:67 directCall -> @directCall
+function awaitPatternMessage(ctx: CheckContext, decl: Node, pattern: Node): string -> @awaitPatternMessage [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: directCall nish_panic_index nish_str_concat nish_str_eq unwrapParens
+  pointer ctx: size=344 writesThrough=false captured=false
+  pointer decl: size=40 writesThrough=false captured=false
+  pointer pattern: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 init: Node (const)
+  callee +0:16 unwrapParens -> @unwrapParens
+  local +1:9 call: Node | null (const)
+  callee +1:16 directCall -> @directCall
+  local +7:7 awaitAll: boolean (let)
+  local +8:14 imp: ImportBinding (const)
+  local +19:14 slot: Node (const)
 function checkAwaitAllDeclaration(ctx: CheckContext, decl: Node, scope: Scope): i32[] | null -> @checkAwaitAllDeclaration [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

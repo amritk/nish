@@ -30,7 +30,7 @@ import WANT_INFERRED from "./expressions" -> const WANT_INFERRED
 import WANT_MAYBE from "./expressions" -> const WANT_MAYBE
 import isMaybeAnnotation from "./validator" -> function @isMaybeAnnotation
 import syntaxKindName from "./checker" -> function @syntaxKindName
-import AWAIT_PATTERN from "./async-check" -> const AWAIT_PATTERN
+import awaitPatternMessage from "./async-check" -> function @awaitPatternMessage
 import checkAwaitAllDeclaration from "./async-check" -> function @checkAwaitAllDeclaration
 import isAwaitAllShape from "./async-check" -> function @isAwaitAllShape
 import CheckContext from "./context" -> struct CheckContext
@@ -79,7 +79,6 @@ import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import Node from "./nodes" -> struct Node
 import awaitsInitializer from "./nodes" -> function @awaitsInitializer
-import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import isPatternName from "./nodes" -> function @isPatternName
 import isPlainSlot from "./nodes" -> function @isPlainSlot
 import patternOf from "./nodes" -> function @patternOf
@@ -278,20 +277,17 @@ function checkDeclarator(ctx: CheckContext, decl: Node, scope: Scope, mutable: b
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: mutable name
-  calls: CheckContext.error CheckContext.textOf TypeTable.assignable TypeTable.isArray TypeTable.isMaybe TypeTable.stripNull TypeTable.typeName allocatesArray annotationSpelling bindsHiddenReceiver checkExpression declareLocal declaredOrigin holdMembers isMaybeAnnotation literalIndexName nish_panic_index nish_str_concat nish_str_eq refuseNarrowingStore resolveMaybeAnnotation resolveType typedArraySpelling unproven
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=resolveMaybeAnnotation#0 resolveType#1 CheckContext.textOf#0 CheckContext.error#0 declaredOrigin#0 declareLocal#0 checkExpression#0 unproven#0 CheckContext.error#0 refuseNarrowingStore#0 CheckContext.error#0 annotationSpelling#0 typedArraySpelling#0 declareLocal#0 declaredOrigin#0 holdMembers#0 allocatesArray#0
-  pointer decl: size=40 writesThrough=false captured=false passedTo=bindsHiddenReceiver#0 CheckContext.error#1 declareLocal#2 CheckContext.error#1 declareLocal#2
+  calls: CheckContext.error TypeTable.assignable TypeTable.isArray TypeTable.isMaybe TypeTable.stripNull TypeTable.typeName allocatesArray annotationSpelling checkExpression declareLocal declaredOrigin holdMembers isMaybeAnnotation literalIndexName nish_panic_index nish_str_concat nish_str_eq refuseNarrowingStore resolveMaybeAnnotation resolveType typedArraySpelling unproven
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=resolveMaybeAnnotation#0 resolveType#1 CheckContext.error#0 declaredOrigin#0 declareLocal#0 checkExpression#0 unproven#0 CheckContext.error#0 refuseNarrowingStore#0 CheckContext.error#0 annotationSpelling#0 typedArraySpelling#0 declareLocal#0 declaredOrigin#0 holdMembers#0 allocatesArray#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 declareLocal#2 CheckContext.error#1 declareLocal#2
   pointer scope: size=56 writesThrough=true captured=true passedTo=declaredOrigin#3 declareLocal#1 checkExpression#2 typedArraySpelling#2 declareLocal#1 declaredOrigin#3 literalIndexName#1 holdMembers#1
   stackSites=0 stackLocals=0
-  local -74:9 annotation: Node (const)
-  local -70:7 declared: i32 (let)
-  callee -68:16 isMaybeAnnotation -> @isMaybeAnnotation
-  callee -67:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
-  callee -66:9 resolveType -> @resolveType
-  local -64:9 initializer: Node (const)
-  local -61:9 shown: string (const)
-  callee -61:17 bindsHiddenReceiver -> @bindsHiddenReceiver
-  callee -61:45 CheckContext.textOf -> @CheckContext.textOf
+  local -71:9 annotation: Node (const)
+  local -67:7 declared: i32 (let)
+  callee -65:16 isMaybeAnnotation -> @isMaybeAnnotation
+  callee -64:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
+  callee -63:9 resolveType -> @resolveType
+  local -61:9 initializer: Node (const)
   callee -59:5 CheckContext.error -> @CheckContext.error
   local -58:11 origin: TypeOrigin | null (const)
   callee -58:20 declaredOrigin -> @declaredOrigin
@@ -305,7 +301,7 @@ function checkDeclarator(ctx: CheckContext, decl: Node, scope: Scope, mutable: b
   callee -39:49 TypeTable.assignable -> @TypeTable.assignable
   callee -38:5 CheckContext.error -> @CheckContext.error
   callee -36:28 TypeTable.typeName -> @TypeTable.typeName
-  callee -36:87 TypeTable.typeName -> @TypeTable.typeName
+  callee -36:86 TypeTable.typeName -> @TypeTable.typeName
   callee -32:5 refuseNarrowingStore -> @refuseNarrowingStore
   callee -29:5 CheckContext.error -> @CheckContext.error
   local -16:9 typedArray: string (const)
@@ -823,10 +819,10 @@ function refuseStructHeader(ctx: CheckContext, node: Node): void -> @refuseStruc
 function refuseDeclarator(ctx: CheckContext, owner: Node, decl: Node): void -> @refuseDeclarator
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  calls: CheckContext.error awaitsInitializer isAwaitAllShape nish_panic_index nish_str_concat patternOf refusePattern
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 refusePattern#0 CheckContext.error#0
+  calls: CheckContext.error awaitPatternMessage awaitsInitializer isAwaitAllShape nish_panic_index nish_str_concat patternOf refusePattern
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 awaitPatternMessage#0 refusePattern#0 CheckContext.error#0
   pointer owner: size=40 writesThrough=false captured=false
-  pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllShape#0 patternOf#0 CheckContext.error#1 awaitsInitializer#0 CheckContext.error#1
+  pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllShape#0 patternOf#0 CheckContext.error#1 awaitsInitializer#0 CheckContext.error#1 awaitPatternMessage#1
   stackSites=0 stackLocals=0
   local +0:9 awaitAll: boolean (const)
   callee +0:87 isAwaitAllShape -> @isAwaitAllShape
@@ -835,6 +831,7 @@ function refuseDeclarator(ctx: CheckContext, owner: Node, decl: Node): void -> @
   callee +4:7 CheckContext.error -> @CheckContext.error
   callee +5:16 awaitsInitializer -> @awaitsInitializer
   callee +6:7 CheckContext.error -> @CheckContext.error
+  callee +6:23 awaitPatternMessage -> @awaitPatternMessage
   callee +8:7 refusePattern -> @refusePattern
   local +15:11 name: string (const)
   callee +16:5 CheckContext.error -> @CheckContext.error

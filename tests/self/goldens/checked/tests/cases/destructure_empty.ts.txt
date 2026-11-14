@@ -16,19 +16,26 @@ function make(calls: i32[]): i32[] -> @make
   calls: nish_array_grow
   pointer calls: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function at(calls: i32[]): Point -> @at
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: +0:3
+  calls: Point.constructor nish_alloc_struct nish_array_grow
+  pointer calls: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +1:10 new Point -> @Point.constructor
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Point.constructor make nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_from_i32
-  stackSites=4 stackLocals=7
+  calls: Point.constructor at make nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_from_i32
+  stackSites=3 stackLocals=6
   local +0:9 p: Point (const)
   callee +0:13 new Point -> @Point.constructor
   local +1:9 xs: i32[] (const)
-  local +2:9 pattern.526: Point (const)
-  local +3:9 pattern.541: i32[] (const)
-  local +4:9 pattern.557: i32[] (const)
+  local +2:9 pattern.697: Point (const)
+  local +3:9 pattern.712: i32[] (const)
+  local +4:9 pattern.728: i32[] (const)
   local +5:9 calls: i32[] (const)
-  local +6:9 pattern.603: i32[] (const)
+  local +6:9 pattern.774: i32[] (const)
   callee +6:17 make -> @make
-  local +7:9 pattern.631: Point (const)
-  callee +7:14 new Point -> @Point.constructor
+  local +7:9 pattern.802: Point (const)
+  callee +7:14 at -> @at

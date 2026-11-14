@@ -76,6 +76,21 @@ function isPatternName(decl: Node): boolean -> @isPatternName [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function patternNamesStart(list: Node, at: i32): i32 -> @patternNamesStart [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: isPatternName nish_panic_index
+  pointer list: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 isPatternName -> @isPatternName
+function patternNamesEnd(list: Node, at: i32): i32 -> @patternNamesEnd [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isPatternName nish_panic_index nish_panic_overflow patternOf
+  pointer list: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  callee +3:5 isPatternName -> @isPatternName
+  callee +4:5 patternOf -> @patternOf
 function patternSlotName(slot: Node): Node -> @patternSlotName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: slot

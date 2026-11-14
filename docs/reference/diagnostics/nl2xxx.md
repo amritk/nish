@@ -13270,7 +13270,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…: use it, delete it, or rename it `_…
+…: use it, delete it, or rename it `…
 ```
 
 [`nl2712_unread_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2712_unread_local.ts):

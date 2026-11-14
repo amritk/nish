@@ -2268,6 +2268,11 @@ export class Parser {
           if (!shorthand) {
             this.advance()
           }
+        } else if (this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER && this.peek() === TOK_COLON) {
+          // `{ default: d }`: a keyword names a key as it names a member
+          // (`parseModuleExportName`); written alone it binds nothing it could.
+          entry.text = tokenName(this.kind)
+          this.advance()
         } else {
           this.advance()
           entry.flags = FLAG_COMPUTED

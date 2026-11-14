@@ -182,6 +182,8 @@ export class Walk {
   choiceTexts: string[]
   /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
   helpers: StringSet
+  /** The node's index in `list`, below; beside the flag after it so neither is padded. */
+  listAt: i32
   /**
    * `--deterministic`: a call the checker bound to `nish/math` (`Math.sin`,
    * `f64ToBits`, ...) is written as a call to that function, which runs the
@@ -227,8 +229,6 @@ export class Walk {
   storageSlots: i32[]
   /** The list the node being walked is an element of, or `null`: where a pattern's head finds its names. */
   list: Node | null
-  /** The node's index in `list`. */
-  listAt: i32
   /** The next number `temporary` tries. */
   temps: i32
   /**

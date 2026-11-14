@@ -2388,7 +2388,11 @@ async function run(): Promise<void> {
   for two to eight calls at once and is awaited into one name per call,
   `const [a, b] = await awaitAll(f(x), g(y))`; one call, or an `awaitAll` not
   so destructured, is NL2647 (`reject_async_await_all_one`,
-  `reject_async_await_all_bare`).
+  `reject_async_await_all_bare`). So is a pattern over it that is not one
+  plain name per call, each with the reason: an object pattern (the answers
+  are read by position), a hole (it would drop an answer; name it `_b`), or
+  a default, rest or nested slot (`reject_async_await_all_object`,
+  `reject_async_await_all_hole`, `reject_async_await_all_default`).
 - **An `async` arrow is passed only where it is awaited.** The parameter's
   function type answers `Promise<T>`, and the callee awaits each call to it.
   An `async` arrow where the type answers a plain `T` is NL2639

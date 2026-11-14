@@ -1,6 +1,7 @@
 // A pattern that binds no name is accepted, as TypeScript accepts it, and
 // still evaluates its right-hand side exactly once: `const {} = p`,
-// `const [] = xs`, `const [,] = xs` and `const [, ,] = make()`.
+// `const [] = xs`, `const [,] = xs`, `const [, ,] = make()` and
+// `const {} = at()`: `calls` counts `make` and `at` once each.
 class Point {
   x: number
   y: number
@@ -15,6 +16,11 @@ const make = (calls: number[]): number[] => {
   return [calls.length, calls.length]
 }
 
+const at = (calls: number[]): Point => {
+  calls.push(calls.length)
+  return new Point(calls.length, 0)
+}
+
 export const main = (): void => {
   const p = new Point(1, 2)
   const xs = [3, 4]
@@ -23,7 +29,7 @@ export const main = (): void => {
   const [,] = xs
   const calls: number[] = []
   const [, ,] = make(calls)
-  const {} = new Point(calls.length, 0)
+  const {} = at(calls)
   console.log(calls.length)
   console.log(p.x + xs[0])
 }

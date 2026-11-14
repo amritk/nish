@@ -446,6 +446,39 @@ export const AWAIT_PATTERN: string =
   "A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name"
 
 /**
+ * What to say of a pattern over an `await` that `isAwaitAllShape` turned
+ * down: NL2193 when the call is not `awaitAll`'s, and when it is, the slot
+ * or the brace in the way, under `AWAIT_ALL_FORM`'s code.
+ */
+export const awaitPatternMessage = (ctx: CheckContext, decl: Node, pattern: Node): string => {
+  const init = unwrapParens(decl.children[2])
+  const call = directCall(init.children[0])
+  if (call === null) {
+    return AWAIT_PATTERN
+  }
+  // The pass 1 sweep runs before imports are bound, so the import is read
+  // as written.
+  let awaitAll = false
+  for (const imp of ctx.program.imports) {
+    if (imp.localName === call.children[0].text) {
+      awaitAll = imp.specifier === "nish:async" && imp.importedName === "awaitAll"
+    }
+  }
+  if (!awaitAll) {
+    return AWAIT_PATTERN
+  }
+  if (pattern.text !== "[") {
+    return `${AWAIT_ALL_FORM}; the answers are read by position, so the pattern is an array, not an object`
+  }
+  for (const slot of pattern.children) {
+    if (slot.kind === NodeKind.Empty && slot.flags === 0) {
+      return `${AWAIT_ALL_FORM}; a hole would drop a call's answer, so name it (\`_b\` if it goes unread)`
+    }
+  }
+  return `${AWAIT_ALL_FORM}; each slot is a plain name, with no default, rest or nested pattern`
+}
+
+/**
  * The declarator `isAwaitAllShape` read: the answer type of each call, one
  * per name, or null having refused. The calls are awaited together, so each
  * is an await edge of its own.

@@ -70,8 +70,8 @@ import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import Node from "./nodes" -> struct Node
 import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
-import isPatternName from "./nodes" -> function @isPatternName
-import patternOf from "./nodes" -> function @patternOf
+import patternNamesEnd from "./nodes" -> function @patternNamesEnd
+import patternNamesStart from "./nodes" -> function @patternNamesStart
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
 import arrowCallee from "./parallel" -> function @arrowCallee
@@ -753,9 +753,9 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   callee +122:14 use -> @use
   callee +124:12 use -> @use
 function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse -> @classifyPatternUse
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via classifyUse
-  calls: ParentTable.parentOf classifyUse isPatternName nish_panic_index nish_panic_overflow patternOf use
+  calls: ParentTable.parentOf classifyUse nish_panic_index patternNamesEnd patternNamesStart use
   pointer unit: size=16 writesThrough=false captured=false passedTo=classifyUse#0
   pointer table: size=136 writesThrough=false captured=false passedTo=classifyUse#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
@@ -764,13 +764,15 @@ function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): P
   callee +0:16 ParentTable.parentOf -> @ParentTable.parentOf
   callee +2:12 use -> @use
   local +4:7 kind: i32 (let)
-  local +5:7 i: i32 (let)
-  callee +10:5 isPatternName -> @isPatternName
-  callee +11:5 patternOf -> @patternOf
-  local +13:11 found: ParamUse (const)
-  callee +13:19 classifyUse -> @classifyUse
-  callee +17:14 use -> @use
-  callee +21:10 use -> @use
+  local +5:9 at: i32 (const)
+  local +6:9 end: i32 (const)
+  callee +6:15 patternNamesEnd -> @patternNamesEnd
+  local +7:12 i: i32 (let)
+  callee +7:16 patternNamesStart -> @patternNamesStart
+  local +8:11 found: ParamUse (const)
+  callee +8:19 classifyUse -> @classifyUse
+  callee +12:14 use -> @use
+  callee +15:10 use -> @use
 function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse -> @classifyMemberUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: ParentTable.parentOf argumentUse arrayMethodName isArrayWriteMethod isAssignmentTarget isInlineField isStringMethodCall nish_panic_index nish_str_eq resultMethodName use

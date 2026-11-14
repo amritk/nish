@@ -68,6 +68,8 @@ import { SGR_CYAN, SGR_RED, SGR_YELLOW, Style } from "../std/cli"
 import { codeFor } from "./codes"
 import { compareStrings, jsonQuote, splitByte, StringBuilder } from "./strings"
 import { StringMap } from "./map"
+import { isDigit, Lexer } from "./lexer"
+import { TOK_END, TOK_LBRACE, TOK_LBRACKET, TOK_RBRACE, TOK_RBRACKET } from "./tokens"
 
 const CH_LF: i32 = 10
 const CH_CR: i32 = 13
@@ -269,6 +271,71 @@ export class Edit {
  * `column` are computed when it is reported rather than when it is printed,
  * because the sort in `DiagnosticSink` reads them for every comparison.
  */
+/**
+ * Where the pattern that starts at `start` in `text` ends: one past its
+ * closing `}` or `]`, found by the lexer so a string or a comment inside it
+ * is skipped. -1 when no pattern starts there or it never closes.
+ */
+const patternEnd = (text: string, start: i32): i32 => {
+  const lexer = new Lexer(text)
+  lexer.pos = start
+  lexer.next()
+  if (lexer.kind !== TOK_LBRACE && lexer.kind !== TOK_LBRACKET) {
+    return -1
+  }
+  let depth = 1
+  while (depth > 0) {
+    lexer.next()
+    if (lexer.kind === TOK_END) {
+      return -1
+    }
+    if (lexer.kind === TOK_LBRACE || lexer.kind === TOK_LBRACKET) {
+      depth = depth + 1
+    } else if (lexer.kind === TOK_RBRACE || lexer.kind === TOK_RBRACKET) {
+      depth = depth - 1
+    }
+  }
+  return lexer.end
+}
+
+/**
+ * `message` with each hidden pattern receiver it names spelled as the
+ * pattern is written in `source`. `Parser.lowerPattern` binds a receiver
+ * that is not a plain name to a `const` named `pattern.<start>`
+ * (`patternReceiverName`), which no program can spell; every diagnostic is
+ * built here, so a message any pass words from a local's name says
+ * `` `{ x, y }` `` instead, wherever it was worded.
+ */
+const writtenPatterns = (source: SourceFile, message: string): string => {
+  const marker = "pattern."
+  let at = message.indexOf(marker)
+  if (at < 0) {
+    return message
+  }
+  const parts: string[] = []
+  let from = 0
+  while (at >= 0) {
+    let digits = at + marker.length
+    let start = 0
+    while (digits < message.length && isDigit(message.charCodeAt(digits)) && start < source.text.length) {
+      start = start * 10 + (message.charCodeAt(digits) - 48)
+      digits = digits + 1
+    }
+    if (digits === at + marker.length) {
+      start = -1
+    }
+    const end = start >= 0 && start < source.text.length ? patternEnd(source.text, start) : -1
+    if (end > start) {
+      parts.push(message.substring(from, at))
+      parts.push(source.text.substring(start, end))
+      from = digits
+    }
+    at = message.indexOf(marker, digits)
+  }
+  parts.push(message.substring(from))
+  return parts.join("")
+}
+
 export class Diagnostic {
   source: SourceFile
   start: i32
@@ -298,7 +365,7 @@ export class Diagnostic {
     this.start = start
     this.end = end < start ? start : end
     this.kind = kind
-    this.text = text
+    this.text = writtenPatterns(source, text)
     this.line = source.lineOf(start)
     this.column = source.columnOf(start)
     this.edits = []

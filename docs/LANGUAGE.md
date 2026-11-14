@@ -3996,7 +3996,11 @@ async function run(): Promise<void> {
   for two to eight calls at once and is awaited into one name per call,
   `const [a, b] = await awaitAll(f(x), g(y))`; one call, or an `awaitAll` not
   so destructured, is NL2647 (`reject_async_await_all_one`,
-  `reject_async_await_all_bare`).
+  `reject_async_await_all_bare`). So is a pattern over it that is not one
+  plain name per call, each with the reason: an object pattern (the answers
+  are read by position), a hole (it would drop an answer; name it `_b`), or
+  a default, rest or nested slot (`reject_async_await_all_object`,
+  `reject_async_await_all_hole`, `reject_async_await_all_default`).
 - **An `async` arrow is passed only where it is awaited.** The parameter's
   function type answers `Promise<T>`, and the callee awaits each call to it.
   An `async` arrow where the type answers a plain `T` is NL2639
@@ -7515,8 +7519,8 @@ for (const { x, y } of points) { ... }
   straight off it, and the function compiles to the body of its hand-written
   reads. Any other receiver (`o.pt`, `o.items`, a call, a `for...of`
   element) is evaluated once into a hidden copy of its pointer: unoptimised
-  that is one alloca more than `const x = o.pt.x`, and after `opt -O2` the
-  bodies are the same (`destructure_zero_cost`). A pattern works over `this`
+  that is one alloca and one store more than `const x = o.pt.x`, and after
+  `opt -O2` the bodies are the same (`destructure_zero_cost`). A pattern works over `this`
   in a method, in an arrow's or an async body, and in a C-style `for`
   initialiser (`destructure_forms`).
 - **An empty pattern**, `const {} = p`, `const [] = xs` or `const [,] = xs`,
@@ -7528,10 +7532,14 @@ Refused, each with its own diagnostic and test:
 | Pattern | Diagnostic | Test |
 | --- | --- | --- |
 | `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object`, `reject_destructure_assignment_renamed` |
-| `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default`, `reject_destructure_for_of_default` |
+| `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default`, `reject_destructure_default_array`, `reject_destructure_for_of_default` |
 | `[a, ...rest]`, `{ x, ...others }` | NL2773 | `reject_destructure_rest`, `reject_destructure_for_of_rest` |
-| `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested`, `reject_destructure_for_of_nested` |
-| `{ ["x"]: a }`, `{ "x": a }` | NL2775 | `reject_destructure_key` |
+| `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested`, `reject_destructure_nested_object`, `reject_destructure_for_of_nested` |
+| `{ ["x"]: a }`, `{ "x": a }` | NL2775 | `reject_destructure_key`, `reject_destructure_key_computed` |
+| `{ default: d }` (a keyword key) | NL2776, the key is read as a field's name and no class has that field | `reject_destructure_key_keyword` |
+| `{ norm }` where `norm` is a method | NL2776, call it instead | `reject_destructure_method` |
+| `const { x }: Other = p` (an annotation the receiver does not match) | NL2185 ``Cannot initialize Other variable `{ x }` with Point`` | `reject_destructure_annotated` |
+| a name never read | NL2712, rename it ``{ y: _y }`` (a shorthand) or `_a` | `reject_destructure_unread` |
 | a value that may be absent, `Point \| null` or a `V \| undefined` from `Map.get` | NL2777, narrow it first | `reject_destructure_nullable`, `reject_destructure_undefined` |
 | a `Map` | NL2778, read each value with `get` | `reject_destructure_map` |
 | a `string` | NL2779, read each character by its index | `reject_destructure_string` |

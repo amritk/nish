@@ -44,7 +44,16 @@
 
 import { isSortInstance } from "./arrays"
 import { Operands, splice, Walk } from "./emit-ts-edits"
-import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind, isPatternName, patternOf } from "./nodes"
+import {
+  FLAG_GATHERED,
+  FLAG_OPTIONAL,
+  Node,
+  NodeKind,
+  isPatternName,
+  patternNamesEnd,
+  patternNamesStart,
+  patternOf,
+} from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 import { STORAGE_NAMESPACE } from "./emit-ts-storage"
@@ -637,26 +646,31 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
 }
 
 /**
- * The `idx(t, 0), idx(t, 2)` an array pattern's reads need, for `t`: one
- * per index the bounds walk did not prove, in the pattern's order, so the
- * first one out of range panics as the native read of it does. Node would
- * bind `undefined` past the end instead. The reads are the declarators of
- * `list` from `from` that `Parser.lowerPattern` wrote, up to the next
- * pattern's head. Empty where every read is proven.
+ * The indices of an array pattern's reads the bounds walk did not prove, in
+ * the pattern's order. The reads are the declarators `list.children[from,
+ * end)` that `Parser.lowerPattern` wrote for one pattern
+ * (`patternNamesStart`, `patternNamesEnd`). Empty where every read is proven.
  */
-const patternChecks = (walk: Walk, list: Node, from: i32, t: string): string => {
-  const parts: string[] = []
-  let i = from
-  while (
-    i < list.children.length &&
-    isPatternName(list.children[i]) &&
-    (i === from || patternOf(list.children[i]) === null)
-  ) {
+const uncheckedReads = (walk: Walk, list: Node, from: i32, end: i32): string[] => {
+  const indices: string[] = []
+  for (let i = from; i < end; i++) {
     const read = list.children[i].children[2]
     if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
-      parts.push(`${walk.helperName("idx")}(${t}, ${read.children[1].text}), `)
+      indices.push(read.children[1].text)
     }
-    i = i + 1
+  }
+  return indices
+}
+
+/**
+ * The `idx(t, 0), idx(t, 2)` the reads at `indices` need, for `t`, so the
+ * first one out of range panics as the native read of it does. Node would
+ * bind `undefined` past the end instead.
+ */
+const patternChecks = (walk: Walk, indices: string[], t: string): string => {
+  const parts: string[] = []
+  for (const index of indices) {
+    parts.push(`${walk.helperName("idx")}(${t}, ${index}), `)
   }
   return parts.join("")
 }
@@ -676,11 +690,14 @@ const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | nu
   if (!direct && node.children[2].kind === NodeKind.Empty) {
     return null
   }
-  const t = walk.temporary()
-  const checks = patternChecks(walk, list, direct ? walk.listAt : walk.listAt + 1, t)
-  if (checks.length === 0) {
+  const from = patternNamesStart(list, walk.listAt)
+  const end = patternNamesEnd(list, walk.listAt)
+  const indices = uncheckedReads(walk, list, from, end)
+  if (indices.length === 0) {
     return null
   }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, indices, t)
   if (direct) {
     const base = node.children[2].children[0]
     const text = walk.source.text
@@ -715,11 +732,12 @@ const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string 
   if (names.kind !== NodeKind.Var || !isPatternName(names)) {
     return null
   }
-  const t = walk.temporary()
-  const checks = patternChecks(walk, names.children[0], 0, t)
-  if (checks.length === 0) {
+  const indices = uncheckedReads(walk, names.children[0], 0, names.children[0].children.length)
+  if (indices.length === 0) {
     return null
   }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, indices, t)
   const rows = walk.temporary()
   operands.texts[1] = `(function* (${rows}) { for (const ${t} of ${rows}) yield (${checks}${t}) })(${operands.at(1)})`
   operands.changed[1] = true

@@ -1534,8 +1534,8 @@ function Parser.parseArrayPattern(this: Parser, pattern: Node): void -> @Parser.
 function Parser.parseObjectPattern(this: Parser, pattern: Node): void -> @Parser.parseObjectPattern [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: Parser.advance Parser.at Parser.eat Parser.expect Parser.node Parser.parseExpression Parser.parsePatternElement Parser.peek nish_array_grow
-  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.at#0 Parser.at#0 Parser.node#0 Parser.at#0 Parser.parsePatternElement#0 Parser.eat#0 Parser.parseExpression#0 Parser.expect#0 Parser.at#0 Parser.peek#0 Parser.advance#0 Parser.advance#0 Parser.expect#0 Parser.parsePatternElement#0 Parser.eat#0 Parser.expect#0
+  calls: Parser.advance Parser.at Parser.eat Parser.expect Parser.node Parser.parseExpression Parser.parsePatternElement Parser.peek nish_array_grow tokenName
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.at#0 Parser.at#0 Parser.node#0 Parser.at#0 Parser.parsePatternElement#0 Parser.eat#0 Parser.parseExpression#0 Parser.expect#0 Parser.at#0 Parser.peek#0 Parser.advance#0 Parser.peek#0 Parser.advance#0 Parser.advance#0 Parser.expect#0 Parser.parsePatternElement#0 Parser.eat#0 Parser.expect#0
   pointer pattern: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:5 Parser.advance -> @Parser.advance
@@ -1552,11 +1552,14 @@ function Parser.parseObjectPattern(this: Parser, pattern: Node): void -> @Parser
   callee +12:20 Parser.at -> @Parser.at
   callee +14:23 Parser.peek -> @Parser.peek
   callee +16:13 Parser.advance -> @Parser.advance
-  callee +19:11 Parser.advance -> @Parser.advance
-  callee +23:11 Parser.expect -> @Parser.expect
-  callee +25:29 Parser.parsePatternElement -> @Parser.parsePatternElement
-  callee +29:12 Parser.eat -> @Parser.eat
-  callee +33:5 Parser.expect -> @Parser.expect
+  callee +18:75 Parser.peek -> @Parser.peek
+  callee +21:24 tokenName -> @tokenName
+  callee +22:11 Parser.advance -> @Parser.advance
+  callee +24:11 Parser.advance -> @Parser.advance
+  callee +28:11 Parser.expect -> @Parser.expect
+  callee +30:29 Parser.parsePatternElement -> @Parser.parsePatternElement
+  callee +34:12 Parser.eat -> @Parser.eat
+  callee +38:5 Parser.expect -> @Parser.expect
 function Parser.lowerPattern(this: Parser, declaration: Node, list: Node): void -> @Parser.lowerPattern [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

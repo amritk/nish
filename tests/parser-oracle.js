@@ -738,17 +738,17 @@ const printTypeScriptTree = (source, sf) => {
             emit(d + 1, "IDENT", ns, ne, el.name.text)
             empty(d + 1)
             const object = ts.isObjectBindingPattern(pattern)
-            emit(
-              d + 1,
-              object ? "MEMBER" : "INDEX",
-              ss,
-              se,
-              object ? (el.propertyName ?? el.name).text : undefined
-            )
+            // An object read spans its key and an array read its slot; the
+            // hidden receiver spans what the source wrote on the right (the
+            // slot in a `for...of` head, which has none).
+            const key = object ? (el.propertyName ?? el.name) : undefined
+            const [rs, re] = key !== undefined ? [ss, span(key)[1]] : [ss, se]
+            emit(d + 1, object ? "MEMBER" : "INDEX", rs, re, key?.text)
             if (direct) {
               expression(base, d + 2)
             } else {
-              emit(d + 2, "IDENT", ss, se, hidden)
+              const [ws, we] = base !== undefined ? span(base) : [ss, se]
+              emit(d + 2, "IDENT", ws, we, hidden)
             }
             if (!object) {
               emit(d + 2, "NUMBER", ss, se, `${i}`)

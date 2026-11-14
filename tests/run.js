@@ -14637,16 +14637,23 @@ if (dealtHere("arrayChecks")) {
       skip("destructure_zero_cost: no .ll was built for it")
     } else {
       const raw = fs.readFileSync(zero, "utf8")
-      // Unoptimised, only a pattern's hidden receiver, the numbered
-      // temporaries and metadata ids may differ; every named local must match.
+      // Unoptimised, only a pattern's hidden receiver's number and the
+      // absolute ids of numbered temporaries and metadata may differ: each is
+      // renumbered by its first use in the body, so a temporary read in
+      // another order, or one more of them, still fails, and every named local
+      // must match.
+      const renumber = (text, re, prefix) => {
+        const seen = new Map()
+        return text.replace(re, (id) => {
+          if (!seen.has(id)) {
+            seen.set(id, `${prefix}${seen.size}`)
+          }
+          return seen.get(id)
+        })
+      }
       const plain = (name) => {
         const b = bodyOf(raw, name)
-        return b
-          ? b
-              .replace(/%pattern\.\d+/g, "%pattern.N")
-              .replace(/%\d+\b/g, "%N")
-              .replace(/![\w.]+/g, "!_")
-          : null
+        return b ? renumber(renumber(b.replace(/%pattern\.\d+/g, "%pattern.N"), /%\d+\b/g, "%t"), /!\d+\b/g, "!m") : null
       }
       for (const form of forms) {
         const pattern = plain(`${form}_pattern`)
@@ -14671,7 +14678,7 @@ if (dealtHere("arrayChecks")) {
         return b ? b.replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N").replace(/%\.not\d+\b/g, "%.not") : null
       }
       // `member` reads through `h.pt` and `h.items`: its hidden receiver is one
-      // alloca more unoptimised, so it is compared here only.
+      // alloca and one store more unoptimised, so it is compared here only.
       for (const form of [...forms, "member"]) {
         const pattern = body(`${form}_pattern`)
         check(

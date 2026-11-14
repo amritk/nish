@@ -104,8 +104,8 @@ import {
   Node,
   NodeKind,
   bindsHiddenReceiver,
-  isPatternName,
-  patternOf,
+  patternNamesEnd,
+  patternNamesStart,
 } from "./nodes"
 import { Options } from "./options"
 import {
@@ -1346,21 +1346,15 @@ const classifyPatternUse = (unit: AnalysisUnit, table: TypeTable, decl: Node): P
     return use(USE_ESCAPE)
   }
   let kind = USE_NONE
-  let i = list.children.indexOf(decl) + 1
-  // The names after the head, up to the next pattern's head: a direct
-  // pattern's first name is a pattern name too, and reads its own receiver.
-  while (
-    i < list.children.length &&
-    isPatternName(list.children[i]) &&
-    patternOf(list.children[i]) === null
-  ) {
+  const at = list.children.indexOf(decl)
+  const end = patternNamesEnd(list, at)
+  for (let i = patternNamesStart(list, at); i < end; i++) {
     const found = classifyUse(unit, table, list.children[i].children[2].children[0])
     if (found.kind === USE_WRITE || (found.kind === USE_READ && kind !== USE_WRITE)) {
       kind = found.kind
     } else if (found.kind !== USE_NONE) {
       return use(USE_ESCAPE)
     }
-    i = i + 1
   }
   return use(kind)
 }
