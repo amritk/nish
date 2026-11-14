@@ -1,11 +1,12 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
 **Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
-#1343), stage 6 measured, gate not met: re-measured on 2026-11-13 after task
-recycling (#1493) and the cached response head (#1457), and still outside the
-band on `plaintext` 256/1024/4096 and `json` 512 (`json` 128 and `db` 64 now
-inside); what is left needs a redesign of the serve/handler/router hand-off,
-an open question (§6, §10).** The language half — `async`,
+#1343), stage 6 measured, gate not met: re-measured on 2026-11-14 after the
+hand-off build (#1601), with 4 of 11 judged cells inside (`json` 32 and 64,
+`db` 64 and 256), `plaintext` 256/1024/4096 and `json` 16/128/256 outside, and
+`json` 512 not judgeable, and the recorded `/queries` at 64 connections worse
+than before by more than its band; what is left is the rest of the serve/handler/router
+hand-off redesign, an open question (§6, §10).** The language half — `async`,
 `await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
 and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
@@ -13,7 +14,7 @@ tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
 cancellation (part 7). D1's condition does not hold yet: the async TFB entries
 are still outside the explicit ones' noise band on `plaintext` and `json`
-([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-task-recycling-wp49-stage-6)).
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-the-hand-off-build-wp49-stage-6)).
 The anchors below are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays
 normative; the API in this note beyond what it states is a proposal and is not
 compiled by `npm test`. This note reopens
@@ -508,6 +509,62 @@ and 4,096 is still outside (−34.5%, −24.1%, −25.7%), and so is `json` at 5
 The rest of the gap is in how the serve, handler and router hand-off is shaped.
 Closing it is an open design decision, so stage 6 stays open.
 
+**After the hand-off build (2026-11-14).** #1601 has `serve` drive the HTTP/1
+server directly, so the `HttpHandler` layer is gone from the async path. The
+gate was re-run with `run.sh` and `profile.sh` unchanged, before (`main` at
+`7699d971`, with the router change #1596, the JSON tokenizer #1600 and the
+codegen change #1597, which move the explicit entry too) and after (`main` at
+`e9730272`), in one container
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-the-hand-off-build-wp49-stage-6)):
+
+| test | connections | band | async vs entry | verdict | before |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `plaintext` | 256 | 6.2% | −24.5% | outside | −29.9% |
+| `plaintext` | 1024 | 1.7% | −20.4% | outside | −23.0% |
+| `plaintext` | 4096 | 13.5% | −20.5% | outside (re-run: the first run's pair was bimodal, 3.6% and −35.7%) | −36.0% |
+| `json` | 16 | 1.3% | −3.6% | outside | −7.1% |
+| `json` | 32 | 1.8% | +3.2% | inside | −7.4% |
+| `json` | 64 | 3.8% | −0.0% | inside | −3.9% |
+| `json` | 128 | 2.8% | −5.4% | outside | −5.0% |
+| `json` | 256 | 5.2% | −9.0% | outside | −10.2% |
+| `json` | 512 | 0.6% | −13.7% | not judgeable: bimodal twice | −7.8% |
+| `db` | 64 | 10.3% | +6.4% | inside | −2.0% |
+| `db` | 256 | 6.8% | +17.1% | inside | +7.3% |
+
+Four of the eleven are inside, so the gate is not met. A cell whose explicit
+pair was bimodal takes its re-run's verdict (`plaintext` 4096); every other
+cell keeps the first run's, and a re-run reading that differs (`plaintext`
+1024 and `json` 16 inside, `json` 32 outside) is reported, not counted.
+
+No judged cell's async median fell; the async entry rose on every `plaintext`
+and `db` cell and on `json` 16 to 256. One recorded cell got worse than before
+by more than its band under both bands: `/queries?queries=20` at 64
+connections, 31,287 → 28,382 req/s (−9.3%, bands 1.5% before and 9.2% after).
+Beyond the before band only are `/queries` at 256 (−7.8%), `/updates` at 16
+(−2.7%), `plaintext` at 16,384 (−3.0%, socket errors) and `/fortunes` at 64
+(−0.22% on 0.16%); `json` 512 (−1.5%) is beyond the after band only. What is
+left, per test:
+
+- **`plaintext`: 20–36% at 256 to 4,096 connections.** Every async round is
+  below every explicit round, in a re-run too. The async entry runs 6,353
+  instructions a request against 4,310 (2,043 more, from 2,227 before).
+- **`json`: 3.6–9.0% at 16, 128 and 256.** 8,105 instructions a request
+  against 5,676 (2,429 more, from 2,539). System calls per request are 0.135
+  against 0.129 on `plaintext` and 2.109 against 2.027 on `json`, so the gap
+  is user-space CPU.
+  `json` 512's explicit pair was bimodal in the run and in its re-run, so this
+  container cannot judge it.
+
+By frame, self instructions a request summed by group, async minus explicit
+(`plaintext`, then `json`): `serve` (`serveOn`'s and `serveTask`'s resumes and
+`ServeConns`) about 1,600 and 2,060, down from 1,830 and 2,300 with
+`HttpHandler`; `Router.match` 430 and 330, unchanged; the task region and
+executor about 225, unchanged; netted against the explicit loop's own dispatch,
+about 815 and 1,015. Part of what `HttpHandler` did now runs in
+`Http1Connection.nextRequest` and `.write`, in the codec group. The rest of
+the hand-off redesign is the two resumes per request and the router's walk;
+stage 6 stays open.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,
@@ -626,7 +683,7 @@ page for anything a user sees.
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
 | 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); the follow-up is a redesign of the serve/handler/router hand-off, the owner's decision |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); after the hand-off build (#1601) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/128/256 outside and `json` 512 not judgeable, and the recorded `/queries` at 64 connections worse than before by more than its band (§6, re-measured 2026-11-14 on `e9730272`, about 2,040 and 2,430 more instructions a request than the explicit entry); the follow-up is the rest of the serve/handler/router hand-off redesign, the owner's decision |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
