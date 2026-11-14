@@ -31839,7 +31839,9 @@ const runFixtureUnderNode = (entry, encoding) =>
 // And the atomics: `thread_atomic_tasks`, whose named, arrow and void tasks
 // update one `AtomicI32` and one `AtomicI64` with commuting operations and a
 // `compareExchange` loop, and `par_atomic`, whose four data-parallel bodies
-// each make an atomic update their one shared write. Every update commutes,
+// each make an atomic update their one shared write, and their array twins
+// `thread_atomic_array` and `par_atomic_array`, which update elements of one
+// `AtomicI32Array` and one `AtomicI64Array`. Every update commutes,
 // so spawn order, iteration order and the pool's threads print the same.
 // `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
 // sibling scopes of one `using` whose tasks reach locks or atomics each made
@@ -31926,10 +31928,12 @@ for (const name of [
   "thread_task_void",
   "thread_atomic_tasks",
   "thread_atomic_unreached",
+  "thread_atomic_array",
   "thread_sibling_disjoint_mutex",
   "thread_sibling_disjoint_mutex_types",
   "thread_sibling_disjoint_atomics",
   "par_atomic",
+  "par_atomic_array",
   "thread_task_string",
   "par_map_string",
   "thread_channel_string",
@@ -32229,7 +32233,8 @@ if (!only || "thread_mutex".includes(only)) {
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
 // `thread_channel_ctor_reads` is the carrier whose constructor reads and
-// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
+// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic`, and
+// their array twins `thread_atomic_array` and `par_atomic_array`, pin that
 // an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
 // lower for wasm32, a module without shared memory, where its tasks run in turn.
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
@@ -32259,6 +32264,8 @@ for (const name of [
   "std_sqlite_wasi",
   "thread_atomic_tasks",
   "par_atomic",
+  "thread_atomic_array",
+  "par_atomic_array",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",

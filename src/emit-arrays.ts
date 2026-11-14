@@ -1118,6 +1118,40 @@ const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: N
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
 }
 
+/**
+ * Address of element `idx` (an i64 value) of the array field `field` of the
+ * object at `receiver`, whose class is `info`, once `idx` is checked against
+ * the array's length as `a[i]`'s is: an atomic array's method reaches its
+ * element through this (`emitAtomicBody`). A plain field's header is `arr`,
+ * which the caller loaded; a boxed or inline one is read in place, as
+ * `inlineFieldBase` reads it.
+ */
+export const checkedFieldElement = (
+  emitter: Emitter,
+  info: StructInfo,
+  receiver: string,
+  field: FieldInfo,
+  arr: string,
+  idx: string
+): string => {
+  emitter.declareType(ARRAY_TYPE)
+  let base = new ArrayBase(arr, null)
+  if (field.boxed || field.inline()) {
+    base = new ArrayBase(
+      field.boxed
+        ? slicePointer(emitter, info, receiver, field)
+        : inlineHeaderPointer(emitter, info, receiver, field),
+      null
+    )
+    base.slice = field.boxed
+    base.owner = info
+    base.receiver = receiver
+    base.field = field
+  }
+  emitRangeCheck(emitter, idx, baseLength(emitter, base))
+  return elementPointer(emitter, base, emitter.table.refOf(field.type), idx)
+}
+
 /** A header's 24 bytes from the arena, its fields not yet stored. */
 const arenaHeader = (emitter: Emitter): string => {
   const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
