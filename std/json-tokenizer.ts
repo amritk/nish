@@ -57,9 +57,8 @@
  * where eight digits fit before the window's end, and keeps that mantissa, the
  * decimal exponent and the digit count for `numberF64`, which is correctly
  * rounded, ties to even, in one of three ways. When the mantissa of at most 19
- * digits is at
- * most 2^53 and the decimal exponent is within ±22, the answer is one exact
- * multiply or divide of two exact doubles (Clinger's fast path).
+ * digits is at most 2^53 and the decimal exponent is within ±22, the answer is
+ * one exact multiply or divide of two exact doubles (Clinger's fast path).
  *
  *  Any other number of at most 19 digits is the Eisel–Lemire algorithm as
  *  fast_float computes it: one or two 64×64-bit products with a truncated power
