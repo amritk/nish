@@ -1,7 +1,6 @@
 /**
  * `nish/net/serve` — an HTTP/1.1 server for an `async` program: one task and
- * one region per request, answers in request order. (WP49 stage 6 spike A:
- * prototyping a per-connection task in place of a spawn per request.)
+ * one region per request, answers in request order.
  *
  *     import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve"
  *     import { Router, RouterLimits } from "nish/net/router"
@@ -88,9 +87,9 @@ const SERVE_TICK_MS: i32 = 1000
 const SERVE_WAKE: i32 = 0
 /** `refused` marks a response the loop answers with `HttpHandler.refuse`. */
 const SERVE_REFUSE: i32 = -1
-/** The status a program's malformed answer is sent as. */
 /** Spike: run the handler inline on the loop's task. */
 const SERVE_INLINE: boolean = true
+/** The status a program's malformed answer is sent as. */
 const SERVE_FAILED: i32 = 500
 
 /** The caps a server holds every request and connection to; each field is read once, by `serve`. */
