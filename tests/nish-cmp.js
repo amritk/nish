@@ -6522,7 +6522,9 @@ const DECLARED = [
   })),
   ...[
     "tests/cases/destructure_array.ts",
+    "tests/cases/destructure_empty.ts",
     "tests/cases/destructure_for_of.ts",
+    "tests/cases/destructure_forms.ts",
     "tests/cases/destructure_object.ts",
     "tests/cases/destructure_out_of_range.ts",
     "tests/cases/destructure_stack.ts",
