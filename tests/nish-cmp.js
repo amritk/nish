@@ -1921,7 +1921,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "forEach on arrays, Map and Set",
+    changelog: "ForEach on arrays, Map and Set",
     why: "the program calls forEach on an array, a Map or a Set, which the seed refuses by name, so only the candidate compiles it",
   })),
   // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
