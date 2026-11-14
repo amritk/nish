@@ -98,7 +98,7 @@ every core the machine has, the ratio and the peak memory of both.
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 | `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
 | `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
-| `par-histogram-atomic` | the same four streams into an `AtomicI32` per bin, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
+| `par-histogram-atomic` | the same four streams into one `AtomicI32Array` of sixteen bins, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
 
 ```bash
 node bench/run.mjs --only par            # all of them and their twins; `--only par-nbody` names one
@@ -128,7 +128,7 @@ its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,
 `std::sync::Mutex`, `sync.Mutex`), and `par-histogram-atomic` an atomic add per
-value in every language (`AtomicI32.add`, `AtomicI32::fetch_add` with
+value in every language (`AtomicI32Array.add`, `AtomicI32::fetch_add` with
 `SeqCst`, `atomic.Int32.Add`), so a lock is never timed against an atomic.
 
 **The same work is not the same checks or the same build**, and the table
@@ -189,21 +189,22 @@ because a squash merge does not keep the branch's own commits.
   as much (0.46 s), and in those runs it came out about level with Nish, so
   parking on a futex is not shown to be the cure. Those figures are from an
   earlier session, in which Nish's `par` run took about 274 ms; in the table's
-  latest runs it took 116 ms and Rust's 308 ms, with no change to either
+  latest runs it took 139 ms and Rust's 313 ms, with no change to either
   program, so par-histogram moves by 2x and more between sessions on this
   machine. Even the sign is not stable: the latest runs put Nish ahead of Go
-  on every median, outside the band in two of the three, where earlier runs
-  put it behind Go on every median.
-- `par-histogram-atomic`: 1.59x to 1.95x behind Rust on the minimum and 1.81x
-  to 1.96x on the median, past 1.10x in all three runs, and level with Go
-  (101 / 129 ms against Rust's 61.3 / 69.2 and Go's 93.3 / 106). Swapping the
-  lock for atomics takes Rust from 308 ms to 61 and Go from 194 to 93, but Nish
-  only from 116 to 101. Why is not measured yet. The differences in the
-  program are the checks above (an overflow check on `v * 75 + 74` and a
-  bounds check on `j.bins[bin]` per value, neither of which Rust makes), and
-  the bins: Nish's are an array of `AtomicI32` objects reached through the
-  task's class, where Rust's and Go's are sixteen counters inline in one array:
-  one more load per value in Nish, and a different layout in the cache.
+  on every minimum and behind it on every median (1.01x to 1.08x), where an
+  earlier set put it ahead of Go on every median.
+- `par-histogram-atomic`: level with Rust, 0.93x to 1.06x on the minimum and
+  1.00x to 1.04x on the median, within 1.10x in all three runs, and ahead of
+  Go (58.1 / 68.9 ms against Rust's 62.4 / 69.5 and Go's 92.0 / 104). The bins
+  are one `AtomicI32Array`, sixteen counters inline in one buffer as Rust's
+  and Go's are, on cache lines nothing else uses (docs/IR_COOKBOOK.md, "an
+  atomic array"). With them as sixteen `AtomicI32` objects reached through an
+  array, Nish ran 1.59x to 1.95x behind Rust: the objects shared lines with
+  each other and with the array's header, which every core reads per value.
+  Nish still makes the checks above (an overflow check on `v * 75 + 74` and a
+  bounds check per `add`) where Rust makes neither; under this much contention
+  the locked add, not the checks, sets the pace.
 - `par-nbody`: 1.11x to 1.17x behind Rayon, past 1.10x in all three runs,
   where on `main` at a1a5bf8a it was 0.96x to 1.06x. Part of that is
   [#731](https://github.com/amritk/nish/pull/731), which cuts a divided region

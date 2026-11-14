@@ -963,8 +963,8 @@ counter, each its own allocation, so sixteen counters end up spread over
 several cache lines, and the cores that update them pass those lines back and
 forth. An `AtomicI32Array(16)` is sixteen adjacent `i32`s in 64 contiguous
 bytes, the layout Rust's `[AtomicI32; 16]` has. Binning 3.2 million values
-into 16 bins on four cores (`bench/par-histogram-atomic.ts`) runs about twice
-as fast on the array as on sixteen `AtomicI32`s. Use an `AtomicI32` for one
+into 16 bins on four cores (`bench/par-histogram-atomic.ts`) runs more than
+twice as fast on the array as on sixteen `AtomicI32`s. Use an `AtomicI32` for one
 counter, or for counters that belong to different objects. And a tally no other
 core touches is cheaper still: when you can, count into a task's own local
 array and add it to the shared one once, at the task's end, as the example
