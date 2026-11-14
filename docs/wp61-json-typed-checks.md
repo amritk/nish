@@ -38,8 +38,8 @@ The owner has decided the following, and this note does not reopen it:
    - what went wrong stays readable after the `OK`.
 
    Strict stays the default.
-4. **The coerced/defaulted record is decided by measurement** (§5.6): always
-   on, unless keeping it costs more than the stated threshold.
+4. **The repair log is decided by measurement** (§5.6): always on, unless
+   keeping it costs more than the stated threshold.
 
 ## 1. The problem
 
@@ -234,7 +234,7 @@ Why the class literal:
 | Keyword | Field types | Check emitted after the read |
 | --- | --- | --- |
 | `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum` | integers | two `icmp`s against constants |
-| | `f64` | `fcmp` against the bound, when the bound's literal is exactly an `f64`; otherwise refused unless the field is `JsonNumber` |
+| | `f64` | `fcmp` against the bound, when the bound's literal is exactly an `f64`; otherwise refused unless the field is `JsonNumber`. Each bound is emitted as the negation of an ordered pass test (`!(x >= min)` fails), so `NaN` fails every bound |
 | | `JsonNumber` | `jsonNumberCompare(text, bound)` on the number's text, exact |
 | `multipleOf` | integers | `srem` against a constant |
 | | `JsonNumber`, `f64` | `jsonNumberMultipleOf` on the token's text, exact |
@@ -336,15 +336,30 @@ is a correct instance of its class. Every field holds one of two things:
 Nothing a body says can fail the decode or leave a field out of its type or
 its constraints.
 
-The mode is per class, and it is **transitive**. A field of a class type, an
-array element, or a map value of a coerce class must itself be of a coerce
-class, or the class is refused with a new diagnostic. A part is written once
-per class and shared by every caller. A strict nested class under a coerce
-class would make the outer decode fail after all, which breaks the guarantee.
+The mode is per class, and it is **transitive**. These must themselves be
+of a coerce class, or the class is refused with a new diagnostic:
 
-A coerce class may not hold a union field (a diagnostic). A union's default
-would have to pick a variant, and its tag failures would need their own rule.
-That is left to a later WP (§12).
+- a field of a class type;
+- an array element;
+- a map value;
+- a union variant.
+
+A part is written once per class and shared by every caller. A strict nested
+class under a coerce class would make the outer decode fail after all, which
+breaks the guarantee.
+
+**Tagged unions.** A union field of a coerce class must be `U | null`, with
+the initializer `null`. A union field without `| null` is refused, because
+no variant is the obvious default.
+
+- The tag chooses the variant, as in strict mode. A value is never coerced
+  into a different variant from the one its tag names. The tag decides which
+  variant the value matches, so the matching variant wins with nothing
+  coerced.
+- A missing tag, a tag that is not a string, and a tag no variant names all
+  give the field its default, `null`, and are recorded as `TAG`.
+- A tag that names a variant decodes the object as that variant's coerce
+  class. Its own fields then convert and default by the rules below.
 
 **One walk.** Each conversion and each default happens at the value or the
 object it concerns:
@@ -356,41 +371,102 @@ object it concerns:
 
 Nothing reads the document twice or walks the decoded object.
 
+**The order, per value.** Each value goes through these steps, in this
+order:
+
+1. the type check, or a conversion by §5.2;
+2. the type's range check;
+3. the constraints of §4;
+4. the default, if any earlier step failed.
+
+A value that converts and then fails a constraint takes the default. The
+field never keeps a half-converted value. Nothing is clamped, rounded or
+truncated to fit:
+
+- `200` with `maximum: 150` is the default, not 150;
+- `"a long name"` with `maxLength: 4` is the default, not `"a lo"`;
+- `7.5` into an `i32` is the default, not 7.
+
 ### 5.2 The conversion table
 
 A value of the wrong type is converted only when the conversion is defined
 here and is lossless. The converted value then passes through the same range
 check and constraints that a value of the right type would.
 
+**A string converts as its contents would.** A string whose raw bytes are
+one JSON number is read as that bare number would be. A string whose raw
+bytes are `true` or `false` is read as that literal would be. "Raw" means no
+escapes, no whitespace and nothing else in the string. So `"7"` behaves as
+`7` does, `"7.0"` as `7.0`, and `"1"` into a boolean field as `1`.
+
 | Field type | Value given | Converted when | Example |
 | --- | --- | --- | --- |
-| `i32`, `u32`, `i64`, `u64`, a numeric enum | a string | its raw bytes, with no escapes and no whitespace, are one JSON number that the strict read would accept for the field | `"7"` → 7 |
-| the same | a number with a fraction or exponent | its exact value is an integer, decided on the token's text by `nish/json-number`, never through `f64` | `7.0`, `7e0`, `1.5e1` → 7, 7, 15 |
+| `i32`, `u32`, `i64`, `u64`, a numeric enum | a number with a fraction or exponent | its exact value is an integer, decided on the token's text by `nish/json-number`, never through `f64` | `7.0`, `7e0`, `1.5e1` → 7, 7, 15 |
+| the same | a string | its raw bytes are one JSON number that converts by the row above or reads as is | `"7"`, `"7.0"` → 7 |
 | `f64` | a string | its raw bytes are one JSON number | `"2.5"` → 2.5 |
 | `JsonNumber` | a string | its raw bytes are one JSON number; the text is kept exactly | `"1e400"` → `1e400` |
-| `boolean` | a string | it is exactly `"true"` or `"false"` | `"true"` → true |
+| `boolean` | a string | its raw bytes are exactly `true` or `false` | `"true"` → true |
+| `boolean` | a number | its exact value is 0 or 1 | `1` → true, `0` → false |
+| `boolean` | a string | its raw bytes are a JSON number whose exact value is 0 or 1 | `"1"` → true, `"0"` → false |
 | `string` | a number | always: the string is the number's text exactly as written | `1e2` → `"1e2"`, `7.50` → `"7.50"` |
 | `string` | a boolean | always | `true` → `"true"` |
 
 Nothing else is converted. In particular:
 
-- `"7.0"` → `i32` is not converted: the string's number must be one the strict
-  read accepts.
-- These strings never convert to a number: `" 7"`, `"+7"`, `"0x7"`, `""`,
-  `"NaN"`, `"Infinity"`, and `"7"` (an escape).
-- `"1"`, `"yes"` and `"True"` never convert to a boolean.
-- A number never converts to a boolean, and a boolean never converts to a
-  number.
-- `null` never converts to anything.
-- An object or array never converts to or from a scalar.
+- **Number grammar.** A string's number is JSON's grammar, scanned by the
+  tokenizer itself. So `"+7"`, `"007"`, `".5"`, `"1."`, `" 7"`, `"0x7"`,
+  `""`, `"NaN"`, `"Infinity"` and `"\u0037"` (an escape) never convert to a
+  number. `"7.5"` into an `i32` has a number but no integer, so it takes the
+  default.
+- **Boolean spellings.** `"yes"`, `"no"`, `"on"`, `"off"`, `"y"`, `"n"`,
+  `"True"`, `" true "` and `""` never convert to a boolean. Neither does `2`,
+  and nothing is ever converted by truthiness.
+- **No numbers from booleans.** A boolean never converts to a number.
+- **`null`** never converts to anything. It means "not set": a field that is
+  not `| null` takes its default, never `0`, `""`, `false` or `"null"`. A
+  `| null` field keeps `null`, which is a value of its type.
+- **No wrapping or unwrapping.** An object or array never converts to or from
+  a scalar. In particular, `"a"` into a `string[]` field is not wrapped as
+  `["a"]`, and `["a"]` into a `string` field is not unwrapped.
+- **Enums.** A value that is not a member, after any conversion, takes the
+  default. A field with a `const` constraint can default only to its `const`
+  (§5.4), so any problem leaves it holding the `const`.
 
 A value that has no conversion takes the field's default.
+
+**Why these spellings and no more.** mjst's coercing parser (§5.7) also
+accepts these:
+
+- `+`, leading zeros and a bare leading `.` in a numeric string;
+- `yes`, `y`, `on`, `no`, `n`, `off` and `""` for a boolean, case-folded and
+  trimmed.
+
+Those spellings suit its inputs, YAML and environment variables, where they
+are ordinary. Nish decodes JSON from a peer. Each extra spelling is another
+place where this decoder and some other parser of the same body can disagree
+(§8), and a JSON producer writes JSON's own literals.
+
+The recommendation is the table above:
+
+- JSON's number grammar, so a quoted number and a bare one are read by one
+  scanner;
+- `true`, `false`, `1` and `0` for a boolean, the encodings a JSON producer
+  actually emits for a flag.
+
+The wider boolean set is §9, question 5.
 
 **How a string's number is read.** The decoder runs the tokenizer's own
 number scanner over the string's bytes: a second `JsonTokenizer` that the
 decoder owns, `reset` over `[tokStart + 1, tokEnd − 1)`
-(`std/json-tokenizer.ts:698`). It allocates nothing, so a converted number and
-a bare one are parsed by the same code.
+(`std/json-tokenizer.ts:698`). It allocates nothing, and it is JSON's grammar
+by construction, so a converted number and a bare one are parsed by the same
+code.
+
+**A number into a string keeps its text.** The text is kept as written, not
+re-printed in a canonical form. A canonical form would go through `f64` and
+lose digits (`0.10000000000000001`, `1e400`). Kept as written, the conversion
+is lossless. The string's own constraints then apply to that text, as to any
+string: `1e2` into a field with `pattern: "^[0-9]+$"` takes the default.
 
 **Encode.** `jsonEncode` writes each field's own type, so a converted `"7"` is
 written back as `7`.
@@ -408,11 +484,17 @@ In coercion mode, a field takes its default (§5.4) when any of these happens:
 4. **`null` arrives** for a field that is not `| null`.
 5. **A key is missing.** For an `optional` field this is not a problem and is
    not recorded. That is what `optional` already means.
-6. **An array element or a map value has a problem** with no conversion: the
-   whole array or map field takes its default. The rest of the array or map is
-   stepped over. The field is the unit of default. Elements have no
-   initializers of their own, and dropping one silently would shift every
-   index after it.
+6. **An array element or a map value has a problem.** Elements and values
+   convert one at a time, by the table. An element or value that still has a
+   problem gives the whole array or map field its default, and the rest of the
+   array or map is stepped over. The field, not the element, is the unit of
+   default, for three reasons:
+   - an element has no initializer of its own to fall back to;
+   - dropping an element would shift every index after it, so `points[3]`
+     would silently be a different point;
+   - a dropped element could break the array's own `minItems` or
+     `uniqueItems`, so the result would not be a correct instance.
+7. **A union's tag is missing or unknown** (§5.1).
 
 Two key-level rules also hold in coercion mode:
 
@@ -452,17 +534,25 @@ fallback syntax. The default of a field is:
 
 - **a scalar, string or enum field:** its initializer, the constant
   `initializerConstant` already gives a missing `optional` field;
-- **a `| null` field:** its initializer, which is usually `null`;
+- **a `| null` field, including a `| null` class or union field:** its
+  initializer, which must be `null` for a class or union;
 - **an array field:** empty. Its length is set to 0 and its buffer kept, so
   no allocation is made;
 - **a `Map` field:** cleared, keeping its storage;
 - **a nested-class field:** its object, reset in place to its own class's
-  defaults by the same rule, one level down. This allocates nothing, and it
-  is bounded by the class's declared depth, not by the input.
+  defaults by the same rule, one level down. A missing required nested object
+  is therefore what its constructor builds.
 
 The array, map and nested-class defaults are what the constructor sets, as
 the owner put it: `[]`, `new Map()`, `new C()`. Each is applied in place, so
 the value is equal to the constructor's and no allocation is made.
+
+**A nested reset is bounded by the class graph, not the input.** A class
+whose constructor builds `new C()` cannot reach itself through such fields,
+or `new C()` would never return. A cycle in the class graph must pass
+through a `| null` field, whose default is `null` and which stops the reset.
+So the deepest reset is the longest chain of non-null class fields, a number
+the compiler knows at build time.
 
 **A field the compiler cannot default is a compile error in coercion mode.**
 A new diagnostic covers each of these:
@@ -478,11 +568,15 @@ A new diagnostic covers each of these:
   a scalar would give a second default the in-place reset could not
   reproduce, and running the constructor itself inside the walk would put
   arbitrary user code inside the walk.
-- an initializer that fails its own field's constraints: `age: i32 = -1` with
-  `minimum: 0`, or an empty-array default with `minItems: 1`. The compiler
-  checks each default against the field's constraints at build time. This is
-  what makes "a correct instance" include the constraints, not just the
-  types.
+- **a default that fails its own field's constraints.** Examples:
+  `age: i32 = -1` with `minimum: 0`, `role: string = "owner"` with an `enum`
+  that does not list it, or an empty-array default with `minItems: 1`. The
+  compiler checks each default against the field's constraints at build time,
+  with the same checks the decoder runs. This is what makes "a correct
+  instance" include the constraints, not just the types. mjst's
+  `getDefaultValue` makes the same choice: it uses a schema's `default` only
+  when that default is an instance of the declared type
+  (`helpers/src/get-default-value.ts:211`).
 
 ### 5.5 What went wrong stays readable
 
@@ -492,9 +586,9 @@ and neither costs anything on the path where nothing goes wrong:
 
 - `reason: i32` is the first problem's code: the code the strict decode would
   have failed with. That is `JSON_DECODE_TYPE`, `RANGE`, `CONSTRAINT`,
-  `MISSING` or `DUPLICATE` for a value-level problem, and a `JSON_TOK_ERR_*`
-  code or `JSON_DECODE_MAP_LIMIT` for a stop. It is `JSON_DECODE_OK` when the
-  body needed no conversion and no default.
+  `MISSING`, `DUPLICATE` or `TAG` for a value-level problem, and a
+  `JSON_TOK_ERR_*` code or `JSON_DECODE_MAP_LIMIT` for a stop. It is
+  `JSON_DECODE_OK` when the body needed no conversion and no default.
 - `errorAt` is the offset of the first problem, as in strict mode.
   `failedKeyword` is set as in §4.2 when that problem is a constraint.
 
@@ -504,46 +598,93 @@ reject imperfect input checks `d.reason`. A caller can tell "reading stopped"
 from "a value was defaulted" by the code alone: a stop is a tokenizer code or
 `MAP_LIMIT`.
 
-### 5.6 Which fields were converted or defaulted: decided by measurement
+`reason` and `errorAt` are kept whatever §5.6 decides, so the first problem
+can always be read.
 
-`reason` names the first problem only. The per-field record says, for each
-wire field of each decoded object, whether its value was:
+### 5.6 The repair log: its shape, and whether it is always on
 
-- read as given (`JSON_FIELD_READ = 0`);
-- converted (`JSON_FIELD_CONVERTED = 1`);
-- defaulted (`JSON_FIELD_DEFAULTED = 2`).
+`reason` names the first problem only. The repair log records every
+conversion and every default, in the order the walk made them. Its shape
+follows mjst's repair report (§5.7), where each repair is reported with the
+path and keyword it would have been rejected with
+(`validation/src/validators/generators/repair-runtime.ts:30`). Here each
+entry is four `i32`s:
 
-It is allocation-free and works like `presence`:
+- `at`: the byte offset of the value. For a missing key, it is the offset of
+  the object's `}`.
+- `code`: the strict code: `TYPE`, `RANGE`, `CONSTRAINT`, `MISSING`,
+  `DUPLICATE` or `TAG`, or the stop's code.
+- `keyword`: the `JSON_KEYWORD_*` constant for a constraint, otherwise 0.
+- `action`: `JSON_REPAIR_CONVERTED = 1` or `JSON_REPAIR_DEFAULTED = 2`.
 
-- **Storage.** It is one hidden `u8` slot per wire field, on coerce classes
-  only. A class without `coerce` keeps its layout byte for byte. This is the
-  one exception to the header's rule that the options take no slot
-  (`std/json-typed.ts:169`), and S2 rewrites that sentence.
-- **Writes.** The slot is written in the after-the-loop block from the state
-  the decoder already holds per field, which is one `store i8` per field.
-- **Reads.** A program reads the record with `jsonFieldOutcome(v, "age")`, a
-  generic function the compiler lowers to one load, as it lowers
-  `jsonDecode`. The field name is a string literal checked against the
-  class's wire fields (a diagnostic otherwise).
+**Allocation-free.** The log is a fixed array of the first `maxRepairs`
+entries, 16 unless set, plus a count of every repair, including those past
+the cap. The decoder allocates the array once, when it is made, not per
+decode. `reset` sets the count to 0. A repair past the cap only increments
+the count, so a hostile body cannot grow the log.
 
-**Always on, or opt-in.** S2 builds the record behind a compiler switch and
-measures decode with the record kept against decode without it:
+The program reads it with:
+
+- `d.repairCount`;
+- `d.repairAt(i)`, `d.repairCode(i)`, `d.repairKeyword(i)` and
+  `d.repairAction(i)` for `i < min(repairCount, maxRepairs)`.
+
+**The path is computed on demand, outside the decode.** mjst's entries carry
+a JSON Pointer path. Building a path string per entry inside the walk would
+allocate, so the log holds the offset instead.
+`jsonPointerAt(text, at): string` turns an offset back into a JSON Pointer
+(`/tags/3`) by scanning the text up to that offset. That scan runs only when
+the program asks, after the decode, and is bounded by the same limits. It is
+not a second validation walk: it answers one question about one offset.
+
+**Clean input writes nothing.** No class layout changes, and the header's
+rule that the options take no slot (`std/json-typed.ts:169`) stands. A body
+that needs no repair writes nothing to the log.
+
+**Always on, or opt-in.** The log's cost is on the repair path: a compare
+against the cap and four stores per repair, plus whatever that branch does to
+the code around it. S2 builds the log behind a compiler switch and measures
+decode with the log kept against decode without it:
 
 - **Workloads:** a citm-shaped one (many small objects, mostly integers) and
   a json-api-shaped one (nested resources, strings, arrays), each declared
-  `coerce: true` with clean input. Clean input is the case the record's
-  stores are pure overhead.
+  `coerce: true`. Each is measured twice:
+  - **clean**, where the log should cost nothing and the measurement checks
+    that it does;
+  - **dirty**, with a fixed 5% of values needing a conversion or a default.
 - **Measures:** `Ir/doc` under callgrind, and interleaved wall clock, 7 rounds
   or more, reported as minimums. The noise band comes from timing two
   byte-identical copies of the same binary under the same interleaving.
-- **Rule:** if keeping the record costs **more than 1% `Ir/doc` on either
-  workload, or a wall-clock median outside the byte-identical-copy band**,
-  the record is opt-in, as `outcome: true` in the literal, and the slots
-  exist only on classes that ask for them. Otherwise it is always on for every
-  coerce class, and `jsonFieldOutcome` needs no option.
+- **Rule:** keeping the log may not cost **more than 1% `Ir/doc` on either
+  workload, clean or dirty, nor put a wall-clock median outside the
+  byte-identical-copy band**. If it does, the log is opt-in: `repairs: true`
+  in the class's literal compiles the log's stores into that class's parts.
+  Otherwise it is always on for every coerce class, and `repairs` is not an
+  option.
 
 This rule is part of S2's exit criteria (§11). The measured figures and the
 outcome are written into this note.
+
+### 5.7 Prior art: mjst
+
+mjst's `validation` package, in the same author's `amritk/mjst` repository
+(MIT), generates validators and a coercing `parseX` from a JSON Schema.
+`parseX` has this WP's "never fails" contract: it always returns a value, and
+it reports the repairs it made. Paths below are under `mjst/packages/` at
+commit `f549612`. Only ideas are taken here, which needs no notice. Code
+ported later would be listed in `THIRD_PARTY_NOTICES.md` per
+`.claude/licensing.md`.
+
+| mjst | Here |
+| --- | --- |
+| A coercion is kept only when the coerced value still passes its bounds; otherwise the default. No clamping (`validation/src/parsers/generators/generate-validation-expression.ts:258`, `:350`). | The same: §5.1's order, type then range then constraints then default, and nothing clamped. |
+| `getDefaultValue` takes a schema's `default` only when it is an instance of the type (`helpers/src/get-default-value.ts:211`). | Stricter: a default that fails its field's constraints is a compile error (§5.4). |
+| A numeric string is scanned by hand against `[+-]?(\d+\|\d*\.\d+)([eE][+-]?\d+)?`; `" 1 "`, `"0x10"`, `"Infinity"` and `"1."` are refused (`helpers/src/coercion-runtime.ts:25`). | JSON's grammar, scanned by the tokenizer, which also refuses `+`, leading zeros and `.5` (§5.2). |
+| A boolean is a token table, never truthiness: `true yes y on 1` and `false no n off 0 ""`, trimmed and lower-cased (`generate-validation-expression.ts:293`). | Never truthiness either; only `true`, `false`, `1` and `0` are recommended (§5.2; §9, question 5). |
+| A union value that already matches a branch is kept uncoerced (`helpers/src/coercion-runtime.ts:122`). | A tag picks the variant, so the matching variant always wins uncoerced. A bad tag gives the default (§5.1). |
+| A repair is reported with the path, keyword and params it would have been rejected with (`repair-runtime.ts:30`). | The repair log: offset, code, keyword and action, with the path computed on demand (§5.6). |
+| `parse-vs-coerce.differential.test.ts`: where the checking mode accepts, the repairing mode must return the same value. | S2's differential test: where strict decode accepts, coercion returns the identical object and an empty log (§11). |
+| Every bound is emitted as the negated pass condition, so `NaN` fails a constrained number (`validation/src/validators/AGENTS.md:32`). | The same for `f64` bounds (§4.1). |
 
 ## 6. Zero cost when unused, and the performance target
 
@@ -557,7 +698,8 @@ the class's mode, both of which are empty for such a class.
   `tests/self/goldens/checked/` and the nish-cmp corpus (`tests/nish-cmp.js`)
   already catch. This is how the `presence` option landed.
 - **New decoder fields** move `JsonDecoder`'s layout: `failedKeyword`,
-  `reason` and the conversion tokenizer. The S1 and S2 PRs state any
+  `reason`, the conversion tokenizer and the repair log (§5.6). The S1 and
+  S2 PRs state any
   corpus program whose IR moves in nish-cmp's `DECLARED` entries. The
   conversion tokenizer is made only when a coerce class is decoded.
 
@@ -580,7 +722,7 @@ minimum):
   the equivalent hand checks, which is the program a TypeScript service
   writes today.
 - **Clean input.** A coerce class decoding clean input costs no more than its
-  strict twin beyond the record's stores (§5.6). Conversions and defaults are
+  strict twin; the repair log writes nothing on clean input (§5.6). Conversions and defaults are
   paid only on the values that need them.
 
 **The bench.** S3 adds to `bench/json-compare/run.mjs`, whose rows today are
@@ -605,8 +747,8 @@ simdjson, yyjson, RapidJSON, serde and Go over twitter, citm and canada:
   Node, so nothing changes. The options literal is erased with the class's
   other statics.
 - **`jsonDecodeUnion`.** In strict mode, a variant's constraints are checked
-  as its fields are read, after the tag has chosen the variant. Coercion does
-  not apply to unions in this WP (§5.1).
+  as its fields are read, after the tag has chosen the variant. In coercion
+  mode a union field must be `| null`; a bad tag gives it `null` (§5.1).
 - **Reuse.**
   - Strict mode: a decode that fails a constraint leaves the object as a
     failed decode does today: it "leaves what it read" (the header,
@@ -683,8 +825,9 @@ The record's guidance: forward the decoded instance, re-encoded with
 component re-parses.
 
 **Conversions** widen what a body may say. S2's record entry names each
-accepted spelling of §5.2 and pins the refusals (`"0x7"`, `" 7"`, `"True"`,
-`"7"`).
+accepted spelling of §5.2 and pins the refusals (`"0x7"`, `" 7"`, `"+7"`,
+`"True"`, `"yes"`, `"\u0037"`). Each spelling the owner adds to the boolean
+set (§9, question 5) gets its own row.
 
 **`uniqueItems`** hashes peer-chosen strings into a `Set`, which uses the
 keyed SipHash that JSON-13 put in place. The set's size is the array's, which
@@ -702,7 +845,17 @@ the caller's limits bound.
    (recommended, §5.1)? The alternative is to write a second, coercing part
    for the strict class, which gives two decoders for one class.
 
-The record's default (§5.6) is not a question: the measurement decides it.
+5. **Boolean spellings.** Only `true`, `false`, `1` and `0`, exactly
+   (recommended, §5.2), or mjst's wider set, trimmed and case-folded:
+   `yes`, `y`, `on`, `no`, `n`, `off` and `""`. The narrow set is what a JSON
+   producer writes; each extra spelling is another place where two parsers
+   of one body disagree (§8).
+6. **Unions in coercion mode.** Allow a union field only as `U | null`,
+   defaulting to `null` on a missing or unknown tag (recommended, §5.1), or
+   refuse unions in coerce classes for this WP and leave them to a later
+   one.
+
+The repair log's default (§5.6) is not a question: the measurement decides it.
 
 ## 10. Docs gaps to close
 
@@ -757,7 +910,11 @@ when it lands. A stage that adds a construct follows
 - a round trip per keyword with a passing body and a failing one, printing
   `failed`, `errorAt` and `failedKeyword`;
 - negative tests for each diagnostic;
-- the linear-time pattern test.
+- the linear-time pattern test;
+- **`NaN` and bounds:** the golden shows each `f64` bound emitted as the
+  negated ordered pass test (`fcmp ult` for a minimum, `fcmp ugt` for a
+  maximum), so a `NaN` fails it. JSON cannot spell `NaN`, but the emitted
+  form must not depend on that.
 
 **Exit:** every keyword of §4.1 is checked in the one pass, at the value's
 offset, and unconstrained IR is unmoved.
@@ -766,26 +923,31 @@ offset, and unconstrained IR is unmoved.
 
 **What lands:**
 
-- the `coerce` option and its diagnostics: transitivity, unions, the
-  constructor rule and defaults that fail their own constraints (§5.1,
-  §5.4);
+- the `coerce` option and its diagnostics: transitivity, a union field
+  without `| null`, the constructor rule and defaults that fail their own
+  constraints (§5.1, §5.4);
 - the conversions of §5.2;
 - the defaults of §5.3, including the stop on malformed JSON and on limits;
 - `reason`;
-- the per-field record and `jsonFieldOutcome` (§5.6), with the measurement
-  that decides its default;
+- the repair log and `jsonPointerAt` (§5.6), with the measurement that
+  decides whether it is always on;
 - LANGUAGE.md, the guide, and the `json.md` entry of §8.
 
 **Tests:**
 
 - **Conversions:** each row of §5.2 with its example, and each listed refusal
   showing the field defaulted and `reason` = `TYPE` at the value's offset.
+  Values that convert and then fail a constraint (`"200"` with
+  `maximum: 150`, `7.5` into an `i32`) take the default, never a clamped or
+  truncated value.
   The strict `{"id":"7"}` → `JSON_DECODE_TYPE` at byte 6 is kept beside the
   coerce class accepting it.
 - **Fallbacks:** each case of §5.3 (no conversion, out of range, a failed
   constraint, `null` into a non-null field, a missing key, an array element
-  and a map value problem, a duplicate key) shows the default, `reason` and
-  `errorAt`. The reused-object cases show that no value survives from an
+  and a map value problem, a duplicate key, a missing or unknown union tag)
+  shows the default, `reason`, `errorAt` and the log's entry. `null` is
+  tested on both sides: a non-null field takes its default, a `| null`
+  field keeps `null` and logs nothing. The reused-object cases show that no value survives from an
   earlier decode.
 - **Malformed JSON still never fails:** a truncated body, a syntax error mid
   value and trailing bytes each answer `OK`, with the prefix kept, the rest
@@ -793,6 +955,19 @@ offset, and unconstrained IR is unmoved.
 - **Limits still bound the work:** depth, string, number and window limits
   and `maxMapKeys` each stop reading at the limit. Each answers `OK` with
   defaults, `reason` the limit's code, and work bounded as in strict mode.
+- **The differential invariant:** for every body in the strict tests that
+  strict decode accepts, the coerce twin returns the identical object, with
+  `reason` = `OK` and `repairCount` = 0. Coercion may only change what strict
+  refuses. mjst pins the same property between its checking and repairing
+  modes (§5.7).
+- **A seeded fuzz:** bodies built by a fixed PRNG from valid ones, with
+  truncations, wrong types, `null`s, duplicate keys, deep nesting and huge
+  strings. Each must answer `OK`; `jsonEncode` of the result must decode
+  strictly, so the instance is correct; and the work, counted in tokenizer
+  steps, must stay under a bound linear in the body. A failure prints its
+  seed.
+- **The log:** the cap (`maxRepairs` entries kept, every repair counted) and
+  `jsonPointerAt` on each entry of a nested body.
 - **Diagnostics:** the new ones of §5.1 and §5.4, each with a negative test.
 - **Byte-identical IR:** the golden for classes that do not opt in.
 
@@ -803,10 +978,11 @@ offset, and unconstrained IR is unmoved.
 - `jsonDecode` of a coerce class never answers anything but `OK`;
 - the limits hold;
 - unopted IR is unmoved;
-- **the record's default settled by §5.6's rule.** If keeping it costs more
-  than 1% `Ir/doc` on either workload, or a wall-clock median falls outside
-  the byte-identical-copy band, the record ships opt-in (`outcome: true`);
-  otherwise it ships always on. The figures are written into §5.6.
+- **the log's default settled by §5.6's rule.** If keeping it costs more
+  than 1% `Ir/doc` on either workload, clean or dirty, or a wall-clock median
+  falls outside the byte-identical-copy band, the log ships opt-in
+  (`repairs: true`); otherwise it ships always on. The figures are written
+  into §5.6.
 
 ### S3: the guide page and the benchmarks
 
@@ -829,7 +1005,8 @@ offset, and unconstrained IR is unmoved.
 - a runtime schema interpreter;
 - validating a `JsonDocument` against a schema;
 - a second pass of any kind;
-- coercion of unions;
+- coercion of a union field that is not `| null`, and coercing a value into
+  a variant other than the one its tag names;
 - conversions beyond §5.2's table, including locale-aware numbers and dates;
 - a per-decoder coercion flag: the class is the contract;
 - continuing to read past a limit or a syntax error.
