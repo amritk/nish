@@ -144,15 +144,14 @@
     )
 
   /**
-   * The name, unpacked: "NISH", whose initials open into their words while it
-   * is hovered or focused (a tap focuses it). A hidden copy, always open, in
-   * the same grid cell holds the open name's height, so opening never pushes
-   * the page down. A screen reader gets the phrase once, from the label.
+   * "NISH", whose initials open into words while hovered or focused (a tap
+   * focuses it). A hidden open copy in the same grid cell holds the height.
+   * A screen reader reads the label once: an img role, as a p's is not read.
    */
   const unpackedName = () =>
     el(
       "p.nish-hero__name",
-      { "aria-label": "Nish: Native Instruction Static Host", tabindex: "0" },
+      { role: "img", "aria-label": "Nish: Native Instruction Static Host", tabindex: "0" },
       nameRow("span.nish-hero__name-row"),
       nameRow("span.nish-hero__name-row.nish-hero__name-row--ghost")
     )
