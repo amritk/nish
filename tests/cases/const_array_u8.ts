@@ -1,0 +1,36 @@
+// A top-level `readonly u8[]` written out as a literal is a constant table:
+// one read-only data global and a constant header, no initialiser code. The
+// class of each byte: 0 other, 1 digit, 2 letter, 3 whitespace.
+const CLASS: readonly u8[] = [
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 0, 0, 3, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+  0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0,
+  0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+]
+
+const classOf = (c: u8): u8 => CLASS[c]
+
+export const main = (): void => {
+  const text = "Nish 0.40, tables!\n"
+  const counts: i32[] = [0, 0, 0, 0]
+  for (let i = 0; i < text.length; i++) {
+    counts[classOf(toU8(text.charCodeAt(i)))] += 1
+  }
+  let sum = 0
+  for (const v of CLASS) {
+    sum += v
+  }
+  console.log(`${CLASS.length} ${counts[0]} ${counts[1]} ${counts[2]} ${counts[3]} ${sum}`)
+}
