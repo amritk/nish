@@ -34,10 +34,8 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
-declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #0
-declare i8* @nish_async_enter(i8* nonnull) #0
-declare void @nish_async_leave(i8* nonnull, i8*) #0
-declare void @nish_async_done(i8* nonnull) #0
+declare nonnull i8* @nish_async_start(i32 noundef, i64 noundef, i8** nonnull) #0
+declare void @nish_async_settle(i8* nonnull, i8*, i32 noundef) #0
 declare noundef i64 @nish_async_sleep(i32 noundef) #0
 declare noundef i32 @nish_async_poll(i64 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
@@ -139,6 +137,7 @@ entry:
   %seen.addr = alloca %struct.Map$str$i32*, align 8
   %first.addr = alloca %struct.Tally*, align 8
   %i.addr = alloca i32, align 4
+  %async.prev = alloca i8*, align 8
   %0 = call i8* @nish_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Tally*
   %2 = getelementptr inbounds %struct.Tally, %struct.Tally* %1, i32 0, i32 0
@@ -184,62 +183,56 @@ for.body:
   %22 = load %struct.nish_array*, %struct.nish_array** %counts.addr, align 8
   %23 = load %struct.Map$str$i32*, %struct.Map$str$i32** %seen.addr, align 8
   %24 = load i32, i32* %i.addr, align 4
-  %25 = call i8* @nish_async_spawn(i32 0, i64 64)
-  %26 = call i8* @nish_async_enter(i8* %25)
-  %27 = getelementptr inbounds i8, i8* %25, i64 32
-  %28 = bitcast i8* %27 to { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }*
-  %29 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %28, i32 0, i32 0
-  store i32 0, i32* %29
-  %30 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %28, i32 0, i32 1
-  store %struct.Tally* %21, %struct.Tally** %30
-  %31 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %28, i32 0, i32 2
-  store %struct.nish_array* %22, %struct.nish_array** %31
-  %32 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %28, i32 0, i32 3
-  store %struct.Map$str$i32* %23, %struct.Map$str$i32** %32
-  %33 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %28, i32 0, i32 4
-  store i32 %24, i32* %33
-  %34 = call i1 @work$fn.4.note.resume(i8* %27)
-  call void @nish_async_leave(i8* %25, i8* %26)
-  br i1 %34, label %spawn.done, label %spawn.join
-
-spawn.done:
-  call void @nish_async_done(i8* %25)
-  br label %spawn.join
-
-spawn.join:
+  %25 = call i8* @nish_async_start(i32 0, i64 64, i8** %async.prev)
+  %26 = getelementptr inbounds i8, i8* %25, i64 32
+  %27 = bitcast i8* %26 to { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }*
+  %28 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %27, i32 0, i32 0
+  store i32 0, i32* %28
+  %29 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %27, i32 0, i32 1
+  store %struct.Tally* %21, %struct.Tally** %29
+  %30 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %27, i32 0, i32 2
+  store %struct.nish_array* %22, %struct.nish_array** %30
+  %31 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %27, i32 0, i32 3
+  store %struct.Map$str$i32* %23, %struct.Map$str$i32** %31
+  %32 = getelementptr inbounds { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }, { i32, %struct.Tally*, %struct.nish_array*, %struct.Map$str$i32*, i32 }* %27, i32 0, i32 4
+  store i32 %24, i32* %32
+  %33 = call i1 @work$fn.4.note.resume(i8* %26)
+  %34 = load i8*, i8** %async.prev
+  %35 = zext i1 %33 to i32
+  call void @nish_async_settle(i8* %25, i8* %34, i32 %35)
   br label %for.inc
 
 for.inc:
-  %35 = load i32, i32* %i.addr, align 4
-  %36 = add nsw i32 %35, 1
-  store i32 %36, i32* %i.addr, align 4
+  %36 = load i32, i32* %i.addr, align 4
+  %37 = add nsw i32 %36, 1
+  store i32 %37, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %37 = call i8* @nish_alloc_struct(i64 8)
-  %38 = bitcast i8* %37 to %struct.Tally*
-  %39 = getelementptr inbounds %struct.Tally, %struct.Tally* %38, i32 0, i32 0
-  store i32 0, i32* %39, align 4, !tbaa !4
-  %40 = getelementptr inbounds %struct.Tally, %struct.Tally* %38, i32 0, i32 1
-  store i32 0, i32* %40, align 4, !tbaa !5
-  store %struct.Tally* %38, %struct.Tally** %tally.addr, align 8
-  %41 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
-  %42 = getelementptr inbounds %struct.Tally, %struct.Tally* %41, i32 0, i32 0
-  store i32 100, i32* %42, align 4, !tbaa !4
-  %43 = load %struct.Tally*, %struct.Tally** %first.addr, align 8
-  %44 = getelementptr inbounds %struct.Tally, %struct.Tally* %43, i32 0, i32 0
-  %45 = load i32, i32* %44, align 4, !tbaa !4
-  %46 = call i8* @nish_str_from_i32(i32 %45)
-  %47 = call i8* @nish_str_concat(i8* bitcast ({ i64, [16 x i8] }* @.str.1 to i8*), i8* %46)
-  %48 = call i8* @nish_str_concat(i8* %47, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  %49 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
-  %50 = getelementptr inbounds %struct.Tally, %struct.Tally* %49, i32 0, i32 0
-  %51 = load i32, i32* %50, align 4, !tbaa !4
-  %52 = call i8* @nish_str_from_i32(i32 %51)
-  %53 = call i8* @nish_str_concat(i8* %48, i8* %52)
-  call void @nish_print(i8* %53)
-  %54 = load %struct.Tally*, %struct.Tally** %first.addr, align 8
-  ret %struct.Tally* %54
+  %38 = call i8* @nish_alloc_struct(i64 8)
+  %39 = bitcast i8* %38 to %struct.Tally*
+  %40 = getelementptr inbounds %struct.Tally, %struct.Tally* %39, i32 0, i32 0
+  store i32 0, i32* %40, align 4, !tbaa !4
+  %41 = getelementptr inbounds %struct.Tally, %struct.Tally* %39, i32 0, i32 1
+  store i32 0, i32* %41, align 4, !tbaa !5
+  store %struct.Tally* %39, %struct.Tally** %tally.addr, align 8
+  %42 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
+  %43 = getelementptr inbounds %struct.Tally, %struct.Tally* %42, i32 0, i32 0
+  store i32 100, i32* %43, align 4, !tbaa !4
+  %44 = load %struct.Tally*, %struct.Tally** %first.addr, align 8
+  %45 = getelementptr inbounds %struct.Tally, %struct.Tally* %44, i32 0, i32 0
+  %46 = load i32, i32* %45, align 4, !tbaa !4
+  %47 = call i8* @nish_str_from_i32(i32 %46)
+  %48 = call i8* @nish_str_concat(i8* bitcast ({ i64, [16 x i8] }* @.str.1 to i8*), i8* %47)
+  %49 = call i8* @nish_str_concat(i8* %48, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %50 = load %struct.Tally*, %struct.Tally** %tally.addr, align 8
+  %51 = getelementptr inbounds %struct.Tally, %struct.Tally* %50, i32 0, i32 0
+  %52 = load i32, i32* %51, align 4, !tbaa !4
+  %53 = call i8* @nish_str_from_i32(i32 %52)
+  %54 = call i8* @nish_str_concat(i8* %49, i8* %53)
+  call void @nish_print(i8* %54)
+  %55 = load %struct.Tally*, %struct.Tally** %first.addr, align 8
+  ret %struct.Tally* %55
 }
 
 define i1 @nish_main.resume(i8* %async.raw) #0 {
@@ -2100,6 +2093,9 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !35 = !{i32 4, !"probe-stack", !"inline-asm"}
 
 declare i8* @nish_async_next()
+declare i8* @nish_async_enter(i8* nonnull)
+declare void @nish_async_leave(i8* nonnull, i8*)
+declare void @nish_async_done(i8* nonnull)
 
 define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:

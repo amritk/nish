@@ -1,16 +1,14 @@
 %frame.nap = type { i32, i32, i32, %frame.nap.rest }
 %frame.nap.rest = type { [0 x <2 x i64>], i1, i64, i64 }
 %frame.nish_main = type { i32, i32, %frame.nish_main.rest }
-%frame.nish_main.rest = type { [0 x <2 x i64>], i1, i64, i1, i64, i64 }
+%frame.nish_main.rest = type { [0 x <2 x i64>], i8*, i8*, i8*, i1, i64, i1, i64, i64 }
 
 declare void @llvm.trap()
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
-declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #0
-declare i8* @nish_async_enter(i8* nonnull) #0
-declare void @nish_async_leave(i8* nonnull, i8*) #0
-declare void @nish_async_done(i8* nonnull) #0
+declare nonnull i8* @nish_async_start(i32 noundef, i64 noundef, i8** nonnull) #0
+declare void @nish_async_settle(i8* nonnull, i8*, i32 noundef) #0
 declare noundef i64 @nish_async_sleep(i32 noundef) #0
 declare noundef i32 @nish_async_poll(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
@@ -94,39 +92,35 @@ async.entry:
   %async.answer = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 1
   %async.rest = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 2
   %async.kids = bitcast %frame.nish_main.rest* %async.rest to i8*
-  %none.addr = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 1
-  %async.wait = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 2
-  %ok.addr = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 3
-  %async.wait.1 = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 4
-  %async.spill.0 = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 5
+  %async.prev = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 1
+  %async.prev.1 = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 2
+  %async.prev.2 = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 3
+  %none.addr = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 4
+  %async.wait = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 5
+  %ok.addr = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 6
+  %async.wait.1 = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 7
+  %async.spill.0 = getelementptr inbounds %frame.nish_main.rest, %frame.nish_main.rest* %async.rest, i32 0, i32 8
   %async.at = load i32, i32* %async.state
   switch i32 %async.at, label %async.bad [ i32 0, label %entry i32 -1, label %async.finished i32 1, label %wait.poll i32 2, label %wait.poll.1 ]
 
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   store i64 %arena.mark, i64* %async.spill.0
-  %0 = call i8* @nish_async_spawn(i32 0, i64 48)
-  %1 = call i8* @nish_async_enter(i8* %0)
-  %2 = getelementptr inbounds i8, i8* %0, i64 32
-  %3 = bitcast i8* %2 to { i32, i32, i32 }*
-  %4 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %3, i32 0, i32 0
-  store i32 0, i32* %4
-  %5 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %3, i32 0, i32 1
-  store i32 3, i32* %5
-  %6 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %3, i32 0, i32 2
-  store i32 30, i32* %6
-  %7 = call i1 @nap.resume(i8* %2)
-  call void @nish_async_leave(i8* %0, i8* %1)
-  br i1 %7, label %spawn.done, label %spawn.join
-
-spawn.done:
-  call void @nish_async_done(i8* %0)
-  br label %spawn.join
-
-spawn.join:
-  %8 = call i8* @nish_async_spawn(i32 0, i64 48)
-  %9 = call i8* @nish_async_enter(i8* %8)
-  %10 = getelementptr inbounds i8, i8* %8, i64 32
+  %0 = call i8* @nish_async_start(i32 0, i64 48, i8** %async.prev)
+  %1 = getelementptr inbounds i8, i8* %0, i64 32
+  %2 = bitcast i8* %1 to { i32, i32, i32 }*
+  %3 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %2, i32 0, i32 0
+  store i32 0, i32* %3
+  %4 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %2, i32 0, i32 1
+  store i32 3, i32* %4
+  %5 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %2, i32 0, i32 2
+  store i32 30, i32* %5
+  %6 = call i1 @nap.resume(i8* %1)
+  %7 = load i8*, i8** %async.prev
+  %8 = zext i1 %6 to i32
+  call void @nish_async_settle(i8* %0, i8* %7, i32 %8)
+  %9 = call i8* @nish_async_start(i32 0, i64 48, i8** %async.prev.1)
+  %10 = getelementptr inbounds i8, i8* %9, i64 32
   %11 = bitcast i8* %10 to { i32, i32, i32 }*
   %12 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %11, i32 0, i32 0
   store i32 0, i32* %12
@@ -135,52 +129,41 @@ spawn.join:
   %14 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %11, i32 0, i32 2
   store i32 10, i32* %14
   %15 = call i1 @nap.resume(i8* %10)
-  call void @nish_async_leave(i8* %8, i8* %9)
-  br i1 %15, label %spawn.done.1, label %spawn.join.1
-
-spawn.done.1:
-  call void @nish_async_done(i8* %8)
-  br label %spawn.join.1
-
-spawn.join.1:
-  %16 = call i8* @nish_async_spawn(i32 0, i64 48)
-  %17 = call i8* @nish_async_enter(i8* %16)
-  %18 = getelementptr inbounds i8, i8* %16, i64 32
-  %19 = bitcast i8* %18 to { i32, i32, i32 }*
-  %20 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %19, i32 0, i32 0
-  store i32 0, i32* %20
-  %21 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %19, i32 0, i32 1
-  store i32 2, i32* %21
-  %22 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %19, i32 0, i32 2
-  store i32 20, i32* %22
-  %23 = call i1 @nap.resume(i8* %18)
-  call void @nish_async_leave(i8* %16, i8* %17)
-  br i1 %23, label %spawn.done.2, label %spawn.join.2
-
-spawn.done.2:
-  call void @nish_async_done(i8* %16)
-  br label %spawn.join.2
-
-spawn.join.2:
-  %24 = call i64 @nish_async_sleep(i32 -1)
-  store i64 %24, i64* %async.wait
+  %16 = load i8*, i8** %async.prev.1
+  %17 = zext i1 %15 to i32
+  call void @nish_async_settle(i8* %9, i8* %16, i32 %17)
+  %18 = call i8* @nish_async_start(i32 0, i64 48, i8** %async.prev.2)
+  %19 = getelementptr inbounds i8, i8* %18, i64 32
+  %20 = bitcast i8* %19 to { i32, i32, i32 }*
+  %21 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %20, i32 0, i32 0
+  store i32 0, i32* %21
+  %22 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %20, i32 0, i32 1
+  store i32 2, i32* %22
+  %23 = getelementptr inbounds { i32, i32, i32 }, { i32, i32, i32 }* %20, i32 0, i32 2
+  store i32 20, i32* %23
+  %24 = call i1 @nap.resume(i8* %19)
+  %25 = load i8*, i8** %async.prev.2
+  %26 = zext i1 %24 to i32
+  call void @nish_async_settle(i8* %18, i8* %25, i32 %26)
+  %27 = call i64 @nish_async_sleep(i32 -1)
+  store i64 %27, i64* %async.wait
   br label %wait.poll
 
 wait.poll:
-  %25 = load i64, i64* %async.wait
-  %26 = call i32 @nish_async_poll(i64 %25)
-  %27 = icmp slt i32 %26, 0
-  br i1 %27, label %wait.pending, label %wait.ready
+  %28 = load i64, i64* %async.wait
+  %29 = call i32 @nish_async_poll(i64 %28)
+  %30 = icmp slt i32 %29, 0
+  br i1 %30, label %wait.pending, label %wait.ready
 
 wait.pending:
   store i32 1, i32* %async.state
   br label %async.suspend
 
 wait.ready:
-  %28 = icmp ne i32 %26, 0
-  store i1 %28, i1* %none.addr, align 1
-  %29 = load i1, i1* %none.addr, align 1
-  br i1 %29, label %cond.true, label %cond.false
+  %31 = icmp ne i32 %29, 0
+  store i1 %31, i1* %none.addr, align 1
+  %32 = load i1, i1* %none.addr, align 1
+  br i1 %32, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -189,28 +172,28 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %30 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %31 = call i8* @nish_str_from_i32(i32 %30)
-  call void @nish_print(i8* %31)
-  %32 = call i64 @nish_async_sleep(i32 60)
-  store i64 %32, i64* %async.wait.1
+  %33 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %34 = call i8* @nish_str_from_i32(i32 %33)
+  call void @nish_print(i8* %34)
+  %35 = call i64 @nish_async_sleep(i32 60)
+  store i64 %35, i64* %async.wait.1
   br label %wait.poll.1
 
 wait.poll.1:
-  %33 = load i64, i64* %async.wait.1
-  %34 = call i32 @nish_async_poll(i64 %33)
-  %35 = icmp slt i32 %34, 0
-  br i1 %35, label %wait.pending.1, label %wait.ready.1
+  %36 = load i64, i64* %async.wait.1
+  %37 = call i32 @nish_async_poll(i64 %36)
+  %38 = icmp slt i32 %37, 0
+  br i1 %38, label %wait.pending.1, label %wait.ready.1
 
 wait.pending.1:
   store i32 2, i32* %async.state
   br label %async.suspend
 
 wait.ready.1:
-  %36 = icmp ne i32 %34, 0
-  store i1 %36, i1* %ok.addr, align 1
-  %37 = load i1, i1* %ok.addr, align 1
-  br i1 %37, label %cond.true.1, label %cond.false.1
+  %39 = icmp ne i32 %37, 0
+  store i1 %39, i1* %ok.addr, align 1
+  %40 = load i1, i1* %ok.addr, align 1
+  br i1 %40, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
   br label %cond.end.1
@@ -219,9 +202,9 @@ cond.false.1:
   br label %cond.end.1
 
 cond.end.1:
-  %38 = phi i32 [ 9, %cond.true.1 ], [ -9, %cond.false.1 ]
-  %39 = call i8* @nish_str_from_i32(i32 %38)
-  call void @nish_print(i8* %39)
+  %41 = phi i32 [ 9, %cond.true.1 ], [ -9, %cond.false.1 ]
+  %42 = call i8* @nish_str_from_i32(i32 %41)
+  call void @nish_print(i8* %42)
   %async.reload.0 = load i64, i64* %async.spill.0
   call void @nish_arena_release(i64 %async.reload.0)
   store i32 0, i32* %async.answer
@@ -277,6 +260,9 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 
 declare i8* @nish_async_next()
+declare i8* @nish_async_enter(i8* nonnull)
+declare void @nish_async_leave(i8* nonnull, i8*)
+declare void @nish_async_done(i8* nonnull)
 
 define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:

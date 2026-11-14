@@ -16526,8 +16526,8 @@ if (dealtHere("runtimeChecks")) {
       )
       const spawned = asyncSymbols("tests/cases/async_spawn_shared.ts")
       check(
-        "async: a program that spawns a task links the executor (`nish_async_spawn`)",
-        spawned.ok && spawned.names.some((line) => line.endsWith(" nish_async_spawn")),
+        "async: a program that spawns a task links the executor (`nish_async_start`)",
+        spawned.ok && spawned.names.some((line) => line.endsWith(" nish_async_start")),
         spawned.detail + spawned.names.join("\n")
       )
     }

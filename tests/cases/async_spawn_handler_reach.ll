@@ -20,10 +20,8 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
-declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #1
-declare i8* @nish_async_enter(i8* nonnull) #1
-declare void @nish_async_leave(i8* nonnull, i8*) #1
-declare void @nish_async_done(i8* nonnull) #1
+declare nonnull i8* @nish_async_start(i32 noundef, i64 noundef, i8** nonnull) #1
+declare void @nish_async_settle(i8* nonnull, i8*, i32 noundef) #1
 declare noundef i64 @nish_async_sleep(i32 noundef) #1
 declare noundef i32 @nish_async_poll(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
@@ -75,6 +73,7 @@ entry:
   %board.addr = alloca %struct.Board*, align 8
   %scale.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
+  %async.prev = alloca i8*, align 8
   %0 = call i8* @nish_alloc_struct(i64 12)
   %1 = bitcast i8* %0 to %struct.Board*
   %2 = getelementptr inbounds %struct.Board, %struct.Board* %1, i32 0, i32 0
@@ -99,41 +98,35 @@ for.body:
   %9 = mul nsw i32 5, %8
   %10 = load %struct.Board*, %struct.Board** %board.addr, align 8
   %11 = load i32, i32* %scale.addr, align 4
-  %12 = call i8* @nish_async_spawn(i32 0, i64 112)
-  %13 = call i8* @nish_async_enter(i8* %12)
-  %14 = getelementptr inbounds i8, i8* %12, i64 32
-  %15 = bitcast i8* %14 to { i32, i32, i32, %struct.Board*, i32 }*
-  %16 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %15, i32 0, i32 0
-  store i32 0, i32* %16
-  %17 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %15, i32 0, i32 1
-  store i32 %7, i32* %17
-  %18 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %15, i32 0, i32 2
-  store i32 %9, i32* %18
-  %19 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %15, i32 0, i32 3
-  store %struct.Board* %10, %struct.Board** %19
-  %20 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %15, i32 0, i32 4
-  store i32 %11, i32* %20
-  %21 = call i1 @serveOne$fn.12.start$arrow0.resume(i8* %14)
-  call void @nish_async_leave(i8* %12, i8* %13)
-  br i1 %21, label %spawn.done, label %spawn.join
-
-spawn.done:
-  call void @nish_async_done(i8* %12)
-  br label %spawn.join
-
-spawn.join:
+  %12 = call i8* @nish_async_start(i32 0, i64 112, i8** %async.prev)
+  %13 = getelementptr inbounds i8, i8* %12, i64 32
+  %14 = bitcast i8* %13 to { i32, i32, i32, %struct.Board*, i32 }*
+  %15 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %14, i32 0, i32 0
+  store i32 0, i32* %15
+  %16 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %14, i32 0, i32 1
+  store i32 %7, i32* %16
+  %17 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %14, i32 0, i32 2
+  store i32 %9, i32* %17
+  %18 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %14, i32 0, i32 3
+  store %struct.Board* %10, %struct.Board** %18
+  %19 = getelementptr inbounds { i32, i32, i32, %struct.Board*, i32 }, { i32, i32, i32, %struct.Board*, i32 }* %14, i32 0, i32 4
+  store i32 %11, i32* %19
+  %20 = call i1 @serveOne$fn.12.start$arrow0.resume(i8* %13)
+  %21 = load i8*, i8** %async.prev
+  %22 = zext i1 %20 to i32
+  call void @nish_async_settle(i8* %12, i8* %21, i32 %22)
   br label %for.inc
 
 for.inc:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = add nsw i32 %22, 1
-  store i32 %23, i32* %i.addr, align 4
+  %23 = load i32, i32* %i.addr, align 4
+  %24 = add nsw i32 %23, 1
+  store i32 %24, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
   call void @nish_print(i8* bitcast ({ i64, [14 x i8] }* @.str.0 to i8*))
-  %24 = load %struct.Board*, %struct.Board** %board.addr, align 8
-  ret %struct.Board* %24
+  %25 = load %struct.Board*, %struct.Board** %board.addr, align 8
+  ret %struct.Board* %25
 }
 
 define i1 @nish_main.resume(i8* %async.raw) #1 {
@@ -428,6 +421,9 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !14 = !{i32 4, !"probe-stack", !"inline-asm"}
 
 declare i8* @nish_async_next()
+declare i8* @nish_async_enter(i8* nonnull)
+declare void @nish_async_leave(i8* nonnull, i8*)
+declare void @nish_async_done(i8* nonnull)
 
 define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:

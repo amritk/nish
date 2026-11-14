@@ -15,10 +15,8 @@ declare void @llvm.trap()
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
-declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #0
-declare i8* @nish_async_enter(i8* nonnull) #0
-declare void @nish_async_leave(i8* nonnull, i8*) #0
-declare void @nish_async_done(i8* nonnull) #0
+declare nonnull i8* @nish_async_start(i32 noundef, i64 noundef, i8** nonnull) #0
+declare void @nish_async_settle(i8* nonnull, i8*, i32 noundef) #0
 declare noundef i64 @nish_async_sleep(i32 noundef) #0
 declare noundef i32 @nish_async_poll(i64 noundef) #0
 declare nonnull i8* @nish_async_copy_str(i8* nonnull) #0
@@ -53,30 +51,25 @@ entry:
 
 define internal void @start() #0 {
 entry:
-  %0 = call i8* @nish_async_spawn(i32 0, i64 48)
-  %1 = call i8* @nish_async_enter(i8* %0)
-  %2 = call i8* @nish_async_copy_str(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
-  %3 = getelementptr inbounds i8, i8* %0, i64 32
-  %4 = bitcast i8* %3 to { i32, i8*, i32 }*
-  %5 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %4, i32 0, i32 0
-  store i32 0, i32* %5
-  %6 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %4, i32 0, i32 1
-  store i8* %2, i8** %6
-  %7 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %4, i32 0, i32 2
-  store i32 10, i32* %7
-  %8 = call i1 @later$fn.5.shout.resume(i8* %3)
-  call void @nish_async_leave(i8* %0, i8* %1)
-  br i1 %8, label %spawn.done, label %spawn.join
-
-spawn.done:
-  call void @nish_async_done(i8* %0)
-  br label %spawn.join
-
-spawn.join:
-  %9 = call i8* @nish_async_spawn(i32 1, i64 48)
-  %10 = call i8* @nish_async_enter(i8* %9)
+  %async.prev = alloca i8*, align 8
+  %async.prev.1 = alloca i8*, align 8
+  %0 = call i8* @nish_async_start(i32 0, i64 48, i8** %async.prev)
+  %1 = call i8* @nish_async_copy_str(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
+  %2 = getelementptr inbounds i8, i8* %0, i64 32
+  %3 = bitcast i8* %2 to { i32, i8*, i32 }*
+  %4 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %3, i32 0, i32 0
+  store i32 0, i32* %4
+  %5 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %3, i32 0, i32 1
+  store i8* %1, i8** %5
+  %6 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %3, i32 0, i32 2
+  store i32 10, i32* %6
+  %7 = call i1 @later$fn.5.shout.resume(i8* %2)
+  %8 = load i8*, i8** %async.prev
+  %9 = zext i1 %7 to i32
+  call void @nish_async_settle(i8* %0, i8* %8, i32 %9)
+  %10 = call i8* @nish_async_start(i32 1, i64 48, i8** %async.prev.1)
   %11 = call i8* @nish_async_copy_str(i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
-  %12 = getelementptr inbounds i8, i8* %9, i64 32
+  %12 = getelementptr inbounds i8, i8* %10, i64 32
   %13 = bitcast i8* %12 to { i32, i8*, i32 }*
   %14 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %13, i32 0, i32 0
   store i32 0, i32* %14
@@ -85,14 +78,9 @@ spawn.join:
   %16 = getelementptr inbounds { i32, i8*, i32 }, { i32, i8*, i32 }* %13, i32 0, i32 2
   store i32 20, i32* %16
   %17 = call i1 @later$fn.12.start$arrow0.resume(i8* %12)
-  call void @nish_async_leave(i8* %9, i8* %10)
-  br i1 %17, label %spawn.done.1, label %spawn.join.1
-
-spawn.done.1:
-  call void @nish_async_done(i8* %9)
-  br label %spawn.join.1
-
-spawn.join.1:
+  %18 = load i8*, i8** %async.prev.1
+  %19 = zext i1 %17 to i32
+  call void @nish_async_settle(i8* %10, i8* %18, i32 %19)
   call void @nish_print(i8* bitcast ({ i64, [14 x i8] }* @.str.3 to i8*))
   ret void
 }
@@ -276,6 +264,9 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 
 declare i8* @nish_async_next()
+declare i8* @nish_async_enter(i8* nonnull)
+declare void @nish_async_leave(i8* nonnull, i8*)
+declare void @nish_async_done(i8* nonnull)
 
 define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:
