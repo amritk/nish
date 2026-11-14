@@ -1277,6 +1277,10 @@ const RECURSION_WIDTH = "Emit self-recursive checked sums of every checked integ
 const RECURSION_WIDTH_WHY =
   "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`"
 
+const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena scope as a loop"
+const RECURSION_ARENA_WHY =
+  "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+
 const DECLARED = [
   {
     changelog: "internal work-package references from diagnostics and generated files",
@@ -1447,6 +1451,25 @@ const DECLARED = [
     file: "opt-recursion-i64.ll",
     changelog: RECURSION_WIDTH,
     why: RECURSION_WIDTH_WHY,
+  },
+  // A sum whose frames allocate loops, releasing the arena per step (issue #1612).
+  {
+    program: "tests/cases/acc_arena.ts",
+    file: "acc_arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "tests/cases/acc_arena_overflow.ts",
+    file: "acc_arena_overflow.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-arena.ts",
+    file: "opt-recursion-arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
   },
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).

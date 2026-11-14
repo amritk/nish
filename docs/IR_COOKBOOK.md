@@ -32851,6 +32851,106 @@ as it was when each frame returned. The proof is `src/emit-accumulate.ts`,
 "Arena scope".
 
 <!-- cookbook:begin opt-recursion-arena -->
+```ts
+const digits = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0
+  }
+  const s = `${n}`
+  return s.length + digits(n - 1)
+}
+
+export const test = (): i32 => digits(100000)
+```
+
+```llvm
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define internal noundef i32 @digits(i32 noundef %n.in) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %9, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %8, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  %0 = icmp sle i32 %n, 0
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %2
+
+if.end:
+  %4 = call i8* @nish_str_from_i32(i32 %n)
+  store i8* %4, i8** %s.addr, align 8
+  %5 = load i8*, i8** %s.addr, align 8
+  %6 = bitcast i8* %5 to i64*
+  %7 = load i64, i64* %6, align 8
+  %8 = trunc i64 %7 to i32
+  %9 = sub nsw i32 %n, 1
+  call void @nish_arena_release(i64 %arena.mark)
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %10 = call i32 @digits(i32 %n)
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %12)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %15
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test() #0 {
+entry:
+  %0 = tail call i32 @digits(i32 100000)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
 <!-- cookbook:end opt-recursion-arena -->
 
 A method's self call is `r.m(args)` on a receiver the checker typed as the
