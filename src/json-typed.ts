@@ -1320,7 +1320,7 @@ const jsonRouteNames = (
       names.add(name)
     }
   } else {
-    for (const name of ["beginObject", "key", "endObject"]) {
+    for (const name of ["beginObject", "key", "keyQuoted", "endObject"]) {
       names.add(name)
     }
   }
