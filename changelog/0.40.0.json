@@ -1,0 +1,1675 @@
+{
+  "version": "0.40.0",
+  "date": "2026-11-14",
+  "tag": "v0.40.0",
+  "range": {
+    "from": "v0.39.0",
+    "to": "68b5b189"
+  },
+  "entries": [
+    {
+      "id": "reach-what-the-aes-kernels-leave-in-vector",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "reach what the AES kernels leave in vector registers (AEAD-4), and settle --cpu for the kernel path",
+      "body": "Each AES kernel in runtime/runtime-aes.c (the key schedule, CTR, GHASH and the single block) now ends in nish_aes_clear, a noinline asm routine that zeroes every caller-saved vector register and the general registers the kernels use, so round keys, H's powers, counter and keystream blocks no longer stay in registers after a seal or open. A new check reads each kernel's -O2 disassembly on x86-64, aarch64 and x86-64-v3, requires every register a kernel touched to be cleared before each ret and every vector spill to be wiped, and refuses a twin without the clear and a twin whose clear skips one register. AEAD-4 is narrowed to what is still out of reach (the -O0 debug profile, and the bitsliced path's stack) and records why --cpu does not pick the kernel path at build time: no x86-64 psABI level guarantees AES-NI or PCLMULQDQ, so the runtime check stays. The runtime-aes.c text budget moves from 2,560 to 2,816 bytes for the clear.",
+      "metrics": [
+        "seal, open and header-mask throughput unchanged within a ±3.5% band (byte-identical twin)"
+      ],
+      "refs": [
+        "docs/security/crypto-aead.md#aead-4"
+      ],
+      "tests": [
+        "runtime-aes.c: the AES kernels clear their registers"
+      ],
+      "commits": [
+        "600df9e"
+      ],
+      "pr": 1510,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "record-the-wp49-stage-6-gate-after-task",
+      "type": "docs",
+      "scope": "benchmarks",
+      "breaking": false,
+      "title": "record the WP49 stage 6 gate after task recycling",
+      "body": "Re-measures the async TechEmpower entry against entry-copy with task\nrecycling (#1493) and the cached response head (#1457) in, using an\nunchanged run.sh on one 4-core VM. The tables are in BENCHMARKS.md, and the\ngate is in WP49's status line, §6 and §10.\n\njson at 128 and /db at 64 move inside the band. Every plaintext cell and\njson at 512 stay outside, so stage 6 stays open and D1's condition does not\nhold yet. Two library candidates were evaluated and dropped as not worth it\nfor ordinary programs: an in-place serve hand-off, which the task-memory\nrule refuses and which saves about 330 Ir per request, and a static-route\ntable, which saves at most about 150 Ir and costs about 40 Ir per 404. What\nremains needs a redesign of the serve/handler/router hand-off, which is the\nowner's decision.\n\nASYNC-20 now says which bytes a recycled chunk still holds. Only `declare\nclass` layout structs are zero-filled whole. Other objects keep the last\ntask's padding, and a fresh Result keeps its unused arm. No construct reads\neither.",
+      "metrics": [
+        "async vs entry, median of 3 x 10 s: plaintext 256 -34.5% (band 1.3%), 1024 -24.1% (4.4%), 4096 -25.7% (2.9%); json 128 +7.3% (10.0%), 512 -17.0% (3.7%); /db 64 +4.9% (7.9%); main 5c0cd6b2, one 4-core VM, server on CPU 0"
+      ],
+      "refs": [
+        "#1468",
+        "#1402"
+      ],
+      "tests": [],
+      "commits": [
+        "357babb"
+      ],
+      "pr": 1514,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "add-nish-page-frame-a-framebuffer-presenter-and",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/page/frame, a framebuffer presenter and fixed-step loop",
+      "body": "A page can now put a wasm module's 0xRRGGBB framebuffer on a canvas through WebGPU, WebGL 2 or Canvas 2D. It uses whichever tier answers first, records why each refused, and moves down a tier when a device or context is lost at runtime. A refused tier releases what it held, and a tier that needs a fresh canvas swaps it in place and hands it to onFallback, so a page can re-attach its listeners.\n\nrunFixedStep steps a simulation at a fixed rate and renders on every animation frame with an interpolation alpha, so a 240 Hz display gets 240 distinct frames. A long frame counts as at most a quarter second, and at most 8 steps run per frame.\n\nIt is the page half of the standard library, shipped as plain ESM with no imports as nish/page/frame, and documented under \"In a browser\" in the interop guide.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/page-frame (the page-frame section of tests/run.js)"
+      ],
+      "commits": [
+        "bf53bee"
+      ],
+      "pr": 1512,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "a-quic-transfer-survives-a-nat-rebind-while",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "a QUIC transfer survives a NAT rebind while one hole fills the stream buffer",
+      "body": "A stream's send buffer is maxStreamData bytes. Once one packet of it was lost, the server could send nothing new until the resend was acknowledged, so between the client's ACK of that resend and the burst it freed, nothing was on its way to the client. A NAT rebinding in that gap was never seen: the client had nothing to answer, every later packet (the PTO probe included) went to the old binding, and the transfer stalled until the idle timeout. The fix is an earlier ACK-eliciting probe, sent max(sRTT/2, 1 ms) after the last ACK-eliciting packet while a stream's buffer is full behind bytes in flight and nothing of it is left to send, at most once per acknowledgement that advances the Application Data space and never while the sent ring is full. The client's ACK of it comes from its new port and the connection follows. The send buffer stays tied to maxStreamData, now documented as the memory bound of a stream's send side on room(), QuicServerConfig.maxStreamData and in docs/security/quic.md (QUIC-12, with what remains: a half round trip with the NAT beside the client, up to two full datagrams a round trip outside the window, and a ~166 ms probe delay after a validated migration until the new path's first RTT sample).\n\nFixes #1485",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_interop_server/rebind.ts (a timed 256 KiB transfer at maxStreamData 64 KiB through a NAT rebinding in the gap: the server follows at 90 ms and the transfer finishes by 405 ms; without the probe the server never follows and the client gives up)"
+      ],
+      "commits": [
+        "91dc390"
+      ],
+      "pr": 1511,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "readcstring-tests-its-pointer-for-null-and-panics",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "readCString tests its pointer for NULL and panics with ffi-null",
+      "body": "`readCString` from `nish:unsafe` now tests its `CPtr` for `NULL` before the\ncopy, as `readStruct` does, and panics with the `ffi-null` kind:\n\"`readCString` read a NULL pointer\", exit 1. Before, a `declare function`\ndeclared to answer a plain `CPtr` that answered `NULL` handed address 0 to\nthe copy: a fault natively, garbage on wasm32. The two readers and a\n`declare function`'s `string` result now share one NULL test.\n\n`readCString` is no longer an allowed `unchecked` panic site.\n`--emit-panics` lists it as an unproven `ffi-null` site beside the copy's\nallowed `oom`, and `--deny-panics` (or a `\"nish\".noPanic` scope) now\nrefuses a `readCString` call, even one on a pointer narrowed with\n`!== null`; make the call from a module outside the scope. `--deny unsafe`\nand `--emit-checked` are unchanged. RT-16 records the before and after.\n\nTests: tests/cases/panics_ffi_read_cstring_null, the readCString checks in tests/ffi-string.js\nRefs: docs/wp27-ffi.md, docs/security/runtime.md#RT-16\nFixes #1498",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ff73acf"
+      ],
+      "pr": 1507,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "declare-the-ir-that-1511-s-quicconnection-field",
+      "type": "test",
+      "breaking": false,
+      "title": "declare the IR that #1511's QuicConnection field moves",
+      "body": "#1511 grew QuicConnection from 752 to 760 bytes and gave QuicStreams a `bufferBlocked` field, which moved the IR of every QUIC, HTTP/3 and WebTransport program that lays either out. It added no DECLARED entries, so nish-cmp went red on main on both architectures. This declares those moves narrowly, one entry per program and file, under #1511's own words.",
+      "metrics": [],
+      "refs": [
+        "#1416",
+        "#1511"
+      ],
+      "tests": [],
+      "commits": [
+        "bd0981c"
+      ],
+      "pr": 1521,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "re-measure-the-explicit-tfb-entry-against-uws",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "re-measure the explicit TFB entry against uWS and go-fasthttp after the codec work",
+      "body": "BENCHMARKS.md gains a re-measured section beside the HTTP/1 codec baseline, taken on main after the vector-at-a-time parser (#1460), the response head kept per Date tick (#1457) and the compiler's bounds-proof elision (#1480). It holds profile.sh instructions per request, run.sh against uWS and go-fasthttp, a browser-shaped head, and the bench/http1-request and bench/http1-parse real-world gauges, with a verdict for each of the run's criteria. WP49 section 6 item 3 is rewritten with the new standing.\n\nThe /plaintext Ir target of 3,251 is not met, at 3,883. Explicit /json is worse in four cells from 128 to 512 connections, and with a browser-shaped head. `varied` is 1.1% slower in time. The entry's peak RSS rise matches the kept head per connection.",
+      "metrics": [
+        "/plaintext 5,422 -> 3,883 Ir/req (-28.4%, callgrind); entry over go-fasthttp +97.6..+124.1% at 256 and +104.4..+149.0% at 1024, over uWS +114.0..+151.2% (bands 0.8-13.8%, client-shared); browser-head /plaintext +13.0%, /json -5.9..-11.7%; http1-parse -24..-28%"
+      ],
+      "refs": [
+        "#1416"
+      ],
+      "tests": [],
+      "commits": [
+        "ac813b5"
+      ],
+      "pr": 1519,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "add-nish-input-a-step-input-any-host",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/input, a step input any host can fill",
+      "body": "nish/input holds StepInput: the key events and held-key state one fixed step reads, with no capability behind it. A terminal host points it at nish/term-io's input by reference each step, and a page host fills it from browser events. Code written against it compiles for wasm32 and under --deterministic, with no terminal, file or clock import. nish/term-io and its TermInput are unchanged.\n\nThe compiler's interactive terminal scenes now step on it through a host-agnostic director. The director takes the seed, settings and help text as inputs, and gates terminal-only settings behind a host capability. The terminal shell keeps raw mode, the environment, the settings file and the frame-rate controller. Behaviour in the terminal is unchanged: every existing expected output is byte-identical.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_input",
+        "tests/link/break_core",
+        "tests/link/break_core_wasm"
+      ],
+      "commits": [
+        "187336a"
+      ],
+      "pr": 1506,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "a-process-spawn-grant-that-lets-a-program",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a process.spawn grant that lets a program start helpers",
+      "body": "Under --sandbox, every program a dependency's process.spawn=<program> grant starts gets exactly one exec (#1486), so a granted program cannot start helpers. A grant can now opt a program out: \"process.spawn=exec:<program>\" grants the program as process.spawn=<program> does and lets it and its descendants execute anything the exec allowlist reaches, which includes every granted program's loader, so such a program can run anything. Grant it only to a dependency that may run anything; a plainly granted program beside it is still held to its one exec.\n\nThe rule is by file identity: the compiler writes an exec: entry as ///<path> in the allowlist, the runtime records that file's identity before confinement, and a spawn whose opened target is that file (any name for it, a hard link included) starts without the one-exec filter, still through the identity-checked, private-descriptor path. A program granted both ways is exec:. \"process.spawn=exec:\" with no program is refused (NL3046), a literal an exec: grant does not cover is refused like any narrow grant (NL2594), and a capabilities lock file that recorded the plain grant refuses an added exec: prefix (NL2593). A build without exec: grants is unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/wp40-dependency-capabilities.md#2a-arguments",
+        "docs/security/sandbox.md#limits"
+      ],
+      "tests": [
+        "tests/link/sandbox_dep_exec_optin",
+        "tests/link/caps_dep_spawn_exec_granted",
+        "tests/link/caps_dep_manifest_spawn_exec_refused",
+        "tests/link/caps_dep_arg_spawn_exec_too_narrow",
+        "tests/link/caps_dep_lock_spawn_exec_widened"
+      ],
+      "commits": [
+        "c17e8e4"
+      ],
+      "pr": 1515,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "an-http-3-server-clock-h3-5-and",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "an HTTP/3 server clock (H3-5) and WebTransport's rate-cap decision",
+      "body": "An HTTP/3 server now closes a slot whose client holds it without progress, with no code in the program. Two new Http3Config fields, headTimeout (30 s by default) and idleTimeout (60 s), are checked at start-up. A connection with no request open past idleTimeout closes with H3_NO_ERROR, and one whose client trickles a request's head past headTimeout closes with H3_EXCESSIVE_LOAD. The clock starts on the first next() that finds the handshake chose h3, so neither a peer's transport parameters (a client that allows fewer than three unidirectional streams) nor a slot the program runs another protocol on (the interop server's hq-interop) changes when it runs; a slot the program never calls next() on is left to QUIC's idle timeout. A request whose head has arrived is the program's to time. The head clock runs from when the connection last completed a head, so a client completing heads faster than headTimeout can hold another stream's HEADERS open, bounded by maxStreamsBidi; H3-5's record says so. HTTP3_SERVER_SLOT_BYTES grows for the clock's fields.\n\nWebTransport's maxDatagramsPerSecond keeps dropping and counting what passes the cap and never closes the session: datagrams are unreliable by contract (RFC 9297), a drop costs O(1), and a close would punish a bursty browser. WT-2 records that as the defence.",
+      "metrics": [],
+      "refs": [
+        "docs/security/http3.md#H3-5",
+        "docs/security/webtransport.md#WT-2"
+      ],
+      "tests": [
+        "tests/link/net_http3_server/clock.ts (trickled and idle clients lose their slot at the timeouts and an active one keeps it; `starved`",
+        "a client allowing two uni streams",
+        "is closed; `unstarted`",
+        "an hq-interop slot",
+        "is not)",
+        "net_http3_server_bad_head_timeout",
+        "net_http3_server_bad_idle_timeout"
+      ],
+      "commits": [
+        "9d59810"
+      ],
+      "pr": 1513,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "keep-the-docs-site-still-under-the-pointer",
+      "type": "docs",
+      "breaking": false,
+      "title": "keep the docs site still under the pointer and stop its home page jumping on load",
+      "body": "No hover on the docs site moves or resizes anything: cards, the hero's buttons, sidebar rows and the header logo keep their colour, border, shadow and glow changes but no longer lift, slide or tilt. A heading's copy-link icon keeps its box and fades in rather than widening the button, and the home page's centred headings stay centred.\n\nOn a phone the hero's \"NISH\" no longer grows a second line as it unfolds and pushes the page down: the phone font size now applies on the home page, and a hidden copy of the name holds its unfolded height.\n\nThe hero, which site.js adds after the page has painted, no longer pushes the page under it off a phone's screen: theme.css holds that part of the page hidden until site.js marks the host ready, then shows it where it stays. The hold ends by itself after 1.2s if site.js does not run. On a phone the compiler diagram keeps a fixed 130px instead of growing with the width.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "71c4143"
+      ],
+      "pr": 1529,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "p-256-s-cached-table-for-g-and",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "P-256's cached table for G and a safegcd scalar inverse for verify (K5)",
+      "body": "P-256 sign and key generation now compute k·G from a fixed-base table generated once by scripts/gen-p256-table.mjs (the work of #1487, which this supersedes), and verify takes its public s^-1 through the constant-time safegcd scalar inverse instead of a Fermat ladder. A variable-time twin was declined: it could save at most about 0.4% of a verify and would add a second path to audit. The Fermat ladder leaves the module and survives only as the independent oracle in the crypto_p256_inverse test seam, which checks safegcd against it on 10,794 scalars including 0, 1, n-1, n and 2^256-1. ct_asm_p256 reads the comb's step and the table read. The scratch the comb uses widens, which moves the IR of the TLS, HTTP and QUIC programs; nish-cmp declares those moves.\n\nSupersedes #1487.",
+      "metrics": [
+        "verify 9,179,460 → 8,437,142 Ir (−8.1%, byte-identical twin 0 Ir band); sign and key generation from the fixed-base table as #1487 measured them (about −26% and −28% Ir); TLS handshake server CPU not slower, within its copy band"
+      ],
+      "refs": [
+        "docs/wp34-hosting-cs.md (K5 result)",
+        "docs/security/crypto-ecc.md#ECC-4"
+      ],
+      "tests": [
+        "tests/link/crypto_p256_inverse",
+        "tests/link/crypto_p256_agree",
+        "tests/cases/ct_asm_p256"
+      ],
+      "commits": [
+        "cf49719"
+      ],
+      "pr": 1516,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "reuse-the-compiler-under-test-across-runs-and",
+      "type": "ci",
+      "breaking": false,
+      "title": "reuse the compiler under test across runs and deal the golden cases across shards",
+      "body": "* ci: reuse the compiler under test when nothing it is linked from changed\n\nEvery `node tests/run.js` linked src/compile.ts with the seed before its first\ncheck: two seconds of front end and about 69 of the speed profile's full LTO on\none core, since a target with landing pads links in one partition. Each of the\neight `test` shards paid it, the NEON job paid it seven times (once per\n`node tests/run.js` step), and so did every filtered run at a workstation.\n\ntests/self/compiler-cache.js now keeps the binary in\nbuild/cache/compiler-under-test/ under a hash of everything the link reads: the\nseed and its package (libexec/, runtime/, std/, scripts/build.sh, from the root\nthe compiler's own package search settles on), this checkout's src/, std/ and\npackage.json, the C compiler and linker versions, CC, NISH_SQLITE_CFLAGS, the\nplatform, architecture and core count. A run with the same inputs copies the\nbinary instead of linking it; the first check says which it did. The key is\ncoarser than the link, so it can miss when nothing relevant changed, but it\nnever reuses a binary built from different inputs. A seed run under Node is\nnever kept, and scripts/bootstrap.sh and the fixed point never read the cache.\n\nIn CI, .github/actions/compiler-cache computes the key, restores that entry\nthrough the Actions cache, links or copies the compiler, and saves a miss (one\nmatrix row saves). The `test`, `runner`, NEON, `runtime-net` and Apple-silicon\nSHA-256 jobs use it.\n\nMeasured: stage1 link 66.1 s, copy from the cache 0.14 s (one run each, 4-core cloud session); the cached binary is byte-identical to an independent link at another path; `node tests/run.js add_plain` 1.8 s warm\nRefs: docs/wp10-ci.md#where-the-wall-clock-goes\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* ci: time ChaCha20-Poly1305 once in the NEON job, not twice\n\nThe NEON job ran `bench/chacha20.mjs --check` and a timed table in two steps, \"ChaCha20-Poly1305 throughput on AArch64\" (9 runs) and \"ChaCha20 throughput on AArch64\" (10 runs): the same two commands, about 93 s each. Neither is a gate. The first step is gone and its note, that S10's AArch64 verdict is read from this table, moves to the one that stays.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* test: deal the golden cases' work past their IR check across the shards\n\nEvery test shard ran all of section A: each case's compile, its llvm-as pass, its --warn-portability, --emit-capabilities, --emit-panics, --emit-arena and --explain-memory compiles, and the native link and run of every case with a .out. That was about 113 s of every shard, eight times over.\n\nEvery shard still compiles every case and holds its IR to the golden, because later sections read that compile: build/test/<name>.ll (the arrays, crypto, runtime and bench blocks, and shard 1's checks after the link programs, most of them behind an existsSync that would skip silently) and caseResults. Nothing reads what the rest of a case's work writes, so that work is dealt: caseShard gives each shard an eighth of the linked cases and an eighth of the compiled-only ones, by position. The first linked case with and without --threads stays in shard 1, where the runtime objects checks replay it. A shard names what it left to each other shard in a DELEGATED line, and the --emit-panics oracle's floor of 500 functions is shared out by the shard count, since a shard now reads about an eighth of the 2,861.\n\nThe compiles of the whole corpus take about 10 s of four cores, so each shard should spend about 100 s less on section A.\n\nMeasured: the 3,766 cases' compiles alone 10.4 s on 4 jobs, against 113 s for section A per shard in run 43369900293; the union of the checks of node tests/run.js str_ --shard i/8 over i = 1..8 is the unsharded run's 262, line for line\nTests: node tests/run.js str_ with and without --shard i/8\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* test: regenerate the shard costs from three green runs of main\n\nnode scripts/shard-costs.mjs --write over runs 43369900293, 43368446929 and 43346142832. The table had drifted: shard 1's own sections cost 297 s against 254, the simd group 179 against 153, and the CLI checks 70 against 103.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* test: keep the shard costs as they were\n\nThis reverts the regeneration of tests/shard-costs.json from three runs of main. The table also deals the Nish runner's corpus, and on this pull request's first CI run the regenerated link costs moved about 500 checks onto the runner's third slice: 3,012 against 2,502, and 617 s against 431 s, which made that job the run's longest. The test shards' own gain from the new table was inside run-to-run noise.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* test: link mem_scope_dynamic_array for its flat-arena check rather than reuse section A's binary\n\nThe check that Arena.used() stays flat across 100,000 scoped calls ran build/test/mem_scope_dynamic_array, the binary section A links, behind an existsSync that skipped it silently. Now that section A's links are dealt across the shards, the shard that runs the arrays group does not always link that case, and on this pull request's first CI run the check ran in no shard at all. It now links its own binary from the case's .ll, which every shard writes, and a failed link fails the check instead of skipping it. Found by comparing every shard's check names with main's run 43369900293; it was the only golden-case check missing.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* docs: state what the golden-case deal saved, measured\n\nThe deal's comment and docs/wp10-ci.md said section A cost every shard 113 s and the deal would save about 100 s of it. That figure grouped every check named like a golden case, and several later sections name their checks the same way. Section A itself took 59 s of shard 2 in run 43369900293 and takes 30 s with the deal in run 43375907084, where every job restored stage1 from the cache. The record now gives those figures and names what every shard still runs before the link programs.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd\n\n* ci: key the compiler cache on the modules the seed's front end names\n\nThe key hashed all of src/ and std/, so a change to a std/ module the compiler does not import missed the cache in every job. This PR's third CI run did, after #1513 changed std/net/http3.ts. The key now runs the seed's front end alone (-o <dir>/, about three seconds) and hashes the file each module names in its source_filename: src/ and the nine std/ modules the compiler imports, still with the seed's package, package.json and the toolchain. Over the last 150 commits to main, 99 leave those files alone, where 67 left all of src/ and std/ alone.\n\nA front end that fails, or a module whose file is not there, makes no key: the compiler is linked and not kept. The CI step then skips the Actions cache and lets the link report the seed's error, rather than failing in the key step.\n\nTests: the key is unchanged by an edit to std/net/http3.ts, changed by one to std/text.ts or src/lexer.ts, and back when they are undone; a cold link is byte-identical to an independent one; node tests/run.js add_plain reuses it in 8.3 s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9NxLqqeALZs9mpfbd",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5cb3b9c"
+      ],
+      "pr": 1524,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "answer-static-routes-from-an-exact-path-table",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "answer static routes from an exact-path table ahead of the trie walk (WP49 stage 6)",
+      "body": "A route with no parameter and no `*` is now also filed under a hash of\nits method and path, and `Router.match` looks there before it walks the\ntree: one pass over the path, at most eight slots, and a byte comparison\nfor a slot whose method and length agree. The tree stays the definition.\nIt tries a literal first at every segment, so the table's answer is the\ntree's, and anything the table does not hold falls through unchanged.\n`matchTree` is the tree alone, and the tests hold `match` to it on every\nroute, near miss, query and table growth.\n\nA client adds nothing to the table and a lookup's cost is bounded by the\nlongest static route, whatever the target (docs/security/router.md,\nROUTE-10 to ROUTE-12). The one unchecked read is the static path compare\nover the private table; the method compare stays checked, since the\nmethod arrays are public.",
+      "metrics": [
+        "async plaintext 7,848 -> 7,654 Ir/request, async json 9,280 -> 9,092 (callgrind, base 7e241d75 against 2ab39e24); the router's own frames 533.9 -> 433.9 and 400.2 -> 328.2 Ir/request; explicit entry unchanged (4,816 -> 4,815, 5,962 -> 5,962); bench/router.ts static lookup 137-141 -> 78-83 ns min over 3 runs, noise band 64-103 per mille; throughput movement is inside the run-to-run band"
+      ],
+      "refs": [
+        "docs/security/router.md"
+      ],
+      "tests": [
+        "tests/link/net_router/exact.ts",
+        "tests/link/net_router_negative_range"
+      ],
+      "commits": [
+        "242343a"
+      ],
+      "pr": 1491,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "p-256-field-arithmetic-on-64-bit-limbs",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "P-256 field arithmetic on 64-bit limbs (K5), or the figures that decline it",
+      "body": "* perf(crypto): a signed fixed-base comb for P-256 sign and key generation (WIP)\n\nWork in progress: the signed all-bits-set comb, 6 teeth 4 apart in 11\ncombs, with a masked constant-time scan; tests, docs and ct_asm to follow.\n\n* wip: signed comb in the ct_asm copies and the agree sweep\n\n* wip: signed comb docs, ECC-7 record and branch-free digit\n\n* perf(crypto): a fixed-base table for P-256 sign and key generation (WP39 G4)\n\nRegenerate the checked goldens and declare the nish-cmp moves: P256PointScratch\ngains the signed comb's selected entry.\n\n* perf(crypto): a fixed-base table for P-256 sign and key generation (WP39 G4)\n\nk*G is now a signed all-bits-set comb: 11 combs of 6 teeth, spacing 4, over\n264 bits, 32 entries a comb (22 KiB, generated and checked by\nscripts/gen-p256-table.mjs). The scalar is recoded so every digit names an\nentry, and each entry is read by scanning all 32 with masks and negating Y\nby a conditional move, so no index, branch or address follows the secret.\nSign and key generation take 44 mixed additions and 3 doublings; ECDH and\nverification are unchanged. The selected entry and the recoded scalar are\nwiped before the multiply returns.\n\nMeasured: callgrind Ir per call ((3 calls - 1 call) / 2), twin of base 0 Ir band: sign 1,908,671 -> 1,411,845 (-26.0%), keygen 1,777,052 -> 1,273,530 (-28.3%)\nRefs: docs/security/crypto-ecc.md (ECC-7)\nTests: tests/link/crypto_p256_agree, tests/cases/ct_asm_p256\n\n* test(crypto): an n - 3 edge for the P-256 comb, and a guard on the comb shape\n\nThe agree sweep also checks n - 3. gen-p256-table.mjs now refuses a comb\nshape of 512 bits or more, since p256BaseDigit's top-limb mask assumes\nlimb < 16. nish-cmp's note now names the new scratch field `comb`.\n\nTests: tests/link/crypto_p256_agree\n\n* perf(crypto): build the P-256 signer's comb table on its first signature\n\nA P256SignScratch built the 22 KiB comb table of G in its constructor,\nso every TLS, HTTP/1.1 over TLS, HTTP/2 and HTTP/3 server carried it\nbefore its first connection and went past its start-memory budget. The\ntable is now built by the first p256SignSha256Into, before the call's\narena block opens; whether it is built yet is public.\n\nTests: tests/link/net_tls_memory, runtime-budget\n\n* test(crypto): bound what the P-256 signer's first signature keeps\n\nnet_tls_memory now checks that the first TlsP256Signer.sign keeps the\ncomb table of G and no more (22,552 bytes, at most the table's 22,528\nand 256), so the \"after the first\" check cannot hide growth on the\nfirst call.\n\nTests: tests/link/net_tls_memory\n\n* wip: verify inverts s by safegcd\n\n* wip: K5 security record for verify's inversion\n\n* wip: K5 result section\n\n* wip: regenerate goldens and reference\n\n* wip: reflow\n\n* wip: drop the scalar set-one the seam alone used\n\n* wip: goldens\n\n* wip: review reflow\n\n* docs(crypto): one safegcd figure and the Fermat seam in ECC-4 (K5 review)\n\n* wip(crypto): P-256 field mul, square, add and sub on 64-bit limbs\n\n* perf(crypto): P-256 field multiply, square, add and subtract on 64-bit limbs\n\nField mul, square, add and sub are fiat-crypto's p256_64.c, read from and\nstored to the same eight u32 words, so R and every other function stay as\nthey were. ct_asm_p256 reads the 64-bit copies and helpers, and the inverse\ntest checks every field op against a bit-serial reference.\n\nTests: tests/link/crypto_p256_inverse, tests/cases/ct_asm_p256\n\n* docs(crypto): record the 64-bit P-256 field port as ECC-8\n\n* docs(crypto): record K5's 64-bit limbs result in the WP34 design note\n\nThe field multiply, square, add and subtract on 64-bit limbs cut key\ngeneration 20.0%, sign 18.0% and verify 22.9% of their instructions, and a\nTLS handshake's server 4.7%; the status, lane and \"what is left\" rows move\nwith it.\n\nMeasured: Ir per call against b1d94315 (twin 0 Ir band): public key -20.0%, sign -18.0%, verify -22.9%; handshake server Ir -4.7% (copies within 0.6%); server CPU equal within its 2.1% band\n\n* docs(roadmap): tick WP34's K5 64-bit limbs, safegcd and cached-table stage\n\n* test(self): regenerate the checked goldens and the P-256 reference for 64-bit limbs\n\n* docs(roadmap): link K5's 64-bit limbs PR from its box\n\n* docs(crypto): say K5's scalar limbs are a follow-up and the wall clock's commit stands\n\nThe roadmap box, the K5 row and \"What is left\" now all say the field\narithmetic is on 64-bit limbs and the scalar arithmetic is the recorded\nfollow-up. The design note says p256.ts is unchanged since the commit the\nwall clock was taken at, ECC-8 labels its parse script's counts as one-off\nevidence not kept in the repository, and p256.ts's header restates why\nsquare reads its limbs into locals (#334).\n\n* test(crypto): declare the P-256 scratch widening in every TLS program's modules\n\nP256PointScratch gains comb, so each TLS, HTTP and QUIC program that links the TLS stack moves its tls.ll, tls-tcp.ll, http1-server.ll or C header, and p256SignSha256Into's sign scratch is no longer readonly.\n\n* docs(reference): regenerate the P-256 page for its header note\n\n* test(crypto): declare the P256PointScratch widening in the TLS, HTTP and QUIC programs\n\n* test(crypto): name #1516's merged subject in the P-256 scratch declarations\n\nThe squash of #1516 replaced the commits that said \"fixed-base table for P-256\", so nish-cmp found no release note for those DECLARED rows; they now quote the merged subject's \"P-256's cached table for G\".",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "99a30d7"
+      ],
+      "pr": 1518,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "write-down-the-ci-runner-rule-for-spawn",
+      "type": "docs",
+      "breaking": false,
+      "title": "write down the CI-runner rule for spawn checks and the c-symbols and NL9007 gates",
+      "body": "Three conventions go into the rules a session reads before it writes a check.\n\nCLAUDE.md's definition of done now says that CI's runners are not this\ncontainer: a spawn or sandbox check in tests/run.js runs on ubuntu with uutils\ncoreutils and with descriptors the runner hands node, so it proves behaviour by\nthe exit status of a helper it builds, never by a tool's message text or the\ntest process's own descriptor count. It also says a change to runtime/*.c runs\n`node tests/run.js c-symbols`, which fails until src/c-symbols.ts reserves a\nnew libc call, and that a new index in src/ the prover cannot discharge is an\nNL9007 warning the ratchet in `node tests/run.js performance` fails on.\n\n.claude/testing.md gains \"Checks that spawn a process\" with the detail and the\nreason. .claude/selfhost.md's \"Changing the runtime\" gains the c-symbols\npairing, including that the section skips its wasm32-wasi leg without\nWASI_SYSROOT and all of itself without clang, and \"How src/ is tested\" points\nat the performance gate for the ratchet.",
+      "metrics": [],
+      "refs": [
+        ".claude/testing.md#checks-that-spawn-a-process",
+        ".claude/selfhost.md#changing-the-runtime"
+      ],
+      "tests": [],
+      "commits": [
+        "3b2bd9d"
+      ],
+      "pr": 1536,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "wp34-s-roadmap-page-and-design-note-match",
+      "type": "docs",
+      "breaking": false,
+      "title": "WP34's roadmap page and design note match main",
+      "body": "The WP34 roadmap page and design note no longer call done or decided work open: AEAD-4's narrowing and the --cpu finding (#1510), #1485's rebind fix (#1511, QUIC-12), H3-5's HTTP/3 clock with WT-2's decision (#1513), and K5's cached table for G, verify's safegcd and 64-bit field limbs (#1516, #1518). The R2 row reads in the present tense of what the interop job does, the \"What is left\" paragraph is dated by when each item landed, and the roadmap's \"Next\" leaves only the cs waves in the cs repository. WP39's design note marks H3-5 (G2) and the faster P-256 (G4) closed.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp34-hosting-cs.md",
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [],
+      "commits": [
+        "7250aaa"
+      ],
+      "pr": 1522,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "add-nish-raster-nish-synth-and-nish-host",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/raster, nish/synth and nish/host/game for browser games",
+      "body": "The standard library gains the Nish half of a small browser-game kit.\n\n- nish/raster draws into a 0xRRGGBB pixel buffer: rects, blends, discs, glow, gradients, a 5x7 pixel font and particle pools. It can draw straight into the module storage a page presents, with no per-frame copy.\n- nish/synth renders square, triangle and noise voices with envelopes into samples.\n- nish/host/game is the contract a game shares with its page: a framebuffer, its size, an input ring of key and pointer events feeding nish/input's StepInput, a sound queue, and samples the page fetches once. It also provides the Nish-side helpers over them.\n\nThe compiler's interactive terminal scenes now draw and sound through these modules, and their output is byte-identical.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_raster",
+        "tests/link/std_synth",
+        "tests/link/std_host_game",
+        "tests/link/break_sound_wav"
+      ],
+      "commits": [
+        "c128c52"
+      ],
+      "pr": 1526,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "enum-narrowing-builds-an-enum-s-members-once",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "enum narrowing builds an enum's members once",
+      "body": "Narrowing an enum variable on `x.kind === K.A`, `!==` and at `||`/`&&` joins\nre-interned every member of the enum on each test, through a string-keyed\ntable, and compared member lists pairwise. With a 79-member enum that made\nchecking enum-heavy code 26% more expensive than the same code on i32\nconstants.\n\nThe checker now builds each enum's member list once, looks member ids up by\n(enum, value) without a string key, holds a narrowed set compactly as\n\"exactly these members\" or \"all members except these\", and only materialises\na full ordered list where something enumerates or prints it. Member types are\nstill created where they were before, so an enum with two members of one\nvalue is named in diagnostics exactly as it was. Diagnostics, narrowed types\nand emitted IR are unchanged.",
+      "metrics": [
+        "callgrind instructions checking src/ (compile.ts -o dir/); main's compiler: i32 node kinds 4,832,180,422, enum node kinds 6,111,521,373 (+26.5%); this compiler: i32 4,830,970,824, enum 4,858,669,843 (+0.57%); deterministic counts, IR byte-identical across compilers on both trees"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/cases/reject_enum_alias_member_name",
+        "reject_enum_narrow_*",
+        "reject_enum_path_chain_match"
+      ],
+      "commits": [
+        "867f835"
+      ],
+      "pr": 1520,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "close-the-http-websocket-yaml-and-pki-attack",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "close the HTTP, WebSocket, YAML and PKI attack paths and pin CI to Node 26 LTS",
+      "body": "Fixes the vulnerability classes from this year's advisories that reached Nish's own implementations: HTTP/1 chunk-extension smuggling and malformed Host, HTTP/2 SETTINGS-flood CPU amplification, HTTP/3 rapid reset, cross-site WebSocket hijacking (a new origin check), YAML merge-key alias blow-up, and IPv4-mapped IPv6 name-constraint bypass. A caller can now pass distrusted keys to the PKI chain builder. Each fix lands with a before/after test and its docs/security/ record.\n\nCI and release move to Node 26.13.1 LTS (the diverse double-compiling chain stays on 22.23.4, because npm 11 refuses old lockfiles). Every npm ci runs with --ignore-scripts, guarded by a lint check that fails when a locked package gains an install script. The seed fetch fails when it cannot verify the build attestation. The release job installs nothing and restores no shared cache, and CODEOWNERS covers the workflows.",
+      "metrics": [],
+      "refs": [
+        "docs/security/supply-chain.md (SC-30 to SC-34)",
+        "docs/security/http2.md",
+        "docs/security/yaml.md",
+        "docs/security/crypto-pki.md"
+      ],
+      "tests": [],
+      "commits": [
+        "723a82f"
+      ],
+      "pr": 1532,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "an-update-notice-and-nish-upgrade-1530",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "an update notice and `nish upgrade`",
+      "body": "A compile, `nish --version` or `nish --help` on a terminal now ends with one\nline on stderr when a newer release is out: `nish X is available (you have Y);\nrun `nish upgrade``. The line is read from a cache under\n`$XDG_CACHE_HOME/nish/release` (else `~/.cache/nish/release`), which is\nbelieved only when it is a private file this user owns in a private\ndirectory this user owns. A check detached in the background refreshes it at\nmost once a day, with a 2 s limit, and a failure is silent. The notice is\nnever shown when stderr is not a terminal, with `--json`, with `CI` or\n`NISH_NO_UPDATE_CHECK` set, in `nish run`, or after a usage error. Stdout and\nthe exit status never change.\n\n`nish upgrade` installs the latest release, or a named one, through that\ntag's own `install.sh`, so its checksum and attestation checks apply. With no\nversion it never moves to an older or equal release. `nish upgrade --check`\nprints the current and latest versions (exit 3 when the latest cannot be\nfound). An npm install is pointed at `npm install -g nish@<version>` and a\nbuild from a checkout is refused, both with exit 2. A version that is not a\nplain release version is refused before any network access.\n\nPrograms can ask the same questions through the new `nish/release` module:\nthe latest release from GitHub's `/releases/latest` redirect (only a redirect\nto that repository's release tag is accepted), semver comparison, and a\ntrusted once-a-day cache.",
+      "metrics": [
+        "no added time with stderr not a terminal (1.5-1.7 ms per `nish --version` either way, within noise); ~3.3 ms on a terminal (the trust probe), +-0.3 ms over 200 runs; none with NISH_NO_UPDATE_CHECK or CI"
+      ],
+      "refs": [
+        "docs/security/release.md"
+      ],
+      "tests": [
+        "tests/run.js upgrade",
+        "tests/run.js release"
+      ],
+      "commits": [
+        "13d004f"
+      ],
+      "pr": 1530,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "the-ast-node-kinds-become-a-nodekind-enum",
+      "type": "refactor",
+      "scope": "self",
+      "breaking": false,
+      "title": "the AST node kinds become a NodeKind enum",
+      "body": "The 79 `N_*` i32 constants in src/nodes.ts become one numeric\n`enum NodeKind`, and `Node.kind`, the Node constructor, nodeName and every\nnode-kind signature are typed `NodeKind`. Nish-0, the subset src/ is written\nin, grows by numeric enums: members compared with `===`/`!==` and switched on.\nToken kinds, type kinds and bit flags stay i32 constants, flags by the\nlanguage's own rule. N_COUNT, which nothing read, is gone.\n\nMembers are PascalCase, the old name without `N_` (`NodeKind.TypeRef`), so a\n400-arm switch names the family once and reads like LANGUAGE.md's `Kind.If`.\n`N_FUNCTION` is `FunctionDecl`, because Phase 0 forbids `Function` as a name.\nnodeName's strings, and so --emit-ast, are unchanged.\n\nThe enum's narrowing proved one check could never be false\n(`initializer.kind !== N_EMPTY` in checkVariableList), and it is dropped. The\ncompiler's own IR is otherwise byte-identical: built by the seed, every module\nbut statements.ll matches main, and statements.ll loses only that check.",
+      "metrics": [
+        "callgrind instructions checking src/, compiler built from src/ with #1520: i32 node kinds 4,830,970,824, NodeKind 4,858,669,843 (+0.57%, deterministic); before #1520 the same enum cost 6,111,521,373 (+26.5%)"
+      ],
+      "refs": [
+        "docs/wp14-selfhost.md",
+        "docs/LANGUAGE.md#enums"
+      ],
+      "tests": [
+        "tests/self/goldens/checked"
+      ],
+      "commits": [
+        "9fe73fe"
+      ],
+      "pr": 1508,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "add-nish-page-game-a-one-call-browser",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/page/game, a one-call browser game harness, with a starter and a guide",
+      "body": "`startGame(canvas, wasmUrl, options)` turns a Nish module written over nish/host/game into a running browser game.\n\nWhat it does:\n- loads the module asynchronously with streaming instantiation;\n- presents its framebuffer through nish/page/frame (WebGPU, then WebGL 2, then Canvas 2D, with fallback when a device is lost), and rebinds its listeners on the fresh canvas;\n- maps the keyboard and pointer/touch zones into the input ring, letting modified browser shortcuts through and releasing held keys on blur and when the page is hidden;\n- plays the sound queue through WebAudio, unlocking it on an activating gesture and retrying until it runs;\n- runs step and draw at the display's own rate;\n- stops cleanly and calls onError when the game throws.\n\nexamples/game-starter is a small complete game. A reader copies it anywhere and builds it against the installed nish package. The new \"Writing a browser game\" guide page walks through it.\n\nruntime-wasm.c now defines nish_arena_keep as the native runtime's refusal, so string code reached from wasm links without a stub.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/game-page (the game-page section of tests/run.js",
+        "including a build of a copied starter outside the repository)"
+      ],
+      "commits": [
+        "7d92184"
+      ],
+      "pr": 1531,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "raise-the-soft-descriptor-limit-to-the-hard",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "raise the soft descriptor limit to the hard limit in nish:net",
+      "body": "A native server was held to the soft RLIMIT_NOFILE it inherited, often 1024\n(256 on macOS), though the hard limit is usually far higher, so it refused\nconnections with -24 long before the operator's limit. The first nish:net call\nthat creates a descriptor (a socket, a socket pair or a poller) now raises the\nsoft limit to the hard one, once per process, as Node and Go do at start-up.\nOn macOS it stops at OPEN_MAX, or below that where kern.maxfilesperproc is\nlower. A failed raise is ignored and the program keeps the limit it had.\nChildren started by spawn inherit the raised limit. Going past the hard limit\nstays the operator's call (ulimit -Hn, LimitNOFILE=, the container's nofile).\n\nRecorded as RT-54 in docs/security/runtime.md; getrlimit and setrlimit are\nreserved in src/c-symbols.ts. runtime-net.c's .text is 4977 of its 5120 byte\nbudget.\n\nTests: tests/link/net_fd_limit (under ulimit -S -n 64 a program that has\ncalled tcpListen holds 200 more descriptors; before the fix pollCreate\nanswered -24 after 60), tests/link/net_handler_descriptors (now run under\nulimit -n 1024, so it still meets the limit fast)\nFixes #1543",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "be16f78"
+      ],
+      "pr": 1548,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "print-async-cancel-s-lines-in-an-order",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "print async_cancel's lines in an order no clock decides",
+      "body": "tests/cases/async_cancel raced quiet's 5 ms readableWithin against nap's\n10 ms cancelAfter, both started at almost the same moment. A loaded ASan\naarch64 runner printed `nap:` first on one of soundness.js's two default\nruns, so `nish-cmp elision (aarch64-linux)` failed the case as\nnondeterministic. Elision was not at fault (differ=0).\n\n`nap` is now spawned only after `await quiet(fd)` returns, so the order\ncomes from the program's structure. Main's closing sleep, the one clock\nleft, goes from 30 ms to 200 ms, so `nap` (cancelled at 10 ms) always\nprints first. The expected output and everything the case tests are\nunchanged.",
+      "metrics": [
+        "200/200 runs matched the .out with every core busy, and 20/20 soundness runs on the case agreed under the same load"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/cases/async_cancel"
+      ],
+      "commits": [
+        "c50b4fb"
+      ],
+      "pr": 1551,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "pin-sqlite-s-sub-second-lock-wait-backoff",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "pin SQLite's sub-second lock-wait backoff in the default build",
+      "body": "The vendored SQLite 3.54.1 already waits on a busy lock in 1 to 100 ms steps in the default build. Its busy handler keys on HAVE_NANOSLEEP, which is on unless defined to 0, not on HAVE_USLEEP as older SQLite did, so adding -DHAVE_USLEEP to the defaults would change no object. A new link program, tests/link/sqlite_busy_backoff, holds a write lock on one connection and sets busy_timeout = 300 on a second. It checks that the blocked write returns SQLITE_BUSY after at least 250 ms and under 900 ms. The whole-second handler returns at once for any timeout under a second, so a SQLite update that brings it back fails the test. docs/security/sqlite.md records why HAVE_USLEEP is absent and names the test.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/sqlite_busy_backoff"
+      ],
+      "commits": [
+        "c6c797f"
+      ],
+      "pr": 1545,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "finish-a-content-length-response-once-its-whole",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "finish a Content-Length response once its whole body is sent",
+      "body": "An Http1Connection response stayed owed until the program called end(), even after write or sendBody had sent every byte its Content-Length declared. A program that skipped end() left a keep-alive connection waiting forever: the client read a complete response, and its next request on the connection was never answered, with no error anywhere.\n\nThe connection now treats a response as finished when it looks for the next request, if that response has sent its whole declared length or carries no body at all (Content-Length 0, HEAD, 204, 304). end() is optional for those. A chunked body, and an unframed one to an HTTP/1.0 client, has no length the connection can count, so it still ends only at end(), and the docs say so. A program that calls end() before the next request starts gets the same answers and the same bytes on the wire as before; one that calls it after the connection has moved on gets H1_CLOSED, as a second end() always did.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_http1_server_implicit_end"
+      ],
+      "commits": [
+        "e0a1661"
+      ],
+      "pr": 1546,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "shrink-what-an-idle-http1server-connection-holds-1552",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "shrink what an idle Http1Server connection holds",
+      "body": "An idle keep-alive Http1Server connection now holds 904 bytes of arena on the default config, against 3,384 on the base for a slot that has served four requests and parked.\n\n- Http1Config.idleInput is now on by default. A parked slot lends its parser input and head buffers back to the server's pools between requests. Those views stay valid only until the next `next()`, as the module already documents.\n- Http1Connection and Http1Parser start with shared empty arrays where no write site can push to them.\n- The constructor no longer builds a throwaway HttpDate; build() passes the shared one in.\n- The 64-entry spans array is made on the first field line.\n- The kept response head is sized to what it holds, not a fixed 1 KiB.\n- Http1OutputPool.take reserves room in its free list when it makes a buffer, so give never allocates after warm-up and a serve loop's arena stays flat.\n\ntests/runtime-budgets.js pins the idle figure with HTTP1_SERVER_IDLE_BYTES = 1024, checked by the net_http1_server startup program. The bench README and docs/security/http1-codec.md record the measurements, the new default and why the lent buffers' lifetime keeps it safe.",
+      "metrics": [
+        "904 B per idle connection (arena, default config, four GETs then parked), against 3,384 B on the base; keep-alive plaintext, json and post-json throughput with idleInput on stay inside the 12–17% copy-to-copy noise band of bench/http1-conn"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/net_http1_server",
+        "tests/link/net_serve_hangup"
+      ],
+      "commits": [
+        "35422b0"
+      ],
+      "pr": 1552,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "a-reassigned-let-no-longer-keeps-its-values",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "a reassigned let no longer keeps its values in the arena",
+      "body": "A `let` holding a Result that was assigned again sent every one of its\nsites to the arena, and the assignment's escape flow took the function's\narena scope away with it, so a handler called from an event loop kept its\nResults for the rest of the run: about 1 KB per request in a server, and\nneither the retention warnings nor --deny-retention said so. Writing the\nvariables as `const` was the only way out.\n\nAn assignment into a local now hands the value the local's own flow\ninstead of an unconditional leak. A function whose reassigned `let` never\nleaves the call keeps its arena scope, and each Ok/Err or by-value Result\nsite outside a loop gets its own stack slot, so a reassignment never\noverwrites a slot an older reader still holds. Sites inside a loop, and\nlets that are returned, captured, stored or self-assigned, keep their\narena placement, as before.\n\nTests: tests/cases/res_let_reassign\nRefs: docs/LANGUAGE.md#memory-model\nPart of #1544",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "733654e"
+      ],
+      "pr": 1553,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "keep-root-storage-s-object-graph-alive-between",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "keep root storage's object graph alive between wasm export calls",
+      "body": "A wasm-host module can now hold an object graph across export calls.\nModule-level storage declared as `const x = new Array<C | null>(n)` is a\nroot: after each export call the runtime traces what the roots reach, keeps\nit, and releases the rest of the call's arena. When the kept region grows\npast twice the live bytes plus a page, it is compacted.\n\nRoot storage is refused under threads and regions, by the native shims and\noutside wasm-host. A module without root storage links exactly the bytes it\ndid before: the keep is compiled in only for IR that defines root storage's\narena resets.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp55-persistent-root.md"
+      ],
+      "tests": [
+        "tests/cases/root_storage_page",
+        "tests/module-storage/persist"
+      ],
+      "commits": [
+        "b4212f7"
+      ],
+      "pr": 1538,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "hmacsha256-digest-allocates-only-the-tag-and-digestinto",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "HmacSha256.digest allocates only the tag, and digestInto allocates nothing",
+      "body": "Sha256.digestInto(out, at) and HmacSha256.digestInto(out, at) write the 32-byte digest or tag into a caller's window and allocate nothing.\n\n- digestInto panics before writing anything if the window is outside `out`. A second digest, or an update after one, also panics.\n- Sha256.digest and HmacSha256.digest are now built on digestInto, so HmacSha256.digest allocates only the 32-byte tag it returns. The inner digest it used to throw away now lives in a 32-byte field the constructor allocates, and that field is wiped right after use.\n- Every intermediate is still wiped, and tests/wipes/crypto.js pins HmacSha256.digestInto's wipes under -O2.\n- The `Arena.used()` checks pin that digestInto allocates nothing and that digest allocates only its tag.\n- Each new negative program pins its own panic message in expected.stderr.\n- RFC 4231 test cases 1–7 are checked through digestInto against the published tags.\n\ndocs/security/crypto-k1.md (K1-7), std/README.md and the guide describe the new calls. tests/nish-cmp.js declares, program by program, the IR moved by HmacSha256's wider layout.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/crypto_hmac",
+        "tests/link/crypto_sha256",
+        "tests/link/crypto_hmac_sha256_digest_into_*",
+        "tests/link/crypto_sha256_digest_into_*",
+        "tests/wipes/crypto.js"
+      ],
+      "commits": [
+        "623675b"
+      ],
+      "pr": 1549,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "let-the-docs-hero-terminal-take-a-command",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "let the docs hero terminal take a command",
+      "body": "The docs site's hero terminal now takes typed commands. `nish`, `--help`\nand `--version` print the compiler's real output, captured at build time and\nchecked against the compiler by a hash. A near-miss gets a riddle, and anything\nelse gets a short reply. A hidden command opens a small game drawn by a\nwasm-host module built from the compiler's own sources. It runs through\nnish/page/game, which tries WebGPU, then WebGL2, then Canvas2D.\n\nNothing loads before it is asked for. site.js only makes the terminal take\ninput, and imports the shell on the first key; the shell imports the game\nwhen the command is entered. site.js grows by under 400 B gzipped and\ntheme.css by under 250 B, both pinned by tests. On touch devices the terminal\ntakes input through a hidden field, and the line is submitted through a form\nso that a soft keyboard's Go key runs it.\n\nexamples/break-web/build.mjs builds docs/site/break/. Its --check fails on a\nstale, hand-edited or extra output, and on any machine path in what is served.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/break-web/check.mjs"
+      ],
+      "commits": [
+        "aa383b7"
+      ],
+      "pr": 1533,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "install-sh-puts-nish-on-path-in-the",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "install.sh puts nish on PATH in the shell's startup file",
+      "body": "The one-liner used to end by printing an `export PATH=` line to paste, and\nthe next thing nearly every user typed was `nish`, into `command not found`.\nIt now adds the install's bin/ to PATH in the startup file of the shell\n$SHELL names: ~/.zshrc for zsh (under $ZDOTDIR when set), ~/.bashrc for bash\non Linux and, on macOS, whichever of ~/.bash_profile, ~/.bash_login and\n~/.profile a login bash already reads, conf.d/nish.fish for fish, and\n~/.profile for any other shell. It says which file it changed and the\n`source` line that brings it into the terminal the install ran from.\n\nThe line sits between `# >>> nish >>>` markers and is written once: a\nreinstall, `nish upgrade`, or a directory already on PATH writes nothing,\nand --uninstall takes the block for that install out of every file it may\nhave gone into, leaving other lines and other installs' blocks alone.\nStartup files that are symlinks stay symlinks. --no-modify-path or\nNISH_NO_MODIFY_PATH=1 leaves every file untouched; scripts/fetch-seed.sh\nsets it, so fetching a seed never puts build/seed/bin on a developer's PATH.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/fetch-seed.js (install.sh puts the install on PATH)"
+      ],
+      "commits": [
+        "4bd2289"
+      ],
+      "pr": 1559,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "plan-wp56-generators-whose-memory-stays-flat-1561",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WP56, generators whose memory stays flat",
+      "body": "A program that reads a large spec and writes thousands of files keeps\nevery string it built until main returns: s = s + t keeps each\nintermediate, and appending to any builder older than a loop pass\nrefuses that pass its arena scope. The design note plans to measure\nthat first, document the shapes that already stay flat (a function per\nfile, an arena block, a region per target), then add builder() from\nnish:string, whose bytes live on a stack outside the arena that the\ncompiler releases at every exit of a scope that makes a builder, a write\nhandle to flush it, and diagnostics that point at it. Design only; the\nowner's decisions are recorded in its section 10.",
+      "metrics": [],
+      "refs": [
+        "docs/wp56-flat-memory-generators.md"
+      ],
+      "tests": [],
+      "commits": [
+        "04486fb"
+      ],
+      "pr": 1561,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "warn-when-an-unbounded-loop-keeps-what-each",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "warn when an unbounded loop keeps what each pass allocates (NL9018)",
+      "body": "A new performance warning, NL9018, names a loop whose passes keep what they allocate when nothing bounds how many passes run: a request loop on Http1Server whose handler builds a temporary per request, a `while (running)` poll loop, an accept loop. Before this, only `--explain-memory` and `--emit-arena` showed that memory piling up, and nothing warned.\n\nThe warning reads the same `accumulates` fact `--emit-arena` writes, and keeps only the temporaries that really pile up:\n- the loop has no bound it can see;\n- the site's pass can continue;\n- its value is not kept on purpose.\n\nOne warning per loop names the first such allocation, why the pass has no scope, and the rewrite: move the per-pass work into a `using a = arena()` block, which the compiler checks.\n\nA loop counts as bounded when its top-level `&&` chain has an order comparison and its condition calls nothing but pure numeric conversions. A `for...of` counts as bounded unless its body extends the collection it walks. A site from which every path leaves the outermost unbounded loop does not count.\n\nNL9018 is a retention finding: `--deny-retention` makes it NL2462. `--no-warn-performance` silences it. It changes no byte of the IR.\n\nFive loops in the compiler's own source had the shape and now release their per-pass memory: capability-lock, discover's import read, emit-ts-records, generics' chain arguments, and the package-root walk. The compiler's output is unchanged.",
+      "metrics": [
+        "an Http1Server loop with a per-request string grows past 256 kB over 20,000 requests; the arena-block rewrite stays within 256 kB (tests/run.js, shard 6)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#retention-as-an-error"
+      ],
+      "tests": [
+        "tests/cases/perf_arena_unbounded_pass",
+        "tests/cases/perf_arena_unbounded_quiet",
+        "tests/cases/reject_deny_retention_unbounded_pass",
+        "tests/wordings/nl9018_unbounded_pass",
+        "tests/link/nl9018_server"
+      ],
+      "commits": [
+        "0bf1ddb"
+      ],
+      "pr": 1555,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "propose-wp57-module-scoped-names-1562",
+      "type": "docs",
+      "scope": "roadmap",
+      "breaking": false,
+      "title": "propose WP57, module-scoped names",
+      "body": "A private function's name must be unique across the whole program, because\nthe emitted symbol is global and the whole-program fact table is keyed by it,\neven though name lookup is already per module. The design note proposes\nthree stages: qualify a private function's or generic template's symbol by\nits module path only when it would clash, so no program that compiles today\nmoves its IR; the owner's options for exported names that clash inside one\npackage, which are the C surface; and module-scoped class and interface\nnames, sized across every place that reaches a struct by name. Design only;\nthe rule is unchanged, and the docs that state it now link the proposal.",
+      "metrics": [],
+      "refs": [
+        "docs/wp57-module-scoped-names.md"
+      ],
+      "tests": [],
+      "commits": [
+        "8d600a2"
+      ],
+      "pr": 1562,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "load-yaml-into-a-jsondocument-about-a-fifth",
+      "type": "perf",
+      "scope": "interop",
+      "breaking": false,
+      "title": "load YAML into a JsonDocument about a fifth faster",
+      "body": "YamlJsonLoader.load now builds a document with far less work per value, and\nanswers exactly as it did before.\n\n- A map with no merge key skips the own-key duplicate scan when the stream was\n  parsed with uniqueKeys, because the parser has already refused any repeat.\n- Each key and scalar is resolved, typed and decoded in one pass.\n- A plain JSON-shaped number, or a verbatim scalar span, is copied without a\n  second check per byte.\n- Maps without `<<` skip the merge bookkeeping.\n- Containers are built at their known size.\n\nA golden test, committed before any std/ change and checked against main's std/\nagain after its inputs grew, pins every value, range and refusal over the\nyaml-test-suite and the std_yaml_json inputs. An earlier attempt that built the\nvalues during the parse (#1554) measured no wall-clock gain and was closed; the\ncost was in building values, not in the second tree.",
+      "metrics": [
+        "load step 163.03M -> 95.94M instructions a document (-41.2%, cachegrind steady state, bench/yaml-json's 1.1 MB OpenAPI fixture); parse + load 0.773x and 0.774x of main in wall clock (bands 0.1-0.2%); parse 135.82M -> 135.50M"
+      ],
+      "refs": [
+        "#1539"
+      ],
+      "tests": [
+        "tests/link/std_yaml_json_golden",
+        "tests/link/std_yaml_json_own_keys",
+        "tests/link/std_yaml_json"
+      ],
+      "commits": [
+        "ef86b6f"
+      ],
+      "pr": 1557,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "hold-the-hero-terminal-still-while-it-is",
+      "type": "docs",
+      "breaking": false,
+      "title": "hold the hero terminal still while it is hovered or focused",
+      "body": "* docs: hold the hero terminal still while it is hovered or focused\n\nThe landing page's terminal kept looping while it was used: a click snapped\nit to the last frame, and blurring it restarted its loop out of step with\nthe rest of the hero. Now a mouse over the terminal (when no other field\nhas focus) or a focus holds it with a blinking prompt. If the loop's\ncommand and output are on screen, the prompt sits on the line under them;\nif not, the terminal is cleared and the prompt takes the first line.\nLeaving before a key lets the loop go on, in step, since the hold\noverrides the animation rather than stopping it. After a key the hold\nstays. The terminal keeps its height through all of it.\n\nTests: tests/break-web/check.mjs\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9pCNwUucWLabXTHGN\n\n* docs: keep the hero terminal held for good once it is clicked\n\nA click on the terminal now holds it still for good, as a key already did:\nleaving it or moving focus elsewhere no longer lets the loop start again.\n\nTests: tests/break-web/check.mjs\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9pCNwUucWLabXTHGN\n\n* docs: pin the held hero terminal's exact height and let a failed load go\n\nThe held terminal's height is pinned from its border box, which it now\nuses whatever the site's reset says, so a hold moves nothing under the\nhero by even a pixel. A mouse dragging a selection across the terminal no\nlonger focuses it, and a shell that fails to load after the terminal was\nleft lets the loop go on rather than leaving it frozen.\n\nTests: tests/break-web/check.mjs\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw9pCNwUucWLabXTHGN",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3af1054"
+      ],
+      "pr": 1564,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "deal-the-small-sections-before-the-link-programs",
+      "type": "ci",
+      "breaking": false,
+      "title": "deal the small sections before the link programs across the test shards",
+      "body": "Every test shard used to run the same fifteen small sections between the\nnative run limit and the first link program: the host builtins, nish:term\nover a pipe and a pty and under wasi, the TCP, Unix-socket, MSS, TLS, HTTP/2\nand TLS-client checks, the wasi file programs, fnref's debug runs, the\ndiagnostics and diagnostic codes, the performance gate, the AWFY memory\nchecks and --fix. They are now in DEALT_SECTIONS, so each runs in one shard\nand the other seven print DELEGATED. Each writes only a directory of its\nown and reads nothing another section writes; --fix still runs under every\nfilter, as before. tests/shard-costs.json gains one cost per section (the\nlargest span one shard paid in run 43375907084) and leaves every other\nentry, the link costs the runner job deals by included, as it was.\n\nAlso points the YAML loader's nish-cmp declarations (#1557) at the words its\ncommit landed with, which failed nish-cmp on every merge with main.",
+      "metrics": [
+        "pre-link span 825 s -> 272 s summed over the eight shards (runs 43375907084 -> 43402907927), 775 s -> 293 s against main run 43524155675; longest test job 10:49 -> 8:32 and 10:49 -> 9:27 (single runs each); the eight shards' check-name union loses no check"
+      ],
+      "refs": [
+        "docs/wp10-ci.md#where-the-wall-clock-goes"
+      ],
+      "tests": [
+        "tests/run.js (DEALT_SECTIONS)",
+        "scripts/shard-costs.mjs (RECOGNIZERS)"
+      ],
+      "commits": [
+        "c11e7d5"
+      ],
+      "pr": 1537,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "let-a-discriminated-union-be-a-generic-s",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "let a discriminated union be a generic's type argument",
+      "body": "A discriminated union can now be a type argument like any other type. `Box<Shape>`, `Stack<Shape>`,\n`Result<Shape, E>`, `Result<T, Shape>`, a generic function or method whose\n`T` binds to a union, and `getOrInsert` / `reserve` on a `Map<K, Shape>` all\ncompile and run natively. A fallible function that returns an IR node no\nlonger needs a hand-written wrapper class: `(): Result<Schema, ParseError>`\njust works.\n\nGenerics are monomorphised and a union is one `%union.tagged*`, so\n`Box<Shape>` lowers to the same IR as a hand-written `ShapeBox`. A variant\nenters its union at every generic payload site, through the checker's single\nexisting conversion, a pointer recast. Those sites are a constructor or\nmethod parameter of type `T`, `Ok(...)` / `Err(...)`, a `T[]`, and either arm\nof a `??` or a ternary. A generic call whose `T` is already bound to an\ninterface now also accepts a class that implements it.\n\nThese stay refused, each with its own code:\n- a union as a `Set` element or a `Map` key\n- a generic class as a variant (NL2522)\n- an arm narrowed through a generic field (NL2534)\n- a union type argument left to inference (NL2172)\n- a constraint a union cannot meet (NL2328)\n- typed JSON (NL2486)\n- `nish:secret` (NL2428)\n- the C header and N-API boundary (NL4009)\n\nNL2533 is retired. Every positive case is also pinned under `-O2` escape and\narena placement, `-g`, wasm32 and `--emit-dts`.",
+      "metrics": [
+        "Result<Shape, E> vs a wrapper class, 4,000,000 calls, 11 interleaved rounds: 0.80x wall (67.8 vs 84.9 ms, noise 6.6%), 32 vs 40 bytes per success, peak RSS 124128 vs 153184 KiB (noise 0.0%)",
+        "self-compile of src/, 9 interleaved rounds: 2181 vs 2219 ms base (identical-binary noise 3.1%), peak RSS 1983892 vs 1983896 KiB (noise 16 KiB); src/ IR byte-identical; nish-cmp corpus IR unchanged"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#discriminated-unions",
+        "docs/BENCHMARKS.md"
+      ],
+      "tests": [
+        "tests/cases/union_generic_class",
+        "tests/cases/union_generic_call",
+        "tests/cases/union_result",
+        "tests/cases/union_map_helpers",
+        "tests/cases/union_generic_escape",
+        "tests/cases/union_generic_nullable",
+        "tests/cases/dbg_union_generic",
+        "tests/cases/wasm_union_generic",
+        "tests/cases/generic_interface_class_arg",
+        "tests/cases/reject_union_generic_field_store",
+        "tests/cases/reject_union_generic_inferred",
+        "tests/cases/reject_union_generic_constraint",
+        "tests/cases/reject_union_generic_json",
+        "tests/cases/reject_union_generic_secret",
+        "tests/cases/reject_union_generic_export",
+        "tests/cases/reject_union_result_export"
+      ],
+      "commits": [
+        "b3cd1b5"
+      ],
+      "pr": 1566,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "make-the-docs-site-s-break-game-playable",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "make the docs site's break game playable by touch",
+      "body": "On a phone the docs site's hidden breakout game could not be steered\nfinely, paused or driven through a menu, and in portrait its landscape\nframe filled a third of the screen. Now the paddle follows a held or\ndragged finger (the game's own paddle step heads for an aim at up to its\ntop speed, and a held arrow still wins), a tap serves, menu rows are\ntapped through the same actions their keys take, a menu button beside\nthe close control opens the pause menu, and a portrait touch screen gets\na frame of its own shape turned a quarter turn. Keyboard play and the\nterminal game are unchanged.",
+      "metrics": [
+        "iPhone 13 portrait (390x664 CSS px) shows the game at 372.7x664, was 390x219.3 (33% to 96% of the screen); landscape and desktop unchanged"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/break-web/check.mjs"
+      ],
+      "commits": [
+        "87f651d"
+      ],
+      "pr": 1567,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "set-inline-code-as-a-lightly-tinted-word",
+      "type": "docs",
+      "breaking": false,
+      "title": "set inline code as a lightly tinted word, not a ringed chip",
+      "body": "The reference pages run a dozen inline code spans to a paragraph, and\nScalar's 1px ring around each one turned that prose into a row of pills.\nInline code is now a faint neutral tint with no ring, slightly smaller and\nwith less side padding, the way GitHub and MDN set it; a grey tint, unlike\na violet one, does not compete with the links. A span that wraps closes\nboth its ends, a long path may break rather than widen a phone-width page,\nlinked code keeps a link's colour, and a table head or callout gets a\ndeeper tint so the span still shows on it.\n\nEvery text colour holds WCAG AA on its tint in both modes: the tightest is\nlinked code in dark mode, lightened to hold 5.3:1 on a table head.\n\nThe break-web theme.css budget measures the hero terminal's growth; its\nbaseline takes in this style's 404 B gzipped, which is no part of it.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "55fbb2d"
+      ],
+      "pr": 1569,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "bound-the-root-storage-trace-to-the-arena",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "bound the root-storage trace to the arena and the static data",
+      "body": "Root storage's compactor traced the kept graph as linear memory said it was, and a page can write all of linear memory: a forged root slot or pointer field made the next compaction read and rewrite memory outside the arena, and a forged array length walked until a bare trap. The trace now bounds every pointer to the arena (or, for a string, the static data) and every length to its block, and refuses a forgery with a NishPanic of kind panic before it moves anything. WH-10 is fixed in docs/security/wasm-host.md.",
+      "metrics": [
+        "1.00x on the graph drive (20,000 steps, 9,999 compactions; noise band +-5%); +745 bytes of wasm for a module with root storage"
+      ],
+      "refs": [
+        "docs/security/wasm-host.md"
+      ],
+      "tests": [
+        "tests/module-storage/persist/forge.ts"
+      ],
+      "commits": [
+        "14a35fc"
+      ],
+      "pr": 1571,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "warn-when-a-function-keeps-per-call-memory",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "warn when a function keeps per-call memory no scope releases",
+      "body": "A new performance warning, NL9019, reports a function that answers no\nmemory but keeps an allocation of its own, when a loop pass that releases\nnothing calls it directly. Each call keeps one more allocation, so the\nmemory grows with every pass, however small the function looks. The fix\nbelongs in the function: give each value its own `const`, wrap the work in\n`using a = arena()`, or keep what must outlive the call in a region.\n`--deny-retention` turns NL9019 into an error, along with NL9002, NL9003,\nNL9011, NL9016 and NL9018.\n\nNL9019 judges only the loop's direct callees, and each one only on its own\nallocations. Memory kept deeper in the call chain is not NL9019's to report;\n`--explain-memory` lists it. A direct callee that runs its work only once,\nbehind a guard, still warns. Constructors are not reported. A loop nested\ninside an arena block, or inside a scoped outer pass, counts as released.\n\nOk(..) and Err(..) built in a loop now count as visible allocations, so\nNL9003 and NL9016 report a boxed Result dropped on every pass.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/guide/language/memory.md"
+      ],
+      "tests": [
+        "tests/cases/perf_kept_memory",
+        "perf_kept_memory_direct",
+        "perf_kept_memory_quiet",
+        "tests/cases/reject_deny_retention_kept",
+        "reject_deny_retention_result_drop",
+        "reject_deny_retention_result_reassign"
+      ],
+      "commits": [
+        "cafcf03"
+      ],
+      "pr": 1558,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "drop-internal-work-package-references-from-diagnostics-and",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "drop internal work-package references from diagnostics and generated files",
+      "body": "Diagnostics NL4010 and NL4011, the comments the compiler writes into async\n.ll files, C headers, N-API sidecars, wasm loaders and the --emit-ts storage\nfile, and the nish/vite error for a loader without loadSync no longer name\ninternal planning notes; they say the same thing in plain words, and the\nvite error names the release that added loadSync (0.36.0). The diagnostics\nreference and the guide pages that quote these messages move with them.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/wordings",
+        "tests/runtime-budgets.js (results.ts loader digest)",
+        "tests/nish-cmp.js"
+      ],
+      "commits": [
+        "d38a94b"
+      ],
+      "pr": 1572,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "clean-up-the-docs-for-the-public-site",
+      "type": "docs",
+      "breaking": false,
+      "title": "clean up the docs for the public site",
+      "body": "Take internal and private material out of the pages the site publishes and\nthe repository's records, and fix what had gone stale.\n\n- A private project is no longer named anywhere: WP34 is now \"The network\n  stack\" (docs/wp34-network-stack.md), its out-of-repo boxes are gone, and\n  the dead links to a private repository are removed. Released changelog\n  entries are reworded to match.\n- The roadmap speaks to readers: \"(owner's decision)\" is now \"(open\n  question)\", and the agent instructions for picking up a work package moved\n  to AGENTS.md. Done counts, states and the docs index's status lines are\n  re-synced, and the sidebar's groups follow the index.\n- Contributor material moved out of README.md, INSTALL.md and\n  RUN_UNDER_NODE.md into a new CONTRIBUTING.md: building from the previous\n  release, the test commands, the conventions, the milestones.\n- User pages no longer name work packages, stage0 or the seed, or link the\n  design notes; std/README.md lists every module without work-package tags.\n- The security records keep every finding as written; contributor process\n  moved to the end of the overview, and docs/security/async.md is routed.\n- The changelog's header is written for readers, its titles drop\n  work-package tags, and session links and tool attribution are stripped\n  from the release records.\n- Deleted: the notes for the two declined packages (WP41, WP48), the HTTP/3\n  latency note, and ten plans whose work has landed.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b252107"
+      ],
+      "pr": 1570,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "run-the-hero-once-and-leave-the-terminal",
+      "type": "docs",
+      "breaking": false,
+      "title": "run the hero once and leave the terminal's prompt waiting",
+      "body": "The landing page's hero looped forever, and holding its terminal still\nwhile it was used (hover, focus, a click) kept fighting the loop. Now the\nsequence plays once: the source is typed, flows through the compiler to\nits targets, runs, and the terminal keeps the formula with a blinking\nprompt on the next line, ready for a command. Every part ends on its\nfinished frame; only the ambient glow and the compiler's ring keep moving.\nThe hover and hold logic is gone, and the size budgets the docs tests pin\nfor the terminal fall back to 500 B for site.js and 250 B for theme.css.\n\n`nish break` in the terminal now grows the game out of the terminal's box\nto the full screen, and closing it shrinks it back into the terminal\nbefore it leaves the page. It does not move under reduced motion or with\nno terminal to grow from.\n\ndocs/site/break is rebuilt from examples/break-web with the current\ncompiler; game.wasm is unchanged.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/break-web/check.mjs"
+      ],
+      "commits": [
+        "f8e2109"
+      ],
+      "pr": 1565,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "put-wp34-s-phase-two-on-its-roadmap",
+      "type": "docs",
+      "breaking": false,
+      "title": "put WP34's phase two on its roadmap page",
+      "body": "The roadmap page tracked only the network stack's stages, while the note's §8 lists the compiler items the later phases owe. Every one of them is now built, most under packages of their own (WP46, WP49, WP50), and nothing on the page said so.\n\nThe page gains §8's items N7 to N14 as ticked boxes, each with the pull request or package that built it, and §8 of the note now says its items are built and that their state lives on the roadmap page.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-network-stack.md#8-after-phase-one",
+        "docs/roadmap/wp34-network-stack.md"
+      ],
+      "tests": [],
+      "commits": [
+        "d302ed4"
+      ],
+      "pr": 1527,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "wp54-async-on-wasm-with-the-page-as",
+      "type": "docs",
+      "breaking": false,
+      "title": "WP54, async on wasm with the page as the executor (design only)",
+      "body": "WP49 refuses async under the wasm profiles until a host loop is designed, and WP50 keeps NL2652 and names the design it would take, WP49's state machine with the page as its executor, as \"its own note\". No such note existed, so both pointed at nothing.\n\nThis is that note, proposed and design only. The lowering carries over unchanged. A host import may answer a promise, which becomes a wait token; the page's event loop does the waiting; a settled promise resumes the module through one generated export that runs from the microtask queue, so WP50's re-entry rule holds; spawn and awaitAll keep their meaning; sleep becomes a loader import, and readable and writable stay refused. The one open design question is the region WP49 gives every task, which the freestanding profiles cannot make: a fixed pool for a page, so its views never go stale, or a malloc for a Worker.\n\nIt argues its own scope down. A page that drives a module does not need it, because WP50's page already awaits each promise and calls an export. The case for building it is a service that must run on Cloudflare Workers, which run JavaScript or wasm and nothing else, so the first question for the owner is whether to build it at all. JSPI is weighed and not recommended, because a function that suspends under it has a TypeScript reading that cannot wait, and the checker loses sight of every place a task may suspend. Nothing is measured yet: each cost is stated as what a stage must measure.\n\nThe note gets its roadmap page, its route under \"In progress and proposed\", its rows in docs/README.md, MASTER_PLAN.md and the roadmap overview, and WP49's and WP50's pointers to it.",
+      "metrics": [],
+      "refs": [
+        "docs/wp54-async-wasm.md",
+        "docs/wp49-async-server.md",
+        "docs/wp50-wasm-host.md"
+      ],
+      "tests": [],
+      "commits": [
+        "680518e"
+      ],
+      "pr": 1528,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "make-the-readme-a-short-tour-and-drop",
+      "type": "docs",
+      "breaking": false,
+      "title": "make the README a short tour and drop the owner wording",
+      "body": "The README is now a taste of the language -- install, a first program, the\nIR it compiles to -- followed by a table of contents and one short section\nper area, each linking to its guide page, and a table of where to read next.\n\nPages, security records and bench notes no longer narrate one person's\ndecisions: an undecided item is an open question, and a settled one says what\nwas decided. The last .claude/plans files are removed. The npm package ships\nonly scripts/build.sh and scripts/postinstall.mjs from scripts/, rather than\nevery development script.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "70a395b"
+      ],
+      "pr": 1578,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "cubic-congestion-control-for-quic-wp39-g5-1495",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "CUBIC congestion control for QUIC (WP39 G5)",
+      "body": "Adds RFC 9438 CUBIC to std/net/quic-recovery.ts and makes it the default controller (QUIC_RECOVERY_DEFAULT). NewReno stays available as QUIC_RECOVERY_NEWRENO; QuicServerConfig.congestion picks one. Tests that pin exact NewReno window traces name the pin with a reason. The HTTP/3 server slot budget moves +72 bytes for the controller choice and CUBIC state.",
+      "metrics": [],
+      "refs": [
+        "docs/roadmap/wp39-complete.md"
+      ],
+      "tests": [
+        "tests/cases/net_quic_recovery"
+      ],
+      "commits": [
+        "5bfe66d"
+      ],
+      "pr": 1495,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "one-handler-for-http-1-1-2-and",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "one handler for HTTP/1.1, 2 and 3 with Alt-Svc (WP39 G7)",
+      "body": "Adds nish/net/http-server: one HttpServer with one request pool, one poll loop and one Router serves HTTP/1.1, cleartext HTTP/2, HTTP/2 over TLS and HTTP/3. Every request comes out of the same take and is answered through the same send, sendFields, start, write and end, whichever version carried it. Once an HTTP/3 listener is configured, HTTP/1.1 and HTTP/2-over-TLS responses carry Alt-Svc.\n\nEvery carrier screens out a plain CONNECT (501), OPTIONS * (204), a head past maxFields (431) and a body past maxBody (413) before take. bodyTimeout applies on every version and idleTimeout on HTTP/2. Bodies grow in tiers, so a held body costs at most maxBody + 3T, where T = min(65536, maxBody).",
+      "metrics": [],
+      "refs": [
+        "docs/http-one-handler.md"
+      ],
+      "tests": [
+        "tests/link/net_http_server"
+      ],
+      "commits": [
+        "da9b7b3"
+      ],
+      "pr": 1473,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "add-object-graphs-in-an-arena-block-to",
+      "type": "docs",
+      "breaking": false,
+      "title": "add object graphs in an arena block to WP56 as S5",
+      "body": "Inside `using a = arena()`, a call to any function that stores an\nallocation is refused (NL2424), so a class whose constructor does\n`this.parts = []` cannot be made inside the block, and generators keep\none graph outside it, cleared between files by hand-written `reset`\nmethods. WP56 gains a sixth stage, S5, and decision D7: an object graph\nmade inside the block belongs to the block, so stores into memory the\nblock allocated are admitted while every outward route stays refused.\nApplying the same analysis to parallel bodies and `scope()` tasks is\ndeferred to its own design note. Design only: nothing is built.",
+      "metrics": [],
+      "refs": [
+        "docs/wp56-flat-memory-generators.md"
+      ],
+      "tests": [],
+      "commits": [
+        "e7649ea"
+      ],
+      "pr": 1586,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "propose-wp59-the-wasm-arena-in-a-second",
+      "type": "docs",
+      "scope": "roadmap",
+      "breaking": false,
+      "title": "propose WP59, the wasm arena in a second, unexported memory",
+      "body": "WH-10's fix bounds every pointer and length the root-storage trace reads,\nbut a page that owns the exported memory can still forge a pointer that\nlands inside the arena and scramble its own kept graph. The design note\nproposes the structural fix: the arena, the kept graph and root storage\nmove to a second wasm memory the module never exports, while exported\nstorage, views(), the rings and the exchange area for crossings stay in\nthe exported one. It corrects WH-10's claim that views() and the rings\nneed nothing from the arena, citing the loader paths that do. It records\nthe LLVM 18 experiment: clang and wasm-ld emit one memory, so the second\nis added by a post-link rewrite before wasm-opt. It prices each copy at a\ncrossing, tabulates engine support with a single-memory fallback, and\nstages the work in four steps: the rewrite, the crossings behind a flag,\nthe forge test and a size and speed budget measured like #1571, and the\nsecurity record. Design only; no code changes. WH-10 stays Fixed and now\npoints at WP59.",
+      "metrics": [],
+      "refs": [
+        "docs/wp59-wasm-arena-memory.md"
+      ],
+      "tests": [],
+      "commits": [
+        "922cca0"
+      ],
+      "pr": 1577,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-13"
+    },
+    {
+      "id": "cheaper-string-runs-past-non-ascii-bytes-1588",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "cheaper string runs past non-ASCII bytes",
+      "body": "A JSON string's text run used to leave the vector loop at every byte of 128 or more and walk one UTF-8 sequence at a time. On twitter.json that walk was about 70% of the text kernel's cost. The SSE2 path now checks a whole 16-byte block of multi-byte text at once, using compares and shifts only. The check flags a continuation that disagrees with the leads before it, a lead no RFC 3629 form starts with, and the second byte of an overlong, surrogate or above-U+10FFFF form. A flagged block goes to the existing scalar step, so invalid UTF-8 still stops at the same byte and the tokenizer reports the same error offset.\n\nThe AVX2 path hands a run to the SSE2 block check at its first high byte. Once a block is ASCII again it takes the run back into its own 32-byte loop. The hand-offs are tail calls both ways, so the stack stays flat. NEON and wasm are unchanged.\n\nruntime-bytes.c grows from 1,525 to 1,891 bytes, so RUNTIME_BYTES_TEXT_BUDGET moves from 1,536 to 2,048, a raise recorded with its gain in docs/wp7-runtime.md. tests/simd/byte-runs.c now puts every valid and invalid UTF-8 form at every offset of a block, with the limit on every byte, and holds the scalar, SSE2 and AVX2 paths to one reference.",
+      "metrics": [
+        "callgrind Ir per document, (N=10 - N=1)/9, same checksums: tokenize twitter.json 12,332,881 -> -8.13%, citm_catalog -1.09%, canada 0.00%; held-out api payload (4.3% non-ASCII) -1.87%; a long ASCII string after one early non-ASCII byte +1.93%, a long ASCII string -4.03%. Wall clock, 15 interleaved rounds: every change inside the byte-identical-copy noise band (twitter band 8.44%)."
+      ],
+      "refs": [
+        "docs/wp7-runtime.md",
+        "docs/security/bytes.md"
+      ],
+      "tests": [
+        "tests/simd/byte-runs.c"
+      ],
+      "commits": [
+        "0df80fd"
+      ],
+      "pr": 1588,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "fit-the-docs-site-s-break-game-to",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "fit the docs site's break game to a phone and give it one menu",
+      "body": "On a phone the docs site's hidden breakout game ran edge to edge, so the\nside the frame is open on, under the paddle, looked cut off by the\nscreen, and two round buttons (pause and close) floated over the frame's\ncorner. The canvas is now sized to the frame's own shape inside the\nscreen's safe area, with a thin edge in the walls' colour, and a bar\nbeside it holds a single menu button that covers none of the frame. The\nbutton opens a small menu, Resume and Quit, which holds the game still\nwhile it is open and reads the way the frame does when it is turned for\na phone held sideways. A mouse click now taps as a finger does, so the\ngame's own menus (Play, Settings, Quit) take a mouse as well as touch;\nonly a finger steers the paddle. Keyboard play is unchanged.\n\nThe landing page's \"NISH\" no longer unfolds into \"Native Instruction\nStatic Host\" on every load: it opens only while hovered or focused (a\ntap focuses it), so the hero has less moving at once.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/break-web/check.mjs"
+      ],
+      "commits": [
+        "dc46e11"
+      ],
+      "pr": 1594,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "parse-a-json-number-in-one-pass-1590",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "parse a JSON number in one pass",
+      "body": "The tokenizer's number scan now folds the digits into the mantissa as it passes them. It takes eight at a time where eight bytes remain, with a SWAR check that rejects any byte that is not an ASCII digit. It keeps the mantissa, scale and digit count on the tokenizer, so `numberF64` and `numberI64` read those instead of walking the text a second time. Only a number of more than 19 digits, or one whose exponent passes the cap, is walked again or handed to `parseFloat`. The doubles are bit for bit those `parseFloat` gives. A short run ends before its eighth byte, so that byte is read first, and only a run that reaches it pays for the eight-byte read.\n\n`JsonTokenizer` gains four number fields, which widens the C header of every program that reads it. The nish-cmp corpus declares each moved program and file.",
+      "metrics": [
+        "callgrind Ir per document, base -> branch, same checksums: canada -32.6%, citm -9.9%, typed citm -13.4%, held-out metrics -10.7%, twitter -0.3%, held-out api -0.2%, 242-byte body -0.4%. Wall clock (median, 21 interleaved rounds, band from byte-identical binaries): canada -31.9% (band 1.5%), citm -12.6% (band 1.0%), typed citm -13.0% (band 2.6%); twitter, api and the 242-byte body within their bands (31 rounds)."
+      ],
+      "refs": [
+        "THIRD_PARTY_NOTICES.md",
+        "std/LICENSE-fast-float"
+      ],
+      "tests": [
+        "tests/link/std_json_tokenizer"
+      ],
+      "commits": [
+        "461b896"
+      ],
+      "pr": 1590,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "document-package-json-and-the-capability-lockfile-from",
+      "type": "docs",
+      "scope": "cli",
+      "breaking": false,
+      "title": "document package.json and the capability lockfile from JSON Schemas",
+      "body": "Every field Nish reads in a package.json is now described once, in schemas/package.schema.json. That covers the nish field's capabilities, noPanic and host, and Node's exports, engines and version as Nish reads them. The capability lockfile is described in schemas/capabilities-lock.schema.json.\n\nThe reference renders a page from each schema under Reference -> Configuration files, through @amritk/generate-markdown (the renderer behind `mjst markdown`), so the page and an editor's hover text say the same thing. Each field names the error a mistake in it gets.\n\nThe sandbox guide gains a section on granting a dependency its capabilities, the basic case its narrowing section assumed. The modules and interop guides link to the new reference page.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "every package.json and lockfile under tests/ validates against its schema",
+        "except the fixtures the compiler refuses for a shape reason."
+      ],
+      "commits": [
+        "d822c60"
+      ],
+      "pr": 1599,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "write-a-typed-object-s-keys-as-one",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "write a typed object's keys as one pre-escaped copy",
+      "body": "jsonEncode of a class now quotes and escapes each field's key once, at\ncompile time, into a string constant (\"name\":), and calls the new\n@internal JsonWriter.keyQuoted, which copies it after the comma in one\nstep when the writer is minified and has room. Any other way (an\nindenting writer, a full buffer, a failed or misused writer) it runs\nkey(name), so the bytes written and the failed code are always key's.\nBefore, every key went through the same byte-at-a-time escape scan as a\nruntime string. JsonWriter.i32 and i64 also count their digits by\ncompares rather than divides. The output is byte-identical.\n\nThe profile came first: on main, key escaping and the per-key state\nchecks were the largest per-field cost in typed serialize. After the\nchange keyQuoted is about a quarter of either profile, JsonWriter.i64\n30% of citm's, and jsonWriterPutString (escaping string values) a third\nof the API page's. bench/json-api is a new non-bench-shaped program, a\npage of twenty user records, so the gain is shown outside citm.",
+      "metrics": [
+        "citm serialize 1.38x to 1.40x at the minimum (bands 0.2-8.8% on minimums); json-api page 1.29x at the minimum (band 2.3%), 1.22x at the median (band 1.6%); callgrind -24.0% (citm, 14.13M to 10.74M) and -13.9% (json-api, 188,879 to 162,647) Ir per document"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md#jsonencodes-keys-one-pre-escaped-copy"
+      ],
+      "tests": [
+        "tests/link/json_encode_keys",
+        "tests/link/std_json_typed"
+      ],
+      "commits": [
+        "e966fbe"
+      ],
+      "pr": 1592,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "foreach-on-arrays-map-and-set-1589",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "forEach on arrays, Map and Set",
+      "body": "`xs.forEach(f)` on `T[]` and `readonly T[]`, `m.forEach((v, k) => …)` on\n`Map<K, V>` and `s.forEach((v) => …)` on `Set<T>` now compile. Until now\nthere was no way to visit a Map's key and value together.\n\nThey use the same statically-known-callee templates as `map` and `filter`\n(std/array.ts, std/collections.ts). Each callback is its own instance, called\ndirectly and inlined after -O2, with no closure and no allocation. An array\nforEach visits indices below the length the array had when the call began,\nas `Array.prototype.forEach` does. A Map or Set forEach runs the table walk\n`for...of` uses, in insertion order, and reads each value from the walk's\nslot, with no `get` and no second probe per entry. A callback that pushes,\npops, stores, sets, deletes or clears on the receiver prints what Node\nprints.\n\nThe answer is void, and using it is an error. An array callback takes at\nmost `(x, i)`, a Map callback `(v, k)` (NL2771) and a Set callback `(v)`\n(NL2772). A callback that assigns a local of the enclosing function is still\nNL2586, and the message now points to a `for...of` loop for accumulating.\n\nAt -O2, with receivers whose length is only known at run time: an array\nforEach is 18 instructions, the same count as its `for...of` loop. Map\nforEach is 92 against 112 for `for...of` with `m.get(k)`, and Set forEach is\n78 against 89.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#arrays-and-strings-as-receivers",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/arr_foreach",
+        "tests/cases/map_foreach",
+        "tests/cases/set_foreach",
+        "tests/cases/foreach_mutate",
+        "tests/cases/foreach_nested",
+        "tests/cases/reject_foreach_*"
+      ],
+      "commits": [
+        "e1381f7"
+      ],
+      "pr": 1589,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "less-fixed-work-per-json-token-1600",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "less fixed work per JSON token",
+      "body": "The tokenizer's `next()` now switches on the byte first. A quote, colon, comma or closer, which make up most of a document's tokens, costs one switch and one test of what the grammar wants; anything else goes on to the old switch on `want`. The innermost open container is kept in a field, so a comma or closer reads no depth stack. A sticky error is answered from a `want` state that `fail` sets, so the hot path no longer tests `failed`. The blank skip and the byte read share one bound. A string finds its byte limit with one comparison against a precomputed `stringFrom`. `stringInto` copies a string with no escapes in one `copyBytes`, and copies the plain runs between escapes whole. Every error code and offset is unchanged, and trailing commas, a surrogate pair between plain runs and a run ending at the window's end are pinned.\n\n`JsonTokenizer` gains two i32 fields, widening it from 112 to 120 bytes; the nish-cmp corpus entries that declare its layout already cover the programs this moves. The same change corrects #1589's nish-cmp declaration to \"ForEach on arrays, Map and Set\", the capitalized spelling its changelog entry renders. nish-cmp matches that text case-sensitively, so the lowercase spelling had turned main's nish-cmp red.",
+      "metrics": [
+        "callgrind Ir per document, base -> branch, same checksums: twitter -11.2%, citm -5.6%, canada -7.6%, typed citm -5.1%, typed-reuse citm -5.1%, held-out metrics -9.3%, held-out api -33.0%, 242-byte body -5.5%. Wall clock (median, 21 interleaved rounds pinned to one core, band from byte-identical binaries): twitter -13.1% (band 1.4%), api -21.1% (band 2.0%), typed-reuse citm -10.8% (band 4.6%), canada -4.6% (band 3.3%), metrics -4.0% (band 0.8%); citm, typed citm and the 242-byte body within their bands."
+      ],
+      "refs": [
+        "docs/wp38-simd.md"
+      ],
+      "tests": [
+        "tests/link/std_json_tokenizer"
+      ],
+      "commits": [
+        "fb4b625"
+      ],
+      "pr": 1600,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "atomici32array-and-atomici64array-n-atomics-in-one-buffer",
+      "type": "feat",
+      "scope": "threads",
+      "breaking": false,
+      "title": "AtomicI32Array and AtomicI64Array, n atomics in one buffer",
+      "body": "`nish/threads` gains two classes that hold n atomic counters in one buffer:\n`AtomicI32Array` and `AtomicI64Array`. They are for per-route request counts,\nhistogram bins and per-shard metrics. Each has the methods of `AtomicI32` and\n`AtomicI64` with the element index first: `load`, `store`, `add`, `sub`,\n`min`, `max`, `exchange` and `compareExchange`. Each compiles to one inline\nsequentially consistent `atomicrmw`, `cmpxchg` or atomic load or store on an\nelement of the buffer. The index is range-checked like an array index, so an\nout-of-range or negative index, or a negative length, stops the program. The\narrays reach a scope's tasks and a parallel body by the routes an `AtomicI32`\ndoes, and are refused where it is refused. The buffer starts on a 64-byte\nboundary with slack before and after it, so the lines its elements sit on are\nshared with no other allocation.\n\nAn array of `AtomicI32` objects puts each counter in its own small allocation,\ninterleaved with the array's own blocks. par-histogram-atomic's sixteen bins\nlanded on four cache lines, and the array header could share a line with bin\n0. Rust's `[AtomicI32; 16]` and Go's `[16]atomic.Int32` keep all sixteen on\none line. That layout was the whole gap: the add itself was already inlined,\nand removing the bounds check changed nothing. The kernel now keeps its bins\nin one `AtomicI32Array`, the layout its twins use, with the same work and\nchecksum.\n\nThe threads guide, LANGUAGE.md, the IR cookbook and the reference document the\nnew classes. Every program that imports nish/threads gets a new `threads.ll`\nand a `struct AtomicI32Array;` declaration in its header; its own module is\nunchanged. NL2515's message now lists the new constructors.",
+      "metrics": [
+        "par-histogram-atomic par 114/120 -> 65.5/73.8 ms (min/median); Nish / fastest Rust twin 1.586x-1.950x -> 0.932x-1.059x by min over 3 runs of `node bench/run.mjs --only par`, bands 4.5%-8.5%"
+      ],
+      "refs": [
+        "docs/guide/using-nish/threads.md",
+        "docs/LANGUAGE.md#atomics",
+        "docs/IR_COOKBOOK.md#nishthreads-an-atomic-array"
+      ],
+      "tests": [
+        "tests/link/thread_atomic_array",
+        "tests/link/par_atomic_array",
+        "tests/link/atomic_array_out_of_range",
+        "tests/link/atomic_array_negative_index",
+        "tests/link/atomic_array_negative_length",
+        "tests/cases/reject_atomic_array_*"
+      ],
+      "commits": [
+        "b34d20e"
+      ],
+      "pr": 1598,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "cut-router-match-s-instructions-per-request-for",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "cut Router.match's instructions per request for every route kind",
+      "body": "One pass hashes and splits a path for the static table, so a miss goes to\nthe tree without reading the path again; a method of up to seven bytes is\nmatched as one packed word; and the byte compare checks its two ranges once\nand then reads unchecked. Answers, parameters and limits are unchanged.",
+      "metrics": [
+        "Ir per match -8.0% to -22.0% by route kind (callgrind, deterministic, band 0); TFB async plaintext 6502 -> 6470 Ir/req, json 8223 -> 8203 (explicit entry band +-4)"
+      ],
+      "refs": [
+        "docs/security/router.md"
+      ],
+      "tests": [
+        "tests/link/net_router"
+      ],
+      "commits": [
+        "2fc0f20"
+      ],
+      "pr": 1596,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "record-the-json-tokenizer-result-1604",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "record the JSON tokenizer result",
+      "body": "docs/BENCHMARKS.md carries a fresh \"JSON against other languages\" record, taken with `bench/json-compare/run.mjs --rounds 9 --mb 128 --record` on the source of fb4b625e. That source includes the UTF-8 block check (#1588), the one-pass number parse (#1590) and the per-token cuts (#1600). simdjson, yyjson, RapidJSON, serde_json and Go all ran.\n\nBelow the record, a held-out table gives the tokenize workload's callgrind instructions per document, base f8e21091 against fb4b625e, with checksums equal. It covers payloads the tuning never saw: a float-heavy metrics document, a string-heavy API response with non-ASCII text and escapes, and the 242-byte `bench/json-tokenizer` body. `bench/json-compare/heldout.mjs` generates the first two from fixed seeds, pins all three by SHA-256 (checked before every measurement and by `--check`), and prints Ir per document for one compiler or for two with `--base`. docs/wp38-simd.md records which of S6d's per-value cuts were built and by which pull requests.",
+      "metrics": [
+        "Nish/yyjson on tokenize, twitter 1.64x, citm 1.20x, canada 1.34x, against 2.02x, 1.60x, 2.18x at 96899c11; noise bands 0.3%, 0.1%, 0.3% on the minimums. Held-out Ir per document, f8e21091 -> fb4b625e: metrics -20.4%, api -16.9%, 242-byte body -6.6%."
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md",
+        "docs/wp38-simd.md"
+      ],
+      "tests": [],
+      "commits": [
+        "ce9bc61"
+      ],
+      "pr": 1604,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "emit-self-recursive-checked-sums-as-a-loop",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "emit self-recursive checked sums as a loop",
+      "body": "A function whose every recursive return is `X + self(args)` over the checked i32 `+` (fib, a tree sum, a count of nodes) now compiles to one loop instead of a tree of calls. LLVM folds such a return into a loop only when the `+` is a plain add. Since signed overflow became a checked panic, the overflow check defeated it, and fib made twice the calls C and Rust make. Its code per call was already identical to C with the same check.\n\nThe loop keeps every check. The header adds the running sum unchecked, and while every step is non-negative a sign test proves that nothing wrapped. A step that fails the test makes one ordinary call and returns the checked adds the recursion would have made. So a program panics on exactly the input, and with exactly the output, it did before. The only difference is that a recursion deep enough to exhaust the stack now completes. The proof sits beside the emitter in src/emit-accumulate.ts.\n\nEligible functions are plain i32 functions of the module with no captures, loops, switch, arena scope or stack-allocated locals. In `self(args) + Y`, Y must be a number literal or a parameter. Everything else, and every function under --no-elision or a debug build, compiles as before.",
+      "metrics": [
+        "fib(40) 1.68x -> 0.99x / 1.06x of Rust -O3 on two interleaved runs (Nish 329 / 348 ms min, noise band ~6%); a class-node tree sum, median 318 -> 191 ms over 15 interleaved runs (band ~6%)"
+      ],
+      "refs": [
+        "docs/wp9-optimisation.md",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/acc_fib",
+        "acc_tree",
+        "acc_shapes",
+        "acc_overflow",
+        "acc_effects",
+        "acc_soundness",
+        "acc_ineligible",
+        "acc_ineligible_f64"
+      ],
+      "commits": [
+        "7699d97"
+      ],
+      "pr": 1597,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "serve-drives-the-http-1-server-directly-instead",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "serve drives the HTTP/1 server directly instead of through HttpHandler (WP49 stage 6)",
+      "body": "nish/net/serve now runs Http1Server from its own readiness loop instead of\ngoing through HttpHandler. Each connection slot keeps one request whose head\nand spans are the parser's own, read in place until the answer is sent; the\nrequest's task still copies it before its first await, so every handler\nkeeps its own copy. The per-request head copy into a pool and the handler's\ngeneral-purpose response paths are gone from the serve path.\n\nAnswered bytes, pipelining order, timeouts, the per-request deadline,\nhang-up cancellation, 500 for a wrong Response, 503 past the in-flight cap,\nthe maxRequests drain and the ServeStats meanings are unchanged, and the API\nstays source-compatible. HttpHandler is unchanged for its other users. Each\nopen connection now holds its own request record (about 400 B), so peak\nmemory grows with connections, not with load.",
+      "metrics": [
+        "Ir/request -2.2% plaintext async (6520 -> 6374), -1.3% json async (8229 -> 8122), plain serve app -3.5% /health (6740 -> 6504) and -3.2% /notes/17 (7305 -> 7070) (callgrind, deterministic); req/s within the 3-round band; peak RSS at plaintext c=16384 26.2 -> 32.5 MiB (+24%, bounded by connections)"
+      ],
+      "refs": [
+        "docs/security/serve.md",
+        "#1468"
+      ],
+      "tests": [
+        "tests/link/net_serve_slot_reuse",
+        "tests/link/net_serve_head_drain",
+        "tests/link/net_serve_rss_flat"
+      ],
+      "commits": [
+        "e973027"
+      ],
+      "pr": 1601,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "design-and-measure-dynamic-dispatch-over-interfaces-wp60",
+      "type": "docs",
+      "scope": "checker",
+      "breaking": false,
+      "title": "design and measure dynamic dispatch over interfaces (WP60)",
+      "body": "Adds the WP60 design note, which designs and measures `Dyn<I>`: a value that holds any class implementing an interface, whose method calls lower to a per-place `switch` of direct calls (WP51's machinery, with classes as the members). It never uses a vtable or an object header. The note also adds the roadmap page and points the WP25, FAQ and validator notes at it. WP54 and WP59 were taken, so this is WP60.\n\nThe recommendation is to ship stage 1 now, gate stage 2 and gate stage 3:\n- Stage 1: interface method signatures, used statically through `<T extends I>`. No IR moves for any program that compiles today.\n- Stage 2: `Dyn<I>` in locals, parameters and returns. It lands only when its own build passes its gate. On the modelled surface it is 0.72x the hand `kind`/`switch` in geomean, but one case (a set of two chosen at random per call) runs at 2.21x.\n- Stage 3: stored `Dyn<I>`, as one tagged word. It meets the size invariant on x86_64, aarch64 and wasm32, but measured 1.18x on arrays. It is gated after stage 2.\n- The vtable is rejected: 1.88x in geomean.\n\nEvery figure was measured on one 4-core machine (best of 7, interleaved and rotated), with checksums checked across variants. The programs and the runner are in the note's appendix.",
+      "metrics": [
+        "0.72x geomean over 15 register-form cases (worst 2.21x), band ±3.3%; stored tagged word 1.18x on array rows, band ±2.6%"
+      ],
+      "refs": [
+        "docs/wp60-dyn-dispatch.md"
+      ],
+      "tests": [],
+      "commits": [
+        "910411c"
+      ],
+      "pr": 1587,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "re-measure-wp49-stage-6-s-gate-after",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "re-measure WP49 stage 6's gate after the hand-off build",
+      "body": "The unchanged run.sh re-measured every judged and recorded TechEmpower cell on\nmain before the hand-off build (7699d971, the router change already in) and\nafter it (e9730272), in one container, one test at a time. The gate is still\nnot met: four of eleven judged cells are inside (json 32 and 64, db 64 and\n256), six are outside (plaintext 256, 1024 and 4096; json 16, 128 and 256),\nand json 512 is bimodal twice and not judgeable. Stage 6 stays unbuilt.\n\nThe async entry now spends 2,043 more instructions a request than the\nexplicit one on plaintext and 2,429 more on json, down from 2,227 and\n2,539. What remains is mostly serve's two resumes per request and its\nconnection layer (about 1,600 and 2,060), then the router (about 430 and\n330), then the task region and executor (about 225). One recorded database\ncell, /queries?queries=20 at 64 connections, fell 9.3% against bands of\n1.5% and 9.2%.",
+      "metrics": [
+        "async vs explicit, after: plaintext -24.5/-20.4/-35.7% (bands 6.2/1.7/3.6%); json -3.6/+3.2/-0.0/-5.4/-9.0% at 16..256 (bands 1.3-5.2%); db +6.4/+17.1% (bands 10.3/6.8%); Ir/request gap 2,227 -> 2,043 (plaintext), 2,539 -> 2,429 (json)"
+      ],
+      "refs": [
+        "#1402",
+        "#1468",
+        "docs/wp49-async-server.md"
+      ],
+      "tests": [],
+      "commits": [
+        "f0dfa29"
+      ],
+      "pr": 1608,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "destructuring-declarations-over-objects-and-arrays-1593",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "destructuring declarations over objects and arrays",
+      "body": "`const` and `let` declarations, and a `for...of` head, now accept destructuring patterns.\n\n- An object pattern works over a class or interface value: `const { x, y: py } = p`. Each name is exactly one field load, and the struct is never copied.\n- An array pattern works over `T[]`, holes included: `const [a, , c] = xs`. Each element is read with the same bounds check and panic as `xs[i]`. TypeScript would give `undefined` for an element past the end; Nish panics, because it has no `undefined`.\n\nA plain name, `this`, or a field path such as `o.items` is read directly, so the pattern compiles to the same IR as its hand-written reads. Any other receiver (a call, an index, a `?.` chain or a `for...of` element) is evaluated once into a hidden local. After `opt -O2` its IR is identical too.\n\nEvery other form is still refused, each with its own diagnostic (NL2773-NL2785):\n- assignment patterns;\n- defaults, rest elements and nested patterns;\n- a key that is not a field, or that names a method;\n- a pattern over `T | null`, `T | undefined`, a Map, a Set or a string.\n\nParameter patterns, `var` patterns and top-level `const` patterns stay refused. A module constant is a compile-time value folded into each use, so at run time there is nothing for a pattern to read.\n\n`--emit-ts` passes the pattern through, and the differential run agrees with Node. An object that is only destructured is still stack-allocated.",
+      "metrics": [
+        "compiling src/compile.ts, 10 interleaved runs against main: wall time 2.139 s vs 2.177 s (base copy 2.175 s, inside noise); peak RSS +38 KiB (0.002%, noise band ~250 KiB); IR for src/compile.ts byte-identical (137/137 .ll); nish-cmp corpus 0 undeclared differences"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/IR_COOKBOOK.md",
+        "docs/guide/language/destructuring.md"
+      ],
+      "tests": [
+        "tests/cases/destructure_*",
+        "tests/cases/reject_destructure_*",
+        "tests/emit-ts/control/destructure-unbraced",
+        "tests/emit-ts/imports/destructure-argv"
+      ],
+      "commits": [
+        "2763199"
+      ],
+      "pr": 1593,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "pin-every-panicking-acc-case-against-no-elision",
+      "type": "test",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "pin every panicking acc_* case against --no-elision byte for byte",
+      "body": "Each tests/cases/acc_*.panics lists the runs of its program that must panic, one argv per line. The acc section builds every such program twice, as is and with --no-elision, runs each listed argv under both, and compares stdout, stderr and the exit status byte for byte, so the loop's overflow is pinned against the recursion it replaces rather than against a hand-copied message. Guards keep the comparison meaningful: the default build must contain the loop and the reference must not, every listed run must panic, and a sidecar must name at least one run; negatives show each guard and a mismatch fail.",
+      "metrics": [],
+      "refs": [
+        "#1605"
+      ],
+      "tests": [
+        "tests/cases/acc_overflow.panics",
+        "tests/cases/acc_effects.panics",
+        "tests/cases/acc_soundness.panics"
+      ],
+      "commits": [
+        "fb9fd09"
+      ],
+      "pr": 1614,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "commit-the-tree-sum-benchmark-with-a-free",
+      "type": "test",
+      "scope": "bench",
+      "breaking": false,
+      "title": "commit the tree-sum benchmark with a free-function and a method kernel",
+      "body": "bench/treesum.{ts,c,go,rs} walks one complete depth-20 tree of heap nodes 60 times, in two kernels timed as their own rows: `treesum/fn`, the free function `t.value + sum(t.left) + sum(t.right)` that docs/wp9-optimisation.md measured, and `treesum/method`, the same walk as a `TreeNode.sum()` method. The tree-sum figure in the wp9 note can now be reproduced, and the method kernel is the target for emitting self-recursive checked-sum methods as a loop. Node values are masked to 10 bits, so no sum leaves i32; the root takes the pass number, so no compiler can hoist the walk out of the pass loop. Every language prints the same checksum per kernel. treesum is timed but not instruction-counted.",
+      "metrics": [],
+      "refs": [
+        "#1605"
+      ],
+      "tests": [],
+      "commits": [
+        "a123f2f"
+      ],
+      "pr": 1619,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "record-main-s-typed-serialize-profile-and-re",
+      "type": "docs",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "record main's typed-serialize profile and re-measure #1592",
+      "body": "The json-encode-keys note in BENCHMARKS.md now has a by-function callgrind\nprofile of typed serialize at e966fbe5^, the commit before #1592. It covers\ncitm_catalog.json and bench/json-api's page. The profile confirms the claim\nbehind #1592. Key writing was the largest cost per field: 35.0% of citm's\ninstructions per document against JsonWriter.i64's 30.5%, and 33.1% of the\npage's against string values' 30.9%. Most of it was the runtime escape scan\nof every key. A re-measure in the same run matches #1592's Ir/doc within\n0.03%, and both builds print the same serialize checksum.\n\nMeasured: citm 14,133,717 -> 10,738,727 Ir/doc (-24.0%); json-api 188,879 -> 162,647 Ir/doc (-13.9%); callgrind is deterministic, no noise band\nRefs: docs/BENCHMARKS.md#jsonencodes-keys-one-pre-escaped-copy\nFixes #1603",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "79b2ea4"
+      ],
+      "pr": 1615,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "cut-serve-s-answer-path-and-hold-a",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "cut serve's answer path and hold a request record only from parse to copy",
+      "body": "serve's answer path keeps each slot's connection in its exchange, runs a send on without looking the connection up again, masks its queue ring, and reads the clock once per answer pass instead of once per answer. A connection no longer keeps a request record for its whole life: a record is taken from a pool when a head is parsed and given back once the request's task has copied it, once it answered 503, or once the connection closed first, so idle keep-alive connections hold none. This undoes most of the peak RSS that reading in place added (SERVE-13), at no cost in instructions per request. Every answered byte is unchanged.\n\nnet_serve_raw pins whole answers byte for byte (200 text and JSON, 404, a wrong Response as 500 and the request after it, HEAD, a 503 past the in-flight cap, a pipelined batch), and net_serve_idle_record fails when a slot keeps its record. docs/security/serve.md gives SERVE-13's bound with pooled records and each slot's pending array.",
+      "metrics": [
+        "Ir/req −0.8% plaintext, −0.8% json, −1.0%/−0.9% on a serve + Router app (callgrind, ±0.2%); peak RSS at plaintext with 16384 connections 27,484–27,496 KiB vs 33,088–33,112 KiB (3 runs each); req/s inside main's 5-run band on plaintext, json and db"
+      ],
+      "refs": [
+        "docs/security/serve.md#findings"
+      ],
+      "tests": [
+        "tests/link/net_serve_raw",
+        "tests/link/net_serve_idle_record"
+      ],
+      "commits": [
+        "798636c"
+      ],
+      "pr": 1621,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "say-that-a-record-type-is-always-a",
+      "type": "docs",
+      "breaking": false,
+      "title": "say that a record type is always a declared name",
+      "body": "An inline object type, `(p: { x: i32 }) => p.x`, and a `type` alias of one, `type Point = { x: i32; y: i32 }`, are refused by the parser with \"expected a type name, found `{`\" (NL0001), but nothing said so: a reader coming from TypeScript met the syntax error with no rule behind it. The reference now states the rule under \"Interfaces and object literals\", \"Type aliases\" and \"Coming from TypeScript\": a record type is identified by its declaration, so two interfaces with the same fields are two types, and the only widening is a class to an interface it `implements`. The classes-and-interfaces guide page shows the refusal and the fix, an `interface`.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/reject_type_object_literal_param",
+        "tests/cases/reject_type_object_literal_alias",
+        "tests/cases/reject_type_object_literal_field",
+        "tests/cases/reject_type_object_literal_return",
+        "tests/cases/reject_type_object_literal_type_arg"
+      ],
+      "commits": [
+        "436e40d"
+      ],
+      "pr": 1622,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "propose-wp61-typed-json-constraints-and-coercion-in",
+      "type": "docs",
+      "scope": "checker",
+      "breaking": false,
+      "title": "propose WP61, typed JSON constraints and coercion in one pass",
+      "body": "WP61 proposes two additions to nish/json-typed, both checked inside\njsonDecode's single walk over the bytes.\n\nConstraints (minLength, pattern, minimum, enum, format and the rest) are\ndeclared on the class and checked as each value is read, with a new\ndecode code and the offset of the offending value. A class that declares\nnone generates byte-identical IR to today.\n\nAn opt-in coercion mode never fails: a value with a defined conversion is\nconverted, anything else takes the field's default, unknown keys are\nignored, and malformed JSON or a limit stops reading (the limits still\nbound the work) with the unread fields defaulted. What went wrong stays\nreadable in reason, errorAt and stopped. Whether the repair log is always\non is decided by a benchmark gate. The design borrows from mjst's\ncoercing parsers. The JSON Schema generator is WP62.",
+      "metrics": [],
+      "refs": [
+        "docs/wp61-json-typed-checks.md",
+        "docs/roadmap/wp61-json-typed-checks.md"
+      ],
+      "tests": [],
+      "commits": [
+        "8fb1b6f"
+      ],
+      "pr": 1623,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "emit-self-recursive-checked-sum-methods-as-a",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "emit self-recursive checked-sum methods as a loop",
+      "body": "A method of a non-generic, non-atomic class of its module now qualifies for the checked-sum loop when its steps call that same method on a receiver of its own class, as a tree walk's `this.value + l + right.sum()` does. Nish binds every method call statically, so such a call reaches this very body, and the loop treats the receiver as one more parameter: a header phi rebound on each step, evaluated after the step's X and before its arguments, as the call evaluates it. The cold path calls the method on the receiver the loop has reached. A field is never Y in `self(args) + Y`, so nothing is read after a call the loop skips. The proof beside the emitter now points its Y sentence at the recorder's argument in src/accumulate.ts.\n\nCalls through a function-valued field, a same-named method of another class, a generic class's method and a field Y all stay recursion. tests/cases/acc_method_overflow.panics runs every overflow case, one of them on a rebound receiver, against --no-elision byte for byte. acc_ineligible's method case moved into acc_method, now that it loops. mem_callee_scope's `Element.length`, the cookbook entry and AWFY's list now loop; nish-cmp declares each.",
+      "metrics": [
+        "no gain outside the noise. treesum/method median 269.6 / 223.4 ms → 263.3 / 208.3 ms over two interleaved rounds. Same-code rows drifted 6–17 % between rounds, so the 2 % and 7 % deltas are inside the band. fib held at 0.92x of Rust (0.92x / 0.89x before)."
+      ],
+      "refs": [
+        "#1605"
+      ],
+      "tests": [
+        "tests/cases/acc_method",
+        "tests/cases/acc_method_overflow",
+        "tests/cases/acc_method_ineligible"
+      ],
+      "commits": [
+        "9d4dc57"
+      ],
+      "pr": 1616,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    },
+    {
+      "id": "propose-wp62-nish-classes-from-a-json-schema",
+      "type": "docs",
+      "scope": "checker",
+      "breaking": false,
+      "title": "propose WP62, Nish classes from a JSON Schema",
+      "body": "WP62 proposes a generator that turns a JSON Schema (2020-12, with draft-07\nand OpenAPI 3.x normalised first) into Nish classes, keeping as much of the\nschema as the target can hold. A keyword-by-keyword table says where each\nkeyword lands: description, title, examples, deprecated, $comment and\nexternalDocs become JSDoc; default becomes the field's initializer, or a\nderived default that satisfies the field's constraints, with the schema's\nown value kept as @default; validation keywords become WP61's constraints;\n$ref becomes one shared class and a tagged oneOf a union. A keyword the\nclasses cannot enforce is refused with a diagnostic naming its schema\npath, never silently weakened.\n\nIts first stage is two typed JSON prerequisites: an optional field whose\ndefault the constructor assigns ([], new Map(), new C(), new JsonNumber()),\nand per-class unknown-key handling. The design borrows from mjst's\nvalidation generators.",
+      "metrics": [],
+      "refs": [
+        "docs/wp62-json-schema-classes.md",
+        "docs/roadmap/wp62-json-schema-classes.md"
+      ],
+      "tests": [],
+      "commits": [
+        "68b5b18"
+      ],
+      "pr": 1625,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-14"
+    }
+  ]
+}
