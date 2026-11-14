@@ -820,7 +820,7 @@ const serveGrown = (have: i32, need: i32): i32 => {
 class ServeConns {
   server: Http1Server
   router: Router
-  /** Each slot's request. */
+  /** Each slot's request, built on the slot's first connection. */
   reqs: HttpRequest[]
   /** Each slot's generation: moves on when its connection closes. */
   slotGen: i32[]
@@ -882,11 +882,6 @@ class ServeConns {
     this.open = new Array<boolean>(limits.connections)
     this.owing = new Array<boolean>(limits.connections)
     this.owed = new Array<i32>(limits.connections)
-    for (let s: i32 = 0; s < limits.connections; s++) {
-      const r: HttpRequest = new HttpRequest(s)
-      r.params = new Array<i32>(2 * router.maxParams + 2)
-      this.reqs.push(r)
-    }
     this.queue = new Array<i32>(16)
     this.queueGen = new Array<i32>(16)
     this.readyFds = new Array<i32>(2 * SERVE_EVENTS)
@@ -953,9 +948,11 @@ class ServeConns {
     if (now >= this.bodyCheckAt) {
       this.bodyCheckAt = now + SERVE_BODY_SWEEP
       for (let s: i32 = 0; s < toI32(this.open.length); s++) {
-        const r: HttpRequest = this.reqs[s]
-        if (this.open[s] && r.state === SERVE_READING && now - r.since > SERVE_BODY_TIMEOUT) {
-          this.closeSlot(s)
+        if (this.open[s]) {
+          const r: HttpRequest = this.reqs[s]
+          if (r.state === SERVE_READING && now - r.since > SERVE_BODY_TIMEOUT) {
+            this.closeSlot(s)
+          }
         }
       }
     }
@@ -990,6 +987,14 @@ class ServeConns {
     let slot: i32 = this.server.accept()
     while (slot >= 0 || slot === H1_POOL_FULL || slot === SERVE_ACCEPT_ABORTED) {
       if (slot >= 0) {
+        // The carrier takes a freed slot first, then the next never used,
+        // so a slot's record is built on its first connection, as its own
+        // buffers are, and a pool that never fills never builds its last.
+        while (toI32(this.reqs.length) <= slot) {
+          const r: HttpRequest = new HttpRequest(toI32(this.reqs.length))
+          r.params = new Array<i32>(2 * this.router.maxParams + 2)
+          this.reqs.push(r)
+        }
         this.open[slot] = true
         this.reqs[slot].state = SERVE_IDLE
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
