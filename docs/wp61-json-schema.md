@@ -98,8 +98,8 @@ something a class asks for (§6).
   `jsonStore(emitter, place, jsonCallMethod(..., jsonScalarMethod(f.scalar),
   ...))` (`:1057`); a string goes through `emitJsonDecodeInto` (`:1207`), which
   calls `d.string(target)` (`:1217`). An enum field is read with `d.i32()` and
-  checked by a `switch` on its members (`emitJsonEnumCheck`, `:1029`), which
-  calls `wrongType` on no match.
+  checked by a `switch` on its members (`emitJsonEnumCheck`, `:1029`), whose
+  other arm calls `wrongType` (`:1070`).
 
 **The key fact for this note:** every read takes exactly one token, so after
 `d.i32()` or `d.string(cur)` returns, `tok.tokStart` still points at the first
@@ -225,8 +225,8 @@ written:
 - `$dynamicRef`, `$anchor`, and a `$ref` outside the document;
 - a recursive `$ref` (a class that holds itself through a field): the decoder
   today recurses one frame per level (JSON-7 in `docs/security/json.md`), and a
-  class field needs an initializer that would recurse at construction; refused
-  until the owner decides (§10, question 5);
+  self-typed field that is not `| null` needs an object of its own type at
+  construction, which has no end; refused until the owner decides (§10, question 5);
 - `format` a name `jsonFormatId` answers `JSON_FORMAT_UNKNOWN` for, unless the
   generator is told `--unknown-format=ignore`, the one weakening that is asked
   for by name, as draft 2020-12 itself treats `format` as an annotation by
@@ -319,7 +319,8 @@ for a `Map`'s `minProperties`/`maxProperties`.
 
 **Which keyword failed.** `failed` and `errorAt` say what and where.
 Recommended: one more `i32` field on `JsonDecoder`, `failedKeyword`, set by
-`constraintFailed(keyword)` to a `JSON_KEYWORD_*` constant, so a server can
+`constraintFailed`, which then takes the keyword as an argument, to a
+`JSON_KEYWORD_*` constant, so a server can
 answer "`age`: maximum" without the program re-checking. It costs a store on
 the failure path only. Owner's decision (§10, question 2).
 
@@ -443,7 +444,7 @@ generator accepts is a class the compiler accepts. The alternative, a
   every option key in one fixed order. The same schema gives the same bytes,
   on every host, so the output can be committed and diffed.
 - **A header** naming it generated, the schema's path, its `$id`, and a hash
-  of its bytes (SHA-256 from `nish/crypto`), and saying not to edit it.
+  of its bytes (SHA-256, `std/crypto/sha256.ts`), and saying not to edit it.
 - **`--check`** regenerates in memory and exits non-zero, writing nothing, when
   the file differs or its header's hash is not the schema's: the CI step a
   project runs, as this repository runs `gen-reference.mjs --check`.
