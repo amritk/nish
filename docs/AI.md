@@ -53,7 +53,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -177,7 +177,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.reduce(f)`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, forEach, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.reduce(f)`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice) `` | a `for` loop; `map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
 | `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `x.toFixed(2)`, `s.split(sep, limit)` | `` Unknown method `toFixed` on f64 `` | `toFixed(x, 2)` and `splitLimit(s, sep, limit)` from `nish/text` |
