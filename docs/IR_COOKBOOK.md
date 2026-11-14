@@ -2922,10 +2922,9 @@ ordinary array's: the buffer is not the next bytes of the arena after the
 allocates next would share its cache line, and every core's read of the
 header would wait on the line another core's `atomicrmw` holds. It is asked
 for with 192 bytes of slack and starts on the first 64-byte boundary at least
-one line in, so the elements begin a line of their own and the line after the
-last one holds nothing else either. Sixteen counters cost four times their
-bytes; on the four-task histogram (bench/par-histogram-atomic.ts) the
-placement took the scope from 93 ms to 71 ms:
+one line in, so the elements begin a line of their own and the allocation
+runs past the end of the line the last element is on: no other object shares a
+line with any element. Sixteen counters cost four times their bytes:
 
 ```llvm
   %7 = mul i64 %1, 4

@@ -6525,7 +6525,7 @@ const DECLARED = [
     program,
     file: "exit",
     changelog: ATOMIC_ARRAYS,
-    why: "the program uses `AtomicI32Array`, new in this release, which the 0.39.0 seed's nish/threads does not export",
+    why: "the program uses `AtomicI32Array`, new in this release, which the last release's nish/threads does not export",
   })),
   ...[
     "examples/histogram.ts",

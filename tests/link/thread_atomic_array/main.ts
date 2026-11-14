@@ -4,6 +4,7 @@
 // elements. Every update commutes, so the totals are the same whatever order
 // the tasks ran in: natively, on the pool's threads, and under Node, in spawn
 // order. A lost add would show in the sums the parent prints after the join.
+// After it, the parent calls each `AtomicI64Array` method the tasks do not.
 import { AtomicI32Array, AtomicI64Array, scope } from "nish/threads";
 
 class Bins {
@@ -87,5 +88,14 @@ export const main = (): i32 => {
   const was: i32 = bins.counts.exchange(0, 7);
   const seen: i32 = bins.counts.compareExchange(0, 7, 9);
   console.log(`${was === bins.counts.load(0) ? 1 : 0} ${seen} ${bins.counts.load(0)} ${bins.counts.length}`);
+  const big: i64 = 5000000000;
+  const small: i64 = -7;
+  bins.bytes.store(1, big);
+  const before: i64 = bins.bytes.min(1, small);
+  const lowest: i64 = bins.bytes.max(1, big);
+  const swapped: i64 = bins.bytes.exchange(1, small);
+  const kept: i64 = bins.bytes.compareExchange(1, small, big);
+  const missed: i64 = bins.bytes.compareExchange(1, small, small);
+  console.log(`${before} ${lowest} ${swapped} ${kept} ${missed} ${bins.bytes.load(1)} ${bins.bytes.length}`);
   return 0;
 };

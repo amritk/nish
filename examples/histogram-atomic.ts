@@ -1,6 +1,6 @@
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
-// bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task counts its own values into a local `i32[]` that no
-// other core touches, then adds each local count to its bin with one `add`, a
+// bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task
+// counts its own values into a local `i32[]` that no other core touches, then adds each local count to its bin with one `add`, a
 // single indivisible read-modify-write: 256 atomic adds per task instead of one
 // per value, no lock, and no increment lost to a race.
 //

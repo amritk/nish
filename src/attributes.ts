@@ -4647,12 +4647,13 @@ const markChannelSend = (facts: FunctionFacts): BodilessStance => {
 /**
  * An atomic's method. The source body is Node's, and the emitter writes one
  * sequentially consistent instruction on `this`'s `value`, or on the element
- * of an atomic array's buffer the index names (`src/emit-parallel.ts`). Every one of them, `load` included, writes: a
- * read-only call could be hoisted out of the loop that spins on it, or merged
- * with the one before it. It allocates nothing, keeps nothing, answers a
- * scalar and returns. The write is through `this` and is not a shared one: an
- * atomic update is what a task and a data-parallel body may make beside the
- * guarded store and the send.
+ * of an atomic array's buffer the index names (`src/emit-parallel.ts`). Every
+ * one of them, `load` included, writes: a read-only call could be hoisted out
+ * of the loop that spins on it, or merged with the one before it. It allocates
+ * nothing, keeps nothing, answers a scalar and returns. The write is through
+ * `this`, or for an array one load deeper, through the buffer `this` points
+ * to, and is not a shared one: an atomic update is what a task and a
+ * data-parallel body may make beside the guarded store and the send.
  */
 const markAtomic = (facts: FunctionFacts): BodilessStance => {
   facts.atomic = true

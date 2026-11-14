@@ -4011,13 +4011,14 @@ author's obligation, as it is for a `Mutex`'s critical sections; the checker
 does not try to prove it.
 
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
-round into 256 bins, four rounds, on four tasks. On a four-core machine, over
-seven interleaved rounds whose seeds move every round, the medians are: each
-task counting into a local tally and adding it with one `add` per bin, 24 ms
-(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
-thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
-value, 677 ms (28× slower), because every increment contends for a cache line
-another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+round into one `AtomicI32Array` of 256 bins, four rounds, on four tasks. On a
+four-core machine, over seven interleaved rounds whose seeds move every round,
+the medians are: each task counting into a local tally and adding it with one
+`add` per bin, 29 ms (a byte-identical copy of it, the noise band, 23 ms; the
+two copies' runs 22–49 ms); one thread binning into plain counters, 80 ms
+(2.8× slower); one atomic `add` per value, 554 ms (19× slower), because every
+increment contends for a cache line another core is writing; and one `Mutex`
+taken per value, 2,155 ms. An atomic
 is far cheaper than a lock and still far dearer than a counter no other core
 touches: update it once per batch, not once per value.
 
@@ -4032,8 +4033,9 @@ its own allocation, so sixteen counters land on several cache lines that the
 cores writing them pass back and forth, an `AtomicI32Array(16)` is sixteen
 adjacent `i32`s in 64 contiguous bytes, which is the layout Rust's
 `[AtomicI32; 16]` and Go's `[16]atomic.Int32` have. The buffer starts on a
-64-byte boundary with a cache line of nothing else before and after it, so no
-other object shares a line the counters' writers fight over.
+64-byte boundary at least one line into its own allocation, which ends past the
+line the last element is on, so no other object shares a line with the
+elements, the lines the counters' writers fight over.
 
 ```typescript
 import { AtomicI32Array, AtomicI64Array, parallelMapInto, scope } from "nish/threads";

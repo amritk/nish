@@ -271,6 +271,13 @@ entry:
   %b.addr = alloca i32, align 4
   %was.addr = alloca i32, align 4
   %seen.addr = alloca i32, align 4
+  %big.addr = alloca i64, align 8
+  %small.addr = alloca i64, align 8
+  %before.addr = alloca i64, align 8
+  %lowest.addr = alloca i64, align 8
+  %swapped.addr = alloca i64, align 8
+  %kept.addr = alloca i64, align 8
+  %missed.addr = alloca i64, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_alloc_struct(i64 32)
   %1 = bitcast i8* %0 to %struct.Bins*
@@ -576,6 +583,79 @@ cond.end.2:
   %186 = call i8* @nish_str_from_i32(i32 %185)
   %187 = call i8* @nish_str_concat(i8* %180, i8* %186)
   call void @nish_print(i8* %187)
+  store i64 5000000000, i64* %big.addr, align 8
+  store i64 -7, i64* %small.addr, align 8
+  %188 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %189 = getelementptr inbounds %struct.Bins, %struct.Bins* %188, i32 0, i32 1
+  %190 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %189, align 8, !tbaa !5
+  %191 = load i64, i64* %big.addr, align 8
+  call void @nish.AtomicI64Array.store(%struct.AtomicI64Array* %190, i32 1, i64 %191)
+  %192 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %193 = getelementptr inbounds %struct.Bins, %struct.Bins* %192, i32 0, i32 1
+  %194 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %193, align 8, !tbaa !5
+  %195 = load i64, i64* %small.addr, align 8
+  %196 = call i64 @nish.AtomicI64Array.min(%struct.AtomicI64Array* %194, i32 1, i64 %195)
+  store i64 %196, i64* %before.addr, align 8
+  %197 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %198 = getelementptr inbounds %struct.Bins, %struct.Bins* %197, i32 0, i32 1
+  %199 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %198, align 8, !tbaa !5
+  %200 = load i64, i64* %big.addr, align 8
+  %201 = call i64 @nish.AtomicI64Array.max(%struct.AtomicI64Array* %199, i32 1, i64 %200)
+  store i64 %201, i64* %lowest.addr, align 8
+  %202 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %203 = getelementptr inbounds %struct.Bins, %struct.Bins* %202, i32 0, i32 1
+  %204 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %203, align 8, !tbaa !5
+  %205 = load i64, i64* %small.addr, align 8
+  %206 = call i64 @nish.AtomicI64Array.exchange(%struct.AtomicI64Array* %204, i32 1, i64 %205)
+  store i64 %206, i64* %swapped.addr, align 8
+  %207 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %208 = getelementptr inbounds %struct.Bins, %struct.Bins* %207, i32 0, i32 1
+  %209 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %208, align 8, !tbaa !5
+  %210 = load i64, i64* %small.addr, align 8
+  %211 = load i64, i64* %big.addr, align 8
+  %212 = call i64 @nish.AtomicI64Array.compareExchange(%struct.AtomicI64Array* %209, i32 1, i64 %210, i64 %211)
+  store i64 %212, i64* %kept.addr, align 8
+  %213 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %214 = getelementptr inbounds %struct.Bins, %struct.Bins* %213, i32 0, i32 1
+  %215 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %214, align 8, !tbaa !5
+  %216 = load i64, i64* %small.addr, align 8
+  %217 = load i64, i64* %small.addr, align 8
+  %218 = call i64 @nish.AtomicI64Array.compareExchange(%struct.AtomicI64Array* %215, i32 1, i64 %216, i64 %217)
+  store i64 %218, i64* %missed.addr, align 8
+  %219 = load i64, i64* %before.addr, align 8
+  %220 = call i8* @nish_str_from_i64(i64 %219)
+  %221 = call i8* @nish_str_concat(i8* %220, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %222 = load i64, i64* %lowest.addr, align 8
+  %223 = call i8* @nish_str_from_i64(i64 %222)
+  %224 = call i8* @nish_str_concat(i8* %221, i8* %223)
+  %225 = call i8* @nish_str_concat(i8* %224, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %226 = load i64, i64* %swapped.addr, align 8
+  %227 = call i8* @nish_str_from_i64(i64 %226)
+  %228 = call i8* @nish_str_concat(i8* %225, i8* %227)
+  %229 = call i8* @nish_str_concat(i8* %228, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %230 = load i64, i64* %kept.addr, align 8
+  %231 = call i8* @nish_str_from_i64(i64 %230)
+  %232 = call i8* @nish_str_concat(i8* %229, i8* %231)
+  %233 = call i8* @nish_str_concat(i8* %232, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %234 = load i64, i64* %missed.addr, align 8
+  %235 = call i8* @nish_str_from_i64(i64 %234)
+  %236 = call i8* @nish_str_concat(i8* %233, i8* %235)
+  %237 = call i8* @nish_str_concat(i8* %236, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %238 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %239 = getelementptr inbounds %struct.Bins, %struct.Bins* %238, i32 0, i32 1
+  %240 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %239, align 8, !tbaa !5
+  %241 = call i64 @nish.AtomicI64Array.load(%struct.AtomicI64Array* %240, i32 1)
+  %242 = call i8* @nish_str_from_i64(i64 %241)
+  %243 = call i8* @nish_str_concat(i8* %237, i8* %242)
+  %244 = call i8* @nish_str_concat(i8* %243, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %245 = load %struct.Bins*, %struct.Bins** %bins.addr, align 8
+  %246 = getelementptr inbounds %struct.Bins, %struct.Bins* %245, i32 0, i32 1
+  %247 = load %struct.AtomicI64Array*, %struct.AtomicI64Array** %246, align 8, !tbaa !5
+  %248 = getelementptr inbounds %struct.AtomicI64Array, %struct.AtomicI64Array* %247, i32 0, i32 0
+  %249 = load i32, i32* %248, align 4, !tbaa !29
+  %250 = call i8* @nish_str_from_i32(i32 %249)
+  %251 = call i8* @nish_str_concat(i8* %244, i8* %250)
+  call void @nish_print(i8* %251)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 
@@ -598,7 +678,7 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!28, !29, !30, !31, !32}
+!llvm.module.flags = !{!30, !31, !32, !33, !34}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -627,8 +707,10 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !25 = !{!22, !21, i64 16}
 !26 = !{!"element i32", !1, i64 0}
 !27 = !{!26, !26, i64 0}
-!28 = !{i32 8, !"cf-protection-branch", i32 1}
-!29 = !{i32 8, !"cf-protection-return", i32 1}
-!30 = !{i32 8, !"branch-target-enforcement", i32 1}
-!31 = !{i32 8, !"sign-return-address", i32 1}
-!32 = !{i32 4, !"probe-stack", !"inline-asm"}
+!28 = !{!"AtomicI64Array", !8, i64 0, !2, i64 8}
+!29 = !{!28, !8, i64 0}
+!30 = !{i32 8, !"cf-protection-branch", i32 1}
+!31 = !{i32 8, !"cf-protection-return", i32 1}
+!32 = !{i32 8, !"branch-target-enforcement", i32 1}
+!33 = !{i32 8, !"sign-return-address", i32 1}
+!34 = !{i32 4, !"probe-stack", !"inline-asm"}
