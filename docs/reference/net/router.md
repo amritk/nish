@@ -123,8 +123,10 @@ the tree unchanged. `matchTree` is the tree alone, for a test of exactly that.
 a range that is not compares unequal, as a byte that differs does. It is
 the one byte compare a lookup makes: a method of more than seven bytes
 against each known one (a shorter one is one packed word, `routerMethodKey`),
-a path against a static route's, a segment against a label. Every other
-read is checked.
+a path against a static route's, a segment against a label.
+`routerMethodKey` reads its at most seven bytes the same way, after the same
+one range check; a range outside the array packs to 0, which no method is.
+Every other read is checked.
 
 </scalar-detail>
 

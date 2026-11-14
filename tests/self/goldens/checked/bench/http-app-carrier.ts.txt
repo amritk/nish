@@ -34114,15 +34114,18 @@ function pkiLoadSystemRoots(): PkiRoots -> @nish.pkiLoadSystemRoots [exported]
 module std/net/router.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
-unsafe import 66:10 uncheckedGet from "nish:unsafe"
-unsafe import 66:24 wrappingAdd from "nish:unsafe"
-unsafe call 793:20 wrappingAdd (node 3414)
-unsafe call 825:22 wrappingAdd (node 3649)
-unsafe call 1062:21 wrappingAdd (node 4919)
-unsafe call 1066:9 uncheckedGet (node 4945)
-unsafe call 1066:32 uncheckedGet (node 4951)
-unsafe call 1069:9 wrappingAdd (node 4965)
-unsafe call 1070:9 wrappingAdd (node 4978)
+unsafe import 68:10 uncheckedGet from "nish:unsafe"
+unsafe import 68:24 wrappingAdd from "nish:unsafe"
+unsafe call 795:20 wrappingAdd (node 3414)
+unsafe call 827:22 wrappingAdd (node 3649)
+unsafe call 925:21 wrappingAdd (node 4171)
+unsafe call 927:24 uncheckedGet (node 4210)
+unsafe call 926:39 wrappingAdd (node 4190)
+unsafe call 1067:21 wrappingAdd (node 4935)
+unsafe call 1071:9 uncheckedGet (node 4961)
+unsafe call 1071:32 uncheckedGet (node 4967)
+unsafe call 1074:9 wrappingAdd (node 4981)
+unsafe call 1075:9 wrappingAdd (node 4994)
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
 const ROUTER_TOO_LONG: i32 = -3 [exported]
@@ -34509,9 +34512,8 @@ function routerHashOf(method: i32): u32 -> @nish.routerHashOf
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function routerMethodKey(bytes: u8[], at: i32, length: i32): u64 -> @nish.routerMethodKey
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
-  calls: nish_panic_index nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 key: u64 (let)

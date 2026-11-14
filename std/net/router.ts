@@ -57,8 +57,10 @@
  * a range that is not compares unequal, as a byte that differs does. It is
  * the one byte compare a lookup makes: a method of more than seven bytes
  * against each known one (a shorter one is one packed word, `routerMethodKey`),
- * a path against a static route's, a segment against a label. Every other
- * read is checked.
+ * a path against a static route's, a segment against a label.
+ * `routerMethodKey` reads its at most seven bytes the same way, after the same
+ * one range check; a range outside the array packs to 0, which no method is.
+ * Every other read is checked.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -915,11 +917,14 @@ const routerMethodKey = (bytes: u8[], at: i32, length: i32): u64 => {
   if (length < 1 || length > 7 || at < 0 || length > toI32(bytes.length) - at) {
     return toU64(0)
   }
+  // The test above puts `[at, at + length)` inside `bytes`, a range the
+  // prover cannot follow through `stop`, so each read skips its check and
+  // the cursor its overflow test: `stop` is at most `bytes.length`, an i32.
   let key: u64 = toU64(length) << toU64(56)
   let shift: u64 = toU64(0)
-  const stop: i32 = at + length
-  for (let i: i32 = at; i < stop; i++) {
-    key = key | (toU64(bytes[i]) << shift)
+  const stop: i32 = wrappingAdd(at, length)
+  for (let i: i32 = at; i < stop; i = wrappingAdd(i, toI32(1))) {
+    key = key | (toU64(uncheckedGet(bytes, i)) << shift)
     shift = shift + toU64(8)
   }
   return key
