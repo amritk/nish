@@ -69,7 +69,6 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
-import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { ROUTER_BAD_ESCAPE, Router } from "nish/net/router"
 import { cancel, cancelAfter, readable, sleep, spawn, taskId } from "nish:async"
@@ -591,43 +590,10 @@ const serveTask = async (
   } else if (st.deadline > 0) {
     cancelAfter(self, st.deadline)
   }
-  // The copy is written out here, not in a helper: a helper handed both the
-  // shared request and the task's own would be refused, as it could store
-  // one into the other.
-  const src: HttpRequest = st.reqs[k]
-  const r: HttpRequest = new HttpRequest(-1)
-  const head: u8[] = new Array<u8>(src.headLength)
-  copyBytes(head, 0, src.head, 0, src.headLength)
-  const spans: i32[] = new Array<i32>(4 * src.headerCount)
-  for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
-    spans[i] = src.spans[i]
-  }
-  // No parameters and no body keep the empty arrays the constructor made.
-  if (src.paramCount > 0) {
-    const params: i32[] = new Array<i32>(2 * src.paramCount)
-    for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
-      params[i] = src.params[i]
-    }
-    r.params = params
-  }
-  if (src.bodyLength > 0) {
-    const body: u8[] = new Array<u8>(src.bodyLength)
-    copyBytes(body, 0, src.body, 0, src.bodyLength)
-    r.body = body
-  }
-  r.head = head
-  r.spans = spans
-  r.route = src.route
-  r.paramCount = src.paramCount
-  r.methodStart = src.methodStart
-  r.methodEnd = src.methodEnd
-  r.targetStart = src.targetStart
-  r.targetEnd = src.targetEnd
-  r.pathEnd = src.pathEnd
-  r.headLength = src.headLength
-  r.headerCount = src.headerCount
-  r.bodyLength = src.bodyLength
-  const res: Response = await handle(new Request(r))
+  // SPIKE (design B ceiling, unsound): the slot's request is handed to the
+  // handler in place, with no copy. Nothing stops `handle` growing or keeping
+  // it; the checker rule that would is on paper in the PR.
+  const res: Response = await handle(new Request(st.reqs[k]))
   st.status[k] = res.status
   const out: u8[] = st.bodies[k]
   // A length the body cannot hold, negative or past either array, is the

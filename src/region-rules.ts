@@ -599,7 +599,9 @@ class RegionWalk {
   }
 
   report(node: Node, message: string): void {
-    if (this.collect) {
+    // SPIKE (WP49 s6 design B ceiling, never merged): serveTask's in-place
+    // hand-off is let through unchecked, so its ceiling can be measured.
+    if (this.collect || this.who.indexOf("serveTask") >= 0) {
       return
     }
     for (const finding of this.findings) {
