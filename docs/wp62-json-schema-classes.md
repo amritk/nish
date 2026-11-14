@@ -328,9 +328,9 @@ the generator's side.
     "name": { "type": "string", "minLength": 1, "examples": ["ada"] },
     "display-name": { "type": ["string", "null"], "$comment": "added in v2" },
     "role": { "type": "string", "enum": ["admin", "member"], "default": "member" },
-    "tags": { "type": "array", "items": { "type": "string" }, "deprecated": true },
-    "x-owner": "accounts-team"
-  }
+    "tags": { "type": "array", "items": { "type": "string" }, "deprecated": true }
+  },
+  "x-owner": "accounts-team"
 }
 ```
 
