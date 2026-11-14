@@ -48,7 +48,7 @@ function qcDefaultConfig(): QuicServerConfig -> @qcDefaultConfig [exported]
   callee +0:89 n64 -> @n64
   callee +0:97 n64 -> @n64
 function qcServer(config: QuicServerConfig): QuicConnection -> @qcServer [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=752
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=760
   sharedWrite: via nish.QuicConnection.constructor
   calls: fixedEntropy nish.QuicConnection.constructor nish_alloc_struct
   pointer config: size=128 writesThrough=true captured=true passedTo=nish.QuicConnection.constructor#1
@@ -60,7 +60,7 @@ function qcConnected(conn: QuicConnection, bidiLocal: i64): QcClient -> @qcConne
   sharedWrite: via QcClient.constructor
   escaping: bidiLocal
   calls: QcClient.constructor fromHex nish.quicEncodeTransportParameters nish_alloc_struct qcConnect qcHello qcParams
-  pointer conn: size=752 writesThrough=true captured=false passedTo=qcConnect#0
+  pointer conn: size=760 writesThrough=true captured=false passedTo=qcConnect#0
   stackSites=1 stackLocals=0
   local +0:9 scid: u8[] (const)
   callee +0:22 fromHex -> @fromHex

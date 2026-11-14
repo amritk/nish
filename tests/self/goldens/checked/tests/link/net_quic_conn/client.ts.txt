@@ -334,7 +334,7 @@ function qcExchange(conn: QuicConnection, c: QcClient, datagram: u8[]): i32 -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.receiveWindowFrom
   calls: leafPrivate n32 nish.QuicConnection.receiveWindowFrom nish.QuicConnection.sign nish.QuicConnection.signatureInput nish.secret$arr.u8 nish.tlsSignEcdsaP256 nish.wipe$$Secret$arr.u8 qcDrain
-  pointer conn: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveWindowFrom#0 nish.QuicConnection.signatureInput#0 nish.QuicConnection.sign#0 qcDrain#0
+  pointer conn: size=760 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveWindowFrom#0 nish.QuicConnection.signatureInput#0 nish.QuicConnection.sign#0 qcDrain#0
   pointer c: size=232 writesThrough=true captured=false passedTo=qcDrain#1
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.QuicConnection.receiveWindowFrom#1
   stackSites=0 stackLocals=0
@@ -354,7 +354,7 @@ function qcDrain(conn: QuicConnection, c: QcClient): i32 -> @qcDrain [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicConnection.takeDatagram nish_array_grow nish_panic_overflow qcReceive
-  pointer conn: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.takeDatagram#0 nish.QuicConnection.takeDatagram#0
+  pointer conn: size=760 writesThrough=true captured=false passedTo=nish.QuicConnection.takeDatagram#0 nish.QuicConnection.takeDatagram#0
   pointer c: size=232 writesThrough=true captured=false passedTo=qcReceive#0
   stackSites=0 stackLocals=0
   local -3:7 n: i32 (let)
@@ -433,7 +433,7 @@ function qcSendHello(conn: QuicConnection, c: QcClient, hello: u8[], offset: i64
   sharedWrite: +0:3
   escaping: before offset
   calls: n32 qcCrypto qcExchange qcInitial
-  pointer conn: size=752 writesThrough=true captured=false passedTo=qcExchange#0
+  pointer conn: size=760 writesThrough=true captured=false passedTo=qcExchange#0
   pointer c: size=232 writesThrough=true captured=false passedTo=qcExchange#1 qcInitial#0
   pointer hello: size=0 writesThrough=false captured=false passedTo=qcCrypto#1
   pointer before: size=0 writesThrough=true captured=true
@@ -460,7 +460,7 @@ function qcConnect(conn: QuicConnection, c: QcClient, hello: u8[]): boolean -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via qcSendHello
   calls: n32 n64 qcExchange qcFinishedPacket qcReadFlight qcSendHello
-  pointer conn: size=752 writesThrough=true captured=false passedTo=qcSendHello#0 qcExchange#0
+  pointer conn: size=760 writesThrough=true captured=false passedTo=qcSendHello#0 qcExchange#0
   pointer c: size=232 writesThrough=true captured=false passedTo=qcSendHello#1 qcReadFlight#0 qcExchange#1 qcFinishedPacket#0
   pointer hello: size=0 writesThrough=true captured=true passedTo=qcSendHello#2 qcSendHello#4
   stackSites=0 stackLocals=0
