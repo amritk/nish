@@ -91,6 +91,11 @@
                 "title": "Classes and interfaces",
                 "filepath": "docs/guide/language/classes-and-interfaces.md"
               },
+              "/destructuring": {
+                "type": "page",
+                "title": "Destructuring",
+                "filepath": "docs/guide/language/destructuring.md"
+              },
               "/unions": {
                 "type": "page",
                 "title": "Discriminated unions",

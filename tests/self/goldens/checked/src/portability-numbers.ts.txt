@@ -98,7 +98,7 @@ function divisionReview(walk: PortabilityWalk, node: Node, type: i32): Edit[] ->
 function boundConversionNames(program: CheckedProgram, parents: ParentTable): StringSet -> @boundConversionNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.constructor collectBoundConversions nish_alloc_struct
-  pointer program: size=896 writesThrough=false captured=false passedTo=collectBoundConversions#0
+  pointer program: size=912 writesThrough=false captured=false passedTo=collectBoundConversions#0
   pointer parents: size=8 writesThrough=false captured=false passedTo=collectBoundConversions#1
   stackSites=0 stackLocals=0
   local +0:9 out: StringSet (const)
@@ -108,7 +108,7 @@ function collectBoundConversions(program: CheckedProgram, parents: ParentTable, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: ParentTable.parentOf StringSet.add collectBoundConversions isBuiltinConversion nish_panic_index nish_str_eq
-  pointer program: size=896 writesThrough=false captured=false passedTo=isBuiltinConversion#0 collectBoundConversions#0
+  pointer program: size=912 writesThrough=false captured=false passedTo=isBuiltinConversion#0 collectBoundConversions#0
   pointer parents: size=8 writesThrough=false captured=false passedTo=ParentTable.parentOf#0 collectBoundConversions#1
   pointer node: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   pointer out: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 StringSet.add#0 collectBoundConversions#3
@@ -203,7 +203,7 @@ function wideFinding(node: Node, what: string): PortabilityFinding -> @wideFindi
 function localFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @localFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: isWide nish_array_grow nish_panic_index nish_str_concat wideFinding
+  calls: CheckedProgram.localText isWide nish_array_grow nish_panic_index nish_str_concat wideFinding
   pointer walk: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
@@ -211,6 +211,7 @@ function localFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding
   local -2:9 local: Local | null (const)
   callee -1:25 isWide -> @isWide
   callee +0:14 wideFinding -> @wideFinding
+  callee +0:49 CheckedProgram.localText -> @CheckedProgram.localText
 function signatureFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @signatureFindings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

@@ -49,7 +49,7 @@ import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
-import { Node, NodeKind } from "./nodes"
+import { Node, NodeKind, bindsHiddenReceiver } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
 import {
   ConstInfo,
@@ -2036,7 +2036,7 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(elem))
   emitter.setSlot(local, slot)
   const debug = emitter.debug
-  if (debug !== null) {
+  if (debug !== null && !bindsHiddenReceiver(decl)) {
     debug.declareLocal(fn, local, slot, decl) // `-g`
   }
   const idxSlot = fn.emitAlloca("forof.idx", "i64", emitter.opts.optimizeAttributes ? 8 : 0)

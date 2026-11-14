@@ -37,6 +37,7 @@ import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
 import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
 import Node from "./nodes" -> struct Node
+import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import simdSuffix from "./nish-modules" -> function @simdSuffix
 import simdTypeLane from "./nish-modules" -> function @simdTypeLane
 import ConstInfo from "./program" -> struct ConstInfo
@@ -1756,7 +1757,7 @@ function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32): strin
 function emitForOf(emitter: Emitter, stmt: Node): void -> @emitForOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: ArrayBase.constructor DebugInfo.declareLocal Emitter.align Emitter.align8 Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor emitChannelWalk emitWalk internalErrorFor isChannelReader loadElement loadLength nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat
+  calls: ArrayBase.constructor DebugInfo.declareLocal Emitter.align Emitter.align8 Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor bindsHiddenReceiver emitChannelWalk emitWalk internalErrorFor isChannelReader loadElement loadLength nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=392 writesThrough=true captured=false passedTo=emitChannelWalk#0 emitWalk#0 Emitter.llvm#0 Emitter.declareType#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.align8#0 Emitter.align8#0 loadLength#0 loadElement#0 Emitter.alignSuffix#0 Emitter.emitStatement#0 Emitter.align8#0 Emitter.align8#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=emitChannelWalk#1 emitWalk#1
   stackSites=1 stackLocals=0
@@ -1785,6 +1786,7 @@ function emitForOf(emitter: Emitter, stmt: Node): void -> @emitForOf [exported]
   callee -22:56 Emitter.align -> @Emitter.align
   callee -21:3 Emitter.setSlot -> @Emitter.setSlot
   local -20:9 debug: DebugInfo | null (const)
+  callee -19:26 bindsHiddenReceiver -> @bindsHiddenReceiver
   callee -18:5 DebugInfo.declareLocal -> @DebugInfo.declareLocal
   local -16:9 idxSlot: string (const)
   callee -16:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca

@@ -1,0 +1,2 @@
+reject_destructure_using_array.ts:6:3
+Unknown identifier `using`

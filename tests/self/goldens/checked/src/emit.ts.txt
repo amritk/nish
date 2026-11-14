@@ -171,6 +171,7 @@ import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import FLAG_USING from "./nodes" -> const FLAG_USING
 import Node from "./nodes" -> struct Node
+import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
 import nodeName from "./nodes" -> function @nodeName
 import Options from "./options" -> struct Options
 import TbaaCache from "./tbaa" -> struct TbaaCache
@@ -1102,9 +1103,9 @@ function Emitter.emitVariableDeclarations(this: Emitter, list: Node): void -> @E
 function Emitter.emitVariableDeclaration(this: Emitter, decl: Node): void -> @Emitter.emitVariableDeclaration [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitAwaitAll
-  calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.setSlot IRFunction.emit IRFunction.emitAlloca TypeTable.isMaybe emitAwaitAll emitMaybeLocal internalErrorFor isAwaitAllDeclaration nish_exit nish_panic_index nish_str_concat
+  calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.setSlot IRFunction.emit IRFunction.emitAlloca TypeTable.isMaybe bindsHiddenReceiver emitAwaitAll emitMaybeLocal internalErrorFor isAwaitAllDeclaration nish_exit nish_panic_index nish_str_concat
   pointer this: size=392 writesThrough=true captured=false passedTo=isAwaitAllDeclaration#0 emitAwaitAll#0 emitMaybeLocal#0 Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.alignSuffix#0
-  pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllDeclaration#1 emitAwaitAll#1 emitMaybeLocal#2 DebugInfo.declareLocal#4
+  pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllDeclaration#1 emitAwaitAll#1 emitMaybeLocal#2 bindsHiddenReceiver#0 DebugInfo.declareLocal#4
   stackSites=0 stackLocals=0
   callee +0:9 isAwaitAllDeclaration -> @isAwaitAllDeclaration
   callee +1:7 emitAwaitAll -> @emitAwaitAll
@@ -1122,8 +1123,9 @@ function Emitter.emitVariableDeclaration(this: Emitter, decl: Node): void -> @Em
   callee +13:20 Emitter.emitExpression -> @Emitter.emitExpression
   callee +14:7 IRFunction.emit -> @IRFunction.emit
   callee +14:58 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +15:13 debug: DebugInfo | null (const)
-  callee +17:9 DebugInfo.declareLocal -> @DebugInfo.declareLocal
+  local +16:13 debug: DebugInfo | null (const)
+  callee +17:30 bindsHiddenReceiver -> @bindsHiddenReceiver
+  callee +18:9 DebugInfo.declareLocal -> @DebugInfo.declareLocal
 function Emitter.emitExpression(this: Emitter, expr: Node): string -> @Emitter.emitExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitEntering

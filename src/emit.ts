@@ -204,7 +204,7 @@ import {
   SHA256_KERNEL,
 } from "./kernels"
 import { StringMap, StringSet } from "./map"
-import { FLAG_USING, Node, NodeKind, nodeName } from "./nodes"
+import { FLAG_USING, Node, NodeKind, bindsHiddenReceiver, nodeName } from "./nodes"
 import { Options } from "./options"
 import { TbaaCache } from "./tbaa"
 import { irEscapeInto, StringBuilder } from "./strings"
@@ -1574,8 +1574,9 @@ export class Emitter {
       this.setSlot(local, slot)
       const init = this.emitExpression(decl.children[2])
       this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`)
+      // A pattern's hidden receiver is not shown to a debugger; its names are.
       const debug = this.debug
-      if (debug !== null) {
+      if (debug !== null && !bindsHiddenReceiver(decl)) {
         debug.declareLocal(this.fn, local, slot, decl) // `-g`: llvm.dbg.declare on the slot
       }
     }

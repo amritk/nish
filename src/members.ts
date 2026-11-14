@@ -1214,7 +1214,7 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
   if (name === "entries") {
     ctx.errorAtProperty(
       at,
-      `\`entries\` is not available on \`${shown}\`: a \`Map\` or \`Set\` in this version has no \`entries\`, because there is no destructuring; \`forEach((value, key) => ...)\` visits each key with its value`
+      `\`entries\` is not available on \`${shown}\`: a \`Map\` or \`Set\` in this version has no \`entries\`, because a \`[key, value]\` pair is a two-type tuple; \`forEach((value, key) => ...)\` visits each key with its value`
     )
     return true
   }

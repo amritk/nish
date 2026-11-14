@@ -101,6 +101,7 @@ reject_cls_field_optional_untyped	a type annotation is required
 reject_cls_static_field_untyped	a type annotation is required
 reject_computed_malformed	expected an expression, found `export`
 reject_computed_skip	expected an expression, found `,`
+reject_destructure_using_object	expected `;`, found `{`
 reject_enum_member_type_nested	expected `;`, found `.`
 reject_ffi_errno_global	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_ffi_handle_walk_non_null	expected `;`, found `!`

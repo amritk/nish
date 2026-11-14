@@ -14581,6 +14581,118 @@ if (dealtHere("arrayChecks")) {
     )
   }
 
+  if (!only || only.startsWith("destructur")) {
+    const ll = path.join(buildDir, "destructure_out_of_range.ll")
+    if (!fs.existsSync(ll)) {
+      skip("destructure_out_of_range: no .ll was built for it")
+    } else {
+      const exe = path.join(buildDir, "destructure_out_of_range")
+      const cc = linkNative(exe, ll)
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        "destructure_out_of_range: `const [a, , , , , f] = xs` over 3 elements exits 1 with `index out of range: 5 >= 3`, as `xs[5]` does",
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes("index out of range: 5 >= 3") &&
+          String(run.stdout).trim() === "3",
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+    // A struct a pattern reads stays on the stack: `destructure_stack`'s
+    // `Point` is an `alloca`, and nothing in `sum` reaches the arena or heap.
+    const stack = path.join(buildDir, "destructure_stack.ll")
+    if (!fs.existsSync(stack)) {
+      skip("destructure_stack: no .ll was built for it")
+    } else {
+      const sum = /^define [^\n]*@sum\([^]*?^\}/m.exec(fs.readFileSync(stack, "utf8"))
+      const text = sum ? sum[0] : ""
+      check(
+        "destructure_stack: sum allocates its Point with alloca and calls no arena or heap allocator",
+        /alloca %struct\.Point,/.test(text) && !/call [^\n]*@(nish_arena_\w*|nish_alloc\w*|malloc|calloc|realloc)\(/.test(text),
+        text
+      )
+    }
+    // Loop-flow reads a pattern's names as it reads hand-written locals, and
+    // the element-reference pass roots them where the twin's are (R5-1): each
+    // pattern is refused exactly where its twin is.
+    for (const name of ["loop_flow", "moved_field", "moved_nested", "moved_this", "moved_call"]) {
+      const twins = [`reject_destructure_${name}`, `reject_destructure_${name}_plain`].map((c) =>
+        fs.readFileSync(path.join(casesDir, `${c}.err`), "utf8")
+      )
+      check(
+        `reject_destructure_${name}: the pattern and its hand-written twin are refused with the same diagnostic`,
+        twins[0] === twins[1],
+        `${twins[0]}\n----\n${twins[1]}`
+      )
+    }
+    // A pattern is the reads it stands for: each `<form>_pattern` body is its
+    // `<form>_plain` twin's, unoptimised (local names aside) and after `opt -O2`.
+    const zero = path.join(buildDir, "destructure_zero_cost.ll")
+    // `member` reads through `h.pt` and `h.items`, a field path the pattern
+    // reads again where it is written, as the twin does.
+    const forms = ["object", "array", "for", "local", "fresh", "guard", "guard_loop", "call", "hole", "let", "rows", "member"]
+    // The local a `<form>_plain` twin names its receiver, which the pattern
+    // holds in its hidden `pattern.N` instead (a field path has none).
+    const twinReceiver = { for: "point", local: "point", fresh: "xs", call: "p", rows: "row" }
+    const bodyOf = (ir, name) => {
+      const m = new RegExp(`^define [^\\n]*@${name}\\([^]*?^\\}`, "m").exec(ir)
+      return m ? m[0].replace(`@${name}(`, "@F(") : null
+    }
+    if (!fs.existsSync(zero)) {
+      skip("destructure_zero_cost: no .ll was built for it")
+    } else {
+      const raw = fs.readFileSync(zero, "utf8")
+      // Unoptimised, only a pattern's hidden receiver's number and the
+      // absolute ids of numbered temporaries and metadata may differ: each is
+      // renumbered by its first use in the body, so a temporary read in
+      // another order, or one more of them, still fails, and every named local
+      // must match.
+      const renumber = (text, re, prefix) => {
+        const seen = new Map()
+        return text.replace(re, (id) => {
+          if (!seen.has(id)) {
+            seen.set(id, `${prefix}${seen.size}`)
+          }
+          return seen.get(id)
+        })
+      }
+      const plain = (name) => {
+        const b = bodyOf(raw, name)
+        return b ? renumber(renumber(b.replace(/%pattern\.\d+/g, "%pattern.N"), /%\d+\b/g, "%t"), /!\d+\b/g, "!m") : null
+      }
+      for (const form of forms) {
+        const pattern = plain(`${form}_pattern`)
+        const receiver = twinReceiver[form]
+        const twin = plain(`${form}_plain`)
+        const named = twin !== null && receiver ? twin.replace(new RegExp(`%${receiver}\\.addr\\b`, "g"), "%pattern.N.addr") : twin
+        check(
+          `destructure_zero_cost: unoptimised, ${form}_pattern compiles to the body of ${form}_plain`,
+          pattern !== null && pattern === named,
+          `${pattern}\n----\n${named}`
+        )
+      }
+    }
+    if (!has("opt")) {
+      skip("destructure_zero_cost: no `opt` on this host for the -O2 comparison")
+    } else if (fs.existsSync(zero)) {
+      const o2 = spawnSync("opt", ["-O2", "-S", zero, "-o", "-"], { encoding: "utf8" })
+      // Inlining mints alias scopes per function, and instcombine numbers the
+      // `%.not` it names per function; neither is the body.
+      const body = (name) => {
+        const b = bodyOf(o2.stdout, name)
+        return b ? b.replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N").replace(/%\.not\d+\b/g, "%.not") : null
+      }
+      for (const form of forms) {
+        const pattern = body(`${form}_pattern`)
+        check(
+          `destructure_zero_cost: after opt -O2, ${form}_pattern compiles to the body of ${form}_plain`,
+          o2.status === 0 && pattern !== null && pattern === body(`${form}_plain`),
+          o2.status === 0 ? `${pattern}\n----\n${body(`${form}_plain`)}` : o2.stderr
+        )
+      }
+    }
+  }
+
   if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     if (has("opt")) {
       for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {

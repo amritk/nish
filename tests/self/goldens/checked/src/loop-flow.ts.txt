@@ -57,7 +57,7 @@ function flowNamesIn(node: Node, scan: FlowScan): void -> @flowNamesIn
 function flowScanNode(node: Node, top: boolean, scan: FlowScan): void -> @flowScanNode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: flowAddName flowNamesIn flowRootName flowScanNode nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq writesLeft
+  calls: flowAddName flowNamesIn flowRootName flowScanNode nish_array_grow nish_panic_index nish_str_eq writesLeft
   pointer node: size=40 writesThrough=false captured=false passedTo=flowNamesIn#0
   pointer scan: size=48 writesThrough=true captured=false passedTo=flowNamesIn#1 flowScanNode#2
   stackSites=0 stackLocals=0
@@ -76,9 +76,10 @@ function flowScanNode(node: Node, top: boolean, scan: FlowScan): void -> @flowSc
   local +49:11 root: string (const)
   callee +49:18 flowRootName -> @flowRootName
   callee +51:7 flowAddName -> @flowAddName
-  local +54:7 i: i32 (let)
-  local +55:14 child: Node (const)
-  callee +58:5 flowScanNode -> @flowScanNode
+  local +56:9 scanned: i32 (const)
+  local +57:7 i: i32 (let)
+  local +58:14 child: Node (const)
+  callee +64:5 flowScanNode -> @flowScanNode
 function flowDead(s: i32[]): boolean -> @flowDead
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer s: size=0 writesThrough=false captured=false

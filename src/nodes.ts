@@ -215,10 +215,15 @@ export enum NodeKind {
   // `const f = (): i32 => 1, g = 2` a sixth child of the NodeKind.FunctionDecl, a LIST of
   // VAR_DECL there only when written.
 
-  // `{ a, b }` or `[a, b]` where a name is bound — a VAR_DECL's or a PARAM's
-  // first child (NL2191, NL2192, NL2193): no children; the pattern between the
-  // brackets is passed over unread, as a namespace body is, because every
-  // declaration that holds one is refused whatever it binds.
+  // `{ a, b: c }` or `[a, , b]` where a name is bound — a VAR_DECL's or a
+  // PARAM's first child; text `{` or `[`. An array pattern's children are its
+  // slots: an IDENT, a nested BINDING_PATTERN, or EMPTY for a hole. An object
+  // pattern's are a NodeKind.Property per entry, its text the key and its
+  // child the IDENT or pattern it binds (FLAG_COMPUTED for a key that is not
+  // a plain name). `...r` is FLAG_REST and `a = 1` FLAG_DEFAULT on the slot,
+  // kept so the checker can refuse each by name. A local `const`/`let` and a
+  // `for...of` head take a flat one (`Parser.lowerPattern`); a parameter's,
+  // a module constant's and a `catch` binding's are refused (NL2192, NL2191).
   BindingPattern = 73,
 
   // ---- Refused class, interface and enum forms (WP33 R1) -------------------------------
@@ -455,6 +460,12 @@ export const FLAG_SCRIPT: i32 = 134217728
 // which the checker lowers to field copies (`checkObjectLiteral`) rather than
 // refusing as the array literal's spread.
 export const FLAG_OBJECT_SPREAD: i32 = 268435456
+// NodeKind.VarDecl: bit 29 marks a declarator `Parser.lowerPattern` wrote for
+// one name of a destructuring pattern, `x = p.x`, which the source spells
+// only inside the pattern; on a NodeKind.Var, the declaration it moved such
+// names into at the top of a `for...of` body. The TypeScript written back
+// out (`src/emit-ts-edits.ts`) spells neither.
+export const FLAG_PATTERN_NAME: i32 = 536870912
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -654,4 +665,91 @@ export const nodeName = (kind: NodeKind): string => {
     default:
       return "?"
   }
+}
+
+/**
+ * The name of the hidden `const` a destructuring declarator binds its
+ * receiver to where its names cannot read the initializer itself
+ * (`Parser.lowerPattern`): one per pattern, by where it starts, spelled with a
+ * `.` no program can write, so it shadows nothing and nothing can name it.
+ */
+export const patternReceiverName = (pattern: Node): string => `pattern.${pattern.start}`
+
+/** Whether `name` is a hidden receiver's (`patternReceiverName`), which no program can write. */
+export const isPatternReceiverName = (name: string): boolean => name.startsWith("pattern.")
+
+/**
+ * The destructuring pattern a declarator stands for, or null: the fourth
+ * child of the first declarator `Parser.lowerPattern` wrote for it (the
+ * pattern's head), or the first child of one it left whole (a module
+ * constant, or WP49's `= await awaitAll(...)`).
+ */
+export const patternOf = (decl: Node): Node | null => {
+  if (decl.children.length > 3) {
+    return decl.children[3]
+  }
+  return decl.children[0].kind === NodeKind.BindingPattern ? decl.children[0] : null
+}
+
+/**
+ * Whether `decl` binds a pattern's hidden receiver (`patternReceiverName`),
+ * which a debugger is not shown.
+ */
+export const bindsHiddenReceiver = (decl: Node): boolean =>
+  decl.children.length > 3 && (decl.flags & FLAG_PATTERN_NAME) === 0
+
+/** Whether `decl` is one of the name declarators `Parser.lowerPattern` wrote. */
+export const isPatternName = (decl: Node): boolean => (decl.flags & FLAG_PATTERN_NAME) !== 0
+
+/**
+ * Where the names of the pattern whose head is `list.children[at]`
+ * (`patternOf`) start in `list`: at the head itself where it is a name read
+ * directly (`isPatternName`), else just after the hidden receiver.
+ */
+export const patternNamesStart = (list: Node, at: i32): i32 =>
+  isPatternName(list.children[at]) ? at : at + 1
+
+/**
+ * One past the last name of the pattern whose head is `list.children[at]`:
+ * the names `Parser.lowerPattern` wrote after it, up to the next declarator
+ * that is not one of them (the next pattern's head, or a plain declarator).
+ * A pattern with no names, `const [] = f()`, ends where its names would
+ * start, so a walk over its names never reaches the next pattern's.
+ */
+export const patternNamesEnd = (list: Node, at: i32): i32 => {
+  let i = at + 1
+  while (
+    i < list.children.length &&
+    isPatternName(list.children[i]) &&
+    patternOf(list.children[i]) === null
+  ) {
+    i = i + 1
+  }
+  return i
+}
+
+/** What a pattern slot binds: an object entry's child, or an array slot itself. */
+export const patternSlotName = (slot: Node): Node =>
+  slot.kind === NodeKind.Property ? slot.children[0] : slot
+
+/**
+ * Whether a pattern slot binds a plain name, with no default, rest or
+ * computed key: the slots `Parser.lowerPattern` gives a declarator.
+ */
+export const isPlainSlot = (slot: Node): boolean => {
+  const name = patternSlotName(slot)
+  return name.kind === NodeKind.Ident && slot.flags === 0 && name.flags === 0
+}
+
+/**
+ * Whether a declarator's initializer is an `await`, parenthesised or not: a
+ * pattern over one is WP49's `awaitAll` or refused (NL2193), and
+ * `Parser.lowerPattern` gives it no names.
+ */
+export const awaitsInitializer = (decl: Node): boolean => {
+  let init = decl.children[2]
+  while (init.kind === NodeKind.Paren) {
+    init = init.children[0]
+  }
+  return init.kind === NodeKind.Unary && init.text === "await"
 }

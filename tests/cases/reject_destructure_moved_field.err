@@ -1,0 +1,1 @@
+`p` refers to an element of `o.items`, and `o.items.push(...)` may move or reuse that storage

@@ -96,7 +96,7 @@ function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, wan
   callee +39:70 TypeTable.typeName -> @TypeTable.typeName
   callee +39:103 TypeTable.typeName -> @TypeTable.typeName
 function narrowHint(ctx: CheckContext, receiverExpr: Node, payload: string): string -> @narrowHint
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat nish_str_eq
   pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
@@ -258,7 +258,7 @@ function rejectDiscardedResult(ctx: CheckContext, expr: Node, type: i32, scope: 
 function checkResultLocalsHandled(ctx: CheckContext, body: Node): void -> @checkResultLocalsHandled [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectResultLocals
-  calls: CheckContext.error TypeTable.typeName collectResultLocals markResultReads nish_array_grow nish_panic_index nish_str_concat rejectUnreadOverwrites
+  calls: CheckContext.error CheckedProgram.localText TypeTable.typeName collectResultLocals markResultReads nish_array_grow nish_panic_index nish_str_concat rejectUnreadOverwrites
   pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 rejectUnreadOverwrites#0
   pointer body: size=40 writesThrough=true captured=true passedTo=collectResultLocals#2 markResultReads#1 rejectUnreadOverwrites#1
   stackSites=3 stackLocals=3
@@ -269,7 +269,9 @@ function checkResultLocalsHandled(ctx: CheckContext, body: Node): void -> @check
   local +7:7 i: i32 (let)
   local +10:13 local: Local | null (const)
   callee +12:9 CheckContext.error -> @CheckContext.error
-  callee +14:42 TypeTable.typeName -> @TypeTable.typeName
+  callee +14:16 CheckedProgram.localText -> @CheckedProgram.localText
+  callee +14:60 TypeTable.typeName -> @TypeTable.typeName
+  callee +14:136 CheckedProgram.localText -> @CheckedProgram.localText
   local +20:9 unread: boolean[] (const)
   callee +24:3 rejectUnreadOverwrites -> @rejectUnreadOverwrites
 function rejectUnreadOverwrites(ctx: CheckContext, node: Node, declarations: Node[], unread: boolean[]): void -> @rejectUnreadOverwrites
@@ -299,7 +301,7 @@ function rejectUnreadOverwrites(ctx: CheckContext, node: Node, declarations: Nod
 function declarationIndex(program: CheckedProgram, declarations: Node[], local: Local | null): i32 -> @declarationIndex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer program: size=896 writesThrough=false captured=false
+  pointer program: size=912 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -310,7 +312,7 @@ function collectResultLocals(program: CheckedProgram, table: TypeTable, node: No
   sharedWrite: +0:7
   escaping: node
   calls: TypeTable.isResult collectResultLocals nish_array_grow nish_panic_index
-  pointer program: size=896 writesThrough=false captured=false passedTo=collectResultLocals#0
+  pointer program: size=912 writesThrough=false captured=false passedTo=collectResultLocals#0
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isResult#0 collectResultLocals#1
   pointer node: size=40 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false passedTo=collectResultLocals#3
@@ -323,7 +325,7 @@ function markResultReads(program: CheckedProgram, node: Node, declarations: Node
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: declarationIndex markResultReads nish_panic_index nish_panic_overflow nish_str_eq
-  pointer program: size=896 writesThrough=false captured=false passedTo=declarationIndex#0 markResultReads#0
+  pointer program: size=912 writesThrough=false captured=false passedTo=declarationIndex#0 markResultReads#0
   pointer node: size=40 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false passedTo=declarationIndex#1 markResultReads#2
   pointer read: size=0 writesThrough=true captured=false passedTo=markResultReads#3

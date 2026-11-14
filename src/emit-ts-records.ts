@@ -43,8 +43,17 @@
 // the composer, which this row tells by setting `walk.instanceChoice`.
 
 import { isSortInstance } from "./arrays"
-import { Operands, Walk } from "./emit-ts-edits"
-import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
+import { Operands, splice, Walk } from "./emit-ts-edits"
+import {
+  FLAG_GATHERED,
+  FLAG_OPTIONAL,
+  Node,
+  NodeKind,
+  isPatternName,
+  patternNamesEnd,
+  patternNamesStart,
+  patternOf,
+} from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 import { STORAGE_NAMESPACE } from "./emit-ts-storage"
@@ -627,7 +636,130 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
       return newRow(walk, node, operands)
     case NodeKind.Member:
       return processArgv(walk, node)
+    case NodeKind.VarDecl:
+      return checkedPattern(walk, node, operands)
+    case NodeKind.ForOf:
+      return checkedPatternHead(walk, node, operands)
     default:
       return null
   }
+}
+
+/**
+ * The indices of an array pattern's reads the bounds walk did not prove, in
+ * the pattern's order. The reads are the declarators `list.children[from,
+ * end)` that `Parser.lowerPattern` wrote for one pattern
+ * (`patternNamesStart`, `patternNamesEnd`). Empty where every read is proven.
+ */
+const uncheckedReads = (walk: Walk, list: Node, from: i32, end: i32): string[] => {
+  const indices: string[] = []
+  for (let i = from; i < end; i++) {
+    const read = list.children[i].children[2]
+    if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
+      indices.push(read.children[1].text)
+    }
+  }
+  return indices
+}
+
+/**
+ * The `idx(t, 0), idx(t, 2)` the reads at `indices` need, for `t`, so the
+ * first one out of range panics as the native read of it does. Node would
+ * bind `undefined` past the end instead.
+ */
+const patternChecks = (walk: Walk, indices: string[], t: string): string => {
+  const parts: string[] = []
+  for (const index of indices) {
+    parts.push(`${walk.helperName("idx")}(${t}, ${index}), `)
+  }
+  return parts.join("")
+}
+
+/**
+ * `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t,
+ * 2), t))(xs)`. A receiver read directly is a field path, `xs` or `o.items`,
+ * which the walk does not visit (`writtenChildren`), so it is spliced from the
+ * source unless a row rewrites it: of the field paths an array pattern may
+ * read, only `process.argv` (`processArgv`) is, to `argv()`, as its
+ * hand-written read `process.argv[1]` is.
+ */
+const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const pattern = patternOf(node)
+  const list = walk.list
+  if (pattern === null || pattern.text !== "[" || list === null || list.children[walk.listAt] !== node) {
+    return null
+  }
+  // An untyped body proves no read, so which ones need a check is not known.
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
+  const direct = isPatternName(node)
+  if (!direct && node.children[2].kind === NodeKind.Empty) {
+    return null
+  }
+  const from = patternNamesStart(list, walk.listAt)
+  const end = patternNamesEnd(list, walk.listAt)
+  const indices = uncheckedReads(walk, list, from, end)
+  // A direct name's read is `base[i]`, its receiver the path the source wrote.
+  const base = direct ? node.children[2].children[0] : node
+  const receiver: string | null = direct && base.kind === NodeKind.Member ? processArgv(walk, base) : null
+  if (indices.length === 0 && receiver === null) {
+    return null
+  }
+  if (direct) {
+    const text = walk.source.text
+    const read = receiver === null ? walk.spanOf(base) : receiver
+    let value = read
+    if (indices.length > 0) {
+      const t = walk.temporary()
+      value = `((${t}) => (${patternChecks(walk, indices, t)}${t}))(${read})`
+    }
+    return `${text.substring(node.start, base.start)}${value}${text.substring(base.end, node.end)}`
+  }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, indices, t)
+  operands.texts[2] = `((${t}) => (${checks}${t}))(${operands.at(2)})`
+  operands.changed[2] = true
+  return splice(walk, node, operands)
+}
+
+/**
+ * `for (const [a, b] of rows)`, each element checked as it is reached:
+ * `rows` walked through `(function* (r) { for (const t of r) yield (idx(t,
+ * 0), idx(t, 1), t) })(rows)`, which reads `rows` as the loop does.
+ */
+const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const head = node.children[0]
+  if (head.kind !== NodeKind.Var || head.children[0].children.length === 0) {
+    return null
+  }
+  const pattern = patternOf(head.children[0].children[0])
+  const body = node.children[node.children.length - 1]
+  if (
+    pattern === null ||
+    pattern.text !== "[" ||
+    body.kind !== NodeKind.Block ||
+    body.children.length === 0
+  ) {
+    return null
+  }
+  const names = body.children[0]
+  if (names.kind !== NodeKind.Var || !isPatternName(names)) {
+    return null
+  }
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
+  const indices = uncheckedReads(walk, names.children[0], 0, names.children[0].children.length)
+  if (indices.length === 0) {
+    return null
+  }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, indices, t)
+  const rows = walk.temporary()
+  operands.texts[1] = `(function* (${rows}) { for (const ${t} of ${rows}) yield (${checks}${t}) })(${operands.at(1)})`
+  operands.changed[1] = true
+  return splice(walk, node, operands)
 }

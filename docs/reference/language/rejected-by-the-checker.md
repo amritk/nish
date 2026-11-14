@@ -169,11 +169,15 @@ messages are exact for the cases cited; other entries quote the checker
   `Functions must have a body` (`nl2204_function_without_body`)
 - **`export default function ()`**: `Functions must be named`
   (`reject_fn_anonymous`)
-- **a destructuring pattern, but for `const [a, b] = await awaitAll(…)`**:
+- **a destructuring pattern as a parameter or a module constant, over
+  `await` but for `const [a, b] = await awaitAll(…)`, or with a default, a
+  rest, a nested pattern or a computed key**:
   `Destructured constants are not supported` /
   `Destructured parameters are not supported` /
-  `Destructuring is not supported` (a local) (`reject_const_destructured`,
-  `reject_param_destructured`, `reject_destructure_local`)
+  ``A pattern may destructure an `await` only of `awaitAll(...)` …`` /
+  NL2773 to NL2785
+  (`reject_const_destructured`, `reject_param_destructured`,
+  `reject_destructure_*`; [Destructuring declarations](statements.md#destructuring-declarations))
 - **an optional parameter; a default or rest outside a function, method,
   constructor or `const` arrow; a spread argument**:
   `Optional parameters are not supported` /

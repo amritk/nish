@@ -100,7 +100,7 @@ function RefModule.constructor(this: RefModule, program: CheckedProgram, ctx: Ch
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: ctx file nodeCount parents program
   pointer this: size=40 writesThrough=true captured=false
-  pointer program: size=896 writesThrough=true captured=true
+  pointer program: size=912 writesThrough=true captured=true
   pointer ctx: size=344 writesThrough=true captured=true
   pointer file: size=40 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
@@ -121,7 +121,7 @@ function RefPass.constructor(this: RefPass, table: TypeTable, first: CheckedProg
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=192 writesThrough=true captured=false
   pointer table: size=136 writesThrough=true captured=true
-  pointer first: size=896 writesThrough=true captured=true
+  pointer first: size=912 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new StringMap -> @StringMap.constructor
 function RefPass.refType(this: RefPass, node: Node): i32 -> @RefPass.refType [method]
@@ -485,7 +485,7 @@ function RefPass.enter(this: RefPass, program: CheckedProgram, module: i32, sig:
   sharedWrite: +0:5
   escaping: module program sig
   pointer this: size=192 writesThrough=true captured=false
-  pointer program: size=896 writesThrough=true captured=true
+  pointer program: size=912 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +4:9 instance: Instantiation | null (let)
@@ -747,7 +747,7 @@ function shapeReferenceCalls(program: CheckedProgram, written: boolean): void ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_panic_index
-  pointer program: size=896 writesThrough=false captured=false
+  pointer program: size=912 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:7 s: i32 (let)
   local -4:11 call: Node (const)

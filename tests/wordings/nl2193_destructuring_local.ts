@@ -1,6 +1,8 @@
-// NL2193: The local half of the same rule, which has a message of its own.
-export const main = (): i32 => {
-  const xs: i32[] = [1, 2];
-  const [a, b] = xs;
-  return a;
+// NL2193: a pattern over an `await` other than `awaitAll(...)`'s, whose names
+// are the calls' answers, is refused.
+const pair = async (): Promise<i32[]> => [1, 2];
+
+export const main = async (): Promise<i32> => {
+  const [a, b] = await pair();
+  return a + b;
 };

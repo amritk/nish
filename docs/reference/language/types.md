@@ -1130,9 +1130,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try` is refused by Nish on its own, destructuring is too but for
-`const [a, b] = await awaitAll(…)`, which declares fresh `const`s rather than
-storing to a variable, and an arrow may read a local it captures but never
+`try` is refused by Nish on its own, a destructuring pattern only ever
+declares fresh names rather than storing to a variable (a destructuring
+assignment is NL2773, [Destructuring declarations](statements.md#destructuring-declarations)),
+and an arrow may read a local it captures but never
 assign it (NL2586, [Function parameters](declarations.md#function-parameters)), so no loop
 that compiles stores through any of them. A loop that holds a
 labelled statement or a labelled `break` or `continue` anywhere in its body,

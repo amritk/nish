@@ -1,7 +1,7 @@
 // The parent may not walk a table a task reads before the join, and the walk of
-// a `Map`'s entries is out of reach for a second reason: it binds `[k, v]`, and
-// this version has no destructuring. Pinned so that adding destructuring meets
-// the region rule here.
+// a `Map`'s entries is out of reach for a second reason: its `[k, v]` pairs are
+// two-type tuples, which an array pattern does not bind. Pinned so that adding
+// tuples meets the region rule here.
 import { scope } from "nish/threads";
 
 class Index {

@@ -141,7 +141,7 @@ function heldLayout(program: CheckedProgram, table: TypeTable, t: i32, seen: Str
   sharedWrite: via heldLayout
   escaping: t
   calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf heldLayout
-  pointer program: size=896 writesThrough=false captured=false passedTo=heldLayout#0 heldLayout#0 heldLayout#0 CheckedProgram.struct#0 heldLayout#0
+  pointer program: size=912 writesThrough=false captured=false passedTo=heldLayout#0 heldLayout#0 heldLayout#0 CheckedProgram.struct#0 heldLayout#0
   pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 heldLayout#1 TypeTable.refOf#0 heldLayout#1 TypeTable.okOf#0 heldLayout#1 TypeTable.errOf#0 TypeTable.nameOf#0 heldLayout#1
   pointer seen: size=8 writesThrough=false captured=false passedTo=heldLayout#3 heldLayout#3 heldLayout#3 StringSet.has#0 StringSet.add#0 heldLayout#3
   stackSites=0 stackLocals=0
@@ -219,7 +219,7 @@ function resolveType(node: Node, ctx: CheckContext): i32 -> @resolveType [export
   callee +33:14 CheckContext.errorType -> @CheckContext.errorType
   callee +33:34 unsupportedType -> @unsupportedType
 function unsupportedType(ctx: CheckContext, node: Node): string -> @unsupportedType
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat
   pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1

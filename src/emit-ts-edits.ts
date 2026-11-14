@@ -62,7 +62,7 @@ import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
 import { isBuiltinSpecifier, isExecutorCall, isNetExport, nishExport } from "./nish-modules"
-import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind } from "./nodes"
+import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind, isPatternName } from "./nodes"
 import { CheckedProgram, Instantiation, STRUCT_INTERFACE } from "./program"
 import { sourceOrder } from "./script"
 import { StringBuilder } from "./strings"
@@ -182,6 +182,8 @@ export class Walk {
   choiceTexts: string[]
   /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
   helpers: StringSet
+  /** The node's index in `list`, below; beside the flag after it so neither is padded. */
+  listAt: i32
   /**
    * `--deterministic`: a call the checker bound to `nish/math` (`Math.sin`,
    * `f64ToBits`, ...) is written as a call to that function, which runs the
@@ -225,6 +227,8 @@ export class Walk {
    */
   storageIds: i32[]
   storageSlots: i32[]
+  /** The list the node being walked is an element of, or `null`: where a pattern's head finds its names. */
+  list: Node | null
   /** The next number `temporary` tries. */
   temps: i32
   /**
@@ -338,6 +342,8 @@ export class Walk {
     this.stubWarnings = []
     this.failure = ""
     this.hoistHere = false
+    this.list = null
+    this.listAt = 0
     this.hoistable = false
     this.effects = false
     this.localsRead = false
@@ -738,6 +744,20 @@ const inOptionalChain = (node: Node): boolean => {
   return false
 }
 
+/**
+ * How many of `node`'s children its text spells. A destructuring
+ * declaration's names (`Parser.lowerPattern`) are the compiler's own reads
+ * of the receiver, spanning the pattern's slots, and are not written: the
+ * pattern is, as it was in the source. A hidden receiver's head spells its
+ * first three, the pattern standing where its name does.
+ */
+const writtenChildren = (node: Node): i32 => {
+  if ((node.kind === NodeKind.VarDecl || node.kind === NodeKind.Var) && isPatternName(node)) {
+    return 0
+  }
+  return node.kind === NodeKind.VarDecl && node.children.length > 3 ? 3 : node.children.length
+}
+
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */
 const hasEffect = (node: Node): boolean => {
   if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
@@ -1036,11 +1056,18 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   const effectsBefore = walk.effects
   const localsBefore = walk.localsRead
   const operands = new Operands(node, walk.source.text)
+  const walked = writtenChildren(node)
+  const outerList = walk.list
+  const outerAt = walk.listAt
   let i = 0
-  while (i < node.children.length) {
+  while (i < walked) {
     operands.texts.push("")
     operands.changed.push(false)
-    if (node.kind === NodeKind.Block) {
+    walk.list = node.kind === NodeKind.List ? node : null
+    walk.listAt = i
+    // A pattern `for...of` wraps its body in a Block the source never
+    // braced; a statement hoisted into it would land outside the loop.
+    if (node.kind === NodeKind.Block && walk.source.text.charCodeAt(node.start) === 123) {
       statementText(walk, node.children[i], operands, i)
     } else {
       walk.hoistHere = here && hoistChild(node, i)
@@ -1057,6 +1084,8 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     }
     i = i + 1
   }
+  walk.list = outerList
+  walk.listAt = outerAt
   if (callee.length > 0) {
     operands.texts[0] = callee
     operands.changed[0] = true
@@ -1215,7 +1244,7 @@ export const splice = (walk: Walk, node: Node, operands: Operands): string => {
   const sb = new StringBuilder()
   let cursor = node.start
   let i = 0
-  while (i < node.children.length) {
+  while (i < operands.changed.length) {
     if (operands.changed[i]) {
       const child = node.children[i]
       if (child.start < cursor || child.end > node.end) {

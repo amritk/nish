@@ -1594,6 +1594,14 @@ export class CheckedProgram {
    */
   scriptLocals: StringSet
   /**
+   * A destructuring pattern's hidden receiver (`patternReceiverName` in
+   * `src/nodes.ts`) -> its index in `hiddenReceiverTexts`: the pattern as
+   * written, `{ x, y }`, which a message names in place of the hidden name.
+   * A side table, so that `Local` carries no field only patterns use.
+   */
+  hiddenReceivers: StringMap
+  hiddenReceiverTexts: string[]
+  /**
    * A call checked in this module gathered a rest parameter's arguments into
    * a new array node (`gatherRest` in `src/declarations.ts`), so the
    * module's parent links are taken again after checking.
@@ -2051,6 +2059,8 @@ export class CheckedProgram {
     this.isEntry = isEntry
     this.nodeCount = nodeCount
     this.scriptLocals = new StringSet()
+    this.hiddenReceivers = new StringMap()
+    this.hiddenReceiverTexts = []
     this.packageName = packageName
     this.symbolPrefix = packageSymbolPrefix(packageName)
     this.functions = []
@@ -2186,6 +2196,21 @@ export class CheckedProgram {
       this.nodeBuiltins.push("")
       i = i + 1
     }
+  }
+
+  /** Record that hidden receiver `name` is named `text` in a message (`hiddenReceivers`). */
+  nameHiddenReceiver(name: string, text: string): void {
+    this.hiddenReceivers.set(name, this.hiddenReceiverTexts.length)
+    this.hiddenReceiverTexts.push(text)
+  }
+
+  /**
+   * `local` as a message names it: its name, or for a pattern's hidden
+   * receiver the pattern as written (`hiddenReceivers`).
+   */
+  localText(local: Local): string {
+    const at = this.hiddenReceivers.get(local.name, -1)
+    return at < 0 ? local.name : this.hiddenReceiverTexts[at]
   }
 
   /**
