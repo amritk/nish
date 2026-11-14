@@ -26,7 +26,7 @@ export const main = (): void => {
   const text = "Nish 0.40, tables!\n"
   const counts: i32[] = [0, 0, 0, 0]
   for (let i = 0; i < text.length; i++) {
-    const k = classOf(toU8(text.charCodeAt(i)))
+    const k = toI32(classOf(toU8(text.charCodeAt(i)))) & 3
     counts[k] += 1
   }
   let sum = 0

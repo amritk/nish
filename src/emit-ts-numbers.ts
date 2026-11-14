@@ -190,7 +190,8 @@ const bigLiteral = (text: string): string => {
  * A module constant with an integer annotation: the checker folds its
  * initializer and records no type in it, so the annotation is the type of
  * every literal and operation inside, which are written as in a function.
- * A literal of an i64 or u64 constant is a `bigint`. An initializer holding
+ * A literal of an i64 or u64 constant is a `bigint`, and so is each element
+ * of an i64 or u64 constant table. An initializer holding
  * anything but literals, names, parentheses and arithmetic is left alone.
  */
 const typedConstant = (walk: Walk, node: Node, operands: Operands): string | null => {
@@ -200,15 +201,44 @@ const typedConstant = (walk: Walk, node: Node, operands: Operands): string | nul
   }
   const annotation = node.children[1]
   const init = node.children[2]
-  const type = annotation.kind === NodeKind.TypeRef ? spelledType(annotation.text) : -1
+  const element = tableElement(annotation, init)
+  const spelled = element === null ? annotation : element
+  const type = spelled.kind === NodeKind.TypeRef ? spelledType(spelled.text) : -1
   if (type < 0 || typeOf(walk, init) >= 0) {
     return null
   }
-  const value = foldedText(walk, init, type)
+  const value = element === null ? foldedText(walk, init, type) : tableText(walk, init, type)
   if (value === null || value === between(walk, init.start, init.end)) {
     return null
   }
   return `${operands.at(0)}${between(walk, node.children[0].end, init.start)}${value}${between(walk, init.end, node.end)}`
+}
+
+/**
+ * The element type of a constant table, `readonly T[]` written out as an
+ * array literal (docs/LANGUAGE.md, "Constant tables"); null for anything else.
+ */
+const tableElement = (annotation: Node, init: Node): Node | null => {
+  if (init.kind !== NodeKind.Array || annotation.kind !== NodeKind.TypeReadonly) {
+    return null
+  }
+  const array = annotation.children[0]
+  return array.kind === NodeKind.TypeArray ? array.children[0] : null
+}
+
+/** A constant table's array literal with every element written at `type`. */
+const tableText = (walk: Walk, init: Node, type: i32): string | null => {
+  let text = ""
+  let at = init.start
+  for (const element of init.children) {
+    const value = foldedText(walk, element, type)
+    if (value === null) {
+      return null
+    }
+    text = `${text}${between(walk, at, element.start)}${value}`
+    at = element.end
+  }
+  return `${text}${between(walk, at, init.end)}`
 }
 
 /** The integer type a type name spells, or -1. */

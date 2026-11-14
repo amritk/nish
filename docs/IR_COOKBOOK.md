@@ -14468,6 +14468,82 @@ not be assigned), which is what lets the page keep a view of
 [panic sites](#panic-sites-a-number-per-call-a-table-at-the-end). Golden:
 `tests/cases/storage_module.ll`; lending, `tests/cases/storage_lend.ll`.
 
+### Constant tables: data the binary carries
+
+A top-level `const` declared `readonly T[]` with an array literal of
+constants is a *constant table* ([LANGUAGE.md → Constant
+tables](LANGUAGE.md#constant-tables)). Like module storage it is two globals,
+named `nish_const_<module>_<name>`, and nothing runs to set either up; unlike
+storage both are `constant`. `@nish_const_0_DIGIT.data` holds the folded
+elements — a `u8` table as a `c"..."` string, an `f64` one as hex doubles —
+and is `private unnamed_addr`, so LLVM may merge it with an equal constant;
+`@nish_const_0_DIGIT` is the `%struct.nish_array` header pointing at it,
+`internal` unless the table is exported (an importer then declares it
+`external constant`). The data pointer is a `bitcast` of the data global, as
+storage's is.
+
+<!-- cookbook:begin const-table -->
+```ts
+const DIGIT: readonly u8[] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 97, 98, 99, 100, 101, 102]
+
+export const hexDigit = (n: i32): u8 => {
+  const k = n & 15
+  return DIGIT[k]
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@nish_const_0_DIGIT.data = private unnamed_addr constant [16 x i8] c"0123456789abcdef", align 16
+@nish_const_0_DIGIT = internal constant %struct.nish_array { i64 16, i64 16, i8* bitcast ([16 x i8]* @nish_const_0_DIGIT.data to i8*) }, align 8
+
+define noundef i8 @hexDigit(i32 noundef %n) #0 {
+entry:
+  %k.addr = alloca i32, align 4
+  %0 = and i32 %n, 15
+  store i32 %0, i32* %k.addr, align 4
+  %1 = load i32, i32* %k.addr, align 4
+  %2 = sext i32 %1 to i64
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_const_0_DIGIT, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = bitcast i8* %4 to i8*
+  %6 = getelementptr inbounds i8, i8* %5, i64 %2
+  %7 = load i8, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  ret i8 %7
+}
+
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !8, i64 16}
+!11 = !{!"element i8", !6, i64 0}
+!12 = !{!11, !11, i64 0}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end const-table -->
+
+A read is an ordinary array read through the header, and because the header
+is `constant` too, `opt` folds the header load away and leaves one load of the
+element. The bounds check is gone before that: `src/bounds.ts` knows the
+table's length from the checker, so an index whose range fits — `n & 15`
+here, or any `u8` into a 256-entry table — needs no compare. Goldens:
+`tests/cases/const_array_u8.ll`, `tests/cases/const_array_numeric.ll`.
+
 ### Root storage: a table the keep walks
 
 Module storage whose element is `C | null` for a class is *root storage*

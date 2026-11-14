@@ -27,15 +27,15 @@ const SIZE: i32 = 4194304
 
 const tableA = (buf: u8[], counts: i32[]): void => {
   for (let i = 0; i < buf.length; i++) {
-    const k = CLASS[buf[i]]
-    counts[k & 3] += 1
+    const k = toI32(CLASS[buf[i]]) & 3
+    counts[k] += 1
   }
 }
 
 const tableB = (buf: u8[], counts: i32[]): void => {
   for (let i = 0; i < buf.length; i++) {
-    const k = CLASS[buf[i]]
-    counts[k & 3] += 1
+    const k = toI32(CLASS[buf[i]]) & 3
+    counts[k] += 1
   }
 }
 
@@ -54,8 +54,8 @@ const classOf = (b: u8): i32 => {
 
 const chain = (buf: u8[], counts: i32[]): void => {
   for (let i = 0; i < buf.length; i++) {
-    const k = classOf(buf[i])
-    counts[k & 3] += 1
+    const k = toI32(classOf(buf[i])) & 3
+    counts[k] += 1
   }
 }
 
@@ -64,7 +64,7 @@ export const main = (): i32 => {
   // Text-like bytes from a fixed xorshift, so the compares of `chain` are not
   // all predicted by one branch.
   let x: u32 = 2463534242
-  for (let i = 0; i < SIZE; i++) {
+  for (let i = 0; i < buf.length; i++) {
     x = x ^ (x << 13)
     x = x ^ (x >> 17)
     x = x ^ (x << 5)
@@ -102,7 +102,7 @@ export const main = (): i32 => {
     if (round === 0 || tc < cUs) {
       cUs = tc
     }
-    buf[round] = toU8(round)
+    buf[0] = toU8(round)
   }
   console.log(`tableA ${aUs} us`)
   console.log(`tableB ${bUs} us`)
