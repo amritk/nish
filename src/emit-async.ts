@@ -1949,7 +1949,7 @@ const removeLine = (text: string, line: string): string => {
 const driverText = (registry: AsyncRegistry, text: string): string => {
   const attrs = `nounwind ${HARDENING_ATTRS}`
   const out = new StringBuilder()
-  out.add("\n; WP49 stage 5: the loop over the executor in runtime-async.c (docs/wp49-async-server.md)\n")
+  out.add("\n; the loop over the executor in runtime-async.c\n")
   const runtime = [
     "declare i8* @nish_async_next()",
     "declare i8* @nish_async_enter(i8* nonnull)",

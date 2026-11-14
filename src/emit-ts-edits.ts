@@ -111,7 +111,7 @@ export const HOST_HANDLE_ALIAS: string =
 
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =
-  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
+  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement"
 
 /**
  * The message NL4017 carries. Node polls no descriptor JavaScript can name,
@@ -144,7 +144,7 @@ const UNTYPED_REFUSAL: string =
 
 /** The message NL4010 carries; `src/codes.ts` keys the code on it. */
 const FOREIGN_REFUSAL: string =
-  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"
+  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi"
 
 /**
  * One module's walk: the tables the hooks read, and what the walk learns on
