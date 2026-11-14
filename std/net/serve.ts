@@ -1162,7 +1162,7 @@ class ServeConns {
     if (this.queueCount === size) {
       const grown: i32[] = new Array<i32>(2 * size)
       const grownGen: i32[] = new Array<i32>(2 * size)
-      for (let k: i32 = 0; k < size && k < toI32(grown.length); k++) {
+      for (let k: i32 = 0; k < size && k < toI32(grown.length) && k < toI32(grownGen.length); k++) {
         grown[k] = this.queue[(this.queueStart + k) % size]
         grownGen[k] = this.queueGen[(this.queueStart + k) % size]
       }
