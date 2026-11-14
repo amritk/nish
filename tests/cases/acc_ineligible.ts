@@ -79,25 +79,10 @@ const digits = (n: i32): i32 => {
   return s.length + digits(n - 1)
 }
 
-// A method.
-class Counter {
-  step: i32
-  constructor(step: i32) {
-    this.step = step
-  }
-  total(n: i32): i32 {
-    if (n <= 0) {
-      return 0
-    }
-    return this.step + this.total(n - 1)
-  }
-}
-
 export const main = (): i32 => {
-  const c = new Counter(3)
   // `noBase` never ends, so it runs only when an argument asks for it.
   const endless: i32 = process.argv.length > 5 ? noBase(1) : -1
-  console.log(`${afterLocal(5)} ${product(5)} ${wide(5)} ${looped(5)} ${c.total(4)} ${endless}`)
+  console.log(`${afterLocal(5)} ${product(5)} ${wide(5)} ${looped(5)} ${endless}`)
   console.log(`${lessSelf(4)} ${selfLess(4)} ${callAfter(4)} ${digits(12)}`)
   return 0
 }

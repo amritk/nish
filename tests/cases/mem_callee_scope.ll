@@ -52,9 +52,21 @@ entry:
   ret void
 }
 
-define internal noundef i32 @Element.length(%struct.Element* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #1 {
+define internal noundef i32 @Element.length(%struct.Element* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this.in) #1 {
 entry:
   %next.addr = alloca %struct.Element*, align 8
+  br label %rec.head
+
+rec.head:
+  %this = phi %struct.Element* [ %this.in, %entry ], [ %7, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ 1, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  br i1 %rec.cold, label %rec.call, label %rec.body
+
+rec.body:
   %0 = getelementptr inbounds %struct.Element, %struct.Element* %this, i32 0, i32 1
   %1 = load %struct.Element*, %struct.Element** %0, align 8, !tbaa !5
   store %struct.Element* %1, %struct.Element** %next.addr, align 8
@@ -63,18 +75,33 @@ entry:
   br i1 %3, label %if.then, label %if.end
 
 if.then:
-  ret i32 1
-
-if.end:
-  %4 = load %struct.Element*, %struct.Element** %next.addr, align 8
-  %5 = call i32 @Element.length(%struct.Element* %4)
-  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 1, i32 %5)
-  %7 = extractvalue { i32, i1 } %6, 0
-  %8 = extractvalue { i32, i1 } %6, 1
-  br i1 %8, label %ovf.fail, label %ovf.ok
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 1)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %7
+  ret i32 %5
+
+if.end:
+  %7 = load %struct.Element*, %struct.Element** %next.addr, align 8
+  br label %rec.head
+
+rec.call:
+  %8 = call i32 @Element.length(%struct.Element* %this)
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %10)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %13
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

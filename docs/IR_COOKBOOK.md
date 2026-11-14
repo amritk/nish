@@ -32608,7 +32608,10 @@ A checked `+` stops LLVM's tail-recursion elimination: it folds
 `return x + f(...)` into a loop and an accumulator only when the `+` is a plain
 `add`. So the compiler writes that loop itself (`src/accumulate.ts` chooses
 the functions, `src/emit-accumulate.ts` writes them, with the proof). A
-function qualifies when it is a plain function of its module that returns
+function qualifies when it is a plain function of its module, or a method of
+a class of its module that is neither generic nor `nish/threads`'s
+atomic `AtomicI32` or `AtomicI64` (whose methods the compiler writes
+itself), that returns
 `i32` (an `f64` sum has no overflow check to defer, and another integer width
 is left to a later stage), every `return` that recurses is `X + self(args)`,
 or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`
@@ -32728,6 +32731,182 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-recursion-loop -->
+
+A method's self call is `r.m(args)` on a receiver the checker typed as the
+method's own class, written with `.`, not `?.`. Nish binds every method call
+statically (no inheritance, no method in an interface, no method call on a
+union), so that call is this body whatever `r` holds, and `this` is one more
+parameter of the loop: `%this` is a `phi` of `rec.head`, and a step
+evaluates `X`, then the receiver, then the arguments, as the call would. A
+tree sum walks its right spine as the loop and calls itself only for the left
+subtrees. A call through a function-valued field (`this.op(x)`) is a
+dispatcher's, not a method call, and never a step (`tests/cases/acc_method`,
+`acc_method_overflow`, `acc_method_ineligible`).
+
+<!-- cookbook:begin opt-recursion-method -->
+```ts
+class TreeNode {
+  value: i32
+  left: TreeNode | null
+  right: TreeNode | null
+  constructor(value: i32, left: TreeNode | null, right: TreeNode | null) {
+    this.value = value
+    this.left = left
+    this.right = right
+  }
+
+  sum(): i32 {
+    const left = this.left
+    const right = this.right
+    const l = left === null ? 0 : left.sum()
+    if (right === null) {
+      return this.value + l
+    }
+    return this.value + l + right.sum()
+  }
+}
+
+export const test = (t: TreeNode): i32 => t.sum()
+```
+
+```llvm
+%struct.TreeNode = type { i32, %struct.TreeNode*, %struct.TreeNode* }
+
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define internal void @TreeNode.constructor(%struct.TreeNode* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i32 noundef %value, %struct.TreeNode* noundef align 8 %left, %struct.TreeNode* noundef align 8 %right) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 0
+  store i32 %value, i32* %0, align 4, !tbaa !5
+  %1 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 1
+  store %struct.TreeNode* %left, %struct.TreeNode** %1, align 8, !tbaa !6
+  %2 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 2
+  store %struct.TreeNode* %right, %struct.TreeNode** %2, align 8, !tbaa !7
+  ret void
+}
+
+define internal noundef i32 @TreeNode.sum(%struct.TreeNode* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this.in) #1 {
+entry:
+  %left.addr = alloca %struct.TreeNode*, align 8
+  %right.addr = alloca %struct.TreeNode*, align 8
+  %l.addr = alloca i32, align 4
+  br label %rec.head
+
+rec.head:
+  %this = phi %struct.TreeNode* [ %this.in, %entry ], [ %26, %ovf.ok.2 ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %ovf.ok.2 ]
+  %rec.last = phi i32 [ 0, %entry ], [ %24, %ovf.ok.2 ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  br i1 %rec.cold, label %rec.call, label %rec.body
+
+rec.body:
+  %0 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 1
+  %1 = load %struct.TreeNode*, %struct.TreeNode** %0, align 8, !tbaa !6
+  store %struct.TreeNode* %1, %struct.TreeNode** %left.addr, align 8
+  %2 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 2
+  %3 = load %struct.TreeNode*, %struct.TreeNode** %2, align 8, !tbaa !7
+  store %struct.TreeNode* %3, %struct.TreeNode** %right.addr, align 8
+  %4 = load %struct.TreeNode*, %struct.TreeNode** %left.addr, align 8
+  %5 = icmp eq %struct.TreeNode* %4, null
+  br i1 %5, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  %6 = load %struct.TreeNode*, %struct.TreeNode** %left.addr, align 8
+  %7 = call i32 @TreeNode.sum(%struct.TreeNode* %6)
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ 0, %cond.true ], [ %7, %cond.false ]
+  store i32 %8, i32* %l.addr, align 4
+  %9 = load %struct.TreeNode*, %struct.TreeNode** %right.addr, align 8
+  %10 = icmp eq %struct.TreeNode* %9, null
+  br i1 %10, label %if.then, label %if.end
+
+if.then:
+  %11 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 0
+  %12 = load i32, i32* %11, align 4, !tbaa !5
+  %13 = load i32, i32* %l.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %17 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %15)
+  %18 = extractvalue { i32, i1 } %17, 0
+  %19 = extractvalue { i32, i1 } %17, 1
+  br i1 %19, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %18
+
+if.end:
+  %20 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 0
+  %21 = load i32, i32* %20, align 4, !tbaa !5
+  %22 = load i32, i32* %l.addr, align 4
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %26 = load %struct.TreeNode*, %struct.TreeNode** %right.addr, align 8
+  br label %rec.head
+
+rec.call:
+  %27 = call i32 @TreeNode.sum(%struct.TreeNode* %this)
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %27)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %29)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  ret i32 %32
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test(%struct.TreeNode* noundef nonnull readonly align 8 dereferenceable(24) nocapture %t) #1 {
+entry:
+  %0 = call i32 @TreeNode.sum(%struct.TreeNode* %t)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"TreeNode", !2, i64 0, !3, i64 8, !3, i64 16}
+!5 = !{!4, !2, i64 0}
+!6 = !{!4, !3, i64 8}
+!7 = !{!4, !3, i64 16}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-method -->
 
 ### `--target`
 

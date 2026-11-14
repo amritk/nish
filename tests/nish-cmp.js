@@ -1270,6 +1270,10 @@ const RECURSION_LOOP = "Emit self-recursive checked sums as a loop"
 const RECURSION_LOOP_WHY =
   "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
+const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop"
+const RECURSION_METHOD_WHY =
+  "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+
 const DECLARED = [
   {
     changelog: "internal work-package references from diagnostics and generated files",
@@ -1396,6 +1400,37 @@ const DECLARED = [
     file: "recursion.ll",
     changelog: RECURSION_LOOP,
     why: RECURSION_LOOP_WHY,
+  },
+  // Self-recursive checked-sum methods become a loop too (issue #1612).
+  {
+    program: "tests/cases/acc_method.ts",
+    file: "acc_method.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "tests/cases/acc_method_overflow.ts",
+    file: "acc_method_overflow.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "tests/cases/mem_callee_scope.ts",
+    file: "mem_callee_scope.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-method.ts",
+    file: "opt-recursion-method.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "list.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
   },
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
