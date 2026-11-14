@@ -679,7 +679,50 @@ const serveTask = async (
   r.headerCount = src.headerCount
   r.bodyLength = src.bodyLength
   const res: Response = await handle(new Request(r))
-  serveStore(st, k, res)
+  st.status[k] = res.status
+  const out: u8[] = st.bodies[k]
+  // A length the body cannot hold, negative or past either array, is the
+  // handler's mistake: the loop answers 500 for it, as for an over-long body.
+  if (res.length < 0 || res.length > toI32(out.length) || res.length > toI32(res.body.length)) {
+    st.lengths[k] = -1
+  } else {
+    // The whole body is copied when the slot holds it, as one `set`: what lies
+    // past `length` is never sent. Only a body larger than the slot is copied
+    // byte by byte, up to `length`.
+    if (res.body.length <= out.length) {
+      out.set(res.body)
+    } else {
+      for (let i: i32 = 0; i < res.length && i < toI32(out.length) && i < toI32(res.body.length); i++) {
+        out[i] = res.body[i]
+      }
+    }
+    st.lengths[k] = res.length
+  }
+  // A type the server has sent before is found by its text, with no copy;
+  // the loop copies a new one's bytes into `typeBytes` as it sends it.
+  const n: i32 = toI32(res.type.length)
+  let known: i32 = -1
+  for (let i: i32 = 0; n > 0 && known < 0 && i < toI32(st.typeTexts.length); i++) {
+    if (st.typeTexts[i] === res.type) {
+      known = i
+    }
+  }
+  st.typeIndex[k] = known
+  const type: u8[] = st.types[k]
+  if (known >= 0) {
+    st.typeLengths[k] = n
+  } else if (n > toI32(type.length)) {
+    st.typeLengths[k] = -1
+  } else {
+    for (let i: i32 = 0; i < n && i < toI32(type.length); i++) {
+      type[i] = toU8(res.type.charCodeAt(i))
+    }
+    st.typeLengths[k] = n
+  }
+  st.done[k] = true
+  st.finished[st.finishedCount] = k
+  st.finishedCount += 1
+  st.fresh = true
   if (!st.awake && !st.signalled) {
     st.signalled = true
     netWrite(st.wakeFd, st.one, 0, 1)
