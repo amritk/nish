@@ -21,6 +21,6 @@ D6: whether and when to submit, shared with WP39 E9.
 
 ## Not planned
 
-Promises as values, `for await`, `async` on the wasm profile.
+Promises as values, `for await`. `async` on the wasm profile is [WP54](wp54-async-wasm.md)'s, proposed.
 
 [All work packages](index.md)
