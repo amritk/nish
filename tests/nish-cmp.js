@@ -530,6 +530,7 @@ const pageMath = (why, filesByProgram) =>
   )
 const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const DESTRUCTURING = "Destructuring declarations over objects and arrays"
+const STRING_ENUMS = "add string enums, decoded and encoded by typed JSON"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -6768,6 +6769,17 @@ const DECLARED = [
     file: "exit",
     changelog: UNION_GENERICS,
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/enum_string.ts",
+    "tests/cases/enum_string_union_tag.ts",
+    "docs/cookbook/decl-enum-string.ts",
+    "tests/link/json_enum_string/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: STRING_ENUMS,
+    why: "the program declares an enum whose members are strings, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
   ...[
     "tests/cases/destructure_array.ts",
