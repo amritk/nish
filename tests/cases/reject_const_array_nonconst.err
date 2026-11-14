@@ -1,0 +1,1 @@
+A module constant's initialiser must be a literal, another constant, or arithmetic over them

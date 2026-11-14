@@ -26,11 +26,12 @@ export const main = (): void => {
   const text = "Nish 0.40, tables!\n"
   const counts: i32[] = [0, 0, 0, 0]
   for (let i = 0; i < text.length; i++) {
-    counts[classOf(toU8(text.charCodeAt(i)))] += 1
+    const k = classOf(toU8(text.charCodeAt(i)))
+    counts[k] += 1
   }
   let sum = 0
   for (const v of CLASS) {
-    sum += v
+    sum += toI32(v)
   }
   console.log(`${CLASS.length} ${counts[0]} ${counts[1]} ${counts[2]} ${counts[3]} ${sum}`)
 }

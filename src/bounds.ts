@@ -2910,6 +2910,10 @@ const judge = (
   passes: boolean
 ): void => {
   const ctx = walk.ctx
+  if (provesTableIndex(walk, state, receiver, index)) {
+    noteProof(walk, node)
+    return
+  }
   const holder = holderOf(walk, receiver)
   if (holder === null) {
     return
@@ -3259,6 +3263,38 @@ const provesByRange = (walk: BoundsWalk, state: State, holder: Local, index: Nod
   }
   const range = valueRange(walk, state, index, type)
   return range.lo >= toI64(0) && range.hi < I32_MAX && knownMinLength(state, holder, toI32(range.hi) + 1)
+}
+
+/**
+ * Whether `index` is inside the constant table `receiver` names. A table's
+ * length is fixed when it is folded and nothing can change it, so no fact is
+ * needed and none is forgotten: the index's declared range (a `u8` into a
+ * 256-entry table), a literal or folded constant, or the range the state
+ * gives an `i32` or `i64` index, below the length is the proof.
+ */
+const provesTableIndex = (walk: BoundsWalk, state: State, receiver: Node, index: Node): boolean => {
+  const e = unwrapBoundsParens(receiver)
+  if (e.kind !== NodeKind.Ident) {
+    return false
+  }
+  const table = walk.ctx.program.nodeConstants[e.id]
+  if (table === null || !table.table || !table.folded) {
+    return false
+  }
+  const declared = declaredValueRange(walk.ctx, index)
+  if (declared !== null) {
+    return declared.lo >= toI64(0) && declared.hi < table.intValue
+  }
+  const written = walk.ctx.program.nodeTypes[index.id]
+  if (written < 0 || writesSomething(index)) {
+    return false
+  }
+  const type = walk.ctx.table.baseOf(written)
+  if (type !== T_I32 && type !== T_I64) {
+    return false
+  }
+  const range = valueRange(walk, state, index, type)
+  return range.lo >= toI64(0) && range.hi < table.intValue
 }
 
 /** Whether `node` assigns, increments or decrements anything, anywhere inside it. */
