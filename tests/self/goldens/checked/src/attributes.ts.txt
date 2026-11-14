@@ -69,7 +69,8 @@ import compareStrings from "./strings" -> function @compareStrings
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import Node from "./nodes" -> struct Node
-import PATTERN_NAMES_AT from "./nodes" -> const PATTERN_NAMES_AT
+import bindsHiddenReceiver from "./nodes" -> function @bindsHiddenReceiver
+import isPatternName from "./nodes" -> function @isPatternName
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
 import arrowCallee from "./parallel" -> function @arrowCallee
@@ -700,7 +701,7 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via classifyElementHolder
   escaping: ref
-  calls: ParentTable.parentOf StructInfo.method argumentUse classifyArgumentUse classifyElementHolder classifyElementUse classifyMemberUse classifyPatternUse enclosingBlock isAssignmentOperator isStringPassthrough nish_panic_index nish_str_eq storesInlineElements unwrapParens use yieldsInteriorPointer
+  calls: ParentTable.parentOf StructInfo.method argumentUse bindsHiddenReceiver classifyArgumentUse classifyElementHolder classifyElementUse classifyMemberUse classifyPatternUse enclosingBlock isAssignmentOperator isStringPassthrough nish_panic_index nish_str_eq storesInlineElements unwrapParens use yieldsInteriorPointer
   pointer unit: size=16 writesThrough=false captured=false passedTo=yieldsInteriorPointer#0 classifyElementUse#0 classifyMemberUse#0 classifyArgumentUse#0 classifyElementHolder#0 classifyElementHolder#0 enclosingBlock#0 classifyPatternUse#0
   pointer table: size=136 writesThrough=false captured=false passedTo=yieldsInteriorPointer#1 classifyMemberUse#1 classifyArgumentUse#1 storesInlineElements#1 storesInlineElements#1 storesInlineElements#1 classifyElementHolder#1 classifyElementHolder#1 classifyPatternUse#1
   pointer ref: size=40 writesThrough=true captured=true
@@ -743,6 +744,7 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   callee +98:14 classifyElementHolder -> @classifyElementHolder
   callee +107:14 classifyElementHolder -> @classifyElementHolder
   callee +107:80 enclosingBlock -> @enclosingBlock
+  callee +112:7 bindsHiddenReceiver -> @bindsHiddenReceiver
   callee +114:14 classifyPatternUse -> @classifyPatternUse
   callee +117:14 use -> @use
   callee +120:14 use -> @use
@@ -752,17 +754,21 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
 function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse -> @classifyPatternUse
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via classifyUse
-  calls: classifyUse nish_panic_index use
+  calls: ParentTable.parentOf classifyUse isPatternName nish_panic_index nish_panic_overflow use
   pointer unit: size=16 writesThrough=false captured=false passedTo=classifyUse#0
   pointer table: size=136 writesThrough=false captured=false passedTo=classifyUse#1
-  pointer decl: size=40 writesThrough=false captured=false
+  pointer decl: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   stackSites=0 stackLocals=0
-  local +0:7 kind: i32 (let)
-  local +1:7 i: i32 (let)
-  local +3:11 found: ParamUse (const)
-  callee +3:19 classifyUse -> @classifyUse
-  callee +7:14 use -> @use
-  callee +11:10 use -> @use
+  local +0:9 list: Node | null (const)
+  callee +0:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +2:12 use -> @use
+  local +4:7 kind: i32 (let)
+  local +5:7 i: i32 (let)
+  callee +6:38 isPatternName -> @isPatternName
+  local +7:11 found: ParamUse (const)
+  callee +7:19 classifyUse -> @classifyUse
+  callee +11:14 use -> @use
+  callee +15:10 use -> @use
 function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse -> @classifyMemberUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: ParentTable.parentOf argumentUse arrayMethodName isArrayWriteMethod isAssignmentTarget isInlineField isStringMethodCall nish_panic_index nish_str_eq resultMethodName use

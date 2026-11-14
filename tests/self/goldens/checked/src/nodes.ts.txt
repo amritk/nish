@@ -35,7 +35,7 @@ const FLAG_SPREAD_ARGUMENT: i32 = 67108864 [exported]
 const FLAG_REFERENCE_ARROW: i32 = 67108864 [exported]
 const FLAG_SCRIPT: i32 = 134217728 [exported]
 const FLAG_OBJECT_SPREAD: i32 = 268435456 [exported]
-const PATTERN_NAMES_AT: i32 = 3 [exported]
+const FLAG_PATTERN_NAME: i32 = 536870912 [exported]
 struct Node (class) size=40 align=8 exported
   field kind: NodeKind index=0 offset=0
   field id: i32 index=1 offset=4
@@ -62,6 +62,19 @@ function patternReceiverName(pattern: Node): string -> @patternReceiverName [exp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   pointer pattern: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function patternOf(decl: Node): Node | null -> @patternOf [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function bindsHiddenReceiver(decl: Node): boolean -> @bindsHiddenReceiver [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function isPatternName(decl: Node): boolean -> @isPatternName [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function patternSlotName(slot: Node): Node -> @patternSlotName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40

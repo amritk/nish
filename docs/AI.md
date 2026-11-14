@@ -201,6 +201,7 @@ rejects. This table is the highest-value part of the page.
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
 | `[a, b] = [b, a]`, `const { x = 0 } = p`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring assignment is not supported` / `A default in a destructuring pattern is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
+| `const { a, b } = config` at module level | `Destructured constants are not supported` | one module `const` per name (a module constant binds one name, because the name is the symbol the emitter writes), or destructure inside a function |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
@@ -2284,8 +2285,9 @@ export const main = (): i32 => {
   `let [a, , c] = xs`, `for (const { x, y } of points)`. Each name is one
   field read, or one bounds-checked element read (past the end panics; it is
   never `undefined`). No defaults, rests, nested patterns, computed keys or
-  assignment patterns; no pattern over a `Map`, a `string`, a nullable value,
-  a parameter or a module constant.
+  assignment patterns; no pattern over a `Map`, a `string`, a nullable value
+  or a parameter. A module constant may not destructure either, because a
+  module constant binds one name, and that name is the symbol the emitter writes.
 - **Semicolons are optional**, where TypeScript would insert one: at a line
   break, before `}` and at the end of the file. It is TypeScript's rule, so a
   line starting with `(` or `[` continues the one before it, and `return`

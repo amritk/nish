@@ -78,18 +78,22 @@ and call `get` instead ([Maps and sets](maps-and-sets.md)).
 
 ## What is not supported
 
-Each of these is refused with a message that says how to write it instead:
+Each of these is refused with its own diagnostic, and most of them say how
+to write it instead:
 
-- **Assigning to a pattern**, `[a, b] = [b, a]`: declare fresh names with
+- **Assigning to a pattern**, `[a, b] = [b, a]` or `({ x } = p)`: declare fresh names with
   `const` or `let`, or assign each name.
 - **Defaults and rests**, `{ x = 0 }` and `[first, ...rest]`: every name is
   read, so read each element you need by name.
 - **Nested patterns**, `{ p: { x } }`: bind the inner value to a name and
   destructure that.
-- **Computed or quoted keys**, `{ ["x"]: a }`.
-- **A value that may be `null`**: narrow it first, as in `if (p !== null)`.
+- **Computed or quoted keys**, `{ ["x"]: a }`: name the field, `{ x: a }`.
+- **A value that may be absent**, a `T | null` or the `V | undefined` that
+  `Map.get` returns: narrow it first, as in `if (p !== null)`.
 - **A `Map` or a `string`**: read a `Map` with `get`, a `string` by index.
 - **Parameters and module constants**: destructure inside the function body.
+  A module constant binds one name, because that name is the symbol the
+  compiler writes for it.
 
 ```ts nish:err-body NL2773
 const [first, ...rest] = [1, 2, 3];

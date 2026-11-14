@@ -44,7 +44,7 @@
 
 import { isSortInstance } from "./arrays"
 import { Operands, splice, Walk } from "./emit-ts-edits"
-import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind, PATTERN_NAMES_AT } from "./nodes"
+import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind, isPatternName, patternOf } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 import { STORAGE_NAMESPACE } from "./emit-ts-storage"
@@ -640,34 +640,47 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
  * The `idx(t, 0), idx(t, 2)` an array pattern's reads need, for `t`: one
  * per index the bounds walk did not prove, in the pattern's order, so the
  * first one out of range panics as the native read of it does. Node would
- * bind `undefined` past the end instead. Empty for an object pattern, or
- * where every read is proven.
+ * bind `undefined` past the end instead. The reads are the declarators of
+ * `list` from `from` that `Parser.lowerPattern` wrote, up to the next
+ * pattern's head. Empty where every read is proven.
  */
-const patternChecks = (walk: Walk, decl: Node, t: string): string => {
+const patternChecks = (walk: Walk, list: Node, from: i32, t: string): string => {
   let checks = ""
-  for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
-    const read = decl.children[i].children[2]
+  let i = from
+  while (i < list.children.length && isPatternName(list.children[i]) && (i === from || patternOf(list.children[i]) === null)) {
+    const read = list.children[i].children[2]
     if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
       checks = `${checks}${walk.helperName("idx")}(${t}, ${read.children[1].text}), `
     }
+    i = i + 1
   }
   return checks
 }
 
-/** `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t, 2), t))(xs)`. */
+/**
+ * `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t,
+ * 2), t))(xs)`. A receiver read directly is a name or `this`, which no row
+ * rewrites, so it is spliced from the source.
+ */
 const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
-  // A `for...of` head's has no value of its own: `checkedPatternHead`.
-  if (
-    node.children[0].kind !== NodeKind.BindingPattern ||
-    node.children[0].text !== "[" ||
-    node.children[2].kind === NodeKind.Empty
-  ) {
+  const pattern = patternOf(node)
+  const list = walk.list
+  if (pattern === null || pattern.text !== "[" || list === null || list.children[walk.listAt] !== node) {
+    return null
+  }
+  const direct = isPatternName(node)
+  if (!direct && node.children[2].kind === NodeKind.Empty) {
     return null
   }
   const t = walk.temporary()
-  const checks = patternChecks(walk, node, t)
+  const checks = patternChecks(walk, list, direct ? walk.listAt : walk.listAt + 1, t)
   if (checks.length === 0) {
     return null
+  }
+  if (direct) {
+    const base = node.children[2].children[0]
+    const text = walk.source.text
+    return `${text.substring(node.start, base.start)}((${t}) => (${checks}${t}))(${walk.spanOf(base)})${text.substring(base.end, node.end)}`
   }
   operands.texts[2] = `((${t}) => (${checks}${t}))(${operands.at(2)})`
   operands.changed[2] = true
@@ -684,12 +697,17 @@ const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string 
   if (head.kind !== NodeKind.Var || head.children[0].children.length === 0) {
     return null
   }
-  const decl = head.children[0].children[0]
-  if (decl.children[0].kind !== NodeKind.BindingPattern || decl.children[0].text !== "[") {
+  const pattern = patternOf(head.children[0].children[0])
+  const body = node.children[node.children.length - 1]
+  if (pattern === null || pattern.text !== "[" || body.kind !== NodeKind.Block || body.children.length === 0) {
+    return null
+  }
+  const names = body.children[0]
+  if (names.kind !== NodeKind.Var || !isPatternName(names)) {
     return null
   }
   const t = walk.temporary()
-  const checks = patternChecks(walk, decl, t)
+  const checks = patternChecks(walk, names.children[0], 0, t)
   if (checks.length === 0) {
     return null
   }

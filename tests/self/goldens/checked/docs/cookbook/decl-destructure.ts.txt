@@ -15,14 +15,12 @@ function pick(p: Point): i32 -> @pick
   calls: nish_panic_overflow
   pointer p: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 pattern.143: Point (const)
-  local +0:11 x: i32 (const)
+  local +0:9 x: i32 (const)
   local +0:14 py: i32 (const)
 function third(xs: i32[]): i32 -> @third
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 pattern.223: i32[] (const)
-  local +0:10 a: i32 (const)
+  local +0:9 a: i32 (const)
   local +0:15 c: i32 (const)

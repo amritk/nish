@@ -59,6 +59,7 @@ import {
   FLAG_GENERATOR,
   FLAG_OBJECT_SPREAD,
   FLAG_OPTIONAL,
+  FLAG_PATTERN_NAME,
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_PROPERTY,
@@ -258,6 +259,52 @@ const isAssignment = (kind: i32): boolean =>
   kind === TOK_SHR_ASSIGN ||
   kind === TOK_USHR_ASSIGN ||
   kind === TOK_STAR_STAR_ASSIGN
+
+/**
+ * Whether a pattern's names may each read `receiver`, a name or `this`, where
+ * it is written (`Parser.lowerPattern`): every slot is a hole or binds a
+ * plain name, at least one binds one, and none is the receiver's, which would
+ * shadow it for the reads after it.
+ */
+const readsDirectly = (pattern: Node, receiver: string): boolean => {
+  let names = 0
+  for (const slot of pattern.children) {
+    if (isHole(slot)) {
+      continue
+    }
+    if (!isPlainSlot(slot) || patternSlotName(slot).text === receiver) {
+      return false
+    }
+    names++
+  }
+  return names > 0
+}
+
+/** Whether `slot` is an array pattern's hole, `[a, , c]`: it reads nothing. */
+const isHole = (slot: Node): boolean => slot.kind === NodeKind.Empty && slot.flags === 0
+
+/** Whether `list`, a `for...of` head's, holds names `Parser.lowerPattern` wrote. */
+const hasPatternNames = (list: Node): boolean => {
+  for (const decl of list.children) {
+    if ((decl.flags & FLAG_PATTERN_NAME) !== 0) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The names `Parser.lowerPattern` wrote into `list`, moved to `names`. */
+const movePatternNames = (list: Node, names: Node): void => {
+  const kept: Node[] = []
+  for (const decl of list.children) {
+    if ((decl.flags & FLAG_PATTERN_NAME) !== 0) {
+      names.children.push(decl)
+    } else {
+      kept.push(decl)
+    }
+  }
+  list.children = kept
+}
 
 /**
  * The words TypeScript reserves that the lexer reads as identifiers (the rest
@@ -2042,7 +2089,7 @@ export class Parser {
     // `const f = (): i32 => 1, g = 2`: the names after the first, a sixth
     // child only when written, for the checker to refuse (NL2274).
     if (this.eat(TOK_COMMA)) {
-      node.children.push(this.parseVariableDeclarations())
+      node.children.push(this.parseVariableDeclarations(false))
     }
     this.expectSemicolon()
     node.end = this.previousEnd
@@ -2240,34 +2287,52 @@ export class Parser {
   }
 
   /**
-   * A flat pattern's names as the declarations they mean: `const { x, y: py }
-   * = p` is the receiver, a hidden `const` the declarator itself declares
-   * (`patternReceiverName`), then `const x = <receiver>.x` and `const py =
-   * <receiver>.y`, appended to the declarator as its fourth child on, in
-   * order; `[a, , c]` reads `<receiver>[0]` and `<receiver>[2]`. Each is an
-   * ordinary declarator, so the checker, the analyses and the emitter read
-   * them as they read any other, after the initializer. A slot the checker
-   * refuses (a default, a rest, a nested pattern, a key that is not a name)
-   * gets none, and neither does WP49's `= await awaitAll(...)`, whose names
-   * are the calls' answers.
+   * A flat pattern's names as the declarations they mean, each an ordinary
+   * declarator of the list, so every pass reads them as it reads any other.
+   * `const { x, y: py } = p` is `const x = p.x, py = p.y`, the receiver read
+   * where it is named: the first carries the pattern as its fourth child
+   * (the pattern's head, `patternOf`) and spans the whole declarator, and
+   * `[a, , c] = xs` reads `xs[0]` and `xs[2]`. A receiver that is not a
+   * plain name or `this`, or one a name of the pattern shadows, is bound
+   * first to a hidden `const` (`patternReceiverName`), the head, so it is
+   * evaluated once; so is any pattern with an annotation, no plain name, or
+   * a slot the checker refuses (a default, a rest, a nested pattern, a key
+   * that is not a name), which reads nothing. WP49's `= await
+   * awaitAll(...)` stays whole: its names are the calls' answers.
    */
-  lowerPattern(declaration: Node): void {
+  lowerPattern(declaration: Node, list: Node): void {
     const pattern = declaration.children[0]
     if (awaitsInitializer(declaration)) {
+      list.children.push(declaration)
       return
     }
-    const receiver = patternReceiverName(pattern)
+    let base = declaration.children[2]
+    while (base.kind === NodeKind.Paren) {
+      base = base.children[0]
+    }
+    const direct =
+      declaration.children[1].kind === NodeKind.Empty &&
+      (base.kind === NodeKind.Ident || base.kind === NodeKind.This) &&
+      readsDirectly(pattern, base.text)
+    if (!direct) {
+      const hidden = this.node(NodeKind.Ident, pattern.start, pattern.end)
+      hidden.text = patternReceiverName(pattern)
+      declaration.children[0] = hidden
+      declaration.children.push(pattern)
+      list.children.push(declaration)
+      base = hidden
+    }
+    const first = list.children.length
     for (let i = 0; i < pattern.children.length; i++) {
       const slot = pattern.children[i]
-      const object = slot.kind === NodeKind.Property
       if (!isPlainSlot(slot)) {
         continue
       }
-      const name = patternSlotName(slot)
+      const object = slot.kind === NodeKind.Property
       const read = this.node(object ? NodeKind.Member : NodeKind.Index, slot.start, slot.end)
-      const base = this.node(NodeKind.Ident, slot.start, slot.end)
-      base.text = receiver
-      read.children.push(base)
+      const receiver = this.node(base.kind, direct ? base.start : slot.start, direct ? base.end : slot.end)
+      receiver.text = base.text
+      read.children.push(receiver)
       if (object) {
         read.text = slot.text
       } else {
@@ -2275,13 +2340,24 @@ export class Parser {
         index.text = `${i}`
         read.children.push(index)
       }
+      const name = patternSlotName(slot)
       const bound = this.node(NodeKind.Ident, name.start, name.end)
       bound.text = name.text
-      const named = this.node(NodeKind.VarDecl, slot.start, slot.end)
+      // The first name a direct pattern binds is its head; a hole reads nothing.
+      const head = direct && list.children.length === first
+      const named = this.node(
+        NodeKind.VarDecl,
+        head ? declaration.start : slot.start,
+        head ? declaration.end : slot.end
+      )
+      named.flags = FLAG_PATTERN_NAME
       named.children.push(bound)
       named.children.push(this.empty())
       named.children.push(read)
-      declaration.children.push(named)
+      if (head) {
+        named.children.push(pattern)
+      }
+      list.children.push(named)
     }
   }
 
@@ -3162,15 +3238,21 @@ export class Parser {
     // Otherwise a top-level `let`, which the checker refuses (NL2084), or
     // (NL2272) when it binds an arrow: the arrow is its initialiser.
     this.advance()
-    node.children.push(this.parseVariableDeclarations())
+    node.children.push(this.parseVariableDeclarations(false))
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
   }
 
-  /** The `a = 1, b = 2` of a `let`/`const`, without the keyword or the semicolon. */
-  parseVariableDeclarations(): Node {
+  /**
+   * The `a = 1, b = 2` of a `let`/`const`, without the keyword or the
+   * semicolon; with `lower`, a destructuring pattern as its names
+   * (`lowerPattern`). A module constant's is not lowered, for the checker
+   * to refuse whole (NL2191).
+   */
+  parseVariableDeclarations(lower: boolean): Node {
     const list = this.list()
+    let end = this.start
     while (true) {
       const start = this.start
       const declaration = this.node(NodeKind.VarDecl, start, this.end)
@@ -3178,15 +3260,19 @@ export class Parser {
       declaration.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty())
       declaration.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
       declaration.end = this.previousEnd
-      if (declaration.children[0].kind === NodeKind.BindingPattern) {
-        this.lowerPattern(declaration)
+      if (lower && declaration.children[0].kind === NodeKind.BindingPattern) {
+        this.lowerPattern(declaration, list)
+      } else {
+        list.children.push(declaration)
       }
-      list.children.push(declaration)
+      end = declaration.end
       if (!this.eat(TOK_COMMA)) {
         break
       }
     }
-    return this.closeList(list)
+    this.closeList(list)
+    list.end = end // past a pattern's last name, which lies inside its head
+    return list
   }
 
   // ---- Types -------------------------------------------------------------------------
@@ -3567,7 +3653,7 @@ export class Parser {
       }
     }
     this.advance()
-    node.children.push(this.parseVariableDeclarations())
+    node.children.push(this.parseVariableDeclarations(true))
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
@@ -3764,7 +3850,7 @@ export class Parser {
         declaration.flags = declaration.flags | FLAG_VAR
       }
       this.advance()
-      declaration.children.push(this.parseVariableDeclarations())
+      declaration.children.push(this.parseVariableDeclarations(true))
       declaration.end = this.previousEnd
       this.noIn = outerNoIn
       if (this.atForOfKeyword()) {
@@ -3795,7 +3881,12 @@ export class Parser {
     return this.at(TOK_IDENT) && (this.value === "of" || this.value === "in")
   }
 
-  /** The `of a) body` of a `for...of`, or `in a) body`, with the head already parsed. */
+  /**
+   * The `of a) body` of a `for...of`, or `in a) body`, with the head already
+   * parsed. A destructuring head binds the element to its hidden receiver,
+   * and its names (`lowerPattern`) move to a declaration of their own at the
+   * top of the body, read each pass, which wraps the body in a block.
+   */
   parseForOfRest(start: i32, head: Node, flags: i32): Node {
     const forOf = this.node(NodeKind.ForOf, start, this.end)
     forOf.flags = this.value === "in" ? flags | FLAG_FOR_IN : flags
@@ -3803,7 +3894,22 @@ export class Parser {
     forOf.children.push(head)
     forOf.children.push(this.parseExpression())
     this.expect(TOK_RPAREN)
-    forOf.children.push(this.parseStatement())
+    const body = this.parseStatement()
+    if (head.kind !== NodeKind.Var || !hasPatternNames(head.children[0])) {
+      forOf.children.push(body)
+    } else {
+      const names = this.list()
+      movePatternNames(head.children[0], names)
+      names.start = body.start
+      names.end = body.start
+      const declaration = this.node(NodeKind.Var, body.start, body.start)
+      declaration.flags = FLAG_PATTERN_NAME | (head.flags & FLAG_CONST)
+      declaration.children.push(names)
+      const block = this.node(NodeKind.Block, body.start, body.end)
+      block.children.push(declaration)
+      block.children.push(body)
+      forOf.children.push(block)
+    }
     forOf.end = this.previousEnd
     return forOf
   }

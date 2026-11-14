@@ -7467,7 +7467,8 @@ loop body that is a single statement rather than a block is accepted
   *(CLI only)*. A local may be a destructuring pattern, `const { x, y } = p`
   or `let [a, b] = xs` ([Destructuring declarations](#destructuring-declarations));
   a module constant may not: `Destructured constants are not supported`
-  (`reject_const_destructured`). `var` is forbidden
+  (`reject_const_destructured`), because a module constant binds one name,
+  and that name is the symbol the emitter writes. `var` is forbidden
   (`tests/cases/reject_var_keyword`, `reject_var_in_for`).
 - `const` freezes the binding, not the contents: `xs[0] = 1` and
   `xs.push(1)` on a `const xs` are fine, `xs = []` is not
@@ -7498,10 +7499,12 @@ for (const { x, y } of points) { ... }
   (`destructure_out_of_range`), where TypeScript would bind `undefined`: a
   name in Nish always holds a value of its type.
 - **A `for...of` head** destructures each element of an array
-  (`destructure_for_of`). Over a `Map`, a `Set` or an iterator it is NL2783
-  (`reject_destructure_for_of_set`); a `Map`'s entries are `[key, value]`
-  pairs of two types, a tuple, which this version does not have
-  (`reject_map_iter_entries`).
+  (`destructure_for_of`). Over a `Set` or an iterator it is NL2783
+  (`reject_destructure_for_of_set`). Over a `Map` it is NL2375, the
+  refusal any `for...of` over a `Map` gets, before the pattern is read: a
+  `Map`'s entries are `[key, value]` pairs of two types, a tuple, which this
+  version does not have (`reject_destructure_for_of_map`,
+  `reject_map_iter_entries`).
 - A name is a fresh local: `let` names may be assigned, `const` names may
   not. A struct's fields are read through its pointer, so
   `const { x } = p` on a stack-allocated `p` costs one load
@@ -7511,12 +7514,12 @@ Refused, each with its own diagnostic and test:
 
 | Pattern | Diagnostic | Test |
 | --- | --- | --- |
-| `[a, b] = xs`, `({ x } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment` |
+| `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object` |
 | `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default` |
 | `[a, ...rest]`, `{ x, ...others }` | NL2773 | `reject_destructure_rest` |
 | `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested` |
 | `{ ["x"]: a }`, `{ "x": a }` | NL2775 | `reject_destructure_key` |
-| a nullable value, `Point \| null` | NL2777, narrow it first | `reject_destructure_nullable` |
+| a value that may be absent, `Point \| null` or a `V \| undefined` from `Map.get` | NL2777, narrow it first | `reject_destructure_nullable`, `reject_destructure_undefined` |
 | a `Map` | NL2778, read each value with `get` | `reject_destructure_map` |
 | a `string` | NL2779, read each character by its index | `reject_destructure_string` |
 | an object pattern over a number | NL2780 | `reject_destructure_object_of_number` |

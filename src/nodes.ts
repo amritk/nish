@@ -460,6 +460,12 @@ export const FLAG_SCRIPT: i32 = 134217728
 // which the checker lowers to field copies (`checkObjectLiteral`) rather than
 // refusing as the array literal's spread.
 export const FLAG_OBJECT_SPREAD: i32 = 268435456
+// NodeKind.VarDecl: bit 29 marks a declarator `Parser.lowerPattern` wrote for
+// one name of a destructuring pattern, `x = p.x`, which the source spells
+// only inside the pattern; on a NodeKind.Var, the declaration it moved such
+// names into at the top of a `for...of` body. The TypeScript written back
+// out (`src/emit-ts-edits.ts`) spells neither.
+export const FLAG_PATTERN_NAME: i32 = 536870912
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -663,18 +669,34 @@ export const nodeName = (kind: NodeKind): string => {
 
 /**
  * The name of the hidden `const` a destructuring declarator binds its
- * receiver to (`Parser.lowerPattern`): one per pattern, by where it starts,
- * spelled with a `.` no program can write, so it shadows nothing and nothing
- * can name it.
+ * receiver to where its names cannot read the initializer itself
+ * (`Parser.lowerPattern`): one per pattern, by where it starts, spelled with a
+ * `.` no program can write, so it shadows nothing and nothing can name it.
  */
 export const patternReceiverName = (pattern: Node): string => `pattern.${pattern.start}`
 
 /**
- * Where a destructuring declarator's names start: after its pattern,
- * annotation and initializer, `Parser.lowerPattern` appends one declarator
- * per name it binds.
+ * The destructuring pattern a declarator stands for, or null: the fourth
+ * child of the first declarator `Parser.lowerPattern` wrote for it (the
+ * pattern's head), or the first child of one it left whole (a module
+ * constant, or WP49's `= await awaitAll(...)`).
  */
-export const PATTERN_NAMES_AT: i32 = 3
+export const patternOf = (decl: Node): Node | null => {
+  if (decl.children.length > 3) {
+    return decl.children[3]
+  }
+  return decl.children[0].kind === NodeKind.BindingPattern ? decl.children[0] : null
+}
+
+/**
+ * Whether `decl` binds a pattern's hidden receiver (`patternReceiverName`),
+ * which a debugger is not shown.
+ */
+export const bindsHiddenReceiver = (decl: Node): boolean =>
+  decl.children.length > 3 && (decl.flags & FLAG_PATTERN_NAME) === 0
+
+/** Whether `decl` is one of the name declarators `Parser.lowerPattern` wrote. */
+export const isPatternName = (decl: Node): boolean => (decl.flags & FLAG_PATTERN_NAME) !== 0
 
 /** What a pattern slot binds: an object entry's child, or an array slot itself. */
 export const patternSlotName = (slot: Node): Node =>

@@ -14583,7 +14583,9 @@ if (dealtHere("arrayChecks")) {
 
   if (!only || only.startsWith("destructur")) {
     const ll = path.join(buildDir, "destructure_out_of_range.ll")
-    if (fs.existsSync(ll)) {
+    if (!fs.existsSync(ll)) {
+      skip("destructure_out_of_range: no .ll was built for it")
+    } else {
       const exe = path.join(buildDir, "destructure_out_of_range")
       const cc = linkNative(exe, ll)
       const run = cc.status === 0 ? spawnSync(exe) : null
@@ -14596,17 +14598,66 @@ if (dealtHere("arrayChecks")) {
         run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
       )
     }
-    // A pattern is the reads it stands for: after `opt -O2` each
-    // `<form>_pattern` body is its `<form>_plain` twin's, byte for byte.
+    // A struct a pattern reads stays on the stack: `destructure_stack`'s
+    // `Point` is an `alloca`, and nothing in `sum` reaches the arena or heap.
+    const stack = path.join(buildDir, "destructure_stack.ll")
+    if (!fs.existsSync(stack)) {
+      skip("destructure_stack: no .ll was built for it")
+    } else {
+      const sum = /^define [^\n]*@sum\([^]*?^\}/m.exec(fs.readFileSync(stack, "utf8"))
+      const text = sum ? sum[0] : ""
+      check(
+        "destructure_stack: sum allocates its Point with alloca and calls no arena or heap allocator",
+        /alloca %struct\.Point,/.test(text) && !/call [^\n]*@(nish_arena_\w*|nish_alloc\w*|malloc|calloc|realloc)\(/.test(text),
+        text
+      )
+    }
+    // Loop-flow reads a pattern's names as it reads hand-written locals: the
+    // pattern loop is refused exactly where its twin is.
+    const flow = ["reject_destructure_loop_flow", "reject_destructure_loop_flow_plain"].map((c) =>
+      fs.readFileSync(path.join(casesDir, `${c}.err`), "utf8")
+    )
+    check(
+      "reject_destructure_loop_flow: the pattern loop and its hand-written twin are refused with the same diagnostic",
+      flow[0] === flow[1],
+      `${flow[0]}\n----\n${flow[1]}`
+    )
+    // A pattern is the reads it stands for: each `<form>_pattern` body is its
+    // `<form>_plain` twin's, unoptimised (local names aside) and after `opt -O2`.
     const zero = path.join(buildDir, "destructure_zero_cost.ll")
-    if (has("opt") && fs.existsSync(zero)) {
-      const o2 = spawnSync("opt", ["-O2", "-S", zero, "-o", "-"], { encoding: "utf8" })
-      const body = (name) => {
-        const m = new RegExp(`^define [^\\n]*@${name}\\([^]*?^\\}`, "m").exec(o2.stdout)
-        // Inlining mints alias scopes per function; their ids are not the body.
-        return m ? m[0].replace(`@${name}(`, "@F(").replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N") : null
+    const forms = ["object", "array", "for", "local", "fresh", "guard", "guard_loop", "call", "hole", "let", "rows"]
+    const bodyOf = (ir, name) => {
+      const m = new RegExp(`^define [^\\n]*@${name}\\([^]*?^\\}`, "m").exec(ir)
+      return m ? m[0].replace(`@${name}(`, "@F(") : null
+    }
+    if (!fs.existsSync(zero)) {
+      skip("destructure_zero_cost: no .ll was built for it")
+    } else {
+      const raw = fs.readFileSync(zero, "utf8")
+      // Unoptimised, only the names of locals and metadata ids may differ.
+      const plain = (name) => {
+        const b = bodyOf(raw, name)
+        return b ? b.replace(/%[\w.]+/g, "%_").replace(/![\w.]+/g, "!_") : null
       }
-      for (const form of ["object", "array", "for", "local"]) {
+      for (const form of forms) {
+        const pattern = plain(`${form}_pattern`)
+        check(
+          `destructure_zero_cost: unoptimised, ${form}_pattern compiles to the body of ${form}_plain`,
+          pattern !== null && pattern === plain(`${form}_plain`),
+          `${pattern}\n----\n${plain(`${form}_plain`)}`
+        )
+      }
+    }
+    if (!has("opt")) {
+      skip("destructure_zero_cost: no `opt` on this host for the -O2 comparison")
+    } else if (fs.existsSync(zero)) {
+      const o2 = spawnSync("opt", ["-O2", "-S", zero, "-o", "-"], { encoding: "utf8" })
+      // Inlining mints alias scopes per function; their ids are not the body.
+      const body = (name) => {
+        const b = bodyOf(o2.stdout, name)
+        return b ? b.replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N") : null
+      }
+      for (const form of forms) {
         const pattern = body(`${form}_pattern`)
         check(
           `destructure_zero_cost: after opt -O2, ${form}_pattern compiles to the body of ${form}_plain`,

@@ -15,8 +15,7 @@ function object_pattern(p: Point): i32 -> @object_pattern [exported]
   calls: nish_panic_overflow
   pointer p: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 pattern.428: Point (const)
-  local +0:11 x: i32 (const)
+  local +0:9 x: i32 (const)
   local +0:14 y: i32 (const)
 function object_plain(p: Point): i32 -> @object_plain [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -30,8 +29,7 @@ function array_pattern(xs: i32[]): i32 -> @array_pattern [exported]
   calls: nish_panic_index nish_panic_overflow
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 pattern.634: i32[] (const)
-  local +0:10 a: i32 (const)
+  local +0:9 a: i32 (const)
   local +0:13 b: i32 (const)
 function array_plain(xs: i32[]): i32 -> @array_plain [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -46,7 +44,7 @@ function for_pattern(points: Point[]): i32 -> @for_pattern [exported]
   pointer points: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 total: i32 (let)
-  local +1:14 pattern.868: Point (const)
+  local +1:14 pattern.883: Point (const)
   local +1:16 x: i32 (const)
   local +1:19 y: i32 (const)
 function for_plain(points: Point[]): i32 -> @for_plain [exported]
@@ -67,7 +65,7 @@ function local_pattern(n: i32): i32 -> @local_pattern [exported]
   callee +0:19 new Point -> @Point.constructor
   callee +0:36 new Point -> @Point.constructor
   local +1:7 total: i32 (let)
-  local +2:14 pattern.1424: Point (const)
+  local +2:14 pattern.1439: Point (const)
   local +2:16 x: i32 (const)
   local +2:19 y: i32 (const)
 function local_plain(n: i32): i32 -> @local_plain [exported]
@@ -82,11 +80,129 @@ function local_plain(n: i32): i32 -> @local_plain [exported]
   local +2:14 point: Point (const)
   local +3:11 x: i32 (const)
   local +4:11 y: i32 (const)
+function fresh_pattern(n: i32): i32 -> @fresh_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: nish_panic_overflow
+  stackSites=1 stackLocals=1
+  local +0:9 pattern.1901: i32[] (const)
+  local +0:10 a: i32 (const)
+  local +0:13 b: i32 (const)
+function fresh_plain(n: i32): i32 -> @fresh_plain [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: nish_panic_overflow
+  stackSites=1 stackLocals=1
+  local +0:9 xs: i32[] (const)
+  local +1:9 a: i32 (const)
+  local +2:9 b: i32 (const)
+function guard_pattern(xs: i32[]): i32 -> @guard_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 a: i32 (const)
+  local +0:15 b: i32 (const)
+function guard_plain(xs: i32[]): i32 -> @guard_plain [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 a: i32 (const)
+  local +1:11 b: i32 (const)
+function guard_loop_pattern(xs: i32[], n: i32): i32 -> @guard_loop_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 total: i32 (let)
+  local +1:12 i: i32 (let)
+  local +3:13 a: i32 (const)
+  local +3:17 b: i32 (const)
+function guard_loop_plain(xs: i32[], n: i32): i32 -> @guard_loop_plain [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 total: i32 (let)
+  local +1:12 i: i32 (let)
+  local +3:13 a: i32 (const)
+  local +4:13 b: i32 (const)
+function make(n: i32): Point -> @make
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  escaping: n
+  calls: Point.constructor nish_alloc_struct nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee +0:36 new Point -> @Point.constructor
+function call_pattern(n: i32): i32 -> @call_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: n
+  calls: make nish_arena_mark nish_arena_release nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 pattern.3120: Point (const)
+  callee +0:20 make -> @make
+  local +0:11 x: i32 (const)
+  local +0:14 y: i32 (const)
+function call_plain(n: i32): i32 -> @call_plain [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: n
+  calls: make nish_arena_mark nish_arena_release nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 p: Point (const)
+  callee +0:13 make -> @make
+  local +1:9 x: i32 (const)
+  local +2:9 y: i32 (const)
+function hole_pattern(xs: i32[]): i32 -> @hole_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 a: i32 (const)
+  local +0:15 c: i32 (const)
+function hole_plain(xs: i32[]): i32 -> @hole_plain [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 a: i32 (const)
+  local +1:9 c: i32 (const)
+function let_pattern(p: Point): i32 -> @let_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer p: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 x: i32 (let)
+  local +0:12 y: i32 (let)
+function let_plain(p: Point): i32 -> @let_plain [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer p: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 x: i32 (let)
+  local +1:7 y: i32 (let)
+function rows_pattern(rows: i32[][]): i32 -> @rows_pattern [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer rows: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 total: i32 (let)
+  local +1:14 pattern.3983: i32[] (const)
+  local +1:15 a: i32 (const)
+  local +1:18 b: i32 (const)
+function rows_plain(rows: i32[][]): i32 -> @rows_plain [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer rows: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 total: i32 (let)
+  local +1:14 row: i32[] (const)
+  local +2:11 a: i32 (const)
+  local +3:11 b: i32 (const)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Point.constructor array_pattern array_plain for_pattern for_plain local_pattern local_plain nish_alloc_struct nish_arena_mark nish_arena_release nish_print object_pattern object_plain
-  stackSites=3 stackLocals=3
+  calls: Point.constructor array_pattern array_plain call_pattern call_plain for_pattern for_plain fresh_pattern fresh_plain guard_loop_pattern guard_loop_plain guard_pattern guard_plain hole_pattern hole_plain let_pattern let_plain local_pattern local_plain nish_alloc_struct nish_arena_mark nish_arena_release nish_print object_pattern object_plain rows_pattern rows_plain
+  stackSites=5 stackLocals=5
   local +0:9 p: Point (const)
   callee +0:13 new Point -> @Point.constructor
   local +1:9 xs: i32[] (const)
@@ -101,3 +217,19 @@ function main(): void -> @nish_main [exported entry]
   callee +5:39 for_plain -> @for_plain
   callee +6:15 local_pattern -> @local_pattern
   callee +6:36 local_plain -> @local_plain
+  callee +7:15 fresh_pattern -> @fresh_pattern
+  callee +7:36 fresh_plain -> @fresh_plain
+  callee +8:15 guard_pattern -> @guard_pattern
+  callee +8:37 guard_plain -> @guard_plain
+  callee +9:15 guard_loop_pattern -> @guard_loop_pattern
+  callee +9:45 guard_loop_plain -> @guard_loop_plain
+  callee +10:15 call_pattern -> @call_pattern
+  callee +10:35 call_plain -> @call_plain
+  local +11:9 ys: i32[] (const)
+  callee +12:15 hole_pattern -> @hole_pattern
+  callee +12:36 hole_plain -> @hole_plain
+  callee +13:15 let_pattern -> @let_pattern
+  callee +13:34 let_plain -> @let_plain
+  local +14:9 rows: i32[][] (const)
+  callee +15:15 rows_pattern -> @rows_pattern
+  callee +15:38 rows_plain -> @rows_plain

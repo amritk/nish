@@ -98,7 +98,7 @@ import {
 } from "./emit-util"
 import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
-import { FLAG_CONST, FLAG_OBJECT_SPREAD, Node, NodeKind, PATTERN_NAMES_AT } from "./nodes"
+import { FLAG_CONST, FLAG_OBJECT_SPREAD, Node, NodeKind, bindsHiddenReceiver, isPatternName } from "./nodes"
 import { Options } from "./options"
 import {
   CaptureTarget,
@@ -1310,7 +1310,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     if (
       parent.kind === NodeKind.VarDecl &&
       parent.children[2] === node &&
-      parent.children[0].kind === NodeKind.BindingPattern
+      bindsHiddenReceiver(parent)
     ) {
       return classifyPatternUse(unit, table, parent)
     }
@@ -1331,16 +1331,20 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
 }
 
 /**
- * `const { x, y } = p`: the hidden receiver holds `p` only for the names the
- * parser declared after it (`decl.children[3..]`), each `recv.key` or
+ * `const { x, y }: P = p`: the hidden receiver holds `p` only for the names
+ * the parser declared after it in the same list, each `recv.key` or
  * `recv[i]`, so `p` is used as those reads use the receiver: read, written
  * through, or escaping if any of them is.
  */
 const classifyPatternUse = (unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse => {
+  const list = unit.parents.parentOf(decl)
+  if (list === null) {
+    return use(USE_ESCAPE)
+  }
   let kind = USE_NONE
-  let i = PATTERN_NAMES_AT
-  while (i < decl.children.length) {
-    const found = classifyUse(unit, table, decl.children[i].children[2].children[0])
+  let i = list.children.indexOf(decl) + 1
+  while (i < list.children.length && isPatternName(list.children[i])) {
+    const found = classifyUse(unit, table, list.children[i].children[2].children[0])
     if (found.kind === USE_WRITE || (found.kind === USE_READ && kind !== USE_WRITE)) {
       kind = found.kind
     } else if (found.kind !== USE_NONE) {

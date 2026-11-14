@@ -14,11 +14,10 @@ function sum(a: i32, b: i32): i32 -> @sum [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: Point.constructor nish_panic_overflow
-  stackSites=1 stackLocals=2
+  stackSites=1 stackLocals=1
   local +0:9 p: Point (const)
   callee +0:13 new Point -> @Point.constructor
-  local +1:9 pattern.284: Point (const)
-  local +1:11 x: i32 (const)
+  local +1:9 x: i32 (const)
   local +1:14 y: i32 (const)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true

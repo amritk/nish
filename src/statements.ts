@@ -49,7 +49,7 @@ import { ASYNC_RETURN_MESSAGE, refuseTypeForm, resolveType } from "./annotations
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { isChannelClass, isIteratorMethod } from "./parallel"
-import { FunctionSig, SWITCH_COVERED, SWITCH_OPEN } from "./program"
+import { FunctionSig, SWITCH_COVERED, SWITCH_OPEN, StructInfo } from "./program"
 import { recordGuardFusion } from "./fusion"
 import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
@@ -60,8 +60,8 @@ import {
   FLAG_ACCESSOR,
   FLAG_ASYNC,
   FLAG_AWAIT,
-  FLAG_CONST,
   FLAG_COMPUTED,
+  FLAG_CONST,
   FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_FOREIGN,
@@ -75,10 +75,10 @@ import {
   Node,
   NodeKind,
   awaitsInitializer,
+  isPatternName,
   isPlainSlot,
-  patternReceiverName,
+  patternOf,
   patternSlotName,
-  PATTERN_NAMES_AT,
 } from "./nodes"
 import { JSON_OPTIONS, jsonOptionsShapeMessage } from "./json-typed"
 import { caseValue } from "./constants"
@@ -351,16 +351,28 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
   }
 }
 
-/** Each `let`/`const` of a list, declared in `scope`. Shared with a `for` initializer. */
+/**
+ * Each `let`/`const` of a list, declared in `scope`. Shared with a `for`
+ * initializer. A destructuring pattern's names are declarators of the list
+ * (`Parser.lowerPattern`), after its head; one whose receiver the head
+ * refused is declared as `T_ERROR`, silently.
+ */
 const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0
+  let refused = false
   for (const decl of list.children[0].children) {
-    if (decl.children[0].kind !== NodeKind.BindingPattern) {
+    const pattern = patternOf(decl)
+    if (pattern === null && isPatternName(decl)) {
+      checkPatternName(ctx, decl, scope, mutable, refused)
+    } else if (pattern === null) {
       checkDeclarator(ctx, decl, scope, mutable, decl.children[0].text)
+    } else if (decl.children[0].kind !== NodeKind.BindingPattern) {
+      refused = checkPatternHead(ctx, decl, pattern, scope, mutable)
     } else if (isAwaitAllShape(decl)) {
       declareAwaitAll(ctx, decl, scope)
     } else {
-      checkPatternDeclarator(ctx, decl, scope, mutable)
+      // `= await` the sweep refused (NL2193), left whole by the parser.
+      declareSlots(ctx, pattern, scope, mutable, true)
     }
   }
 }
@@ -461,58 +473,60 @@ const checkDeclarator = (
 }
 
 /**
- * A destructuring declarator, `const { x, y: py } = p` or `let [a, , c] = xs`.
- * The initializer binds a hidden `const` (`patternReceiverName`), evaluated
- * once; each name is the declarator `Parser.lowerPattern` appended to read
- * one field or element of it, checked as any other with the list's `let` or
- * `const`. The sweep refused the shapes no type decides (`refusePattern`).
+ * The head of a destructuring declarator, `const { x, y: py } = p` or `let
+ * [a, , c] = xs`: its receiver checked as one a pattern may read, once, and
+ * the names the sweep refused (`refusePattern`) declared. Where the names
+ * read `p` itself the head is the first of them; otherwise it binds the
+ * hidden `const` they read, evaluated once. Answers whether the receiver
+ * was refused, so that the names after the head are declared silently.
  */
-const checkPatternDeclarator = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean): void => {
-  const pattern = decl.children[0]
+const checkPatternHead = (
+  ctx: CheckContext,
+  decl: Node,
+  pattern: Node,
+  scope: Scope,
+  mutable: boolean
+): boolean => {
+  if (isPatternName(decl)) {
+    const receiver = decl.children[2].children[0]
+    const fits = patternReceiverFits(ctx, pattern, checkExpression(ctx, receiver, scope, -1), receiver)
+    checkPatternName(ctx, decl, scope, mutable, !fits)
+    return !fits
+  }
+  let fits = false
   if (decl.children[2].kind === NodeKind.Empty) {
     ctx.error(decl, "A destructuring declaration must be initialized")
-    declarePatternNames(ctx, decl, scope, mutable, T_ERROR)
-    return
+    declareLocal(ctx, scope, decl, decl.children[0], decl.children[0].text, T_ERROR, false, null)
+  } else {
+    checkDeclarator(ctx, decl, scope, false, decl.children[0].text)
+    const local = ctx.program.nodeLocals[decl.id]
+    fits = patternReceiverFits(ctx, pattern, local === null ? T_ERROR : local.type, decl.children[2])
   }
-  checkDeclarator(ctx, decl, scope, false, patternReceiverName(pattern))
-  const local = ctx.program.nodeLocals[decl.id]
-  checkPatternNames(ctx, decl, scope, mutable, local === null ? T_ERROR : local.type, decl.children[2])
+  declareSlots(ctx, pattern, scope, mutable, false)
+  return !fits
 }
 
 /**
- * The names of a pattern whose receiver, `decl`'s hidden local or a
- * `for...of` element, is a `type`: each lowered name read and declared, once
- * the receiver is one a pattern may read — a class or interface value for
- * `{`, an array for `[` — and its key a field. A refused receiver or key
- * still declares its names, as `T_ERROR`, so later uses stay silent (#275).
+ * One name of a pattern, `x = <receiver>.x` or `a = <receiver>[0]`, checked
+ * as any declarator once its receiver is known to have the field: a
+ * `refused` receiver, or one of no type, declares it as `T_ERROR`, so later
+ * uses stay silent (#275).
  */
-const checkPatternNames = (
-  ctx: CheckContext,
-  decl: Node,
-  scope: Scope,
-  mutable: boolean,
-  type: i32,
-  at: Node
-): void => {
-  if (!patternReceiverFits(ctx, decl.children[0], type, at)) {
-    declarePatternNames(ctx, decl, scope, mutable, T_ERROR)
-    return
+const checkPatternName = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, refused: boolean): void => {
+  const read = decl.children[2]
+  const name = decl.children[0]
+  const type = refused ? T_ERROR : checkExpression(ctx, read.children[0], scope, -1)
+  const info: StructInfo | null = type === T_ERROR ? null : structOf(ctx, type)
+  const missing = info !== null && read.kind === NodeKind.Member && info.field(read.text) === null
+  if (missing && info !== null) {
+    const method = info.method(read.text) === null ? "" : `; \`${read.text}\` is a method, so call it instead`
+    ctx.error(read, `Cannot destructure field \`${read.text}\`: ${ctx.table.typeName(type)} has no such field${method}`)
   }
-  const info = structOf(ctx, type)
-  for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
-    const named = decl.children[i]
-    const read = named.children[2]
-    if (info !== null && read.kind === NodeKind.Member && info.field(read.text) === null) {
-      ctx.error(
-        named,
-        `Cannot destructure field \`${read.text}\`: ${ctx.table.typeName(type)} has no such field`
-      )
-      declareLocal(ctx, scope, named, named.children[0], named.children[0].text, T_ERROR, mutable, null)
-    } else {
-      checkDeclarator(ctx, named, scope, mutable, named.children[0].text)
-    }
+  if (type === T_ERROR || missing) {
+    declareLocal(ctx, scope, decl, name, name.text, T_ERROR, mutable, null)
+  } else {
+    checkDeclarator(ctx, decl, scope, mutable, name.text)
   }
-  declareRefusedSlots(ctx, decl, scope, mutable)
 }
 
 /**
@@ -544,29 +558,15 @@ const patternReceiverFits = (ctx: CheckContext, pattern: Node, type: i32, at: No
   return false
 }
 
-/** Every name a pattern binds directly, declared as a `type`. */
-const declarePatternNames = (
-  ctx: CheckContext,
-  decl: Node,
-  scope: Scope,
-  mutable: boolean,
-  type: i32
-): void => {
-  for (let i = PATTERN_NAMES_AT; i < decl.children.length; i++) {
-    const named = decl.children[i]
-    declareLocal(ctx, scope, named, named.children[0], named.children[0].text, type, mutable, null)
-  }
-  declareRefusedSlots(ctx, decl, scope, mutable)
-}
-
 /**
- * The plain names of the slots the sweep refused (a default or a rest), which
- * `Parser.lowerPattern` gave no declarator: each declared as `T_ERROR`.
+ * The plain names of a pattern's slots, each declared as `T_ERROR`: those of
+ * the slots the sweep refused (a default or a rest), which
+ * `Parser.lowerPattern` gave no declarator, or with `all` every one.
  */
-const declareRefusedSlots = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean): void => {
-  for (const slot of decl.children[0].children) {
+const declareSlots = (ctx: CheckContext, pattern: Node, scope: Scope, mutable: boolean, all: boolean): void => {
+  for (const slot of pattern.children) {
     const name = patternSlotName(slot)
-    if (name.kind === NodeKind.Ident && !isPlainSlot(slot)) {
+    if (name.kind === NodeKind.Ident && (all || !isPlainSlot(slot))) {
       declareLocal(ctx, scope, name, name, name.text, T_ERROR, mutable, null)
     }
   }
@@ -893,8 +893,7 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   const iterable = checkExpression(ctx, stmt.children[1], scope, -1)
   ctx.forOfWalk = null
   const outer = scope.child()
-  const pattern = decl.children[0].kind === NodeKind.BindingPattern
-  const name = pattern ? patternReceiverName(decl.children[0]) : decl.children[0].text
+  const pattern = patternOf(decl)
   let element = T_ERROR
   if (ctx.program.nodeCallees[stmt.id] === null && iterable !== T_ERROR) {
     if (ctx.table.isArray(iterable)) {
@@ -913,34 +912,30 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   // `for (let x of a)` binds a mutable element, `for (const x of a)` does not,
   // and an element of a `T[]` came from `T` (WP18 G6).
   const origin = elementOrigin(ctx, stmt.children[1], scope)
-  declareLocal(
-    ctx,
-    outer,
-    decl,
-    decl.children[0],
-    name,
-    element,
-    (stmt.children[0].flags & FLAG_CONST) === 0,
-    origin
-  )
+  // A pattern's names are read from the element each pass, by the
+  // declaration `Parser.parseForOfRest` put first in the body; only an
+  // array's elements are read that way, and a refused element is one of no
+  // type, so that its names are declared silently.
+  const binding = (stmt.children[0].flags & FLAG_CONST) === 0
+  if (pattern !== null && walked !== null) {
+    ctx.error(
+      pattern,
+      "A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body"
+    )
+    element = T_ERROR
+  } else if (pattern !== null && !patternReceiverFits(ctx, pattern, element, stmt.children[1])) {
+    element = T_ERROR
+  }
+  declareLocal(ctx, outer, decl, decl.children[0], decl.children[0].text, element, binding, origin)
+  if (pattern !== null) {
+    declareSlots(ctx, pattern, outer, binding, false)
+  }
   // WP33 R2: an element of a `Float64Array[]` is a `Float64Array` to
   // TypeScript, and so is a value of a `Map<K, Float64Array>` walked by
   // `values()`, which `mapReadSpelling` answers as an array of them.
   const local = ctx.program.nodeLocals[decl.id]
   if (local !== null) {
     local.typedArray = elementSpelling(typedArraySpelling(ctx, stmt.children[1], scope))
-  }
-  // A pattern's names are read from the element each pass, as a body's first
-  // declarations would be; only an array's elements are read that way.
-  const binding = (stmt.children[0].flags & FLAG_CONST) === 0
-  if (pattern && walked !== null) {
-    ctx.error(
-      decl.children[0],
-      "A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body"
-    )
-    declarePatternNames(ctx, decl, outer, binding, T_ERROR)
-  } else if (pattern) {
-    checkPatternNames(ctx, decl, outer, binding, element, stmt.children[1])
   }
   keySteadyVariables(ctx, list, [stmt.children[2]])
   flowHead(ctx, flow, scope, outer)
@@ -1212,8 +1207,8 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
 const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
   // WP49: `const [a, b] = await awaitAll(...)` is the checker's to decide.
   const awaitAll = owner.kind === NodeKind.Var && (owner.flags & FLAG_CONST) !== 0 && isAwaitAllShape(decl)
-  const pattern = decl.children[0]
-  if (pattern.kind === NodeKind.BindingPattern && !awaitAll) {
+  const pattern = patternOf(decl)
+  if (pattern !== null && !awaitAll) {
     if (owner.kind === NodeKind.ModuleConst) {
       ctx.error(decl, "Destructured constants are not supported")
     } else if (awaitsInitializer(decl)) {

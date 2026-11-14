@@ -112,7 +112,7 @@ const flowScanNode = (node: Node, top: boolean, scan: FlowScan): void => {
     kind === NodeKind.Try ||
     kind === NodeKind.With ||
     kind === NodeKind.Labeled ||
-    kind === NodeKind.BindingPattern
+    (kind === NodeKind.VarDecl && node.children[0].kind === NodeKind.BindingPattern)
   ) {
     scan.bail = true
     return
@@ -168,8 +168,14 @@ const flowScanNode = (node: Node, top: boolean, scan: FlowScan): void => {
       flowAddName(scan.disq, root)
     }
   }
+  // A destructuring head's pattern (`patternOf`) is source text: its names
+  // are the declarators after it, scanned as any other.
+  const scanned = kind === NodeKind.VarDecl && node.children.length > 3 ? 3 : node.children.length
   let i = 0
   for (const child of node.children) {
+    if (i >= scanned) {
+      break
+    }
     // A statement's own expression, and a `for`'s initializer and update, may
     // assign a tracked variable; an assignment anywhere else in an expression may not.
     flowScanNode(child, kind === NodeKind.ExprStmt || (kind === NodeKind.For && (i === 0 || i === 2)), scan)

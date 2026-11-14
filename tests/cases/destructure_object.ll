@@ -38,27 +38,23 @@ entry:
 
 define internal noundef i32 @area(%struct.Size* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
-  %pattern.533.addr = alloca %struct.Size*, align 8
   %w.addr = alloca i32, align 4
   %h.addr = alloca i32, align 4
-  store %struct.Size* %s, %struct.Size** %pattern.533.addr, align 8
-  %0 = load %struct.Size*, %struct.Size** %pattern.533.addr, align 8
-  %1 = getelementptr inbounds %struct.Size, %struct.Size* %0, i32 0, i32 0
-  %2 = load i32, i32* %1, align 4
-  store i32 %2, i32* %w.addr, align 4
-  %3 = load %struct.Size*, %struct.Size** %pattern.533.addr, align 8
-  %4 = getelementptr inbounds %struct.Size, %struct.Size* %3, i32 0, i32 1
-  %5 = load i32, i32* %4, align 4
-  store i32 %5, i32* %h.addr, align 4
-  %6 = load i32, i32* %w.addr, align 4
-  %7 = load i32, i32* %h.addr, align 4
-  %8 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %6, i32 %7)
-  %9 = extractvalue { i32, i1 } %8, 0
-  %10 = extractvalue { i32, i1 } %8, 1
-  br i1 %10, label %ovf.fail, label %ovf.ok
+  %0 = getelementptr inbounds %struct.Size, %struct.Size* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  store i32 %1, i32* %w.addr, align 4
+  %2 = getelementptr inbounds %struct.Size, %struct.Size* %s, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4
+  store i32 %3, i32* %h.addr, align 4
+  %4 = load i32, i32* %w.addr, align 4
+  %5 = load i32, i32* %h.addr, align 4
+  %6 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %4, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %9
+  ret i32 %7
 
 ovf.fail:
   call void @nish_panic_overflow(i32 2)
@@ -69,7 +65,6 @@ define void @nish_main() #1 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
-  %pattern.634.addr = alloca %struct.Point*, align 8
   %x.addr = alloca i32, align 4
   %py.addr = alloca i32, align 4
   %pattern.679.addr = alloca %struct.Box*, align 8
@@ -81,54 +76,52 @@ entry:
   call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4)
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %0 = load %struct.Point*, %struct.Point** %p.addr, align 8
-  store %struct.Point* %0, %struct.Point** %pattern.634.addr, align 8
-  %1 = load %struct.Point*, %struct.Point** %pattern.634.addr, align 8
-  %2 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 0
-  %3 = load i32, i32* %2, align 4, !tbaa !4
-  store i32 %3, i32* %x.addr, align 4
-  %4 = load %struct.Point*, %struct.Point** %pattern.634.addr, align 8
-  %5 = getelementptr inbounds %struct.Point, %struct.Point* %4, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4, !tbaa !5
-  store i32 %6, i32* %py.addr, align 4
-  %7 = load i32, i32* %x.addr, align 4
-  %8 = load i32, i32* %py.addr, align 4
-  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %8)
-  %10 = extractvalue { i32, i1 } %9, 0
-  %11 = extractvalue { i32, i1 } %9, 1
-  br i1 %11, label %ovf.fail, label %ovf.ok
+  %1 = getelementptr inbounds %struct.Point, %struct.Point* %0, i32 0, i32 0
+  %2 = load i32, i32* %1, align 4, !tbaa !4
+  store i32 %2, i32* %x.addr, align 4
+  %3 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %4 = getelementptr inbounds %struct.Point, %struct.Point* %3, i32 0, i32 1
+  %5 = load i32, i32* %4, align 4, !tbaa !5
+  store i32 %5, i32* %py.addr, align 4
+  %6 = load i32, i32* %x.addr, align 4
+  %7 = load i32, i32* %py.addr, align 4
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %12 = call i8* @nish_str_from_i32(i32 %10)
-  call void @nish_print(i8* %12)
+  %11 = call i8* @nish_str_from_i32(i32 %9)
+  call void @nish_print(i8* %11)
   call void @Box.constructor(%struct.Box* %Box.obj, i32 2, i32 5, i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*))
   store %struct.Box* %Box.obj, %struct.Box** %pattern.679.addr, align 8
-  %13 = load %struct.Box*, %struct.Box** %pattern.679.addr, align 8
-  %14 = getelementptr inbounds %struct.Box, %struct.Box* %13, i32 0, i32 2
-  %15 = load i8*, i8** %14, align 8
-  store i8* %15, i8** %label.addr, align 8
-  %16 = load %struct.Box*, %struct.Box** %pattern.679.addr, align 8
-  %17 = getelementptr inbounds %struct.Box, %struct.Box* %16, i32 0, i32 0
-  %18 = load i32, i32* %17, align 4
-  store i32 %18, i32* %w.addr, align 4
-  %19 = load i32, i32* %w.addr, align 4
-  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 1)
-  %21 = extractvalue { i32, i1 } %20, 0
-  %22 = extractvalue { i32, i1 } %20, 1
-  br i1 %22, label %ovf.fail, label %ovf.ok.1
+  %12 = load %struct.Box*, %struct.Box** %pattern.679.addr, align 8
+  %13 = getelementptr inbounds %struct.Box, %struct.Box* %12, i32 0, i32 2
+  %14 = load i8*, i8** %13, align 8
+  store i8* %14, i8** %label.addr, align 8
+  %15 = load %struct.Box*, %struct.Box** %pattern.679.addr, align 8
+  %16 = getelementptr inbounds %struct.Box, %struct.Box* %15, i32 0, i32 0
+  %17 = load i32, i32* %16, align 4
+  store i32 %17, i32* %w.addr, align 4
+  %18 = load i32, i32* %w.addr, align 4
+  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 1)
+  %20 = extractvalue { i32, i1 } %19, 0
+  %21 = extractvalue { i32, i1 } %19, 1
+  br i1 %21, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %21, i32* %w.addr, align 4
-  %23 = load i8*, i8** %label.addr, align 8
-  %24 = call i8* @nish_str_concat(i8* %23, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %25 = load i32, i32* %w.addr, align 4
-  %26 = call i8* @nish_str_from_i32(i32 %25)
-  %27 = call i8* @nish_str_concat(i8* %24, i8* %26)
-  call void @nish_print(i8* %27)
+  store i32 %20, i32* %w.addr, align 4
+  %22 = load i8*, i8** %label.addr, align 8
+  %23 = call i8* @nish_str_concat(i8* %22, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %24 = load i32, i32* %w.addr, align 4
+  %25 = call i8* @nish_str_from_i32(i32 %24)
+  %26 = call i8* @nish_str_concat(i8* %23, i8* %25)
+  call void @nish_print(i8* %26)
   call void @Box.constructor(%struct.Box* %Box.obj.1, i32 6, i32 7, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  %28 = bitcast %struct.Box* %Box.obj.1 to %struct.Size*
-  %29 = call i32 @area(%struct.Size* %28)
-  %30 = call i8* @nish_str_from_i32(i32 %29)
-  call void @nish_print(i8* %30)
+  %27 = bitcast %struct.Box* %Box.obj.1 to %struct.Size*
+  %28 = call i32 @area(%struct.Size* %27)
+  %29 = call i8* @nish_str_from_i32(i32 %28)
+  call void @nish_print(i8* %29)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 

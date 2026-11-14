@@ -49,7 +49,7 @@ import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
-import { Node, NodeKind } from "./nodes"
+import { Node, NodeKind, bindsHiddenReceiver } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
 import {
   ConstInfo,
@@ -1980,9 +1980,8 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const endBlock = fn.newBlock("forof.end")
   const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(elem))
   emitter.setSlot(local, slot)
-  const pattern = decl.children[0].kind === NodeKind.BindingPattern
   const debug = emitter.debug
-  if (debug !== null && !pattern) {
+  if (debug !== null && !bindsHiddenReceiver(decl)) {
     debug.declareLocal(fn, local, slot, decl) // `-g`
   }
   const idxSlot = fn.emitAlloca("forof.idx", "i64", emitter.opts.optimizeAttributes ? 8 : 0)
@@ -2001,9 +2000,6 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   // slot's address, so the body reads and writes the element in place.
   const value = loadElement(emitter, new ArrayBase(arr, null), elem, idx)
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`)
-  if (pattern) {
-    emitter.emitPatternNames(decl) // `for (const { x, y } of ps)`: its names, each pass
-  }
   emitter.loops.push(new LoopTarget(endBlock, incBlock))
   emitter.emitStatement(stmt.children[2])
   emitter.loops.pop()

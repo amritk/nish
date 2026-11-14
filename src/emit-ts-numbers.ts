@@ -194,7 +194,8 @@ const bigLiteral = (text: string): string => {
  * anything but literals, names, parentheses and arithmetic is left alone.
  */
 const typedConstant = (walk: Walk, node: Node, operands: Operands): string | null => {
-  if (node.children.length !== 3 || operands.changed[2]) {
+  // A destructuring name spells none of its children (`writtenChildren`).
+  if (node.children.length !== 3 || operands.changed.length !== 3 || operands.changed[2]) {
     return null
   }
   const annotation = node.children[1]

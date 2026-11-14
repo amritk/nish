@@ -14,7 +14,6 @@ entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
-  %pattern.230.addr = alloca %struct.nish_array*, align 8
   %a.addr = alloca i32, align 4
   %f.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
@@ -40,51 +39,39 @@ entry:
   %12 = call i8* @nish_str_from_i32(i32 %11)
   call void @nish_print(i8* %12)
   %13 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  store %struct.nish_array* %13, %struct.nish_array** %pattern.230.addr, align 8
-  %14 = load %struct.nish_array*, %struct.nish_array** %pattern.230.addr, align 8
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %17 = icmp ult i64 0, %16
-  br i1 %17, label %bounds.ok, label %bounds.fail
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2
+  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %16 = bitcast i8* %15 to i32*
+  %17 = getelementptr inbounds i32, i32* %16, i64 0
+  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %18, i32* %a.addr, align 4
+  %19 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 0
+  %21 = load i64, i64* %20, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %22 = icmp ult i64 5, %21
+  br i1 %22, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %16)
+  call void @nish_panic_index(i64 5, i64 %21)
   unreachable
 
 bounds.ok:
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
-  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %20 = bitcast i8* %19 to i32*
-  %21 = getelementptr inbounds i32, i32* %20, i64 0
-  %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  store i32 %22, i32* %a.addr, align 4
-  %23 = load %struct.nish_array*, %struct.nish_array** %pattern.230.addr, align 8
-  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
-  %25 = load i64, i64* %24, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %26 = icmp ult i64 5, %25
-  br i1 %26, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 5, i64 %25)
-  unreachable
-
-bounds.ok.1:
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
-  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %29 = bitcast i8* %28 to i32*
-  %30 = getelementptr inbounds i32, i32* %29, i64 5
-  %31 = load i32, i32* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  store i32 %31, i32* %f.addr, align 4
-  %32 = load i32, i32* %a.addr, align 4
-  %33 = load i32, i32* %f.addr, align 4
-  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %32, i32 %33)
-  %35 = extractvalue { i32, i1 } %34, 0
-  %36 = extractvalue { i32, i1 } %34, 1
-  br i1 %36, label %ovf.fail, label %ovf.ok
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 2
+  %24 = load i8*, i8** %23, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %25 = bitcast i8* %24 to i32*
+  %26 = getelementptr inbounds i32, i32* %25, i64 5
+  %27 = load i32, i32* %26, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %27, i32* %f.addr, align 4
+  %28 = load i32, i32* %a.addr, align 4
+  %29 = load i32, i32* %f.addr, align 4
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %28, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %37 = call i8* @nish_str_from_i32(i32 %35)
-  call void @nish_print(i8* %37)
+  %33 = call i8* @nish_str_from_i32(i32 %31)
+  call void @nish_print(i8* %33)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 

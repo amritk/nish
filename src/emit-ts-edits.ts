@@ -62,7 +62,7 @@ import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
 import { isBuiltinSpecifier, isExecutorCall, isNetExport, nishExport } from "./nish-modules"
-import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind, PATTERN_NAMES_AT } from "./nodes"
+import { FLAG_FOREIGN, FLAG_OPTIONAL, FLAG_TYPE_ONLY, Node, NodeKind, isPatternName } from "./nodes"
 import { CheckedProgram, Instantiation, STRUCT_INTERFACE } from "./program"
 import { sourceOrder } from "./script"
 import { StringBuilder } from "./strings"
@@ -265,6 +265,10 @@ export class Walk {
   hostHandle: boolean
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
   hoistHere: boolean
+  /** The list the node being walked is an element of, or `null`: where a pattern's head finds its names. */
+  list: Node | null
+  /** The node's index in `list`. */
+  listAt: i32
   /** What `canHoist` answers to the hook being asked about the current node. */
   hoistable: boolean
   /** An effect, a possible panic or a read of a field or an element ran in the current statement, and was not hoisted. */
@@ -338,6 +342,8 @@ export class Walk {
     this.stubWarnings = []
     this.failure = ""
     this.hoistHere = false
+    this.list = null
+    this.listAt = 0
     this.hoistable = false
     this.effects = false
     this.localsRead = false
@@ -740,14 +746,17 @@ const inOptionalChain = (node: Node): boolean => {
 
 /**
  * How many of `node`'s children its text spells. A destructuring
- * declarator's names after the third (`Parser.lowerPattern`) are the
- * compiler's own reads of the receiver, spanning the pattern's slots, and
- * are not written: the pattern is, as it was in the source.
+ * declaration's names (`Parser.lowerPattern`) are the compiler's own reads
+ * of the receiver, spanning the pattern's slots, and are not written: the
+ * pattern is, as it was in the source. A hidden receiver's head spells its
+ * first three, the pattern standing where its name does.
  */
-const writtenChildren = (node: Node): i32 =>
-  node.kind === NodeKind.VarDecl && node.children[0].kind === NodeKind.BindingPattern
-    ? PATTERN_NAMES_AT
-    : node.children.length
+const writtenChildren = (node: Node): i32 => {
+  if ((node.kind === NodeKind.VarDecl || node.kind === NodeKind.Var) && isPatternName(node)) {
+    return 0
+  }
+  return node.kind === NodeKind.VarDecl && node.children.length > 3 ? 3 : node.children.length
+}
 
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */
 const hasEffect = (node: Node): boolean => {
@@ -1048,10 +1057,14 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   const localsBefore = walk.localsRead
   const operands = new Operands(node, walk.source.text)
   const walked = writtenChildren(node)
+  const outerList = walk.list
+  const outerAt = walk.listAt
   let i = 0
   while (i < walked) {
     operands.texts.push("")
     operands.changed.push(false)
+    walk.list = node.kind === NodeKind.List ? node : null
+    walk.listAt = i
     if (node.kind === NodeKind.Block) {
       statementText(walk, node.children[i], operands, i)
     } else {
@@ -1069,6 +1082,8 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     }
     i = i + 1
   }
+  walk.list = outerList
+  walk.listAt = outerAt
   if (callee.length > 0) {
     operands.texts[0] = callee
     operands.changed[0] = true

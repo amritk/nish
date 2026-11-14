@@ -24,6 +24,7 @@ import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
 import FLAG_GENERATOR from "./nodes" -> const FLAG_GENERATOR
 import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
+import FLAG_PATTERN_NAME from "./nodes" -> const FLAG_PATTERN_NAME
 import FLAG_POSTFIX from "./nodes" -> const FLAG_POSTFIX
 import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
 import FLAG_PROPERTY from "./nodes" -> const FLAG_PROPERTY
@@ -349,6 +350,34 @@ function isPrefixWord(word: string): boolean -> @isPrefixWord
 function isAssignment(kind: i32): boolean -> @isAssignment
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function readsDirectly(pattern: Node, receiver: string): boolean -> @readsDirectly
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isHole isPlainSlot nish_panic_overflow nish_str_eq patternSlotName
+  pointer pattern: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 names: i32 (let)
+  local +1:14 slot: Node (const)
+  callee +2:9 isHole -> @isHole
+  callee +5:10 isPlainSlot -> @isPlainSlot
+  callee +5:31 patternSlotName -> @patternSlotName
+function isHole(slot: Node): boolean -> @isHole
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer slot: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function hasPatternNames(list: Node): boolean -> @hasPatternNames
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer list: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 decl: Node (const)
+function movePatternNames(list: Node, names: Node): void -> @movePatternNames
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_array_grow
+  pointer list: size=40 writesThrough=true captured=false
+  pointer names: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -3:9 kept: Node[] (const)
+  local -2:14 decl: Node (const)
 function isReservedWord(word: string): boolean -> @isReservedWord
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -1528,34 +1557,42 @@ function Parser.parseObjectPattern(this: Parser, pattern: Node): void -> @Parser
   callee +25:29 Parser.parsePatternElement -> @Parser.parsePatternElement
   callee +29:12 Parser.eat -> @Parser.eat
   callee +33:5 Parser.expect -> @Parser.expect
-function Parser.lowerPattern(this: Parser, declaration: Node): void -> @Parser.lowerPattern [exported method]
+function Parser.lowerPattern(this: Parser, declaration: Node, list: Node): void -> @Parser.lowerPattern [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: Parser.empty Parser.node awaitsInitializer isPlainSlot nish_array_grow nish_panic_index nish_str_from_i32 patternReceiverName patternSlotName
-  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.node#0 Parser.node#0 Parser.node#0 Parser.node#0 Parser.node#0 Parser.empty#0
-  pointer declaration: size=40 writesThrough=false captured=false passedTo=awaitsInitializer#0
+  escaping: declaration
+  calls: Parser.empty Parser.node awaitsInitializer isPlainSlot nish_array_grow nish_panic_index nish_str_from_i32 patternReceiverName patternSlotName readsDirectly
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.node#0 Parser.node#0 Parser.node#0 Parser.node#0 Parser.node#0 Parser.node#0 Parser.empty#0
+  pointer declaration: size=40 writesThrough=true captured=true passedTo=awaitsInitializer#0
+  pointer list: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -14:11 pattern: Node (const)
-  callee -13:9 awaitsInitializer -> @awaitsInitializer
-  local -10:11 receiver: string (const)
-  callee -10:22 patternReceiverName -> @patternReceiverName
-  local -9:14 i: i32 (let)
-  local -8:13 slot: Node (const)
-  local -7:13 object: boolean (const)
-  callee -6:12 isPlainSlot -> @isPlainSlot
-  local -3:13 name: Node (const)
-  callee -3:20 patternSlotName -> @patternSlotName
-  local -2:13 read: Node (const)
-  callee -2:20 Parser.node -> @Parser.node
-  local -1:13 base: Node (const)
-  callee -1:20 Parser.node -> @Parser.node
-  local +5:15 index: Node (const)
-  callee +5:23 Parser.node -> @Parser.node
-  local +9:13 bound: Node (const)
-  callee +9:21 Parser.node -> @Parser.node
-  local +11:13 named: Node (const)
-  callee +11:21 Parser.node -> @Parser.node
-  callee +13:27 Parser.empty -> @Parser.empty
+  local -2:11 pattern: Node (const)
+  callee -1:9 awaitsInitializer -> @awaitsInitializer
+  local +3:9 base: Node (let)
+  local +7:11 direct: boolean (const)
+  callee +10:7 readsDirectly -> @readsDirectly
+  local +12:13 hidden: Node (const)
+  callee +12:22 Parser.node -> @Parser.node
+  callee +13:21 patternReceiverName -> @patternReceiverName
+  local +19:11 first: i32 (const)
+  local +20:14 i: i32 (let)
+  local +21:13 slot: Node (const)
+  callee +22:12 isPlainSlot -> @isPlainSlot
+  local +25:13 object: boolean (const)
+  local +26:13 read: Node (const)
+  callee +26:20 Parser.node -> @Parser.node
+  local +27:13 receiver: Node (const)
+  callee +27:24 Parser.node -> @Parser.node
+  local +33:15 index: Node (const)
+  callee +33:23 Parser.node -> @Parser.node
+  local +37:13 name: Node (const)
+  callee +37:20 patternSlotName -> @patternSlotName
+  local +38:13 bound: Node (const)
+  callee +38:21 Parser.node -> @Parser.node
+  local +41:13 head: boolean (const)
+  local +42:13 named: Node (const)
+  callee +42:21 Parser.node -> @Parser.node
+  callee +49:27 Parser.empty -> @Parser.empty
 function Parser.parsePatternElement(this: Parser): Node -> @Parser.parsePatternElement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:7
@@ -2122,14 +2159,15 @@ function Parser.parseModuleConst(this: Parser, start: i32): Node -> @Parser.pars
   callee +6:5 Parser.advance -> @Parser.advance
   callee +7:24 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
   callee +8:5 Parser.expectSemicolon -> @Parser.expectSemicolon
-function Parser.parseVariableDeclarations(this: Parser): Node -> @Parser.parseVariableDeclarations [exported method]
+function Parser.parseVariableDeclarations(this: Parser, lower: boolean): Node -> @Parser.parseVariableDeclarations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:7
   calls: Parser.at Parser.closeList Parser.eat Parser.empty Parser.list Parser.lowerPattern Parser.node Parser.parseBindingName Parser.parseExpression Parser.parseTypeAnnotation nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.list#0 Parser.node#0 Parser.parseBindingName#0 Parser.at#0 Parser.parseTypeAnnotation#0 Parser.empty#0 Parser.eat#0 Parser.parseExpression#0 Parser.empty#0 Parser.lowerPattern#0 Parser.eat#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  local -4:11 list: Node (const)
-  callee -4:18 Parser.list -> @Parser.list
+  local -5:11 list: Node (const)
+  callee -5:18 Parser.list -> @Parser.list
+  local -4:9 end: i32 (let)
   local -2:13 start: i32 (const)
   local -1:13 declaration: Node (const)
   callee -1:27 Parser.node -> @Parser.node
@@ -2141,8 +2179,8 @@ function Parser.parseVariableDeclarations(this: Parser): Node -> @Parser.parseVa
   callee +2:56 Parser.parseExpression -> @Parser.parseExpression
   callee +2:81 Parser.empty -> @Parser.empty
   callee +5:9 Parser.lowerPattern -> @Parser.lowerPattern
-  callee +8:12 Parser.eat -> @Parser.eat
-  callee +12:12 Parser.closeList -> @Parser.closeList
+  callee +10:12 Parser.eat -> @Parser.eat
+  callee +14:5 Parser.closeList -> @Parser.closeList
 function Parser.parseType(this: Parser): Node -> @Parser.parseType [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
@@ -2564,8 +2602,8 @@ function Parser.parseForOfRest(this: Parser, start: i32, head: Node, flags: i32)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
   escaping: flags head start
-  calls: Parser.advance Parser.expect Parser.node Parser.parseExpression Parser.parseStatement nish_array_grow nish_str_eq
-  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.expect#0 Parser.parseStatement#0
+  calls: Parser.advance Parser.expect Parser.list Parser.node Parser.parseExpression Parser.parseStatement hasPatternNames movePatternNames nish_array_grow nish_panic_index nish_str_eq
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.expect#0 Parser.parseStatement#0 Parser.list#0 Parser.node#0 Parser.node#0
   pointer head: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -1:11 forOf: Node (const)
@@ -2573,7 +2611,16 @@ function Parser.parseForOfRest(this: Parser, start: i32, head: Node, flags: i32)
   callee +1:5 Parser.advance -> @Parser.advance
   callee +3:25 Parser.parseExpression -> @Parser.parseExpression
   callee +4:5 Parser.expect -> @Parser.expect
-  callee +5:25 Parser.parseStatement -> @Parser.parseStatement
+  local +5:11 body: Node (const)
+  callee +5:18 Parser.parseStatement -> @Parser.parseStatement
+  callee +6:40 hasPatternNames -> @hasPatternNames
+  local +9:13 names: Node (const)
+  callee +9:21 Parser.list -> @Parser.list
+  callee +10:7 movePatternNames -> @movePatternNames
+  local +13:13 declaration: Node (const)
+  callee +13:27 Parser.node -> @Parser.node
+  local +16:13 block: Node (const)
+  callee +16:21 Parser.node -> @Parser.node
 function Parser.parseForRest(this: Parser, start: i32, initializer: Node, flags: i32): Node -> @Parser.parseForRest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5

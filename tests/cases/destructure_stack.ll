@@ -21,30 +21,27 @@ define noundef i32 @sum(i32 noundef %a, i32 noundef %b) #1 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
-  %pattern.284.addr = alloca %struct.Point*, align 8
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
   call void @Point.constructor(%struct.Point* %Point.obj, i32 %a, i32 %b)
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %0 = load %struct.Point*, %struct.Point** %p.addr, align 8
-  store %struct.Point* %0, %struct.Point** %pattern.284.addr, align 8
-  %1 = load %struct.Point*, %struct.Point** %pattern.284.addr, align 8
-  %2 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 0
-  %3 = load i32, i32* %2, align 4, !tbaa !4
-  store i32 %3, i32* %x.addr, align 4
-  %4 = load %struct.Point*, %struct.Point** %pattern.284.addr, align 8
-  %5 = getelementptr inbounds %struct.Point, %struct.Point* %4, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4, !tbaa !5
-  store i32 %6, i32* %y.addr, align 4
-  %7 = load i32, i32* %x.addr, align 4
-  %8 = load i32, i32* %y.addr, align 4
-  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %8)
-  %10 = extractvalue { i32, i1 } %9, 0
-  %11 = extractvalue { i32, i1 } %9, 1
-  br i1 %11, label %ovf.fail, label %ovf.ok
+  %1 = getelementptr inbounds %struct.Point, %struct.Point* %0, i32 0, i32 0
+  %2 = load i32, i32* %1, align 4, !tbaa !4
+  store i32 %2, i32* %x.addr, align 4
+  %3 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %4 = getelementptr inbounds %struct.Point, %struct.Point* %3, i32 0, i32 1
+  %5 = load i32, i32* %4, align 4, !tbaa !5
+  store i32 %5, i32* %y.addr, align 4
+  %6 = load i32, i32* %x.addr, align 4
+  %7 = load i32, i32* %y.addr, align 4
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %10
+  ret i32 %9
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
