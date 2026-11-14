@@ -41,8 +41,9 @@ const pick = (n: i32): i32 => {
   return r.unwrapOr(-1);
 };
 
-// The only way the growing loop below reaches `relabel`: a number result, so
-// `outer`'s own scope releases what `relabel` keeps on each call.
+// The only way the growing loop below reaches `relabel`. It is quiet for two
+// reasons: `relabel` is not a direct callee of that loop, and `outer` answers
+// a number, so its own scope releases what `relabel` keeps on each call.
 const outer = (n: i32): i32 => relabel(n) + 1;
 
 // Keeps an array of its own on every call, but no loop calls it directly:

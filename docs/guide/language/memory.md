@@ -137,8 +137,12 @@ The warning (NL9019) names the function and the line it keeps. Give each
 value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
 block with `using a = arena()` around the work. A loop whose passes are
 released already, because nothing a pass makes outlives it, takes back what
-the call kept, so that one does not warn. The warning counts passes, not how
-many there are, so a short fixed loop warns like an unbounded one.
+the call kept, so that one does not warn. So does a loop inside a
+`using a = arena()` block, or inside an outer loop whose passes are released:
+the memory goes back when that block or pass ends, so a block around a loop
+that never ends quiets the warning without stopping the growth. A constructor
+called with `new` is never reported. The warning counts passes, not how many
+there are, so a short fixed loop warns like an unbounded one.
 
 NL9019 judges only the functions a loop calls directly, each on what it
 allocates itself. When the loop calls a function that returns memory, and

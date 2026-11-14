@@ -29,7 +29,9 @@ const guarded = (s: State): i32 => {
   return xs.length;
 };
 
-// A negated guard returns until the field is set, and runs after.
+// A negated guard returns until the field is set, and runs after. Nothing
+// sets `ready` first, so at run time it always returns 0: the case pins the
+// static shape only.
 const whenReady = (s: State): i32 => {
   if (!s.ready) {
     return 0;
@@ -139,7 +141,8 @@ const gated = (s: State): i32 => {
 };
 
 class Holder {
-  cur: State; next: State;
+  cur: State;
+  next: State;
   constructor() { this.cur = new State(); this.next = new State(); }
 
   renew(): void {

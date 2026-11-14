@@ -14773,9 +14773,13 @@ by the caller.
     `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
     when the function returns a value that is not a number, a boolean, an enum
     or nothing, because then its caller owns the memory; when it manages the
-    arena itself, feeds tasks, or fills a parameter; or when every loop that
-    calls it releases what it kept — a pass with a scope of its own, or a
-    call inside a `using a = arena()` block. Only a loop's direct callees are
+    arena itself, feeds tasks, or fills a parameter; when it is a
+    constructor reached by `new`; or when every loop that calls it releases
+    what it kept — a pass with a scope of its own, or a call inside a
+    `using a = arena()` block. A loop nested in such a block, or in a pass of
+    an outer loop that has a scope of its own, counts as released, because
+    the memory goes back when that block or pass ends: a block around a loop
+    that never ends silences the warning without bounding the growth. Only a loop's direct callees are
     judged, each on its own allocations: memory kept deeper in the chain,
     behind a direct callee that answers memory, is not this warning's, and
     [`--explain-memory`](#explaining-kept-memory) lists it

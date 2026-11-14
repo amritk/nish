@@ -5661,13 +5661,13 @@ if (dealtHere("performance")) {
     "prepAlias",
     "warmOnce",
   ]
-  const directFirst = [27, 39, 50, 60, 72, 83, 94, 108, 119, 137, 162, 173, 184, 196, 212]
+  const directFirst = [27, 41, 52, 62, 74, 85, 96, 110, 121, 139, 165, 176, 187, 199, 215]
   check(
     "performance: NL9019 reports every direct callee of an unscoped pass that keeps an allocation, guarded or not",
     direct.status === 0 &&
       directLines.length === 15 &&
       positions(directLines) ===
-        "21:1,33:1,44:1,55:1,66:1,77:1,88:1,102:1,117:1,128:1,156:1,167:1,178:1,190:1,206:1" &&
+        "21:1,35:1,46:1,57:1,68:1,79:1,90:1,104:1,119:1,130:1,159:1,170:1,181:1,193:1,209:1" &&
       directLines.every(
         (l, i) =>
           l.includes(`\`${directNames[i]}\` keeps an allocation on every call`) &&
