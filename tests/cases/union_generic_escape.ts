@@ -2,10 +2,18 @@
 // payload escapes the helper that built it: the boxes and the variants they
 // hold live past the iteration that made them, so escape analysis has to see
 // the variant flow through the `T` field and the `Ok` payload (the `.arena`
-// golden pins where each allocation lands). Then a write through a narrowed
-// `Circle` is read back through the union: the two accesses use different
-// TBAA tags, so the output pins that the read is not reordered above the
-// write at -O2.
+// golden pins where each allocation lands).
+//
+// `probe` writes `r` through `b.value` narrowed to `Circle`, re-reads the
+// value through the `Box<Shape>` field and switches on it through the union
+// view; the output pins the arm taken and the value written. No Nish access
+// path puts two non-aliasing TBAA tags on the same bytes: a variant's fields
+// are reached only through that variant's own tag (`r` is stored and loaded
+// under `Circle`'s, here and in `area`), the instance field only through its
+// class's tag, and the one shared word, the kind at offset 0, is stored under
+// the variant's tag by its constructor and loaded by the union view with no
+// tag, which aliases everything. At -O2 `probe` is inlined and its loads are
+// forwarded from the stores, so this pins behaviour, not a reordering.
 enum Kind {
   Circle,
   Square,
@@ -52,9 +60,18 @@ const build = (n: i32): Result<Shape, string> => {
   return n % 2 === 0 ? Ok(new Circle(n)) : Ok(new Square(n));
 };
 
-const grow = (s: Shape): void => {
-  if (s.kind === Kind.Circle) {
-    s.r = s.r + 10;
+const probe = (n: i32): i32 => {
+  const b = new Box<Shape>(n % 2 === 0 ? new Circle(n) : new Square(n));
+  const v = b.value;
+  if (v.kind === Kind.Circle) {
+    v.r = v.r + 10;
+  }
+  const again = b.value;
+  switch (again.kind) {
+    case Kind.Circle:
+      return again.r;
+    case Kind.Square:
+      return -again.side;
   }
 };
 
@@ -76,9 +93,7 @@ export const main = (): void => {
   }
   console.log(`boxes ${boxes.length} skipped ${skipped} total ${total}`);
 
-  const held = boxes[1].value;
-  const before = area(held);
-  grow(held);
-  const after = area(boxes[1].value);
-  console.log(`before ${before} after ${after}`);
+  for (let i = 1; i <= 4; i++) {
+    console.log(`probe ${i} ${probe(i)}`);
+  }
 };
