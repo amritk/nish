@@ -1152,6 +1152,8 @@ const pathMtu = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
+/** The changelog words of the stage that adds atomic arrays to nish/threads. */
+const ATOMIC_ARRAYS = "AtomicI32Array and AtomicI64Array, n atomics in one buffer"
 /** The changelog words of the stage that gives HmacSha256 and Sha256 digestInto (#1542). */
 const HMAC_DIGEST_INTO = "HmacSha256.digest allocates only the tag, and digestInto allocates nothing"
 /** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
@@ -6519,6 +6521,30 @@ const DECLARED = [
     changelog: UNION_GENERICS,
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
+  ...["examples/histogram-atomic.ts", "docs/cookbook/thread-atomic-array.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: ATOMIC_ARRAYS,
+    why: "the program uses `AtomicI32Array`, new in this release, which the 0.39.0 seed's nish/threads does not export",
+  })),
+  ...[
+    "examples/histogram.ts",
+    "examples/tasks.ts",
+    "docs/cookbook/par-alloc.ts",
+    "docs/cookbook/par-capture.ts",
+    "docs/cookbook/par-map.ts",
+    "docs/cookbook/thread-atomic.ts",
+    "docs/cookbook/thread-channel.ts",
+    "docs/cookbook/thread-cross.ts",
+    "docs/cookbook/thread-mutex.ts",
+  ].flatMap((program) =>
+    ["threads.ll", `${program.split("/").pop().replace(/\.ts$/, "")}.h`].map((file) => ({
+      program,
+      file,
+      changelog: ATOMIC_ARRAYS,
+      why: "std/threads.ts declares the classes AtomicI32Array and AtomicI64Array, so the threads module and the interop header of every program importing nish/threads carry their struct types and methods; the program's own main module is unchanged",
+    }))
+  ),
 ]
 
 /**
