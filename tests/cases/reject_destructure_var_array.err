@@ -1,0 +1,2 @@
+reject_destructure_var_array.ts:5:3
+`var` is forbidden; use `let` or `const`

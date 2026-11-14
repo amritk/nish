@@ -2292,8 +2292,9 @@ export const main = (): i32 => {
   `let [a, , c] = xs`, `for (const { x, y } of points)`. Each name is one
   field read, or one bounds-checked element read (past the end panics; it is
   never `undefined`). No defaults, rests, nested patterns, computed keys or
-  assignment patterns; no pattern over a `Map`, a `string`, a nullable value
-  or a parameter. A module constant may not destructure either, because a
+  assignment patterns; no pattern over a `Map`, a `string` or a nullable
+  value, and no pattern as a parameter (`const { w, h } = s` over a
+  parameter `s` is fine). A module constant may not destructure either, because a
   module constant is a compile-time value folded into each use, and a
   pattern's names are reads of a receiver at run time.
 - **Semicolons are optional**, where TypeScript would insert one: at a line

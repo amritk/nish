@@ -973,9 +973,18 @@ export class Parser {
     return node
   }
 
-  /** `var` followed by a name: the one place the word opens a declaration. */
+  /**
+   * `var` followed by a name or a pattern: the one place the word opens a
+   * declaration. TypeScript reads `var [a] = xs` and `var { x } = p` as
+   * declarations, so they are, and the checker refuses them as it refuses
+   * `var a = 1` rather than reporting an unknown `var`.
+   */
   varAhead(): boolean {
-    return this.at(TOK_IDENT) && this.value === "var" && this.peek() === TOK_IDENT && this.aheadOnSameLine()
+    if (!this.at(TOK_IDENT) || this.value !== "var") {
+      return false
+    }
+    const next = this.peek()
+    return (next === TOK_IDENT || next === TOK_LBRACKET || next === TOK_LBRACE) && this.aheadOnSameLine()
   }
 
   /**

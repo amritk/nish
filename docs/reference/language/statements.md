@@ -103,6 +103,8 @@ Refused, each with its own diagnostic and test:
 | `let { x }: Point;` (no initializer) | NL2784 | `reject_destructure_uninitialized` |
 | a parameter, `({ x }: Point) => x` | `Destructured parameters are not supported` | `reject_param_destructured` |
 | a module constant | `Destructured constants are not supported` | `reject_const_destructured` |
+| `var [a] = xs`, `var { x } = p`, `for (var [a] of rows)` | NL1036 `` `var` is forbidden; use `let` or `const` ``, as for `var a` | `reject_destructure_var_array`, `reject_destructure_var_object`, `reject_destructure_var_for_of` |
+| `using [a] = xs`, `using { s } = scope()` | none of its own: as in TypeScript, `using` binds only a plain name, so `using [a]` reads a variable named `using` and `using {` is a syntax error | `reject_destructure_using_array`, `reject_destructure_using_object` |
 
 A pattern over `await` is refused with ``A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name``
 (`nl2193_destructuring_local`), but for the answers of
