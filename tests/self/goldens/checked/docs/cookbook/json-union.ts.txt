@@ -2559,31 +2559,26 @@ function JsonTokenizer.numberWalk(this: JsonTokenizer): f64 -> @nish.JsonTokeniz
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokEiselLemire nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
   pointer this: size=112 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
   stackSites=0 stackLocals=0
-  local +0:11 src: u8[] (const)
-  local +1:11 start: i32 (const)
-  local +2:11 end: i32 (const)
-  local +3:11 negative: boolean (const)
-  callee +3:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local +7:11 ten: u64 (const)
-  local +8:9 mantissa: u64 (let)
-  local +9:9 digits: i32 (let)
-  local +10:9 scale: i32 (let)
-  local +11:9 afterDot: boolean (let)
+  callee +0:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local +2:11 src: u8[] (const)
+  local +3:11 start: i32 (const)
+  local +4:11 end: i32 (const)
+  local +5:11 negative: boolean (const)
+  callee +5:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local +9:11 ten: u64 (const)
+  local +10:9 mantissa: u64 (let)
+  local +11:9 digits: i32 (let)
   local +12:9 i: i32 (let)
   callee +14:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
   local +19:13 b: i32 (const)
-  callee +22:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee +33:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local +43:13 sign: i32 (const)
-  callee +43:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local +44:13 minus: boolean (const)
-  local +48:11 exponent: i32 (let)
-  callee +54:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local +58:9 value: f64 (let)
-  local +60:13 exact: boolean (const)
-  local +63:15 power: f64 (const)
-  callee +63:28 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
-  callee +66:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
+  callee +20:11 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee +24:20 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local +33:11 scale: i32 (const)
+  local +34:9 value: f64 (let)
+  local +36:13 exact: boolean (const)
+  local +39:15 power: f64 (const)
+  callee +39:28 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  callee +42:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new

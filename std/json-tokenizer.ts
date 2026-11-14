@@ -1502,11 +1502,15 @@ export class JsonTokenizer {
 
   /**
    * `numberF64` for a number `number()` could not read into 19 digits: it
-   * walks the text again, skipping leading zeros, so `0.000…0001` of many
-   * zeros still takes the fast path, and hands more than 19 significant digits
-   * or an exponent past the cap to `numberSlow`.
+   * folds the digits again, skipping leading zeros, so `0.000…0001` of many
+   * zeros still takes the fast path. `numberScale` already holds the dot and
+   * the exponent, and dropping leading zeros does not move it. More than 19
+   * significant digits, or an exponent past the cap, go to `numberSlow`.
    */
   private numberWalk(): f64 {
+    if (this.numberDigits === JSON_TOK_NUMBER_WALK) {
+      return this.numberSlow()
+    }
     const src: u8[] = this.src
     const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
@@ -1517,8 +1521,6 @@ export class JsonTokenizer {
     const ten: u64 = toU64(10)
     let mantissa: u64 = toU64(0)
     let digits: i32 = 0
-    let scale: i32 = 0
-    let afterDot = false
     let i: i32 = negative ? start + 1 : start
     if (i < 0 || end > toI32(src.length)) {
       return this.numberSlow()
@@ -1527,44 +1529,20 @@ export class JsonTokenizer {
     // `numberSlow` in the loop would otherwise end what a hoisted copy proves.
     while (i < end && i < toI32(src.length)) {
       const b: i32 = toI32(src[i])
-      if (b === JSON_TOK_DOT) {
-        afterDot = true
-      } else if (jsonTokIsDigit(b)) {
+      if (jsonTokIsDigit(b)) {
         if (digits > 0 || b !== JSON_TOK_DIGIT_0) {
           digits += 1
-          if (digits <= JSON_TOK_FAST_DIGITS) {
-            mantissa = mantissa * ten + toU64(b - JSON_TOK_DIGIT_0)
+          if (digits > JSON_TOK_FAST_DIGITS) {
+            return this.numberSlow()
           }
+          mantissa = mantissa * ten + toU64(b - JSON_TOK_DIGIT_0)
         }
-        if (afterDot) {
-          scale -= 1
-        }
-        if (digits > JSON_TOK_FAST_DIGITS) {
-          return this.numberSlow()
-        }
-      } else {
+      } else if (b !== JSON_TOK_DOT) {
         break
       }
       i += 1
     }
-    if (i < end) {
-      // The exponent: `i` is at the `e` or `E`.
-      i += 1
-      const sign: i32 = jsonTokByteAt(src, i, end)
-      const minus: boolean = sign === JSON_TOK_MINUS
-      if (minus || sign === JSON_TOK_PLUS) {
-        i += 1
-      }
-      let exponent: i32 = 0
-      while (i < end && i < toI32(src.length) && exponent < JSON_TOK_EXPONENT_CAP) {
-        exponent = exponent * JSON_TOK_TEN + toI32(src[i]) - JSON_TOK_DIGIT_0
-        i += 1
-      }
-      if (i < end) {
-        return this.numberSlow()
-      }
-      scale += minus ? -exponent : exponent
-    }
+    const scale: i32 = this.numberScale
     let value: f64 = 0
     if (digits > 0) {
       const exact: boolean = mantissa <= toU64(1) << toU64(53)
