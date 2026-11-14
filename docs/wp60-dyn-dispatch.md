@@ -103,15 +103,15 @@ The seven decisions, each with the alternatives it beat:
 | D4 | Sets and dispatchers (§2.4) | Per-place sets, solved by WP51's `RefPass` (`src/fnref-places.ts`, `solve` `:680`); one dispatcher per (set, method); a set of one compiles to the direct call; the sets are known before the whole-program passes (WP51 §2.4) | **One set per interface** (every class that `implements I`): a call that only ever sees one class pays a `switch` over all of them. **One dispatcher per call site**: the same `switch` emitted N times, and N copies for the inliner to weigh. |
 | D5 | Escape-join refusal (§2.5) | Per method and per parameter, with `this` as parameter 0: a call whose set holds a member whose method keeps an argument and one whose method does not is a compile error | **Join** (every call keeps what any member keeps): case B's cost, silently, at every call (§4). **Split the call by tag at the call site**: a `switch` in every caller, which is the hand program with the type hiding it. |
 | D6 | Boundaries (§2.6) | A `Dyn<I>` never crosses the C ABI or a host-visible signature (as NL2733 refuses a function reference); it may sit in a `Result` arm as the tagged word; it crosses `spawn` and `parallelMap` when every member of its set may | **A C spelling** (`struct { int32_t tag; void *obj; }`): a C caller could hand in a tag no set holds, which breaks the closed set everything rests on. **Refuse it in a `Result`**: a function that may fail could not return one, so every fallible factory (`parse(): Result<Dyn<Shape>, E>`) would return the hand program instead; the payload slot is a reference's, so nothing is gained by the refusal. **A `Result` payload as the fat pair**: a second payload layout in `Result`, for one type. **Refuse it across `spawn` and `parallelMap`**: the tag is a program constant valid in every thread, so the refusal would protect nothing the members' own sendability does not; it would push a worker pool over plugins back to the hand program. **Admit it across threads whatever the members**: a member holding a non-sendable field would cross by the back door. |
-| D7 | Diagnostics (§2.7) | Nine new codes from NL2771 (NL2774 and NL2778 in stage 1, NL2777 in stage 3, the rest in stage 2) and one warning, NL9020, for a set past eight members (as NL9017) | **Reuse WP51's codes** (NL2733, NL2736, NL9017): their words name a function reference and a function; a dyn call's names a class and a method, and a code is a stable identifier an agent keys on. **Reuse NL2048 for stage 1's refusals**: its words, "interfaces describe layout only", stop being true in stage 1, so stage 1's negatives (a call on a plain `I`, a missing or mismatched method) get their own codes and NL2048 narrows to a method body. |
+| D7 | Diagnostics (§2.7) | Nine new codes from NL2771 (NL2774 and NL2778 in stage 1, NL2777 in stage 3, the rest in stage 2) and one warning, NL9020, for a set past eight members (as NL9017) | **Reuse WP51's codes** (NL2733, NL2736, NL9017): their words name a function reference and a function; a dyn call's names a class and a method, and a code is a stable identifier an agent keys on. **Reuse NL2048 for stage 1's refusals**: its words, "interfaces describe layout only", stop being true in stage 1, so stage 1's negatives (a call on a plain `I`, a missing or mismatched method) get their own codes and NL2048 narrows to what is not a plain signature (a body, an accessor, `?`, a type parameter; §9 stage 1). |
 
 **The invariants.** Each one names the check that holds it, in the stage that
 lands it (§9).
 
 | # | Invariant | The check |
 | --- | --- | --- |
-| I1 | **Zero cost unused.** A program with no `Dyn` emits the IR it emits today. | `node tests/nish-cmp.js` over the corpus with **no** `DECLARED` entry, in every stage's PR; stage 1's IR moves for no program at all. |
-| I2 | **Never slower than the hand program.** A call through a `Dyn<I>` costs what the hand `kind` + `switch` costs over the same set, within the noise band. Met by the register form (0.98x, §3.3); not yet by the stored form (1.11x, 1.18x on arrays, §3.4), which is why stage 3 is gated. | Stage 2: the §3.3 programs rerun against its build, with the band, any case past 1.25x named in its PR; a `tests/run.js` IR check that the dispatcher of a set of one is the direct call. Stage 3: the §3.4 rows rerun against its build, every array row inside the band, or stage 3 does not land. |
+| I1 | **Zero cost unused.** A program with no `Dyn` emits the IR it emits today. | `node tests/nish-cmp.js` over the corpus with **no** `DECLARED` entry in stages 1 to 3's PRs; stage 1's IR moves for no program at all. Stage 4 moves `std/` IR on purpose: each adoption adds narrow `DECLARED` entries for the programs it moves, and I1 still holds for every program none of whose code, its own or `std/`'s, uses `Dyn`. |
+| I2 | **Never slower than the hand program.** A call through a `Dyn<I>` costs what the hand `kind` + `switch` costs over the same set, within the noise band. Met by the register form (0.98x, §3.3); not yet by the stored form (1.11x, 1.18x on arrays, §3.4), which is why stage 3 is gated. | Stage 2: the §3.3 programs rerun against its build, with the band, any case past 1.25x named in its PR; a `tests/run.js` IR check that the dispatcher of a set of one is the direct call. Stage 3: the §3.4 rows rerun against its build and **the stage 3 gate** (§8): the geomean of the ten array rows inside the ±2.6% band and no array row above 1.25x, or stage 3 does not land. |
 | I3 | **The escape proof survives.** A `Dyn` call whose set agrees on keeping places its arguments as the hand call does; one whose set disagrees is refused. | `.memory` goldens for case A (stack) and case C (stack, the keeper outside the set), and a negative test for case B (§4, §9). |
 | I4 | **No leak, no growth.** Peak RSS is flat at 1x, 10x and 100x a loop's length, and valgrind finds 0 bytes lost. | The §4 programs rerun by stage 2's PR; valgrind over every variant, case A, B and C and the registry forms, as this note ran it (`v/run.sh`, §12.10: 183 binaries, 0 bytes in use at exit, 0 errors); stage 3 adds a 1M-slot array at 1x/10x/100x and an `NISH_ASAN` run (LeakSanitizer and the tagged word, §10). |
 | I5 | **No layout surprise.** In the brief's words: "A field or element of the dynamic type is no larger than the hand program's tag plus reference; padding reported by the existing layout warning is the same or better." No class, plain interface or union changes size. Met on x86_64, aarch64 and wasm32 by the tagged word (§2.3). | `tests/layout/` entries for a class with one and two `Dyn` fields on each target, each equal to the hand class's size, and NL9010 reporting the same padding for both (stage 3); a `datalayout` probe of the tagged word per target (`l2/probe.ll`, §12.8). |
@@ -149,10 +149,16 @@ const all: Dyn<Shape>[] = [new Circle(), new Square()]
 console.log(`${total(all)}`)
 ```
 
+This is the whole proposal's program, and its `Dyn<Shape>[]` is a stored
+place: stages 1 and 2 refuse it (NL2779) until stage 3 lands. What stage 2
+compiles of it is a `Dyn<Shape>` local, parameter or return, for example
+`const show = (s: Dyn<Shape>): f64 => s.area()` called with a `Circle` and a
+`Square`.
+
 - **An interface may declare method signatures** (stage 1). A signature has
-  no body; a body, a getter or a setter in an interface stays refused (NL2048,
-  its wording narrowed to "cannot declare a method body"). Fields and
-  signatures may mix.
+  no body; a body, a getter or a setter, an optional `m?()` and a type
+  parameter `m<T>()` in an interface stay refused (NL2048, its words narrowed
+  to name the plain signature, §9 stage 1). Fields and signatures may mix.
 - **`implements I` checks the methods** (stage 1). `checkImplements`
   (`src/structs.ts:1231`) checks today that the class lists the interface's
   fields first; it learns to check that the class declares each of the
@@ -165,7 +171,12 @@ console.log(`${total(all)}`)
   already is for a class `C` (`tests/cases/gen_constraint_method`).
 - **`Dyn<I>` is a value type** (stages 2 and 3): a local, a parameter, a
   return, a call's receiver (stage 2); a class field, an array element, a
-  `Map` value, `Dyn<I> | null` and a `Result` arm (stage 3). A value of a
+  `Map` value, `Dyn<I> | null` and a `Result` arm (stage 3). The last two
+  and a `spawn` or `parallelMap` argument are stage 3 even in a local: a
+  `| null` local is laid out as a nullable reference, one word, and a `Result`
+  payload and a thread's argument are stored slots, so all three hold the
+  tagged word, and stage 2 refuses them with NL2779 as it refuses a field. A
+  value of a
   class `C` that implements `I` converts to `Dyn<I>` where one is expected,
   implicitly, as a `C` converts to `I` today.
 - **A method call on a `Dyn<I>` runs the method of the class it holds.**
@@ -256,7 +267,21 @@ memory:
 %hi  = lshr i64 %wi, 48
 %tg  = trunc i64 %hi to i32
 ; untag: clear the top 16 bits, keeping provenance
-%ob  = call i8* @llvm.ptrmask.p0i8.i64(i8* %w, i64 281474976710655)
+%ob  = call i8* @llvm.ptrmask.p0.i64(i8* %w, i64 281474976710655)
+```
+
+On wasm32 the same three operations are 32 bits wide and use the low 3 bits
+(the name mangles the mask's width; this form was not run, §7):
+
+```llvm
+; tag: the tag added to an 8-aligned address
+%raw = bitcast %struct.Shape* %p to i8*
+%w   = getelementptr i8, i8* %raw, i32 %tag
+; read the tag: the low 3 bits
+%wi  = ptrtoint i8* %w to i32
+%tg  = and i32 %wi, 7
+; untag: clear the low 3 bits, keeping provenance
+%ob  = call i8* @llvm.ptrmask.p0.i32(i8* %w, i32 -8)
 ```
 
 These are the transforms `mktp.mjs` and `mktp1m.py` (§12.8) apply to the
@@ -292,6 +317,17 @@ builds them follows:
   `alloca` is `align 8`), so the low 3 bits are free: wasm32 stores the tag
   there, and a stored place on wasm32 holds at most 7 members (NL2777 names
   the target), a limit x86_64 and aarch64 do not have.
+- **32-bit references (WP48).** WP48 measured compressed 32-bit references
+  and built neither a whole-program 32-bit mode nor an `i32` pool
+  (`docs/roadmap/index.md`, `MASTER_PLAN.md` row 48), so no 64-bit target has
+  a 4-byte reference today. If one lands, the split form is unchanged (an
+  `i32` tag beside a 4-byte reference in registers, and SoA's side array if a
+  stored place used it), but the tagged word has no spare high bits: it takes
+  the wasm32 form there (the low 3 bits of an 8-aligned offset, at most 7
+  members) or the stored place widens to 8 bytes. That choice is that work's,
+  and NL2777 names whichever limit holds. The 48-bit assumption the 64-bit
+  form rests on is the debug check's above, and LA57's 5-level paging is the
+  one way it breaks on Linux today.
 
 **The sizes**, LLVM's own, for each target's data layout: `l2/probe.ll`
 (§12.8), `opt -O2 -mtriple=<t>` folding each `@size_*` to a constant, LLVM
@@ -324,7 +360,8 @@ the split form failed it with two fields (24 against 16) and on wasm32 with one
 
 **What it costs in a million objects** (`l2/`, §12.8: 1,048,576 objects of
 two classes pushed to an array or set in a `Map<i32, _>`, then summed; peak RSS
-from `wait4`, best of 3, `l2/rss.py`):
+from `wait4`, best of 3, `l2/rss.py`; its output was not kept, and a rerun
+gave every figure within 20 KB of these):
 
 | Program | What the slot is | Peak RSS (KB) | Over `empty` |
 | --- | --- | --- | --- |
@@ -454,10 +491,18 @@ today's is one `%struct.C*`); and the tagged word's three operations
 (stage 3).
 
 **A set of one** compiles to the direct call: the dispatcher is not made, and
-the tag, which no instruction then reads, is dead. For a local or a parameter
-the IR is the IR of the same program written with `Circle`, which stage 2's
+the tag, which no instruction then reads, is dead. A local of a set of one is
+typed by its member (`%struct.Circle*`, no tag). A parameter or return of a set
+of one is too: the sets are solved before any function is emitted (§2.4), so
+the function is emitted with the member's type and no tag parameter, its
+symbol and signature are the ones the same function written with `Circle`
+gets, and every caller, being in the same whole program, passes the bare
+pointer. No caller outside the program exists: a host-visible signature
+cannot carry a `Dyn` (§2.6). So for a local, a parameter or a return the IR is
+the IR of the same program written with `Circle`, which stage 2's
 `tests/run.js` check "dyn: a set of one is the direct call" pins by diffing
-the two programs' `.ll`. For a stored place it is not identical: the field,
+the two programs' `.ll`, one with a `Dyn` parameter and one with a `Dyn`
+local. For a stored place it is not identical: the field,
 element or `Map` value still holds a tagged word, so a store tags and a load
 untags (an `add` and an `and` the hand program does not have); stage 3's
 `.ll` golden `dyn_field_set_of_one` records that IR rather than claiming
@@ -497,14 +542,19 @@ first: if one member's method keeps the argument (stores it somewhere that
 outlives the call) and another member's does not, the call is refused
 (NL2771). The check is WP51's `checkReferenceSites`
 (`src/compilation.ts:2750`) with the receiver as parameter 0. Its words
-follow `escapeJoinMessage` (`src/fnrefs.ts:405`):
+are `escapeJoinMessage` (`src/fnrefs.ts:405`) filled in, unchanged, with the
+call as `shown`, `this` as the parameter and the store that brought `Circle`
+into the set as `via`:
 
 ```
-this call of `area` through `Dyn<Shape>` can reach `Circle.area`, which keeps `this`, and
-`Square.area`, which does not, so every call here would allocate the receiver in the arena;
-`Circle` reaches this call through `shapes`: call `Circle.area` directly, or keep `Circle`
-out of the values this call reads
+this call through `s.area` can reach `Circle.area`, which keeps `this`, and `Square.area`,
+which does not, so every call here would allocate `this` in the arena; `Circle.area` reaches
+`s.area` through `shapes`: call `Circle.area` directly, or store it where `s.area` does not read
 ```
+
+The last clause is WP51's, written for a function value; for a receiver it
+reads as "store the `Circle`". Stage 2 decides whether NL2771 keeps it or
+takes its own last clause, and its wording test pins the choice.
 
 **Why `this` counts.** A method that stores `this` into a field or a global
 keeps its receiver exactly as a function that stores its parameter does. The
@@ -519,8 +569,8 @@ escape analysis already reads `this` as the method's first parameter
   `declare function` parameter or return, a field of a class a host can reach,
   and every signature `hostVisible` (`src/visibility.ts:153`) answers yes for,
   as WP51 §5.2 refuses a function reference (NL2733, `refuseHostReferences`,
-  `src/fnrefs.ts:305`). The new code is NL2772. `src/interop-header.ts:100`
-  writes an interface as its flattened field prefix; it has nothing to write
+  `src/fnrefs.ts:305`). The new code is NL2772. `structDefinitions`
+  (`src/interop-header.ts:111`) writes an interface as its flattened field prefix; it has nothing to write
   for a `Dyn`, and does not have to, because none reaches it.
 - **A `Result` arm.** `Result<Dyn<I>, E>` holds the tagged word in its
   payload slot (stage 3), a pointer-sized payload like any reference's;
@@ -554,7 +604,8 @@ next free number when it lands.
 | NL2779 | a `Dyn<I>` stored in a field, an array element, a `Map` value or a `Result` payload, before stage 3 lands (§1, §8) | `` a `Dyn<Shape>` lives in locals, parameters and returns: storing one in `shapes` is not supported yet; keep the class's own `kind` field and `switch` on it `` | 2 (lifted by 3) |
 | NL9020 | a call whose set passes eight classes (as NL9017) | `` this call of `area` through `Dyn<Shape>` can reach 13 classes, more than eight, so it branches on a `switch` of them where a direct call would not; they came in through ... `` | 2 |
 
-NL2048 keeps its number and narrows to a method body in an interface.
+NL2048 keeps its number and narrows to an interface member that is not a
+plain method signature (§9 stage 1).
 
 ## 3. The measurements
 
@@ -571,10 +622,16 @@ interleaved across a group and the order rotated each round, and reads peak
 RSS from `wait4`.
 
 **Checksums.** Every binary prints a checksum. The runner exits 1, printing
-`MISMATCH <group> k<K>`, when two binaries of one group and one K print
-different checksums, when a binary's output changes from one run to the next,
-or when `direct` and `direct_copy` differ; otherwise it prints
-`checksums ok`. Every run quoted here printed `checksums ok`. `direct` is the
+`MISMATCH`, when a binary's output changes from one run to the next, or when
+two binaries of a group that compute the same thing print different
+checksums: every variant of one K; `direct` and `direct_copy`; every `reg_*`
+program of §3.5 against the others; and the first field (the accumulator) of
+escape cases A and B of §4.2, whose second field differs by design. Escape
+case C is another program and `empty` prints 0, so neither is compared. The
+runner prints `checksums ok (N pairs compared)` otherwise, and every run
+quoted here printed `checksums ok`; the §3.5 and §4.2 figures are from the
+reruns under this rule (`r/timing3`, `e/timing2`), each with 3 pairs
+compared. `direct` is the
 K=1 program: one class, every call `g0(o, ACC)` to the one method, no tag. In a
 `same` group every K computes `direct`'s chain (array same 4265377792, serial
 same 1738459905), so every row of a `same` table also prints `direct`'s
@@ -711,7 +768,7 @@ What this says, and does not:
   programs differ only in where the tag is read from, and the machine code
   shows it (§12.9): at serial aperiodic K=4 the `switch` and `proposed` hot
   loops are 50 and 49 instructions, the same three-compare chain on the tag and
-  the same three arms, and differ in one place — `switch` loads the tag from
+  the same arms (four members: three compares, the fourth the fall-through), and differ in one place — `switch` loads the tag from
   the object (`mov esi, [rdx]`), `proposed` takes it from the index it already
   holds (`shr esi, 8; and esi, 3`). At K=13 both become one jump table (88 and
   87 instructions). With no counters (§7) this note does not claim why the
@@ -736,8 +793,11 @@ What this says, and does not:
   write the table itself with WP51's function references (`table` above).
   §11 records the threshold as a later question.
 - **A union pays for `s.f(x)` re-dispatching per arm** at large K (3.00x at
-  array periodic K=16), and WP51's table form pays its own tag check and an
-  indirect call per site.
+  array periodic K=16), and WP51's table form pays, per site, a
+  bounds check on `kind` against the table's length and an `i32` load of the
+  function reference before its `$ref.` dispatcher's `switch`, whose arms are
+  inlined: no indirect call (§12.9, `serial_aperiodic_k4_table`: `cmp rdi,0x4;
+  jae`, then `mov esi,[rsp+rdi*4+0x60]` and a three-compare chain).
 
 ### 3.4 The stored form
 
@@ -769,7 +829,9 @@ Milliseconds; in brackets, the ratio to `switch`:
 | array periodic | 16 | 268 | 268 (1.00) | 296 (1.10) | 313 (1.17) |
 
 A second run (`timing_tp3`, nine rounds) repeated the three periodic rows that
-move and timed the serial chain with a tagged word passed through a local:
+move and timed the serial programs' `tp` variant (the same 1024-entry pool of
+tagged words, read under a serial chain, §12.8); each serial cell is tp/switch
+in milliseconds:
 
 | Group | K | switch | SoA | AoS | tp |
 | --- | --- | --- | --- | --- | --- |
@@ -785,8 +847,14 @@ move and timed the serial chain with a tagged word passed through a local:
 Serial periodic at K ≥ 8 swings from run to run for every variant, `proposed`
 included (565 ms in §3.3 and 585 ms here at K=13, against `switch`'s 456 and
 394; 238 ms at K=16 in both): its rows are the least trustworthy in the note,
-and the 0.73 and 1.45 above are read as noise of that shape, not as a gain or a
-loss of the tagged word.
+and the 0.73, 1.45 and 1.37 above are read as noise of that shape, not as a
+gain or a loss of the tagged word.
+
+**The band is within a run.** ±2.6% is `direct` against `direct_copy` inside
+one run. Between runs the same binary moves more: `switch` at array same K=2
+is 105 ms in §3.3's run and 112 in `timing_tp` (7%), and at array periodic
+K=8 295 and 302 in this section's two runs (2%). Every ratio here is therefore
+taken within one run, and no ratio compares a figure of one run with another's.
 
 Geomeans against `switch`:
 
@@ -796,11 +864,14 @@ Geomeans against `switch`:
 | AoS | 1.09 | — | 16 B | fails |
 | tp | **1.18** | **1.11** | 8 B | meets |
 
-**No stored form meets I2 and I5 together.** The two that come within the band
-of the hand program in the geomean are wider than it; the one that is as wide
-is 18% slower on arrays. The cost is not spread evenly: tp is within 9% on
-seven of the ten array rows and the stored-local serial rows are within the
-band at K ≤ 4, but array periodic K=8 and K=13 are 1.5x to 1.7x in both runs.
+**No stored form meets I2 and I5 together.** The one that comes within the
+band of the hand program in the geomean, SoA at 1.02x, is 12 bytes a slot; AoS
+is outside the band at 1.09x and 16 bytes; the one that is as wide as the hand
+program, tp, is 18% slower on arrays. The cost is not spread evenly: tp is
+0.99x on one array row (periodic K=4), 1.07x to 1.09x on three, 1.11x to
+1.17x on four, and 1.52x and 1.67x at array periodic K=13 and K=8, the two
+that stay at 1.5x to 1.7x in both runs; its serial rows are within the band at
+every K of the same set and at K ≤ 4 of the periodic one.
 
 The machine code says where those two rows' cost is not (§12.9). At array
 periodic K=8 the `switch` and `tp` hot loops are the same jump table over the
@@ -811,7 +882,8 @@ cost 200 ms over 200M calls, 1 ns a call, on their own; the difference is in how
 the branch predictor or the loop's placement meets the jump table, which
 without counters (§7) this machine cannot show. It is recorded as unexplained,
 and it is why stage 3 is gated (§1, §9): stage 3 lands when its own run of
-these rows, with counters, comes inside the band, or it does not land.
+these rows, with counters, passes the stage 3 gate (§8: the array geomean
+inside the band, no array row above 1.25x), or it does not land.
 
 Peak RSS for all of these is 13 MB at 1024 elements; §2.3 gives the 1M-element
 array and the `Map` sizes, where the tagged word costs the hand program's
@@ -823,25 +895,33 @@ The shape `Dyn` is for: 13 implementations of a 4-method interface, called
 50M times in all through a 1024-entry pool (§12.6). Written by hand (a `kind`
 field and four `switch` functions), with WP51's function references (four
 `Hook[]` tables indexed by `kind`), and as the proposed lowering (four
-dispatchers on a tag). A fourth program, `hand_copy`, is the hand source
+dispatchers on a tag). The proposed program's pool is a stored place: a
+`Plugin[]` and a parallel `tags: i32[]`, §3.4's SoA form (`r/src/reg_proposed.ts`
+`:128`), because the tagged word is stage 3's; its 51 ms is SoA's figure on
+this shape, not the tagged word's. A fourth program, `hand_copy`, is the hand source
 copied byte for byte and built to a second binary, so the registry has its own
-band. Run time is best of 7 (`r/timing2`, `empty` 1 ms, `checksums ok`);
+band. Run time is best of 7 (`r/timing3`, `empty` 1 ms, `checksums ok (3 pairs
+compared)`);
 `nish X.ts -o X.ll` and the full `scripts/build.sh --profile speed` build are
 best and worst of seven rounds, interleaved (`r/ctime.py`, §12.10):
 
 | Form | run | per hook call | `nish` compile, best/max | full build, best/max | binary | dispatchers |
 | --- | --- | --- | --- | --- | --- | --- |
 | hand | 50 ms | 1.0 ns | 7/8 ms | 1704/1815 ms | 7352 B | 4 hand `switch` functions |
-| hand_copy | 48 ms | 0.96 ns | 7/9 ms | 1781/1913 ms | 7352 B | the same |
+| hand_copy | 50 ms | 1.0 ns | 7/9 ms | 1781/1913 ms | 7352 B | the same |
 | proposed | 51 ms | 1.0 ns | 7/11 ms | 1756/1981 ms | 7352 B | 4, one per method of the 13-member set |
-| table (WP51) | 191 ms (3.9x) | 3.8 ns | 8/11 ms | 1715/1883 ms | 8288 B | 1, a 52-member `$ref.` dispatcher |
+| table (WP51) | 191 ms (3.8x) | 3.8 ns | 8/11 ms | 1715/1883 ms | 8288 B | 1, a 52-member `$ref.` dispatcher |
 
-All four print 425062. **The band here is 4%** (hand 50 against hand_copy 48),
-in run time; the build times' best-to-max spread is 6% to 13% for every form,
+All four print 425062. **The band here is 4%** in run time: hand and
+hand_copy are both 50 ms in this run, and 50 against 48 in the first one
+(`r/timing2`, the same binaries under the earlier runner), so the note takes
+the wider figure; the build times' best-to-max spread is 6% to 13% for every form,
 hand_copy included, so build and compile differences under that spread are no
 difference. The proposed form is the hand form inside both bands: 51 against
-48 to 50 ms, 1.0 ns a hook call, the same binary to the byte, and a compile
-time whose best is the hand form's. The table form is 3.9x slower, and shows
+50 ms (2%), 1.0 ns a hook call, a binary of the same size to the byte (not
+compared with `cmp`; the symbols differ), and a compile
+time whose best is the hand form's. The table form is 3.8x slower (191 against
+50), and shows
 why §2.4 makes one dispatcher per (set, method) and not per type: its four
 same-typed `Hook[]` arrays share one place, so one 52-member set and one
 `$ref.0.fr2.$Plugin.u32.u32.0` dispatcher serve all four, and NL9017 fires
@@ -868,19 +948,21 @@ and passes it to `d(t, o, k, acc)`, a four-member dispatcher, in a loop of
 
 ### 4.2 Results
 
-Best of 7; milliseconds and peak RSS in MB:
+Best of 7 (`e/timing2`, `checksums ok (3 pairs compared)`); milliseconds and
+peak RSS in MB:
 
 | Case | 1M | 10M | 100M |
 | --- | --- | --- | --- |
-| A | 2 ms, 13 MB | 7 ms, 13 MB | 65 ms, 13 MB |
-| B | 5 ms, 13 MB | 40 ms, 77 MB | 386 ms, 764 MB |
-| C | 2 ms, 13 MB | 9 ms, 13 MB | 78 ms, 13 MB |
+| A | 2 ms, 13 MB | 7 ms, 13 MB | 66 ms, 13 MB |
+| B | 5 ms, 13 MB | 41 ms, 77 MB | 391 ms, 764 MB |
+| C | 2 ms, 13 MB | 9 ms, 13 MB | 77 ms, 13 MB |
 
 B is 5.9x A at 100M and its memory grows with the loop: every object the
 loop allocates is kept by the arena, because one member might keep it. A and
 C are flat at 1x, 10x and 100x (I4). C's time is not comparable with A's (a
 3-way dispatch over different arithmetic); its RSS is the point. A and B
-print the same checksum; B's second number is the last object kept.
+print the same accumulator (4246864251); B's second number is the last object
+kept (999999 at 1M), A's is 0.
 
 ### 4.3 What the compiler says
 
@@ -922,8 +1004,8 @@ are the result:
   (`@nish_alloc_struct(i64 8)`), passed to `@m3` directly. A's IR has the same
   `alloca` and the same loop, with the four-member `@d`.
 - **B**: `1 of 1 allocating loops keep what a pass allocates`, and the reason
-  names line 32, the `k.last = o` in member 3, reached through the
-  dispatcher.
+  names line 32, the `new Obj` whose result member 3 stores (`k.last = o`,
+  line 16), reached through the dispatcher.
 
 So the escape proof reads through the dispatcher's arms as it reads through
 any direct call: the dispatcher is an ordinary function with ordinary direct
@@ -1007,16 +1089,16 @@ what the proposal does to it.
 
 | Where | What it says | What leans on it | Under the proposal |
 | --- | --- | --- | --- |
-| `src/statements.ts:1111` (`refuseMembers`; the error at `:1142`), `src/codes.ts:1086` (NL2048) | `` Interface `X` cannot declare methods (interfaces describe layout only) `` | the refusal | narrows to a method body (stage 1) |
+| `src/statements.ts:1111` (`refuseMembers`; the error at `:1142`), `src/codes.ts:1086` (NL2048) | `` Interface `X` cannot declare methods (interfaces describe layout only) `` | the refusal | narrows to what is not a plain signature (stage 1, §9) |
 | `src/structs.ts:1159`, `src/codes.ts:1597` (NL2079) | `` `X` is not a declared interface ``: `implements` names an interface of the class's own module | which classes a set can hold | holds through stage 3: a `Dyn<I>`'s members are classes of `I`'s module (§2.2); stage 4 decides whether to lift it, with NL2079's words (§9) |
 | `src/structs.ts:1231` (`checkImplements`) | `implements` is a field-prefix check | the bitcast widening | learns to check method signatures too; the prefix rule stands (stage 1) |
 | `src/generics.ts:3201` (`implementsDeclaration`) | a constraint is satisfied by a class or its `implements` | `<T extends I>` | an interface with methods constrains `T` and its methods are callable (stage 1) |
 | `src/emit-classes.ts:13` | "There is no inheritance and no vtable — a method call resolves to the method of the receiver's own type" | the emitter's one path | still true of every call the checker records: a `Dyn` call's recorded callee is the dispatcher, itself an ordinary function (stage 2); the comment gains that sentence |
 | `src/emit-classes.ts:447` (`emitMethodCall`) | a method call with no recorded callee is an internal error | the side-table rule | holds: the dispatcher is recorded (§2.3) |
-| `src/interop-header.ts:100`–`110` | an interface is its flattened field prefix in C | the C header | holds: a `Dyn` never reaches it (§2.6) |
+| `src/interop-header.ts:100`–`111` (`structDefinitions`) | an interface is its flattened field prefix in C | the C header | holds: a `Dyn` never reaches it (§2.6) |
 | `src/fnref-places.ts`, `src/fnrefs.ts`, `src/emit-fnrefs.ts` | sets, dispatchers and the tag check for function references | WP51 | generalised to a member that is a class's method (stage 2) |
 | [LANGUAGE.md](LANGUAGE.md) "Classes" (`:3070`–`3082`) | "every method call in a program names exactly one symbol and there is nothing for a vtable to decide" | the rule users read | true of every call but one through a `Dyn`, which names a dispatcher (stage 2 rewrites the sentence) |
-| LANGUAGE.md "Method dispatch is static" (`:14228`–`14233`) | "every method call in a program names one symbol" | the performance model | gains the `Dyn` case and its cost (stage 2) |
+| LANGUAGE.md "Method dispatch is static" (`:14229`–`14233`) | "every method call in a program names one symbol" | the performance model | gains the `Dyn` case and its cost (stage 2) |
 | LANGUAGE.md `:262` (types table), `:3271` (constraints), `:6230`, `:16102` | a class is a struct with no header and no vtable; constraints | the layout table | unchanged: no class gains a header; a row for `Dyn<I>` is added (stage 2) |
 | LANGUAGE.md `:8478`–`8500` (arrays of records) | an array of an interface is inline records, unless a class implements it, when it is a pointer per slot — "the language's only polymorphic container" | arrays | unchanged; `Dyn<I>[]` is a second polymorphic container, one tagged word (8 bytes, the hand array's) a slot (stage 3) |
 | LANGUAGE.md `:12794` (`Map` values) | a value is anything but `void` and an interface | `Map` | unchanged for `I`; `Dyn<I>` is admitted as a value (stage 3) |
@@ -1048,6 +1130,13 @@ what the proposal does to it.
   generated, so its attributes, its name and its `default` arm are what §2.3
   specifies, not what a build produced. Stage 2 reruns §3.3 and §3.5 against
   them; stage 3 reruns §3.4.
+- **Stored places other than an array element.** §3.4 times array elements;
+  a `Dyn` field, a `Map` value and a `Result` payload use the same word but
+  were not timed. §3.5's registry holds its pool as two arrays (SoA).
+- **The escape-join refusal's reach.** No program was checked for how often
+  NL2771 would fire, or how many arena allocations it prevents.
+- **Compile time.** Set solving and the dispatchers' emission were not timed;
+  only the registry's binary size was compared (§3.5).
 - **Sets wider than 16.** NL9020's threshold of eight is WP51's; no program
   here measures a set of 32 or 100.
 - **DWARF and gdb.** §5.3's debugger reading was not built or run.
@@ -1063,12 +1152,13 @@ what the proposal does to it.
 **Ship it scoped: stages 1 and 2 now, stage 3 gated on I2, stage 4 after.**
 Neither "build it all" nor "decline" is what the figures say. In registers
 the proposal meets I2 and I5: 0.98x the hand program in geomean over 25 cases
-(§3.3), 51 ms against 48 to 50 on the registry (§3.5), and two registers
+(§3.3), 51 ms against 50 on the registry (§3.5), and two registers
 where the hand program holds one pointer and loads its tag. Stored, no form
 measured meets both: the tagged word meets I5 to the byte on every target
 (§2.3) and costs 1.11x in geomean over 20 cases, 1.18x on the ten array rows;
-the two forms that come within the band in geomean are 12 and 16 bytes a slot,
-where the hand program pays 8 (§3.4). I5 is the brief's and is not redefined
+the one form that comes within the band in geomean, SoA at 1.02x, is 12 bytes
+a slot where the hand program pays 8, and AoS is outside it at 1.09x and 16
+bytes (§3.4). I5 is the brief's and is not redefined
 here, so the stored forms are not shipped on these figures.
 
 What ships, and what it buys:
@@ -1083,8 +1173,9 @@ What ships, and what it buys:
   today. That is the registry (§3.5), a visitor passed down a call tree, a
   strategy chosen once and called in a loop.
 - **Stage 3 is gated.** It lands when its PR reruns §3.4's rows against the
-  compiler's tagged word, with counters if the machine has them, and the
-  geomean comes inside the ±2.6% band with no array row above 1.25x; or it
+  compiler's tagged word, with counters if the machine has them, and passes
+  **the stage 3 gate**: the geomean of the ten array rows inside the ±2.6%
+  band and no array row above 1.25x. Otherwise it
   does not land, NL2779 stays, and the note's §11 question (a tag in the
   object for sets that already declare one) is the next thing to try. Its
   form is not reopened: a stored form wider than the hand program's fails I5.
@@ -1124,9 +1215,38 @@ them.
   `reject_iface_method_body` (NL2048), `reject_iface_method_on_plain`
   (NL2774), `reject_implements_method_missing` and
   `reject_implements_method_signature` (NL2778).
+- NL2048 narrows. Stage 1 admits a plain signature, `m(params): R;`, and NL2048
+  keeps refusing everything else an interface member can be that runs: a
+  body, an accessor, an optional `m?()` and a type parameter `m<T>()`. Its
+  words become `` Interface `Shape` cannot declare `area` that way: an
+  interface method is a plain signature, `area(params): R;`, with no body,
+  accessor, `?` or type parameters ``, and `src/codes.ts`'s NL2048 entry is
+  rewritten to match.
+- Tests that flip, each updated in stage 1's PR:
+  - `tests/wordings/nl2048_interface_method.ts` declares `area(): i32;`,
+    which stage 1 admits: it is retargeted to `area(): i32 { return 1; }`, its
+    header comment says a body is what NL2048 refuses, and
+    `nl2048_interface_method.err` takes the words above.
+  - `tests/cases/reject_iface_method.ts` (`area?<T>(of: T): i32;`) and
+    `tests/cases/reject_iface_accessor.ts` (`get size(): i32;`) stay refused;
+    their `.err` files take the new words.
+  - `tests/cases/reject_multi_decl.ts`'s `interface Shape { area(): number; }`
+    is admitted, so its `.err` loses that line; the file keeps its other
+    refusals.
+  - `tests/wordings/nl2330_member_not_in_constraint.ts` still fails (`grow`
+    is not in `Shape`), but its comment ("an interface has fields only") is
+    rewritten.
+  - `docs/AI.md`'s row for a method in an `interface`, and the generated
+    `docs/reference/` pages that quote NL2048, move with it.
+- Stages 2 to 4 flip no existing test: no test under `tests/` names `Dyn`,
+  `nish:dyn` or a code from NL2771 on, and stage 2's NL2774 clause only adds
+  words to a code stage 1 introduces.
 - Invariants: I1 (nish-cmp, 0 `DECLARED`).
 - Docs: LANGUAGE.md "Interfaces" and "Constraints"; IR_COOKBOOK "Constrained
-  generics"; guide `classes-and-interfaces.md`.
+  generics"; guide `classes-and-interfaces.md`; `docs/reference/` regenerated
+  (`node scripts/gen-reference.mjs`) for the LANGUAGE.md and NL2048 changes.
+  `--emit-ts` needs nothing new: an interface method signature is already
+  TypeScript, and the stage's round trips run under Node through it.
 
 **Stage 2: `Dyn<I>` in locals, parameters, returns and calls.**
 
@@ -1160,7 +1280,10 @@ them.
 - Docs: LANGUAGE.md "Dynamic dispatch: `Dyn<I>`" with the cost model and the
   stored-place refusal; the types table row; IR_COOKBOOK "Dynamic dispatch";
   guide page `docs/guide/language/dynamic-dispatch.md` and its route in
-  `scalar.config.json`.
+  `scalar.config.json`; `Dyn`'s declaration in `runtime/nish.d.ts` lands with
+  its doc comment (a type alias, so no `@param` or `@returns`), and `docs/reference/` is regenerated so
+  `node scripts/gen-reference.mjs --check` passes with `scripts/undocumented.txt`
+  unchanged.
 
 **Stage 3: fields, arrays, `Map` values, `| null`, `Result`, threads. Gated
 on I2 (§8).**
@@ -1179,11 +1302,13 @@ on I2 (§8).**
   `reject_dyn_map_key`, `reject_dyn_set_element`, `reject_dyn_json`,
   `reject_dyn_spawn_unsendable`.
 - Invariants: I1; I2 for stored places: §3.4's rows rerun against the
-  compiler's word, inside the band in geomean, no row above 1.25x, or the
-  stage does not land; I4 (RSS at 1x/10x/100x for a 1M-element array, valgrind
+  compiler's word, and the stage 3 gate (§8: the array geomean inside the
+  band, no array row above 1.25x), or the stage does not land; I4 (RSS at 1x/10x/100x for a 1M-element array, valgrind
   and an `NISH_ASAN` run); I5 (the layout entries above).
 - Docs: LANGUAGE.md arrays and `Map`; the cookbook's layout entry; the guide
-  page's container section, and the NL2779 section removed.
+  page's container section, and the NL2779 section removed; `docs/reference/`
+  regenerated. `--emit-ts` needs nothing new: a stored `Dyn<I>` is an `I` in
+  TypeScript, as a local is.
 
 **Stage 4: `std/` adoption and the agents' idiom.**
 
@@ -1194,7 +1319,8 @@ on I2 (§8).**
   `` `X` is not a declared interface `` to name the module the interface
   must be declared in; if not, the guide page says why.
 - Docs: AI.md's `Dyn` idiom and when to use `<T extends I>`; the guide page's
-  library section.
+  library section; each adopted `std/` declaration's doc comment and
+  `docs/reference/` regenerated.
 
 ## 10. Risks
 
@@ -1227,13 +1353,14 @@ on I2 (§8).**
 ## 11. Open
 
 - **Why the tagged word costs 1.18x on arrays.** §3.4 measured it and
-  §12.9 shows its K=8 loop: the same jump table as the hand program's, with
+  §12.9 shows its K=8 loop (`objdump` only; no `.ll` is quoted for the array
+  rows): the same jump table as the hand program's, with
   `and`, `shr` and `dec` where the hand program loads `kind` from the
-  object. No counter says where the 18% goes. Stage 3's gate run answers it or the
-  stage does not land.
+  object. No counter says where the 18% goes. Stage 3's run against the gate
+  (§8) answers it or the stage does not land.
 - **The vtable or jump-table threshold.** The vtable won aperiodic K ≥ 8 by
-  5% to 10% (§3.3); LLVM lowered the dispatcher's `switch` to a jump table
-  from K = 4 on this machine (§12.9). Whether the dispatcher should pick an
+  5% to 10% (§3.3); on this machine LLVM lowered the dispatcher's `switch` to
+  a chain of compares at K=4 and to a jump table at K=8 and K=13 (§12.9). Whether the dispatcher should pick an
   indirect call above some K, with the escape proof kept by the closed set, is
   a question for after stage 2 measures its own dispatchers.
 - **Thin `Dyn` over tagged classes.** When every class in a set already
@@ -1275,8 +1402,8 @@ band comes from:
 | `d/groups.json` | `serial_same`, `serial_periodic`, `serial_aperiodic`, `array_same`, `array_periodic`: every K and variant of `gen.mjs`, plus `vtable` | §3.3 |
 | `d/groups_tp.json` | `array_same`, `array_periodic`: `switch`, `proposed`, `aos`, `tp` at K = 2 to 16 (`timing_tp`, 7 rounds) | §3.4 |
 | `d/groups_tp3.json` | `serial_same`, `serial_periodic` with `tp`; `array_periodic` K = 4, 8, 13 (`timing_tp3`, 9 rounds) | §3.4 |
-| `e/groups.json` | `s`, `m`, `l`: cases A, B and C at one loop length each | §4 |
-| `r/groups2.json` | `reg`: `empty`, `reg_hand`, `reg_table`, `reg_proposed`, `reg_hand_copy` | §3.5 |
+| `e/groups.json` | `s`, `m`, `l`: cases A, B and C at one loop length each (`timing2`, 7 rounds) | §4 |
+| `r/groups2.json` | `reg`: `empty`, `reg_hand`, `reg_table`, `reg_proposed`, `reg_hand_copy` (`timing3`, 7 rounds) | §3.5 |
 
 `d/groups_aos.json` and `d/groups_tp2.json` were earlier, smaller runs of the
 same binaries, superseded by the two above and not cited. `--explain-memory`
@@ -1588,7 +1715,7 @@ for (const f of ["hand", "table", "proposed"]) writeFileSync(`${out}/reg_${f}.ts
 # NISH: the repository checkout (scripts/build.sh, runtime/runtime.c)
 # buildone.sh <name>: ll_<name>.ll -> bin/<name> at --profile speed
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")"; mkdir -p bin
 n=$1
 llvm-as ll_$n.ll -o /dev/null
 extra=""
@@ -1599,8 +1726,17 @@ case $n in *_vtable) extra=wp60_vt.c;; esac
 ```python
 # bench.py <groups.json> <rounds>: best-of-N wall time, interleaved and rotated.
 # groups.json maps a group name to the list of binaries under bin/ it times.
-# Exits 1 if two binaries of one group and one K (the _kN_ part of the name)
-# print different checksums, or if direct and direct_copy differ.
+# Every binary must print the same output in every round. Within a group, the
+# binaries that compute the same thing must print the same checksum, keyed:
+#   a name with _kN_     -> every name of that group and K
+#   a name with "direct" -> direct and direct_copy
+#   empty                -> nothing to compare (prints 0)
+#   esc_A_*, esc_B_*     -> the first field (acc) of A and B; the second field,
+#                           k.last.v, differs by design (B keeps, A does not)
+#   esc_C_*              -> none: C is another program (three members in the
+#                           loop and one keeper call after it), so its acc differs
+#   any other name       -> every other such name of the group (reg_*)
+# Exits 1 on any mismatch and prints how many comparisons it made.
 import json, os, re, subprocess, sys, time
 groups = json.load(open(sys.argv[1]))
 rounds = int(sys.argv[2])
@@ -1619,35 +1755,48 @@ for r in range(rounds):
             rss[n] = max(rss.get(n, 0), ru.ru_maxrss)
             outs.setdefault(n, set()).add(out.decode().strip())
     print("round", r + 1, "done", flush=True)
-bad = 0
+def key(n):
+    m = re.search(r"_k(\d+)_", n)
+    if m: return "k" + m.group(1), lambda o: o
+    if "direct" in n: return "direct", lambda o: o
+    if n == "empty" or n.startswith("esc_C_"): return None, None
+    if re.match(r"esc_[AB]_", n): return "AB", lambda o: o.split()[0]
+    return "*", lambda o: o
+bad, compared = 0, 0
 for g, names in groups.items():
     for n in names:
         print(f"{g}\t{n}\t{best[n]*1000:.0f}\t{rss[n]//1024}\t{','.join(sorted(outs[n]))}")
+        if len(outs[n]) != 1: print("MISMATCH run-to-run", n); bad = 1
     keyed = {}
     for n in names:
-        m = re.search(r"_k(\d+)_", n)
-        key = m.group(1) if m else ("direct" if "direct" in n else None)
-        if key is None: continue
-        if len(outs[n]) != 1: print("MISMATCH run-to-run", n); bad = 1
-        keyed.setdefault(key, set()).update(outs[n])
-    for k, s in keyed.items():
-        if len(s) != 1: print("MISMATCH", g, "k" + k, sorted(s)); bad = 1
-print("checksums", "FAIL" if bad else "ok")
+        k, f = key(n)
+        if k is None: continue
+        keyed.setdefault(k, []).append((n, {f(o) for o in outs[n]}))
+    for k, members in keyed.items():
+        vals = set().union(*(v for _, v in members))
+        compared += len(members) - 1
+        if len(vals) != 1: print("MISMATCH", g, k, [(n, sorted(v)) for n, v in members]); bad = 1
+print("checksums", "FAIL" if bad else "ok", f"({compared} pairs compared)")
 sys.exit(bad)
 ```
 
 ### 12.8 The stored forms (`mktp.mjs`, `l2/`)
 
-`node mktp.mjs array_same_k2 ...` rewrites each `ll_<name>_proposed.ll` into
-`ll_<name>_tp.ll`: the pool's elements become tagged words and the hot loop
-reads its tag from the word, not from the `tags` array. It runs on the
-compiler's IR, so the rest of the program is the compiler's.
+`node mktp.mjs array_same_k2 serial_same_k2 ...` rewrites each
+`ll_<name>_proposed.ll` into `ll_<name>_tp.ll`, for the array and the serial
+programs alike (both fill a 1024-entry `pool` and a parallel `tags` array
+through `push.store.1` and call `d(tags[j], pool[j], acc)` from the hot loop):
+the pool's elements become tagged words, and the hot loop reads its tag from
+the word it loads, not from the `tags` array. A serial program differs from an
+array one only in its chain (`acc = d(...)`), so its `tp` rows in §3.4 are
+the same stored word under a serial dependency. It runs on the compiler's IR,
+so the rest of the program is the compiler's.
 
 ```js
-// mktp.mjs: ll_array_*_k*_proposed.ll -> ll_array_*_k*_tp.ll, the tag in the
-// pointer's top 16 bits (the pointer-tagged Dyn<I> element, 8 bytes). Tags are
-// stored as t+1 so that 0 stays null; the hot loop reads the tag with lshr and
-// strips it with llvm.ptrmask, and never reads the tags array's elements.
+// mktp.mjs <name>...: ll_<name>_proposed.ll -> ll_<name>_tp.ll, for any
+// array_* or serial_* name: the tag in the pointer's top 16 bits (the
+// tagged Dyn<I> word, 8 bytes). Tags are stored as t+1 so that 0 stays null;
+// the hot loop reads the tag with lshr and strips it with llvm.ptrmask.
 import { readFileSync, writeFileSync } from "node:fs"
 for (const name of process.argv.slice(2)) {
   let s = readFileSync(`ll_${name}_proposed.ll`, "utf8")
@@ -1952,10 +2101,10 @@ Lines in each hot loop, serial aperiodic:
 
 | Variant | K=4 `objdump` | K=4 `.ll` | K=13 `objdump` | K=13 `.ll` |
 | --- | --- | --- | --- | --- |
-| `switch` | 50 | 51 | 88 | 118 |
-| `proposed` | 49 | 50 | 87 | 117 |
-| `table` | 53 | 62 | 92 | 129 |
-| `vtable` | 22 | 22 | 31 | 34 |
+| `switch` | 50 | 50 | 88 | 117 |
+| `proposed` | 49 | 49 | 87 | 116 |
+| `table` | 53 | 61 | 92 | 128 |
+| `vtable` | 22 | 21 | 31 | 33 |
 
 <details>
 <summary><code>serial_aperiodic_k4_switch</code>: <code>objdump -d</code> and the <code>-O3</code> IR</summary>
@@ -3242,24 +3391,28 @@ for f in forms:
 
 `bash v/run.sh` builds every §3.3 and §3.4 variant at a hundredth of its loop
 length (`gen.mjs` reads `SERIAL` and `ROUNDS` from the environment in this
-run), the three escape cases and the registry at 500,000 calls, and runs each
-under valgrind; `v/valgrind.txt` holds one line per binary (173), and
-`v/valgrind_stp.txt` the ten serial tagged-word variants of §3.4's second run,
-built and run the same way afterwards: 183 in all (§4.4). The environment
+run), the twenty tagged-word variants of §3.4 (array and serial), the three
+escape cases at `s` (rebuilt from `e/gen.mjs`) and the registry at 500,000
+calls, and runs each under valgrind: `NISH=<checkout> bash v/run.sh` writes
+one line per binary to `v/valgrind.txt`, 183 lines and `VDONE` (§4.4). The environment
 variables change only the loop lengths; the timed programs used the defaults.
 
 ```sh
-# v/run.sh: every §3.3/§3.4 variant at 1/100th of its loop, the escape case B
-# (and A, C) at s, and the three registry forms at 500k calls, each under
-# valgrind --error-exitcode=1 --leak-check=full. One line per binary.
+# v/run.sh: every §3.3/§3.4 variant at 1/100th of its loop (the serial and
+# array tp variants included), the escape cases A, B and C at s, and the three
+# registry forms at 500k calls, each under valgrind --error-exitcode=1
+# --leak-check=full. One line per binary in valgrind.txt; 183 lines and VDONE.
+# Needs NISH (the checkout with build/nish) and the sibling d/, e/ and r/
+# directories for their generators; it builds every binary it runs.
 set -u
-export NISH=/home/user/nish
+: "${NISH:?set NISH to the nish checkout}"; export NISH
 S=$(cd "$(dirname "$0")/.." && pwd); V=$S/v
-cd $V; mkdir -p bin src rsrc
+cd $V; mkdir -p bin src rsrc esrc
 cp $S/d/gen.mjs $S/d/mkvt.mjs $S/d/mkaos.mjs $S/d/mktp.mjs $S/d/wp60_vt.c $S/d/buildone.sh .
 SERIAL=2000000 ROUNDS=2000 node gen.mjs src > /dev/null
 aos=""; tp=""
 for g in array_same array_periodic; do for k in 2 4 8 13 16; do aos="$aos ${g}_k$k"; done; done
+for g in serial_same serial_periodic array_same array_periodic; do for k in 2 4 8 13 16; do tp="$tp ${g}_k$k"; done; done
 node mkaos.mjs $aos
 names="$(cat src/list.txt)"
 for n in $aos; do names="$names ${n}_aos"; done
@@ -3268,13 +3421,16 @@ for n in $(grep _proposed src/list.txt); do
   k=$(echo $n | sed 's/.*_k\([0-9]*\)_.*/\1/'); vt=${n%_proposed}_vtable
   node mkvt.mjs ll_$n.ll ll_$vt.ll $k; names="$names $vt"
 done
-node mktp.mjs $aos; for n in $aos; do names="$names ${n}_tp"; done
+node mktp.mjs $tp; for n in $tp; do names="$names ${n}_tp"; done
 for n in $names; do bash buildone.sh $n || echo "BUILD FAIL $n"; done
 CALLS=500000 node $S/r/gen.mjs rsrc > /dev/null
 for f in hand table proposed; do
   $NISH/build/nish rsrc/reg_$f.ts -o ll_reg_$f.ll && bash buildone.sh reg_$f || echo "BUILD FAIL reg_$f"; names="$names reg_$f"
 done
-for e in A B C; do cp $S/e/bin/esc_${e}_s bin/; names="$names esc_${e}_s"; done
+node $S/e/gen.mjs esrc > /dev/null
+for e in A B C; do
+  $NISH/build/nish esrc/esc_${e}_s.ts -o ll_esc_${e}_s.ll && bash buildone.sh esc_${e}_s || echo "BUILD FAIL esc_${e}_s"; names="$names esc_${e}_s"
+done
 : > valgrind.txt
 for n in $names; do
   valgrind --error-exitcode=1 --leak-check=full --log-file=vlog_$n.txt bin/$n > out_$n.txt
