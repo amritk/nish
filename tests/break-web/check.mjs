@@ -214,8 +214,9 @@ check(
 
 // The terminal's look before it is used ships in theme.css on every docs page
 // too; the rest comes with the shell. The baseline is theme.css on main
-// (c6c797f9b) before the terminal took keys.
-const THEME_GZIP_BEFORE = 8956
+// (c6c797f9b) before the terminal took keys, plus 404 B for the inline-code
+// style added after it, which is no part of the terminal.
+const THEME_GZIP_BEFORE = 8956 + 404
 const THEME_GZIP_GROWTH = 550
 const themeGzipped = zlib.gzipSync(fs.readFileSync(path.join(root, "docs", "site", "theme.css")), { level: 9 }).length
 check(

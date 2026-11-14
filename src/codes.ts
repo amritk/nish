@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 929
+export const RULE_COUNT: i32 = 930
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1903,6 +1903,8 @@ const performanceRules = (): string[] => [
   "NL9014",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
+  "keeps an allocation on every call and runs on every pass of a loop that releases nothing",
+  "NL9019",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",

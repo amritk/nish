@@ -1268,6 +1268,12 @@ const DECLARED = [
     why: "an `Ok`/`Err` assigned to a `let` of the frame follows the `let`, so the sites outside a loop are allocas and the functions keep their arena scope",
   },
   {
+    program: "tests/cases/perf_kept_memory_quiet.ts",
+    file: "perf_kept_memory_quiet.ll",
+    changelog: LET_REASSIGN,
+    why: "`pick` assigns an `Ok`/`Err` to a `let` of its frame outside a loop, so the Result is an alloca rather than an arena allocation",
+  },
+  {
     program: "tests/cases/res_proof_consumers.ts",
     file: "res_proof_consumers.ll",
     changelog: LET_REASSIGN,

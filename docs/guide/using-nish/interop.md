@@ -523,6 +523,12 @@ that.
   is refused with NL2766.
 - Root storage is not exported and has no `layout` entry: its objects move,
   so the page reads them through exported functions (NL2767).
+- The page must not write into kept objects through `memory`. If it points
+  one outside the module's heap or gives an array a length past its end, the
+  next compaction refuses it: the call throws a `NishPanic` of kind `panic`
+  ("root storage: a pointer in the kept graph names memory outside the
+  arena", or "... a length in the kept graph runs past its block") and the
+  module is dead.
 - A program that loads `nish/threads` or `nish:region` cannot have root
   storage (NL2768).
 - A native program keeps root storage like any module storage, with nothing

@@ -3134,13 +3134,25 @@ const ownLeak = (facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): Fu
  * The first allocation `f` itself holds past its return, the one
  * `leaksItself` stands for: a site of its own whose flow leaks, or a call
  * to an allocating callee whose result does. `null` when none is on record.
+ * With `kept`, `f`'s unit, a value whose only doubt is that it is handed to a
+ * function's parameter is skipped: what that function does with it is its
+ * own, and the doubt is often only that its parameter fact is conservative.
  */
-const ownLeakNode = (facts: FactsTable, f: FunctionFacts): Node | null => {
+const ownLeakNode = (
+  facts: FactsTable,
+  f: FunctionFacts,
+  kept: AnalysisUnit | null,
+  table: TypeTable
+): Node | null => {
   let first: Node | null = null
   let i = 0
   while (i < f.arenaNodes.length && i < f.arenaFlows.length) {
     const node = f.arenaNodes[i]
-    if (f.arenaFlows[i] === FLOW_LEAKS && (first === null || node.start < first.start)) {
+    if (
+      f.arenaFlows[i] === FLOW_LEAKS &&
+      (first === null || node.start < first.start) &&
+      !handedOn(kept, table, node)
+    ) {
       first = node
     }
     i = i + 1
@@ -3151,7 +3163,8 @@ const ownLeakNode = (facts: FactsTable, f: FunctionFacts): Node | null => {
       site.flow === FLOW_LEAKS &&
       g !== null &&
       g.allocates &&
-      (first === null || site.node.start < first.start)
+      (first === null || site.node.start < first.start) &&
+      !handedOn(kept, table, site.node)
     ) {
       first = site.node
     }
@@ -3159,11 +3172,238 @@ const ownLeakNode = (facts: FactsTable, f: FunctionFacts): Node | null => {
   return first
 }
 
+/**
+ * Whether `node`, in `unit` when there is one, is handed on rather than kept:
+ * an argument to a function, or to `spawnSync`, which is done with it when it
+ * returns. An element of an array or object literal is handed on with the
+ * literal, and so is one of a literal that is only read (`[a, b].join(",")`).
+ */
+const handedOn = (unit: AnalysisUnit | null, table: TypeTable, node: Node): boolean => {
+  if (unit === null) {
+    return false
+  }
+  let value = node
+  let parent = unit.parents.parentOf(value)
+  while (
+    parent !== null &&
+    (parent.kind === NodeKind.Paren ||
+      parent.kind === NodeKind.Array ||
+      parent.kind === NodeKind.Object ||
+      parent.kind === NodeKind.Property)
+  ) {
+    value = parent
+    parent = unit.parents.parentOf(value)
+  }
+  const found = classifyUse(unit, table, value).kind
+  if (found === USE_ARGUMENT || (value !== node && (found === USE_NONE || found === USE_READ))) {
+    return true
+  }
+  const call: Node | null = parent === null ? null : unit.parents.parentOf(parent)
+  if (parent === null || parent.kind !== NodeKind.List || call === null || call.kind !== NodeKind.Call) {
+    return false
+  }
+  const name = unit.program.nodeCallees[call.id] === null ? builtinNameOf(unit.program, call) : ""
+  return name === "spawnSync" || name === "spawnSyncTo"
+}
+
 /** Whether `list` holds `f`. */
 const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
   for (const g of list) {
     if (g === f) {
       return true
+    }
+  }
+  return false
+}
+
+// ---- The kept-memory diagnostic (NL9019) --------------------------------------------------
+//
+// The arena-loop warning speaks at the loop, about a callee whose memory piles
+// up there. This one speaks at the callee: a function that answers no memory
+// and could release all it allocates, but keeps an allocation of its own,
+// called directly from a loop pass that releases nothing. Each call keeps one
+// more, so memory grows with every pass however small the function looks, and
+// the fix is in the function. It is found across every module, because the
+// loop is often a dependency's (a server's event loop calls the program's
+// handler). Memory kept deeper in the chain, behind a direct callee that
+// answers memory, is `--explain-memory`'s to name, not this warning's.
+
+/**
+ * The functions a loop pass that takes no scope calls directly: memory one of
+ * them keeps goes to the pass, and the pass keeps it. Nothing further down
+ * the call graph is followed, and no call is excused for the object it
+ * receives: a function runs on every pass the moment a pass calls it. Every
+ * module and every instantiation is walked, with its own side tables
+ * installed, because a loop that calls a function parameter calls the
+ * argument inside the instantiation.
+ */
+export const loopReachedFunctions = (
+  units: AnalysisUnit[],
+  table: TypeTable,
+  facts: FactsTable
+): StringSet => {
+  const reached = new StringSet()
+  for (const unit of units) {
+    const program = unit.program
+    for (const sig of program.functions) {
+      const f = facts.get(sig.name)
+      const body = sig.body()
+      if (!sig.definedIn(program.source) || f === null || body === null) {
+        continue
+      }
+      const instance = sig.instance
+      if (instance !== null) {
+        program.enterInstance(instance)
+      }
+      collectPassCalls(program, table, f, body, false, false, reached)
+      if (instance !== null) {
+        program.leaveInstance()
+      }
+    }
+  }
+  return reached
+}
+
+/**
+ * Each function a call or `new` under `node` runs, when it runs on a pass
+ * that releases nothing: `inLoop` says a loop encloses `node`, `released` that
+ * a scoped pass or a `using a = arena()` block does.
+ */
+const collectPassCalls = (
+  program: CheckedProgram,
+  table: TypeTable,
+  f: FunctionFacts,
+  node: Node,
+  inLoop: boolean,
+  released: boolean,
+  reached: StringSet
+): void => {
+  if (node.kind === NodeKind.Arrow) {
+    return
+  }
+  if (inLoop && !released) {
+    const callee = calleeAt(program, table, node)
+    if (callee !== null) {
+      reached.add(callee.name)
+    }
+  }
+  const isLoop = isLoopKind(node)
+  const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
+  let free = released
+  let i = 0
+  while (i < node.children.length) {
+    const child = node.children[i]
+    free = free || (node.kind === NodeKind.Block && isArenaUsing(program, child))
+    // A `for` initialiser and a `for...of` iterable run once, before the first pass.
+    const once = (node.kind === NodeKind.For && i === 0) || (node.kind === NodeKind.ForOf && i === 1)
+    const pass = isLoop && !once
+    // The condition and the update run outside the bracket the body takes.
+    const scoped = pass && scope !== null && scope.scoped && child === scope.body
+    collectPassCalls(program, table, f, child, inLoop || pass, pass ? released || scoped : free, reached)
+    i = i + 1
+  }
+}
+
+/**
+ * The NL9019 warnings of one module: each function `reached` names (a direct
+ * callee of an unscoped loop pass, `loopReachedFunctions`) that answers no
+ * memory, would take a scope of its own but for an allocation it holds where
+ * this analysis does not prove it dead (`leaksItself`), and so keeps what it
+ * allocates on every call. Reported
+ * at the function, naming the first allocation it holds. A function that
+ * calls `Arena.mark`, files a task or fills a parameter keeps its memory on
+ * purpose, and one refused its scope for another reason is `--explain-memory`'s
+ * to explain: the rewrites named here would not give it one. A generic
+ * function warns once, at its template. The caller asks `mayKeepMemory`
+ * first, which also answers no when elision is off.
+ */
+export const keptMemoryFindings = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  reached: StringSet
+): ArenaFinding[] => {
+  const out: ArenaFinding[] = []
+  const program = unit.program
+  // The declarations already warned at, by node id: instances share their template's.
+  const said = new StringSet()
+  for (const sig of program.functions) {
+    const f = facts.get(sig.name)
+    const body = sig.body()
+    if (
+      !sig.definedIn(program.source) ||
+      f === null ||
+      body === null ||
+      !reached.has(sig.name) ||
+      said.has(`${sig.decl.id}`)
+    ) {
+      continue
+    }
+    const instance = sig.instance
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    const held = keptOwnAllocation(unit, table, facts, sig, f, body)
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+    if (held !== null) {
+      said.add(`${sig.decl.id}`)
+      out.push(
+        new ArenaFinding(
+          sig.decl,
+          `\`${f.sourceName}\` keeps an allocation on every call and runs on every pass of a loop that releases ` +
+            "nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line " +
+            `${program.source.lineOf(held.start)}, where this analysis does not prove it dead when the function ` +
+            "returns (a local assigned more than once, or an array of its own). " +
+            "Give each value its own `const`, open a block with `using a = arena()` around the work, or keep " +
+            "what must outlive the call in a region"
+        )
+      )
+    }
+  }
+  return out
+}
+
+/** The first allocation `f` holds of its own when it answers no memory and holds nothing else; `null` otherwise. */
+const keptOwnAllocation = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  sig: FunctionSig,
+  f: FunctionFacts,
+  body: Node
+): Node | null => {
+  if (
+    sig.role === ROLE_CONSTRUCTOR ||
+    f.arenaScope ||
+    !f.leaksItself ||
+    f.managesArena ||
+    f.feedsTasks ||
+    f.fillsParam >= 0 ||
+    noScopeReason(unit, facts, f).length > 0 ||
+    keptAllocation(unit, table, facts, f, body) === null
+  ) {
+    return null
+  }
+  return ownLeakNode(facts, f, unit, table)
+}
+
+/**
+ * Whether NL9019 could warn in any of `units` at all: some function there may
+ * keep an allocation of its own. When none can, the whole-program walk of
+ * `loopReachedFunctions` is skipped; with elision off, nothing is kept.
+ */
+export const mayKeepMemory = (units: AnalysisUnit[], facts: FactsTable): boolean => {
+  if (facts.noElision) {
+    return false
+  }
+  for (const unit of units) {
+    for (const sig of unit.program.functions) {
+      const f = facts.get(sig.name)
+      if (f !== null && f.leaksItself && !f.arenaScope && sig.definedIn(unit.program.source)) {
+        return true
+      }
     }
   }
   return false
@@ -3404,7 +3644,7 @@ const keptReason = (
   // A leak of its own is the one to fix first: a callee's would not
   // give this function its scope back while its own remains.
   if (f.leaksItself) {
-    const held = ownLeakNode(facts, f)
+    const held = ownLeakNode(facts, f, null, table)
     const where =
       held === null ? "" : `; the first allocation it holds is on line ${program.source.lineOf(held.start)}`
     return (
