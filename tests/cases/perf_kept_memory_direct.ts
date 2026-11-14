@@ -62,7 +62,7 @@ const capped = (s: State): i32 => {
   return xs.length;
 };
 
-// A latch on its parameter, run on a different object on every pass.
+// A once-guard on its parameter, run on a different object on every pass.
 const mark = (item: State): i32 => {
   if (item.seen) {
     return 0;
@@ -73,7 +73,7 @@ const mark = (item: State): i32 => {
   return xs.length;
 };
 
-// The same latch, run on a local the loop assigns again on every pass.
+// The same once-guard, run on a local the loop assigns again on every pass.
 const stamp = (item: State): i32 => {
   if (item.seen) {
     return 0;
@@ -84,7 +84,7 @@ const stamp = (item: State): i32 => {
   return xs.length;
 };
 
-// A latch the program clears elsewhere: `invalidate` stores `false` back.
+// A once-guard the program clears elsewhere: `invalidate` stores `false` back.
 const armedWork = (s: State): i32 => {
   if (s.armed) {
     return 0;
@@ -98,7 +98,7 @@ const invalidate = (s: State): void => {
   s.armed = false;
 };
 
-// A latch cleared through another name for the same object.
+// A once-guard cleared through another name for the same object.
 const loadedWork = (s: State): i32 => {
   if (s.loaded) {
     return 0;
@@ -113,7 +113,7 @@ const unload = (s: State): void => {
   t.loaded = false;
 };
 
-// Work before the guard runs on every call, latch or not.
+// Work before the guard runs on every call, guarded or not.
 const early = (s: State): i32 => {
   const tmp: string[] = [];
   tmp.push(`${s.n}`);
@@ -124,7 +124,7 @@ const early = (s: State): i32 => {
   return tmp.length;
 };
 
-// A second way out between the guard and the store leaves the latch unset.
+// A second way out between the guard and the store leaves the flag unset.
 const gated = (s: State): i32 => {
   if (s.gated) {
     return 0;
@@ -152,7 +152,7 @@ const renewG = (g: Holder): void => {
   g.cur = new State();
 };
 
-// A latch run on a field the loop stores a new object into on every pass.
+// A once-guard run on a field the loop stores a new object into on every pass.
 const prep = (item: State): i32 => {
   if (item.seen) {
     return 0;
@@ -174,7 +174,7 @@ const prepNext = (item: State): i32 => {
   return xs.length;
 };
 
-// The same latch, run on a field the loop replaces through `renewG`.
+// The same once-guard, run on a field the loop replaces through `renewG`.
 const prepG = (item: State): i32 => {
   if (item.seen) {
     return 0;
@@ -185,7 +185,7 @@ const prepG = (item: State): i32 => {
   return xs.length;
 };
 
-// The same latch, run on a field the loop replaces through a name for the
+// The same once-guard, run on a field the loop replaces through a name for the
 // holder made before the loop.
 const prepAlias = (item: State): i32 => {
   if (item.seen) {
