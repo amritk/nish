@@ -1395,7 +1395,7 @@ export class HttpServer {
   private drivePass(h1: Http1Server, slot: i32): void {
     const conn: Http1Connection = h1.connection(slot)
     let event: i32 = H1_NEED_MORE
-    if (!this.starve(slot)) {
+    if (!this.starve(slot) && !this.unended(slot)) {
       event = h1.next(slot)
       while (event !== H1_NEED_MORE && event !== H1_ERROR) {
         if (event === H1_REQUEST) {
@@ -1407,7 +1407,7 @@ export class HttpServer {
         } else if (event === H1_WRITE) {
           this.resume(slot, conn)
         }
-        if (this.starve(slot)) {
+        if (this.starve(slot) || this.unended(slot)) {
           break
         }
         event = h1.next(slot)
@@ -1419,6 +1419,22 @@ export class HttpServer {
       this.releaseReading(slot)
     }
     this.settle(h1, slot, conn)
+  }
+
+  /**
+   * Whether `slot`'s response is under way with every byte handed over but
+   * not yet ended. The carrier finishes a `Content-Length` response once its
+   * last byte is written and would read the next request on the next `next`,
+   * so the slot is not asked until the program's `end`: until then the
+   * response is the program's, and a draining connection stays open for it.
+   */
+  private unended(slot: i32): boolean {
+    const at: i32 = this.h1Current[slot]
+    if (at < 0) {
+      return false
+    }
+    const r: HttpServerRequest = this.requests[at]
+    return r.state === HTTP_SERVER_STREAMING && r.pendingEnd === r.pendingStart
   }
 
   /** Whether `slot` must wait for a free request before it reads a head: it then joins `starved`. */
