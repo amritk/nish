@@ -16493,6 +16493,203 @@ attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end union-switch -->
 
+A union as a generic's type argument is monomorphised like any other:
+`Box<Shape>` is `%struct.Box$un2.$Circle.$Square = type { %union.tagged* }`,
+the layout a class written by hand with a `Shape` field has
+(`%struct.ShapeBox` below), field for field. A variant entering a `T` slot is
+the same `bitcast` to `%union.tagged*` it is for a `Shape` parameter, and the
+two instances differ only in their names and their TBAA tag, which is one
+per class as for any two classes (`tests/cases/union_generic_class`,
+`union_generic_call`, `union_result`).
+
+<!-- cookbook:begin decl-union-generic -->
+```ts
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle
+  r: i32 = 3
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square
+  side: i32 = 4
+}
+
+type Shape = Circle | Square
+
+class Box<T> {
+  value: T
+  constructor(value: T) {
+    this.value = value
+  }
+}
+
+class ShapeBox {
+  value: Shape
+  constructor(value: Shape) {
+    this.value = value
+  }
+}
+
+const viaBox = (): Kind => new Box<Shape>(new Circle()).value.kind
+
+const viaShapeBox = (): Kind => new ShapeBox(new Circle()).value.kind
+
+export const main = (): number => {
+  console.log(viaBox() === viaShapeBox() ? "same" : "different")
+  return 0
+}
+```
+
+```llvm
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32, i32 }
+%struct.ShapeBox = type { %union.tagged* }
+%struct.Box$un2.$Circle.$Square = type { %union.tagged* }
+%union.tagged = type { i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"same\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"different\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @ShapeBox.constructor(%struct.ShapeBox* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %union.tagged* noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.ShapeBox, %struct.ShapeBox* %this, i32 0, i32 0
+  store %union.tagged* %value, %union.tagged** %0, align 8, !tbaa !4
+  ret void
+}
+
+define internal noundef i32 @viaBox() #0 {
+entry:
+  %Box$un2.$Circle.$Square.obj = alloca %struct.Box$un2.$Circle.$Square, align 8
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Circle*
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !7
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 1
+  store i32 3, i32* %3, align 4, !tbaa !8
+  %4 = bitcast %struct.Circle* %1 to %union.tagged*
+  call void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, %union.tagged* %4)
+  %5 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, i32 0, i32 0
+  %6 = load %union.tagged*, %union.tagged** %5, align 8, !tbaa !10
+  %7 = getelementptr inbounds %union.tagged, %union.tagged* %6, i32 0, i32 0
+  %8 = load i32, i32* %7, align 4
+  ret i32 %8
+}
+
+define internal noundef i32 @viaShapeBox() #0 {
+entry:
+  %ShapeBox.obj = alloca %struct.ShapeBox, align 8
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Circle*
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !7
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 1
+  store i32 3, i32* %3, align 4, !tbaa !8
+  %4 = bitcast %struct.Circle* %1 to %union.tagged*
+  call void @ShapeBox.constructor(%struct.ShapeBox* %ShapeBox.obj, %union.tagged* %4)
+  %5 = getelementptr inbounds %struct.ShapeBox, %struct.ShapeBox* %ShapeBox.obj, i32 0, i32 0
+  %6 = load %union.tagged*, %union.tagged** %5, align 8, !tbaa !4
+  %7 = getelementptr inbounds %union.tagged, %union.tagged* %6, i32 0, i32 0
+  %8 = load i32, i32* %7, align 4
+  ret i32 %8
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i32 @viaBox()
+  %1 = call i32 @viaShapeBox()
+  %2 = icmp eq i32 %0, %1
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %3 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), %cond.true ], [ bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), %cond.false ]
+  call void @nish_print(i8* %3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %union.tagged* noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %this, i32 0, i32 0
+  store %union.tagged* %value, %union.tagged** %0, align 8, !tbaa !10
+  ret void
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"ShapeBox", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"i32", !1, i64 0}
+!6 = !{!"Circle", !5, i64 0, !5, i64 4}
+!7 = !{!6, !5, i64 0}
+!8 = !{!6, !5, i64 4}
+!9 = !{!"Box$un2.$Circle.$Square", !2, i64 0}
+!10 = !{!9, !2, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-union-generic -->
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that

@@ -427,10 +427,10 @@ function resultArmIsReference(ctx: CheckContext, arm: i32): boolean -> @resultAr
 function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i32 -> @resolveResult
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
-  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.holdsUnion TypeTable.resultOf TypeTable.typeName containerMessage nish_panic_index nish_str_concat rejectForeignPointer rejectStoredMask resolveType resultArmIsReference unionArgumentMessage
-  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
+  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.resultOf TypeTable.typeName containerMessage nish_panic_index nish_str_concat rejectForeignPointer rejectStoredMask resolveType resultArmIsReference
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer args: size=40 writesThrough=false captured=false
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.errorType#0 resolveType#1 resolveType#1 rejectForeignPointer#0 rejectForeignPointer#0 rejectStoredMask#0 rejectStoredMask#0 CheckContext.errorType#0 CheckContext.errorType#0 resultArmIsReference#0 resultArmIsReference#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.errorType#0 resolveType#1 resolveType#1 rejectForeignPointer#0 rejectForeignPointer#0 rejectStoredMask#0 rejectStoredMask#0 CheckContext.errorType#0 resultArmIsReference#0 resultArmIsReference#0 CheckContext.errorType#0 CheckContext.errorType#0
   stackSites=0 stackLocals=0
   callee +0:12 CheckContext.errorType -> @CheckContext.errorType
   local +2:9 ok: i32 (const)
@@ -448,24 +448,14 @@ function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   callee +20:58 TypeTable.typeName -> @TypeTable.typeName
   callee +21:12 CheckContext.errorType -> @CheckContext.errorType
   callee +21:32 containerMessage -> @containerMessage
-  callee +23:7 TypeTable.holdsUnion -> @TypeTable.holdsUnion
-  callee +23:35 TypeTable.holdsUnion -> @TypeTable.holdsUnion
-  callee +24:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +26:7 unionArgumentMessage -> @unionArgumentMessage
-  callee +26:38 TypeTable.typeName -> @TypeTable.typeName
-  callee +26:65 TypeTable.typeName -> @TypeTable.typeName
-  callee +29:7 resultArmIsReference -> @resultArmIsReference
-  callee +29:40 resultArmIsReference -> @resultArmIsReference
-  local +30:11 spelled: string (const)
-  callee +30:31 TypeTable.typeName -> @TypeTable.typeName
-  callee +30:58 TypeTable.typeName -> @TypeTable.typeName
+  callee +23:7 resultArmIsReference -> @resultArmIsReference
+  callee +23:40 resultArmIsReference -> @resultArmIsReference
+  local +24:11 spelled: string (const)
+  callee +24:31 TypeTable.typeName -> @TypeTable.typeName
+  callee +24:58 TypeTable.typeName -> @TypeTable.typeName
+  callee +25:12 CheckContext.errorType -> @CheckContext.errorType
   callee +31:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +37:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +42:10 TypeTable.resultOf -> @TypeTable.resultOf
-function unionArgumentMessage(spelled: string): string -> @unionArgumentMessage [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_concat
-  stackSites=0 stackLocals=0
+  callee +36:10 TypeTable.resultOf -> @TypeTable.resultOf
 function resolveUnion(node: Node, ctx: CheckContext): i32 -> @resolveUnion
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nullableOfChecked

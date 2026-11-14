@@ -166,9 +166,9 @@ function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: want
-  calls: Scope.heldBy TypeTable.isEnumMemberType TypeTable.isMaybe TypeTable.isRanged TypeTable.stripNull coercesTo computeType enterMember joinArmMembers namesMembers nish_panic_index pathVariable readAsBase recordRangeEntry refuseInferredTag refuseMaybe takesRangeContext
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=computeType#0 pathVariable#0 refuseInferredTag#0 joinArmMembers#0 refuseMaybe#0 recordRangeEntry#0 enterMember#0 readAsBase#0 coercesTo#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=takesRangeContext#0 computeType#1 pathVariable#1 refuseInferredTag#1 joinArmMembers#1 refuseMaybe#1 recordRangeEntry#1 enterMember#1
+  calls: Scope.heldBy TypeTable.isEnumMemberType TypeTable.isMaybe TypeTable.isRanged computeType enterMember joinArmMembers namesMembers nish_panic_index pathVariable readAsBase recordCoercion recordRangeEntry refuseInferredTag refuseMaybe takesRangeContext
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=computeType#0 pathVariable#0 refuseInferredTag#0 joinArmMembers#0 refuseMaybe#0 recordRangeEntry#0 enterMember#0 readAsBase#0 recordCoercion#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=takesRangeContext#0 computeType#1 pathVariable#1 refuseInferredTag#1 joinArmMembers#1 refuseMaybe#1 recordRangeEntry#1 enterMember#1 recordCoercion#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=computeType#2 pathVariable#2 Scope.heldBy#0
   stackSites=0 stackLocals=0
   local -19:9 welcome: boolean (const)
@@ -197,10 +197,18 @@ function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32)
   local +31:9 type: i32 (const)
   callee +31:16 readAsBase -> @readAsBase
   callee +32:28 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +35:7 coercesTo -> @coercesTo
-  local +38:11 target: i32 (const)
-  callee +38:29 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +38:57 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +35:7 recordCoercion -> @recordCoercion
+function recordCoercion(ctx: CheckContext, node: Node, from: i32, want: i32): boolean -> @recordCoercion [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: from want
+  calls: TypeTable.stripNull coercesTo nish_panic_index
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=coercesTo#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee -5:8 coercesTo -> @coercesTo
+  callee +1:45 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +1:73 TypeTable.stripNull -> @TypeTable.stripNull
 function takesRangeContext(expr: Node): boolean -> @takesRangeContext
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq

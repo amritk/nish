@@ -1173,7 +1173,12 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[], laysOut
     f = unionField(table, info)
   }
   if (unit !== null && info !== null && f !== null) {
-    reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+    reportUnion(
+      compilation,
+      unit,
+      f.decl,
+      `\`${table.typeName(info.type)}.${f.name}\` is \`${table.typeName(f.type)}\``
+    )
     return false
   }
   return true

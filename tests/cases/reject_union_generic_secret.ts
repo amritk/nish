@@ -1,8 +1,9 @@
-// A generic call whose type parameter would bind to a union is refused.
+// A `Secret` holds key material, which a union is not.
+import { secret, wipe } from "nish:secret";
+
 enum Kind {
   Circle,
   Square,
-  Tri,
 }
 
 class Circle {
@@ -19,6 +20,7 @@ type Shape = Circle | Square;
 
 const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
 
-const id = <T>(x: T): T => x;
-
-const same = (s: Shape): Shape => id(s);
+export const main = (): void => {
+  const s = secret(pick(1));
+  wipe(s);
+};

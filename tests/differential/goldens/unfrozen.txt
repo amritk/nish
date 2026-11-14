@@ -660,6 +660,9 @@ cases/term_pty added after R6: no rewriter to freeze it with
 cases/term_restore added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
+cases/union_generic_call added after R6: no rewriter to freeze it with
+cases/union_generic_class added after R6: no rewriter to freeze it with
+cases/union_map_helpers added after R6: no rewriter to freeze it with
 cases/union_map_value added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with
 cases/union_narrowing_arms added after R6: no rewriter to freeze it with
@@ -671,6 +674,7 @@ cases/union_narrowing_loop_reads added after R6: no rewriter to freeze it with
 cases/union_narrowing_paths added after R6: no rewriter to freeze it with
 cases/union_narrowing_switch_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_tested_join added after R6: no rewriter to freeze it with
+cases/union_result added after R6: no rewriter to freeze it with
 cases/union_scale added after R6: no rewriter to freeze it with
 cases/union_switch added after R6: no rewriter to freeze it with
 cases/union_switch_flow added after R6: no rewriter to freeze it with

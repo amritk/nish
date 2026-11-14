@@ -10216,46 +10216,10 @@ const weight = (s: Shape): i32 => {
 The message of an error contains:
 
 ```text
-…` cannot take a union as a type argument: in this version a union is the type of a local, …
+` cannot take a union as a type argument: in this version a union is the type of a local, …
 ```
 
-[`nl2533_union_type_argument.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2533_union_type_argument.ts):
-
-```ts
-// NL2533: a union given as a generic class's type argument.
-enum Kind {
-  Circle,
-  Square,
-  Tri,
-}
-
-class Circle {
-  readonly kind: Kind.Circle = Kind.Circle;
-  r: i32 = 1;
-}
-
-class Square {
-  readonly kind: Kind.Square = Kind.Square;
-  side: i32 = 2;
-}
-
-type Shape = Circle | Square;
-
-const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
-
-class Box<T> {
-  value: T;
-  constructor(value: T) {
-    this.value = value;
-  }
-}
-
-const open = (b: Box<Shape>): Kind => b.value.kind;
-```
-
-```text
-`Box<Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value, an array element or a `Map`'s value, and not of a generic's, a `Set`'s or a `Result`'s type argument
-```
+**Retired**: `... cannot take a union as a type argument`, the refusal WP58 S1 lifted; a union is a generic's, a `Result`'s and `nish/map`'s helpers' type argument now (tests/cases/union_generic_class, union_generic_call, union_result, union_map_helpers), and what stays refused keeps its own code: a `Set` element or `Map` key NL2353, a generic variant NL2522, an inferred union NL2172, a variant stored through a generic field NL2534
 
 ## NL2534
 

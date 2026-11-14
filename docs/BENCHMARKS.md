@@ -2585,3 +2585,19 @@ The Nish body is 13.9% to 22.1% (22.1%, 19.8% and 13.9%) slower than OpenSSL's s
 
 The best rewrite of `sha256Compress` tried (`run.mjs --variant locals+maj+nested`) was 8% to 9.5% faster (189 to 192 ns against 208, three pinned runs), under the 10% bar, and `--cpu x86-64-v3` alone gives as much, so the body is unchanged. Rounds 16 to 63 as a loop over a K table would need module-level constant arrays in the compiler. HMAC-SHA256, HS256 and PBKDF2 (`hmacCopySha256`) take the SHA-NI kernel by default and the Nish body under `NISH_SHA256=soft`, shown by their timings here and by a `-Wl,--wrap` call counter in `tests/run.js`'s "sha256 kernel" section.
 <!-- sha-block:end -->
+
+<!-- union-result:begin -->
+## A union as a `Result`'s success (WP58 S1)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bench/union-result/union.ts` returns `Result<Shape, string>`, where `Shape` is a discriminated union; `wrapper.ts` is the same program written the way it had to be before a union could be a type argument, `Result<ShapeWrapper, string>` with the union in a class field. A success allocates the 24-byte result and the 8-byte variant; the wrapper adds its own 8 bytes, so it allocates a fifth more and its resident set grows with it. The union enters the result with a bitcast, so it costs nothing over the variant.
+
+4,000,000 calls of `parse`, 11 interleaved rounds, medians; `node bench/union-result/run.mjs`.
+
+| variant | wall ms | vs wrapper | bytes per success | peak resident KiB |
+| --- | ---: | ---: | ---: | ---: |
+| union | 70.1 | 0.77x | 32 | 124060 |
+| union2 | 71.1 | 0.78x | 32 | 124060 |
+| wrapper | 90.7 | 1.00x | 40 | 153116 |
+
+Noise band (union against its byte-identical copy union2): wall 7.0%, peak resident 0.0%.
+<!-- union-result:end -->

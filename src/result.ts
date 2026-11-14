@@ -143,8 +143,12 @@ export const checkResultConstructor = (ctx: CheckContext, call: Node, scope: Sco
   // WP31 §6: a ranged payload is the exception, because a range is a sink the
   // value enters rather than a width a literal might take: it is passed down
   // so a literal is checked against it and anything else enters it checked.
-  // An enum member payload is passed down for the same reason (`isEntered`).
-  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isEntered(payload) ? payload : -1)
+  // An enum member payload is passed down for the same reason (`isEntered`),
+  // and so is a union payload: a variant enters its union there through
+  // `coercesTo`, the conversion every other sink records, so `Ok(new
+  // Circle())` for a `Result<Shape, E>` is the variant's pointer, recast.
+  const sink = ctx.table.isEntered(payload) || ctx.table.isUnion(ctx.table.stripNull(payload))
+  const got = checkExpression(ctx, args.children[0], scope, sink ? payload : -1)
   if (!ctx.table.assignable(got, payload)) {
     ctx.error(
       args.children[0],
