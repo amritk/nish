@@ -1216,6 +1216,10 @@ export class JsonTokenizer {
       if (stop > i) {
         const count: i32 = stop - i
         if (o >= 0) {
+          // The entry guard sized `out` for the decoded length the scan
+          // measured, but the source can change after the scan: a backslash
+          // turned plain lets a run outgrow that length, so the copy is cut
+          // to the room left.
           const room: i32 = toI32(out.length) - o
           const c: i32 = room < count ? room : count
           if (c > 0) {

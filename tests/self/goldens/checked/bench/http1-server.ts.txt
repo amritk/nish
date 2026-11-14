@@ -1563,22 +1563,22 @@ function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 
   pointer this: size=120 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0 nish.copyBytes#0 nish.copyBytes#0
   stackSites=0 stackLocals=0
-  local -57:11 n: i32 (const)
-  callee -56:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local -53:11 src: u8[] (const)
-  local -52:11 end: i32 (const)
-  local -51:9 i: i32 (let)
-  local -50:9 o: i32 (let)
-  callee -42:9 copyBytes -> @nish.copyBytes
-  local -38:15 srcLength: i32 (const)
-  local -37:15 outLength: i32 (const)
-  local -36:13 count: i32 (let)
-  callee -28:11 copyBytes -> @nish.copyBytes
-  local -21:13 b: i32 (const)
-  callee -21:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local -16:13 stop: i32 (const)
-  callee -16:56 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
-  local -14:15 count: i32 (const)
+  local -61:11 n: i32 (const)
+  callee -60:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local -57:11 src: u8[] (const)
+  local -56:11 end: i32 (const)
+  local -55:9 i: i32 (let)
+  local -54:9 o: i32 (let)
+  callee -46:9 copyBytes -> @nish.copyBytes
+  local -42:15 srcLength: i32 (const)
+  local -41:15 outLength: i32 (const)
+  local -40:13 count: i32 (let)
+  callee -32:11 copyBytes -> @nish.copyBytes
+  local -25:13 b: i32 (const)
+  callee -25:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local -20:13 stop: i32 (const)
+  callee -20:56 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
+  local -18:15 count: i32 (const)
   local -12:17 room: i32 (const)
   local -11:17 c: i32 (const)
   callee -9:13 copyBytes -> @nish.copyBytes

@@ -1198,6 +1198,28 @@ const fastPaths = (t: Suite): void => {
   mt.next();
   t.eqI32("stringInto: only escapes, no run between them", mt.stringInto(scratch, 5), 5);
   t.eqStr("stringInto: ...their bytes from the offset", jtHex(scratch.slice(5, 10), 5), "0ac3a9c3a9");
+  // A run that meets the closing quote ends the string; one that meets the
+  // window's end first is a truncated string, as before the runs.
+  const tail = jtAt('"\\nabc"', JSON_TOK_STRING);
+  t.eqStr("stringInto: the last run ends at the closing quote", tail === null ? "" : jtHex(scratch, tail.stringInto(scratch, 0)), "0a616263");
+  t.eqStr("stringInto: the last run ends at the window's end", jtVerdictWindow(jtBytes('"\\nabc"'), 0, 6), "TRUNCATED@6");
+  // A surrogate pair between two runs decodes whole, with the runs either side.
+  const pair = jtAt('"ab\\ud83d\\ude00cd\\n"', JSON_TOK_STRING);
+  t.eqStr("stringInto: a surrogate pair between two runs", pair === null ? "" : jtHex(scratch, pair.stringInto(scratch, 0)), "6162f09f988063640a");
+  // A backslash turned plain after the scan joins its escape to the run, which
+  // then outgrows the decoded length: the copy stops at the end of `out`.
+  const grown = jtBytes('["\\nabc"]');
+  const g = new JsonTokenizer(grown, 0, toI32(grown.length), new JsonLimits());
+  g.next();
+  g.next();
+  grown[2] = toU8(120);
+  const exact = new Array<u8>(4);
+  t.eqI32("stringInto: a run grown past the decoded length", g.stringInto(exact, 0), 5);
+  t.eqStr("stringInto: ...is cut to the room in out", jtHex(exact, 4), "786e6162");
+
+  // A comma before a closer is refused where the closer stands.
+  t.eqStr("dispatch: a trailing comma in an array", jtVerdict("[1,]"), "SYNTAX@3");
+  t.eqStr("dispatch: a trailing comma in an object", jtVerdict('{"a":1,}'), "SYNTAX@7");
 };
 
 /** Every unit check. */

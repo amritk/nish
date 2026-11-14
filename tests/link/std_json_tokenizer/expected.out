@@ -528,6 +528,13 @@ PASS  stringInto: escapes back to back with plain bytes between
 PASS  stringInto: a run stopped by a byte other than a backslash
 PASS  stringInto: only escapes, no run between them
 PASS  stringInto: ...their bytes from the offset
+PASS  stringInto: the last run ends at the closing quote
+PASS  stringInto: the last run ends at the window's end
+PASS  stringInto: a surrogate pair between two runs
+PASS  stringInto: a run grown past the decoded length
+PASS  stringInto: ...is cut to the room in out
+PASS  dispatch: a trailing comma in an array
+PASS  dispatch: a trailing comma in an object
 PASS  skipValue: the key
 PASS  skipValue after a key steps over its object value, to its closer
 PASS  ...back at the key's depth
@@ -567,4 +574,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 569 passed, 0 failed, 0 skipped
+std/json-tokenizer: 576 passed, 0 failed, 0 skipped
