@@ -1307,6 +1307,9 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     if (interior && parent.kind === NodeKind.VarDecl && parent.children[2] === node) {
       return classifyElementHolder(unit, table, program.nodeLocals[parent.id], enclosingBlock(unit, parent))
     }
+    if (parent.kind === NodeKind.VarDecl && parent.children[2] === node && parent.children[0].kind === NodeKind.BindingPattern) {
+      return classifyPatternUse(unit, table, parent)
+    }
     if (parent.kind === NodeKind.Unary) {
       return use(USE_NONE)
     }
@@ -1321,6 +1324,27 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     }
     return use(USE_ESCAPE) // return, variable initializer, array/object literal element, ...
   }
+}
+
+/**
+ * `const { x, y } = p`: the hidden receiver holds `p` only for the names the
+ * parser declared after it (`decl.children[3..]`), each `recv.key` or
+ * `recv[i]`, so `p` is used as those reads use the receiver: read, written
+ * through, or escaping if any of them is.
+ */
+const classifyPatternUse = (unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse => {
+  let kind = USE_NONE
+  let i = 3
+  while (i < decl.children.length) {
+    const found = classifyUse(unit, table, decl.children[i].children[2].children[0])
+    if (found.kind === USE_WRITE || (found.kind === USE_READ && kind !== USE_WRITE)) {
+      kind = found.kind
+    } else if (found.kind !== USE_NONE) {
+      return use(USE_ESCAPE)
+    }
+    i = i + 1
+  }
+  return use(kind)
 }
 
 /** `p.f`, `p.f = v`, `p.m(...)`, `p.length`: the member access is the consumer. */
