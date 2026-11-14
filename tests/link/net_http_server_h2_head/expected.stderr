@@ -1,0 +1,1 @@
+HttpServer.listenHttp2Tls: maxHeaderListSize 32769 is more than limits.maxHead 32768

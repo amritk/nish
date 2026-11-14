@@ -62,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 53 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 54 modules.
 
 </scalar-card>
 
@@ -199,6 +199,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/hpack`](net/hpack.md) | HPACK, the header compression of HTTP/2, as RFC 7541 defines it: the §5.1 integer with an N-bit prefix, the §5.2 string literal with Appendix B's Huffman code, the Appendix A static table, the §2.3.2 dynamic table with its §4 size accounting and eviction, and the four §6 representations. |
 | [`nish/net/http-compress`](net/http-compress.md) | Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a request's `Accept-Encoding` and compressing a body with `Content-Encoding: gzip`, for any of the three servers. |
 | [`nish/net/http-fields`](net/http-fields.md) | The header model HTTP/2 and HTTP/3 share: what a field name and a field value may hold, the pseudo-header fields and the order and count they come in, the connection-specific fields neither version carries, and the shapes of a request, a response and a trailer section. |
+| [`nish/net/http-server`](net/http-server.md) | One handler for HTTP/1.1, HTTP/2 (over TLS and cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port. |
 | [`nish/net/http1-client-codec`](net/http1-client-codec.md) | The client side of HTTP/1.1, sans-IO: a request writer and an incremental response parser, bytes in, events and bytes out, and no socket anywhere. |
 | [`nish/net/http1-codec`](net/http1-codec.md) | An incremental HTTP/1.1 request parser and a response writer, sans-IO: bytes in, events and bytes out, and no socket anywhere. |
 | [`nish/net/http1-server`](net/http1-server.md) | The server side of HTTP/1.1 (RFC 9112): a sans-IO connection that drives `nish/net/http1-codec`'s parser, and two pools of them for a program that owns its readiness loop, one on `nish:net`'s plain TCP and one on `nish/net/tls-tcp` with ALPN `http/1.1`. |

@@ -233,6 +233,11 @@
                 "title": "An async server",
                 "filepath": "docs/guide/using-nish/async-server.md"
               },
+              "/http-server": {
+                "type": "page",
+                "title": "One server for HTTP/1.1, 2 and 3",
+                "filepath": "docs/guide/using-nish/http-server.md"
+              },
               "/websocket": {
                 "type": "page",
                 "title": "WebSocket",
@@ -669,6 +674,11 @@
                         "type": "page",
                         "title": "http-fields",
                         "filepath": "docs/reference/net/http-fields.md"
+                      },
+                      "/http-server": {
+                        "type": "page",
+                        "title": "http-server",
+                        "filepath": "docs/reference/net/http-server.md"
                       },
                       "/http1-client-codec": {
                         "type": "page",
@@ -1246,6 +1256,11 @@
                     "type": "page",
                     "title": "Async server",
                     "filepath": "docs/security/serve.md"
+                  },
+                  "/http-server": {
+                    "type": "page",
+                    "title": "One HTTP server for HTTP/1.1, 2 and 3",
+                    "filepath": "docs/security/http-server.md"
                   },
                   "/router": {
                     "type": "page",
