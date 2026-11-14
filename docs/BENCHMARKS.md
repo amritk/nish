@@ -564,7 +564,7 @@ On citm, the escape scan does not make serialize faster outside its band: most s
 
 `jsonEncode` of a class writes each key with `JsonWriter.keyQuoted`: the compiler quotes and escapes the key once, at compile time, into a string constant (`"name":`), and the writer copies it in one go after the comma and indent. Before, every key went through the same escape scan as a runtime string. `JsonWriter.i32` and `i64` also count their digits by compares rather than divides. The output is byte-identical.
 
-Instructions per document under callgrind: citm_catalog.json 14.13M → 10.74M (−24.0%); `bench/json-api`'s page of twenty users 188,879 → 162,647 (−13.9%). After the change, `keyQuoted` is about a quarter of either profile, `JsonWriter.i64` 30% of citm's, and `jsonWriterPutString` (escaping the string values) a third of the API page's.
+Instructions per document under callgrind: citm_catalog.json 14.13M → 10.74M (−24.0%); `bench/json-api`'s page of twenty users 188,879 → 162,647 (−13.9%). After the change, `keyQuoted` is about a quarter of either profile, `JsonWriter.i64` 31% of citm's, and `jsonWriterPutString` (escaping the string values) a third of the API page's.
 
 Wall clock, against main at `f8e21091`. In `bench/json-compare`, serialize on citm ran 548,213 and 554,908 ns/doc at the minimum in two runs, against main's 767,648 (**1.38x to 1.40x** at the minimum). The bands, each the build against its byte-identical copy on the minimums, were 8.8%, 5.8% and 0.2%. In `node bench/json-api/run.mjs --base <main's nish>` (18 interleaved rounds), the page took 8,676 against 11,149 ns at the minimum (**1.29x**) and 9,710 against 11,856 ns at the median (**1.22x**); the noise band, main against its own copy, was 2.3% on the minimums and 1.6% on the medians.
 
@@ -587,7 +587,7 @@ Each group's Ir/doc and share of the whole run. The share of the run includes th
 
 | `bench/json-api` page | Before (`d822c60d`) | Share | After (`e966fbe5`) | Share |
 | --- | ---: | ---: | ---: | ---: |
-| Key writing: escape scan (`jsonWriterPutString` called from `key`) | 48,620 | 25.76% | — | — |
+| Key writing: escape scan (`jsonWriterPutString` called from `key`) | 48,620 | 25.77% | — | — |
 | Key writing: state checks and separators (`JsonWriter.key` self) | 13,852 | 7.34% | — | — |
 | Key writing: `JsonWriter.keyQuoted` | — | — | 38,143 | 23.52% |
 | String values: `JsonWriter.string` inclusive | 58,342 | 30.92% | 58,342 | 35.98% |
