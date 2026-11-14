@@ -1285,6 +1285,12 @@ const DECLARED = [
   },
   // Self-recursive checked sums become a loop (src/accumulate.ts, src/emit-accumulate.ts).
   {
+    program: "tests/cases/acc_effects.ts",
+    file: "acc_effects.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
     program: "tests/cases/acc_fib.ts",
     file: "acc_fib.ll",
     changelog: RECURSION_LOOP,
