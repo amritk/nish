@@ -177,7 +177,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.reduce(f)`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, forEach, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
 | `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `x.toFixed(2)`, `s.split(sep, limit)` | `` Unknown method `toFixed` on f64 `` | `toFixed(x, 2)` and `splitLimit(s, sep, limit)` from `nish/text` |
@@ -218,7 +218,7 @@ rejects. This table is the highest-value part of the page.
 | `total += xs[i]` in a loop, with `i` from somewhere the compiler cannot bound | it compiles, with an `NL9007` performance warning: `` `i` is not proven to be in range for `xs` here, so this access keeps its bounds check `` | a guard before the statement, `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`, which proves both ends in either number mode; `nish --fix` inserts it where it changes nothing the program does |
 | `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
 | `JSON.parse`, `RegExp`, `/re/` literals, `Promise` | unknown / forbidden | none of these are built in: `regexCompile(pattern, flags)` from `nish/regex` for a pattern, `jsonDecode` from `nish/json-typed` for JSON; restructure around `Promise` |
-| `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
+| `for (const [k, v] of m)`, `m.entries()`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, `forEach`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
 | `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
 
@@ -2731,7 +2731,9 @@ order, SameValueZero keys (`-0` is `+0`, `NaN` finds `NaN`). What they have is
 exactly `size` (a read-only `number`), `get(k)`, `set(k, v)` / `add(x)` (both
 answer the receiver, so they chain), `has(k)`, `delete(k)` (answers whether it
 was there) and `clear()`, and `keys()` / `values()` as the iterable of a
-`for...of` and nowhere else. `entries` and `forEach` are refused by name.
+`for...of` and nowhere else, and `forEach(f)`: `m.forEach((value, key) => ...)`
+and `s.forEach((x) => ...)` compile to that `for...of` walk with `f` inlined,
+and answer `void`. `entries` is refused by name.
 
 ```ts nish:ok-body
 const seen = new Set<string>();
@@ -3074,7 +3076,7 @@ the module (NL4015).
 
 ## Recipes for what is missing
 
-**Iterate and accumulate** — there is no `reduce` or `forEach` (`map`, `filter`, `some`, `every`, `findIndex` and `slice` work); fold in a loop:
+**Iterate and accumulate** — there is no `reduce` (`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, but a callback may not assign a local of its caller); fold in a loop:
 
 ```ts nish:ok-body
 const xs: i32[] = [1, 2, 3];

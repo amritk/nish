@@ -33,8 +33,8 @@ export const main = (): i32 => {
 
 Those — `length` (read-only), `push`, `pop`, `indexOf` and `join` (on a
 `string[]` only) — with `set` and `fill` on arrays of numbers, `sort`,
-`map`, `filter`, `some`, `every`, `findIndex` and `slice` (below), are every
-array method there is. There is no `find`, `reduce` or `forEach`, and no
+`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` (below),
+are every array method there is. There is no `find` or `reduce`, and no
 spread. Write the loop, or a function that takes
 [a function argument](functions.md#passing-a-function-to-a-function).
 
@@ -104,8 +104,8 @@ memory.
 
 ### `map`, `filter` and `slice`
 
-`map`, `filter`, `some`, `every` and `findIndex` take a callback, which gets
-the element, or the element and its index, as in TypeScript. `slice` copies a
+`map`, `filter`, `forEach`, `some`, `every` and `findIndex` take a callback,
+which gets the element, or the element and its index, as in TypeScript. `slice` copies a
 range into a new array.
 
 ```ts nish:ok
@@ -165,6 +165,24 @@ const largestAt = (xs: i32[]): i32 => {
 export const main = (): i32 => {
   console.log(`${sum([1.5, 2.5, 4.0])}`);       // 8
   console.log(`${largestAt([3, 9, 4])}`);       // 1
+  return 0;
+};
+```
+
+`xs.forEach(f)` is that `for...of` loop with `f` written in as its body: it
+answers nothing (`void`), and `f` follows the callback rule above, so it may
+call, print and `push` onto an array it can see, but not assign a local of the
+function around it. To add up, write the loop; the compiler says so:
+
+```ts nish:ok
+export const main = (): i32 => {
+  const xs: i32[] = [3, 8, 1];
+  const seen: i32[] = [];
+  xs.forEach((x, i) => console.log(`${i}:${x}`));   // 0:3 1:8 2:1
+  xs.forEach((x) => {
+    seen.push(x * 10);
+  });
+  console.log(`${seen[2]}`);                         // 10
   return 0;
 };
 ```
