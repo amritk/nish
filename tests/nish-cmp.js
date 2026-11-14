@@ -554,6 +554,12 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+/** The changelog line of the stage that folds a JSON number's digits as `number()` scans them. */
+const NUMBER_ONE_PASS = "Parse a JSON number in one pass"
+const numberOnePass = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: NUMBER_ONE_PASS, why }))
+  )
 const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
 const taggedUnions = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -4510,6 +4516,23 @@ const DECLARED = [
       "tests/link/std_json_value_ranges/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll"],
       "tests/link/std_json_writer/main.ts": ["common.ll", "json-tokenizer.ll", "json-typed.ll", "main.h"],
       "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
+    }
+  ),
+  ...numberOnePass(
+    "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
+    {
+      "bench/json-tokenizer/main.ts": ["main.h"],
+      "bench/json-value/main.ts": ["main.h"],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.h"],
+      "docs/cookbook/json-value.ts": ["json-value.h"],
+      "tests/link/std_json_conformance/main.ts": ["main.h"],
+      "tests/link/std_json_equal/main.ts": ["main.h"],
+      "tests/link/std_json_number/main.ts": ["main.h"],
+      "tests/link/std_json_pointer/main.ts": ["main.h"],
+      "tests/link/std_json_value/main.ts": ["main.h"],
+      "tests/link/std_json_value_ranges/main.ts": ["main.h"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json-tokenizer.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-tokenizer.ll"],
     }
   ),
   {
