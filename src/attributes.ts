@@ -1307,11 +1307,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     if (interior && parent.kind === NodeKind.VarDecl && parent.children[2] === node) {
       return classifyElementHolder(unit, table, program.nodeLocals[parent.id], enclosingBlock(unit, parent))
     }
-    if (
-      parent.kind === NodeKind.VarDecl &&
-      parent.children[2] === node &&
-      bindsHiddenReceiver(parent)
-    ) {
+    if (parent.kind === NodeKind.VarDecl && parent.children[2] === node && bindsHiddenReceiver(parent)) {
       return classifyPatternUse(unit, table, parent)
     }
     if (parent.kind === NodeKind.Unary) {

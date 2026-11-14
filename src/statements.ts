@@ -512,7 +512,13 @@ const checkPatternHead = (
  * `refused` receiver, or one of no type, declares it as `T_ERROR`, so later
  * uses stay silent (#275).
  */
-const checkPatternName = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, refused: boolean): void => {
+const checkPatternName = (
+  ctx: CheckContext,
+  decl: Node,
+  scope: Scope,
+  mutable: boolean,
+  refused: boolean
+): void => {
   const read = decl.children[2]
   const name = decl.children[0]
   const type = refused ? T_ERROR : checkExpression(ctx, read.children[0], scope, -1)
@@ -520,7 +526,10 @@ const checkPatternName = (ctx: CheckContext, decl: Node, scope: Scope, mutable: 
   const missing = info !== null && read.kind === NodeKind.Member && info.field(read.text) === null
   if (missing && info !== null) {
     const method = info.method(read.text) === null ? "" : `; \`${read.text}\` is a method, so call it instead`
-    ctx.error(read, `Cannot destructure field \`${read.text}\`: ${ctx.table.typeName(type)} has no such field${method}`)
+    ctx.error(
+      read,
+      `Cannot destructure field \`${read.text}\`: ${ctx.table.typeName(type)} has no such field${method}`
+    )
   }
   if (type === T_ERROR || missing) {
     declareLocal(ctx, scope, decl, name, name.text, T_ERROR, mutable, null)
@@ -563,7 +572,13 @@ const patternReceiverFits = (ctx: CheckContext, pattern: Node, type: i32, at: No
  * the slots the sweep refused (a default or a rest), which
  * `Parser.lowerPattern` gave no declarator, or with `all` every one.
  */
-const declareSlots = (ctx: CheckContext, pattern: Node, scope: Scope, mutable: boolean, all: boolean): void => {
+const declareSlots = (
+  ctx: CheckContext,
+  pattern: Node,
+  scope: Scope,
+  mutable: boolean,
+  all: boolean
+): void => {
   for (const slot of pattern.children) {
     const name = patternSlotName(slot)
     if (name.kind === NodeKind.Ident && (all || !isPlainSlot(slot))) {

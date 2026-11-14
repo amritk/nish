@@ -135,7 +135,7 @@ const printTypeScriptTree = (source, sf) => {
   /** The declaration a `for` or `for...of` head holds: its VAR, then its list. */
   const declarationHead = (declarationList, depth) => {
     emit(depth, `VAR${letFlags(declarationList)}`, at(declarationList.getStart(sf)), at(declarationList.end))
-    list(depth + 1, declarationList.declarations, variableDeclaration)
+    loweredList(depth + 1, declarationList.declarations)
   }
 
   /**
@@ -615,33 +615,171 @@ const printTypeScriptTree = (source, sf) => {
   const arrowParameter = (node, depth) => parameter(node, depth, false)
 
   /**
-   * A bound name, or a destructuring pattern (NL2191–NL2193). Stage1 keeps
-   * the names of a flat `[a, b]` of plain names, the pattern WP49's
-   * `const [a, b] = await awaitAll(...)` reads, and passes over any other.
+   * A bound name, or a destructuring pattern (NL2191–NL2193): BINDING_PATTERN
+   * spelled `[` or `{`, a child per slot. An array slot is its name or nested
+   * pattern, EMPTY for a hole; an object slot is a PROPERTY with its key for
+   * text (none, and `+computed`, for a key that is not a plain name) and what
+   * it binds for a child. `...` and `= default` flag the element.
    */
-  const bindingName = (node, depth) => {
+  const bindingName = (node, depth, flags = "") => {
     if (ts.isIdentifier(node)) {
-      identifier(node, depth)
+      const [s, e] = span(node)
+      emit(depth, `IDENT${flags}`, s, e, node.text)
       return
     }
     const [s, e] = span(node)
-    emit(depth, "BINDING_PATTERN", s, e)
-    const flat =
-      ts.isArrayBindingPattern(node) &&
-      node.elements.length > 0 &&
-      node.elements.every(
-        (el) =>
-          ts.isBindingElement(el) &&
-          ts.isIdentifier(el.name) &&
-          el.initializer === undefined &&
-          el.dotDotDotToken === undefined
-      )
-    if (flat) {
-      for (const el of node.elements) {
-        identifier(el.name, depth + 1)
+    const array = ts.isArrayBindingPattern(node)
+    emit(depth, `BINDING_PATTERN${flags}`, s, e, array ? "[" : "{")
+    for (const el of node.elements) {
+      if (ts.isOmittedExpression(el)) {
+        empty(depth + 1)
+        continue
       }
+      const elementFlags = `${el.dotDotDotToken === undefined ? "" : "+rest"}${el.initializer === undefined ? "" : "+default"}`
+      if (array) {
+        bindingName(el.name, depth + 1, elementFlags)
+        continue
+      }
+      const [ps, pe] = span(el)
+      if (el.dotDotDotToken !== undefined) {
+        emit(depth + 1, "PROPERTY+rest", ps, pe)
+      } else if (el.propertyName === undefined || ts.isIdentifier(el.propertyName)) {
+        emit(depth + 1, "PROPERTY", ps, pe, (el.propertyName ?? el.name).text)
+      } else {
+        emit(depth + 1, "PROPERTY+computed", ps, pe)
+      }
+      bindingName(el.name, depth + 2, elementFlags)
     }
   }
+
+  /** Whether a pattern's slot binds a plain name: no `...`, default or computed key. */
+  const isPlainSlot = (el) =>
+    ts.isBindingElement(el) &&
+    ts.isIdentifier(el.name) &&
+    el.dotDotDotToken === undefined &&
+    el.initializer === undefined &&
+    (el.propertyName === undefined || ts.isIdentifier(el.propertyName))
+
+  /**
+   * A declaration list as stage1's parser lowers it (`Parser.lowerPattern`):
+   * a pattern's plain names become declarators of their own that read the
+   * receiver, `const { x } = p` as `const x = p.x`. A receiver that is not a
+   * name or `this`, or that a name shadows, an annotated pattern, or one with
+   * no plain name, is first bound to a hidden `pattern.<start>`; an `await`
+   * initializer (WP49) stays whole. Each item is a declarator to print, and
+   * `name` marks the ones a pattern's names wrote.
+   */
+  const lowered = (declarations) => {
+    const items = []
+    for (const decl of declarations) {
+      const whole = { start: decl.getStart(sf), name: false, print: (d) => variableDeclaration(decl, d) }
+      if (ts.isIdentifier(decl.name)) {
+        items.push(whole)
+        continue
+      }
+      let base = decl.initializer
+      while (base !== undefined && ts.isParenthesizedExpression(base)) {
+        base = base.expression
+      }
+      if (base !== undefined && ts.isAwaitExpression(base)) {
+        items.push(whole)
+        continue
+      }
+      const pattern = decl.name
+      const [ps, pe] = span(pattern)
+      const hidden = `pattern.${ps}`
+      const receiverText = base !== undefined && ts.isIdentifier(base) ? base.text : ""
+      let names = 0
+      let shadowed = false
+      for (const el of pattern.elements) {
+        if (ts.isOmittedExpression(el)) {
+          continue
+        }
+        if (!isPlainSlot(el) || el.name.text === receiverText) {
+          shadowed = true
+        }
+        names++
+      }
+      const direct =
+        decl.type === undefined &&
+        base !== undefined &&
+        (ts.isIdentifier(base) || base.kind === ts.SyntaxKind.ThisKeyword) &&
+        !shadowed &&
+        names > 0
+      if (!direct) {
+        items.push({
+          start: decl.getStart(sf),
+          name: false,
+          print: (d) => {
+            const [s, e] = span(decl)
+            emit(d, "VAR_DECL", s, e)
+            emit(d + 1, "IDENT", ps, pe, hidden)
+            optional(d + 1, decl.type, type)
+            optional(d + 1, decl.initializer, expression)
+            bindingName(pattern, d + 1)
+          },
+        })
+      }
+      let head = direct
+      pattern.elements.forEach((el, i) => {
+        if (ts.isOmittedExpression(el) || !isPlainSlot(el)) {
+          return
+        }
+        const [ss, se] = span(el)
+        const [ns, ne] = span(el.name)
+        const [ds, de] = head ? span(decl) : [ss, se]
+        const carries = head
+        head = false
+        items.push({
+          start: carries ? decl.getStart(sf) : el.getStart(sf),
+          name: true,
+          print: (d) => {
+            emit(d, "VAR_DECL", ds, de)
+            emit(d + 1, "IDENT", ns, ne, el.name.text)
+            empty(d + 1)
+            const object = ts.isObjectBindingPattern(pattern)
+            emit(
+              d + 1,
+              object ? "MEMBER" : "INDEX",
+              ss,
+              se,
+              object ? (el.propertyName ?? el.name).text : undefined
+            )
+            if (direct) {
+              expression(base, d + 2)
+            } else {
+              emit(d + 2, "IDENT", ss, se, hidden)
+            }
+            if (!object) {
+              emit(d + 2, "NUMBER", ss, se, `${i}`)
+            }
+            if (carries) {
+              bindingName(pattern, d + 1)
+            }
+          },
+        })
+      })
+    }
+    return items
+  }
+
+  /**
+   * The LIST of `items`: it starts where its first declarator does and ends
+   * where the last one written ends, past a pattern's names inside it.
+   * `onlyKept` leaves out the names a `for...of` moves into its body.
+   */
+  const printLowered = (depth, items, declarations, onlyKept) => {
+    const kept = onlyKept ? items.filter((item) => !item.name) : items
+    if (items.length === 0) {
+      emit(depth, "LIST", 0, 0)
+      return
+    }
+    emit(depth, "LIST", at(items[0].start), at(declarations[declarations.length - 1].end))
+    for (const item of kept) {
+      item.print(depth + 1)
+    }
+  }
+  const loweredList = (depth, declarations) => printLowered(depth, lowered(declarations), declarations, false)
 
   const block = (node, depth) => {
     const [s, e] = span(node)
@@ -693,7 +831,7 @@ const printTypeScriptTree = (source, sf) => {
         return
       case ts.SyntaxKind.VariableStatement: {
         emit(depth, varKind(node.declarationList), s, e)
-        list(depth + 1, node.declarationList.declarations, variableDeclaration)
+        loweredList(depth + 1, node.declarationList.declarations)
         return
       }
       case ts.SyntaxKind.ExpressionStatement:
@@ -739,13 +877,29 @@ const printTypeScriptTree = (source, sf) => {
         const isAwait = node.awaitModifier !== undefined ? "+await" : ""
         emit(depth, `FOR_OF${isAwait}${forIn}`, s, e)
         const initializer = node.initializer
-        if (ts.isVariableDeclarationList(initializer)) {
-          declarationHead(initializer, depth + 1)
-        } else {
+        if (!ts.isVariableDeclarationList(initializer)) {
           expression(initializer, depth + 1)
+          expression(node.expression, depth + 1)
+          statement(node.statement, depth + 1)
+          return
         }
+        const items = lowered(initializer.declarations)
+        const names = items.filter((item) => item.name)
+        emit(depth + 1, `VAR${letFlags(initializer)}`, at(initializer.getStart(sf)), at(initializer.end))
+        printLowered(depth + 2, items, initializer.declarations, true)
         expression(node.expression, depth + 1)
-        statement(node.statement, depth + 1)
+        if (names.length === 0) {
+          statement(node.statement, depth + 1)
+          return
+        }
+        const [bs, be] = span(node.statement)
+        emit(depth + 1, "BLOCK", bs, be)
+        emit(depth + 2, isConst(initializer) ? "VAR+const" : "VAR", bs, bs)
+        emit(depth + 3, "LIST", bs, bs)
+        for (const item of names) {
+          item.print(depth + 4)
+        }
+        statement(node.statement, depth + 2)
         return
       }
       case ts.SyntaxKind.BreakStatement:

@@ -645,16 +645,20 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
  * pattern's head. Empty where every read is proven.
  */
 const patternChecks = (walk: Walk, list: Node, from: i32, t: string): string => {
-  let checks = ""
+  const parts: string[] = []
   let i = from
-  while (i < list.children.length && isPatternName(list.children[i]) && (i === from || patternOf(list.children[i]) === null)) {
+  while (
+    i < list.children.length &&
+    isPatternName(list.children[i]) &&
+    (i === from || patternOf(list.children[i]) === null)
+  ) {
     const read = list.children[i].children[2]
     if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
-      checks = `${checks}${walk.helperName("idx")}(${t}, ${read.children[1].text}), `
+      parts.push(`${walk.helperName("idx")}(${t}, ${read.children[1].text}), `)
     }
     i = i + 1
   }
-  return checks
+  return parts.join("")
 }
 
 /**
@@ -699,7 +703,12 @@ const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string 
   }
   const pattern = patternOf(head.children[0].children[0])
   const body = node.children[node.children.length - 1]
-  if (pattern === null || pattern.text !== "[" || body.kind !== NodeKind.Block || body.children.length === 0) {
+  if (
+    pattern === null ||
+    pattern.text !== "[" ||
+    body.kind !== NodeKind.Block ||
+    body.children.length === 0
+  ) {
     return null
   }
   const names = body.children[0]

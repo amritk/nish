@@ -182,12 +182,6 @@ export class Walk {
   choiceTexts: string[]
   /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
   helpers: StringSet
-  /**
-   * `--deterministic`: a call the checker bound to `nish/math` (`Math.sin`,
-   * `f64ToBits`, ...) is written as a call to that function, which runs the
-   * same instructions as the native build, rather than as the platform's.
-   */
-  deterministic: boolean
   /** Every name the emitted module must import from `nish/math`, in first-use order. */
   mathNames: StringSet
   /** Every width type the module spells, in first-use order. */
@@ -225,8 +219,25 @@ export class Walk {
    */
   storageIds: i32[]
   storageSlots: i32[]
+  /** The list the node being walked is an element of, or `null`: where a pattern's head finds its names. */
+  list: Node | null
+  /**
+   * The operands of the node the rows were last asked about. A node's last
+   * child is walked last, so while the rows are asked about a call, these are
+   * its argument list's when that list was walked: each argument's text, which
+   * the list's own spliced text no longer separates.
+   */
+  lastOperands: Operands | null
+  /** The node's index in `list`. */
+  listAt: i32
   /** The next number `temporary` tries. */
   temps: i32
+  /**
+   * `--deterministic`: a call the checker bound to `nish/math` (`Math.sin`,
+   * `f64ToBits`, ...) is written as a call to that function, which runs the
+   * same instructions as the native build, rather than as the platform's.
+   */
+  deterministic: boolean
   /**
    * A body no instance reaches is being walked. Its nodes have no types, so
    * the rows that need none rewrite it as they would any code and the rest
@@ -265,23 +276,12 @@ export class Walk {
   hostHandle: boolean
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
   hoistHere: boolean
-  /** The list the node being walked is an element of, or `null`: where a pattern's head finds its names. */
-  list: Node | null
-  /** The node's index in `list`. */
-  listAt: i32
   /** What `canHoist` answers to the hook being asked about the current node. */
   hoistable: boolean
   /** An effect, a possible panic or a read of a field or an element ran in the current statement, and was not hoisted. */
   effects: boolean
   /** A local was read in the current statement, outside what was hoisted. */
   localsRead: boolean
-  /**
-   * The operands of the node the rows were last asked about. A node's last
-   * child is walked last, so while the rows are asked about a call, these are
-   * its argument list's when that list was walked: each argument's text, which
-   * the list's own spliced text no longer separates.
-   */
-  lastOperands: Operands | null
 
   constructor(program: CheckedProgram, table: TypeTable, source: SourceFile, nodeCount: i32) {
     this.program = program

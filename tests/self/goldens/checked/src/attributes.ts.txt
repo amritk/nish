@@ -744,13 +744,13 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   callee +98:14 classifyElementHolder -> @classifyElementHolder
   callee +107:14 classifyElementHolder -> @classifyElementHolder
   callee +107:80 enclosingBlock -> @enclosingBlock
-  callee +112:7 bindsHiddenReceiver -> @bindsHiddenReceiver
-  callee +114:14 classifyPatternUse -> @classifyPatternUse
-  callee +117:14 use -> @use
-  callee +120:14 use -> @use
-  callee +123:14 use -> @use
-  callee +126:14 use -> @use
-  callee +128:12 use -> @use
+  callee +109:76 bindsHiddenReceiver -> @bindsHiddenReceiver
+  callee +110:14 classifyPatternUse -> @classifyPatternUse
+  callee +113:14 use -> @use
+  callee +116:14 use -> @use
+  callee +119:14 use -> @use
+  callee +122:14 use -> @use
+  callee +124:12 use -> @use
 function classifyPatternUse(unit: AnalysisUnit, table: TypeTable, decl: Node): ParamUse -> @classifyPatternUse
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via classifyUse
