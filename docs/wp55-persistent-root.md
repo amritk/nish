@@ -282,3 +282,8 @@ alone, which is sound because a store through a root is an escape.
 A generational keep (copying only what the call allocated and the old graph
 points to), which would make a compaction cost what the call kept rather than
 the live graph; a root reachable from a page; the refused types of §3.1.
+
+The page holds the memory the kept graph lives in, so it can still scramble
+that graph inside the arena (security record, WH-10).
+[WP59](wp59-wasm-arena-memory.md) proposes moving the arena into a second
+memory the module does not export.

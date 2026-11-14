@@ -287,6 +287,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 55 | An object graph a WebAssembly module keeps between calls | [wp55](wp55-persistent-root.md) |
 | 56 | Generators whose memory stays flat: a string builder, and a scope per file | [wp56](wp56-flat-memory-generators.md) |
 | 57 | Module-scoped names: a private function's symbol qualified by its module when it would clash | [wp57](wp57-module-scoped-names.md) |
+| 59 | The wasm arena in a second, unexported memory: the page holds only module storage and an exchange area | [wp59](wp59-wasm-arena-memory.md) |
 | 60 | Dynamic dispatch over interfaces: `Dyn<I>`, a tag and a pointer, a call lowered to a `switch` of direct calls | [wp60](wp60-dyn-dispatch.md) |
 
 A package's plan said where its work would be done, which for everything up
