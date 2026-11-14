@@ -36326,6 +36326,12 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // kept in place, a union and a nullable-union field, a `(C | null)[]` and
 // `u8[]`, `f64[]` and `i64[]`. The chain counts its compactions and needs each
 // to pack the list to 8 bytes a node, so a run whose keep never compacts fails.
+// A sixth, tests/module-storage/persist/forge.ts, plays a hostile page (WH-10,
+// docs/security/wasm-host.md): it points a root slot or a pointer field at a
+// fake cell past the arena, or sets an array's len (and cap) to 2^40, then
+// forces a compaction, which must throw a NishPanic and leave the fake's bytes
+// as written. Before the fix the compactor rewrote the fake's field for the
+// first two and walked the len into a bare out-of-bounds trap.
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
 // without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
 // union is fine in a page build's `.d.ts` but refused once a C header is asked
@@ -36417,6 +36423,7 @@ if (!only || "persist".includes(only)) {
       ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
+      ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
     ]) {
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })

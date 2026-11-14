@@ -182,7 +182,17 @@ void nish_array_grow(nish_array *a, uint64_t elem_size) {
  * each rounded to 8 as every allocation is. Overlapping and adjacent blocks
  * merge into one extent, so a block reached twice, or through a pointer into
  * its middle, moves once and keeps its shape. Each extent moves down by a
- * multiple of 8, so nothing loses its alignment. */
+ * multiple of 8, so nothing loses its alignment.
+ *
+ * The page can write every byte the trace reads (docs/security/wasm-host.md,
+ * WH-10), so the trace believes no pointer and no length it did not check.
+ * An object, an array's header and its data lie in the arena below `off`;
+ * a string lies there or in the static data, where the compiler puts its
+ * constants. An array's `len` is at most its `cap`, and `cap` slots fit
+ * before `off`; a string's bytes fit before the end of its area. Anything
+ * else panics (NISH_DIE, kind panic, so the page hears why) before the trace
+ * reads it, and nothing has moved: the rewrites come after the trace. The
+ * scratch lies above `off`, so no pointer the trace follows can reach it. */
 #define NISH_TRACE_STRUCT 0
 #define NISH_TRACE_STRING 1
 #define NISH_TRACE_ARRAY 2
@@ -336,6 +346,24 @@ static int nish_seen_add(uint32_t p, uint32_t d) {
 
 static int nish_in_region(uintptr_t p) { return p >= nish_tr.lo && p < nish_tr.hi; }
 
+/* The static data wasm-ld lays out: string constants live here. */
+extern unsigned char __global_base;
+extern unsigned char __data_end;
+
+#define NISH_FORGED_POINTER "root storage: a pointer in the kept graph names memory outside the arena"
+#define NISH_FORGED_LENGTH "root storage: a length in the kept graph runs past its block"
+#define NISH_FORGED(msg) NISH_DIE(NISH_PANIC_MESSAGE, -1, (msg), (uint32_t)(sizeof(msg) - 1), 0, 0)
+
+/* The end of the area `p` may lie in and `size` bytes from it fit before:
+   the arena [buf, off), or for a string the static data too; 0 for neither.
+   The checks subtract, so no forged size wraps a sum. */
+static uintptr_t nish_area_end(uintptr_t p, uint64_t size, int string) {
+  uintptr_t end = 0;
+  if (p >= (uintptr_t)nish_arena.buf && p <= nish_tr.hi) end = nish_tr.hi;
+  else if (string && p >= (uintptr_t)&__global_base && p <= (uintptr_t)&__data_end) end = (uintptr_t)&__data_end;
+  return end && size <= (uint64_t)(end - p) ? end : 0;
+}
+
 static void nish_block(uintptr_t p, uint64_t size) {
   if (!size || !nish_in_region(p)) return;
   uint64_t end = (uint64_t)p + ((size + 7) & ~(uint64_t)7);
@@ -347,6 +375,11 @@ static void nish_block(uintptr_t p, uint64_t size) {
 static void nish_slot(char **s, const nish_trace *d) {
   uintptr_t p = (uintptr_t)*s;
   if (!p) return;
+  /* The fixed part of the block: a string's length word, an array's header,
+     a union's tag (its arm is checked once the tag is read). */
+  uint64_t head = d->kind == NISH_TRACE_STRING ? 8 : d->kind == NISH_TRACE_ARRAY ? sizeof(nish_array)
+                : d->kind == NISH_TRACE_UNION ? 4 : (uint64_t)d->size;
+  if (!nish_area_end(p, head, d->kind == NISH_TRACE_STRING)) NISH_FORGED(NISH_FORGED_POINTER);
   if (nish_in_region(p)) nish_words_push(&nish_tr.slots, (uint32_t)(uintptr_t)s, 0);
   if (nish_seen_add((uint32_t)p, (uint32_t)(uintptr_t)d)) nish_words_push(&nish_tr.work, (uint32_t)p, (uint32_t)(uintptr_t)d);
 }
@@ -360,6 +393,8 @@ static void nish_visit(char *p, const nish_trace *d) {
   case NISH_TRACE_STRING: {
     uint64_t len;
     __builtin_memcpy(&len, p, 8);
+    uintptr_t end = nish_area_end((uintptr_t)p, 0, 1);
+    if (len > (uint64_t)(end - (uintptr_t)p) - 8) NISH_FORGED(NISH_FORGED_LENGTH);
     nish_block((uintptr_t)p, 8 + len + 1);
     break;
   }
@@ -372,6 +407,7 @@ static void nish_visit(char *p, const nish_trace *d) {
     __builtin_memcpy(&tag, p, 4);
     for (int32_t i = 0; i < d->count; i++) {
       if (d->at[i] == tag) {
+        if (!nish_area_end((uintptr_t)p, (uint64_t)d->to[i]->size, 0)) NISH_FORGED(NISH_FORGED_LENGTH);
         nish_block((uintptr_t)p, (uint64_t)d->to[i]->size);
         nish_fields(p, d->to[i]);
         break;
@@ -382,7 +418,16 @@ static void nish_visit(char *p, const nish_trace *d) {
   case NISH_TRACE_ARRAY: {
     nish_array *a = (nish_array *)p;
     nish_block((uintptr_t)p, sizeof *a);
-    if (!a->data) break;
+    /* `len <= cap` and `cap * size <= off - data`, by division, so a forged
+       `cap` cannot wrap the product and a forged `len` walks no slot the
+       data does not hold. */
+    if (a->len > a->cap) NISH_FORGED(NISH_FORGED_LENGTH);
+    if (!a->data) {
+      if (a->cap) NISH_FORGED(NISH_FORGED_POINTER);
+      break;
+    }
+    if (!nish_area_end((uintptr_t)a->data, 0, 0)) NISH_FORGED(NISH_FORGED_POINTER);
+    if (d->size > 0 && a->cap > (uint64_t)(nish_tr.hi - (uintptr_t)a->data) / (uint64_t)d->size) NISH_FORGED(NISH_FORGED_LENGTH);
     if (nish_in_region((uintptr_t)a->data)) nish_words_push(&nish_tr.slots, (uint32_t)(uintptr_t)&a->data, 0);
     nish_block((uintptr_t)a->data, a->cap * (uint64_t)d->size);
     if (d->count == 1) {
