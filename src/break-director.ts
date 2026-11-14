@@ -75,7 +75,14 @@ import {
   viewFor,
 } from "./break-gfx"
 import { rasterRgb } from "../std/raster"
-import { GAME_PLAYING, BreakGame, drawBreakGame, newBreakGame, stepBreakGame } from "./break-game"
+import {
+  GAME_PLAYING,
+  BreakGame,
+  aimBreakPaddle,
+  drawBreakGame,
+  newBreakGame,
+  stepBreakGame,
+} from "./break-game"
 import {
   BreakIntro,
   INTRO_DONE,
@@ -97,6 +104,7 @@ import {
   newBreakMenuWith,
   resolutionChoice,
   stepBreakMenu,
+  tapBreakMenu,
 } from "./break-menu"
 
 /** How long a toast stays up, in steps (two seconds). */
@@ -433,6 +441,50 @@ const directorStepMenu = (d: BreakDirector, input: StepInput, resolution: i32, s
   }
   if (answer !== MENU_STAY) {
     directorStartGame(d, answer)
+  }
+  return true
+}
+
+/** The world x under frame pixel column `px` in `view`, shake left out; `view` has been drawn. */
+const directorWorldX = (view: View, px: f64): f64 => (px + 0.5 - view.offsetX) / view.scale + view.shakeX
+
+/** The world y under frame pixel row `py` in `view`, shake left out; `view` has been drawn. */
+const directorWorldY = (view: View, py: f64): f64 => (py + 0.5 - view.offsetY) / view.scale + view.shakeY
+
+/**
+ * Hold the paddle toward the frame pixel column `px`, through the view the
+ * game last drew with, as a finger held on the screen does; a negative `px`
+ * lets go. Outside a game, or before the game's first frame, it does nothing.
+ *
+ * @param d The director.
+ * @param px The frame column, or negative for none.
+ */
+export const aimBreakDirector = (d: BreakDirector, px: f64): void => {
+  if (d.scene !== SCENE_GAME) {
+    return
+  }
+  const view: View = d.game.view
+  aimBreakPaddle(d.game, px < 0.0 || view.scale <= 0.0 ? -1.0 : Math.max(directorWorldX(view, px), 0.0))
+}
+
+/**
+ * A tap at frame pixel `px`, `py`, as a finger's on a phone: on the menu it
+ * acts on the line under it (`tapBreakMenu`), through the view the menu last
+ * drew with, at the next step. Elsewhere a tap means what Space does, which
+ * the host is to send instead.
+ *
+ * @param d The director.
+ * @param px The frame column.
+ * @param py The frame row.
+ * @returns Whether the menu took the tap; false when the host is to press Space for it.
+ */
+export const tapBreakDirector = (d: BreakDirector, px: f64, py: f64): boolean => {
+  if (d.scene !== SCENE_MENU) {
+    return false
+  }
+  const view: View = d.menu.view
+  if (view.scale > 0.0) {
+    tapBreakMenu(d.menu, directorWorldX(view, px), directorWorldY(view, py))
   }
   return true
 }
