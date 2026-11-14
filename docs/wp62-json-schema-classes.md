@@ -103,7 +103,7 @@ compiler half in [`src/json-typed.ts`](../src/json-typed.ts):
     (`std/json-typed.ts:285`, `docs/LANGUAGE.md:13675`).
 - **Decoding is strict**: every field required unless `optional`, an unknown
   key an error unless `d.ignoreUnknown` (`docs/LANGUAGE.md:13497`). That flag
-  belongs to the *decoder* (`std/json-typed.ts:131`), not to a class, so it
+  belongs to the *decoder* (`std/json-typed.ts:600`), not to a class, so it
   holds for every class one decode reaches. §5.0 proposes a per-class option.
   Also: a
   `readonly` field refused because decoding assigns it (NL2487,
@@ -221,7 +221,7 @@ the stage that lands the row (§12).
 
 | Keyword | Outcome | Where it goes |
 | --- | --- | --- |
-| `type: "integer"` | typed | `i64`; `i32`, `u32` or `u64` when `minimum` and `maximum` are both given and fit, compared exactly with `jsonNumberCompare`. **The narrowing rule is WP62's own:** take the first of `u32`, `i32`, `u64`, `i64` whose range holds `[minimum, maximum]`. An `exclusiveMinimum` or `exclusiveMaximum` counts as the next integer inward. A bound on one side only gives `i64` (or `u64` when the minimum is 0 or more and there is no maximum). An `enum` or `const` of integers narrows the same way, by its smallest and largest value. `x-nish` may pick a wider type, never a narrower one (§4.7). `JsonNumber` under `--exact-numbers`, so an integer past `i64` is not a `RANGE` error. S2 |
+| `type: "integer"` | typed | `i64`; `i32`, `u32` or `u64` when `minimum` and `maximum` are both given and fit, compared exactly with `jsonNumberCompare`. **The narrowing rule is WP62's own:** take the first of `u32`, `i32`, `u64`, `i64` whose range holds `[minimum, maximum]`. An `exclusiveMinimum` or `exclusiveMaximum` counts as the next integer inward. A bound on one side only gives `i64` (or `u64` when the minimum is 0 or more and there is no maximum). An `enum` or `const` of integers narrows to `i32` when every value fits, else to `i64`, never to `u32` or `u64`: WP61 takes `enum` on `i32` and `i64` only. An integer `enum` or `const` with a value outside `i64` is refused, under `--exact-numbers` too, since WP61 takes no `enum` on a `JsonNumber`. `x-nish` may pick a wider type, never a narrower one (§4.7). `JsonNumber` under `--exact-numbers`, so an integer past `i64` is not a `RANGE` error. S2 |
 | `type: "number"` | typed | `f64`; `JsonNumber` under `--exact-numbers`, or when a `multipleOf` or bound is not exactly an `f64`. WP61 refuses such a bound on an `f64` field and checks it exactly on a `JsonNumber` one (its "What a keyword means here"). An `f64` field loses what a double cannot hold (§8.1). S2 |
 | `type: "string"` | typed | `string`. S2 |
 | `type: "boolean"` | typed | `boolean`. S2 |
@@ -247,10 +247,10 @@ the generator translates nothing: WP61's "The decision" takes JSON Schema's keyw
 | --- | --- | --- |
 | `minLength`, `maxLength`, `pattern` | `string` | a `pattern` `nish/regex` refuses is refused here, with the regex error |
 | `format` | `string` | **checked by default**, as WP61 checks it ("What a keyword means here"). Each format the schema names becomes a constraint checked with `nish/json-format`, and a name that `jsonFormatId` answers `JSON_FORMAT_UNKNOWN` for is refused. This is stricter than a 2020-12 validator in its default configuration, which treats `format` as an annotation. Under `--formats-as-tags` (§10 question 10), a weakening the header records, every format is kept as a `@format` tag instead and nothing is checked |
-| `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | integers, `f64`, `JsonNumber` **WP62's own rule:** a bound equal to the narrowed type's own range (`minimum: 0` on a `u32`, `maximum: 4294967295` on a `u32`) is already the type's `RANGE` check and is not written as a constraint. A bound inside the range is written. The reverse generator writes the dropped bound back from the type (§8.1) |
+| `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | integers, `f64`, `JsonNumber` | **WP62's own rule:** a bound equal to the narrowed type's own range (`minimum: 0` on a `u32`, `maximum: 4294967295` on a `u32`) is already the type's `RANGE` check and is not written as a constraint. A bound inside the range is written. The reverse generator writes the dropped bound back from the type (§8.1) |
 | `minItems`, `maxItems`, `uniqueItems` | arrays | `uniqueItems` on an array of objects is refused, as WP61's "Where the check goes, and the strict error" refuses it |
 | `minProperties`, `maxProperties` | `Map` | |
-| `enum` | `string`; integers, which narrow to `i32` or `i64` (WP61 takes `enum` on `string`, `i32` and `i64` only) | the field keeps its type and gains an `enum` constraint: Nish has no string enums (NL1043, `docs/LANGUAGE.md:13485`). An integer `enum` with a value past `i64` is refused. Before S4 the values are kept as a `@enum` tag and the field is refused unless `--before-constraints` (§9.2) |
+| `enum` | `string`; integers, which narrow to `i32` or `i64` (WP61 takes `enum` on `string`, `i32` and `i64` only) | the field keeps its type and gains an `enum` constraint: Nish has no string enums (NL1043, `docs/LANGUAGE.md:13485`). An integer `enum` with a value outside `i64` is refused, under `--exact-numbers` too (§4.3). Before S4 the values are kept as a `@enum` tag and the field is refused unless `--before-constraints` (§9.2) |
 | `const` | `string`, integers as `enum` | an `enum` constraint of one value, or a union's tag (§4.5) |
 | `enum` or `const` on anything else | refused, except one case | refused on a `boolean`, a non-integer `number`, an object or an array, on a mixed `enum` (strings and numbers), and on an `enum` holding `null`. WP61 has no constraint for any of them, and a tag would let the class accept what the schema refuses. The one case kept: `enum: [true, false]` on a `boolean`, which is the type itself and is typed |
 | `contentEncoding`, `contentMediaType`, `contentSchema` | `string` | kept as `@contentEncoding`, `@contentMediaType` tags; the field stays a `string`. `contentSchema` is refused: it is a schema for the decoded content, which the class does not decode |
@@ -261,7 +261,7 @@ the generator translates nothing: WP61's "The decision" takes JSON Schema's keyw
 | --- | --- | --- |
 | `oneOf`/`anyOf` of objects, each with a `const` or a one-value `enum` on one shared property, the values distinct across branches (found structurally, as mjst does), or with OpenAPI's `discriminator.propertyName` | typed | a tagged union: a numeric `enum` with a member per tag, one class per variant with `readonly kind: Tag.X = Tag.X`, `tag: "<wire string>"`, and a `rename` when the property is not called `kind` (`docs/LANGUAGE.md:13675`). `discriminator.mapping` names each variant's tag. **An empty tag is refused**: `tag: ""` means "use the member's name" (`std/json-typed.ts:191` to `:193`), so a `const: ""` cannot be written as a tag. S3 |
 | `oneOf`/`anyOf` of `S` and `{type: "null"}` | typed | `S' \| null` (§4.3). S3 |
-| `allOf` of a `$ref` and an object, or of objects whose properties do not overlap | typed | one class with the properties of each branch, branch by branch, in order. **This flat merge is WP62's own rule.** `required` is the union of the branches' lists. Class-level keywords (`additionalProperties`, `title`, `description`) are taken from the branch that is not a `$ref`. If two branches both set the same class-level keyword, the merge is refused. The `$ref`'s class is copied into the merged class, not extended: a class with options cannot be extended (`json_reject_options_subclass`). S3 |
+| `allOf` of a `$ref` and an object, or of objects whose properties do not overlap | typed | one class with the properties of each branch, branch by branch, in order. **This flat merge is WP62's own rule.** `required` is the union of the branches' lists. Class-level keywords (`additionalProperties`, `title`, `description`) are taken from the branch that is not a `$ref`. If two branches both set the same class-level keyword, the merge is refused. If the branch that is not a `$ref` sets `additionalProperties: false` and the merge brings in properties from another branch, the merge is refused too, with a diagnostic naming that branch's pointer: under the schema, that branch refuses the other branches' keys, so no instance with them is valid, and the merged class would accept them. The `$ref`'s class is copied into the merged class, not extended: a class with options cannot be extended (`json_reject_options_subclass`). S3 |
 | `allOf` beyond that | refused | overlapping or conflicting branches |
 | `oneOf`/`anyOf` without a tag ("untagged") | refused | it would need trial decoding, a second walk. A union whose branches differ by JSON type (a string or an object, as `package.json`'s `exports`) needs no trial — the first token decides — but the decoder has no field kind for it (§10 question 5) |
 | `not`, `if`/`then`/`else` | refused | no place in a class |
@@ -345,9 +345,14 @@ exactly once, unconditionally and at the constructor's top level, one of:
 - `new C()`, to a field of class `C`. `C`'s constructor takes no parameters,
   and `C` meets this rule for every field it has: each scalar and `string`
   field has a literal initializer, and each other field is assigned one of
-  these forms. So `C`'s defaults are known at build time.
-- `new JsonNumber()`, to a `JsonNumber` field. This is the `new C()` case; a
-  new `JsonNumber` holds `0` (`std/json-typed.ts:475`).
+  these forms. So `C`'s defaults are known at build time. A required
+  non-null union field in `C` is not one of these forms, so a class with one
+  is never `C` here (see below).
+- `new JsonNumber()`, to a `JsonNumber` field. This is a form of its own, not
+  the `new C()` case: `JsonNumber`'s own constructor assigns `bytes = [48]`
+  (`std/json-typed.ts:475`), which the rule above would refuse. The rule
+  takes `new JsonNumber()` as a known value instead, the number `0`: its
+  text is the one byte `0` and its `count` is 1.
 
 A missing key then resets the field in place to that value, in the
 after-the-loop block where a missing `optional` field takes its initializer
@@ -357,17 +362,40 @@ today (`src/emit-json.ts:1005`):
 - a map is cleared;
 - an object is reset field by field to its own class's defaults, by the same
   rule, one level down;
-- a `JsonNumber` is set back to `0`.
+- a `JsonNumber`'s text is set back to the one byte `0`, keeping its buffer,
+  and its `count` to 1.
 
 No allocation is made, and no constructor runs inside the decode. This is the
 same rule, and the same reset, that WP61's "The default, and the constructor
-rule" gives a coerce class's fields. Whichever of WP61's coercion stage and
-WP62's S1 lands first builds the reset, and the other reuses it. The reset is
+rule" gives a coerce class's fields, with one form added: `new JsonNumber()`.
+WP61's rule takes only `[]`, `new Map()` and `new C()` for a coerce class `C`,
+and its transitivity rule would require a `JsonNumber` field's class to be a
+coerce class, which `JsonNumber` is not. **WP62's own rule** extends both, as
+a prerequisite of WP61's "S2: coercion":
+
+- a coerce class's constructor may assign `new JsonNumber()` to a
+  `JsonNumber` field, and the default is `0`, reset in place as above;
+- `JsonNumber` is a leaf value, like a scalar, not a class the transitivity
+  rule reaches. WP61's conversion table already says how a coerce class
+  converts a value into a `JsonNumber` field.
+
+It lands in whichever of WP62's S1 and WP61's "S2: coercion" lands first, the
+one that builds the shared reset; the other reuses it. If WP61's stage lands
+first without it, WP62's S1 adds it, with its `docs/LANGUAGE.md` rule and a
+coerce-class test. The reset is
 bounded by the class graph, not by the input: `new C()` cannot build a cycle
 of non-null class fields, because it would never return.
 
-A union field is not covered: no variant is the obvious default. An optional
-union field stays refused unless it is `| null`. NL2498's message becomes:
+A union field is not covered. No variant is the obvious default, and
+resetting one variant's object in place cannot turn it into another variant
+without an allocation. So:
+
+- an optional union field stays refused unless it is `| null`;
+- S1 does not take `new V()` for a union field. A class with a required
+  non-null union field cannot be the `C` of a `new C()` default. The
+  generator refuses the schema that would need one (an optional property, or
+  a field of a coerce class, whose class holds a required non-null union),
+  naming the property's pointer and the union's. NL2498's message becomes:
 
 > `` `C.json` makes `f` optional, and the field has no default: a missing
 > optional key sets its field to its default, a literal initializer or `[]`,
@@ -387,7 +415,7 @@ map, a reset object and a `JsonNumber` holding `0`. The case then re-encodes
 the object. There is one negative case per diagnostic.
 
 **2. Unknown keys per class.** Today `d.ignoreUnknown` is a flag of the
-decoder (`std/json-typed.ts:131`). It holds for every class one decode
+decoder (`std/json-typed.ts:600`). It holds for every class one decode
 reaches. Take a schema whose outer object allows other keys and whose nested
 object says `additionalProperties: false`. That schema has no faithful
 decoder today:
@@ -503,6 +531,23 @@ fails, `minItems: 1`, or `minimum: 1` on a `JsonNumber`. Then:
   replaces it: <reason>`. The decode refuses a body that leaves the field out,
   so only an object made with `new` ever holds that value.
 
+**A placeholder must not leak.** A class `C` whose own fields, or whose
+nested classes' fields, needed such a placeholder holds an invalid value
+after `new C()` and after its reset. So `C` may not be used where its reset
+becomes data:
+
+- the default of an optional field of type `C`, since a missing key would
+  decode to a `C` holding the placeholder, and the encode would write it;
+- the default of an array element or map value of type `C`, wherever a
+  default of one is made;
+- the default of any field of a coerce class, since coercion falls back on
+  it.
+
+Each is refused, with a diagnostic naming the field's pointer and the
+pointer of the property that needed the placeholder. The fix is in the
+schema: a `default`, an `examples` entry or a `const` that the property can
+hold.
+
 ### 5.2 How this meets `required`
 
 | Property | Generated |
@@ -520,6 +565,8 @@ document is always valid against the schema, for three reasons:
 
 - §5.1 gives every optional field a default the schema accepts;
 - §5.1 refuses an optional field it cannot give one;
+- §5.1 refuses an optional field whose class holds a required field's
+  placeholder, so no reset object carries one into the output;
 - §5.0 means no `| null` is ever added.
 
 The output is only longer than the input. The JSDoc of an optional field
@@ -572,7 +619,9 @@ WP61's other coerce rules hold too:
   A non-empty array `default`, or an object `default` that differs from
   `new C()`'s reset, is kept only as a `@default` tag, with the warning, as in
   a strict class. The constructor assigns only `[]`, `new Map()` or `new C()`,
-  as WP61's constructor rule requires.
+  as WP61's constructor rule requires, or `new JsonNumber()`, under WP62's
+  extension of that rule (§5.0). A class whose derivation needed a
+  placeholder (§5.1) is refused as any coerce field's class.
 - **`unknown` is not written** on a coerce class: coercion ignores unknown
   keys (§5.0).
 
@@ -947,14 +996,21 @@ references is a refusal, not a loop, and a class count limit stops a schema
 that would expand without end. The escaping of §9.3 keeps schema text inside
 the comments and literals it is written into. The decoder the classes get is
 `jsonDecode`'s, whose record is `docs/security/json.md`; a `pattern` it checks
-is WP61's, bounded there. No `docs/security/` record is added: the generator
-reads no network, terminal or other process.
+is WP61's, bounded there. The generator reads no network, terminal or other
+process, so it adds no record of its own. S1 does change what the decoder
+accepts (the constructor-assigned default and the per-class `unknown`), so S1
+lands with its update to `docs/security/json.md`: the new options in its
+scope, and a finding for each case where an unknown key or a missing field
+could now reach the decoded value.
 
 ## 12. Stages
 
 Each stage is a PR, ticked on [the roadmap page](roadmap/wp62-json-schema-classes.md)
-when it lands. None adds a construct; each adds diagnostics of the generator,
-a corpus directory per behaviour and its guide text.
+when it lands. S1 adds two typed JSON language options (the
+constructor-assigned optional default and the per-class `unknown`), each with
+its `docs/LANGUAGE.md` rule, a golden `.ll` and an `llvm-as` pass. S2 to S5
+add no construct; each adds diagnostics of the generator, a corpus directory
+per behaviour and its guide text.
 
 ### S1: typed JSON prerequisites
 
@@ -965,11 +1021,14 @@ a corpus directory per behaviour and its guide text.
 `src/emit-json.ts` and `std/json-typed.ts`:
 
 - an optional field whose default the constructor assigns, with NL2498's new
-  wording and the new diagnostics;
-- the per-class `unknown` option.
+  wording and the new diagnostics, including the `new JsonNumber()` form;
+- the per-class `unknown` option;
+- the `new JsonNumber()` form in a coerce class's constructor (§5.5), unless
+  WP61's "S2: coercion" has landed it first.
 
 Also each one's `docs/LANGUAGE.md` rule, cookbook entry and guide text; the
-options' doc comment; and `docs/reference/`, regenerated.
+options' doc comment; `docs/reference/`, regenerated; and the update to
+`docs/security/json.md` (§11), with its index row.
 
 **Tests:** §5.0's positive cases, each with a golden `.ll`, an `llvm-as` pass
 and a native round trip with expected stdout; one negative case per new
@@ -977,7 +1036,8 @@ diagnostic; and the nish-cmp `DECLARED` entries, if the emit moves any corpus
 program's IR.
 
 **Exit:** a class with an optional array, map, class and `JsonNumber` field
-and no `| null` decodes `{}` to its constructor's values. A strict inner class
+and no `| null` decodes `{}` to its constructor's values, and a coerce class
+with a `JsonNumber` field assigned `new JsonNumber()` compiles. A strict inner class
 inside an ignoring outer class refuses an unknown key under both decoder
 settings.
 
@@ -1009,6 +1069,10 @@ with every annotation and default kept.
 - a default the field cannot hold: the warning on stderr, the `@default` tag
   and the derived initializer;
 - an optional field with nothing derivable, refused;
+- an optional field, an array element and a coerce field whose class needed
+  a required field's placeholder, each refused with both pointers (§5.1);
+- an optional field whose class holds a required non-null union, refused
+  with both pointers (§5.0);
 - a refusal per out-of-scope keyword;
 - an outer object that allows other keys holding one that does not, decoded
   under both settings of `ignoreUnknown`;
@@ -1033,7 +1097,9 @@ recursion (§5.4); object defaults; `--omit`.
 **Tests:** one class for a `$ref` used twice; a recursive tree through an
 array and through `| null`; the refused self-reference through a non-null
 field; an OpenAPI 3.1 document with a `discriminator` and `mapping`; a
-reference cycle refused; a pointer into an `enum` value refused.
+reference cycle refused; a pointer into an `enum` value refused; an `allOf`
+whose non-`$ref` branch sets `additionalProperties: false` beside another
+branch's properties, refused with that branch's pointer.
 
 **Exit:** a schema built from `$defs`, maps, nullables and tagged unions
 generates and decodes; the refusals of §4.5 hold.
