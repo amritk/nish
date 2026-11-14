@@ -826,6 +826,8 @@ class ServeConns {
   router: Router
   /** Each slot's request, built on the slot's first connection. */
   reqs: HttpRequest[]
+  /** Each slot's connection, which the carrier keeps for the slot once built. */
+  conns: Http1Connection[]
   /** Each slot's generation: moves on when its connection closes. */
   slotGen: i32[]
   /** Whether a slot holds a connection the loop accepted and has not forgotten. */
@@ -834,7 +836,11 @@ class ServeConns {
   owing: boolean[]
   /** The slots whose send waits for the end of the turn, `owed[0 .. owedCount)`. */
   owed: i32[]
-  /** The queued exchanges' slots, a ring from `queueStart`, and each one's generation when queued. */
+  /**
+   * The queued exchanges' slots, a ring from `queueStart`, and each one's
+   * generation when queued. Its length stays a power of two, so a position
+   * wraps with a mask.
+   */
   queue: i32[]
   queueGen: i32[]
   /** `pollWait`'s answers: token and bits per ready socket. */
@@ -882,6 +888,7 @@ class ServeConns {
     this.listener = listener
     this.outputSize = config.outputSize
     this.reqs = []
+    this.conns = []
     this.slotGen = new Array<i32>(limits.connections)
     this.open = new Array<boolean>(limits.connections)
     this.owing = new Array<boolean>(limits.connections)
@@ -974,10 +981,10 @@ class ServeConns {
     }
     for (let s: i32 = 0; s < toI32(this.open.length); s++) {
       if (this.open[s] && this.server.holds(s)) {
-        if (this.reqs[s].state === SERVE_IDLE && !this.server.connection(s).wantsWrite()) {
+        if (this.reqs[s].state === SERVE_IDLE && !this.conns[s].wantsWrite()) {
           this.closeSlot(s)
         } else {
-          this.server.connection(s).closeAfter = true
+          this.conns[s].closeAfter = true
         }
       }
     }
@@ -998,6 +1005,7 @@ class ServeConns {
           const r: HttpRequest = new HttpRequest(toI32(this.reqs.length))
           r.params = new Array<i32>(2 * this.router.maxParams + 2)
           this.reqs.push(r)
+          this.conns.push(this.server.connection(toI32(this.conns.length)))
         }
         this.open[slot] = true
         this.reqs[slot].state = SERVE_IDLE
@@ -1019,15 +1027,18 @@ class ServeConns {
       const slot: i32 = this.owed[k]
       this.owing[slot] = false
       if (this.open[slot] && this.server.holds(slot)) {
-        this.settle(slot, this.server.connection(slot))
+        this.settle(slot, this.conns[slot])
       }
     }
   }
 
   /** Runs slot `s`'s events until it needs bytes, then owes or makes its send. */
   drive(s: i32): void {
-    const conn: Http1Connection = this.server.connection(s)
-    const r: HttpRequest = this.reqs[s]
+    this.driveOn(s, this.conns[s], this.reqs[s])
+  }
+
+  /** `drive` for a caller that holds slot `s`'s connection and request. */
+  driveOn(s: i32, conn: Http1Connection, r: HttpRequest): void {
     let event: i32 = this.server.next(s)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
@@ -1167,14 +1178,15 @@ class ServeConns {
       const grown: i32[] = new Array<i32>(2 * size)
       const grownGen: i32[] = new Array<i32>(2 * size)
       for (let k: i32 = 0; k < size && k < toI32(grown.length) && k < toI32(grownGen.length); k++) {
-        grown[k] = this.queue[(this.queueStart + k) % size]
-        grownGen[k] = this.queueGen[(this.queueStart + k) % size]
+        const from: i32 = (this.queueStart + k) & (size - 1)
+        grown[k] = this.queue[from]
+        grownGen[k] = this.queueGen[from]
       }
       this.queue = grown
       this.queueGen = grownGen
       this.queueStart = 0
     }
-    const at: i32 = (this.queueStart + this.queueCount) % toI32(this.queue.length)
+    const at: i32 = (this.queueStart + this.queueCount) & (toI32(this.queue.length) - 1)
     this.queue[at] = s
     this.queueGen[at] = this.slotGen[s]
     this.queueCount += 1
@@ -1186,7 +1198,7 @@ class ServeConns {
       if (this.live(this.queue[this.queueStart], this.queueGen[this.queueStart])) {
         return true
       }
-      this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
+      this.queueStart = (this.queueStart + 1) & (toI32(this.queue.length) - 1)
       this.queueCount -= 1
     }
     return false
@@ -1195,7 +1207,7 @@ class ServeConns {
   /** The next queued exchange's slot, now held; call after `ready`. */
   take(): i32 {
     const s: i32 = this.queue[this.queueStart]
-    this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
+    this.queueStart = (this.queueStart + 1) & (toI32(this.queue.length) - 1)
     this.queueCount -= 1
     this.reqs[s].state = SERVE_HELD
     return s
@@ -1208,7 +1220,7 @@ class ServeConns {
 
   /** Whether nobody waits for the answer of slot `s`'s exchange at generation `gen`. */
   hungUp(s: i32, gen: i32): boolean {
-    return !this.live(s, gen) || this.server.connection(s).ended()
+    return !this.live(s, gen) || this.conns[s].ended()
   }
 
   closeSlot(s: i32): void {
@@ -1233,7 +1245,7 @@ class ServeConns {
     if (!this.live(s, gen)) {
       return
     }
-    const conn: Http1Connection = this.server.connection(s)
+    const conn: Http1Connection = this.conns[s]
     const bodiless: boolean = status === 204 || status === 304
     const sent: i32 = conn.respond(status, names, values, bodiless ? HTTP1_NO_BODY : len)
     if (sent === H1_AGAIN) {
@@ -1266,7 +1278,7 @@ class ServeConns {
       }
     }
     this.finish(r, conn)
-    this.drive(s)
+    this.driveOn(s, conn, r)
   }
 
   /** Writes what the answer still has pending and ends it; the exchange is over once both are done. */
