@@ -97,7 +97,7 @@ import { checkResultLocalsHandled } from "./result"
 import { isResultConstructorCall } from "./emit-result"
 import { checkHygiene } from "./hygiene"
 import { checkSecretFlow } from "./secret"
-import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
+import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   checkImplements,
@@ -443,8 +443,8 @@ export class Checker {
   }
 
   /**
-   * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
-   * and `xs.slice(...)` are `std/array.ts`'s templates: a module that calls a
+   * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
+   * `xs.forEach(f)` and `xs.slice(...)` are `std/array.ts`'s templates: a module that calls a
    * method of one of those names is given an import of each template the call
    * may become, under `arrayMethodLocal`'s dotted name, and `checkArrayMethod`
    * checks the call as one to the template that fits. The scan is syntax, so a
@@ -1866,6 +1866,8 @@ export const checkSignatureBody = (
     terminates = checkStatements(ctx, body.children, scope)
   } else if (inferReturn) {
     sig.returnType = checkExpression(ctx, body, scope, WANT_INFERRED)
+  } else if (sig.returnType === T_VOID) {
+    checkVoidConciseBody(ctx, body, scope, sig.decl.children[2].kind !== NodeKind.Empty)
   } else {
     checkReturnValue(ctx, body, scope)
   }
@@ -3402,6 +3404,7 @@ const mentionsArrayMethod = (text: string): boolean =>
   text.indexOf("some") >= 0 ||
   text.indexOf("every") >= 0 ||
   text.indexOf("findIndex") >= 0 ||
+  text.indexOf("forEach") >= 0 ||
   text.indexOf("slice") >= 0
 
 /** The names of the `.map(...)`-like calls under `node` that `std/array.ts` answers (`importArrayMethods`). */

@@ -251,7 +251,7 @@ export const isSortModule = (packageName: string, name: string): boolean =>
 
 /**
  * `nish/array`: the loops `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`,
- * `xs.every(f)`, `xs.findIndex(f)` and `xs.slice(a, b)` compile to. Like
+ * `xs.every(f)`, `xs.findIndex(f)`, `xs.forEach(f)` and `xs.slice(a, b)` compile to. Like
  * `nish/sort` a call of one of those methods is what loads it (the checker's
  * `importArrayMethods`), and the call is checked as one to its template,
  * instantiated per callback; a program may import the templates by name too.
@@ -265,6 +265,7 @@ const isArrayMethod = (name: string): boolean =>
   name === "some" ||
   name === "every" ||
   name === "findIndex" ||
+  name === "forEach" ||
   name === "slice"
 
 /**
@@ -301,6 +302,9 @@ export const arrayMethodTemplate = (name: string, k: i32): string => {
   }
   if (name === "some") {
     return "someIndexed"
+  }
+  if (name === "forEach") {
+    return "forEachIndexed"
   }
   return name === "every" ? "everyIndexed" : "findIndexIndexed"
 }

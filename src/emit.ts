@@ -698,6 +698,8 @@ export class Emitter {
       emitAtomicBody(this, sig)
     } else if (body.kind === NodeKind.Block) {
       this.emitBlock(body)
+    } else if (sig.returnType === T_VOID) {
+      this.emitExpression(body) // `checkVoidConciseBody`: a statement, its answer dropped
     } else {
       this.emitReturnValue(body)
     }

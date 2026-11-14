@@ -49,7 +49,7 @@ import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
 const ARRAY_METHODS: string =
-  "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice"
+  "push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice"
 
 /**
  * `[a, b]`. An empty literal takes its type from context, since there is
@@ -547,8 +547,8 @@ const callbackArity = (ctx: CheckContext, arg: Node, scope: Scope): i32 => {
 }
 
 /**
- * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)` and
- * `xs.findIndex(f)`: a call of `std/array.ts`'s template of that name, or of
+ * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
+ * and `xs.forEach(f)`: a call of `std/array.ts`'s template of that name, or of
  * its `<name>Indexed` twin when `f` takes the index too, so each callback is
  * an instantiation that calls it directly. JavaScript passes a third
  * argument, the array; Nish passes none, and a callback that asks for it is
