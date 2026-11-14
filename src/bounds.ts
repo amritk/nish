@@ -6613,6 +6613,9 @@ export const forgetProofs = (program: CheckedProgram): void => {
   program.fusion.ids = []
   program.fusion.roles = []
   program.fusion.partners = []
+  program.accumulate.ids = []
+  program.accumulate.roles = []
+  program.accumulate.partners = []
   for (const info of program.instantiationList) {
     forgetTable(info.nodeProvenIndex)
     forgetTable(info.nodeProvenClamp)

@@ -10,6 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
+import { recordAccumulation } from "./accumulate"
 import {
   checkExportedLayouts,
   aliasType,
@@ -1891,6 +1892,9 @@ export const checkSignatureBody = (
     // not come off, and it has to be reported by the same source-order walk
     // as the rest of the class.
     const bounds = analyzeBounds(ctx, body)
+    // Issue #1582: a function whose recursive returns are `X + self(...)` is
+    // recorded to be emitted as one loop (`src/accumulate.ts`).
+    recordAccumulation(ctx, sig, body)
     // WP15 §8: the performance warnings, over the same body and the same
     // side tables. Only for a body that checked cleanly — advice about code
     // that does not compile is noise, and a poisoned body has incomplete

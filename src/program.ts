@@ -484,6 +484,16 @@ export class FusionTable {
   }
 }
 
+// What a node is to a self-recursive checked sum emitted as a loop (`src/accumulate.ts`
+// records, `src/emit-accumulate.ts` lowers). Kept in a `FusionTable` keyed by node id.
+
+/** The declaration of a function whose recursive returns are all folded into one loop. */
+export const ACC_FUNCTION: i32 = 1
+/** `X + self(args)`, or `self(args) + Y`, in tail position: one turn of the loop. Its partner is the call. */
+export const ACC_STEP: i32 = 2
+/** A `c ? A : B` in tail position with a step in an arm: each arm is a tail of its own. */
+export const ACC_SPLIT: i32 = 3
+
 /**
  * One call of `parallelMapInto` or `parallelReduce`, recorded where it was
  * checked so that the rules which need the whole-program facts can be judged
@@ -2021,6 +2031,12 @@ export class CheckedProgram {
    * instantiation's own, which `enterInstance` installs.
    */
   fusion: FusionTable
+  /**
+   * The functions of this module's bodies whose recursive returns are one
+   * loop, with their steps and splits (`src/accumulate.ts`). Never kept for
+   * an instantiation: a generic function is not one.
+   */
+  accumulate: FusionTable
 
   constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
     this.source = source
@@ -2070,6 +2086,7 @@ export class CheckedProgram {
     this.savedNodeProvenNoOverflow = []
     this.savedNodeDisjointCopy = []
     this.savedNodeSpreadCopies = []
+    this.accumulate = new FusionTable()
     this.fusion = new FusionTable()
     this.savedFusion = this.fusion
     this.enums = new StringMap()

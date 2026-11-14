@@ -173,6 +173,14 @@ import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {
+  RecursionLoop,
+  emitsAsLoop,
+  closeAccumulation,
+  emitAccumulateTail,
+  incomingName,
+  openAccumulation,
+} from "./emit-accumulate"
+import {
   AES_HW,
   AES_SEAM_NONE,
   aesKernelOf,
@@ -292,6 +300,8 @@ export class Emitter {
    * or `-1` for none. See `planTailCall`.
    */
   tailCallId: i32
+  /** Issue #1582: the loop a self-recursive checked sum is emitted as (`src/emit-accumulate.ts`), or null. */
+  accumulator: RecursionLoop | null
   /** The node `emitUncopied` is emitting, whose guarded string read `guardedRead` leaves uncopied; `-1` for none. */
   uncopied: i32
   /** The index of `@llvm.global_ctors` in the module's globals, or `-1` before the first constructor. */
@@ -415,6 +425,7 @@ export class Emitter {
     this.asyncLanes = []
     this.asyncPolls = []
     this.tailCallId = -1
+    this.accumulator = null
     this.uncopied = -1
     this.loops = []
     this.labelNames = []
@@ -566,6 +577,7 @@ export class Emitter {
     // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
     const isPrivate = privateAbi(this.opts, sig.visibleOutside())
+    const looped = emitsAsLoop(this, sig, facts)
     let i = 0
     while (i < sig.paramNames.length) {
       // WP29: a compile-time function parameter is a position in the call and
@@ -580,7 +592,7 @@ export class Emitter {
       if (optimize) {
         attrs = paramAttributes(this.table, name, type, facts, isPrivate)
       }
-      params.push(new IRParam(name, this.llvmAbi(type, isPrivate), attrs))
+      params.push(new IRParam(looped ? incomingName(name) : name, this.llvmAbi(type, isPrivate), attrs))
       i = i + 1
     }
     // WP29: the captures of the arrows an instance was given, which it passes
@@ -638,6 +650,7 @@ export class Emitter {
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
+    this.accumulator = null
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     const debug = this.debug
     if (debug !== null) {
@@ -679,6 +692,9 @@ export class Emitter {
     const body = sig.decl.kind === NodeKind.Constructor ? sig.decl.children[1] : sig.decl.children[3]
     // A concise arrow body is the one `return` it means; `nish:secret`'s
     // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
+    if (looped) {
+      openAccumulation(this, sig) // issue #1582
+    }
     if (sig.dispatcher && this.opts.profile === "debug" && sig.refMembers.length > 0) {
       emitTagCheck(this, sig) // WP51 §6
     }
@@ -702,6 +718,10 @@ export class Emitter {
       this.emitReturnValue(body)
     }
 
+    const acc = this.accumulator
+    if (acc !== null) {
+      closeAccumulation(this, acc)
+    }
     // Void functions may fall off the end; give them an explicit terminator.
     if (!this.fn.currentBlock().terminated()) {
       this.emitScopeExit()
@@ -1484,6 +1504,11 @@ export class Emitter {
     const sig = this.currentSig
     if (sig === null) {
       process.exit(internalErrorFor("emitter: `return` outside a function", this.opts.json))
+    }
+    const acc = this.accumulator
+    if (acc !== null) {
+      emitAccumulateTail(this, acc, value)
+      return
     }
     // WP17: a small `Result` leaves in a register. It is built before the
     // scope release, because the object it may be read out of is arena memory

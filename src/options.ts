@@ -130,6 +130,7 @@ export class Options {
    *   `proveCallSiteRanges` is not run), so every index keeps its check;
    * - proven no-overflow (`nodeProvenNoOverflow`), and with it every `nsw`;
    * - disjoint copies (`nodeDisjointCopy`) and fused map lookups (`fusion`);
+   * - self-recursive checked sums emitted as a loop (`accumulate`, `src/accumulate.ts`);
    * - inline fixed-length array fields (`layoutInlineArrays` is not run);
    * - every proof-backed attribute — `noalias`, `nocapture`, `willreturn`,
    *   `readonly`, `dereferenceable`, `align`, TBAA — and loop header hoisting,

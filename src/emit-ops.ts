@@ -74,7 +74,7 @@ export const constantText = (emitter: Emitter, info: ConstInfo): string => {
 // ---- Integer arithmetic -----------------------------------------------------------
 
 /** The `nish_panic_overflow` argument for each checked operator, in runtime/runtime.c's order. */
-const OVERFLOW_ADD: i32 = 0
+export const OVERFLOW_ADD: i32 = 0
 const OVERFLOW_SUB: i32 = 1
 const OVERFLOW_MUL: i32 = 2
 const OVERFLOW_NEG: i32 = 3
