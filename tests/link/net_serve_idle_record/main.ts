@@ -3,8 +3,9 @@
 // next exchange on any connection. The client opens `IDLE` connections one
 // at a time, sends one request with a `BODY`-byte body on each, reads the
 // answer and leaves the connection open. The body goes `PACE` bytes at a
-// time, each read by the server before the next is sent, so the carrier's
-// input buffer stays small and what is left is the record: its body buffer
+// time, with a turn of the loop (`sleep(0)`) between, so the server can read
+// each before the next is sent, the carrier's input buffer stays small and
+// what is left is the record: its body buffer
 // grows to the body, so a record kept per slot keeps `BODY` bytes or more
 // per idle connection (130 KiB measured), and one given back is reused
 // (2 KiB measured). The process's peak resident set (VmHWM) may rise by at
@@ -24,7 +25,7 @@ const WARM: i32 = 8
 const IDLE: i32 = 200
 /** Each request's body, in bytes. */
 const BODY: i32 = 65536
-/** The body is sent this many bytes at a time, each read by the server before the next is sent. */
+/** The body is sent this many bytes at a time, yielding one loop turn between, so the server can read each before the next. */
 const PACE: i32 = 4096
 /** The most the peak may rise for each idle connection, in KiB: half `BODY`. */
 const PER_IDLE: i64 = 32

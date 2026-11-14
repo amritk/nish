@@ -4606,7 +4606,7 @@ const DECLARED = [
       program,
       file,
       changelog: "Cut serve's answer path and hold a request record only from parse to copy",
-      why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
+      why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns, and this change moves serve's answer path and holds each request record only from the head's parse to the task's copy (json.ll only on aarch64)",
     }))
   ),
   ...taggedUnions(

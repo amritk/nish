@@ -851,8 +851,9 @@ class ServeExchange {
  * as `spawn` runs it that far at once. What an exchange needs after the copy
  * — its state, its route for a 404 or 405, the answer's pending bytes — is
  * the slot's own, in a `ServeExchange`: a few dozen bytes, and the pending
- * array, which grows to the most of an answer the output could not take (at
- * most `responseBytes`) and is kept for the slot's next answer. An exchange
+ * array, which doubles from 64 bytes until it holds the most of an answer
+ * the output could not take (under 2 × `responseBytes`, at most the power of
+ * two at or above it) and is kept for the slot's next answer. An exchange
  * moves idle → reading → (parked →) queued → held → (flushing →) idle; a
  * slot whose connection closes goes idle and its generation moves on, so an
  * answer for it is dropped.
