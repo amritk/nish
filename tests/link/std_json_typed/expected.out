@@ -328,4 +328,36 @@ PASS  number: 1,000 decodes into one Reading succeed
 PASS  number: Arena.used() is flat over them
 PASS  renamed: decodes
 PASS  renamed: encodes, tries at its initializer
-std_json_typed: 329 passed, 0 failed, 0 skipped
+PASS  keys: escaped keys are written as JSON.stringify writes them
+PASS  keys: escaped, indent 0, wrapped false: complete at 150 bytes: true
+PASS  keys: escaped, indent 0, wrapped false: the same bytes, cursor and code as through key, at every size to 150
+PASS  keys: escaped, indent 0, wrapped true: complete at 150 bytes: true
+PASS  keys: escaped, indent 0, wrapped true: the same bytes, cursor and code as through key, at every size to 150
+PASS  keys: escaped, indent 2, wrapped false: complete at 150 bytes: true
+PASS  keys: escaped, indent 2, wrapped false: the same bytes, cursor and code as through key, at every size to 150
+PASS  keys: escaped, indent 2, wrapped true: complete at 150 bytes: true
+PASS  keys: escaped, indent 2, wrapped true: the same bytes, cursor and code as through key, at every size to 150
+PASS  keys: nested, null, array, map and empty fields
+PASS  keys: an indented writer indents every key
+PASS  keys: an empty class is an empty object
+PASS  keys: nested, indent 0, wrapped false: complete at 320 bytes: true
+PASS  keys: nested, indent 0, wrapped false: the same bytes, cursor and code as through key, at every size to 320
+PASS  keys: nested, indent 0, wrapped true: complete at 320 bytes: true
+PASS  keys: nested, indent 0, wrapped true: the same bytes, cursor and code as through key, at every size to 320
+PASS  keys: nested, indent 2, wrapped false: complete at 320 bytes: true
+PASS  keys: nested, indent 2, wrapped false: the same bytes, cursor and code as through key, at every size to 320
+PASS  keys: nested, indent 2, wrapped true: complete at 320 bytes: true
+PASS  keys: nested, indent 2, wrapped true: the same bytes, cursor and code as through key, at every size to 320
+PASS  keys: a tagged variant writes its tag key first
+PASS  keys: tagged, indent 0: complete at 120 bytes: true
+PASS  keys: tagged, indent 0: the same bytes, cursor and code as through key, at every size to 120
+PASS  keys: tagged, indent 2: complete at 120 bytes: true
+PASS  keys: tagged, indent 2: the same bytes, cursor and code as through key, at every size to 120
+PASS  keys: sixty-five objects deep is the writer's depth code
+PASS  keys: sixty-five deep: complete at 600 bytes: false
+PASS  keys: sixty-five deep: the same bytes, cursor and code as through key, at every size to 600
+PASS  keys: a full writer keeps its code
+PASS  keys: and a second encode adds nothing
+PASS  digits: i32 at every power of ten and its edges
+PASS  digits: i64 at every power of ten and its edges
+std_json_typed: 361 passed, 0 failed, 0 skipped

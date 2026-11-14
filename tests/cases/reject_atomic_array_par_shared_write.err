@@ -1,0 +1,1 @@
+`parallelMap` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result

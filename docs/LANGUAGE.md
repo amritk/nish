@@ -5518,7 +5518,7 @@ answer the same natively and under Node:
   object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
   `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
   Node, without the methods, and is refused with
-  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
   (NL2515, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
   `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
   `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
@@ -5616,15 +5616,111 @@ author's obligation, as it is for a `Mutex`'s critical sections; the checker
 does not try to prove it.
 
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
-round into 256 bins, four rounds, on four tasks. On a four-core machine, over
-seven interleaved rounds whose seeds move every round, the medians are: each
-task counting into a local tally and adding it with one `add` per bin, 24 ms
-(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
-thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
-value, 677 ms (28× slower), because every increment contends for a cache line
-another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+round into one `AtomicI32Array` of 256 bins, four rounds, on four tasks. On a
+four-core machine, over seven interleaved rounds whose seeds move every round,
+the medians are: each task counting into a local tally and adding it with one
+`add` per bin, 29 ms (a byte-identical copy of it, the noise band, 23 ms; the
+two copies' runs 22–49 ms); one thread binning into plain counters, 80 ms
+(2.8× slower); one atomic `add` per value, 554 ms (19× slower), because every
+increment contends for a cache line another core is writing; and one `Mutex`
+taken per value, 2,155 ms. An atomic
 is far cheaper than a lock and still far dearer than a counter no other core
 touches: update it once per batch, not once per value.
+
+### Atomic arrays: `AtomicI32Array` and `AtomicI64Array`
+
+An atomic array is `length` atomic counters in one contiguous buffer. It is
+`AtomicI32` (or `AtomicI64`) with the element's index first: every method of
+the one has a twin on the other, with the same meaning, the same ordering and
+the same rules, R1, R7 and R8 above, and the same one shared write a task or a
+parallel body may make. Where an `AtomicI32[]` is one object per counter, each
+its own allocation, so sixteen counters land on several cache lines that the
+cores writing them pass back and forth, an `AtomicI32Array(16)` is sixteen
+adjacent `i32`s in 64 contiguous bytes, which is the layout Rust's
+`[AtomicI32; 16]` and Go's `[16]atomic.Int32` have. The buffer starts on a
+64-byte boundary at least one line into its own allocation, which ends past the
+line the last element is on, so no other object shares a line with the
+elements, the lines the counters' writers fight over.
+
+```typescript
+import { AtomicI32Array, AtomicI64Array, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32Array;
+  constructor(xs: i32[], bins: AtomicI32Array) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    s.bins.add(x & 3, 1);            // one indivisible add on element x & 3
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins = new AtomicI32Array(4);   // four counters in one buffer, each 0
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const bytes = new AtomicI64Array(2);
+  const one: i64 = 1;
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => {
+    bytes.add(x & 1, one);             // the one shared write a body may make
+    return x;
+  });
+  console.log(`${bins.load(0)} ${bins.load(1)} ${bins.length} ${bytes.load(1)}`); // 2 2 4 2
+  return 0;
+};
+```
+
+- **The methods.** `load(i)` and `store(i, v)`; `add(i, n)`, `sub(i, n)`,
+  `min(i, v)`, `max(i, v)` and `exchange(i, v)`, each answering the value
+  element `i` held before it; and `compareExchange(i, expected, desired)`.
+  `length` is a `readonly` field, fixed by `new AtomicI32Array(n)`, which
+  makes `n` elements, each `0`; a negative `n` stops the program as
+  `new Array` of one does. `AtomicI64Array` is the same over `i64`, its index
+  still an `i32`.
+- **An index is checked as an array index is**: one out of range stops the
+  program with `index out of range: 16 >= 16` and exit status 1, and never
+  touches memory outside the buffer (`tests/link/atomic_array_out_of_range`).
+  The check is an ordinary one, which the prover may discharge.
+- **Natively each method is the bounds check and then one instruction** on a
+  `getelementptr` into the buffer: a `load atomic` or `store atomic ...
+  seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a
+  `cmpxchg ... seq_cst seq_cst`, aligned to the element (`align 4`,
+  `align 8`); no element is an object of its own, so there is no per-element
+  pointer to load (`tests/link/thread_atomic_array`, whose `threads.ll` is the
+  lowering; docs/IR_COOKBOOK.md, "an atomic array").
+- **Under Node each method is the plain operation** on an element of an
+  ordinary array, exact for the reason an `AtomicI32`'s is, with the same
+  ±2^53 limit on an `AtomicI64Array`'s elements.
+- **The rules are `AtomicI32`'s.** Its buffer, `values`, is a field no program
+  may name (R1, NL2514, `reject_atomic_array_member_read`,
+  `reject_atomic_array_member_store`), and a method named without a call is
+  refused as any class's is (`reject_atomic_array_member_unbound`); `length`
+  is assigned only by the constructor
+  (`reject_atomic_array_length_store`); an object literal of either class is
+  refused by NL2515 (`reject_atomic_array_literal`); the parent does not
+  touch one a scope's tasks reach before the scope joins (R7, NL2513,
+  `reject_atomic_array_region_direct`); the tasks of sibling scopes share none
+  (NL2516, `reject_atomic_array_sibling_load`); and a parallel body may update
+  one and write nothing else shared
+  (`reject_atomic_array_par_shared_write`, `tests/link/par_atomic_array`).
+
+Choose an atomic array over an `AtomicI32[]` when the counters are many or hot
+— a histogram's bins, a counter per route or per worker — and an `AtomicI32`
+for one counter, or for counters that live in different objects. A counter no
+other core writes is still cheaper than either: count into a task's own tally
+and add it once per batch, as the example under "Atomics" does.
 
 ### Channels: `Channel<T>`
 
@@ -11946,6 +12042,7 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `filter(pred)` | arrays | `T[]` |
 | `some(pred)`, `every(pred)` | arrays | `boolean` |
 | `findIndex(pred)` | arrays | `number` |
+| `forEach(f)` | arrays | `void` |
 | `slice(start?, end?)` | arrays | `T[]` |
 | `length` | strings | `number` |
 | `charCodeAt(i)` | strings | `number` |
@@ -12284,15 +12381,30 @@ and parameters (`arr_sort_capture`), under the rule in [Function parameters](#fu
 
 #### Callback methods and `slice`
 
-`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
-and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
-a template of `std/array.ts`, which a call of one of those names loads, and the
-callback is a compile-time function parameter, so each callback gets an
-instantiation of its own whose loop calls it directly. `xs.map(f)` and
-`map(xs, f)` with `map` imported from `nish/array` are the same call and
-compile to one instance (`arr_map_template`). The template is picked by the
-callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
-`slice`, `sliceFrom` or `sliceAll` by the argument count.
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
+`xs.forEach(f)` and `xs.slice(...)` are lowered as `sort` is: the checker
+rewrites the call to a template of `std/array.ts`, which a call of one of those
+names loads, and the callback is a compile-time function parameter, so each
+callback gets an instantiation of its own whose loop calls it directly.
+`xs.map(f)` and `map(xs, f)` with `map` imported from `nish/array` are the same
+call and compile to one instance (`arr_map_template`). The template is picked by
+the callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`,
+and `slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+`xs.forEach(f)` answers `void`, so its answer cannot be bound
+(`reject_foreach_answer`), and its callback is written to answer nothing: a
+concise body such as `(x) => console.log(x)` or `(x) => ys.push(x)` is a
+statement, and what it computes is dropped. It compiles to a counted loop over
+the array with the callback inlined into its body, as `for...of` does, but the
+loop stops at the length the array had when the call began, as Node does,
+where `for...of` reads the length on every pass. With a callback that does not
+resize the array, `opt -O2` leaves the same instruction count for both: 18 on
+the `walk` function measured in
+[IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration). An arrow argument
+never assigns a name of the function it is written in (NL2586), and a
+`forEach` callback is no exception, so a running total is a `for...of` loop,
+whose body may assign it; the refusal says so (`reject_foreach_capture_sum`):
+`for (const x of xs) { sum += x }`.
 
 The callback takes the element, or the element and its index, as TypeScript
 allows. JavaScript passes a third argument, the array itself; Nish refuses a
@@ -12308,7 +12420,10 @@ Each method walks the array from index 0 and calls the callback once per
 element, in order, up to the length the array had when the call began, as
 `Array.prototype` does; `some`, `every` and `findIndex` stop at the first
 element that decides. A callback that shrinks the array ends the walk at the
-new length, where JavaScript goes on and skips the missing indices. `map` and
+new length, where JavaScript goes on and skips the missing indices. So a
+`forEach` callback that pushes onto its receiver does not visit what it
+pushed, one that stores ahead of the walk is handed the stored value, and one
+that pops stops the walk early, as Node does (`arr_foreach`). `map` and
 `filter` answer a new array, so writing into it does not touch the receiver;
 an element that is an `interface` record is stored inline and copied, so
 `filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
@@ -12341,10 +12456,10 @@ message reads `expected f64`. Neither conversion works in the other mode. An arr
 proof at the call removes, and `--deny-panics` refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
-words, so the two agree on every input; `map`, `filter`, `some`, `every` and
-`findIndex` are the platform's own `Array.prototype` methods there, and an
-answer that holds records inline is copied with the runtime's `copyRecords`,
-as the native `push` copies.
+words, so the two agree on every input; `map`, `filter`, `some`, `every`,
+`findIndex` and `forEach` are the platform's own `Array.prototype` methods
+there, and an answer that holds records inline is copied with the runtime's
+`copyRecords`, as the native `push` copies.
 
 ### Bulk writes: `set` and `fill`
 
@@ -12464,8 +12579,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
-  passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`,
+  `forEach`, `slice`, passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -12753,17 +12868,42 @@ export const main = (): i32 => {
 ```
 
 - **The members are JavaScript's, less what this version defers.** A `Map` has
-  `size`, `get`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
-  `has`, `delete` and `clear`. `set` and `add` answer the receiver, so they
-  chain, and `delete` answers whether the key was there
-  (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
-  `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
+  `size`, `get`, `set`, `has`, `delete`, `clear` and `forEach`; a `Set` has
+  `size`, `add`, `has`, `delete`, `clear` and `forEach`. `set` and `add`
+  answer the receiver, so they chain, and `delete` answers whether the key was
+  there (`tests/cases/map_key_str`, `set_str`). `size` is a read-only
+  `number`: `` `size` of `Map<string, i32>` is read-only ``
+  (`reject_map_size_assign`).
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
-  iterable of a `for...of`, below. There is no `entries` or
-  `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`,
-  `reject_map_iter_entries_call`). Everything else in the
+  iterable of a `for...of`, below. There is no `entries`, because there is no
+  destructuring (`reject_map_entries`, `reject_map_iter_entries_call`):
+  `m.forEach((value, key) => ...)` visits each key with its value.
+- **`forEach` is the `for...of` walk with the callback inlined.**
+  `m.forEach(f)` on a `Map` calls `f` with each value, and with its key too
+  when `f` is written with two parameters, value first, as JavaScript does;
+  `s.forEach(f)` on a `Set` calls `f` with each element. The checker rewrites
+  the call to a template of `std/collections.ts` (`forEachEntry`,
+  `forEachValue`, `forEachElement`), whose body is the same walk as
+  `for...of` over the table, below: the same insertion order, an entry set
+  during the walk visited and one deleted before the walk reaches it not, and
+  `clear` ending it (`map_foreach`, `set_foreach`). It allocates nothing and
+  looks no key up, where `for (const k of m.keys())` with `m.get(k) ?? 0`
+  calls `Map.probe` and takes the nullish branch once per key, and rewinds
+  the arena on every pass: under `opt -O2`, 92 instructions against 112 for
+  a `Map` and 78 against 89 for a `Set`
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration)). JavaScript passes
+  a `Map`'s callback the map as a third argument, and a `Set`'s callback the
+  element twice and the set third; Nish refuses a callback written with more
+  than two parameters on a `Map` (NL2771, `reject_map_foreach_third_param`)
+  or more than one on a `Set` (NL2772, `reject_set_foreach_second_param`),
+  since the receiver is the one the call already names. The callback follows the array callbacks' rules
+  above: a top-level function or an arrow written at the call
+  (`reject_map_foreach`), at least one parameter, an answer of `void`, no
+  assignment to a name of the function around it (NL2586), and `m.forEach`
+  named without a call is refused (`reject_map_foreach_uncalled`). An arrow
+  inside another arrow reads only its own parameters, so a nested walk goes
+  through a top-level function (`set_foreach`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
   `reject_map_internal_method`, `reject_set_set`).

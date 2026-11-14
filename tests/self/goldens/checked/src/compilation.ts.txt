@@ -137,6 +137,8 @@ import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
 import isArrayMethodLocal from "./std-modules" -> function @isArrayMethodLocal
 import isArrayModule from "./std-modules" -> function @isArrayModule
+import isCollectionForEachLocal from "./std-modules" -> function @isCollectionForEachLocal
+import isCollectionsModule from "./std-modules" -> function @isCollectionsModule
 import isStdModule from "./std-modules" -> function @isStdModule
 import isStdModuleName from "./std-modules" -> function @isStdModuleName
 import SECRET_STD_SPECIFIER from "./std-modules" -> const SECRET_STD_SPECIFIER
@@ -381,10 +383,11 @@ function isRetentionCode(code: string): boolean -> @isRetentionCode
 function isUnusedArrayImport(specifier: string, local: string, template: TemplateInfo | null): boolean -> @isUnusedArrayImport [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: local
-  calls: isArrayMethodLocal nish_str_eq
+  calls: isArrayMethodLocal isCollectionForEachLocal nish_str_eq
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:36 isArrayMethodLocal -> @isArrayMethodLocal
+  callee +0:38 isArrayMethodLocal -> @isArrayMethodLocal
+  callee +1:45 isCollectionForEachLocal -> @isCollectionForEachLocal
 function Compilation.constructor(this: Compilation, opts: Options): void -> @Compilation.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via RuntimeTable.constructor
@@ -2025,14 +2028,16 @@ function Compilation.rejectCLibrarySymbols(this: Compilation): void -> @Compilat
   callee +44:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.isUnusedArrayModule(this: Compilation, unit: ModuleUnit): boolean -> @Compilation.isUnusedArrayModule [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isArrayModule isUnusedArrayImport nish_str_eq
+  calls: isArrayModule isCollectionsModule isUnusedArrayImport nish_str_eq
   pointer this: size=208 writesThrough=false captured=false
   pointer unit: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:10 isArrayModule -> @isArrayModule
-  local +3:16 other: ModuleUnit (const)
-  local +4:18 imp: ImportBinding (const)
-  callee +7:12 isUnusedArrayImport -> @isUnusedArrayImport
+  local +0:9 specifier: string (let)
+  callee +1:9 isCollectionsModule -> @isCollectionsModule
+  callee +3:17 isArrayModule -> @isArrayModule
+  local +6:16 other: ModuleUnit (const)
+  local +7:18 imp: ImportBinding (const)
+  callee +8:45 isUnusedArrayImport -> @isUnusedArrayImport
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:9

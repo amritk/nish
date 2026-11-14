@@ -174,9 +174,10 @@ export const main = (): i32 => {
 This prints `ada`, `grace`, `total 121`, `x` and `y`, one to a line.
 
 There is no `entries()`, because Nish has no destructuring to take a
-`[key, value]` pair apart, and no `forEach`, because a method cannot take a
-function. Walking a `Map` directly would mean walking its entries, so it is
-refused with the rewrite: walk `keys()` and call `get`, or walk `values()`.
+`[key, value]` pair apart; `ages.forEach((age, name) => ...)` hands you both
+instead (see [forEach](#foreach)). Walking a `Map` directly would mean walking
+its entries, so it is refused with the rewrite: walk `keys()` and call `get`,
+or walk `values()`.
 
 ```ts nish:err NL2375
 export const main = (): i32 => {
@@ -193,6 +194,28 @@ cannot be stored in a variable or passed around.
 Changing the table during a walk does what it does in JavaScript: a key added
 during the walk is visited later in it, and a key deleted before the walk
 reaches it is skipped.
+
+### `forEach`
+
+`m.forEach((value, key) => ...)` and `s.forEach((x) => ...)` are the same walk
+with the callback written in as the loop body: the order and the rules for a
+change during the walk are those above, and the call answers nothing. The
+callback is an arrow or a top-level function; for a `Map` it takes the value,
+or the value and the key, and for a `Set` the element alone. Like an array
+callback, it may not assign a local of the function around it: walk with
+`for...of` to add up.
+
+```ts nish:ok
+export const main = (): i32 => {
+  const ages = new Map<string, i32>();
+  ages.set("ada", 36).set("grace", 85);
+  ages.forEach((age, name) => console.log(`${name} ${age}`)); // ada 36, grace 85
+  const tags = new Set<string>();
+  tags.add("x").add("y");
+  tags.forEach((tag) => console.log(tag));                   // x, y
+  return 0;
+};
+```
 
 ## `nish/map`: two more calls
 

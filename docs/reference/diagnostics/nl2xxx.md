@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 762 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 764 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5581,22 +5581,22 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function
+…`: a `Map` or `Set` in this version has no `entries`, because there is no destructuring; `forEach((value, key) => ...)` visits each key with its value
 ```
 
-[`nl2356_map_foreach.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_foreach.ts):
+[`nl2356_map_entries.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_entries.ts):
 
 ```ts
-// NL2356: `forEach` on the global `Map`; a method cannot take a function.
+// NL2356: `entries` on the global `Map`; there is no destructuring.
 export const main = (): i32 => {
   const m = new Map<string, i32>();
-  m.forEach(0);
+  m.entries();
   return 0;
 };
 ```
 
 ```text
-`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function
+`entries` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries`, because there is no destructuring; `forEach((value, key) => ...)` visits each key with its value
 ```
 
 ## NL2357
@@ -5637,7 +5637,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear
+…`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach
 ```
 
 [`nl2359_map_internal_member.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2359_map_internal_member.ts):
@@ -5651,7 +5651,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-Unknown member `live` on `Set<i32>`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear
+Unknown member `live` on `Set<i32>`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach
 ```
 
 ## NL2360
@@ -9528,7 +9528,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
+…` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
 ```
 
 [`nl2515_atomic_literal.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2515_atomic_literal.ts):
@@ -9545,7 +9545,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
+`AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
 ```
 
 ## NL2516
@@ -14750,4 +14750,54 @@ export const join = (score: i32): i32 => {
 
 ```text
 Root storage `player` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
+```
+
+## NL2771
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead
+```
+
+[`nl2771_map_foreach_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_map_foreach_arity.ts):
+
+```ts
+// NL2771: A `Map`'s `forEach` callback takes the value, or the value and its key;
+// JavaScript's third parameter, the map, is refused.
+export const main = (): i32 => {
+  const m = new Map<string, i32>()
+  m.set("a", 1)
+  m.forEach((v, k, all) => console.log(`${k}${v}${all.size}`))
+  return 0
+}
+```
+
+```text
+The callback of `forEach` on a `Map` takes 3 parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead
+```
+
+## NL2772
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names
+```
+
+[`nl2772_set_foreach_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2772_set_foreach_arity.ts):
+
+```ts
+// NL2772: A `Set`'s `forEach` callback takes the element alone; JavaScript passes it
+// twice, and the set third, and Nish refuses the second parameter.
+export const main = (): i32 => {
+  const s = new Set<i32>()
+  s.add(1)
+  s.forEach((v, again) => console.log(v + again))
+  return 0
+}
+```
+
+```text
+The callback of `forEach` on a `Set` takes 2 parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names
 ```

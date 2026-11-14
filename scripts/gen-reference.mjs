@@ -33,15 +33,24 @@
 // provokes; docs/reference/command-line.md from `helpText` in
 // src/cli-style.ts, read as a TypeScript AST.
 //
+// The configuration files Nish reads are generated from their JSON Schemas:
+// each schemas/*.schema.json, in SCHEMAS' order, becomes a page under
+// docs/reference/config/ through @amritk/generate-markdown (the renderer
+// behind `mjst markdown`), which lays a page out from the schema's own
+// `x-mjst.markdown` keyword. The schema is the one place a field is described:
+// an editor reads the same descriptions the page prints.
+//
 // The routes go to scalar.config.json under /reference: /reference/language
 // for docs/LANGUAGE.md, the /reference/library group holding every library
-// page, and the /reference/compiler group holding the two compiler pages. Only the /reference group's text is rewritten, in the
+// page, the /reference/compiler group holding the two compiler pages, and the
+// /reference/config group holding one page per schema. Only the /reference group's text is rewritten, in the
 // one-line-when-it-fits layout the rest of the file keeps.
 //
 // Output is byte-deterministic: TypeDoc sorts each module's members, modules
 // and routes are sorted here, and no page holds a time or an absolute path.
 import fs from "node:fs"
 import path from "node:path"
+import { generateMarkdownFiles } from "@amritk/generate-markdown"
 import { Application, ReflectionKind } from "typedoc"
 import ts from "typescript"
 import { parseCodesRegistry } from "./codes-registry.js"
@@ -1140,13 +1149,19 @@ const renderIndex = (pages) => {
       rel(diagnosticsPage),
       "Every diagnostic code, what it means and a program that provokes it."
     ),
+    card(
+      "Configuration files",
+      "brackets-curly",
+      rel(schemaPage(SCHEMAS[0])),
+      "Every field Nish reads in `package.json`, and the capability lockfile it writes."
+    ),
   ]
   return `${[
     header("std/**/*.ts and runtime/nish.d.ts"),
     "# Library reference",
     "Every module a Nish program can import, one page each, generated from the doc comments of its source. " +
       "The builtins come with the compiler; the `nish/` modules are the standard library, written in Nish and grouped here by area. " +
-      "The language specification and the compiler's own command line and diagnostics are references too.",
+      "The language specification, the compiler's own command line and diagnostics, and the configuration files it reads are references too.",
     tag("scalar-grid", 'cols="2"', cards.join("\n\n")),
     "## Builtins",
     table(builtin),
@@ -1493,6 +1508,13 @@ const configText = (text, pages) => {
         "/command-line": { type: "page", title: "Command line", filepath: commandLinePage },
         "/diagnostics": diagnosticsRoutes(),
       },
+    },
+    "/config": {
+      type: "group",
+      title: "Configuration files",
+      children: Object.fromEntries(
+        SCHEMAS.map((s) => [`/${s.slug}`, { type: "page", title: schemaTitle(s), filepath: schemaPage(s) }])
+      ),
     },
   }
   // The references first, then the hand-written pages: the overview of std/,
@@ -2239,6 +2261,60 @@ const renderCommandLine = (link) => {
   return `${out.join("\n")}\n`
 }
 
+// ---- Configuration files --------------------------------------------------
+
+const schemaDir = "schemas"
+const configDir = `${outDir}/config`
+
+/**
+ * The JSON Schemas of the files Nish reads, in the order the sidebar lists
+ * them. `slug` is the page's file name and route; the page's title is the
+ * schema's own `title`. Every schemas/*.schema.json must be listed, so a new
+ * schema cannot land without its page.
+ */
+const SCHEMAS = [
+  { source: `${schemaDir}/package.schema.json`, slug: "package-json" },
+  { source: `${schemaDir}/capabilities-lock.schema.json`, slug: "capabilities-lock" },
+]
+
+const schemaPage = (s) => `${configDir}/${s.slug}.md`
+const readSchema = (s) => JSON.parse(fs.readFileSync(path.join(root, s.source), "utf8"))
+const schemaTitle = (s) => readSchema(s).title
+
+/**
+ * docs/reference/config/<slug>.md from one schema. The schema's descriptions
+ * write their links relative to the page, so a link that resolves nowhere fails
+ * here rather than on the site. A schema that declares more than one page is
+ * refused: its other pages would have no route.
+ */
+const renderSchema = (s, link) => {
+  const listed = new Set(SCHEMAS.map((x) => x.source))
+  for (const name of fs.readdirSync(path.join(root, schemaDir)).sort()) {
+    if (name.endsWith(".schema.json") && !listed.has(`${schemaDir}/${name}`)) {
+      throw new Error(`${schemaDir}/${name}: not in SCHEMAS, so it would have no reference page`)
+    }
+  }
+  const page = schemaPage(s)
+  const files = generateMarkdownFiles(readSchema(s))
+  if (files.length !== 1 || files[0].filename !== `${s.slug}.md`) {
+    throw new Error(
+      `${s.source}: expected one page, ${s.slug}.md (its x-mjst.markdown.file), got ${files.map((f) => f.filename).join(", ")}`
+    )
+  }
+  const to = linkFrom(link, page)
+  // A sibling schema page may not be written yet, so it is checked against
+  // SCHEMAS rather than against the disk.
+  const siblings = new Set(SCHEMAS.map(schemaPage))
+  const relink = (target) =>
+    siblings.has(path.posix.join(configDir, target.split("#")[0])) ? target : to(target)
+  const body = files[0].content
+    .trimEnd()
+    .replace(/\]\(([^)\s]+)\)/g, (whole, target) =>
+      /^(https?:|mailto:|#)/.test(target) ? whole : `](${relink(target)})`
+    )
+  return [[page, `${header(s.source, "the schema's descriptions")}\n\n${body}\n`]]
+}
+
 // ---- Main -----------------------------------------------------------------
 
 const listFiles = (dir) => {
@@ -2364,6 +2440,11 @@ const main = async () => {
     want.set(file, text)
   }
   want.set(commandLinePage, renderCommandLine(link))
+  for (const s of SCHEMAS) {
+    for (const [file, text] of renderSchema(s, link)) {
+      want.set(file, text)
+    }
+  }
   const have = listFiles(outDir)
   const problems = []
   for (const [file, text] of [...want].sort(([a], [b]) => (a < b ? -1 : 1))) {

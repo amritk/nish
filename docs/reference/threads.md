@@ -7,7 +7,9 @@ Data parallelism, a scope for heterogeneous tasks, and a lock that owns its data
 ```ts
 import {
   AtomicI32,
+  AtomicI32Array,
   AtomicI64,
+  AtomicI64Array,
   Channel,
   Mutex,
   MutexGuard,
@@ -102,9 +104,21 @@ An `i32` that a scope's tasks and a parallel body may update together (docs/LANG
 
 </scalar-card>
 
+<scalar-card title="Atomic​I32​Array" icon="phosphor/regular/cube" href="#atomici32array">
+
+`length` `i32` counters in one contiguous buffer, each of which a scope's tasks and a parallel body may update together (docs/LANGUAGE.md, "Atomic arrays").
+
+</scalar-card>
+
 <scalar-card title="Atomic​I64" icon="phosphor/regular/cube" href="#atomici64">
 
 An `i64` that a scope's tasks and a parallel body may update together (docs/LANGUAGE.md, "Atomics").
+
+</scalar-card>
+
+<scalar-card title="Atomic​I64​Array" icon="phosphor/regular/cube" href="#atomici64array">
+
+`length` `i64` counters in one contiguous buffer, each of which a scope's tasks and a parallel body may update together (docs/LANGUAGE.md, "Atomic arrays").
 
 </scalar-card>
 
@@ -402,6 +416,42 @@ class AtomicI32
 | `store(value: i32): void` | Sets the value to `value`. |
 | `sub(delta: i32): i32` | Subtracts `delta`, wrapping, and answers the value before. |
 
+### AtomicI32Array
+
+`length` `i32` counters in one contiguous buffer, each of which a scope's
+tasks and a parallel body may update together (docs/LANGUAGE.md,
+"Atomic arrays"). It is `AtomicI32` with the element's index first: each
+method checks `i` as an array index is checked, so an index out of range
+stops the program, and is then one indivisible operation on that element.
+Natively the compiler emits each body itself, as a sequentially consistent
+`load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on the element
+(docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+which is what runs under Node. `add` and `sub` wrap
+at 32 bits, as the native instruction does.
+
+Choose it over an `AtomicI32[]` when the counters are many or hot: an
+`AtomicI32[]` is one object per counter, each its own allocation, so
+neighbouring counters land on several cache lines; here they are adjacent
+`i32`s, as Rust's `[AtomicI32; N]` is. It reaches a task and a parallel body
+by the routes `AtomicI32` does, and is refused where it is.
+
+```ts
+class AtomicI32Array
+```
+
+| Member | |
+| --- | --- |
+| `new AtomicI32Array(length: i32)` | An array of `length` elements, each `0`. |
+| `readonly length: i32` | How many elements the array holds, fixed when it is made. |
+| `add(i: i32, delta: i32): i32` | Adds `delta` to element `i`, wrapping at 32 bits, and answers the element before. |
+| `compareExchange(i: i32, expected: i32, desired: i32): i32` | Sets element `i` to `desired` if it is `expected`, and answers the value it saw. |
+| `exchange(i: i32, value: i32): i32` | Sets element `i` to `value` and answers the element before. |
+| `load(i: i32): i32` | Element `i`. |
+| `max(i: i32, value: i32): i32` | Keeps the larger of element `i` and `value`, and answers the element before. |
+| `min(i: i32, value: i32): i32` | Keeps the smaller of element `i` and `value`, and answers the element before. |
+| `store(i: i32, value: i32): void` | Sets element `i` to `value`. |
+| `sub(i: i32, delta: i32): i32` | Subtracts `delta` from element `i`, wrapping at 32 bits, and answers the element before. |
+
 ### AtomicI64
 
 An `i64` that a scope's tasks and a parallel body may update together
@@ -435,6 +485,44 @@ class AtomicI64
 | `min(value: i64): i64` | Keeps the smaller of the value and `value`, and answers the value before. |
 | `store(value: i64): void` | Sets the value to `value`. |
 | `sub(delta: i64): i64` | Subtracts `delta` and answers the value before; natively the difference wraps at 64 bits. |
+
+### AtomicI64Array
+
+`length` `i64` counters in one contiguous buffer, each of which a scope's
+tasks and a parallel body may update together (docs/LANGUAGE.md,
+"Atomic arrays"). It is `AtomicI64` with the element's index first: each
+method checks `i` as an array index is checked, so an index out of range
+stops the program, and is then one indivisible operation on that element.
+Natively the compiler emits each body itself, as a sequentially consistent
+`load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on the element
+(docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+which is what runs under Node. Node holds each
+element as a `number`, so `add` and `sub` are `+` and `-` there, and agree
+with native while values stay within ±2^53; wrapping at 2^63 is native-only,
+as it is for `AtomicI64`.
+
+Choose it over an `AtomicI64[]` when the counters are many or hot: an
+`AtomicI64[]` is one object per counter, each its own allocation, so
+neighbouring counters land on several cache lines; here they are adjacent
+`i64`s, as Rust's `[AtomicI64; N]` is. It reaches a task and a parallel body
+by the routes `AtomicI64` does, and is refused where it is.
+
+```ts
+class AtomicI64Array
+```
+
+| Member | |
+| --- | --- |
+| `new AtomicI64Array(length: i32)` | An array of `length` elements, each `0`. |
+| `readonly length: i32` | How many elements the array holds, fixed when it is made. |
+| `add(i: i32, delta: i64): i64` | Adds `delta` to element `i` and answers the element before; natively the sum wraps at 64 bits. |
+| `compareExchange(i: i32, expected: i64, desired: i64): i64` | Sets element `i` to `desired` if it is `expected`, and answers the value it saw. |
+| `exchange(i: i32, value: i64): i64` | Sets element `i` to `value` and answers the element before. |
+| `load(i: i32): i64` | Element `i`. |
+| `max(i: i32, value: i64): i64` | Keeps the larger of element `i` and `value`, and answers the element before. |
+| `min(i: i32, value: i64): i64` | Keeps the smaller of element `i` and `value`, and answers the element before. |
+| `store(i: i32, value: i64): void` | Sets element `i` to `value`. |
+| `sub(i: i32, delta: i64): i64` | Subtracts `delta` from element `i` and answers the element before; natively the difference wraps at 64 bits. |
 
 ### Channel
 

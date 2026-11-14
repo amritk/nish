@@ -478,6 +478,91 @@ const numbers = (t: Suite): void => {
   t.eqI64("numberF64(1.7976931348623159e308) rounds up to an infinity", jtF64Bits("1.7976931348623159e308"), infinity);
 };
 
+/** The bits of `numberF64` on the number the window `off`, `len` of `text` holds, or `-1` with no number. */
+const jtF64BitsWindow = (text: string, off: i32, len: i32): i64 => {
+  const bytes = jtBytes(text);
+  const t = new JsonTokenizer(bytes, off, len, new JsonLimits());
+  return t.next() === JSON_TOK_NUMBER ? f64ToBits(t.numberF64()) : -1;
+};
+
+/** `numberI64` of the first number in `text`, or 0. */
+const jtI64OfText = (text: string): i64 => {
+  const n = jtAt(text, JSON_TOK_NUMBER);
+  return n === null ? toI64(0) : n.numberI64();
+};
+
+// The one-pass scan reads eight digits at a time while eight fit before the
+// window's end, then one at a time: each length either side of a block of
+// eight, each place a run can stop, and the fall back to the text past 19
+// digits, held bit for bit against parseFloat.
+const numberRuns = (t: Suite): void => {
+  const texts = [
+    "123456789012345",
+    "1234567890123456",
+    "-123456789012345",
+    "-1234567890123456",
+    "0.123456789012345",
+    "0.1234567890123456",
+    "12345678",
+    "123456789",
+    "-12345678",
+    "-123456789",
+    "0.12345678",
+    "0.123456789",
+    "-0.12345678",
+    "-0.123456789",
+    "9.12345678",
+    "9.123456789",
+    "12345678.12345678",
+    "123456789.123456789",
+    "1234567890123456789",
+    "0.12345678e3",
+    "0.123456789E-3",
+    "1234567812345678e-8",
+    "1234567.5",
+    "[1234567 ]",
+    "[12345678,9]",
+    "{\"a\":123456789}",
+    "0.00000000000000000001234",
+    "123456789012345678901234567890",
+    "1.2345678901234567890123e5",
+    "9007199254740993.000000001",
+    "1e99999",
+    "1e100000",
+    "1e-999999",
+    "1e1000000",
+  ];
+  let i: i32 = 0;
+  while (i < toI32(texts.length)) {
+    const text = texts[i];
+    const n = jtAt(text, JSON_TOK_NUMBER);
+    if (n === null) {
+      t.fail(`a number token for ${text}`, "none");
+    } else {
+      const want = f64ToBits(parseFloat(String.fromBytes(n.src, n.tokStart, n.tokEnd)));
+      t.eqI64(`numberF64(${text}) is parseFloat's bits`, f64ToBits(n.numberF64()), want);
+    }
+    i += 1;
+  }
+  const billion: i64 = 1000000000;
+  const nines: i64 = billion * billion - 1;
+  const nineteen: i64 = toI64(1234567890) * billion + toI64(123456789);
+  t.eqI64("numberI64 of 18 digits", jtI64OfText("999999999999999999"), nines);
+  t.eqI64("numberI64 of -18 digits", jtI64OfText("-999999999999999999"), -nines);
+  t.eqI64("numberI64 of 19 digits", jtI64OfText("1234567890123456789"), nineteen);
+  t.eqI64("numberI64 of -19 digits", jtI64OfText("-1234567890123456789"), -nineteen);
+  // A window that ends inside a run: the scan stops at the window, not the buffer.
+  t.eqI64("a window ending after 5 of 16 digits", jtF64BitsWindow("1234567890123456", 0, 5), f64ToBits(toF64(12345)));
+  t.eqI64("a window ending after 9 of 16 digits", jtF64BitsWindow("1234567890123456", 0, 9), f64ToBits(toF64(123456789)));
+  t.eqI64("a window of 9 digits from the middle", jtF64BitsWindow("1234567890123456", 3, 9), f64ToBits(toF64(456789012)));
+  t.eqI64("a window ending after 8 fraction digits", jtF64BitsWindow("0.123456789", 0, 10), f64ToBits(parseFloat("0.12345678")));
+  t.eqI64("a window ending on a dot is not a number", jtF64BitsWindow("12345678.5", 0, 9), toI64(-1));
+  // `/` and `:` sit either side of the digits, so the eight-byte check must reject them.
+  t.eqStr("a slash in an eight-byte digit window", jtVerdict("[1234567/8]"), "SYNTAX@8");
+  t.eqStr("a colon in an eight-byte digit window", jtVerdict("[1234:678]"), "SYNTAX@5");
+  t.eqStr("a slash after eight digits", jtVerdict("[12345678/]"), "SYNTAX@9");
+};
+
 /** `numberF64` of the first number in `text`, or 0. */
 const jtF64OfText = (text: string): f64 => {
   const n = jtAt(text, JSON_TOK_NUMBER);
@@ -1004,12 +1089,146 @@ const shrunk = (t: Suite): void => {
   t.eqI32("shrunk: stringInto copies only the bytes left", s.stringInto(into, 0), 3);
 };
 
+/** Checks of the per-token fast paths: each input reaches one of them, or its fallback. */
+const fastPaths = (t: Suite): void => {
+  // The innermost container is kept as a field: a closer and a comma read it,
+  // so each must see the one a nested closer restored.
+  t.eqStr("inside: a comma after a closed object is an array's", jtTokens("[{},2]"), "[ { } n:2 ] END");
+  t.eqStr("inside: a comma after a closed array is an object's", jtTokens('{"a":[],"b":1}'), "{ k:a [ ] k:b n:1 } END");
+  t.eqStr("inside: an array's closer after a closed object", jtVerdict("[{}}"), "SYNTAX@3");
+  t.eqStr("inside: an object's closer after a closed array", jtVerdict('{"a":[]]'), "SYNTAX@7");
+  t.eqStr("inside: three levels close back to the top", jtTokens('[{"a":[1]},[]]'), "[ { k:a [ n:1 ] } [ ] ] END");
+  t.eqStr("inside: a document after the top level closes", jtVerdict("[[]]]"), "TRAILING@4");
+
+  // The byte is dispatched first; a byte the state refuses falls through to
+  // the state's own answer.
+  t.eqStr("dispatch: a string where a colon is wanted", jtVerdict('{"a" "b"}'), "SYNTAX@5");
+  t.eqStr("dispatch: a string where a comma is wanted", jtVerdict('["a" "b"]'), "SYNTAX@5");
+  t.eqStr("dispatch: a string after a top-level value", jtVerdict('1 "b"'), "TRAILING@2");
+  t.eqStr("dispatch: a colon in an array", jtVerdict("[1:2]"), "SYNTAX@2");
+  t.eqStr("dispatch: a colon where a key is wanted", jtVerdict("{:1}"), "SYNTAX@1");
+  t.eqStr("dispatch: a colon where a value is wanted", jtVerdict('{"a"::1}'), "SYNTAX@5");
+  t.eqStr("dispatch: a colon at the top level", jtVerdict(":"), "SYNTAX@0");
+  t.eqStr("dispatch: a comma where a colon is wanted", jtVerdict('{"a",1}'), "SYNTAX@4");
+  t.eqStr("dispatch: a comma where a key is wanted", jtVerdict("{,}"), "SYNTAX@1");
+  t.eqStr("dispatch: a comma after a top-level value", jtVerdict("1,"), "TRAILING@1");
+  t.eqStr("dispatch: a brace closing where a colon is wanted", jtVerdict('{"a"}'), "SYNTAX@4");
+  t.eqStr("dispatch: a brace closing where a value is wanted", jtVerdict('{"a":}'), "SYNTAX@5");
+  t.eqStr("dispatch: a bracket closing where a colon is wanted", jtVerdict('{"a"]'), "SYNTAX@4");
+  t.eqStr("dispatch: a bracket closing where a key is wanted", jtVerdict("{]"), "SYNTAX@1");
+  t.eqStr("dispatch: a bracket closing an object's value", jtVerdict('{"a":]'), "SYNTAX@5");
+  t.eqStr("dispatch: a closer at the top level", jtVerdict("]"), "SYNTAX@0");
+  t.eqStr("dispatch: a value where a comma is wanted", jtVerdict("[1 true]"), "SYNTAX@3");
+  t.eqStr("dispatch: a value after a key", jtVerdict('{"a" 1}'), "SYNTAX@5");
+  t.eqStr("dispatch: blanks before each token", jtTokens(' [ "a" , { "b" : 1 } ] '), "[ s:a { k:b n:1 } ] END");
+
+  // The blank skip and the byte after it are read together.
+  t.eqStr("blanks: one before a token", jtTokens("[ 1]"), "[ n:1 ] END");
+  t.eqStr("blanks: two before a token", jtTokens("[\t\n1]"), "[ n:1 ] END");
+  t.eqStr("blanks: a long run before a token", jtTokens("[\r\n        1        ]"), "[ n:1 ] END");
+  t.eqStr("blanks: one, then the window's end", jtVerdict("[ "), "TRUNCATED@2");
+  t.eqStr("blanks: two, then the window's end", jtVerdict("[  "), "TRUNCATED@3");
+  t.eqStr("blanks: a window ending inside a run", jtTokensOf(jtWindow(jtBytes("[1]   x"), 0, 5), new JsonLimits(), false), "[ n:1 ] END");
+  t.eqStr("blanks: a window ending before a blank", jtVerdictOf(jtWindow(jtBytes("[ 1]"), 0, 1), new JsonLimits()), "TRUNCATED@1");
+
+  // A failed tokenizer answers its error from its state alone.
+  const bad = jtBytes('{"a":1,"b":x}');
+  const sticky = new JsonTokenizer(bad, 0, toI32(bad.length), new JsonLimits());
+  t.eqStr("failed: the error", jtCodeName(jtRunTo(sticky)), "SYNTAX");
+  sticky.rewindObject(0);
+  t.eqStr("failed: rewindObject after an error leaves it answered", jtCodeName(sticky.next()), "SYNTAX");
+  t.eqI32("failed: ...at the same place", sticky.errorAt, 11);
+  t.eqStr("failed: ...and skipValue answers it", jtCodeName(sticky.skipValue()), "SYNTAX");
+  const keyed = jtBytes('{"tag":1}');
+  const r = new JsonTokenizer(keyed, 0, toI32(keyed.length), new JsonLimits());
+  r.next();
+  r.next();
+  r.next();
+  r.rewindObject(0);
+  t.eqI32("rewindObject: the next token is the first key", r.next(), JSON_TOK_KEY);
+  t.ok("rewindObject: ...and it is the key read before", r.keyEquals("tag"));
+
+  // A string's limit is `end` from `stringFrom` on, so the boundary moves
+  // with the window and with `reset`.
+  const three = jtLimits(4, 3, 100, 100);
+  t.eqStr("stringFrom: a string one past the limit, cut by the window", jtVerdictOf(jtBytes('"abcd'), three), "STRING_LIMIT@4");
+  t.eqStr("stringFrom: a string at the limit, cut by the window", jtVerdictOf(jtBytes('"abc'), three), "TRUNCATED@4");
+  t.eqStr("stringFrom: in an array, one past", jtVerdictOf(jtBytes('["abcd'), three), "STRING_LIMIT@5");
+  t.eqStr("stringFrom: in an array, at the limit", jtVerdictOf(jtBytes('["abc'), three), "TRUNCATED@5");
+  const wide = jtBytes('xx"abcd"yy');
+  const w = new JsonTokenizer(wide, 2, 4, three);
+  t.eqStr("stringFrom: a window from 2, cut at the limit", jtCodeName(w.next()), "TRUNCATED");
+  t.eqI32("stringFrom: ...truncated at the window's end", w.errorAt, 6);
+  w.reset(wide, 2, 5);
+  t.eqStr("stringFrom: reset to a window one past the limit", jtCodeName(w.next()), "STRING_LIMIT");
+  t.eqI32("stringFrom: ...refused at the limit", w.errorAt, 6);
+  w.reset(wide, 9, 5);
+  t.eqStr("stringFrom: reset to a window outside the array", jtCodeName(w.next()), "WINDOW");
+  t.eqStr(
+    "stringFrom: a limit of 2^31 - 1 does not overflow",
+    jtVerdictOf(jtBytes('["abc"]'), jtLimits(4, 2147483647, 100, 100)),
+    "END"
+  );
+
+  // stringInto copies an escaped string's plain runs whole.
+  const scratch = new Array<u8>(64);
+  const runs = jtAt('"abcdefgh\\\\ijklmnop\\nqr\\u00e9stuvwxyz"', JSON_TOK_STRING);
+  if (runs !== null) {
+    const n = runs.stringInto(scratch, 0);
+    t.eqStr(
+      "stringInto: plain runs either side of each escape",
+      jtHex(scratch, n),
+      "61626364656667685c696a6b6c6d6e6f700a7172c3a9737475767778797a"
+    );
+  } else {
+    t.ok("stringInto: plain runs either side of each escape", false);
+  }
+  const utf8 = jtAt('"\\u00e9caf\\u00c3\\u00a9 \\u20ac\\u0041"', JSON_TOK_STRING);
+  t.eqStr("stringInto: escapes back to back with plain bytes between", utf8 === null ? "" : jtHex(scratch, utf8.stringInto(scratch, 0)), "c3a9636166c383c2a920e282ac41");
+  const raw = jtBytes('["\\u00e9 caf\\u00e9 \\u20ac"]');
+  const m = new JsonTokenizer(raw, 0, toI32(raw.length), new JsonLimits());
+  m.next();
+  m.next();
+  // A byte changed in the source after the scan stops the plain run; it is
+  // copied alone, as the byte loop always did.
+  raw[10] = toU8(1);
+  t.eqStr("stringInto: a run stopped by a byte other than a backslash", jtHex(scratch, m.stringInto(scratch, 0)), "c3a920630166c3a920e282ac");
+  const multi = jtBytes('"\\n\\u00e9\\u00e9"');
+  const mt = new JsonTokenizer(multi, 0, toI32(multi.length), new JsonLimits());
+  mt.next();
+  t.eqI32("stringInto: only escapes, no run between them", mt.stringInto(scratch, 5), 5);
+  t.eqStr("stringInto: ...their bytes from the offset", jtHex(scratch.slice(5, 10), 5), "0ac3a9c3a9");
+  // A run that meets the closing quote ends the string; one that meets the
+  // window's end first is a truncated string, as before the runs.
+  const tail = jtAt('"\\nabc"', JSON_TOK_STRING);
+  t.eqStr("stringInto: the last run ends at the closing quote", tail === null ? "" : jtHex(scratch, tail.stringInto(scratch, 0)), "0a616263");
+  t.eqStr("stringInto: the last run ends at the window's end", jtVerdictWindow(jtBytes('"\\nabc"'), 0, 6), "TRUNCATED@6");
+  // A surrogate pair between two runs decodes whole, with the runs either side.
+  const pair = jtAt('"ab\\ud83d\\ude00cd\\n"', JSON_TOK_STRING);
+  t.eqStr("stringInto: a surrogate pair between two runs", pair === null ? "" : jtHex(scratch, pair.stringInto(scratch, 0)), "6162f09f988063640a");
+  // A backslash turned plain after the scan joins its escape to the run, which
+  // then outgrows the decoded length: the copy stops at the end of `out`.
+  const grown = jtBytes('["\\nabc"]');
+  const g = new JsonTokenizer(grown, 0, toI32(grown.length), new JsonLimits());
+  g.next();
+  g.next();
+  grown[2] = toU8(120);
+  const exact = new Array<u8>(4);
+  t.eqI32("stringInto: a run grown past the decoded length", g.stringInto(exact, 0), 5);
+  t.eqStr("stringInto: ...is cut to the room in out", jtHex(exact, 4), "786e6162");
+
+  // A comma before a closer is refused where the closer stands.
+  t.eqStr("dispatch: a trailing comma in an array", jtVerdict("[1,]"), "SYNTAX@3");
+  t.eqStr("dispatch: a trailing comma in an object", jtVerdict('{"a":1,}'), "SYNTAX@7");
+};
+
 /** Every unit check. */
 export const jtUnits = (t: Suite): void => {
   tokenKinds(t);
   errors(t);
   strings(t);
   numbers(t);
+  numberRuns(t);
   unsigned(t);
   limits(t);
   windows(t);
@@ -1017,6 +1236,7 @@ export const jtUnits = (t: Suite): void => {
   longRuns(t);
   shrunk(t);
   stickyAndReset(t);
+  fastPaths(t);
   skipping(t);
   duplicates(t);
   cookbook(t);
