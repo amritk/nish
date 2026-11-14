@@ -547,6 +547,16 @@ Two rows are past their bands: tokenize on citm by 0.1 points and typed-reuse by
 On citm, the escape scan does not make serialize faster outside its band: most strings are shorter than 16 bytes, and its ceiling at the 16-byte guard, 1.0139x, is inside the 1.4% band by 0.01 points. The profile, the guard and the full A/B are in [wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md), *JsonWriter's byte writers*.
 <!-- json-writer-bytes:end -->
 
+<!-- json-encode-keys:begin -->
+### `jsonEncode`'s keys, one pre-escaped copy
+
+`jsonEncode` of a class writes each key with `JsonWriter.keyQuoted`: the compiler quotes and escapes the key once, at compile time, into a string constant (`"name":`), and the writer copies it in one go after the comma and indent. Before, every key went through the same escape scan as a runtime string. `JsonWriter.i32` and `i64` also count their digits by compares rather than divides. The output is byte-identical.
+
+Instructions per document under callgrind: citm_catalog.json 14.13M → 10.74M (−24.0%); `bench/json-api`'s page of twenty users 188,879 → 162,647 (−13.9%). After the change, `keyQuoted` is about a quarter of either profile, `JsonWriter.i64` 30% of citm's, and `jsonWriterPutString` (escaping the string values) a third of the API page's.
+
+Wall clock, against main at `f8e21091`. In `bench/json-compare`, serialize on citm ran 548,213 and 554,908 ns/doc at the minimum in two runs, against main's 767,648 (**1.38x**). The bands, each the build against its byte-identical copy, were 8.8%, 5.8% and 0.2%. In `node bench/json-api/run.mjs --base <main's nish>` (18 interleaved rounds), the page took 8,676 against 11,149 ns at the minimum (**1.22x**; the noise band, main against its own copy, was 2.3%).
+<!-- json-encode-keys:end -->
+
 <!-- json-value-ranges:begin -->
 
 ### JsonDocument's source ranges
