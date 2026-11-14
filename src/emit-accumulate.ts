@@ -11,45 +11,59 @@
 //
 //   entry:     br label %rec.head
 //   rec.head:  %n = phi i32 [ %n.in, %entry ], [ <n - 2>, <step> ]
-//              %rec.sum = phi i64 [ 0, %entry ], [ <sum + x>, <step> ]
-//              %rec.min / %rec.max = phi i64 ...   ; the extremes of the sums
-//   (base)     T = sum + n; panic unless min >= T - MAX and max <= T - MIN;
-//              ret i32 (trunc T)
-//   (step)     x = fib(n - 1); n' = n - 2; record sum in min/max;
-//              sum = sum + x; br label %rec.head
+//              %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, <step> ]
+//              %rec.last = phi i32 [ 0, %entry ], [ <x>, <step> ]
+//              %rec.sum = add i32 %rec.prev, %rec.last     ; wraps
+//              %rec.cold = (%rec.last | %rec.sum) < 0
+//              leave when n < 2 or cold; otherwise run the step
+//   rec.exit:  cold ? rec.call : base
+//   (base)     ret i32 (%rec.sum + n, checked)
+//   (step)     x = fib(n - 1); n' = n - 2; br label %rec.head
+//   rec.call:  ret i32 (%rec.prev + (%rec.last + fib(n), checked), checked)
 //
 // Each parameter is a `phi` of the header, so the body reads it as before:
 // a parameter is an SSA value no statement assigns. A step evaluates its `X`,
 // then its arguments, the order the source evaluates them in, and loops back
 // instead of calling. A base answers the sum of every `X` and its own value.
+// Each step's `X` is checked when the header is entered again, and any step
+// the check rejects is handed back to the recursion: `rec.call` makes that
+// step's call itself.
 //
-// Why the deferred check is exact. Say a call takes steps 1..k, whose `X`
-// values are x_1..x_k, and ends on the base value b. The recursion answers
-// r_k = b and r_(j-1) = x_j + r_j, a checked `+` each, evaluated on the way
-// back up, deepest first. Let P_j = x_1 + ... + x_j (P_0 = 0) and
-// T = P_k + b, all exact. Then r_(j-1) = T - P_(j-1) whenever every add below
-// it succeeded, so the recursion panics exactly when some P_j with j < k lies
-// outside [T - MAX, T - MIN], MAX and MIN being i32's. That is the test the
-// base makes: `%rec.min` and `%rec.max` are the least and greatest of
-// P_0..P_(k-1) (each step records the sum before adding its `X`; both start
-// at P_0 = 0, so k = 0 tests 0 against the window around b, which always
-// holds). The panic is the same one: every `+` here panics with
-// `OVERFLOW_ADD`, and nothing the recursion does between its base and the
-// failing add can be observed — the adds are all it does. What runs before
-// the base runs in both forms in the same order.
+// Why the result and the panic are the recursion's. Say a call takes steps
+// 1..k, whose `X` values are x_1..x_k, with arguments p_1..p_k, and ends on
+// the base value b. The recursion answers r_k = b and r_(j-1) = x_j + r_j, a
+// checked `+` each, evaluated on the way back up, deepest first. Let
+// S_j = x_1 + ... + x_j, exactly. The header's i-th entry has the arguments
+// p_i, `%rec.prev` = S_(i-1) and `%rec.last` = x_i (x_0 = 0, S_(-1) = 0).
 //
-// Why `i64` is wide enough, with plain wrapping adds. Until some exact P_j
-// reaches 2^32 in magnitude no `i64` value can wrap (each x is below 2^31 in
-// magnitude), so up to there the loop's values are exact. A panic-free run
-// needs every P_j, j < k, and P_0 = 0 inside one window 2^32 - 1 wide, so
-// such a run never gets there and its answer is exact. Otherwise let J be
-// the first index with |P_J| >= 2^32. If J = k nothing was recorded wrong
-// and T is exact, so the test is exact. If J < k, the next step records P_J,
-// and `%rec.min` and `%rec.max` only move outward, so say max >= 2^32 (min
-// is the mirror image). Whatever T has become: if T < max - 2^31, then
-// T - MIN = T + 2^31 cannot wrap and is below max, so the test fails; if
-// not, T >= 2^31, so T - MAX cannot wrap and is at least 1, above
-// min <= 0, and the test fails. Either way it panics, as the recursion does.
+// While no entry was cold, every x so far is at least 0 and every S_j is
+// exact and in [0, MAX]. The 0th entry is not cold. If entries 0..i-1 were
+// not, `%rec.prev` = S_(i-1) is exact and in [0, MAX], so if x_i >= 0 the
+// true sum lies in [0, 2 MAX], and it wraps, to a negative `%rec.sum`,
+// exactly when it passes MAX. Not being cold says neither happened.
+//
+// A base reached with no cold entry answers S_k + b, checked. In the
+// recursion every x is at least 0, so its partial sums b, b + x_k, ...,
+// b + S_k never fall below b >= MIN and never fall as they go: it overflows
+// exactly when the last, b + S_k, passes MAX, which is when the loop's one
+// add does. A cold i-th entry makes the recursion's i-th call, of p_i, which
+// answers r_i or panics as that call does, and answers
+// S_(i-1) + (x_i + r_i), each checked. The inner add is the recursion's own;
+// what the recursion adds after it, x_(i-1) .. x_1, is all at least 0, so
+// for the same reason it overflows exactly when that add of S_(i-1) does.
+// Every one of these adds panics with `OVERFLOW_ADD`, and nothing the
+// recursion does between its base and the failing add can be observed: the
+// adds are all it does. Each step's `X` and arguments run where the recursion
+// runs them.
+//
+// What runs between the header and its test. Where the header's own code
+// only computes (`onlyComputes`), the test is folded into the branch that
+// ends it, so the hot loop takes no branch of its own: a cold entry runs that
+// code once, and the call runs it again, with no effect to repeat; a panic
+// that code would take is the call's to take. Otherwise the test comes first
+// and the code moves to `rec.body`, so a cold entry runs none of it before
+// the call does. A cold call may itself loop, and each sign change of the
+// sum makes one more call, never more frames than the recursion had.
 //
 // A function emitted this way may run deeper than its recursion could before
 // the stack ran out, as tail-call elimination lets any loop do; nothing that
@@ -62,13 +76,9 @@ import { Emitter } from "./emit"
 import { OVERFLOW_ADD } from "./emit-ops"
 import { unwrapParens } from "./emit-util"
 import { FunctionFacts } from "./attributes"
-import { IRBlock, paramValue } from "./ir"
+import { IRBlock, IRFunction, paramValue } from "./ir"
 import { Node } from "./nodes"
 import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig } from "./program"
-
-/** `i32`'s bounds, as the `i64` constants the base's test offsets `T` by. */
-const I32_MAX: string = "2147483647"
-const I32_MIN_NEGATED: string = "2147483648"
 
 /** One function's loop while its body is emitted: the header and every edge back into it. */
 export class RecursionLoop {
@@ -76,12 +86,10 @@ export class RecursionLoop {
   /** The parameters' names and LLVM types, in order. */
   names: string[]
   types: string[]
-  /** For each step, the block it branches back from and what it passes. */
+  /** For each edge back into the header, the block it leaves, the arguments it passes and the `X` it adds. */
   edges: string[]
   args: string[][]
-  sums: string[]
-  mins: string[]
-  maxes: string[]
+  addends: string[]
 
   constructor(head: IRBlock, names: string[], types: string[]) {
     this.head = head
@@ -89,9 +97,7 @@ export class RecursionLoop {
     this.types = types
     this.edges = []
     this.args = []
-    this.sums = []
-    this.mins = []
-    this.maxes = []
+    this.addends = []
   }
 }
 
@@ -141,40 +147,202 @@ export const openAccumulation = (emitter: Emitter, sig: FunctionSig): void => {
   emitter.accumulator = new RecursionLoop(head, sig.paramNames, types)
 }
 
-/** Close the loop: write the header's `phi`s, now that every edge back into it is known. */
+/**
+ * Close the loop once every edge back into the header is known: write the
+ * header's `phi`s and its test of the last step, and the call that takes
+ * over when that test fails.
+ */
 export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void => {
-  const phis: string[] = []
+  const fn = emitter.fn
+  const lines: string[] = []
+  const operands: string[] = []
   let i = 0
   while (i < acc.names.length) {
     const name = acc.names[i]
-    let line = `${paramValue(name)} = phi ${acc.types[i]} [ %${incomingName(name)}, %entry ]`
-    let e = 0
-    while (e < acc.edges.length) {
-      line = `${line}, [ ${acc.args[e][i]}, %${acc.edges[e]} ]`
-      e = e + 1
-    }
-    phis.push(line)
+    lines.push(headPhi(acc, `${paramValue(name)}`, acc.types[i], `%${incomingName(name)}`, acc.args, i))
+    operands.push(`${acc.types[i]} ${paramValue(name)}`)
     i = i + 1
   }
-  phis.push(accumulatorPhi("%rec.sum", acc, acc.sums))
-  phis.push(accumulatorPhi("%rec.min", acc, acc.mins))
-  phis.push(accumulatorPhi("%rec.max", acc, acc.maxes))
-  for (const line of acc.head.instructions) {
-    phis.push(line)
+  const sums: string[][] = []
+  const addends: string[][] = []
+  for (const x of acc.addends) {
+    sums.push(["%rec.sum"])
+    addends.push([x])
   }
-  acc.head.instructions = phis
+  lines.push(headPhi(acc, "%rec.prev", "i32", "0", sums, 0))
+  lines.push(headPhi(acc, "%rec.last", "i32", "0", addends, 0))
+  lines.push("%rec.sum = add i32 %rec.prev, %rec.last")
+  lines.push("%rec.signs = or i32 %rec.last, %rec.sum")
+  lines.push("%rec.cold = icmp slt i32 %rec.signs, 0")
+  const body = acc.head.instructions
+  acc.head.instructions = lines
+  const call = fn.newBlock("rec.call")
+  if (!foldColdTest(fn, acc.head, body, call)) {
+    // The body's first block does more than compute: test before it runs.
+    const rest = fn.newBlock("rec.body")
+    rest.instructions = body
+    acc.head.instructions.push(`br i1 %rec.cold, label %${call.label}, label %${rest.label}`)
+    renameEdges(fn, acc.head.label, rest.label)
+    placeAfter(fn, acc.head, rest)
+  }
+  fn.placeBlock(call)
+  const sig = emitter.currentSig
+  const name = sig === null ? "" : sig.name
+  const answer = fn.emitValue(`call i32 @${name}(${operands.join(", ")})`)
+  fn.emit(`ret i32 ${checkedAdd(emitter, "%rec.prev", checkedAdd(emitter, "%rec.last", answer))}`)
   emitter.accumulator = null
 }
 
-/** One of the three `i64` `phi`s: 0 from the entry, `values[e]` from edge `e`. */
-const accumulatorPhi = (name: string, acc: RecursionLoop, values: string[]): string => {
-  let line = `${name} = phi i64 [ 0, %entry ]`
+/** The header's `phi` named `value`: `entry` passes `initial`, edge `e` passes `incoming[e][slot]`. */
+const headPhi = (
+  acc: RecursionLoop,
+  value: string,
+  type: string,
+  initial: string,
+  incoming: string[][],
+  slot: i32
+): string => {
+  let line = `${value} = phi ${type} [ ${initial}, %entry ]`
   let e = 0
   while (e < acc.edges.length) {
-    line = `${line}, [ ${values[e]}, %${acc.edges[e]} ]`
+    line = `${line}, [ ${incoming[e][slot]}, %${acc.edges[e]} ]`
     e = e + 1
   }
   return line
+}
+
+/**
+ * Fold `%rec.cold` into the conditional branch that ends the header's own
+ * code, when that code only computes (no call but an overflow intrinsic, no
+ * store), so the hot loop takes no branch of its own; answer whether it did.
+ * The header then leaves through `rec.exit` when the test fails or the
+ * condition holds, and `rec.exit` sorts the two out.
+ */
+const foldColdTest = (fn: IRFunction, head: IRBlock, body: string[], call: IRBlock): boolean => {
+  const n = body.length
+  if (n === 0) {
+    return false
+  }
+  const last = body[n - 1]
+  const prefix = "br i1 "
+  const sep = ", label %"
+  const thenAt = last.indexOf(sep)
+  if (!last.startsWith(prefix) || thenAt < 0) {
+    return false
+  }
+  const rest = last.substring(thenAt + sep.length)
+  const elseAt = rest.indexOf(sep)
+  if (elseAt < 0) {
+    return false
+  }
+  const flag = last.substring(prefix.length, thenAt)
+  const whenTrue = rest.substring(0, elseAt)
+  const whenFalse = untilComma(rest.substring(elseAt + sep.length))
+  if (whenTrue === whenFalse) {
+    return false
+  }
+  let k = 0
+  while (k < n - 1) {
+    if (!onlyComputes(body[k])) {
+      return false
+    }
+    k = k + 1
+  }
+  const exit = fn.newBlock("rec.exit")
+  k = 0
+  while (k < n - 1) {
+    head.instructions.push(body[k])
+    k = k + 1
+  }
+  head.instructions.push(`%rec.leave = or i1 ${flag}, %rec.cold`)
+  head.instructions.push(`br i1 %rec.leave, label %${exit.label}, label %${whenFalse}`)
+  exit.instructions.push(`br i1 %rec.cold, label %${call.label}, label %${whenTrue}`)
+  for (const block of fn.blocks) {
+    if (block.label === whenTrue) {
+      renamePhiEdges(block, head.label, exit.label)
+    }
+  }
+  renameOverflowEdges(fn, head.label, exit.label)
+  fn.placeBlock(exit)
+  return true
+}
+
+/**
+ * Put `block` right after `anchor` in `fn`: the code moved into it numbered
+ * its unnamed values before every block that follows, and LLVM reads them in
+ * the order they are written.
+ */
+const placeAfter = (fn: IRFunction, anchor: IRBlock, block: IRBlock): void => {
+  const placed: IRBlock[] = []
+  for (const each of fn.blocks) {
+    placed.push(each)
+    if (each === anchor) {
+      placed.push(block)
+    }
+  }
+  fn.blocks = placed
+}
+
+/** `text` up to its first comma: a label without the metadata a branch may carry. */
+const untilComma = (text: string): string => {
+  const comma = text.indexOf(",")
+  return comma < 0 ? text : text.substring(0, comma)
+}
+
+/** Whether instruction `line` has no effect but its value: no call other than an overflow intrinsic, no store, nothing volatile or atomic. */
+const onlyComputes = (line: string): boolean => {
+  if (line.indexOf("call ") >= 0) {
+    return line.indexOf(".with.overflow.") >= 0 && line.indexOf("@llvm.") >= 0
+  }
+  return (
+    line.indexOf("store ") < 0 &&
+    line.indexOf("volatile") < 0 &&
+    line.indexOf("atomic") < 0 &&
+    line.indexOf("fence") < 0 &&
+    line.indexOf("cmpxchg") < 0
+  )
+}
+
+/** Point every `phi` edge from `from` at `to` instead, in every block but the header and in the overflow blocks still to be written. */
+const renameEdges = (fn: IRFunction, from: string, to: string): void => {
+  for (const block of fn.blocks) {
+    if (block.label !== from) {
+      renamePhiEdges(block, from, to)
+    }
+  }
+  renameOverflowEdges(fn, from, to)
+}
+
+/** The header's branch to an overflow block now leaves from `to`: the block's `phi` of codes, written last, must say so. */
+const renameOverflowEdges = (fn: IRFunction, from: string, to: string): void => {
+  let k = 0
+  while (k < fn.overflowEdges.length) {
+    if (fn.overflowEdges[k] === from) {
+      fn.overflowEdges[k] = to
+    }
+    k = k + 1
+  }
+}
+
+/** Point `block`'s `phi` edges from `from` at `to`. */
+const renamePhiEdges = (block: IRBlock, from: string, to: string): void => {
+  const old = `, %${from} ]`
+  const updated: string[] = []
+  for (const line of block.instructions) {
+    let text = line
+    if (text.indexOf(" = phi ") >= 0) {
+      let done = ""
+      let at = text.indexOf(old)
+      while (at >= 0) {
+        done = `${done}${text.substring(0, at)}, %${to} ]`
+        text = text.substring(at + old.length)
+        at = text.indexOf(old)
+      }
+      text = `${done}${text}`
+    }
+    updated.push(text)
+  }
+  block.instructions = updated
 }
 
 /** The value of a `return` in an accumulating function: a step, a split between tails, or a base. */
@@ -193,11 +361,16 @@ export const emitAccumulateTail = (emitter: Emitter, acc: RecursionLoop, value: 
   } else if (role === ACC_STEP) {
     emitStep(emitter, acc, inner)
   } else {
-    emitBase(emitter, value)
+    const total = checkedAdd(emitter, "%rec.sum", emitter.emitExpression(value))
+    emitter.emitScopeExit()
+    emitter.fn.emit(`ret i32 ${total}`)
   }
 }
 
-/** `X + self(args)` or `self(args) + Y`: `X`, the arguments, then `Y`, as the call would, and back to the header. */
+/**
+ * `X + self(args)` or `self(args) + Y`: `X`, the arguments, then `Y`, as the
+ * call would, and back to the header, which tests what this step added.
+ */
 const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   const fn = emitter.fn
   const partner = emitter.program.accumulate.partnerOf(step.id)
@@ -218,33 +391,20 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   if (callFirst) {
     x = emitter.emitExpression(other)
   }
-  const wide = fn.emitValue(`sext i32 ${x} to i64`)
-  const below = fn.emitValue("icmp slt i64 %rec.sum, %rec.min")
-  const min = fn.emitValue("select i1 " + below + ", i64 %rec.sum, i64 %rec.min")
-  const above = fn.emitValue("icmp sgt i64 %rec.sum, %rec.max")
-  const max = fn.emitValue("select i1 " + above + ", i64 %rec.sum, i64 %rec.max")
-  const sum = fn.emitValue(`add i64 %rec.sum, ${wide}`)
   acc.edges.push(fn.currentBlock().label)
   acc.args.push(args)
-  acc.sums.push(sum)
-  acc.mins.push(min)
-  acc.maxes.push(max)
+  acc.addends.push(x)
   fn.emit(`br label %${acc.head.label}`)
 }
 
-/** A base: the sum the steps owe plus this value, checked against every sum they recorded, then `ret`. */
-const emitBase = (emitter: Emitter, value: Node): void => {
+/** `a + b` over `i32`, panicking with `OVERFLOW_ADD` as the checked `+` does. */
+const checkedAdd = (emitter: Emitter, a: string, b: string): string => {
   const fn = emitter.fn
-  const b = emitter.emitExpression(value)
-  const wide = fn.emitValue(`sext i32 ${b} to i64`)
-  const total = fn.emitValue(`add i64 %rec.sum, ${wide}`)
-  const lo = fn.emitValue(`sub i64 ${total}, ${I32_MAX}`)
-  const hi = fn.emitValue(`add i64 ${total}, ${I32_MIN_NEGATED}`)
-  const under = fn.emitValue(`icmp slt i64 %rec.min, ${lo}`)
-  const over = fn.emitValue(`icmp sgt i64 %rec.max, ${hi}`)
-  const failed = fn.emitValue(`or i1 ${under}, ${over}`)
+  const pair = fn.emitValue(
+    `call { i32, i1 } ${emitter.useRuntime("llvm.sadd.with.overflow.i32")}(i32 ${a}, i32 ${b})`
+  )
+  const sum = fn.emitValue(`extractvalue { i32, i1 } ${pair}, 0`)
+  const failed = fn.emitValue(`extractvalue { i32, i1 } ${pair}, 1`)
   fn.branchOnOverflow(failed, OVERFLOW_ADD, emitter.useRuntime("nish_panic_overflow"))
-  const result = fn.emitValue(`trunc i64 ${total} to i32`)
-  emitter.emitScopeExit()
-  fn.emit(`ret i32 ${result}`)
+  return sum
 }

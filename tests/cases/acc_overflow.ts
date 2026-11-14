@@ -1,4 +1,4 @@
-// The deferred overflow check of a self-recursive sum (src/emit-accumulate.ts)
+// The overflow check of a self-recursive sum's loop (src/emit-accumulate.ts)
 // panics exactly when the recursion would. `chain(c, i)` answers
 // term(c, i) + term(c, i - 1) + ... + term(c, 1) + last(c), added deepest
 // first as the recursion unwinds, and is emitted as one loop.
@@ -12,8 +12,8 @@
 //   1  (b) a middle add overflows though the whole sum fits: -1 + (MAX + 1)
 //   2  (c) the outermost add overflows: MAX + (1 + 0)
 //   3  (d) MAX + (MAX + (MAX + (-MAX + 0))): the inner adds fit and the
-//          outermost overflows, while the loop's sums from the outside in,
-//          MAX, 2 MAX, 3 MAX, pass 2^32 before the base checks them
+//          outermost overflows, while the loop's sum from the outside in
+//          passes MAX at the second step, which it hands to the call
 const MAX: i32 = 2147483647
 
 /** Step `i` of chain `c`; step 1 is the deepest add, the first to run. */

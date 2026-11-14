@@ -63,36 +63,47 @@ entry:
   br label %rec.head
 
 rec.head:
-  %n = phi i32 [ %n.in, %entry ], [ %9, %if.end ]
-  %rec.sum = phi i64 [ 0, %entry ], [ %15, %if.end ]
-  %rec.min = phi i64 [ 0, %entry ], [ %12, %if.end ]
-  %rec.max = phi i64 [ 0, %entry ], [ %14, %if.end ]
+  %n = phi i32 [ %n.in, %entry ], [ %4, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ 1, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp sle i32 %n, 0
-  br i1 %0, label %if.then, label %if.end
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
 
 if.then:
-  %1 = sext i32 0 to i64
-  %2 = add i64 %rec.sum, %1
-  %3 = sub i64 %2, 2147483647
-  %4 = add i64 %2, 2147483648
-  %5 = icmp slt i64 %rec.min, %3
-  %6 = icmp sgt i64 %rec.max, %4
-  %7 = or i1 %5, %6
-  br i1 %7, label %ovf.fail, label %ovf.ok
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %8 = trunc i64 %2 to i32
-  ret i32 %8
+  ret i32 %2
 
 if.end:
-  %9 = sub nsw i32 %n, 1
-  %10 = sext i32 1 to i64
-  %11 = icmp slt i64 %rec.sum, %rec.min
-  %12 = select i1 %11, i64 %rec.sum, i64 %rec.min
-  %13 = icmp sgt i64 %rec.sum, %rec.max
-  %14 = select i1 %13, i64 %rec.sum, i64 %rec.max
-  %15 = add i64 %rec.sum, %10
+  %4 = sub nsw i32 %n, 1
   br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %5 = call i32 @depth(i32 %n)
+  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %7)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %10
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

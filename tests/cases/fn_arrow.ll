@@ -7,6 +7,7 @@ declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @double(i32 noundef %n) #0 {
 entry:
@@ -31,36 +32,47 @@ entry:
   br label %rec.head
 
 rec.head:
-  %n = phi i32 [ %n.in, %entry ], [ %9, %rec.false ]
-  %rec.sum = phi i64 [ 0, %entry ], [ %15, %rec.false ]
-  %rec.min = phi i64 [ 0, %entry ], [ %12, %rec.false ]
-  %rec.max = phi i64 [ 0, %entry ], [ %14, %rec.false ]
+  %n = phi i32 [ %n.in, %entry ], [ %4, %rec.false ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %rec.false ]
+  %rec.last = phi i32 [ 0, %entry ], [ %n, %rec.false ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp sle i32 %n, 0
-  br i1 %0, label %rec.true, label %rec.false
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %rec.false
 
 rec.true:
-  %1 = sext i32 0 to i64
-  %2 = add i64 %rec.sum, %1
-  %3 = sub i64 %2, 2147483647
-  %4 = add i64 %2, 2147483648
-  %5 = icmp slt i64 %rec.min, %3
-  %6 = icmp sgt i64 %rec.max, %4
-  %7 = or i1 %5, %6
-  br i1 %7, label %ovf.fail, label %ovf.ok
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %8 = trunc i64 %2 to i32
-  ret i32 %8
+  ret i32 %2
 
 rec.false:
-  %9 = sub nsw i32 %n, 1
-  %10 = sext i32 %n to i64
-  %11 = icmp slt i64 %rec.sum, %rec.min
-  %12 = select i1 %11, i64 %rec.sum, i64 %rec.min
-  %13 = icmp sgt i64 %rec.sum, %rec.max
-  %14 = select i1 %13, i64 %rec.sum, i64 %rec.max
-  %15 = add i64 %rec.sum, %10
+  %4 = sub nsw i32 %n, 1
   br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %rec.true
+
+rec.call:
+  %5 = call i32 @sumTo(i32 %n)
+  %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %7)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %10
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

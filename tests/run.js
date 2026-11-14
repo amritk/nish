@@ -16156,8 +16156,8 @@ if (dealtHere("arrayChecks")) {
   }
 
   // ---- Self-recursive checked sums ------------------------------------------------
-  // A function whose recursive returns are `X + self(...)` is one loop with its overflow
-  // check deferred to the base (src/emit-accumulate.ts). acc_overflow's cases (a)-(d)
+  // A function whose recursive returns are `X + self(...)` is one loop whose overflow
+  // check panics where the recursion would (src/emit-accumulate.ts). acc_overflow's cases (a)-(d)
   // each overflow one add of the recursion at a different depth, and the loop must panic
   // as the recursion did; acc_ineligible's sums must stay recursion.
   if (!only || "acc_".includes(only) || only.startsWith("acc")) {
@@ -16180,6 +16180,21 @@ if (dealtHere("arrayChecks")) {
     } else if (linked !== null) {
       check("acc_overflow: links", false, String(linked.stderr))
     }
+    // acc_effects' `noisy` calls before its first test, so the loop tests each step
+    // ahead of that call: the panicking run prints every line once, in order.
+    const effectsLl = path.join(buildDir, "acc_effects.ll")
+    const effectsExe = path.join(buildDir, "acc_effects")
+    const effectsLinked = fs.existsSync(effectsLl) ? linkNative(effectsExe, effectsLl) : null
+    if (effectsLinked !== null && effectsLinked.status === 0) {
+      const run = spawnSync(effectsExe, ["1"], { encoding: "utf8" })
+      check(
+        'acc_effects: noisy(3, 1000000000) prints "at 3" to "at 0" once each, then exits 1 with "attempt to add with overflow"',
+        run.status === 1 && run.stderr.includes("attempt to add with overflow") && run.stdout === "at 3\nat 2\nat 1\nat 0\n",
+        shown(run)
+      )
+    } else if (effectsLinked !== null) {
+      check("acc_effects: links", false, String(effectsLinked.stderr))
+    }
     const looped = (name) => {
       const ll = path.join(casesDir, `${name}.ll`)
       return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8").split("\nrec.head:").length - 1 : -1
@@ -16188,6 +16203,14 @@ if (dealtHere("arrayChecks")) {
       "acc_: fib, the tree sum, the shapes and the overflow chain are each one loop",
       ["acc_fib", "acc_tree", "acc_shapes", "acc_overflow"].every((name) => looped(name) === 1),
       ["acc_fib", "acc_tree", "acc_shapes", "acc_overflow"].map((name) => `${name}: ${looped(name)}`).join(", ")
+    )
+    const effects = path.join(casesDir, "acc_effects.ll")
+    const effectsText = fs.existsSync(effects) ? fs.readFileSync(effects, "utf8") : ""
+    check(
+      "acc_effects: three loops, one testing ahead of its header's call (rec.body) and two folding the test into its branch (rec.exit)",
+      effectsText.split("\nrec.head:").length === 4 &&
+        effectsText.split("\nrec.body:").length === 2 &&
+        effectsText.split("\nrec.exit:").length === 3
     )
     check("acc_ineligible: no sum it holds becomes a loop", looped("acc_ineligible") === 0)
   }

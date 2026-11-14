@@ -14,6 +14,7 @@ declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 n
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare i32 @llvm.fptosi.sat.i32.f64(double) #0
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @term(i32 noundef %c, i32 noundef %i) #0 {
@@ -188,46 +189,57 @@ entry:
 
 rec.head:
   %c = phi i32 [ %c.in, %entry ], [ %c, %ovf.ok.1 ]
-  %i = phi i32 [ %i.in, %entry ], [ %12, %ovf.ok.1 ]
-  %rec.sum = phi i64 [ 0, %entry ], [ %19, %ovf.ok.1 ]
-  %rec.min = phi i64 [ 0, %entry ], [ %16, %ovf.ok.1 ]
-  %rec.max = phi i64 [ 0, %entry ], [ %18, %ovf.ok.1 ]
+  %i = phi i32 [ %i.in, %entry ], [ %7, %ovf.ok.1 ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %ovf.ok.1 ]
+  %rec.last = phi i32 [ 0, %entry ], [ %5, %ovf.ok.1 ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp eq i32 %i, 0
-  br i1 %0, label %if.then, label %if.end
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
 
 if.then:
   %1 = call i32 @last(i32 %c)
-  %2 = sext i32 %1 to i64
-  %3 = add i64 %rec.sum, %2
-  %4 = sub i64 %3, 2147483647
-  %5 = add i64 %3, 2147483648
-  %6 = icmp slt i64 %rec.min, %4
-  %7 = icmp sgt i64 %rec.max, %5
-  %8 = or i1 %6, %7
-  br i1 %8, label %ovf.fail, label %ovf.ok
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %9 = trunc i64 %3 to i32
-  ret i32 %9
+  ret i32 %3
 
 if.end:
-  %10 = call i32 @term(i32 %c, i32 %i)
-  %11 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %i, i32 1)
-  %12 = extractvalue { i32, i1 } %11, 0
-  %13 = extractvalue { i32, i1 } %11, 1
-  br i1 %13, label %ovf.fail, label %ovf.ok.1
+  %5 = call i32 @term(i32 %c, i32 %i)
+  %6 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %i, i32 1)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %14 = sext i32 %10 to i64
-  %15 = icmp slt i64 %rec.sum, %rec.min
-  %16 = select i1 %15, i64 %rec.sum, i64 %rec.min
-  %17 = icmp sgt i64 %rec.sum, %rec.max
-  %18 = select i1 %17, i64 %rec.sum, i64 %rec.max
-  %19 = add i64 %rec.sum, %14
   br label %rec.head
 
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %9 = call i32 @chain(i32 %c, i32 %i)
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %9)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %11)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  ret i32 %14
+
 ovf.fail:
-  %ovf.op = phi i32 [ 0, %if.then ], [ 1, %if.end ]
+  %ovf.op = phi i32 [ 0, %if.then ], [ 1, %if.end ], [ 0, %rec.call ], [ 0, %ovf.ok.2 ]
   call void @nish_panic_overflow(i32 %ovf.op)
   unreachable
 }

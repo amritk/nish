@@ -12,8 +12,8 @@
 // checked one, `llvm.sadd.with.overflow` and a branch, defeats it, and `fib`
 // stays a tree of two calls per frame. This module finds the functions whose
 // every recursive return is a step, so `src/emit-accumulate.ts` can write the
-// loop itself, with an exact overflow check deferred to the base case (the
-// proof is beside the emitter).
+// loop itself, with an overflow check that panics exactly when the recursion
+// would (the proof is beside the emitter).
 //
 // A function qualifies when all of this holds, and compiles as it always did
 // when any of it does not — so this module only records; it reports nothing:

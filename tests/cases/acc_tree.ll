@@ -55,48 +55,59 @@ entry:
   br label %rec.head
 
 rec.head:
-  %t = phi %struct.TreeNode* [ %t.in, %entry ], [ %18, %ovf.ok.1 ]
-  %rec.sum = phi i64 [ 0, %entry ], [ %24, %ovf.ok.1 ]
-  %rec.min = phi i64 [ 0, %entry ], [ %21, %ovf.ok.1 ]
-  %rec.max = phi i64 [ 0, %entry ], [ %23, %ovf.ok.1 ]
+  %t = phi %struct.TreeNode* [ %t.in, %entry ], [ %13, %ovf.ok.1 ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %ovf.ok.1 ]
+  %rec.last = phi i32 [ 0, %entry ], [ %10, %ovf.ok.1 ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp eq %struct.TreeNode* %t, null
-  br i1 %0, label %if.then, label %if.end
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
 
 if.then:
-  %1 = sext i32 0 to i64
-  %2 = add i64 %rec.sum, %1
-  %3 = sub i64 %2, 2147483647
-  %4 = add i64 %2, 2147483648
-  %5 = icmp slt i64 %rec.min, %3
-  %6 = icmp sgt i64 %rec.max, %4
-  %7 = or i1 %5, %6
-  br i1 %7, label %ovf.fail, label %ovf.ok
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %8 = trunc i64 %2 to i32
-  ret i32 %8
+  ret i32 %2
 
 if.end:
-  %9 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %t, i32 0, i32 0
-  %10 = load i32, i32* %9, align 4, !tbaa !5
-  %11 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %t, i32 0, i32 1
-  %12 = load %struct.TreeNode*, %struct.TreeNode** %11, align 8, !tbaa !6
-  %13 = call i32 @sum(%struct.TreeNode* %12)
-  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %13)
-  %15 = extractvalue { i32, i1 } %14, 0
-  %16 = extractvalue { i32, i1 } %14, 1
-  br i1 %16, label %ovf.fail, label %ovf.ok.1
+  %4 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %t, i32 0, i32 0
+  %5 = load i32, i32* %4, align 4, !tbaa !5
+  %6 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %t, i32 0, i32 1
+  %7 = load %struct.TreeNode*, %struct.TreeNode** %6, align 8, !tbaa !6
+  %8 = call i32 @sum(%struct.TreeNode* %7)
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %17 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %t, i32 0, i32 2
-  %18 = load %struct.TreeNode*, %struct.TreeNode** %17, align 8, !tbaa !7
-  %19 = sext i32 %15 to i64
-  %20 = icmp slt i64 %rec.sum, %rec.min
-  %21 = select i1 %20, i64 %rec.sum, i64 %rec.min
-  %22 = icmp sgt i64 %rec.sum, %rec.max
-  %23 = select i1 %22, i64 %rec.sum, i64 %rec.max
-  %24 = add i64 %rec.sum, %19
+  %12 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %t, i32 0, i32 2
+  %13 = load %struct.TreeNode*, %struct.TreeNode** %12, align 8, !tbaa !7
   br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %14 = call i32 @sum(%struct.TreeNode* %t)
+  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %14)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %16)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  ret i32 %19
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

@@ -14,110 +14,99 @@ entry:
   br label %rec.head
 
 rec.head:
-  %n = phi i32 [ %n.in, %entry ], [ %30, %rec.false ], [ %39, %if.then.3 ], [ %46, %ovf.ok.3 ]
-  %k = phi i32 [ %k.in, %entry ], [ %k, %rec.false ], [ %k, %if.then.3 ], [ %48, %ovf.ok.3 ]
-  %rec.sum = phi i64 [ 0, %entry ], [ %36, %rec.false ], [ %45, %if.then.3 ], [ %55, %ovf.ok.3 ]
-  %rec.min = phi i64 [ 0, %entry ], [ %33, %rec.false ], [ %42, %if.then.3 ], [ %52, %ovf.ok.3 ]
-  %rec.max = phi i64 [ 0, %entry ], [ %35, %rec.false ], [ %44, %if.then.3 ], [ %54, %ovf.ok.3 ]
+  %n = phi i32 [ %n.in, %entry ], [ %15, %rec.false ], [ %18, %if.then.3 ], [ %19, %ovf.ok.3 ]
+  %k = phi i32 [ %k.in, %entry ], [ %k, %rec.false ], [ %k, %if.then.3 ], [ %21, %ovf.ok.3 ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %rec.false ], [ %rec.sum, %if.then.3 ], [ %rec.sum, %ovf.ok.3 ]
+  %rec.last = phi i32 [ 0, %entry ], [ %14, %rec.false ], [ %n, %if.then.3 ], [ %k, %ovf.ok.3 ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp sle i32 %n, 0
-  br i1 %0, label %if.then, label %if.end
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
 
 if.then:
-  %1 = sext i32 %k to i64
-  %2 = add i64 %rec.sum, %1
-  %3 = sub i64 %2, 2147483647
-  %4 = add i64 %2, 2147483648
-  %5 = icmp slt i64 %rec.min, %3
-  %6 = icmp sgt i64 %rec.max, %4
-  %7 = or i1 %5, %6
-  br i1 %7, label %ovf.fail, label %ovf.ok
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %k)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %8 = trunc i64 %2 to i32
-  ret i32 %8
+  ret i32 %2
 
 if.end:
-  %9 = icmp eq i32 %n, 7
-  br i1 %9, label %if.then.1, label %if.end.1
+  %4 = icmp eq i32 %n, 7
+  br i1 %4, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %10 = sext i32 100 to i64
-  %11 = add i64 %rec.sum, %10
-  %12 = sub i64 %11, 2147483647
-  %13 = add i64 %11, 2147483648
-  %14 = icmp slt i64 %rec.min, %12
-  %15 = icmp sgt i64 %rec.max, %13
-  %16 = or i1 %14, %15
-  br i1 %16, label %ovf.fail, label %ovf.ok.1
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 100)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %17 = trunc i64 %11 to i32
-  ret i32 %17
+  ret i32 %6
 
 if.end.1:
-  %18 = icmp sgt i32 %n, 40
-  br i1 %18, label %if.then.2, label %if.end.2
+  %8 = icmp sgt i32 %n, 40
+  br i1 %8, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %19 = srem i32 %n, 3
-  %20 = icmp eq i32 %19, 0
-  br i1 %20, label %rec.true, label %rec.false
+  %9 = srem i32 %n, 3
+  %10 = icmp eq i32 %9, 0
+  br i1 %10, label %rec.true, label %rec.false
 
 rec.true:
-  %21 = sext i32 1000 to i64
-  %22 = add i64 %rec.sum, %21
-  %23 = sub i64 %22, 2147483647
-  %24 = add i64 %22, 2147483648
-  %25 = icmp slt i64 %rec.min, %23
-  %26 = icmp sgt i64 %rec.max, %24
-  %27 = or i1 %25, %26
-  br i1 %27, label %ovf.fail, label %ovf.ok.2
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 1000)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  %28 = trunc i64 %22 to i32
-  ret i32 %28
+  ret i32 %12
 
 rec.false:
-  %29 = mul nsw i32 2, %n
-  %30 = sub nsw i32 %n, 3
-  %31 = sext i32 %29 to i64
-  %32 = icmp slt i64 %rec.sum, %rec.min
-  %33 = select i1 %32, i64 %rec.sum, i64 %rec.min
-  %34 = icmp sgt i64 %rec.sum, %rec.max
-  %35 = select i1 %34, i64 %rec.sum, i64 %rec.max
-  %36 = add i64 %rec.sum, %31
+  %14 = mul nsw i32 2, %n
+  %15 = sub nsw i32 %n, 3
   br label %rec.head
 
 if.end.2:
-  %37 = srem i32 %n, 2
-  %38 = icmp eq i32 %37, 0
-  br i1 %38, label %if.then.3, label %if.end.3
+  %16 = srem i32 %n, 2
+  %17 = icmp eq i32 %16, 0
+  br i1 %17, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %39 = sub nsw i32 %n, 1
-  %40 = sext i32 %n to i64
-  %41 = icmp slt i64 %rec.sum, %rec.min
-  %42 = select i1 %41, i64 %rec.sum, i64 %rec.min
-  %43 = icmp sgt i64 %rec.sum, %rec.max
-  %44 = select i1 %43, i64 %rec.sum, i64 %rec.max
-  %45 = add i64 %rec.sum, %40
+  %18 = sub nsw i32 %n, 1
   br label %rec.head
 
 if.end.3:
-  %46 = sub nsw i32 %n, 2
-  %47 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %k, i32 1)
-  %48 = extractvalue { i32, i1 } %47, 0
-  %49 = extractvalue { i32, i1 } %47, 1
-  br i1 %49, label %ovf.fail, label %ovf.ok.3
+  %19 = sub nsw i32 %n, 2
+  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %k, i32 1)
+  %21 = extractvalue { i32, i1 } %20, 0
+  %22 = extractvalue { i32, i1 } %20, 1
+  br i1 %22, label %ovf.fail, label %ovf.ok.3
 
 ovf.ok.3:
-  %50 = sext i32 %k to i64
-  %51 = icmp slt i64 %rec.sum, %rec.min
-  %52 = select i1 %51, i64 %rec.sum, i64 %rec.min
-  %53 = icmp sgt i64 %rec.sum, %rec.max
-  %54 = select i1 %53, i64 %rec.sum, i64 %rec.max
-  %55 = add i64 %rec.sum, %50
   br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %23 = call i32 @shape(i32 %n, i32 %k)
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %25)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok.5
+
+ovf.ok.5:
+  ret i32 %28
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
