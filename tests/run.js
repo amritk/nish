@@ -14581,6 +14581,23 @@ if (dealtHere("arrayChecks")) {
     )
   }
 
+  if (!only || only.startsWith("destructur")) {
+    const ll = path.join(buildDir, "destructure_out_of_range.ll")
+    if (fs.existsSync(ll)) {
+      const exe = path.join(buildDir, "destructure_out_of_range")
+      const cc = linkNative(exe, ll)
+      const run = cc.status === 0 ? spawnSync(exe) : null
+      check(
+        "destructure_out_of_range: `const [a, , , , , f] = xs` over 3 elements exits 1 with `index out of range: 5 >= 3`, as `xs[5]` does",
+        run !== null &&
+          run.status === 1 &&
+          String(run.stderr).includes("index out of range: 5 >= 3") &&
+          String(run.stdout).trim() === "3",
+        run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+      )
+    }
+  }
+
   if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     if (has("opt")) {
       for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {

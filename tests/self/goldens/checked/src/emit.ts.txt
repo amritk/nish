@@ -309,6 +309,7 @@ struct Emitter (class) size=384 align=8 exported
   method emitReturnValue -> @Emitter.emitReturnValue
   method emitVariableDeclarations -> @Emitter.emitVariableDeclarations
   method emitVariableDeclaration -> @Emitter.emitVariableDeclaration
+  method emitPatternNames -> @Emitter.emitPatternNames
   method emitExpression -> @Emitter.emitExpression
   method emitArgument -> @Emitter.emitArgument
   method emitEntering -> @Emitter.emitEntering
@@ -1086,9 +1087,9 @@ function Emitter.emitVariableDeclarations(this: Emitter, list: Node): void -> @E
 function Emitter.emitVariableDeclaration(this: Emitter, decl: Node): void -> @Emitter.emitVariableDeclaration [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitAwaitAll
-  calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.setSlot IRFunction.emit IRFunction.emitAlloca TypeTable.isMaybe emitAwaitAll emitMaybeLocal internalErrorFor isAwaitAllDeclaration nish_exit nish_panic_index nish_str_concat
-  pointer this: size=384 writesThrough=true captured=false passedTo=isAwaitAllDeclaration#0 emitAwaitAll#0 emitMaybeLocal#0 Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.alignSuffix#0
-  pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllDeclaration#1 emitAwaitAll#1 emitMaybeLocal#2 DebugInfo.declareLocal#4
+  calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.emitExpression Emitter.emitPatternNames Emitter.llvm Emitter.setSlot IRFunction.emit IRFunction.emitAlloca TypeTable.isMaybe emitAwaitAll emitMaybeLocal internalErrorFor isAwaitAllDeclaration nish_exit nish_panic_index nish_str_concat
+  pointer this: size=384 writesThrough=true captured=false passedTo=isAwaitAllDeclaration#0 emitAwaitAll#0 emitMaybeLocal#0 Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.alignSuffix#0 Emitter.emitPatternNames#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=isAwaitAllDeclaration#1 emitAwaitAll#1 emitMaybeLocal#2 DebugInfo.declareLocal#4 Emitter.emitPatternNames#1
   stackSites=0 stackLocals=0
   callee +0:9 isAwaitAllDeclaration -> @isAwaitAllDeclaration
   callee +1:7 emitAwaitAll -> @emitAwaitAll
@@ -1106,8 +1107,19 @@ function Emitter.emitVariableDeclaration(this: Emitter, decl: Node): void -> @Em
   callee +13:20 Emitter.emitExpression -> @Emitter.emitExpression
   callee +14:7 IRFunction.emit -> @IRFunction.emit
   callee +14:58 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +15:13 debug: DebugInfo | null (const)
-  callee +17:9 DebugInfo.declareLocal -> @DebugInfo.declareLocal
+  local +16:13 pattern: boolean (const)
+  local +17:13 debug: DebugInfo | null (const)
+  callee +19:9 DebugInfo.declareLocal -> @DebugInfo.declareLocal
+  callee +22:9 Emitter.emitPatternNames -> @Emitter.emitPatternNames
+function Emitter.emitPatternNames(this: Emitter, decl: Node): void -> @Emitter.emitPatternNames [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.emitVariableDeclaration
+  calls: Emitter.emitVariableDeclaration
+  pointer this: size=384 writesThrough=true captured=false passedTo=Emitter.emitVariableDeclaration#0
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 i: i32 (let)
+  callee +1:7 Emitter.emitVariableDeclaration -> @Emitter.emitVariableDeclaration
 function Emitter.emitExpression(this: Emitter, expr: Node): string -> @Emitter.emitExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitEntering

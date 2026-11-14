@@ -323,6 +323,11 @@ function inOptionalChain(node: Node): boolean -> @inOptionalChain
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:7 link: Node (let)
+function writtenChildren(node: Node): i32 -> @writtenChildren
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function hasEffect(node: Node): boolean -> @hasEffect
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_at nish_str_eq
@@ -440,9 +445,9 @@ function changedText(walk: Walk, node: Node, out: Operands, slot: i32): void -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: node slot
-  calls: Operands.constructor Walk.refuse Walk.spanOf Walk.stubName bodyIndex changedAcrossInstances changedText controlRow hasEffect hoistChild inOptionalChain mathCallee mayPanic needsTypes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq numbersRow observe observeWidths readsLocal readsState recordsRow splice statementText stringsRow stubText writes
+  calls: Operands.constructor Walk.refuse Walk.spanOf Walk.stubName bodyIndex changedAcrossInstances changedText controlRow hasEffect hoistChild inOptionalChain mathCallee mayPanic needsTypes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq numbersRow observe observeWidths readsLocal readsState recordsRow splice statementText stringsRow stubText writes writtenChildren
   pointer walk: size=248 writesThrough=true captured=false passedTo=stubText#0 changedText#0 Walk.refuse#0 stubText#0 Walk.stubName#0 observeWidths#0 changedAcrossInstances#0 observe#0 mathCallee#0 statementText#0 changedText#0 readsState#0 readsLocal#0 numbersRow#0 stringsRow#0 recordsRow#0 controlRow#0 Walk.spanOf#0 mayPanic#0 Walk.spanOf#0 splice#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=needsTypes#0 stubText#1 changedText#1 stubText#1 bodyIndex#0 changedAcrossInstances#1 observe#1 mathCallee#1 Operands.constructor#1 hoistChild#0 readsState#1 readsLocal#1 inOptionalChain#0 writes#0 numbersRow#1 stringsRow#1 recordsRow#1 controlRow#1 Walk.spanOf#1 hasEffect#0 mayPanic#1 Walk.spanOf#1 splice#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=needsTypes#0 stubText#1 changedText#1 stubText#1 bodyIndex#0 changedAcrossInstances#1 observe#1 mathCallee#1 Operands.constructor#1 writtenChildren#0 hoistChild#0 readsState#1 readsLocal#1 inOptionalChain#0 writes#0 numbersRow#1 stringsRow#1 recordsRow#1 controlRow#1 Walk.spanOf#1 hasEffect#0 mayPanic#1 Walk.spanOf#1 splice#1
   pointer out: size=40 writesThrough=false captured=false passedTo=changedText#2 changedAcrossInstances#2
   stackSites=0 stackLocals=0
   local -6:11 choices: i32 (const)
@@ -469,26 +474,28 @@ function changedText(walk: Walk, node: Node, out: Operands, slot: i32): void -> 
   local +52:9 localsBefore: boolean (const)
   local +53:9 operands: Operands (const)
   callee +53:20 new Operands -> @Operands.constructor
-  local +54:7 i: i32 (let)
-  callee +59:7 statementText -> @statementText
-  callee +61:32 hoistChild -> @hoistChild
-  callee +62:7 changedText -> @changedText
-  callee +63:11 readsState -> @readsState
-  callee +66:11 readsLocal -> @readsLocal
-  callee +81:47 inOptionalChain -> @inOptionalChain
-  callee +81:90 writes -> @writes
-  local +82:9 hoisted: i32 (const)
-  local +83:9 choiceBefore: boolean (const)
-  local +87:7 rewritten: string | null (let)
-  callee +87:19 numbersRow -> @numbersRow
-  callee +89:17 stringsRow -> @stringsRow
-  callee +92:17 recordsRow -> @recordsRow
-  callee +95:17 controlRow -> @controlRow
-  callee +99:48 Walk.spanOf -> @Walk.spanOf
-  callee +109:14 hasEffect -> @hasEffect
-  callee +109:33 mayPanic -> @mayPanic
-  callee +113:23 Walk.spanOf -> @Walk.spanOf
-  callee +120:23 splice -> @splice
+  local +54:9 walked: i32 (const)
+  callee +54:18 writtenChildren -> @writtenChildren
+  local +55:7 i: i32 (let)
+  callee +60:7 statementText -> @statementText
+  callee +62:32 hoistChild -> @hoistChild
+  callee +63:7 changedText -> @changedText
+  callee +64:11 readsState -> @readsState
+  callee +67:11 readsLocal -> @readsLocal
+  callee +82:47 inOptionalChain -> @inOptionalChain
+  callee +82:90 writes -> @writes
+  local +83:9 hoisted: i32 (const)
+  local +84:9 choiceBefore: boolean (const)
+  local +88:7 rewritten: string | null (let)
+  callee +88:19 numbersRow -> @numbersRow
+  callee +90:17 stringsRow -> @stringsRow
+  callee +93:17 recordsRow -> @recordsRow
+  callee +96:17 controlRow -> @controlRow
+  callee +100:48 Walk.spanOf -> @Walk.spanOf
+  callee +110:14 hasEffect -> @hasEffect
+  callee +110:33 mayPanic -> @mayPanic
+  callee +114:23 Walk.spanOf -> @Walk.spanOf
+  callee +121:23 splice -> @splice
 function changedAcrossInstances(walk: Walk, node: Node, out: Operands, slot: i32): void -> @changedAcrossInstances
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

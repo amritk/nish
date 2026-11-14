@@ -12761,8 +12761,8 @@ export const main = (): i32 => {
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
   iterable of a `for...of`, below. There is no `entries` or
-  `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`,
+  `forEach`, because a `[key, value]` pair is a two-type tuple and a
+  method cannot take a function (`reject_map_entries`, `reject_map_foreach`,
   `reject_map_iter_entries_call`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,

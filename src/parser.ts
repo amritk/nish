@@ -74,6 +74,8 @@ import {
   FLAG_VAR,
   Node,
   NodeKind,
+  awaitsInitializer,
+  patternReceiverName,
 } from "./nodes"
 import {
   TOK_AMP,
@@ -2162,48 +2164,137 @@ export class Parser {
     }
     const pattern = this.node(NodeKind.BindingPattern, this.start, this.end)
     if (this.at(TOK_LBRACKET)) {
-      this.parseNamePattern(pattern)
+      this.parseArrayPattern(pattern)
     } else {
-      this.skipBindingPattern()
+      this.parseObjectPattern(pattern)
     }
     pattern.end = this.previousEnd
     return pattern
   }
 
   /**
-   * `[a, b]`: a flat array pattern of plain names keeps them as its
-   * children, the one destructuring the checker takes (WP49's
-   * `const [a, b] = await awaitAll(...)`). Any other shape — a hole, a
-   * default, a rest, a nested pattern — keeps none, and is refused as
-   * every pattern was.
+   * `[a, , c]`: an element per slot — the name, a nested pattern, or EMPTY
+   * for a hole. `...rest` and `a = 1` are FLAG_REST and FLAG_DEFAULT on the
+   * element, read so the checker can name what it refuses.
    */
-  parseNamePattern(pattern: Node): void {
+  parseArrayPattern(pattern: Node): void {
     this.advance() // `[`
-    let flat = true
-    while (flat && this.at(TOK_IDENT)) {
-      const name = this.node(NodeKind.Ident, this.start, this.end)
-      name.text = this.value
-      pattern.children.push(name)
-      this.advance()
+    pattern.text = "["
+    while (!this.at(TOK_RBRACKET) && !this.at(TOK_END)) {
+      if (this.eat(TOK_COMMA)) {
+        pattern.children.push(this.empty())
+        continue
+      }
+      pattern.children.push(this.parsePatternElement())
       if (!this.eat(TOK_COMMA)) {
-        flat = this.at(TOK_RBRACKET)
         break
       }
     }
-    if (flat && this.at(TOK_RBRACKET) && pattern.children.length > 0) {
-      this.advance()
+    this.expect(TOK_RBRACKET)
+  }
+
+  /**
+   * `{ x, y: py }`: a NodeKind.Property per entry, its text the key and its
+   * child what the key binds — an identifier, or a nested pattern. A key that
+   * is not a plain name (`"x"`, `0`, `[k]`) is FLAG_COMPUTED, and `...rest`
+   * is FLAG_REST with no key.
+   */
+  parseObjectPattern(pattern: Node): void {
+    this.advance() // `{`
+    pattern.text = "{"
+    while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
+      const entry = this.node(NodeKind.Property, this.start, this.end)
+      if (this.at(TOK_DOT_DOT_DOT)) {
+        entry.children.push(this.parsePatternElement())
+        entry.flags = FLAG_REST
+      } else {
+        let shorthand = false
+        if (this.eat(TOK_LBRACKET)) {
+          this.parseExpression()
+          this.expect(TOK_RBRACKET)
+          entry.flags = FLAG_COMPUTED
+        } else if (this.at(TOK_IDENT)) {
+          entry.text = this.value
+          shorthand = this.peek() !== TOK_COLON
+          if (!shorthand) {
+            this.advance()
+          }
+        } else {
+          this.advance()
+          entry.flags = FLAG_COMPUTED
+        }
+        if (!shorthand) {
+          this.expect(TOK_COLON)
+        }
+        entry.children.push(this.parsePatternElement())
+      }
+      entry.end = this.previousEnd
+      pattern.children.push(entry)
+      if (!this.eat(TOK_COMMA)) {
+        break
+      }
+    }
+    this.expect(TOK_RBRACE)
+  }
+
+  /**
+   * A flat pattern's names as the declarations they mean: `const { x, y: py }
+   * = p` is the receiver, a hidden `const` the declarator itself declares
+   * (`patternReceiverName`), then `const x = <receiver>.x` and `const py =
+   * <receiver>.y`, appended to the declarator as its fourth child on, in
+   * order; `[a, , c]` reads `<receiver>[0]` and `<receiver>[2]`. Each is an
+   * ordinary declarator, so the checker, the analyses and the emitter read
+   * them as they read any other, after the initializer. A slot the checker
+   * refuses (a default, a rest, a nested pattern, a key that is not a name)
+   * gets none, and neither does WP49's `= await awaitAll(...)`, whose names
+   * are the calls' answers.
+   */
+  lowerPattern(declaration: Node): void {
+    const pattern = declaration.children[0]
+    if (awaitsInitializer(declaration)) {
       return
     }
-    pattern.children = []
-    let depth = 1
-    while (!this.at(TOK_END) && depth > 0) {
-      if (this.at(TOK_LBRACE) || this.at(TOK_LBRACKET)) {
-        depth = depth + 1
-      } else if (this.at(TOK_RBRACE) || this.at(TOK_RBRACKET)) {
-        depth = depth - 1
+    const receiver = patternReceiverName(pattern)
+    for (let i = 0; i < pattern.children.length; i++) {
+      const slot = pattern.children[i]
+      const object = slot.kind === NodeKind.Property
+      const name = object ? slot.children[0] : slot
+      if (name.kind !== NodeKind.Ident || slot.flags !== 0 || name.flags !== 0) {
+        continue
       }
-      this.advance()
+      const read = this.node(object ? NodeKind.Member : NodeKind.Index, slot.start, slot.end)
+      const base = this.node(NodeKind.Ident, slot.start, slot.end)
+      base.text = receiver
+      read.children.push(base)
+      if (object) {
+        read.text = slot.text
+      } else {
+        const index = this.node(NodeKind.Number, slot.start, slot.end)
+        index.text = `${i}`
+        read.children.push(index)
+      }
+      const bound = this.node(NodeKind.Ident, name.start, name.end)
+      bound.text = name.text
+      const named = this.node(NodeKind.VarDecl, slot.start, slot.end)
+      named.children.push(bound)
+      named.children.push(this.empty())
+      named.children.push(read)
+      declaration.children.push(named)
     }
+  }
+
+  /** One slot of a pattern: `...` and a name or nested pattern, then a `= default`. */
+  parsePatternElement(): Node {
+    const rest = this.eat(TOK_DOT_DOT_DOT)
+    const element = this.parseBindingName()
+    if (rest) {
+      element.flags = element.flags | FLAG_REST
+    }
+    if (this.eat(TOK_ASSIGN)) {
+      this.parseExpression()
+      element.flags = element.flags | FLAG_DEFAULT
+    }
+    return element
   }
 
   /**
@@ -3085,6 +3176,9 @@ export class Parser {
       declaration.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty())
       declaration.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
       declaration.end = this.previousEnd
+      if (declaration.children[0].kind === NodeKind.BindingPattern) {
+        this.lowerPattern(declaration)
+      }
       list.children.push(declaration)
       if (!this.eat(TOK_COMMA)) {
         break
@@ -3526,8 +3620,7 @@ export class Parser {
 
   /**
    * Step over a destructuring pattern, from its `{` or `[` to the bracket that
-   * closes it. Only a refused form reads one — a `catch` binding, or a `{`
-   * pattern of `parseBindingName` (a `[` one is `parseNamePattern`'s) — so
+   * closes it. Only a refused form reads one — a `catch` binding — so
    * nothing is built from it.
    */
   skipBindingPattern(): void {

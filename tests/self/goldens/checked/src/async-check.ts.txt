@@ -289,14 +289,15 @@ function isSpawnable(ctx: CheckContext, type: i32): boolean -> @isSpawnable
   callee +3:3 TypeTable.isEnum -> @TypeTable.isEnum
   callee +4:3 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
 function isAwaitAllShape(decl: Node): boolean -> @isAwaitAllShape [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: directCall nish_panic_index nish_str_eq unwrapParens
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 pattern: Node (const)
-  local +4:9 init: Node (const)
-  callee +4:16 unwrapParens -> @unwrapParens
-  callee +5:67 directCall -> @directCall
+  local +4:14 name: Node (const)
+  local +9:9 init: Node (const)
+  callee +9:16 unwrapParens -> @unwrapParens
+  callee +10:67 directCall -> @directCall
 function checkAwaitAllDeclaration(ctx: CheckContext, decl: Node, scope: Scope): i32[] | null -> @checkAwaitAllDeclaration [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

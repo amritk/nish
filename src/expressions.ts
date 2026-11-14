@@ -3775,6 +3775,14 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     return stored
   }
+  // `[a, b] = [b, a]` and `({ x } = p)`: a declaration may destructure, an
+  // assignment may not.
+  if ((target.kind === NodeKind.Array || target.kind === NodeKind.Object) && expr.text === "=") {
+    return ctx.errorType(
+      target,
+      "Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name"
+    )
+  }
   if (target.kind !== NodeKind.Ident) {
     return ctx.errorType(target, "Only simple variables can be assigned")
   }

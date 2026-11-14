@@ -57,3 +57,14 @@ function nodeName(kind: NodeKind): string -> @nodeName [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: kind
   stackSites=0 stackLocals=0
+function patternReceiverName(pattern: Node): string -> @patternReceiverName [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  pointer pattern: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function awaitsInitializer(decl: Node): boolean -> @awaitsInitializer [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 init: Node (let)

@@ -3,6 +3,7 @@
 entry: src/emit-ts-records.ts src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-root.ts src/ice.ts src/branding.ts src/codes.ts src/program.ts src/region.ts src/std-modules.ts src/paths.ts src/strings.ts src/context.ts src/diagnostics.ts std/cli.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/annotations.ts src/simd.ts src/builtins.ts src/expressions.ts src/constants.ts src/async-check.ts src/emit-util.ts src/region-rules.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/parallel.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/checker.ts src/assignment.ts src/declarations.ts src/host-module.ts src/parser.ts src/module-storage.ts src/script.ts src/hygiene.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/fnrefs.ts src/visibility.ts src/options.ts src/parents.ts src/region-check.ts src/loop-flow.ts src/tbaa.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-map.ts src/runtime.ts src/target.ts src/emit-region.ts src/emit-shm-window.ts src/shm-window.ts src/emit-json.ts src/emit-async.ts src/capabilities.ts src/debug.ts src/emit-fnrefs.ts src/emit-ts-edits.ts src/emit-ts-control.ts src/emit-ts-numbers.ts src/emit-ts-strings.ts src/emit-ts-storage.ts src/interop-wasm.ts src/compilation.ts src/fnref-places.ts src/portability.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts src/inline-arrays.ts src/ranges.ts src/arena-report.ts src/capability-report.ts src/capability-lock.ts src/manifest.ts src/interop-abi.ts
 import isSortInstance from "./arrays" -> function @isSortInstance
 import Operands from "./emit-ts-edits" -> struct Operands
+import splice from "./emit-ts-edits" -> function @splice
 import Walk from "./emit-ts-edits" -> struct Walk
 import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
@@ -346,10 +347,10 @@ function processArgv(walk: Walk, node: Node): string | null -> @processArgv
 function recordsRow(walk: Walk, node: Node, operands: Operands): string | null -> @recordsRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.helperName
-  calls: Operands.at Walk.helperName checkedAt literalRow newRow nish_str_concat processArgv recordCallRow storeRow
-  pointer walk: size=248 writesThrough=true captured=false passedTo=checkedAt#0 Walk.helperName#0 storeRow#0 recordCallRow#0 literalRow#0 newRow#0 processArgv#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1 storeRow#1 recordCallRow#1 literalRow#1 newRow#1 processArgv#1
-  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 storeRow#2 recordCallRow#2 literalRow#2 newRow#2
+  calls: Operands.at Walk.helperName checkedAt checkedPattern checkedPatternHead literalRow newRow nish_str_concat processArgv recordCallRow storeRow
+  pointer walk: size=248 writesThrough=true captured=false passedTo=checkedAt#0 Walk.helperName#0 storeRow#0 recordCallRow#0 literalRow#0 newRow#0 processArgv#0 checkedPattern#0 checkedPatternHead#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1 storeRow#1 recordCallRow#1 literalRow#1 newRow#1 processArgv#1 checkedPattern#1 checkedPatternHead#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 storeRow#2 recordCallRow#2 literalRow#2 newRow#2 checkedPattern#2 checkedPatternHead#2
   stackSites=0 stackLocals=0
   callee +0:50 checkedAt -> @checkedAt
   callee +3:17 Walk.helperName -> @Walk.helperName
@@ -360,3 +361,49 @@ function recordsRow(walk: Walk, node: Node, operands: Operands): string | null -
   callee +9:14 literalRow -> @literalRow
   callee +11:14 newRow -> @newRow
   callee +13:14 processArgv -> @processArgv
+  callee +15:14 checkedPattern -> @checkedPattern
+  callee +17:14 checkedPatternHead -> @checkedPatternHead
+function patternChecks(walk: Walk, decl: Node, t: string): string -> @patternChecks
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.helperName
+  calls: Walk.helperName checkedAt nish_panic_index nish_str_concat
+  pointer walk: size=248 writesThrough=false captured=false passedTo=checkedAt#0 Walk.helperName#0
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 checks: string (let)
+  local +1:12 i: i32 (let)
+  local +2:11 read: Node (const)
+  callee +3:41 checkedAt -> @checkedAt
+  callee +4:28 Walk.helperName -> @Walk.helperName
+function checkedPattern(walk: Walk, node: Node, operands: Operands): string | null -> @checkedPattern
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: Operands.at Walk.temporary nish_panic_index nish_str_concat patternChecks splice
+  pointer walk: size=248 writesThrough=true captured=false passedTo=Walk.temporary#0 patternChecks#0 splice#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=patternChecks#1 splice#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 splice#2
+  stackSites=0 stackLocals=0
+  local -5:9 t: string (const)
+  callee -5:13 Walk.temporary -> @Walk.temporary
+  local -4:9 checks: string (const)
+  callee -4:18 patternChecks -> @patternChecks
+  callee +0:54 Operands.at -> @Operands.at
+  callee +2:10 splice -> @splice
+function checkedPatternHead(walk: Walk, node: Node, operands: Operands): string | null -> @checkedPatternHead
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: Operands.at Walk.temporary nish_panic_index nish_str_concat patternChecks splice
+  pointer walk: size=248 writesThrough=true captured=false passedTo=Walk.temporary#0 patternChecks#0 Walk.temporary#0 splice#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=splice#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 splice#2
+  stackSites=0 stackLocals=0
+  local -14:9 head: Node (const)
+  local -10:9 decl: Node (const)
+  local -6:9 t: string (const)
+  callee -6:13 Walk.temporary -> @Walk.temporary
+  local -5:9 checks: string (const)
+  callee -5:18 patternChecks -> @patternChecks
+  local -1:9 rows: string (const)
+  callee -1:16 Walk.temporary -> @Walk.temporary
+  callee +0:102 Operands.at -> @Operands.at
+  callee +2:10 splice -> @splice

@@ -2459,19 +2459,20 @@ function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @c
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.capturesOuter CheckContext.errorType CheckedProgram.constant Scope.lookup assignInto carryMembers checkIndexAssignment checkMemberAssignment clearPaths holdMembers isCapture nish_panic_index nish_str_concat nish_str_eq pathVariable refuseOuterWrite unknownIdentifier
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkMemberAssignment#0 checkIndexAssignment#0 clearPaths#0 pathVariable#0 holdMembers#0 carryMembers#0 CheckContext.errorType#0 CheckContext.capturesOuter#0 isCapture#0 refuseOuterWrite#0 CheckContext.errorType#0 CheckContext.errorType#0 unknownIdentifier#0 CheckContext.errorType#0 assignInto#0
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkMemberAssignment#0 checkIndexAssignment#0 clearPaths#0 pathVariable#0 holdMembers#0 carryMembers#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.capturesOuter#0 isCapture#0 refuseOuterWrite#0 CheckContext.errorType#0 CheckContext.errorType#0 unknownIdentifier#0 CheckContext.errorType#0 assignInto#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkMemberAssignment#1 checkIndexAssignment#1 carryMembers#1 assignInto#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMemberAssignment#2 checkIndexAssignment#2 clearPaths#2 pathVariable#2 holdMembers#1 Scope.lookup#0 assignInto#2
   stackSites=0 stackLocals=0
-  local -33:9 target: Node (const)
-  local -31:11 stored: i32 (const)
-  callee -29:11 checkMemberAssignment -> @checkMemberAssignment
-  callee -28:11 checkIndexAssignment -> @checkIndexAssignment
-  callee -27:5 clearPaths -> @clearPaths
-  local -26:11 path: Local | null (const)
-  callee -26:18 pathVariable -> @pathVariable
-  callee -24:7 holdMembers -> @holdMembers
-  callee -21:7 carryMembers -> @carryMembers
+  local -41:9 target: Node (const)
+  local -39:11 stored: i32 (const)
+  callee -37:11 checkMemberAssignment -> @checkMemberAssignment
+  callee -36:11 checkIndexAssignment -> @checkIndexAssignment
+  callee -35:5 clearPaths -> @clearPaths
+  local -34:11 path: Local | null (const)
+  callee -34:18 pathVariable -> @pathVariable
+  callee -32:7 holdMembers -> @holdMembers
+  callee -29:7 carryMembers -> @carryMembers
+  callee -22:12 CheckContext.errorType -> @CheckContext.errorType
   callee -16:12 CheckContext.errorType -> @CheckContext.errorType
   local -14:9 local: Local | null (const)
   callee -14:17 Scope.lookup -> @Scope.lookup

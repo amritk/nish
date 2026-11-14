@@ -422,15 +422,20 @@ const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
 
 /**
  * `const [a, b] = await awaitAll(f(x), g(y))`, read off the tree: a
- * declarator whose names the parser kept (`parseNamePattern`) and whose
- * initializer is an `await` of a call. The checker decides whether the call
+ * declarator whose pattern is a list of plain names and whose initializer is
+ * an `await` of a call. The checker decides whether the call
  * is to `awaitAll`; the sweep that refuses every other pattern leaves this
  * one to it.
  */
 export const isAwaitAllShape = (decl: Node): boolean => {
   const pattern = decl.children[0]
-  if (pattern.kind !== NodeKind.BindingPattern || pattern.children.length === 0 || decl.children.length < 3) {
+  if (pattern.kind !== NodeKind.BindingPattern || pattern.text !== "[" || pattern.children.length === 0) {
     return false
+  }
+  for (const name of pattern.children) {
+    if (name.kind !== NodeKind.Ident || name.flags !== 0) {
+      return false
+    }
   }
   const init = unwrapParens(decl.children[2])
   return init.kind === NodeKind.Unary && init.text === "await" && directCall(init.children[0]) !== null

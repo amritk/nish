@@ -738,6 +738,15 @@ const inOptionalChain = (node: Node): boolean => {
   return false
 }
 
+/**
+ * How many of `node`'s children its text spells. A destructuring
+ * declarator's names after the third (`Parser.lowerPattern`) are the
+ * compiler's own reads of the receiver, spanning the pattern's slots, and
+ * are not written: the pattern is, as it was in the source.
+ */
+const writtenChildren = (node: Node): i32 =>
+  node.kind === NodeKind.VarDecl && node.children[0].kind === NodeKind.BindingPattern ? 3 : node.children.length
+
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */
 const hasEffect = (node: Node): boolean => {
   if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
@@ -1036,8 +1045,9 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   const effectsBefore = walk.effects
   const localsBefore = walk.localsRead
   const operands = new Operands(node, walk.source.text)
+  const walked = writtenChildren(node)
   let i = 0
-  while (i < node.children.length) {
+  while (i < walked) {
     operands.texts.push("")
     operands.changed.push(false)
     if (node.kind === NodeKind.Block) {
@@ -1215,7 +1225,7 @@ export const splice = (walk: Walk, node: Node, operands: Operands): string => {
   const sb = new StringBuilder()
   let cursor = node.start
   let i = 0
-  while (i < node.children.length) {
+  while (i < operands.changed.length) {
     if (operands.changed[i]) {
       const child = node.children[i]
       if (child.start < cursor || child.end > node.end) {

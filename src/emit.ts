@@ -1547,10 +1547,27 @@ export class Emitter {
       this.setSlot(local, slot)
       const init = this.emitExpression(decl.children[2])
       this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`)
+      // A pattern's receiver is hidden, so a debugger is shown only its names.
+      const pattern = decl.children[0].kind === NodeKind.BindingPattern
       const debug = this.debug
-      if (debug !== null) {
+      if (debug !== null && !pattern) {
         debug.declareLocal(this.fn, local, slot, decl) // `-g`: llvm.dbg.declare on the slot
       }
+      if (pattern) {
+        this.emitPatternNames(decl)
+      }
+    }
+  }
+
+  /**
+   * The names of a destructuring declarator, after its receiver is stored:
+   * each the declarator `Parser.lowerPattern` appended, a field load or a
+   * bounds-checked element read of the receiver's slot. A `for...of` head's
+   * receiver is the element, stored each pass.
+   */
+  emitPatternNames(decl: Node): void {
+    for (let i = 3; i < decl.children.length; i++) {
+      this.emitVariableDeclaration(decl.children[i])
     }
   }
 

@@ -215,10 +215,15 @@ export enum NodeKind {
   // `const f = (): i32 => 1, g = 2` a sixth child of the NodeKind.FunctionDecl, a LIST of
   // VAR_DECL there only when written.
 
-  // `{ a, b }` or `[a, b]` where a name is bound — a VAR_DECL's or a PARAM's
-  // first child (NL2191, NL2192, NL2193): no children; the pattern between the
-  // brackets is passed over unread, as a namespace body is, because every
-  // declaration that holds one is refused whatever it binds.
+  // `{ a, b: c }` or `[a, , b]` where a name is bound — a VAR_DECL's or a
+  // PARAM's first child; text `{` or `[`. An array pattern's children are its
+  // slots: an IDENT, a nested BINDING_PATTERN, or EMPTY for a hole. An object
+  // pattern's are a NodeKind.Property per entry, its text the key and its
+  // child the IDENT or pattern it binds (FLAG_COMPUTED for a key that is not
+  // a plain name). `...r` is FLAG_REST and `a = 1` FLAG_DEFAULT on the slot,
+  // kept so the checker can refuse each by name. A local `const`/`let` and a
+  // `for...of` head take a flat one (`src/destructure.ts`); a parameter's,
+  // a module constant's and a `catch` binding's are refused (NL2192, NL2191).
   BindingPattern = 73,
 
   // ---- Refused class, interface and enum forms (WP33 R1) -------------------------------
@@ -654,4 +659,25 @@ export const nodeName = (kind: NodeKind): string => {
     default:
       return "?"
   }
+}
+
+/**
+ * The name of the hidden `const` a destructuring declarator binds its
+ * receiver to (`Parser.lowerPattern`): one per pattern, by where it starts,
+ * spelled with a `.` no program can write, so it shadows nothing and nothing
+ * can name it.
+ */
+export const patternReceiverName = (pattern: Node): string => `pattern.${pattern.start}`
+
+/**
+ * Whether a declarator's initializer is an `await`, parenthesised or not: a
+ * pattern over one is WP49's `awaitAll` or refused (NL2193), and
+ * `Parser.lowerPattern` gives it no names.
+ */
+export const awaitsInitializer = (decl: Node): boolean => {
+  let init = decl.children[2]
+  while (init.kind === NodeKind.Paren) {
+    init = init.children[0]
+  }
+  return init.kind === NodeKind.Unary && init.text === "await"
 }

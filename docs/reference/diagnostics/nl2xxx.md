@@ -5581,7 +5581,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function
+…`: a `Map` or `Set` in this version has no `entries` or `forEach`, because a `[key, value]` pair is a two-type tuple and a method cannot take a function
 ```
 
 [`nl2356_map_foreach.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_foreach.ts):
@@ -5596,7 +5596,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function
+`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`, because a `[key, value]` pair is a two-type tuple and a method cannot take a function
 ```
 
 ## NL2357
@@ -6008,7 +6008,7 @@ export const main = (): i32 => keysOf(new Set<i32>()).length;
 The message of an error contains:
 
 ```text
-…`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of …
+…`, whose `[key, value]` pairs are two-type tuples, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of …
 ```
 
 [`nl2375_map_iter_entries.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2375_map_iter_entries.ts):
@@ -6024,7 +6024,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`for...of` over `Map<string, i32>` needs `entries()`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of m.keys())`
+`for...of` over `Map<string, i32>` needs `entries()`, whose `[key, value]` pairs are two-type tuples, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of m.keys())`
 ```
 
 ## NL2376

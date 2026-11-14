@@ -61,6 +61,7 @@ import {
   FLAG_ASYNC,
   FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_COMPUTED,
   FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_FOREIGN,
@@ -73,12 +74,14 @@ import {
   FLAG_VAR,
   Node,
   NodeKind,
+  awaitsInitializer,
+  patternReceiverName,
 } from "./nodes"
 import { JSON_OPTIONS, jsonOptionsShapeMessage } from "./json-typed"
 import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
-import { isInteger, T_ERROR, T_VOID } from "./types"
+import { isInteger, T_ERROR, T_STRING, T_VOID } from "./types"
 import {
   flowBegin,
   flowDoCondition,
@@ -349,104 +352,214 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
 const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0
   for (const decl of list.children[0].children) {
-    if (decl.children[0].kind === NodeKind.BindingPattern) {
+    if (decl.children[0].kind !== NodeKind.BindingPattern) {
+      checkDeclarator(ctx, decl, scope, mutable, decl.children[0].text)
+    } else if (isAwaitAllShape(decl)) {
       declareAwaitAll(ctx, decl, scope)
-      continue
+    } else {
+      checkPatternDeclarator(ctx, decl, scope, mutable)
     }
-    const name = decl.children[0].text
-    const annotation = decl.children[1]
-    // The annotation is resolved first, so that a refused initializer still
-    // leaves the variable its declared type (see below).
-    // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
-    let declared = -1
-    if (annotation.kind !== NodeKind.Empty) {
-      declared = isMaybeAnnotation(annotation)
-        ? resolveMaybeAnnotation(ctx, annotation)
-        : resolveType(annotation, ctx)
-    }
-    const initializer = decl.children[2]
-    if (initializer.kind === NodeKind.Empty) {
-      ctx.error(decl, `Variable \`${name}\` must be initialized`)
-      const origin = declaredOrigin(ctx, annotation, initializer, scope)
-      declareLocal(
-        ctx,
-        scope,
-        decl,
-        decl.children[0],
-        name,
-        declared < 0 ? T_ERROR : declared,
-        mutable,
-        origin
-      )
-      continue
-    }
-    // WP32: a `const` is one of the places a maybe may go, and a `let` is not,
-    // however it is annotated, so its initialiser is refused as NL2361.
-    let want = declared
-    if (!mutable && declared < 0) {
-      want = WANT_MAYBE
-    } else if (mutable && ctx.table.isMaybe(declared)) {
-      want = -1
-    } else if (mutable && declared < 0) {
-      want = WANT_INFERRED
-    }
-    const initType = checkExpression(ctx, initializer, scope, want)
-    // An inferred type never carries the initialiser's proof (#234):
-    // `let y = r` inside `if (r.ok)` is a `Result`, and `y` may be assigned
-    // an error later.
-    let type = declared < 0 ? unproven(ctx, initType) : declared
-    if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
-      ctx.error(
-        initializer,
-        `Cannot initialize ${ctx.table.typeName(declared)} variable \`${name}\` with ${ctx.table.typeName(initType)}`
-      )
-    }
-    if (declared >= 0 && initType !== T_ERROR) {
-      refuseNarrowingStore(ctx, initializer, declared, `The variable \`${name}\``)
-    }
-    if (type === T_VOID) {
-      ctx.error(decl, "Cannot declare a variable of type void")
-      type = T_ERROR
-    }
-    // A refused initializer still declares the variable, as its annotation or
-    // else as `T_ERROR`, so later uses stay silent rather than each reporting
-    // an `Unknown identifier` (#275).
-    if (ctx.errored && declared < 0) {
-      type = T_ERROR
-    }
-    // WP33 R2: `const t = new Float64Array(n)` is a `Float64Array` to
-    // TypeScript as surely as an annotation would make it, so an unannotated
-    // binding takes its initialiser's spelling. Read before the name is
-    // declared, so that the initialiser's names are the outer ones.
-    const typedArray =
-      annotation.kind !== NodeKind.Empty
-        ? annotationSpelling(ctx, true, annotation)
-        : typedArraySpelling(ctx, initializer, scope)
+  }
+}
+
+/** One `let`/`const` declarator binding `name`, declared in `scope`. */
+const checkDeclarator = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, name: string): void => {
+  const annotation = decl.children[1]
+  // The annotation is resolved first, so that a refused initializer still
+  // leaves the variable its declared type (see below).
+  // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
+  let declared = -1
+  if (annotation.kind !== NodeKind.Empty) {
+    declared = isMaybeAnnotation(annotation)
+      ? resolveMaybeAnnotation(ctx, annotation)
+      : resolveType(annotation, ctx)
+  }
+  const initializer = decl.children[2]
+  if (initializer.kind === NodeKind.Empty) {
+    ctx.error(decl, `Variable \`${name}\` must be initialized`)
+    const origin = declaredOrigin(ctx, annotation, initializer, scope)
     declareLocal(
       ctx,
       scope,
       decl,
       decl.children[0],
       name,
-      type,
+      declared < 0 ? T_ERROR : declared,
       mutable,
-      declaredOrigin(ctx, annotation, initializer, scope)
+      origin
     )
-    const local = ctx.program.nodeLocals[decl.id]
-    if (local !== null) {
-      local.typedArray = typedArray
-      // `xs[i]` is `xs[0]` after `const i = 0`, annotated or not, as it is to
-      // TypeScript; only an unannotated one has the literal type that keys
-      // `xs[j]` the same after `const j = i`.
-      const literal = mutable ? "" : literalIndexName(initializer, scope)
-      if (literal !== "") {
-        local.pathIndex = literal
-        local.literalKey = annotation.kind === NodeKind.Empty ? literal : ""
-      }
-      holdMembers(ctx, scope, local, initializer)
+    return
+  }
+  // WP32: a `const` is one of the places a maybe may go, and a `let` is not,
+  // however it is annotated, so its initialiser is refused as NL2361.
+  let want = declared
+  if (!mutable && declared < 0) {
+    want = WANT_MAYBE
+  } else if (mutable && ctx.table.isMaybe(declared)) {
+    want = -1
+  } else if (mutable && declared < 0) {
+    want = WANT_INFERRED
+  }
+  const initType = checkExpression(ctx, initializer, scope, want)
+  // An inferred type never carries the initialiser's proof (#234):
+  // `let y = r` inside `if (r.ok)` is a `Result`, and `y` may be assigned
+  // an error later.
+  let type = declared < 0 ? unproven(ctx, initType) : declared
+  if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
+    ctx.error(
+      initializer,
+      `Cannot initialize ${ctx.table.typeName(declared)} variable \`${name}\` with ${ctx.table.typeName(initType)}`
+    )
+  }
+  if (declared >= 0 && initType !== T_ERROR) {
+    refuseNarrowingStore(ctx, initializer, declared, `The variable \`${name}\``)
+  }
+  if (type === T_VOID) {
+    ctx.error(decl, "Cannot declare a variable of type void")
+    type = T_ERROR
+  }
+  // A refused initializer still declares the variable, as its annotation or
+  // else as `T_ERROR`, so later uses stay silent rather than each reporting
+  // an `Unknown identifier` (#275).
+  if (ctx.errored && declared < 0) {
+    type = T_ERROR
+  }
+  // WP33 R2: `const t = new Float64Array(n)` is a `Float64Array` to
+  // TypeScript as surely as an annotation would make it, so an unannotated
+  // binding takes its initialiser's spelling. Read before the name is
+  // declared, so that the initialiser's names are the outer ones.
+  const typedArray =
+    annotation.kind !== NodeKind.Empty
+      ? annotationSpelling(ctx, true, annotation)
+      : typedArraySpelling(ctx, initializer, scope)
+  declareLocal(
+    ctx,
+    scope,
+    decl,
+    decl.children[0],
+    name,
+    type,
+    mutable,
+    declaredOrigin(ctx, annotation, initializer, scope)
+  )
+  const local = ctx.program.nodeLocals[decl.id]
+  if (local !== null) {
+    local.typedArray = typedArray
+    // `xs[i]` is `xs[0]` after `const i = 0`, annotated or not, as it is to
+    // TypeScript; only an unannotated one has the literal type that keys
+    // `xs[j]` the same after `const j = i`.
+    const literal = mutable ? "" : literalIndexName(initializer, scope)
+    if (literal !== "") {
+      local.pathIndex = literal
+      local.literalKey = annotation.kind === NodeKind.Empty ? literal : ""
     }
-    if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
-      local.fresh = allocatesArray(ctx, initializer)
+    holdMembers(ctx, scope, local, initializer)
+  }
+  if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
+    local.fresh = allocatesArray(ctx, initializer)
+  }
+}
+
+/**
+ * A destructuring declarator, `const { x, y: py } = p` or `let [a, , c] = xs`.
+ * The initializer binds a hidden `const` (`patternReceiverName`), evaluated
+ * once; each name is the declarator `Parser.lowerPattern` appended to read
+ * one field or element of it, checked as any other with the list's `let` or
+ * `const`. The sweep refused the shapes no type decides (`refusePattern`).
+ */
+const checkPatternDeclarator = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean): void => {
+  const pattern = decl.children[0]
+  if (decl.children[2].kind === NodeKind.Empty) {
+    ctx.error(decl, "A destructuring declaration must be initialized")
+    declarePatternNames(ctx, decl, scope, mutable, T_ERROR)
+    return
+  }
+  checkDeclarator(ctx, decl, scope, false, patternReceiverName(pattern))
+  const local = ctx.program.nodeLocals[decl.id]
+  checkPatternNames(ctx, decl, scope, mutable, local === null ? T_ERROR : local.type, decl.children[2])
+}
+
+/**
+ * The names of a pattern whose receiver, `decl`'s hidden local or a
+ * `for...of` element, is a `type`: each lowered name read and declared, once
+ * the receiver is one a pattern may read — a class or interface value for
+ * `{`, an array for `[` — and its key a field. A refused receiver or key
+ * still declares its names, as `T_ERROR`, so later uses stay silent (#275).
+ */
+const checkPatternNames = (
+  ctx: CheckContext,
+  decl: Node,
+  scope: Scope,
+  mutable: boolean,
+  type: i32,
+  at: Node
+): void => {
+  if (!patternReceiverFits(ctx, decl.children[0], type, at)) {
+    declarePatternNames(ctx, decl, scope, mutable, T_ERROR)
+    return
+  }
+  const info = structOf(ctx, type)
+  for (let i = 3; i < decl.children.length; i++) {
+    const named = decl.children[i]
+    const read = named.children[2]
+    if (info !== null && read.kind === NodeKind.Member && info.fieldIndex.get(read.text, -1) < 0) {
+      ctx.error(
+        named,
+        `Cannot destructure field \`${read.text}\`: ${ctx.table.typeName(type)} has no such field`
+      )
+      declareLocal(ctx, scope, named, named.children[0], named.children[0].text, T_ERROR, mutable, null)
+    } else {
+      checkDeclarator(ctx, named, scope, mutable, named.children[0].text)
+    }
+  }
+  declareRefusedSlots(ctx, decl, scope, mutable)
+}
+
+/**
+ * Whether a pattern may read a `type`, refusing it where not: a value that
+ * may be null or missing, a string, a `Map`, and anything else that is not a
+ * class or interface value under `{` or an array under `[`.
+ */
+const patternReceiverFits = (ctx: CheckContext, pattern: Node, type: i32, at: Node): boolean => {
+  if (type === T_ERROR) {
+    return false
+  }
+  const shown = ctx.table.typeName(type)
+  const info = structOf(ctx, type)
+  if (ctx.table.isNullable(type) || ctx.table.isMaybe(type)) {
+    ctx.error(at, `Cannot destructure ${shown}, which may be absent; narrow it first, as in \`if (p !== null)\``)
+  } else if (type === T_STRING) {
+    ctx.error(at, "A `string` cannot be destructured; read each character by its index")
+  } else if (info !== null && isMapOwner(info)) {
+    ctx.error(at, "A `Map` cannot be destructured; read each value with `get`")
+  } else if (pattern.text === "{" && (info === null || !ctx.table.isStruct(type))) {
+    ctx.error(at, `An object pattern reads a class or interface value, got ${shown}`)
+  } else if (pattern.text === "[" && !ctx.table.isArray(type)) {
+    ctx.error(at, `An array pattern reads an array, got ${shown}`)
+  } else {
+    return true
+  }
+  return false
+}
+
+/** Every name a pattern binds directly, declared as a `type`. */
+const declarePatternNames = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean, type: i32): void => {
+  for (let i = 3; i < decl.children.length; i++) {
+    const named = decl.children[i]
+    declareLocal(ctx, scope, named, named.children[0], named.children[0].text, type, mutable, null)
+  }
+  declareRefusedSlots(ctx, decl, scope, mutable)
+}
+
+/**
+ * The plain names of the slots the sweep refused (a default or a rest), which
+ * `Parser.lowerPattern` gave no declarator: each declared as `T_ERROR`.
+ */
+const declareRefusedSlots = (ctx: CheckContext, decl: Node, scope: Scope, mutable: boolean): void => {
+  for (const slot of decl.children[0].children) {
+    const name = slot.kind === NodeKind.Property ? slot.children[0] : slot
+    if (name.kind === NodeKind.Ident && (slot.flags !== 0 || name.flags !== 0)) {
+      declareLocal(ctx, scope, name, name, name.text, T_ERROR, mutable, null)
     }
   }
 }
@@ -772,7 +885,8 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   const iterable = checkExpression(ctx, stmt.children[1], scope, -1)
   ctx.forOfWalk = null
   const outer = scope.child()
-  const name = decl.children[0].text
+  const pattern = decl.children[0].kind === NodeKind.BindingPattern
+  const name = pattern ? patternReceiverName(decl.children[0]) : decl.children[0].text
   let element = T_ERROR
   if (ctx.program.nodeCallees[stmt.id] === null && iterable !== T_ERROR) {
     if (ctx.table.isArray(iterable)) {
@@ -807,6 +921,18 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   const local = ctx.program.nodeLocals[decl.id]
   if (local !== null) {
     local.typedArray = elementSpelling(typedArraySpelling(ctx, stmt.children[1], scope))
+  }
+  // A pattern's names are read from the element each pass, as a body's first
+  // declarations would be; only an array's elements are read that way.
+  const binding = (stmt.children[0].flags & FLAG_CONST) === 0
+  if (pattern && walked !== null) {
+    ctx.error(
+      decl.children[0],
+      "A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body"
+    )
+    declarePatternNames(ctx, decl, outer, binding, T_ERROR)
+  } else if (pattern) {
+    checkPatternNames(ctx, decl, outer, binding, element, stmt.children[1])
   }
   keySteadyVariables(ctx, list, [stmt.children[2]])
   flowHead(ctx, flow, scope, outer)
@@ -1078,13 +1204,15 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
 const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
   // WP49: `const [a, b] = await awaitAll(...)` is the checker's to decide.
   const awaitAll = owner.kind === NodeKind.Var && (owner.flags & FLAG_CONST) !== 0 && isAwaitAllShape(decl)
-  if (decl.children[0].kind === NodeKind.BindingPattern && !awaitAll) {
-    ctx.error(
-      decl,
-      owner.kind === NodeKind.ModuleConst
-        ? "Destructured constants are not supported"
-        : "Destructuring is not supported"
-    )
+  const pattern = decl.children[0]
+  if (pattern.kind === NodeKind.BindingPattern && !awaitAll) {
+    if (owner.kind === NodeKind.ModuleConst) {
+      ctx.error(decl, "Destructured constants are not supported")
+    } else if (awaitsInitializer(decl)) {
+      ctx.error(decl, "Destructuring is not supported")
+    } else {
+      refusePattern(ctx, pattern)
+    }
   } else if (
     owner.kind === NodeKind.ModuleConst &&
     decl.children[1].kind !== NodeKind.Empty &&
@@ -1095,6 +1223,30 @@ const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
       decl.children[1],
       `Function \`${name}\` takes its signature from the arrow; drop the annotation on \`${name}\``
     )
+  }
+}
+
+/**
+ * The slots of a local's destructuring pattern no type decides: a default
+ * (NL2772), a rest (NL2773), a nested pattern (NL2774) and a key that is not
+ * a field's name (NL2775). Each is refused where it is written.
+ */
+const refusePattern = (ctx: CheckContext, pattern: Node): void => {
+  for (const slot of pattern.children) {
+    const name = slot.kind === NodeKind.Property ? slot.children[0] : slot
+    const flags = slot.flags | name.flags
+    if ((flags & FLAG_REST) !== 0) {
+      ctx.error(slot, "A rest element in a destructuring pattern is not supported; read each element you need by name")
+    } else if ((flags & FLAG_COMPUTED) !== 0) {
+      ctx.error(slot, "A destructuring key must be a field's name, not a computed or quoted key")
+    } else if (name.kind === NodeKind.BindingPattern) {
+      ctx.error(name, "A nested destructuring pattern is not supported; bind the inner value to a name and destructure that")
+    } else if ((flags & FLAG_DEFAULT) !== 0) {
+      ctx.error(
+        slot,
+        "A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take"
+      )
+    }
   }
 }
 
@@ -1234,7 +1386,7 @@ const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): bool
   if (isMapOwner(info)) {
     ctx.error(
       stmt.children[1],
-      `\`for...of\` over \`${ctx.table.typeName(iterable)}\` needs \`entries()\`, whose \`[key, value]\` pairs need destructuring, which this version does not have: walk \`keys()\` or \`values()\` instead, as in \`for (const k of ${ctx.textOf(unwrapParens(stmt.children[1]))}.keys())\``
+      `\`for...of\` over \`${ctx.table.typeName(iterable)}\` needs \`entries()\`, whose \`[key, value]\` pairs are two-type tuples, which this version does not have: walk \`keys()\` or \`values()\` instead, as in \`for (const k of ${ctx.textOf(unwrapParens(stmt.children[1]))}.keys())\``
     )
     return true
   }

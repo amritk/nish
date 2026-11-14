@@ -43,7 +43,7 @@
 // the composer, which this row tells by setting `walk.instanceChoice`.
 
 import { isSortInstance } from "./arrays"
-import { Operands, Walk } from "./emit-ts-edits"
+import { Operands, splice, Walk } from "./emit-ts-edits"
 import { FLAG_GATHERED, FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
@@ -627,7 +627,70 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
       return newRow(walk, node, operands)
     case NodeKind.Member:
       return processArgv(walk, node)
+    case NodeKind.VarDecl:
+      return checkedPattern(walk, node, operands)
+    case NodeKind.ForOf:
+      return checkedPatternHead(walk, node, operands)
     default:
       return null
   }
+}
+
+/**
+ * The `idx(t, 0), idx(t, 2)` an array pattern's reads need, for `t`: one
+ * per index the bounds walk did not prove, in the pattern's order, so the
+ * first one out of range panics as the native read of it does. Node would
+ * bind `undefined` past the end instead. Empty for an object pattern, or
+ * where every read is proven.
+ */
+const patternChecks = (walk: Walk, decl: Node, t: string): string => {
+  let checks = ""
+  for (let i = 3; i < decl.children.length; i++) {
+    const read = decl.children[i].children[2]
+    if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
+      checks = `${checks}${walk.helperName("idx")}(${t}, ${read.children[1].text}), `
+    }
+  }
+  return checks
+}
+
+/** `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t, 2), t))(xs)`. */
+const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
+  // A `for...of` head's has no value of its own: `checkedPatternHead`.
+  if (node.children[0].kind !== NodeKind.BindingPattern || node.children[2].kind === NodeKind.Empty) {
+    return null
+  }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, node, t)
+  if (checks.length === 0) {
+    return null
+  }
+  operands.texts[2] = `((${t}) => (${checks}${t}))(${operands.at(2)})`
+  operands.changed[2] = true
+  return splice(walk, node, operands)
+}
+
+/**
+ * `for (const [a, b] of rows)`, each element checked as it is reached:
+ * `rows` walked through `(function* (r) { for (const t of r) yield (idx(t,
+ * 0), idx(t, 1), t) })(rows)`, which reads `rows` as the loop does.
+ */
+const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const head = node.children[0]
+  if (head.kind !== NodeKind.Var || head.children[0].children.length === 0) {
+    return null
+  }
+  const decl = head.children[0].children[0]
+  if (decl.children[0].kind !== NodeKind.BindingPattern) {
+    return null
+  }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, decl, t)
+  if (checks.length === 0) {
+    return null
+  }
+  const rows = walk.temporary()
+  operands.texts[1] = `(function* (${rows}) { for (const ${t} of ${rows}) yield (${checks}${t}) })(${operands.at(1)})`
+  operands.changed[1] = true
+  return splice(walk, node, operands)
 }

@@ -1,0 +1,1 @@
+A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take
