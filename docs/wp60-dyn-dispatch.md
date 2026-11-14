@@ -1,8 +1,8 @@
 # WP60: Dynamic dispatch over interfaces — designed and measured
 
 **Status: designed and measured; nothing built.** This note recommends a
-construct and a scoped ship in four stages, the third gated on its own timing
-(§8, §9). Every program it measured lives
+construct in four stages: stage 1 ships now, and stages 2 and 3 are each
+gated on their own build's timing (§8, §9). Every program it measured lives
 in §12 and was not committed. [LANGUAGE.md](LANGUAGE.md) stays normative. The
 anchors are at `e0a1661e`. Part of #1583.
 
@@ -57,9 +57,11 @@ calls — a tagged reference held as an `i32` tag and a pointer, one dispatcher
 per (module, set, method) built by WP51's place solver, the escape-join
 refusal with `this` as an argument, and the debug-build tag check. Measured in
 the shapes stage 2 can write (§3.6), it is 0.72x the hand `kind` + `switch` in
-geomean over 15 cases, and 47 ms against the hand registry's 91, but one case,
-a set of two chosen at random per call, runs at 2.21x, past the 1.25x line its
-gate draws: stage 2 lands when its own build passes that gate, and declines
+geomean over 15 cases, and 47 ms against the hand registry's 91 (both wins
+are LLVM merging the selecting `switch` with the dispatch, which a hand
+program that dispatched once would get too: not a property of `Dyn`, §3.6),
+but one case, a set of two chosen at random per call, runs at 2.21x, past the
+1.25x line its gate draws: stage 2 lands when its own build passes that gate, and declines
 otherwise. **Stage 3, a `Dyn<I>` in a field, an array element, a `Map` value
 or a `Result` payload, is gated too.** Its form, one pointer-sized word with
 the tag in bits the address does not use, meets I5 on x86_64, aarch64 and
@@ -75,7 +77,11 @@ stays static.
   hand program in geomean over 15 cases of 2 to 16 classes (strategy 1.01x,
   periodic 0.37x, aperiodic 1.00x), 0.22x at best and 2.21x at worst (the
   aperiodic set of two), against a ±3.3% band; on a 13-class, 4-method registry,
-  47 ms against the hand program's 91 (94 for its byte-identical copy). §3.3's
+  47 ms against the hand program's 91 (94 for its byte-identical copy). The
+  periodic rows' 0.37x and the registry's halving are one LLVM merge of two
+  jump tables into one, which the hand program written to dispatch once would
+  also get (§3.6): they bound nothing in `Dyn`'s favour, and the claim this
+  note makes for stage 2 is only that it is no slower than the gate allows. §3.3's
   0.98x over 25 cases is a different form: 20 of its cases read the tag from a
   side `i32[]` beside the objects (1.02x; the ten array rows 1.03x) and only
   the five serial-aperiodic cases take it from a register (0.84x); §3.5's
@@ -115,15 +121,15 @@ The seven decisions, each with the alternatives it beat:
 | D4 | Sets and dispatchers (§2.4) | Per-place sets, solved by WP51's `RefPass` (`src/fnref-places.ts`, `solve` `:680`); one dispatcher per (set, method); a set of one compiles to the direct call; the sets are known before the whole-program passes (WP51 §2.4) | **One set per interface** (every class that `implements I`): a call that only ever sees one class pays a `switch` over all of them. **One dispatcher per call site**: the same `switch` emitted N times, and N copies for the inliner to weigh. |
 | D5 | Escape-join refusal (§2.5) | Per method and per parameter, with `this` as parameter 0: a call whose set holds a member whose method keeps an argument and one whose method does not is a compile error | **Join** (every call keeps what any member keeps): case B's cost, silently, at every call (§4). **Split the call by tag at the call site**: a `switch` in every caller, which is the hand program with the type hiding it. |
 | D6 | Boundaries (§2.6) | A `Dyn<I>` never crosses the C ABI or a host-visible signature (as NL2733 refuses a function reference); it may sit in a `Result` arm as the tagged word; it crosses `spawn` and `parallelMap` when every member of its set may | **A C spelling** (`struct { int32_t tag; void *obj; }`): a C caller could hand in a tag no set holds, which breaks the closed set everything rests on. **Refuse it in a `Result`**: a function that may fail could not return one, so every fallible factory (`parse(): Result<Dyn<Shape>, E>`) would return the hand program instead; the payload slot is a reference's, so nothing is gained by the refusal. **A `Result` payload as the fat pair**: a second payload layout in `Result`, for one type. **Refuse it across `spawn` and `parallelMap`**: the tag is a program constant valid in every thread, so the refusal would protect nothing the members' own sendability does not; it would push a worker pool over plugins back to the hand program. **Admit it across threads whatever the members**: a member holding a non-sendable field would cross by the back door. |
-| D7 | Diagnostics (§2.7) | Nine new codes from NL2771 (NL2774 and NL2778 in stage 1, NL2777 in stage 3, the rest in stage 2) and one warning, NL9020, for a set past eight members (as NL9017) | **Reuse WP51's codes** (NL2733, NL2736, NL9017): their words name a function reference and a function; a dyn call's names a class and a method, and a code is a stable identifier an agent keys on. **Reuse NL2048 for stage 1's refusals**: its words, "interfaces describe layout only", stop being true in stage 1, so stage 1's negatives (a call on a plain `I`, a missing or mismatched method) get their own codes and NL2048 narrows to what is not a plain signature (an accessor, `?`, a type parameter; a body is a parse error before it, §9 stage 1). |
+| D7 | Diagnostics (§2.7) | Ten new codes from NL2771 (NL2774, NL2778 and NL2780 in stage 1, NL2777 in stage 3, the rest in stage 2) and one warning, NL9020, for a set past eight members (as NL9017); three existing codes widen (NL2556 in stage 1, NL2353 and NL2766 in stage 3) | **Reuse WP51's codes** (NL2733, NL2736, NL9017): their words name a function reference and a function; a dyn call's names a class and a method, and a code is a stable identifier an agent keys on. **Reuse NL2048 for stage 1's refusals**: its words, "interfaces describe layout only", stop being true in stage 1, so stage 1's negatives (a call on a plain `I`, a missing or mismatched method) get their own codes and NL2048 narrows to what is not a plain signature (an accessor, `?`, a type parameter; a body is a parse error before it, §9 stage 1). |
 
 **The invariants.** Each one names the check that holds it, in the stage that
 lands it (§9).
 
 | # | Invariant | The check |
 | --- | --- | --- |
-| I1 | **Zero cost unused.** A program with no `Dyn` emits the IR it emits today. | `node tests/nish-cmp.js` over the corpus with **no** `DECLARED` entry, in every stage's PR: no stage moves any program's IR. Stage 4 does not touch `std/`; adopting `Dyn` there would move `std/` IR and add `DECLARED` entries, so it is left to later work (§11), outside this work package's I1. |
-| I2 | **Never slower than the hand program.** A call through a `Dyn<I>` costs what the hand `kind` + `switch` costs over the same set, within the noise band. Not yet met in every case by either form. Stage 2's register form is 0.72x in geomean and 2.21x on one case (§3.6); the stored form is 1.11x, 1.18x on arrays (§3.4). Both stages are gated. | Stage 2: the §3.6 programs (`s2/`: strategy, periodic and aperiodic at K = 2, 4, 8, 13, 16, and `reg2`, all of which stage 2 can build) rebuilt with `Dyn<Base>` for the `surface` variant and rerun against the hand programs, and **the stage 2 gate** (§8): the geomean of the 15 cases inside the band or below it, and no case above 1.25x, or stage 2 does not land; §3.3 and §3.5 hold the tag in a side array, a stored place stage 2 refuses, so they are not stage 2's check. A `tests/run.js` IR check that the dispatcher of a set of one is the direct call. Stage 3: the §3.4 rows rerun against its build and **the stage 3 gate** (§8): the geomean of the ten array rows inside the ±2.6% band and no array row above 1.25x, or stage 3 does not land. |
+| I1 | **Zero cost unused.** A program with no `Dyn` emits the IR it emits today, and the same sidecars. | `node tests/nish-cmp.js` over the corpus (its IR and its sidecars) with **no** `DECLARED` entry, in every stage's PR: no stage moves any program's IR. Stage 4 does not touch `std/`; adopting `Dyn` there would move `std/` IR and add `DECLARED` entries, so it is left to later work (§11), outside this work package's I1. |
+| I2 | **Never slower than the hand program.** A call through a `Dyn<I>` costs what the hand `kind` + `switch` costs over the same set, within the noise band. Not yet met in every case by either form. Stage 2's register form is 0.72x in geomean and 2.21x on one case (§3.6); the stored form is 1.11x, 1.18x on arrays (§3.4). Both stages are gated. | Stage 2: the §3.6 programs (`s2/`: strategy, periodic and aperiodic at K = 2, 4, 8, 13, 16, and `reg2`, all of which stage 2 can build) rebuilt with K real classes, `class C0 implements Base` to `C{K-1}`, each with its own `m` (§12.11's `gen.mjs` changed to emit them in place of its functions `g0`..), and `Dyn<Base>` for the `surface` variant, rerun against the hand programs with `python3 bench.py groups.json 7` (§12.7: best of 7, interleaved), which must print `checksums ok` (a mismatch fails the run), and **the stage 2 gate** (§8): the geomean of the 15 cases inside the band or below it, and no case above 1.25x, or stage 2 does not land; §3.3 and §3.5 hold the tag in a side array, a stored place stage 2 refuses, so they are not stage 2's check. A `tests/run.js` IR check that the dispatcher of a set of one is the direct call. Stage 3: the §3.4 rows rerun against its build and **the stage 3 gate** (§8): the geomean of the ten array rows inside the ±2.6% band and no array row above 1.25x, or stage 3 does not land. |
 | I3 | **The escape proof survives.** A `Dyn` call whose set agrees on keeping places its arguments as the hand call does; one whose set disagrees is refused. | `.memory` goldens for case A (stack) and case C (stack, the keeper outside the set), and a negative test for case B (§4, §9). |
 | I4 | **No leak, no growth.** Peak RSS is flat at 1x, 10x and 100x a loop's length, and valgrind finds 0 bytes lost. | The §4 programs rerun by stage 2's PR; valgrind over every variant, case A, B and C and the registry forms, as this note ran it (`v/run.sh`, §12.10: 183 binaries, 0 bytes in use at exit, 0 errors); stage 3 adds a 1M-slot array at 1x/10x/100x and an `NISH_ASAN` run (LeakSanitizer and the tagged word, §10). |
 | I5 | **No layout surprise.** In the brief's words: "A field or element of the dynamic type is no larger than the hand program's tag plus reference; padding reported by the existing layout warning is the same or better." No class, plain interface or union changes size. Met on x86_64, aarch64 and wasm32 by the tagged word (§2.3), wasm32's for an interface with at most 7 classes converted to `Dyn` (more is NL2777). | A `tests/run.js` probe, "WP60: Dyn layout", added by stage 3: it compiles a class with one `Dyn` field, one with two, and their hand twins (a `kind` field's place taken by nothing, the reference by the class) with `nish --target` for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` and `wasm32-unknown-wasi`, reads each class's size from the `.ll` as LLVM computes it (`opt -O2 -mtriple=<t>` folding a gep-from-null size function, `l2/probe.ll`'s idiom, §12.8), checks every `Dyn` class equals its hand twin on every target, and checks NL9010's words for the pair are the same. `tests/layout/` cannot serve: it compares a class with its C twin on the host only, and a `Dyn` has no C spelling (NL2772). |
@@ -343,6 +349,24 @@ builds them follows:
   `alloca` is `align 8`), so the low 3 bits are free: wasm32 stores the tag
   there, and an interface that is stored has at most 7 classes converted to
   it on wasm32 (NL2777 names the target), counted as on 64-bit.
+- **Root storage and the other readers of a stored word.** A page module's
+  root tracer (`nish_runtime_root_keep`, `runtime/runtime-wasm.c`) follows
+  only what `holdsPointer` (`src/emit-root.ts:67`–`72`) names: a string, an
+  array, a union or a class. A tagged word is none of them, so a descriptor
+  would skip the field and the slide would release the object it tags; were it
+  treated as a class pointer instead, its low tag bits on wasm32 would point
+  inside an object and the tracer's range check would panic with
+  `NISH_FORGED_POINTER` (`:353`, `:382`). Stage 3 does neither: root storage
+  refuses a `Dyn<I>` anywhere its closure reaches, with NL2766, the code that
+  already refuses "an interface a class implements" (the same polymorphic
+  reference, `rootFault` in `src/module-storage.ts:385`–`396`), its words
+  gaining `` a `Dyn` ``. Lifting that is a later change and needs a fifth
+  descriptor kind: a flag in `holdsPointer`, the untag (`& ~7` on wasm32, the
+  only target with root storage) in the tracer, and one class descriptor per
+  tag, as kind 3 has per union variant. The word's other readers are closed by
+  the refusals already listed: `--emit-header` and the C ABI (NL2772), the
+  typed-JSON sidecars and `jsonRefusal` (NL2486), and a `Map` key or `Set`
+  element (NL2353).
 - **32-bit references (WP48).** WP48 measured compressed 32-bit references
   and built neither a whole-program 32-bit mode nor an `i32` pool
   (`docs/roadmap/index.md`, `MASTER_PLAN.md` row 48), so no 64-bit target has
@@ -528,7 +552,13 @@ cannot carry a `Dyn` (§2.6). So for a local, a parameter or a return the IR is
 the IR of the same program written with `Circle`, which stage 2's
 `tests/run.js` check "dyn: a set of one is the direct call" pins by diffing
 the two programs' `.ll`, one with a `Dyn` parameter and one with a `Dyn`
-local. For a stored place it is not identical: the field,
+local. In both programs `Circle` declares `implements Shape` and `Shape`
+keeps its method signature: only the `Dyn<Shape>` spellings differ. That is
+what makes byte equality a fair claim: `fieldTbaa` (`src/tbaa.ts:137`) tags
+no field access of a class that implements an interface, so a twin whose
+`Circle` dropped `implements Shape` would carry `!tbaa` on every field access
+and differ for a reason that is not `Dyn`'s, and a twin without `Shape` would
+lose its `%struct.Shape` definition. For a stored place it is not identical: the field,
 element or `Map` value still holds a tagged word, so a store tags and a load
 untags (an `add` and an `and` the hand program does not have); stage 3's
 `.ll` golden `dyn_field_set_of_one` records that IR rather than claiming
@@ -628,10 +658,16 @@ next free number when it lands.
 | NL2777 | a stored place (a field, an array element, a `Map` value, a `Result` payload) of `Dyn<I>` in a program that converts more than 255 classes to `Dyn<I>`, or 7 on wasm32, whatever the place's own set (§2.3) | `` `shapes` stores a `Dyn<Shape>`, and this program converts 300 classes to `Dyn<Shape>`, more than the 255 a stored one can tag; keep `Dyn<Shape>` in locals, parameters and returns, or convert fewer classes to it `` (on wasm32, `7` and `on wasm32`) | 3 |
 | NL2778 | `implements I` where the class lacks one of `I`'s methods, or declares it with another signature | `` `Hexagon` declares `implements Shape` but has no method `area(): f64` `` | 1 |
 | NL2779 | a `Dyn<I>` stored in a field, an array element, a `Map` value or a `Result` payload, before stage 3 lands (§1, §8) | `` a `Dyn<Shape>` lives in locals, parameters and returns: storing one in `shapes` is not supported yet; keep the class's own `kind` field and `switch` on it `` | 2 (lifted by 3) |
+| NL2780 | an interface that declares a method used as its own type argument for `<T extends I>`, written or inferred (§9 stage 1) | `` `Shape` cannot be `T` in `<T extends Shape>`: `Shape` declares methods, and a call through `T` runs a class's method, so `T` is a class that declares `implements Shape` `` | 1 |
 | NL9020 | a call whose set passes eight classes (as NL9017) | `` this call of `area` through `Dyn<Shape>` can reach 13 classes, more than eight, so it branches on a `switch` of them where a direct call would not; they came in through ... `` | 2 |
 
 NL2048 keeps its number and narrows to an interface member that is not a
-plain method signature (§9 stage 1).
+plain method signature (§9 stage 1). Three existing codes widen rather than
+gain a sibling, because the rule each states is the same rule: NL2556 (an
+object literal typed as something with methods) takes an interface that
+declares a method in stage 1; NL2353 (a `Map` key or `Set` element) and
+NL2766 (root storage) take a `Dyn<I>` in stage 3, each word list gaining
+`` a `Dyn` ``.
 
 ## 3. The measurements
 
@@ -1177,8 +1213,9 @@ None crosses (§2.6). A real C callback or C-side vtable is
 needs none first: the compiler's own dispatch is central `switch`es on node
 kinds (`docs/wp14-selfhost.md` §3a D2), which is the lowering this proposal
 generates; whether a release after should rewrite one as a `Dyn` is a
-readability question, not a speed one, since §3 measures the lowering at the
-hand `switch`'s cost.
+readability question, not a speed one, since §3.6 measures its register form
+(a `Dyn` made where its class is known, the form a local `Dyn` in `src/`
+would take) at 0.72x of the hand `switch` in geomean.
 
 ## 6. What leaned on "interfaces describe layout only" and "every method call names one symbol"
 
@@ -1200,12 +1237,14 @@ what the proposal does to it.
 | `src/fnref-places.ts`, `src/fnrefs.ts`, `src/emit-fnrefs.ts` | sets, dispatchers and the tag check for function references | WP51 | generalised to a member that is a class's method (stage 2) |
 | [LANGUAGE.md](LANGUAGE.md) "Classes" (`:3070`–`3082`) | "every method call in a program names exactly one symbol and there is nothing for a vtable to decide" | the rule users read | true of every call but one through a `Dyn`, which names a dispatcher (stage 2 rewrites the sentence) |
 | LANGUAGE.md "Method dispatch is static" (`:14229`–`14233`) | "every method call in a program names one symbol" | the performance model | gains the `Dyn` case and its cost (stage 2) |
-| LANGUAGE.md `:262` (types table), `:3271` (constraints), `:6230`, `:16102` | a class is a struct with no header and no vtable; constraints | the layout table | unchanged: no class gains a header; a row for `Dyn<I>` is added (stage 2) |
+| LANGUAGE.md `:262` (types table), `:3271` (constraints) | a class is a struct with no header and no vtable; constraints | the layout table | unchanged: no class gains a header; a row for `Dyn<I>` is added (stage 2) |
+| LANGUAGE.md `:6230`, `:16102` | quote NL2048's words, "interfaces describe layout only" | the diagnostic index | rewritten to NL2048's narrowed words (stage 1) |
+| [guide from-typescript](guide/getting-started/from-typescript.md) `:330`; [guide classes-and-interfaces](guide/language/classes-and-interfaces.md) `:4`, `:78`, `:100`; [AI.md](AI.md) `:1784` | an interface holds fields only, never methods | users and agents | rewritten to admit method signatures and `<T extends I>` (stage 1) |
 | LANGUAGE.md `:8478`–`8500` (arrays of records) | an array of an interface is inline records, unless a class implements it, when it is a pointer per slot — "the language's only polymorphic container" | arrays | unchanged; `Dyn<I>[]` is a second polymorphic container, one tagged word (8 bytes, the hand array's) a slot (stage 3) |
 | LANGUAGE.md `:12794` (`Map` values) | a value is anything but `void` and an interface | `Map` | unchanged for `I`; `Dyn<I>` is admitted as a value (stage 3) |
 | [IR_COOKBOOK.md](IR_COOKBOOK.md) `:628` | a constrained generic is monomorphised | the cookbook | gains a `Dyn` entry beside it (stage 2) |
 | [AI.md](AI.md) `:205`, `:294`, `:712` | no inheritance; dispatch is a `switch`; constraints | agents writing Nish | gains the `Dyn` idiom and when to prefer `<T extends I>` (stage 4) |
-| [guide classes-and-interfaces](guide/language/classes-and-interfaces.md) `:4`, `:236` | interfaces are shapes; constraints | users | a section on `Dyn` (stage 4) |
+| [guide classes-and-interfaces](guide/language/classes-and-interfaces.md) `:236` | constraints | users | a section on `Dyn` (stage 2, which ships the construct a user sees: CLAUDE.md's "the user guide moves with the language") |
 | [wp2-classes.md](wp2-classes.md) `:18`, `:120`–`138`; [roadmap/wp2-classes.md](roadmap/wp2-classes.md) `:15` | no vtable, by design | the history | historical notes; unchanged |
 | [wp15-performance.md](wp15-performance.md) `:49`, `:60` | static dispatch as a speed property | the performance case | holds for every program without `Dyn` (I1) |
 | [wp18-generics.md](wp18-generics.md) `:295` | constraints monomorphise | D2 | holds (D2) |
@@ -1266,7 +1305,9 @@ neither lands yet.**
   escape proof intact (§4: case B's 5.9x and 764 MB is a compile error,
   NL2771), the debug tag check, and a stored `Dyn<I>` refused with NL2779,
   whose words name what to write instead. It lands when its PR rebuilds §3.6's
-  programs with `Dyn<Base>` and passes **the stage 2 gate**: over the 15
+  programs with K real classes `C{i} implements Base` and `Dyn<Base>`,
+  times them with `python3 bench.py groups.json 7` (§12.7), which must print
+  `checksums ok`, and passes **the stage 2 gate**: over the 15
   strategy, periodic and aperiodic cases, the geomean of surface over hand
   inside the band or below it, and no case above 1.25x; `reg2` reported beside
   them. On §3.6's modelled surface the geomean passes (0.72x) and one case
@@ -1314,15 +1355,72 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
   (NL2778); `<T extends I>` calls them on `T`; a method call on a plain `I` is
   NL2774, naming `<T extends I>`.
 - Code: `refuseMembers` (`src/statements.ts:1111`) admits a signature;
-  `checkImplements` (`src/structs.ts:1231`) and `implementsDeclaration`
-  (`src/generics.ts:3201`) read methods; the method lookup on a constrained
-  `T` reads the interface's signatures.
+  the interface collector (`src/structs.ts:1178`–`1182`, which keeps only
+  fields) records the signatures; `checkImplements` (`src/structs.ts:1231`)
+  and `implementsDeclaration` (`src/generics.ts:3201`) read methods;
+  `satisfiesConstraint` (`src/generics.ts:3175`–`3185`) refuses a
+  method-bearing interface as its own argument (NL2780, reported by
+  `checkConstraints`, `src/generics.ts:3218`, the one caller, for function
+  and class templates alike); NL2556's check (`src/members.ts:1003`, whose
+  `STRUCT_CLASS` test goes; words at `:742`) widens to such an interface; the method lookup on a
+  constrained `T` reads the interface's signatures. The comments that say an
+  interface holds only fields are rewritten with it: `src/parser.ts:2883`
+  and `:2963`, and `src/statements.ts:1107`.
+- Rule, the ways a value of an interface that declares a method comes to
+  exist. A method is only ever called on a `T` bound to a class, so a plain
+  `I` value is harmless wherever it comes from, provided it can never become
+  that `T`. Each way in:
+  - A class instance converted to `I` (a class that `implements I`): admitted;
+    a call on it is NL2774.
+  - `I` itself as the type argument of `<T extends I>`, written
+    (`area<Shape>(s)`) or inferred from an argument typed `I`: refused,
+    NL2780 (new). Today `satisfiesConstraint`
+    (`src/generics.ts:3175`–`3185`) answers `info === want ||
+    implementsDeclaration(info, want)`, so the interface satisfies its own
+    constraint; the instantiation `area$$Shape` would reach `emitMethodCall`
+    with no callee bound and stop with an internal error (`emitter: no method
+    recorded for ...`, `src/emit-classes.ts:447`–`449`). Stage 1 keeps
+    `info === want` for an interface that declares only fields (WP18's
+    `gen_constraint` relies on it) and refuses it for one that declares a
+    method. Words: `` `Shape` cannot be `T` in `<T extends Shape>`: `Shape`
+    declares methods, and a call through `T` runs a class's method, so `T` is
+    a class that declares `implements Shape` ``. A constrained type parameter
+    passed on (`<U extends Shape>` calling `area<U>`) is bound to a class by
+    the time it is instantiated, and is checked there.
+  - An object literal typed `I`: refused with NL2556, the rule that already
+    refuses one typed as a class with methods (`classLiteralMessage`,
+    `src/members.ts:742`–`744`, tested at `:1003`), its condition widened to an interface that
+    declares a method. Under Node the literal is a plain object with no
+    method, and `--emit-ts`'s `tsc` would refuse it for the missing member.
+    Interface words: `` `Shape` declares methods, so a `Shape` is made only
+    by `new` of a class that implements it: an object literal would be a
+    plain object under Node, with none of the methods. Write `new Circle(...)`
+    for a class that `implements Shape` `` (the class named is the first that
+    implements `Shape`, or `a class` when none does). `src/codes.ts`'s NL2556
+    entry gains the interface case.
+  - Typed JSON: already refused, an interface is not a class to `jsonRefusal`
+    (`src/json-typed.ts:1119`–`1123`).
+  - C, the host or `declare function`: a pointer to `I`'s fields, as today.
+    It names no class, and by the two refusals above it can reach no method
+    call.
+  - An inline record (an interface no class implements, `inlineElementStruct`,
+    `src/program.ts:2650`): the same value as above, copied in place; no class
+    exists to call.
 - Tests: `tests/cases/iface_method_sig` (golden `.ll`, `llvm-as`, round trip),
-  `gen_constraint_iface_method` (golden `.ll` byte-identical to the same
-  program constrained by a class), negatives
+  `gen_constraint_iface_method` (golden `.ll`, compared byte for byte by a
+  `tests/run.js` check with `gen_constraint_iface_method_class`'s: the same
+  program, the same `interface Shape` fields and the same `class Circle
+  implements Shape`, but `Shape` declares no method and the function is
+  `<T extends Circle>`; both instantiate only at `Circle`, so both emit
+  `twice$$Circle`, both define `%struct.Shape`, and `fieldTbaa`
+  (`src/tbaa.ts:137`) tags no field access of either, since `Circle`
+  implements an interface in both; a twin without `implements` would carry
+  `!tbaa` and differ for that reason alone), negatives
   `reject_iface_method_optional` (`area?(): i32;`, NL2048), `reject_iface_method_on_plain`
   (NL2774), `reject_implements_method_missing` and
-  `reject_implements_method_signature` (NL2778).
+  `reject_implements_method_signature` (NL2778), `reject_iface_as_own_type_arg`
+  (NL2780, written and inferred) and `reject_iface_method_literal` (NL2556,
+  the interface words).
 - NL2048 narrows. Stage 1 admits a plain signature, `m(params): R;`, and NL2048
   keeps refusing every other method form the parser reads in an interface: an
   accessor, an optional `m?()` and a type parameter `m<T>()`. Its words become
@@ -1332,7 +1430,7 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
   body never reaches the checker: `parseMethodSignature`
   (`src/parser.ts:2969`–`2987`) pushes an empty body and eats only `;` or `,`
   (`eatMemberSeparator`, `:2811`), so the `{` falls to `` an interface holds
-  only annotated fields `` (`:2934`). Stage 1 leaves the parser alone: a body
+  only annotated fields `` (`this.fail` at `:2903` and `:2932`). Stage 1 leaves the parser alone: a body
   stays that parse error, `tests/wordings/parser_refusals.txt` gains no entry,
   and the parser oracle sees no change. Only the comment above the call
   (`:2934`–`2935`, "for the checker to refuse (NL2048)") is rewritten to say
@@ -1360,8 +1458,11 @@ verdict moves, and `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`) and
   adds words to a code stage 1 introduces. Stage 3 flips stage 2's own NL2779
   negatives (below).
 - Invariants: I1 (nish-cmp, 0 `DECLARED`).
-- Docs: LANGUAGE.md "Interfaces" and "Constraints"; IR_COOKBOOK "Constrained
-  generics"; guide `classes-and-interfaces.md`; `docs/reference/` regenerated
+- Docs: LANGUAGE.md "Interfaces" and "Constraints", and its NL2048 quotes
+  (`:6230`, `:16102`); IR_COOKBOOK "A constrained type parameter"
+  (`docs/IR_COOKBOOK.md:620`); guide `classes-and-interfaces.md` (`:4`, `:78`,
+  `:100`) and `getting-started/from-typescript.md` (`:330`); `docs/AI.md`
+  (`:1784`); `docs/reference/` regenerated
   (`node scripts/gen-reference.mjs`) for the LANGUAGE.md and NL2048 changes.
   `--emit-ts` needs nothing new: an interface method signature is already
   TypeScript, and the stage's round trips run under Node through it.
@@ -1380,7 +1481,8 @@ stage 2 gate (§8).**
   (§5.1).
 - Tests: `dyn_call` (golden `.ll` holding a `$dyn.` dispatcher with a member
   `default` arm), `dyn_set_of_one` (golden `.ll` equal, names aside, to
-  `dyn_set_of_one_direct`'s: a set of one is a direct call, §2.4),
+  `dyn_set_of_one_direct`'s: a set of one is a direct call, §2.4; in both
+  `Circle` declares `implements Shape`, so `fieldTbaa` tags neither),
   `dyn_eq`, `dyn_return`; the round trips with expected stdout, each also run
   under Node through `--emit-ts`; `.memory` goldens `dyn_escape_a` (stack) and
   `dyn_escape_c` (stack, the keeper outside the set); negatives
@@ -1417,7 +1519,9 @@ on the stage 3 gate (§8), after stage 2.**
   field, `Dyn<I>[]`, a `Map` value, `Dyn<I> | null` (the 0 word), a `Result`
   arm, across `spawn` and `parallelMap`; a stored place of `Dyn<I>` in a
   program that converts more than 255 classes to `Dyn<I>` (7 on wasm32) is
-  NL2777, however few of them reach the place (§2.3).
+  NL2777, however few of them reach the place (§2.3). Root storage refuses a
+  `Dyn<I>` its closure reaches (NL2766, §2.3 "Root storage"), so the root
+  tracer and `holdsPointer` (`src/emit-root.ts:67`–`72`) are unchanged.
 - Tests: `dyn_field`, `dyn_field_two`, `dyn_field_set_of_one` (a stored set of
   one is still a word: its tag is 1, and the call is direct), `dyn_array`,
   `dyn_map_value`, `dyn_nullable`, `dyn_result`, `dyn_spawn`;
@@ -1428,8 +1532,13 @@ on the stage 3 gate (§8), after stage 2.**
   classes converted to `Dyn<I>` in locals, and one field whose own set holds
   two of them) and `reject_dyn_wide_stored_wasm32` (the same with 8 classes,
   built for wasm32),
-  `reject_dyn_map_key`, `reject_dyn_set_element`, `reject_dyn_json`,
-  `reject_dyn_spawn_unsendable`.
+  `reject_dyn_map_key` and `reject_dyn_set_element` (NL2353, whose words gain
+  `` a `Dyn` `` beside "an interface"), `reject_dyn_json` (NL2486: a `Dyn` is
+  not a class to typed JSON), `reject_dyn_spawn_unsendable` (the member's own
+  refusal, §2.6: the test's member is an object of the spawner's region,
+  NL2673), and `reject_dyn_root_storage` (NL2766: a root class with a
+  `Dyn<Shape>` field, and one reaching it through a nested class's field;
+  §2.3, "Root storage").
 - Tests that flip: stage 2's `reject_dyn_stored_field`,
   `reject_dyn_stored_array` and `reject_dyn_stored_map` are admitted, and are
   deleted (`dyn_field`, `dyn_array` and `dyn_map_value` cover the same
@@ -1466,6 +1575,13 @@ on the stage 3 gate (§8), after stage 2.**
   variants reported 0 errors and 0 leaks, but those programs free what they
   allocate; stage 3 runs `NISH_ASAN` over a program that keeps its objects
   live only through `Dyn<I>[]` and records what LSan says.
+- **A reader of memory that does not know the word.** Any code that walks a
+  stored object by its type, the root tracer first (§2.3, "Root storage"),
+  sees a `Dyn<I>` field as a scalar unless taught otherwise, and drops the
+  object it tags. Stage 3 refuses a `Dyn` in root storage (NL2766) and in every
+  other walker named in §2.3, pins it with `reject_dyn_root_storage`, and
+  `src/emit-root.ts`'s `traceFail` stays the backstop for a type with no
+  descriptor.
 - **The stored form costs time the hand program does not.** The tagged word
   matches the hand program's memory to the byte (1M-element array: 25948 KB
   peak RSS for hand, tagged word and union alike; the 16-byte form 16 MiB
