@@ -922,21 +922,23 @@ export class JsonTokenizer {
       i += 1
     }
     while (true) {
-      while (run && i >= 0 && i < JSON_TOK_END_CEILING && i + 8 <= to && i + 8 <= n) {
-        const word: u64 = jsonTokLoad8(src, i)
-        if (!jsonTokEightDigits(word)) {
-          break
+      if (run) {
+        while (i >= 0 && i < JSON_TOK_END_CEILING && i + 8 <= to && i + 8 <= n) {
+          const word: u64 = jsonTokLoad8(src, i)
+          if (!jsonTokEightDigits(word)) {
+            break
+          }
+          mantissa = mantissa * toU64(100000000) + jsonTokParseEight(word)
+          i += 8
         }
-        mantissa = mantissa * toU64(100000000) + jsonTokParseEight(word)
-        i += 8
-      }
-      while (run && i >= 0 && i < to && i < n) {
-        const digit: i32 = toI32(src[i]) - JSON_TOK_DIGIT_0
-        if (digit < 0 || digit > 9) {
-          break
+        while (i >= 0 && i < to && i < n) {
+          const digit: i32 = toI32(src[i]) - JSON_TOK_DIGIT_0
+          if (digit < 0 || digit > 9) {
+            break
+          }
+          mantissa = mantissa * toU64(10) + toU64(digit)
+          i += 1
         }
-        mantissa = mantissa * toU64(10) + toU64(digit)
-        i += 1
       }
       if (fractionAt >= 0 || jsonTokByteAt(src, i, end) !== JSON_TOK_DOT) {
         break
