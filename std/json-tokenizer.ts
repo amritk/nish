@@ -912,7 +912,16 @@ export class JsonTokenizer {
     }
     while (true) {
       if (run) {
-        while (i >= 0 && i < JSON_TOK_END_CEILING && i + 8 <= to && i + 8 <= n) {
+        // A run shorter than eight digits, most of a document's, ends
+        // before its eighth byte: that one byte is read first, and only a
+        // run that reaches it pays for the eight-byte read and check.
+        while (
+          i >= 0 &&
+          i < JSON_TOK_END_CEILING &&
+          i + 8 <= to &&
+          i + 8 <= n &&
+          jsonTokIsDigit(toI32(src[i + 7]))
+        ) {
           const word: u64 = jsonTokLoad8(src, i)
           if (!jsonTokEightDigits(word)) {
             break

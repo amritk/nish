@@ -35696,20 +35696,21 @@ function JsonTokenizer.number(this: JsonTokenizer, at: i32): i32 -> @nish.JsonTo
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish.JsonTokenizer.numberRefused nish.jsonTokByteAt nish.jsonTokEightDigits nish.jsonTokIsDigit nish.jsonTokLoad8 nish.jsonTokParseEight nish_panic_overflow
   pointer this: size=112 writesThrough=true captured=false passedTo=nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.numberRefused#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local -87:11 src: u8[] (const)
-  local -86:11 end: i32 (const)
-  local -85:9 i: i32 (let)
-  local -84:11 negative: boolean (const)
-  callee -84:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local -80:11 digitsAt: i32 (const)
-  local -79:11 first: i32 (const)
-  callee -79:24 jsonTokByteAt -> @nish.jsonTokByteAt
-  callee -77:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
-  local -70:11 n: i32 (const)
-  local -69:11 to: i32 (const)
-  local -68:9 mantissa: u64 (let)
-  local -67:9 fractionAt: i32 (let)
-  local -66:9 run: boolean (let)
+  local -96:11 src: u8[] (const)
+  local -95:11 end: i32 (const)
+  local -94:9 i: i32 (let)
+  local -93:11 negative: boolean (const)
+  callee -93:31 jsonTokByteAt -> @nish.jsonTokByteAt
+  local -89:11 digitsAt: i32 (const)
+  local -88:11 first: i32 (const)
+  callee -88:24 jsonTokByteAt -> @nish.jsonTokByteAt
+  callee -86:14 JsonTokenizer.numberRefused -> @nish.JsonTokenizer.numberRefused
+  local -79:11 n: i32 (const)
+  local -78:11 to: i32 (const)
+  local -77:9 mantissa: u64 (let)
+  local -76:9 fractionAt: i32 (let)
+  local -75:9 run: boolean (let)
+  callee -61:11 jsonTokIsDigit -> @nish.jsonTokIsDigit
   local -59:17 word: u64 (const)
   callee -59:29 jsonTokLoad8 -> @nish.jsonTokLoad8
   callee -58:16 jsonTokEightDigits -> @nish.jsonTokEightDigits
