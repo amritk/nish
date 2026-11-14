@@ -951,8 +951,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **111,016 bytes** (+8) by the reset budget (H3-9,
  * `docs/security/http3.md`): the `resetCredit` an `Http3Connection` charges each
  * request reset against, which the clock's fields had left no padding for.
+ *
+ * Moved to **111,088 bytes** (+72) by CUBIC (RFC 9438): recovery's controller
+ * choice and its eight CUBIC fields (the window before the last reduction, K,
+ * the epoch start, the Reno-friendly estimate and its carry, the step carry,
+ * the prior window and the idle start).
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111016
+export const HTTP3_SERVER_SLOT_BYTES = 111088
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
