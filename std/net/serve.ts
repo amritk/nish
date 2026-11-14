@@ -1246,7 +1246,8 @@ class ServeConns {
     }
     const r: HttpRequest = this.reqs[s]
     if (len > 0 && !bodiless) {
-      let taken: i32 = conn.write(body, 0, len)
+      const start: i32 = 0
+      let taken: i32 = conn.write(body, start, len)
       if (taken === H1_AGAIN) {
         taken = 0
       } else if (taken < 0) {
@@ -1297,7 +1298,7 @@ class ServeConns {
       this.send(
         s,
         gen,
-        405,
+        toI32(405),
         this.allowNames,
         this.allowValues,
         this.notAllowed,
@@ -1305,7 +1306,15 @@ class ServeConns {
       )
       return
     }
-    this.send(s, gen, 404, this.problemNames, this.problemValues, this.notFound, toI32(this.notFound.length))
+    this.send(
+      s,
+      gen,
+      toI32(404),
+      this.problemNames,
+      this.problemValues,
+      this.notFound,
+      toI32(this.notFound.length)
+    )
   }
 
   /** Answers slot `s`'s exchange at `gen` with the problem body `body` as `status`. */
