@@ -4173,39 +4173,87 @@ export const isLockMethod = (sig: FunctionSig): boolean =>
   sig.decl.kind === NodeKind.Method &&
   sig.decl.children[0].text === "lock"
 
-// ---- Atomics: `AtomicI32` and `AtomicI64` ------------------------------------------------
+// ---- Atomics: `AtomicI32`, `AtomicI64` and their arrays ----------------------------------
 //
-// An atomic is a class of one scalar whose methods the emitter writes as one
-// sequentially consistent instruction each (`emitAtomicBody`). It reaches a
-// task as a `Mutex` does, by its argument or a capture, and R7 holds of it as
-// of a lock; an atomic method's write is not a shared one, so a task and a
-// data-parallel body may make it beside the guarded store and the send.
+// An atomic is a class of one scalar, or of one array of them, whose methods
+// the emitter writes as one sequentially consistent instruction each
+// (`emitAtomicBody`), on the word or on the element the index names. It
+// reaches a task as a `Mutex` does, by its argument or a capture, and R7 holds
+// of it as of a lock; an atomic method's write is not a shared one, so a task
+// and a data-parallel body may make it beside the guarded store and the send.
 
-/** The two classes `nish/threads` declares for atomics. */
+/** The four classes `nish/threads` declares for atomics. */
 const ATOMIC_I32: string = "AtomicI32"
 const ATOMIC_I64: string = "AtomicI64"
+const ATOMIC_I32_ARRAY: string = "AtomicI32Array"
+const ATOMIC_I64_ARRAY: string = "AtomicI64Array"
 
 /**
- * Mark `info` as an atomic when it is `AtomicI32` or `AtomicI64` and `program`
- * is `nish/threads` itself, as the class is collected. The package is part of
- * the test, as `isThreadsModule`'s is: a root-package `std/threads.ts` that
- * declares an `AtomicI32` declares an ordinary class, whose bodies run as they
- * are written.
+ * Mark `info` as an atomic when it is `AtomicI32`, `AtomicI64` or an array of
+ * either and `program` is `nish/threads` itself, as the class is collected.
+ * The package is part of the test, as `isThreadsModule`'s is: a root-package
+ * `std/threads.ts` that declares an `AtomicI32` declares an ordinary class,
+ * whose bodies run as they are written.
  */
 export const markAtomicClass = (program: CheckedProgram, info: StructInfo): void => {
   if (
     info.kind === STRUCT_CLASS &&
-    (info.name === ATOMIC_I32 || info.name === ATOMIC_I64) &&
+    (info.name === ATOMIC_I32 ||
+      info.name === ATOMIC_I64 ||
+      info.name === ATOMIC_I32_ARRAY ||
+      info.name === ATOMIC_I64_ARRAY) &&
     isThreadsModule(program)
   ) {
     info.atomic = true
   }
 }
 
-/** Whether `info` is `nish/threads`'s `AtomicI32` or `AtomicI64`. */
+/** Whether `sig` is a method of an `AtomicI32Array` or an `AtomicI64Array`, whose index is checked. */
+export const isAtomicArrayMethod = (sig: FunctionSig): boolean => {
+  const owner = sig.owner
+  return isAtomicMethod(sig) && owner !== null && owner.field("values") !== null
+}
+
+/**
+ * Whether `sig` is the constructor of an `AtomicI32Array` or an
+ * `AtomicI64Array`, whose `new Array` the emitter places on its own cache
+ * lines (`emitNewArray`).
+ */
+export const isAtomicArrayConstructor = (sig: FunctionSig | null): boolean => {
+  if (sig === null) {
+    return false
+  }
+  const owner = sig.owner
+  return (
+    isAtomicClass(owner) && sig.role === ROLE_CONSTRUCTOR && owner !== null && owner.field("values") !== null
+  )
+}
+
+/** Whether `info` is one of `nish/threads`'s atomics. */
 const isAtomicClass = (info: StructInfo | null): boolean => info !== null && info.atomic
 
-/** Whether `type` is an `AtomicI32` or an `AtomicI64`. */
+/**
+ * Whether `name` is a field of the atomic `type` a program may read: one
+ * declared `readonly`, an array's `length`, which no method writes.
+ */
+const isAtomicReadonlyField = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  name: string
+): boolean => {
+  const info = classLayoutOf(program, table, type)
+  if (info !== null) {
+    for (const field of info.fields) {
+      if (field.name === name) {
+        return field.readonly
+      }
+    }
+  }
+  return false
+}
+
+/** Whether `type` is one of the atomics. */
 const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isAtomicClass(classLayoutOf(program, table, type))
 
@@ -4280,7 +4328,8 @@ const atomicMemberMessage = (name: string): string =>
 
 const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
   `\`${table.typeName(type)}\` is a class of \`nish/threads\`, and its objects are made only as the module ` +
-  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
+  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, " +
+  "`new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
   "An object literal would be a plain record under Node, with none of the methods the class is used through"
 
 const lockNotUsingMessage = (name: string, mutex: string): string =>
@@ -4882,7 +4931,10 @@ const walkMutexes = (
     node.kind === NodeKind.Member &&
     isAtomicType(program, table, program.nodeTypes[node.children[0].id])
   ) {
-    if (!called) {
+    if (
+      !called &&
+      !isAtomicReadonlyField(program, table, program.nodeTypes[node.children[0].id], node.text)
+    ) {
       out.push(new ScopeFinding(node, atomicMemberMessage(node.text)))
       return
     }

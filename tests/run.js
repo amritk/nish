@@ -16267,6 +16267,91 @@ if (dealtHere("arrayChecks")) {
     )
   }
 
+  // ---- Self-recursive checked sums ------------------------------------------------
+  // A function whose recursive returns are `X + self(...)` is one loop whose overflow
+  // check panics where the recursion would (src/emit-accumulate.ts). acc_overflow's cases 0-3
+  // each overflow one add of the recursion, and the loop must panic as the recursion
+  // did; acc_soundness' two divide-by-zero cases must panic as theirs do, though an
+  // overflow is pending; acc_ineligible's sums must stay recursion.
+  if (!only || "acc_".includes(only) || only.startsWith("acc")) {
+    const accLl = path.join(buildDir, "acc_overflow.ll")
+    const accExe = path.join(buildDir, "acc_overflow")
+    const linked = fs.existsSync(accLl) ? linkNative(accExe, accLl) : null
+    if (linked !== null && linked.status === 0) {
+      const failed = []
+      for (let k = 0; k < 4; k++) {
+        const run = spawnSync(accExe, [String(k)], { encoding: "utf8" })
+        if (run.status !== 1 || !run.stderr.includes("attempt to add with overflow") || run.stdout !== "") {
+          failed.push(`case ${k}: ${shown(run)}`)
+        }
+      }
+      check(
+        'acc_overflow: cases 0-3 each exit 1 with "attempt to add with overflow" and print nothing',
+        failed.length === 0,
+        failed.join("\n")
+      )
+    } else if (linked !== null) {
+      check("acc_overflow: links", false, String(linked.stderr))
+    }
+    // acc_effects' `noisy` calls before its first test, so the loop tests each step
+    // ahead of that call: the panicking run prints every line once, in order.
+    const effectsLl = path.join(buildDir, "acc_effects.ll")
+    const effectsExe = path.join(buildDir, "acc_effects")
+    const effectsLinked = fs.existsSync(effectsLl) ? linkNative(effectsExe, effectsLl) : null
+    if (effectsLinked !== null && effectsLinked.status === 0) {
+      const run = spawnSync(effectsExe, ["1"], { encoding: "utf8" })
+      check(
+        'acc_effects: noisy(3, 1000000000) prints "at 3" to "at 0" once each, then exits 1 with "attempt to add with overflow"',
+        run.status === 1 && run.stderr.includes("attempt to add with overflow") && run.stdout === "at 3\nat 2\nat 1\nat 0\n",
+        shown(run)
+      )
+    } else if (effectsLinked !== null) {
+      check("acc_effects: links", false, String(effectsLinked.stderr))
+    }
+    // acc_soundness' cases 0 and 1 divide by zero after steps whose sum has passed MAX.
+    const soundLl = path.join(buildDir, "acc_soundness.ll")
+    const soundExe = path.join(buildDir, "acc_soundness")
+    const soundLinked = fs.existsSync(soundLl) ? linkNative(soundExe, soundLl) : null
+    if (soundLinked !== null && soundLinked.status === 0) {
+      const failed = []
+      for (let k = 0; k < 2; k++) {
+        const run = spawnSync(soundExe, [String(k)], { encoding: "utf8" })
+        if (run.status !== 1 || !run.stderr.includes("attempt to divide by zero") || run.stdout !== "") {
+          failed.push(`case ${k}: ${shown(run)}`)
+        }
+      }
+      check(
+        'acc_soundness: cases 0 and 1 each exit 1 with "attempt to divide by zero" and print nothing',
+        failed.length === 0,
+        failed.join("\n")
+      )
+    } else if (soundLinked !== null) {
+      check("acc_soundness: links", false, String(soundLinked.stderr))
+    }
+    const looped = (name) => {
+      const ll = path.join(casesDir, `${name}.ll`)
+      return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8").split("\nrec.head:").length - 1 : -1
+    }
+    check(
+      "acc_: fib, the tree sum, the shapes and the overflow chain are each one loop",
+      ["acc_fib", "acc_tree", "acc_shapes", "acc_overflow"].every((name) => looped(name) === 1),
+      ["acc_fib", "acc_tree", "acc_shapes", "acc_overflow"].map((name) => `${name}: ${looped(name)}`).join(", ")
+    )
+    const effects = path.join(casesDir, "acc_effects.ll")
+    const effectsText = fs.existsSync(effects) ? fs.readFileSync(effects, "utf8") : ""
+    check(
+      "acc_effects: three loops, one testing ahead of its header's call (rec.body) and two folding the test into its branch (rec.exit)",
+      effectsText.split("\nrec.head:").length === 4 &&
+        effectsText.split("\nrec.body:").length === 2 &&
+        effectsText.split("\nrec.exit:").length === 3
+    )
+    check("acc_soundness: each of its six sums is a loop", looped("acc_soundness") === 6, String(looped("acc_soundness")))
+    check(
+      "acc_ineligible: no sum it holds, in either number mode, becomes a loop",
+      looped("acc_ineligible") === 0 && looped("acc_ineligible_f64") === 0
+    )
+  }
+
   // ---- Ranged integers (WP31) ------------------------------------------------------
   // A value that leaves `integer<Lo, Hi>` at an entry panics (exit 1) with the range
   // on stderr, before the line after it prints. The f64 twin is the one the
@@ -31985,7 +32070,9 @@ const runFixtureUnderNode = (entry, encoding) =>
 // And the atomics: `thread_atomic_tasks`, whose named, arrow and void tasks
 // update one `AtomicI32` and one `AtomicI64` with commuting operations and a
 // `compareExchange` loop, and `par_atomic`, whose four data-parallel bodies
-// each make an atomic update their one shared write. Every update commutes,
+// each make an atomic update their one shared write, and their array twins
+// `thread_atomic_array` and `par_atomic_array`, which update elements of one
+// `AtomicI32Array` and one `AtomicI64Array`. Every update commutes,
 // so spawn order, iteration order and the pool's threads print the same.
 // `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
 // sibling scopes of one `using` whose tasks reach locks or atomics each made
@@ -32072,10 +32159,12 @@ for (const name of [
   "thread_task_void",
   "thread_atomic_tasks",
   "thread_atomic_unreached",
+  "thread_atomic_array",
   "thread_sibling_disjoint_mutex",
   "thread_sibling_disjoint_mutex_types",
   "thread_sibling_disjoint_atomics",
   "par_atomic",
+  "par_atomic_array",
   "thread_task_string",
   "par_map_string",
   "thread_channel_string",
@@ -32375,7 +32464,8 @@ if (!only || "thread_mutex".includes(only)) {
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
 // `thread_channel_ctor_reads` is the carrier whose constructor reads and
-// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
+// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic`, and
+// their array twins `thread_atomic_array` and `par_atomic_array`, pin that
 // an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
 // lower for wasm32, a module without shared memory, where its tasks run in turn.
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
@@ -32405,6 +32495,8 @@ for (const name of [
   "std_sqlite_wasi",
   "thread_atomic_tasks",
   "par_atomic",
+  "thread_atomic_array",
+  "par_atomic_array",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",

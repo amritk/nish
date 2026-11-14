@@ -118,13 +118,15 @@ the tree unchanged. `matchTree` is the tree alone, for a test of exactly that.
 
 <scalar-detail title="What is unchecked">
 
-`routerSameRange` reads with `nish:unsafe`'s
-`uncheckedGet`, and has one caller: `staticRoute` compares a path `add`
-stored with the start of the target. The stored range is inside
-`staticPaths` because only `add` writes that private array and nothing
-removes a byte; the target range is the one `enter` panics on when it is
-outside `target`. Every other read is checked, the method compare in
-`enter` included, since the method arrays are public.
+`routerSameBytes` reads with `nish:unsafe`'s
+`uncheckedGet`, after one check that both ranges are inside their arrays;
+a range that is not compares unequal, as a byte that differs does. It is
+the one byte compare a lookup makes: a method of more than seven bytes
+against each known one (a shorter one is one packed word, `routerMethodKey`),
+a path against a static route's, a segment against a label.
+`routerMethodKey` reads its at most seven bytes the same way, after the same
+one range check; a range outside the array packs to 0, which no method is.
+Every other read is checked.
 
 </scalar-detail>
 

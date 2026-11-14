@@ -59,6 +59,8 @@ on the 0.16.0 run in BENCHMARKS.md (2026-10-05) fib is 1.68x Rust by default
 and at parity under `--wrapping` (564 ms by default, 338 under `--wrapping`,
 Rust 336), because every `+` in its
 recursion now carries an overflow check the bounds walk cannot prove away.
+[Self-recursive checked sums as a loop](#self-recursive-checked-sums-as-a-loop)
+brought it back: 0.99x and 1.06x of Rust on two interleaved runs.
 The other six are within 1.10x. On a shared VM the medians sit 15–20 % above the minima, and the
 ratios move by about that much between back-to-back runs. **A row near 1.10x
 needs several runs, or cachegrind, before it means anything.** Nish binaries
@@ -112,6 +114,37 @@ measurement made `nsw` the default in WP15 §3, with `--wrapping` to opt out.
 #426 then made unproven overflow a checked panic. The bounds walk still proves
 the sieve's counters and keeps `nsw` on them, which preserves the win the flag
 was measured for. The `opt_nsw` golden now pins that default.
+
+### Self-recursive checked sums as a loop
+
+A function whose recursive returns are `X + self(args)` over the checked `i32`
+`+` (fib, a tree sum) is emitted as one loop (`src/accumulate.ts` records it,
+`src/emit-accumulate.ts` writes it). LLVM's tail-recursion elimination does
+this only for a plain `add`; `llvm.sadd.with.overflow` and its branch defeat
+it, which is what made fib 1.68x Rust after #426. The loop's header carries
+the previous partial sum and the last `X` as phis and tests their signs: while
+every `X` and every partial sum is non-negative, the sum the recursion would
+build from the base outwards is monotone, so one checked add at the base is
+exact. A step whose sign test fails hands itself to one ordinary call of the
+function and adds the call's answer with checked adds, so where the recursion
+would overflow the program panics at the same add, with the same output. A
+recursion deep enough to exhaust the stack is the one difference: the loop
+completes it, or makes its cold call only every 2^31 or so steps. The proof is
+the header comment of `src/emit-accumulate.ts`.
+
+- **fib(40)**: 1.68x → 0.99x and 1.06x of Rust (Nish 329 / 348 ms minima
+  against Rust 333 / 329 on two interleaved `bench/run.mjs --runs 15` runs).
+  The two Nish minima are one binary and differ by 6 %, which is the band:
+  the loop is at parity with Rust, not ahead of it.
+- **Tree sum** (a depth-20 tree of class nodes, summed 60 times, `return
+  t.value + sum(t.left) + sum(t.right)`): median 318 ms → 191 ms, 15
+  interleaved runs; two copies of the new binary differ by 191 against
+  179 ms, so the band is about 6 %.
+
+`tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
+effects, the soundness shapes (permuted arguments, a nested split, a panic
+other than overflow while one is pending) and the sums that stay recursion; `--no-elision` drops the records, so the soundness differential
+compares each such function with its plain recursive self.
 
 ### `dereferenceable(24)` on array parameters and returns
 

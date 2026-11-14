@@ -3917,7 +3917,7 @@ answer the same natively and under Node:
   object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
   `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
   Node, without the methods, and is refused with
-  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
   (NL2515, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
   `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
   `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
@@ -4015,15 +4015,111 @@ author's obligation, as it is for a `Mutex`'s critical sections; the checker
 does not try to prove it.
 
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
-round into 256 bins, four rounds, on four tasks. On a four-core machine, over
-seven interleaved rounds whose seeds move every round, the medians are: each
-task counting into a local tally and adding it with one `add` per bin, 24 ms
-(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
-thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
-value, 677 ms (28× slower), because every increment contends for a cache line
-another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+round into one `AtomicI32Array` of 256 bins, four rounds, on four tasks. On a
+four-core machine, over seven interleaved rounds whose seeds move every round,
+the medians are: each task counting into a local tally and adding it with one
+`add` per bin, 29 ms (a byte-identical copy of it, the noise band, 23 ms; the
+two copies' runs 22–49 ms); one thread binning into plain counters, 80 ms
+(2.8× slower); one atomic `add` per value, 554 ms (19× slower), because every
+increment contends for a cache line another core is writing; and one `Mutex`
+taken per value, 2,155 ms. An atomic
 is far cheaper than a lock and still far dearer than a counter no other core
 touches: update it once per batch, not once per value.
+
+## Atomic arrays: `AtomicI32Array` and `AtomicI64Array`
+
+An atomic array is `length` atomic counters in one contiguous buffer. It is
+`AtomicI32` (or `AtomicI64`) with the element's index first: every method of
+the one has a twin on the other, with the same meaning, the same ordering and
+the same rules, R1, R7 and R8 above, and the same one shared write a task or a
+parallel body may make. Where an `AtomicI32[]` is one object per counter, each
+its own allocation, so sixteen counters land on several cache lines that the
+cores writing them pass back and forth, an `AtomicI32Array(16)` is sixteen
+adjacent `i32`s in 64 contiguous bytes, which is the layout Rust's
+`[AtomicI32; 16]` and Go's `[16]atomic.Int32` have. The buffer starts on a
+64-byte boundary at least one line into its own allocation, which ends past the
+line the last element is on, so no other object shares a line with the
+elements, the lines the counters' writers fight over.
+
+```typescript
+import { AtomicI32Array, AtomicI64Array, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32Array;
+  constructor(xs: i32[], bins: AtomicI32Array) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    s.bins.add(x & 3, 1);            // one indivisible add on element x & 3
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins = new AtomicI32Array(4);   // four counters in one buffer, each 0
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const bytes = new AtomicI64Array(2);
+  const one: i64 = 1;
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => {
+    bytes.add(x & 1, one);             // the one shared write a body may make
+    return x;
+  });
+  console.log(`${bins.load(0)} ${bins.load(1)} ${bins.length} ${bytes.load(1)}`); // 2 2 4 2
+  return 0;
+};
+```
+
+- **The methods.** `load(i)` and `store(i, v)`; `add(i, n)`, `sub(i, n)`,
+  `min(i, v)`, `max(i, v)` and `exchange(i, v)`, each answering the value
+  element `i` held before it; and `compareExchange(i, expected, desired)`.
+  `length` is a `readonly` field, fixed by `new AtomicI32Array(n)`, which
+  makes `n` elements, each `0`; a negative `n` stops the program as
+  `new Array` of one does. `AtomicI64Array` is the same over `i64`, its index
+  still an `i32`.
+- **An index is checked as an array index is**: one out of range stops the
+  program with `index out of range: 16 >= 16` and exit status 1, and never
+  touches memory outside the buffer (`tests/link/atomic_array_out_of_range`).
+  The check is an ordinary one, which the prover may discharge.
+- **Natively each method is the bounds check and then one instruction** on a
+  `getelementptr` into the buffer: a `load atomic` or `store atomic ...
+  seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a
+  `cmpxchg ... seq_cst seq_cst`, aligned to the element (`align 4`,
+  `align 8`); no element is an object of its own, so there is no per-element
+  pointer to load (`tests/link/thread_atomic_array`, whose `threads.ll` is the
+  lowering; docs/IR_COOKBOOK.md, "an atomic array").
+- **Under Node each method is the plain operation** on an element of an
+  ordinary array, exact for the reason an `AtomicI32`'s is, with the same
+  ±2^53 limit on an `AtomicI64Array`'s elements.
+- **The rules are `AtomicI32`'s.** Its buffer, `values`, is a field no program
+  may name (R1, NL2514, `reject_atomic_array_member_read`,
+  `reject_atomic_array_member_store`), and a method named without a call is
+  refused as any class's is (`reject_atomic_array_member_unbound`); `length`
+  is assigned only by the constructor
+  (`reject_atomic_array_length_store`); an object literal of either class is
+  refused by NL2515 (`reject_atomic_array_literal`); the parent does not
+  touch one a scope's tasks reach before the scope joins (R7, NL2513,
+  `reject_atomic_array_region_direct`); the tasks of sibling scopes share none
+  (NL2516, `reject_atomic_array_sibling_load`); and a parallel body may update
+  one and write nothing else shared
+  (`reject_atomic_array_par_shared_write`, `tests/link/par_atomic_array`).
+
+Choose an atomic array over an `AtomicI32[]` when the counters are many or hot
+— a histogram's bins, a counter per route or per worker — and an `AtomicI32`
+for one counter, or for counters that live in different objects. A counter no
+other core writes is still cheaper than either: count into a task's own tally
+and add it once per batch, as the example under "Atomics" does.
 
 ## Channels: `Channel<T>`
 

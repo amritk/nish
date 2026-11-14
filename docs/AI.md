@@ -1340,6 +1340,12 @@ export const main = (): i32 => {
 - **Add once per batch**: count into a local array, then one `add` per bin.
   One `add` per value makes the cores wait on each other.
 - **`AtomicI64` takes `i64` values**, exact under Node within ±2^53.
+- **Many counters — a histogram, a count per route — go in one atomic
+  array**: `new AtomicI32Array(16)` (or `AtomicI64Array`) is 16 counters in
+  one buffer, each `0`; every method takes the index first,
+  `bins.add(b, 1)`, `bins.load(b)`, and checks it as an array index. Prefer it
+  to an `AtomicI32[]`, whose counters are separate objects on separate cache
+  lines. Same rules as above.
 
 ```ts nish:err NL2513
 import { AtomicI32, scope } from "nish/threads";

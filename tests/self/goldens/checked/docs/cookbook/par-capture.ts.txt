@@ -8,6 +8,8 @@ unsafe import 73:10 wrappingAdd from "nish:unsafe"
 unsafe import 73:23 wrappingSub from "nish:unsafe"
 unsafe call 579:18 wrappingAdd (node 1394)
 unsafe call 591:18 wrappingSub (node 1424)
+unsafe call 851:22 wrappingAdd (node 1896)
+unsafe call 865:22 wrappingSub (node 1934)
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 const MIN_STACK: i32 = 131072
@@ -35,6 +37,30 @@ struct AtomicI64 (class) size=8 align=8 exported
   method max -> @nish.AtomicI64.max
   method exchange -> @nish.AtomicI64.exchange
   method compareExchange -> @nish.AtomicI64.compareExchange
+struct AtomicI32Array (class) size=16 align=8 exported
+  field length: i32 index=0 offset=0 readonly
+  field values: i32[] index=1 offset=8
+  constructor -> @nish.AtomicI32Array.constructor
+  method load -> @nish.AtomicI32Array.load
+  method store -> @nish.AtomicI32Array.store
+  method add -> @nish.AtomicI32Array.add
+  method sub -> @nish.AtomicI32Array.sub
+  method min -> @nish.AtomicI32Array.min
+  method max -> @nish.AtomicI32Array.max
+  method exchange -> @nish.AtomicI32Array.exchange
+  method compareExchange -> @nish.AtomicI32Array.compareExchange
+struct AtomicI64Array (class) size=16 align=8 exported
+  field length: i32 index=0 offset=0 readonly
+  field values: i64[] index=1 offset=8
+  constructor -> @nish.AtomicI64Array.constructor
+  method load -> @nish.AtomicI64Array.load
+  method store -> @nish.AtomicI64Array.store
+  method add -> @nish.AtomicI64Array.add
+  method sub -> @nish.AtomicI64Array.sub
+  method min -> @nish.AtomicI64Array.min
+  method max -> @nish.AtomicI64Array.max
+  method exchange -> @nish.AtomicI64Array.exchange
+  method compareExchange -> @nish.AtomicI64Array.compareExchange
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i32.f64 nish_ceil
@@ -151,6 +177,110 @@ function AtomicI64.exchange(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64
 function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64): i64 -> @nish.AtomicI64.compareExchange [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i64 (const)
+function AtomicI32Array.constructor(this: AtomicI32Array, length: i32): void -> @nish.AtomicI32Array.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: length
+  calls: nish_panic
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32Array.load(this: AtomicI32Array, i: i32): i32 -> @nish.AtomicI32Array.load [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32Array.store(this: AtomicI32Array, i: i32, value: i32): void -> @nish.AtomicI32Array.store [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32Array.add(this: AtomicI32Array, i: i32, delta: i32): i32 -> @nish.AtomicI32Array.add [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i32 (const)
+function AtomicI32Array.sub(this: AtomicI32Array, i: i32, delta: i32): i32 -> @nish.AtomicI32Array.sub [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i32 (const)
+function AtomicI32Array.min(this: AtomicI32Array, i: i32, value: i32): i32 -> @nish.AtomicI32Array.min [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i32 (const)
+function AtomicI32Array.max(this: AtomicI32Array, i: i32, value: i32): i32 -> @nish.AtomicI32Array.max [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i32 (const)
+function AtomicI32Array.exchange(this: AtomicI32Array, i: i32, value: i32): i32 -> @nish.AtomicI32Array.exchange [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i32 (const)
+function AtomicI32Array.compareExchange(this: AtomicI32Array, i: i32, expected: i32, desired: i32): i32 -> @nish.AtomicI32Array.compareExchange [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i32 (const)
+function AtomicI64Array.constructor(this: AtomicI64Array, length: i32): void -> @nish.AtomicI64Array.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: length
+  calls: nish_panic
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64Array.load(this: AtomicI64Array, i: i32): i64 -> @nish.AtomicI64Array.load [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64Array.store(this: AtomicI64Array, i: i32, value: i64): void -> @nish.AtomicI64Array.store [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64Array.add(this: AtomicI64Array, i: i32, delta: i64): i64 -> @nish.AtomicI64Array.add [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i64 (const)
+function AtomicI64Array.sub(this: AtomicI64Array, i: i32, delta: i64): i64 -> @nish.AtomicI64Array.sub [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i64 (const)
+function AtomicI64Array.min(this: AtomicI64Array, i: i32, value: i64): i64 -> @nish.AtomicI64Array.min [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i64 (const)
+function AtomicI64Array.max(this: AtomicI64Array, i: i32, value: i64): i64 -> @nish.AtomicI64Array.max [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i64 (const)
+function AtomicI64Array.exchange(this: AtomicI64Array, i: i32, value: i64): i64 -> @nish.AtomicI64Array.exchange [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 old: i64 (const)
+function AtomicI64Array.compareExchange(this: AtomicI64Array, i: i32, expected: i64, desired: i64): i64 -> @nish.AtomicI64Array.compareExchange [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 old: i64 (const)
 function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.13.affine$arrow0 [exported instance]

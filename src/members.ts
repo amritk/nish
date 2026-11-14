@@ -749,7 +749,7 @@ const classLiteralMessage = (name: string): string =>
   `with none of the methods the class is used through. Write \`new ${name}(...)\``
 
 /** Whether an object literal has a `...s` among its properties. */
-const hasSpread = (expr: Node): boolean => {
+export const hasSpread = (expr: Node): boolean => {
   for (const prop of expr.children) {
     if (prop.kind === NodeKind.Spread) {
       return true

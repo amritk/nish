@@ -44,7 +44,7 @@ import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-ut
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
-import { isChannelReader, isGuardedAccess } from "./parallel"
+import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
@@ -1118,6 +1118,40 @@ const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: N
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
 }
 
+/**
+ * Address of element `idx` (an i64 value) of the array field `field` of the
+ * object at `receiver`, whose class is `info`, once `idx` is checked against
+ * the array's length as `a[i]`'s is: an atomic array's method reaches its
+ * element through this (`emitAtomicBody`). A plain field's header is `arr`,
+ * which the caller loaded; a boxed or inline one is read in place, as
+ * `inlineFieldBase` reads it.
+ */
+export const checkedFieldElement = (
+  emitter: Emitter,
+  info: StructInfo,
+  receiver: string,
+  field: FieldInfo,
+  arr: string,
+  idx: string
+): string => {
+  emitter.declareType(ARRAY_TYPE)
+  let base = new ArrayBase(arr, null)
+  if (field.boxed || field.inline()) {
+    base = new ArrayBase(
+      field.boxed
+        ? slicePointer(emitter, info, receiver, field)
+        : inlineHeaderPointer(emitter, info, receiver, field),
+      null
+    )
+    base.slice = field.boxed
+    base.owner = info
+    base.receiver = receiver
+    base.field = field
+  }
+  emitRangeCheck(emitter, idx, baseLength(emitter, base))
+  return elementPointer(emitter, base, emitter.table.refOf(field.type), idx)
+}
+
 /** A header's 24 bytes from the arena, its fields not yet stored. */
 const arenaHeader = (emitter: Emitter): string => {
   const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
@@ -1174,6 +1208,25 @@ const emitData = (emitter: Emitter, site: Node, elem: i32, count: i32, bytes: st
     return emitter.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`)
   }
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`)
+}
+
+/**
+ * An atomic array's elements (docs/IR_COOKBOOK.md, "an atomic array"): `bytes`
+ * from the arena, starting on a 64-byte boundary with at least one whole line
+ * of slack before and after them. Every task writes the elements and reads the
+ * header and the object beside them on each update; on one line, each write
+ * would evict the line every other thread is reading. The slack is never
+ * named, and the arena takes it back with the rest.
+ */
+const emitLineData = (emitter: Emitter, bytes: string): string => {
+  const fn = emitter.fn
+  const room = fn.emitValue(`add i64 ${bytes}, 192`)
+  const raw = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${room})`)
+  const at = fn.emitValue(`ptrtoint i8* ${raw} to i64`)
+  const back = fn.emitValue(`sub i64 0, ${at}`)
+  const gap = fn.emitValue(`and i64 ${back}, 63`)
+  const offset = fn.emitValue(`add i64 ${gap}, 64`)
+  return fn.emitValue(`getelementptr inbounds i8, i8* ${raw}, i64 ${offset}`)
 }
 
 const storeData = (emitter: Emitter, arr: string, data: string): void => {
@@ -1323,7 +1376,9 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   if (count < 0 && emitter.isStackSite(expr)) {
     process.exit(internalErrorFor("emitter: a stack array whose length is not a literal", emitter.opts.json))
   }
-  const data = emitData(emitter, expr, elem, count, bytes)
+  const data = isAtomicArrayConstructor(emitter.currentSig)
+    ? emitLineData(emitter, bytes)
+    : emitData(emitter, expr, elem, count, bytes)
   // `sortWith`'s scratch is copied over whole before it is read, and no
   // optimizer pass drops a fill the copy loop then overwrites.
   if (!isSortInstance(emitter.program.activeInstance)) {

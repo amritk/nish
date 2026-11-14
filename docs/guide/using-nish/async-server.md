@@ -7,9 +7,10 @@ gives back a `Response`; `serve` runs the loop, routes each request through a
 every request that arrives whole. While a request's task awaits — a sleep, a
 socket, another service — the server goes on taking and answering others.
 
-It is built on the pull-style [API server](api-server.md) handler, which it
-drives for you: keep-alive, pipelining, chunked bodies, `HEAD`, the timeouts
-and the 404 and 405 answers are the handler's, and behave as that page says.
+It drives the same HTTP/1.1 connections as the pull-style
+[API server](api-server.md) handler, by the same rules: keep-alive,
+pipelining, chunked bodies, `HEAD`, the timeouts and the 404 and 405 answers
+behave as that page says.
 Reach for `nish/net/handler` directly when the program is not `async`, or
 answers every request without waiting on anything.
 
@@ -61,8 +62,10 @@ and does not return while it serves. It answers 0 once it stops (see
 
 ## Reading a request
 
-A `Request` is the task's own copy of the request: reading it never touches
-another request's memory.
+A `Request` is the task's own copy of the request, made before your function
+runs: reading it never touches another request's memory, and it stays
+readable to the end of the task, even after the client hangs up and another
+client's connection takes its place.
 
 | Member | What it gives |
 | --- | --- |

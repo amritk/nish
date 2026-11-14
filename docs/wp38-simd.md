@@ -2774,6 +2774,8 @@ both files.
   N2) cost more, so it stays a lead, and a future attempt would have to
   crack it.
 
+**What was built of S6d's cuts (2026-11-14).** S6d priced them and built none; the tokenize-gap work (#1584) took most of them later, with no index. #1588 added the UTF-8 block check to the string-run kernel. #1590 built A (the integral path in `numberF64`) and N3 (the direct sign read), the one-pass number, and the eight-digit SWAR step. #1600 built G (the innermost container's kind in a field), H2 (the failed state), D (dispatch fused on the byte), E2 (`stringFrom`) and C2 and C (`stringInto`'s whole runs and its no-escape copy). The record in `docs/BENCHMARKS.md`, taken at `fb4b625e` (plus the generator), puts Nish against yyjson on tokenize at **1.64x** on twitter, **1.20x** on citm and **1.34x** on canada, from **2.02x, 1.60x and 2.18x** at `96899c11`. The noise bands on the minimums are 0.3%, 0.1% and 0.3%.
+
 **What S6 does not do.** It does not move the default target (§5), add
 `nish:simd` (S3 stays on its own bar), or touch `std/json`'s older reader,
 which S1 measured. Serialize beyond the escape scan is out of scope: its

@@ -74,7 +74,7 @@ export const constantText = (emitter: Emitter, info: ConstInfo): string => {
 // ---- Integer arithmetic -----------------------------------------------------------
 
 /** The `nish_panic_overflow` argument for each checked operator, in runtime/runtime.c's order. */
-const OVERFLOW_ADD: i32 = 0
+export const OVERFLOW_ADD: i32 = 0
 const OVERFLOW_SUB: i32 = 1
 const OVERFLOW_MUL: i32 = 2
 const OVERFLOW_NEG: i32 = 3
@@ -111,6 +111,30 @@ const emitSignedArith = (
   if (emitter.program.nodeProvenNoOverflow[node.id]) {
     return fn.emitValue(`${opcode} nsw ${ty} ${lhs}, ${rhs}`)
   }
+  return emitCheckedArith(emitter, opcode, ty, lhs, rhs, panicCode)
+}
+
+/**
+ * `lhs <opcode> rhs` over the signed `ty` through its overflow intrinsic,
+ * panicking with `panicCode` when it overflows, whatever is proven about it.
+ *
+ * @param emitter the emitter whose current function gets the code
+ * @param opcode `add`, `sub` or `mul`
+ * @param ty the LLVM integer type
+ * @param lhs the left operand
+ * @param rhs the right operand
+ * @param panicCode the `OVERFLOW_*` code the panic reports
+ * @returns the result's value
+ */
+export const emitCheckedArith = (
+  emitter: Emitter,
+  opcode: string,
+  ty: string,
+  lhs: string,
+  rhs: string,
+  panicCode: i32
+): string => {
+  const fn = emitter.fn
   const pair = fn.emitValue(
     `call { ${ty}, i1 } ${emitter.useRuntime(`llvm.s${opcode}.with.overflow.${ty}`)}(${ty} ${lhs}, ${ty} ${rhs})`
   )
