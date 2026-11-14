@@ -748,6 +748,25 @@ const serveTask = async (
   }
 }
 
+/**
+ * `a` copied into a new array of `n`, the slots past its end set to `fill`.
+ * @param a the array to copy
+ * @param n the new length, at least `a.length`
+ * @param fill the value of each new slot
+ * @returns the grown copy
+ */
+const serveWidened = (a: i32[], n: i32, fill: i32): i32[] => {
+  const b: i32[] = new Array<i32>(n)
+  for (let i: i32 = 0; i < toI32(b.length); i++) {
+    if (i < toI32(a.length)) {
+      b[i] = a[i]
+    } else {
+      b[i] = fill
+    }
+  }
+  return b
+}
+
 /** Wakes the loop every `SERVE_TICK_MS`, so the connections' timeouts run while no socket is ready; ends once the loop stops. */
 const serveTick = async (st: ServeState): Promise<void> => {
   while (!st.stopped) {
@@ -840,7 +859,7 @@ class ServeConns {
   states: i32[]
   /** Each slot's route, as `begin` matched it: what `refuse` answers from once the record is given back. */
   routes: i32[]
-  /** What the output had no room for yet, per slot: `pending[s][pendingStart[s] .. pendingEnd[s])`; slots share `noBytes` until one needs its own. */
+  /** What the output had no room for yet, per slot: `pending[s][pendingStart[s] .. pendingEnd[s])`; slots share `noBytes` until one needs its own. These per-slot arrays grow (`growSlots`) as `acceptAll` first fills a slot. */
   pending: u8[][]
   pendingStart: i32[]
   pendingEnd: i32[]
@@ -888,6 +907,8 @@ class ServeConns {
   owedCount: i32 = 0
   spareCount: i32 = 0
   outputSize: i32 = 0
+  /** The most slots the carrier hands out, `limits.connections`. */
+  slotLimit: i32 = 0
   /** Set once the server stops taking connections and requests. */
   draining: boolean = false
 
@@ -901,18 +922,16 @@ class ServeConns {
     this.router = router
     this.listener = listener
     this.outputSize = config.outputSize
+    this.slotLimit = limits.connections
     this.pool = []
     this.spare = []
-    this.held = new Array<i32>(limits.connections)
-    for (let s: i32 = 0; s < toI32(this.held.length); s++) {
-      this.held[s] = -1
-    }
-    this.states = new Array<i32>(limits.connections)
-    this.routes = new Array<i32>(limits.connections)
+    this.held = []
+    this.states = []
+    this.routes = []
     this.noBytes = []
     this.pending = []
-    this.pendingStart = new Array<i32>(limits.connections)
-    this.pendingEnd = new Array<i32>(limits.connections)
+    this.pendingStart = []
+    this.pendingEnd = []
     this.slotGen = new Array<i32>(limits.connections)
     this.open = new Array<boolean>(limits.connections)
     this.owing = new Array<boolean>(limits.connections)
@@ -1022,9 +1041,10 @@ class ServeConns {
     while (slot >= 0 || slot === H1_POOL_FULL || slot === SERVE_ACCEPT_ABORTED) {
       if (slot >= 0) {
         // The carrier takes a freed slot first, then the next never used,
-        // so a slot's entry is made on its first connection.
-        while (toI32(this.pending.length) <= slot) {
-          this.pending.push(this.noBytes)
+        // so a slot's entries are made on its first connection: a server
+        // sized for many connections pays for the ones it has had.
+        if (slot >= toI32(this.pending.length)) {
+          this.growSlots(slot)
         }
         this.open[slot] = true
         this.states[slot] = SERVE_IDLE
@@ -1129,6 +1149,35 @@ class ServeConns {
   /** Whether the output is at most half full: room for an answer's head behind what is there. */
   roomy(conn: Http1Connection): boolean {
     return (conn.outputEnd - conn.outputStart) * 2 <= this.outputSize
+  }
+
+  /**
+   * Grows the per-slot arrays to cover `slot`: doubling from 64 slots while
+   * few are used, then straight to `slotLimit`. The arena keeps every
+   * outgrown array, so doubling all the way would leave as much again behind.
+   * A server sized for many connections pays for the ones it has had.
+   */
+  growSlots(slot: i32): void {
+    let n: i32 = toI32(this.pending.length) * 2
+    if (n < 64) {
+      n = 64
+    }
+    if (n > 1024 || n > this.slotLimit) {
+      n = this.slotLimit
+    }
+    if (n <= slot) {
+      n = slot + 1
+    }
+    // `pending` grows by push, as on main: an array of arrays is not built
+    // zero-filled.
+    while (toI32(this.pending.length) < n) {
+      this.pending.push(this.noBytes)
+    }
+    this.pendingStart = serveWidened(this.pendingStart, n, 0)
+    this.pendingEnd = serveWidened(this.pendingEnd, n, 0)
+    this.held = serveWidened(this.held, n, -1)
+    this.states = serveWidened(this.states, n, SERVE_IDLE)
+    this.routes = serveWidened(this.routes, n, 0)
   }
 
   /** Takes a spare record, building one only when every built record is held. */
