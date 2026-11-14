@@ -12,9 +12,9 @@ function product(n: i32): i32 -> @product
   calls: nish_panic_overflow product
   stackSites=0 stackLocals=0
   callee +0:14 product -> @product
-function wide(n: i32): i64 -> @wide
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow wide
+function wide(n: i32): u64 -> @wide
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: wide
   stackSites=0 stackLocals=0
   callee +0:21 wide -> @wide
 function noBase(n: i32): i32 -> @noBase
@@ -58,7 +58,7 @@ function digits(n: i32): i32 -> @digits
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: afterLocal callAfter digits lessSelf looped nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 noBase product selfLess wide
+  calls: afterLocal callAfter digits lessSelf looped nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 noBase product selfLess wide
   stackSites=0 stackLocals=0
   local +0:9 endless: i32 (const)
   callee +0:50 noBase -> @noBase
