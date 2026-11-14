@@ -137,9 +137,10 @@ const SERVE_ACCEPT_REST: i64 = 100000000
 const SERVE_BODY_SWEEP: i64 = 1000000000
 /** Nanoseconds a request's body may take to arrive, from its head. */
 const SERVE_BODY_TIMEOUT: i64 = 30000000000
-// `HttpRequest.state` is internal: under `serve` it carries these SERVE_*
-// numbers, which are not `HttpHandler`'s HANDLER_* ones (its FLUSHING is 6,
-// and `serve` has no STREAMING), so the two must not be mixed.
+// A connection slot's exchange state, `ServeConns.states`: these SERVE_*
+// numbers are not `HttpHandler`'s HANDLER_* ones (its FLUSHING is 6, and
+// `serve` has no STREAMING), and `serve` does not keep them in
+// `HttpRequest.state`, since a slot holds no record between exchanges.
 /** A slot's exchange: no request. */
 const SERVE_IDLE: i32 = 0
 /** A slot's exchange: its head is read and its body is arriving. */
@@ -812,11 +813,16 @@ const serveGrown = (have: i32, need: i32): i32 => {
 }
 
 /**
- * The connections: an `Http1Server` driven straight from the loop. Each slot
- * has one `HttpRequest`, reused for each exchange on it, whose head and
- * spans are the parser's own: the parser keeps them until the exchange's
+ * The connections: an `Http1Server` driven straight from the loop. A slot
+ * holds an `HttpRequest` record only from the head's parse to the task's
+ * copy: `begin` takes one from `pool` (building one only when every built
+ * record is held) and the loop gives it back once the task has copied it, or
+ * once it answered 503, or the connection closed first. The record's head
+ * and spans are the parser's own: the parser keeps them until the exchange's
  * answer is sent, and the request's task copies them before it first waits,
- * as `spawn` runs it that far at once. An exchange moves idle → reading →
+ * as `spawn` runs it that far at once. What an exchange needs after the copy
+ * — its state, its route for a 404 or 405, the answer's pending bytes — is
+ * the slot's own, in arrays of a few bytes a slot. An exchange moves idle → reading →
  * (parked →) queued → held → (flushing →) idle; a slot whose connection
  * closes goes idle and its generation moves on, so an answer for it is
  * dropped.
@@ -824,8 +830,21 @@ const serveGrown = (have: i32, need: i32): i32 => {
 class ServeConns {
   server: Http1Server
   router: Router
-  /** Each slot's request, built on the slot's first connection. */
-  reqs: HttpRequest[]
+  /** The request records: each is held by one slot from its head's parse to its task's copy, or is spare. */
+  pool: HttpRequest[]
+  /** The spare records' indices in `pool`, `spare[0 .. spareCount)`, the last given back on top. */
+  spare: i32[]
+  /** Each slot's record's index in `pool`, or -1 while it holds none. */
+  held: i32[]
+  /** Each slot's exchange, one of the SERVE_* states. */
+  states: i32[]
+  /** Each slot's route, as `begin` matched it: what `refuse` answers from once the record is given back. */
+  routes: i32[]
+  /** What the output had no room for yet, per slot: `pending[s][pendingStart[s] .. pendingEnd[s])`; slots share `noBytes` until one needs its own. */
+  pending: u8[][]
+  pendingStart: i32[]
+  pendingEnd: i32[]
+  noBytes: u8[]
   /** Each slot's generation: moves on when its connection closes. */
   slotGen: i32[]
   /** Whether a slot holds a connection the loop accepted and has not forgotten. */
@@ -867,6 +886,7 @@ class ServeConns {
   queueStart: i32 = 0
   queueCount: i32 = 0
   owedCount: i32 = 0
+  spareCount: i32 = 0
   outputSize: i32 = 0
   /** Set once the server stops taking connections and requests. */
   draining: boolean = false
@@ -881,7 +901,18 @@ class ServeConns {
     this.router = router
     this.listener = listener
     this.outputSize = config.outputSize
-    this.reqs = []
+    this.pool = []
+    this.spare = []
+    this.held = new Array<i32>(limits.connections)
+    for (let s: i32 = 0; s < toI32(this.held.length); s++) {
+      this.held[s] = -1
+    }
+    this.states = new Array<i32>(limits.connections)
+    this.routes = new Array<i32>(limits.connections)
+    this.noBytes = []
+    this.pending = []
+    this.pendingStart = new Array<i32>(limits.connections)
+    this.pendingEnd = new Array<i32>(limits.connections)
     this.slotGen = new Array<i32>(limits.connections)
     this.open = new Array<boolean>(limits.connections)
     this.owing = new Array<boolean>(limits.connections)
@@ -952,9 +983,8 @@ class ServeConns {
     if (now >= this.bodyCheckAt) {
       this.bodyCheckAt = now + SERVE_BODY_SWEEP
       for (let s: i32 = 0; s < toI32(this.open.length); s++) {
-        if (this.open[s]) {
-          const r: HttpRequest = this.reqs[s]
-          if (r.state === SERVE_READING && now - r.since > SERVE_BODY_TIMEOUT) {
+        if (this.open[s] && this.states[s] === SERVE_READING && this.held[s] >= 0) {
+          if (now - this.pool[this.held[s]].since > SERVE_BODY_TIMEOUT) {
             this.closeSlot(s)
           }
         }
@@ -974,7 +1004,7 @@ class ServeConns {
     }
     for (let s: i32 = 0; s < toI32(this.open.length); s++) {
       if (this.open[s] && this.server.holds(s)) {
-        if (this.reqs[s].state === SERVE_IDLE && !this.server.connection(s).wantsWrite()) {
+        if (this.states[s] === SERVE_IDLE && !this.server.connection(s).wantsWrite()) {
           this.closeSlot(s)
         } else {
           this.server.connection(s).closeAfter = true
@@ -992,15 +1022,12 @@ class ServeConns {
     while (slot >= 0 || slot === H1_POOL_FULL || slot === SERVE_ACCEPT_ABORTED) {
       if (slot >= 0) {
         // The carrier takes a freed slot first, then the next never used,
-        // so a slot's record is built on its first connection, as its own
-        // buffers are, and a pool that never fills never builds its last.
-        while (toI32(this.reqs.length) <= slot) {
-          const r: HttpRequest = new HttpRequest(toI32(this.reqs.length))
-          r.params = new Array<i32>(2 * this.router.maxParams + 2)
-          this.reqs.push(r)
+        // so a slot's entry is made on its first connection.
+        while (toI32(this.pending.length) <= slot) {
+          this.pending.push(this.noBytes)
         }
         this.open[slot] = true
-        this.reqs[slot].state = SERVE_IDLE
+        this.states[slot] = SERVE_IDLE
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
       }
       slot = this.server.accept()
@@ -1027,12 +1054,12 @@ class ServeConns {
   /** Runs slot `s`'s events until it needs bytes, then owes or makes its send. */
   drive(s: i32): void {
     const conn: Http1Connection = this.server.connection(s)
-    const r: HttpRequest = this.reqs[s]
     let event: i32 = this.server.next(s)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
-        this.begin(s, conn, r)
-      } else if (event === H1_BODY && r.state === SERVE_READING) {
+        this.begin(s, conn)
+      } else if (event === H1_BODY && this.states[s] === SERVE_READING && this.held[s] >= 0) {
+        const r: HttpRequest = this.pool[this.held[s]]
         const n: i32 = conn.dataLength
         const need: i32 = r.bodyLength + n
         if (toI32(r.body.length) < need) {
@@ -1042,28 +1069,29 @@ class ServeConns {
         }
         copyBytes(r.body, r.bodyLength, conn.data, conn.dataStart, n)
         r.bodyLength = need
-      } else if (event === H1_END && r.state === SERVE_READING) {
+      } else if (event === H1_END && this.states[s] === SERVE_READING) {
         if (this.roomy(conn)) {
           this.enqueue(s)
         } else {
-          r.state = SERVE_PARKED
+          this.states[s] = SERVE_PARKED
         }
-      } else if (event === H1_WRITE && r.state === SERVE_FLUSHING) {
-        this.finish(r, conn)
+      } else if (event === H1_WRITE && this.states[s] === SERVE_FLUSHING) {
+        this.finish(s, conn)
       }
       event = this.server.next(s)
     }
     if (event === H1_ERROR) {
       // The carrier has written its refusal and ends the connection.
-      if (r.state === SERVE_READING) {
-        r.state = SERVE_IDLE
+      if (this.states[s] === SERVE_READING) {
+        this.states[s] = SERVE_IDLE
+        this.release(s)
       }
     } else if (
       !this.draining &&
       conn.wantsWrite() &&
       !conn.writeHeld &&
       this.roomy(conn) &&
-      r.state !== SERVE_PARKED
+      this.states[s] !== SERVE_PARKED
     ) {
       // The send waits for the turn's end, to go out with the answers after it.
       if (!this.owing[s]) {
@@ -1086,15 +1114,14 @@ class ServeConns {
       this.closeSlot(s)
       return
     }
-    const r: HttpRequest = this.reqs[s]
-    if (this.draining && r.state === SERVE_IDLE && !conn.wantsWrite()) {
+    if (this.draining && this.states[s] === SERVE_IDLE && !conn.wantsWrite()) {
       this.closeSlot(s)
       return
     }
     if (this.server.rearm(s, wants)) {
       pollModify(this.loop, this.server.fd(s), wants & (H1_WANT_READ | H1_WANT_WRITE), s)
     }
-    if (r.state === SERVE_PARKED && this.roomy(conn)) {
+    if (this.states[s] === SERVE_PARKED && this.roomy(conn)) {
       this.enqueue(s)
     }
   }
@@ -1104,12 +1131,44 @@ class ServeConns {
     return (conn.outputEnd - conn.outputStart) * 2 <= this.outputSize
   }
 
-  /** Points slot `s`'s request at the head the parser read, and routes it. */
-  begin(s: i32, conn: Http1Connection, r: HttpRequest): void {
+  /** Takes a spare record, building one only when every built record is held. */
+  acquire(): i32 {
+    if (this.spareCount > 0) {
+      this.spareCount -= 1
+      return this.spare[this.spareCount]
+    }
+    const r: HttpRequest = new HttpRequest(toI32(this.pool.length))
+    r.params = new Array<i32>(2 * this.router.maxParams + 2)
+    this.pool.push(r)
+    this.spare.push(toI32(0))
+    return r.index
+  }
+
+  /** Gives slot `s`'s record back to the pool, if it holds one: its task has copied it, or nobody will. */
+  release(s: i32): void {
+    const i: i32 = this.held[s]
+    if (i >= 0) {
+      this.held[s] = -1
+      this.spare[this.spareCount] = i
+      this.spareCount += 1
+    }
+  }
+
+  /** Slot `s`'s record; only while it holds one, from `begin` to `release`. */
+  req(s: i32): HttpRequest {
+    return this.pool[this.held[s]]
+  }
+
+  /** Points a record for slot `s` at the head the parser read, and routes it. */
+  begin(s: i32, conn: Http1Connection): void {
     if (this.draining) {
       // A head read during the drain is the connection's last.
       conn.closeAfter = true
     }
+    if (this.held[s] < 0) {
+      this.held[s] = this.acquire()
+    }
+    const r: HttpRequest = this.pool[this.held[s]]
     const p = conn.parser
     r.head = p.head
     r.spans = p.spans
@@ -1123,9 +1182,9 @@ class ServeConns {
     r.slot = s
     r.gen = this.slotGen[s]
     r.since = this.turnAt
-    r.state = SERVE_READING
-    r.pendingStart = 0
-    r.pendingEnd = 0
+    this.states[s] = SERVE_READING
+    this.pendingStart[s] = 0
+    this.pendingEnd[s] = 0
     const router: Router = this.router
     let route: i32 = router.match(
       r.head,
@@ -1154,6 +1213,7 @@ class ServeConns {
       }
     }
     r.route = route
+    this.routes[s] = route
     r.paramCount = route >= 0 ? router.paramCount(route) : 0
     // The router found where the path ends, before any query, as it matched.
     r.pathEnd = router.pathEnd
@@ -1161,7 +1221,7 @@ class ServeConns {
 
   /** Queues slot `s`'s whole exchange for a task. */
   enqueue(s: i32): void {
-    this.reqs[s].state = SERVE_QUEUED
+    this.states[s] = SERVE_QUEUED
     const size: i32 = toI32(this.queue.length)
     if (this.queueCount === size) {
       const grown: i32[] = new Array<i32>(2 * size)
@@ -1197,7 +1257,7 @@ class ServeConns {
     const s: i32 = this.queue[this.queueStart]
     this.queueStart = (this.queueStart + 1) % toI32(this.queue.length)
     this.queueCount -= 1
-    this.reqs[s].state = SERVE_HELD
+    this.states[s] = SERVE_HELD
     return s
   }
 
@@ -1220,13 +1280,14 @@ class ServeConns {
   forget(s: i32): void {
     this.open[s] = false
     this.slotGen[s] = this.slotGen[s] + 1
-    this.reqs[s].state = SERVE_IDLE
+    this.states[s] = SERVE_IDLE
+    this.release(s)
   }
 
   /**
    * Answers slot `s`'s held exchange at generation `gen`, unless its
    * connection closed: the head, `len` bytes of `body` unless the status has
-   * none, the end. What the output cannot take waits in the request's
+   * none, the end. What the output cannot take waits in the slot's
    * `pending` for `H1_WRITE`.
    */
   send(s: i32, gen: i32, status: i32, names: u8[][], values: u8[][], body: u8[], len: i32): void {
@@ -1247,7 +1308,6 @@ class ServeConns {
         `serve: the carrier refused the head (${sent}): a name or value that is not a token or field text`
       )
     }
-    const r: HttpRequest = this.reqs[s]
     if (len > 0 && !bodiless) {
       const start: i32 = 0
       let taken: i32 = conn.write(body, start, len)
@@ -1258,35 +1318,35 @@ class ServeConns {
       }
       if (taken < len) {
         const rest: i32 = len - taken
-        if (toI32(r.pending.length) < rest) {
-          r.pending = new Array<u8>(serveGrown(toI32(r.pending.length), rest))
+        if (toI32(this.pending[s].length) < rest) {
+          this.pending[s] = new Array<u8>(serveGrown(toI32(this.pending[s].length), rest))
         }
-        copyBytes(r.pending, 0, body, taken, rest)
-        r.pendingEnd = rest
+        copyBytes(this.pending[s], 0, body, taken, rest)
+        this.pendingEnd[s] = rest
       }
     }
-    this.finish(r, conn)
+    this.finish(s, conn)
     this.drive(s)
   }
 
   /** Writes what the answer still has pending and ends it; the exchange is over once both are done. */
-  finish(r: HttpRequest, conn: Http1Connection): void {
-    r.state = SERVE_FLUSHING
-    const left: i32 = r.pendingEnd - r.pendingStart
+  finish(s: i32, conn: Http1Connection): void {
+    this.states[s] = SERVE_FLUSHING
+    const left: i32 = this.pendingEnd[s] - this.pendingStart[s]
     if (left > 0) {
-      const taken: i32 = conn.write(r.pending, r.pendingStart, left)
+      const taken: i32 = conn.write(this.pending[s], this.pendingStart[s], left)
       if (taken > 0) {
-        r.pendingStart += taken
+        this.pendingStart[s] += taken
       }
-      if (r.pendingStart < r.pendingEnd) {
+      if (this.pendingStart[s] < this.pendingEnd[s]) {
         return
       }
-      r.pendingStart = 0
-      r.pendingEnd = 0
+      this.pendingStart[s] = 0
+      this.pendingEnd[s] = 0
     }
     // `H1_AGAIN`: no room for the end yet; `H1_WRITE` comes back here.
     if (conn.end() !== H1_AGAIN) {
-      r.state = SERVE_IDLE
+      this.states[s] = SERVE_IDLE
     }
   }
 
@@ -1295,9 +1355,11 @@ class ServeConns {
     if (!this.live(s, gen)) {
       return
     }
-    const r: HttpRequest = this.reqs[s]
-    if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
-      this.allowValues[1] = this.allowFor(r)
+    if (this.routes[s] === ROUTER_METHOD_NOT_ALLOWED) {
+      // The parser still keeps this exchange's head: it reads the next only
+      // once this one is answered.
+      const p = this.server.connection(s).parser
+      this.allowValues[1] = this.allowFor(p.head, p.targetStart, p.targetEnd)
       this.send(
         s,
         gen,
@@ -1325,8 +1387,8 @@ class ServeConns {
     this.send(s, gen, status, this.problemNames, this.problemValues, body, toI32(body.length))
   }
 
-  /** The `allow` value for `r`'s path: the methods with a route for it, and HEAD where GET has one. */
-  allowFor(r: HttpRequest): u8[] {
+  /** The `allow` value for the path `bytes[targetStart .. targetEnd)`: the methods with a route for it, and HEAD where GET has one. */
+  allowFor(bytes: u8[], targetStart: i32, targetEnd: i32): u8[] {
     const router: Router = this.router
     const methods: i32 = toI32(router.methodStart.length)
     let mask: i64 = 0
@@ -1335,9 +1397,9 @@ class ServeConns {
         router.methodBytes,
         router.methodStart[m],
         router.methodEnd[m],
-        r.head,
-        r.targetStart,
-        r.targetEnd,
+        bytes,
+        targetStart,
+        targetEnd,
         this.probe
       )
       if (route >= 0) {
@@ -1444,14 +1506,15 @@ export const serveOn = async (
         const k: i32 = serveFreeSlot(st, limits)
         moved = true
         if (k < 0) {
-          c.problem(s, c.reqs[s].gen, 503, c.unavailable)
+          c.release(s)
+          c.problem(s, c.slotGen[s], 503, c.unavailable)
           stats.busy += 1
           stats.answered += 1
           continue
         }
-        st.reqs[k] = c.reqs[s]
+        st.reqs[k] = c.req(s)
         st.slots[k] = s
-        st.gens[k] = c.reqs[s].gen
+        st.gens[k] = c.slotGen[s]
         st.busy[k] = true
         st.done[k] = false
         st.cancelled[k] = false
@@ -1461,7 +1524,11 @@ export const serveOn = async (
           st.running[st.runningCount] = k
           st.runningCount += 1
         }
+        // `spawn` runs the task to its first await, past its copy of the
+        // request, so the record goes back to the pool here: an idle
+        // keep-alive connection holds none.
         spawn(serveTask(handle, st, k))
+        c.release(s)
       }
     }
     // A task still running whose client hung up, or any once the server is
