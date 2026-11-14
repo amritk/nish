@@ -343,9 +343,10 @@ already costs the same order.
 
 `nish_export_out(hdr)` copies the elements into the exchange area and
 answers the offset. `arrayOut` (`:1168`) and `copyBack` (`:1184`) read the
-elements from there. A copy-back writes the exchange block, and the module
-copies it home with `nish_copy_back(hdr, offset)`. Each direction costs one
-copy of the elements.
+elements from there. A copy-back runs the same way: the module copies the
+arena array into an exchange block with `nish_copy_back(hdr, offset)`, and the
+loader copies that block into the page's typed array, as `copyBack` does from
+the arena today. Each direction costs one copy of the elements.
 
 ### 5.3 A string to the loader, or to a host import
 
@@ -403,8 +404,13 @@ to exactly one:
   (`arrayOut`, `stringOut`) and its copy-back blocks are taken after the
   export's mark (`src/interop-wasm.ts:992`). They are released with the arena
   bracket in the call's `finally` (`:1005`–`:1011`), after the loader has
-  read every result. With root storage the bracket is `nish_root_keep(mark)`;
-  the exchange area is reset there too, because nothing in it is kept.
+  read every result. The loader resets the exchange area itself, with a new
+  export, `nish_exchange_reset()`, called in that `finally` beside
+  `nish_arena_release(mark)` (no root storage) or `nish_root_keep(mark)`
+  (root storage). Nothing in the area is kept in either case. The reset is
+  not part of `nish_arena_release`, because compiled code also calls that at
+  scope exits (`src/emit.ts:839`, `:851`, `:1383`), in the middle of a call
+  whose exchange blocks are still live.
 - **A host-import call.** Before the import, the runtime takes an exchange
   mark. The import's strings and its non-storage windows are copied in above
   it. After the import returns, the windows are copied back, and the area is
@@ -412,7 +418,7 @@ to exactly one:
   space of one import, not the sum of them.
 
 Neither scope nests inside itself. A page that calls an export from inside an
-import is refused today (`NishReentry`, `src/interop-wasm.ts:999`), so an
+import is refused today (`NishReentry`, `src/interop-wasm.ts:987`), so an
 import's mark is always above its export's blocks, and resetting it never
 releases them.
 
@@ -577,7 +583,8 @@ What lands:
   `--enable-multimemory`;
 - `nish_memory_bytes()`, an export that answers memory 0's size in bytes
   (`memory.size 0` × 64 KiB), for the tests that today read
-  `memory.buffer.byteLength` to see whether the arena grew;
+  `memory.buffer.byteLength` to see whether the arena grew. It is exported
+  only with the flag on, like everything else in this stage;
 - in `runtime/runtime-wasm.c`, `nish_page_copy_in`, `nish_page_copy_out`,
   `nish_page_fill` and `nish_page_grow` over memory 1, compiled with
   `-mmultimemory`;
@@ -606,7 +613,11 @@ What lands:
 - the loader (`src/interop-wasm.ts`) and the emitted host-import glue
   (`src/emit-strings.ts`) do §5's copies;
 - the runtime syncs the storage mirror around exports and imports (§4.1);
-- `views()` is built over memory 1.
+- `views()` is built over memory 1;
+- the runtime exports §5 relies on, all behind the flag:
+  `nish_alloc_array_from` (§5.1), `nish_export_out` and `nish_copy_back`
+  (§5.2), `nish_exchange` (§5.1), `nish_exchange_reset` (§5.6), and
+  `nish_exchange_high`, the exchange area's high-water mark the tests read.
 
 Tests:
 
@@ -648,7 +659,7 @@ Tests:
   and `drive.mjs forge` today write a fake cell past the arena and forged
   lengths, and check each refusal. The rewrite forges as an attacker with the
   whole exported memory would:
-  - it captures the instance (as `drive.mjs:12`–`:14` already does);
+  - it captures the instance (as `drive.mjs:27`–`:36` already does);
   - it asserts that the instance's exports hold exactly one
     `WebAssembly.Memory`, and that the module's memory section declares two;
   - between every pair of calls it fills every byte of that memory with
