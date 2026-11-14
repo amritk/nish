@@ -1367,7 +1367,8 @@
                   "/wp54-async-wasm": { "type": "page", "title": "WP54: async on wasm, with the page as the executor", "filepath": "docs/roadmap/wp54-async-wasm.md" },
                   "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
                   "/wp57-module-scoped-names": { "type": "page", "title": "WP57: Module-scoped names", "filepath": "docs/roadmap/wp57-module-scoped-names.md" },
-                  "/wp59-wasm-arena-memory": { "type": "page", "title": "WP59: The wasm arena in a second, unexported memory", "filepath": "docs/roadmap/wp59-wasm-arena-memory.md" }
+                  "/wp59-wasm-arena-memory": { "type": "page", "title": "WP59: The wasm arena in a second, unexported memory", "filepath": "docs/roadmap/wp59-wasm-arena-memory.md" },
+                  "/wp60-dyn-dispatch": { "type": "page", "title": "WP60: Dynamic dispatch over interfaces", "filepath": "docs/roadmap/wp60-dyn-dispatch.md" }
                 }
               },
               "/done/..": {

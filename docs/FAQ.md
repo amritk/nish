@@ -13,7 +13,9 @@ runtime type tags, boxing, and dynamic dispatch, which is what a JavaScript
 engine provides and what Nish deliberately leaves out. The full list,
 with the guarantee each construct would break, is in
 [LANGUAGE.md: Forbidden constructs](LANGUAGE.md#forbidden-constructs-phase-0-validator).
-If it compiles, the layout is known.
+If it compiles, the layout is known. Dispatch over the classes that
+implement an interface, with a tag the compiler picks rather than a
+prototype, is proposed in [WP60](wp60-dyn-dispatch.md).
 
 ### Why is `number` a 32-bit integer by default?
 
