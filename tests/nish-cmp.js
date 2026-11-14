@@ -1934,7 +1934,7 @@ const DECLARED = [
   // SSSE3 or NEON kernel, the walk on the other arm.
   {
     file: "checksum.ll",
-    changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+    changelog: "Ship the SSSE3 and NEON Adler-32 kernels",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
   // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it

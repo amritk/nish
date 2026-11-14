@@ -26,9 +26,9 @@ const LINE = 40
 
 /**
  * The live terminal's look, kept out of theme.css so a page that never types
- * loads none of it: for good once attached (--live) the hero's animation holds
- * on its last frame, so what is typed stays put, and the caret blinks while
- * the terminal has focus.
+ * loads none of it. Once attached (--live), the terminal's part of the hero's
+ * one run jumps to its end, so a line typed before the run is over still lands
+ * under the output; the caret blinks while the terminal has focus.
  */
 const css = `
 .nish-hero__terminal--live *{animation:none}
@@ -143,7 +143,11 @@ export const attach = (
     opening ??= load()
     opening
       .then((game) =>
-        game.open({ focus: touched ? null : input, say: (text) => say(`$ ${command}\n${text}\n`) })
+        game.open({
+          focus: touched ? null : input,
+          from: term,
+          say: (text) => say(`$ ${command}\n${text}\n`),
+        })
       )
       .then(() => say(""))
       .catch((error) => {

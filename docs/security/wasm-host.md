@@ -1,8 +1,7 @@
 # Security record: the wasm-host boundary — module storage, windows, panics and `nish/page`
 
-The record of WP50 stage 3 (`docs/wp50-wasm-host.md` §5, §6, §11, §12): the
-boundary between a module built with `--profile wasm-host` and the page that
-loads it. It covers the panic import, the generated loader's guard around
+The record of the boundary between a module built with `--profile wasm-host`
+and the page that loads it. It covers the panic import, the generated loader's guard around
 every export, the buffer windows a host import is lent, the ring the page and
 the program share in module storage, and the page-side handle table. It says
 what each side may hand the other, what is refused, and the test that pins

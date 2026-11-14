@@ -1,4 +1,4 @@
-// WP34's N9 acceptance (docs/wp34-hosting-cs.md §4): sessions connect, send
+// WP34's N9 acceptance (docs/wp34-network-stack.md §4): sessions connect, send
 // and leave through the relay, and its arena and its resident memory stay
 // flat once its pools are full. The relay runs in a process of its own
 // (`serve.ts`), started in the background, so that what is measured is the

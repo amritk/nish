@@ -1,9 +1,8 @@
 # Security record: the async server
 
-The record of WP49 stage 5's serve part: `nish/net/serve`, which runs
+The record of `nish/net/serve`, which runs
 `nish/net/handler`'s readiness loop as an `async` function and answers each
-request in a task of its own
-([wp49-async-server.md](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md)).
+request in a task of its own.
 It says what the server holds per connection and per request, what each cap
 answers, what a task may reach of the server's memory, and the test that pins
 each property. It is written with the code rather than after an audit, so

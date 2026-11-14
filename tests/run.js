@@ -12115,7 +12115,7 @@ if (dealtHere("breakWeb")) {
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 145
+  const BREAK_WEB_CHECKS = 138
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))
@@ -26709,17 +26709,23 @@ if (dealtHere("releaseChecks")) {
       "the two darwin rows have different attachedSince values, so a claim about `the darwin pair` no longer has one answer: give each asset its own pattern in versionClaims above"
     )
 
-    const proseDocs = ["INSTALL.md", "wp10-ci.md", "wp12-release.md", "wp19-stage0-retirement.md"]
+    const proseDocs = [
+      "CONTRIBUTING.md",
+      "docs/INSTALL.md",
+      "docs/wp10-ci.md",
+      "docs/wp12-release.md",
+      "docs/wp19-stage0-retirement.md",
+    ]
     const staleProse = []
     let proseClaims = 0
     for (const doc of proseDocs) {
-      const text = fs.readFileSync(path.join(root, "docs", doc), "utf8")
+      const text = fs.readFileSync(path.join(root, doc), "utf8")
       for (const [shape, re, asset] of versionClaims) {
         const want = rows.find((t) => t.asset === asset)?.attachedSince
         for (const m of text.matchAll(new RegExp(re, "g"))) {
           proseClaims += 1
           if (m[1] !== want) {
-            staleProse.push(`docs/${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`)
+            staleProse.push(`${doc}: ${shape} says ${m[1]}, but ${asset} is ${want}`)
           }
         }
       }

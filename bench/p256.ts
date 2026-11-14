@@ -1,5 +1,5 @@
 // ECDSA over P-256 on the three calls a key's life makes: K5's baseline in
-// WP34 (docs/wp34-hosting-cs.md, "K5: P-256, the baseline"), the measure a
+// WP34 (docs/wp34-network-stack.md, "K5: P-256, the baseline"), the measure a
 // fixed-base table is judged by. bench/p256.mjs builds and drives it.
 //
 //   p256 [scale] [workload]

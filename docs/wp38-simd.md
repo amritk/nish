@@ -16,12 +16,12 @@ NEON at sixteen. `std/regex.ts`'s walker `regexScanFrom` is recognised as
 `tests/simd/regex-scan.c` holds every path to a reference loop.
 A third kernel, CRC-32 for `nish/compress/checksum`, shares the same seam (#1062; §7).
 S2's `--cpu` flag is built (#660): S0's figures missed its bar, a
-re-measurement against the noise met it, and the owner decided on 2026-10-16
-to build it with one value, `x86-64-v3` (§7; §8, Q7), in
-[the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
+re-measurement against the noise met it, and it was decided on 2026-10-16
+to build it with one value, `x86-64-v3` (§7; §8, Q7), as
+[#650](https://github.com/amritk/nish/pull/650) planned.
 `x86-64-v4`, `armv8.2-a` and `armv8.4-a+crypto` have been measured, and
 none is built: the AArch64 levels miss the bar, and `x86-64-v4` gains nothing
-over `x86-64-v3`, so the owner decided on 2026-11-12 to keep it out
+over `x86-64-v3`, so it was decided on 2026-11-12 to keep it out
 (#1432; §7; §8, Q11).
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
 small a part of the bootstrap to move it (§7). S7, crediting an offset index
@@ -35,7 +35,7 @@ Eisel–Lemire (S6b: met), each against the json-compare record of the
 json-parity run (§2.4, §7). S6c's block classifier did not pass its callgrind
 gate, and S6d's per-value cuts could not lift it to 1.5x on both documents, so
 neither is built. S3a measured S3's two bar kernels in C with portable vectors
-without a surface (#658): both cleared 1.5x on x86-64. On 2026-10-30 the owner
+without a surface (#658): both cleared 1.5x on x86-64. On 2026-10-30 it was
 decided to build S3, `nish:simd`, on those figures (§8, Q10), with the surface
 in §3.2. It is built (`src/simd.ts`; #1064) and its bar met, and its rules
 are in [LANGUAGE.md](LANGUAGE.md#nishsimd-sixteen-byte-vectors). [MASTER_PLAN.md](MASTER_PLAN.md)
@@ -1654,7 +1654,7 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Superseded by S6c; never built.** S6c re-aimed the same classifier at `JsonTokenizer`, and S6c's callgrind gate and S6d measured it not reachable (below). |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). **Built (`d835d40` in #660)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). **Later levels measured, not built (#1432)**: `x86-64-v4` clears the bar against the baseline but gains nothing over `x86-64-v3`, so it is not built (**Decided 2026-11-12, Q11**), and `armv8.2-a` and `armv8.4-a+crypto` nothing over the AArch64 baseline. |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [#650](https://github.com/amritk/nish/pull/650). **Built (`d835d40` in #660)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). **Later levels measured, not built (#1432)**: `x86-64-v4` clears the bar against the baseline but gains nothing over `x86-64-v3`, so it is not built (**Decided 2026-11-12, Q11**), and `armv8.2-a` and `armv8.4-a+crypto` nothing over the AArch64 baseline. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Decided 2026-10-30 (Q10): build it**, on S3a's figures, with the surface in §3.2. Built in three stages: the types with load, store, splat and lanes; the masks and the rest of the operations; then the two bar kernels written with it and measured against this bar. **Bar met**: see below. Tracking issue #1064. |
 | **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Landed (#658)**, taken at `46a1e4d` in #658 (§2.3, S3a): the C vector form beats Nish checked by 1.65x on mat-vec and by 1.81x and 3.51x on the two depth documents at the median, outside a noise band within 5%, so both kernels clear 1.5x on x86-64; no AArch64 machine was at hand. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
@@ -1912,11 +1912,11 @@ documents at the median (§2.3, S3). `src/` implements the module and does not u
 rolling freeze (§4).
 
 **#662, the S7 and S2 acceptance pass.** Of eight criteria, six were met. The
-owner accepted the other two as shipped on 2026-10-30. S7's golden
+other two were accepted as shipped on 2026-10-30. S7's golden
 `arr_bounds_offset_other` panics natively only: `runtime/nish.mjs` does not
 check indexing, by design, so under Node it prints `NaN`. S2's baseline
 capability report has no `cpu` key, as LANGUAGE.md says; only a `--cpu` build
-writes one. See the Sign-off in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
+writes one.
 
 **S4 is declined for now on its own bar.** The lexer is about 1% of the front
 end, and the front end's three runs about 2% of `scripts/bootstrap.sh
@@ -2810,7 +2810,7 @@ first; S6c waits for both, because its bar is a ratio against what they leave.
 
 ## 8. Decisions
 
-The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. Q10 came with S3a's figures, and the owner took it on 2026-10-30. Q11 came with S2's later levels, and the owner took it on 2026-11-12. The reason
+Q1 to Q4 were accepted on 2026-10-09, each as recommended. Q5 and Q6 came with S6. Q6 was accepted on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. Q10 came with S3a's figures, and the owner took it on 2026-10-30. Q11 came with S2's later levels, and the owner took it on 2026-11-12. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -2823,8 +2823,8 @@ builds anything else.
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |
 | Q5 | S6c's structural index | a bitmask per block kept beside the document; a list of `u32` positions; not built | **Accepted as recommended** (2026-10-24): the design in §7 (*S6c, the structural index: the design*), with one bitmap per 64-byte block, built in 4 KiB chunks into a fixed buffer the tokenizer keeps across documents. The kernel only gives hints, and every error is still the scalar code's. It was to be built only if callgrind showed the bar reachable, and it did not: the ceilings are 1.37x on twitter and 1.22x on citm (*S6c, the callgrind gate*), so it is not built. |
 | Q6 | Where S6a's functions live | `nish/text`, beside `indexOfAny`; a new `nish/bytes` for `u8[]` scans | **`nish/bytes`** (2026-10-23), as recommended, because `nish/text` is about `string`s and these functions read `u8[]`. It holds `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` ([LANGUAGE.md](LANGUAGE.md#byte-runs-skipblank-skipdigits-skipjsontext-skipjsonplain-and-copybytes-in-nishbytes)). |
-| Q7 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **`x86-64-v3` only, for the module and the runtime alike** (2026-10-16). It is the one level that met the bar, and both constant-time checkers already read it cleanly; `native` can never be read, and the SVE levels fail today. Planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
-| Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **S3a, then decide** (2026-10-16). S7 was already built (#561), so scalar Nish reaches the vector loop for a float kernel with checked indexing; the byte half overlaps S6c's classifier; the surface is large and permanent. S3a is planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
+| Q7 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **`x86-64-v3` only, for the module and the runtime alike** (2026-10-16). It is the one level that met the bar, and both constant-time checkers already read it cleanly; `native` can never be read, and the SVE levels fail today. Planned in [#650](https://github.com/amritk/nish/pull/650). |
+| Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **S3a, then decide** (2026-10-16). S7 was already built (#561), so scalar Nish reaches the vector loop for a float kernel with checked indexing; the byte half overlaps S6c's classifier; the surface is large and permanent. S3a is planned in [#650](https://github.com/amritk/nish/pull/650). |
 | Q9 | S7, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Ahead of both** (2026-10-16), and found built: #561 had landed it on 2026-10-10 (§7, S7). |
 | Q10 | S3, `nish:simd`, on S3a's figures | build it with §3.2's surface; decline it into §9 | **Build it** (2026-10-30). Both bar kernels cleared 1.5x in S3a (#658), and the byte half is not reachable by S6c's runtime classifier (§7, S6c). The surface is §3.2 as revised: `u16x8` for `i16x8`, four value-only mask types and the operation table. Built in three stages, the last measuring S3's bar (§7, S3). |
 | Q11 | `x86-64-v4` for `--cpu`, which clears S2's bar against the baseline but not against `x86-64-v3` | build it; keep it out | **Keep it out** (2026-11-12). A level must add over the one already shipped, and v4 is 3.6–7.4% slower than `x86-64-v3` on spectral and gains on neither nbody nor vec3 (§7, *S2's later levels*). |

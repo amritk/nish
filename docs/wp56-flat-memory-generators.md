@@ -1,7 +1,7 @@
 # WP56: Generators whose memory stays flat: a string builder, and a scope per file
 
-**Status: accepted (owner, 2026-11-13), design only.** Nothing here is
-built. §10 records the owner's decisions: the builder is `builder()` from
+**Status: accepted (2026-11-13), design only.** Nothing here is
+built. §10 records the decisions: the builder is `builder()` from
 `nish:string`, and the other five questions take this note's
 recommendations. Its stages are in §9 and on
 [the roadmap page](roadmap/wp56-flat-memory-generators.md). The plan that
@@ -267,7 +267,7 @@ Each stage is one pull request.
 
 ## 10. Decisions
 
-The owner decided these on 2026-11-13. S2 builds what they say.
+These were decided on 2026-11-13. S2 builds what they say.
 
 - **Q1. The name and module: `builder()` from `nish:string`.** It answers a `Builder`, as `region()` answers a `Region`. The note had proposed `StringBuilder` from `nish:builder`. `nish:string` names what the module is about and leaves room for other string builtins later. It is a different specifier from `std`'s `nish/text`, so the two do not collide.
 - **Q2. Lifetime: D2.** The scope that made the builder owns its storage. No `using` is required, so a builder can be held in a field or a region's root, and §7's third shape works. Review of the first draft showed that hanging the storage off the arena could not work. Pass rewinds are an inline store, and `nish_arena_keep` moves memory. So the stack of §5 is kept outside the arena, and the compiler releases it, but only in scopes that make builders. The decision itself is unchanged.

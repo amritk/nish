@@ -1,6 +1,6 @@
 # Security record: HTTP/2 — frames, the connection and its TLS carrier
 
-The record of WP34's lane H2 past HPACK: `nish/net/http-fields` (the header
+The record of HTTP/2 past HPACK: `nish/net/http-fields` (the header
 model HTTP/2 and HTTP/3 share), `nish/net/http2-frame` (the frames of RFC 9113
 §6), `nish/net/http2` (the server side of a connection) and
 `nish/net/http2-tls` (the connection over `nish/net/tls-tcp` with ALPN `h2`).

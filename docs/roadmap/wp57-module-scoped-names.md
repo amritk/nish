@@ -5,7 +5,7 @@
 ## Stages
 
 - [ ] S1: a private function's or generic template's symbol qualified by its module path when it would clash, with the clash checks over the qualified symbols
-- [ ] S2: exported names that clash inside one package and are not on the C surface *(owner's decision)*
+- [ ] S2: exported names that clash inside one package and are not on the C surface *(open question)*
 - [ ] S3: module-scoped class and interface names, with type identity (module, name)
 
 ## Next
@@ -14,7 +14,7 @@ S1, private functions and generic templates: [§4](https://github.com/amritk/nis
 
 ## Waiting on a decision
 
-S2: keep refusing, make only the entry's exports the C surface, qualify in a closed-world build only, or give each a chosen C name ([§6](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#6-s2-exported-names-that-clash-inside-one-package-owners-decision)).
+S2: keep refusing, make only the entry's exports the C surface, qualify in a closed-world build only, or give each a chosen C name ([§6](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#6-s2-exported-names-that-clash-inside-one-package-open-question)).
 
 ## Not planned
 

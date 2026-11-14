@@ -1,6 +1,6 @@
-# WP34: Hosting cs: the network stack
+# WP34: The network stack
 
-**State:** In progress · **Done:** 16 of 19 · **Design note:** [`docs/wp34-hosting-cs.md`](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md)
+**State:** Landed · **Done:** 16 of 16 · **Design note:** [`docs/wp34-network-stack.md`](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md)
 
 ## Stages
 
@@ -20,13 +20,10 @@
 - [x] T2, H1, H2: `curl --http1.1`, Autobahn and Chrome over HTTP/1.1 in the interop job (WP39 G1, [#1437](https://github.com/amritk/nish/pull/1437)); the lingering close, the HTTP/2 SETTINGS and idle timeouts and WebTransport's session clock (WP39 G2, [#1454](https://github.com/amritk/nish/pull/1454)); H3-5, an HTTP/3 server clock, and WebTransport's rate cap kept as drop-and-count (WT-2) ([#1513](https://github.com/amritk/nish/pull/1513))
 - [x] Q3: the interop runner's goodput and crosstraffic cases, both passing for quic-go and ngtcp2 ([#1477](https://github.com/amritk/nish/pull/1477))
 - [x] A1: QUIC DPLPMTUD, so DATA down is no longer held to 1,164 bytes ([#1458](https://github.com/amritk/nish/pull/1458))
-- [ ] cs, wave 3: port `services/relay` and run the Nish relay in staging behind a flag
-- [ ] cs, wave 3: `boot-check`'s wire pass and `bench:offload` against the Rust relay
-- [ ] cs, wave 4: the reverse proxy for `/connect` and `/play` (S5), then retire the Rust relay
 
 ## Next
 
-The cs waves remain (wave 3's two items and wave 4), in the cs repository and its staging. Nothing else of WP34 is open in this repository; WP39's Part B stages are on [its own page](wp39-http-server.md).
+Nothing of WP34 is open. The HTTP server's remaining work is WP39's, on [its own page](wp39-http-server.md).
 
 ## Not planned
 

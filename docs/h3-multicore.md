@@ -1,7 +1,9 @@
 # WP39 G6: QUIC on more than one core
 
-**Status: design note.** Nothing here is built yet. The follow-on stage,
-`g6-steer`, builds §8 and writes the security record of §6. Anchors are at
+**Status: built** (#1470): §8's steering is in `udpBind`'s flag 4,
+`QuicServerConfig`'s `workerIndex` and `workerCount`, and `nish/net/prefork`'s
+`listenUdp`, and §6's security record is
+[security/quic-multicore.md](security/quic-multicore.md). Anchors are at
 `52cc8d66`. Where an anchor names a function rather than a line, the function
 is the anchor. Figures marked **measured** were taken in a 4-vCPU cloud VM
 (Intel Xeon @ 2.10 GHz, Firecracker, Linux 6.18) with throwaway C programs that
