@@ -348,13 +348,14 @@ const jsonTokLoad8 = (src: u8[], i: i32): u64 => {
     return toU64(0)
   }
   return (
-    (toU64(src[i]) | (toU64(src[i + 1]) << toU64(8))) |
+    toU64(src[i]) |
+    (toU64(src[i + 1]) << toU64(8)) |
     ((toU64(src[i + 2]) << toU64(16)) | (toU64(src[i + 3]) << toU64(24))) |
-    (((toU64(src[i + 4]) << toU64(32)) | (toU64(src[i + 5]) << toU64(40))) |
+    ((toU64(src[i + 4]) << toU64(32)) |
+      (toU64(src[i + 5]) << toU64(40)) |
       ((toU64(src[i + 6]) << toU64(48)) | (toU64(src[i + 7]) << toU64(56))))
   )
 }
-
 
 /**
  * The first index at or after `i` that is not a blank, or `end`. The run is
@@ -380,21 +381,6 @@ const jsonTokSkipBlank = (src: u8[], i: i32, end: i32): i32 => {
     return i + 1
   }
   return skipBlank(src, i + 2, to)
-}
-
-/** The first index at or after `i` that is not a digit, or `end`, read as `jsonTokSkipBlank` reads its run. */
-const jsonTokSkipDigits = (src: u8[], i: i32, end: i32): i32 => {
-  if (i < 0) {
-    return i
-  }
-  // A number's digits are short runs, which a call into `skipDigits`'s
-  // kernel costs more than it saves (WP38 S6a), so they stay a loop here.
-  const n: i32 = toI32(src.length)
-  let j: i32 = i
-  while (j < end && j < n && jsonTokIsDigit(toI32(src[j]))) {
-    j += 1
-  }
-  return j
 }
 
 /**
@@ -1485,7 +1471,11 @@ export class JsonTokenizer {
     const scale: i32 = this.numberScale
     let value: f64 = 0
     if (mantissa !== toU64(0)) {
-      if (mantissa <= toU64(1) << toU64(53) && scale >= -JSON_TOK_FAST_EXPONENT && scale <= JSON_TOK_FAST_EXPONENT) {
+      if (
+        mantissa <= toU64(1) << toU64(53) &&
+        scale >= -JSON_TOK_FAST_EXPONENT &&
+        scale <= JSON_TOK_FAST_EXPONENT
+      ) {
         // Clinger: both operands are exact doubles, so one rounding. An
         // integer of up to 15 digits is below 2^53 and needs no power at all.
         if (scale === 0) {

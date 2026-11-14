@@ -2075,15 +2075,6 @@ function jsonTokSkipBlank(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkip
   callee +8:8 jsonTokIsBlank -> @nish.jsonTokIsBlank
   callee +11:23 jsonTokIsBlank -> @nish.jsonTokIsBlank
   callee +14:10 skipBlank -> @nish.skipBlank
-function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipDigits
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: nish.jsonTokIsDigit
-  pointer src: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +1:7 j: i32 (let)
-  callee +2:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i limit
@@ -2555,9 +2546,9 @@ function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenize
   local +2:11 mantissa: u64 (const)
   local +3:11 scale: i32 (const)
   local +4:9 value: f64 (let)
-  local +12:17 power: f64 (const)
-  callee +12:30 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
-  callee +16:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
+  local +16:17 power: f64 (const)
+  callee +16:30 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  callee +20:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
 function JsonTokenizer.numberWalk(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberWalk [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokEiselLemire nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
