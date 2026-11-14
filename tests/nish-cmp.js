@@ -1898,6 +1898,8 @@ const DECLARED = [
     "tests/cases/arr_foreach.ts",
     "tests/cases/map_foreach.ts",
     "tests/cases/set_foreach.ts",
+    "tests/cases/foreach_mutate.ts",
+    "tests/cases/foreach_nested.ts",
     "docs/cookbook/map-foreach.ts",
   ].map((program) => ({
     program,

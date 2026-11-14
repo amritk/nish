@@ -283,6 +283,8 @@ cases/fnref_row_map_set added after R6: no rewriter to freeze it with
 cases/fnref_row_nullish added after R6: no rewriter to freeze it with
 cases/fnref_row_push_nullable added after R6: no rewriter to freeze it with
 cases/fnref_stores added after R6: no rewriter to freeze it with
+cases/foreach_mutate added after R6: no rewriter to freeze it with
+cases/foreach_nested added after R6: no rewriter to freeze it with
 cases/generic_interface_class_arg added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/hygiene_quiet added after R6: no rewriter to freeze it with

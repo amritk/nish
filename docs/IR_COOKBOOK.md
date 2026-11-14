@@ -5814,10 +5814,24 @@ each pass. The checker rewrites the call to a template of
 `for...of` over `keys()`, reading the value from the entry the cursor stands
 on. `f` is a compile-time function parameter, so the instance calls `@show`
 with a plain `call`, and the key's value comes from `valueAt` at the cursor
-rather than a `get`: no probe. Under `opt -O2` the `@nish_main` of
-`tests/cases/map_foreach` is a walk loop identical to the hand-written
-`for...of` but for that missing probe; `xs.forEach(f)` on an array is likewise
-`for (const x of xs)`.
+rather than a `get`: no probe. The template differs from the hand-written
+`for...of` in two more ways: the callback's own arena mark and release stand
+where `for...of` rewinds the arena once per pass, and the cursor's `i + 1` is
+a checked add. Measured on a `walk` function whose receiver is built from
+`process.argv`, so nothing folds, `opt -O2` leaves 92 instructions for
+`m.forEach((v, k) => ...)` against 112 for `for (const k of m.keys())` with
+`m.get(k)`, which calls `Map.probe` per entry, and 78 for `s.forEach` against
+89 for `for (const x of s)`.
+
+`xs.forEach(f)` on an array is the `std/array.ts` template `forEach`, a loop
+with an `i32` index that stops at the length the array had when the call
+began, as Node does, and at the current length if the callback shrinks it.
+`for (const x of xs)` keeps an `i64` index and reloads the length each pass.
+Emitted, the template compares its index twice, against the snapshot and
+the length. Under `opt -O2`, with a callback that does not write the array,
+the two compares fold into one `icmp slt` and the length and data-pointer
+loads move out of the loop, which `for...of` reloads every pass: both loops
+are 18 instructions on the same `walk`.
 
 <!-- cookbook:begin map-foreach -->
 ```ts

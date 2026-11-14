@@ -3651,24 +3651,26 @@ and parameters (`arr_sort_capture`), under the rule in [Function parameters](dec
 ### Callback methods and `slice`
 
 `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
-`xs.forEach(f)` and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
-a template of `std/array.ts`, which a call of one of those names loads, and the
-callback is a compile-time function parameter, so each callback gets an
-instantiation of its own whose loop calls it directly. `xs.map(f)` and
-`map(xs, f)` with `map` imported from `nish/array` are the same call and
-compile to one instance (`arr_map_template`). The template is picked by the
-callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
-`slice`, `sliceFrom` or `sliceAll` by the argument count.
+`xs.forEach(f)` and `xs.slice(...)` are lowered as `sort` is: the checker
+rewrites the call to a template of `std/array.ts`, which a call of one of those
+names loads, and the callback is a compile-time function parameter, so each
+callback gets an instantiation of its own whose loop calls it directly.
+`xs.map(f)` and `map(xs, f)` with `map` imported from `nish/array` are the same
+call and compile to one instance (`arr_map_template`). The template is picked by
+the callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`,
+and `slice`, `sliceFrom` or `sliceAll` by the argument count.
 
 `xs.forEach(f)` answers `void`, so its answer cannot be bound
 (`reject_foreach_answer`), and its callback is written to answer nothing: a
 concise body such as `(x) => console.log(x)` or `(x) => ys.push(x)` is a
-statement, and what it computes is dropped. The loop it compiles to is the
-`for...of` loop over the same array, with the callback inlined into its body
-(`arr_foreach`). An arrow argument never assigns a name of the function it is
-written in (NL2586), and a `forEach` callback is no exception, so a running
-total is a `for...of` loop, whose body may assign it; the refusal says so
-(`reject_foreach_capture_sum`):
+statement, and what it computes is dropped. It compiles to a counted loop over
+the array with the callback inlined into its body, as `for...of` does, but the
+loop stops at the length the array had when the call began, as Node does,
+where `for...of` reads the length on every pass; under `opt -O2` the two loops
+are the same size (`arr_foreach`, `foreach_nested`). An arrow argument never
+assigns a name of the function it is written in (NL2586), and a `forEach`
+callback is no exception, so a running total is a `for...of` loop, whose body
+may assign it; the refusal says so (`reject_foreach_capture_sum`):
 `for (const x of xs) { sum += x }`.
 
 The callback takes the element, or the element and its index, as TypeScript
@@ -3722,9 +3724,9 @@ proof at the call removes, and `--deny-panics` refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,
-`findIndex` and `forEach` are the platform's own `Array.prototype` methods there, and an
-answer that holds records inline is copied with the runtime's `copyRecords`,
-as the native `push` copies.
+`findIndex` and `forEach` are the platform's own `Array.prototype` methods
+there, and an answer that holds records inline is copied with the runtime's
+`copyRecords`, as the native `push` copies.
 
 ## Bulk writes: `set` and `fill`
 
@@ -4136,10 +4138,11 @@ export const main = (): i32 => {
 
 - **The members are JavaScript's, less what this version defers.** A `Map` has
   `size`, `get`, `set`, `has`, `delete`, `clear` and `forEach`; a `Set` has
-  `size`, `add`, `has`, `delete`, `clear` and `forEach`. `set` and `add` answer the receiver, so they
-  chain, and `delete` answers whether the key was there
-  (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
-  `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
+  `size`, `add`, `has`, `delete`, `clear` and `forEach`. `set` and `add`
+  answer the receiver, so they chain, and `delete` answers whether the key was
+  there (`tests/cases/map_key_str`, `set_str`). `size` is a read-only
+  `number`: `` `size` of `Map<string, i32>` is read-only ``
+  (`reject_map_size_assign`).
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
   iterable of a `for...of`, below. There is no `entries`, because there is no
