@@ -688,7 +688,19 @@ const printTypeScriptTree = (source, sf) => {
       const pattern = decl.name
       const [ps, pe] = span(pattern)
       const hidden = `pattern.${ps}`
-      const receiverText = base !== undefined && ts.isIdentifier(base) ? base.text : ""
+      // The parser's `fieldPathRoot`: a chain of plain `.name` reads down to
+      // a name or `this`, read directly where the source wrote it.
+      let root = base
+      while (
+        root !== undefined &&
+        ts.isPropertyAccessExpression(root) &&
+        root.questionDotToken === undefined &&
+        ts.isIdentifier(root.name)
+      ) {
+        root = root.expression
+      }
+      const rooted = root !== undefined && (ts.isIdentifier(root) || root.kind === ts.SyntaxKind.ThisKeyword)
+      const receiverText = rooted && ts.isIdentifier(root) ? root.text : ""
       let names = 0
       let shadowed = false
       for (const el of pattern.elements) {
@@ -703,7 +715,7 @@ const printTypeScriptTree = (source, sf) => {
       const direct =
         decl.type === undefined &&
         base !== undefined &&
-        (ts.isIdentifier(base) || base.kind === ts.SyntaxKind.ThisKeyword) &&
+        rooted &&
         !shadowed &&
         names > 0
       if (!direct) {

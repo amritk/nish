@@ -678,7 +678,10 @@ const patternChecks = (walk: Walk, indices: string[], t: string): string => {
 /**
  * `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t,
  * 2), t))(xs)`. A receiver read directly is a field path, `xs` or `o.items`,
- * which no row rewrites, so it is spliced from the source.
+ * which the walk does not visit (`writtenChildren`), so it is spliced from the
+ * source unless a row rewrites it: of the field paths an array pattern may
+ * read, only `process.argv` (`processArgv`) is, to `argv()`, as its
+ * hand-written read `process.argv[1]` is.
  */
 const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
   const pattern = patternOf(node)
@@ -698,16 +701,24 @@ const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | nu
   const from = patternNamesStart(list, walk.listAt)
   const end = patternNamesEnd(list, walk.listAt)
   const indices = uncheckedReads(walk, list, from, end)
-  if (indices.length === 0) {
+  // A direct name's read is `base[i]`, its receiver the path the source wrote.
+  const base = direct ? node.children[2].children[0] : node
+  const receiver: string | null = direct && base.kind === NodeKind.Member ? processArgv(walk, base) : null
+  if (indices.length === 0 && receiver === null) {
     return null
+  }
+  if (direct) {
+    const text = walk.source.text
+    const read = receiver === null ? walk.spanOf(base) : receiver
+    let value = read
+    if (indices.length > 0) {
+      const t = walk.temporary()
+      value = `((${t}) => (${patternChecks(walk, indices, t)}${t}))(${read})`
+    }
+    return `${text.substring(node.start, base.start)}${value}${text.substring(base.end, node.end)}`
   }
   const t = walk.temporary()
   const checks = patternChecks(walk, indices, t)
-  if (direct) {
-    const base = node.children[2].children[0]
-    const text = walk.source.text
-    return `${text.substring(node.start, base.start)}((${t}) => (${checks}${t}))(${walk.spanOf(base)})${text.substring(base.end, node.end)}`
-  }
   operands.texts[2] = `((${t}) => (${checks}${t}))(${operands.at(2)})`
   operands.changed[2] = true
   return splice(walk, node, operands)

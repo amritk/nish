@@ -14020,16 +14020,16 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 ### Destructuring declarations
 
-A pattern over a name (`p`, `xs`, `this`) declares each name as an ordinary
-local read straight off it, exactly as `const x = p.x` would: a field name is
-one `getelementptr` and one `load`, with no copy of the struct; an array
-position is the same bounds-checked element read as `xs[i]`, so `[a, , c]`
-checks `0` and `2` and skips the hole. Any other receiver (`o.pt`,
-`o.items`, a call, a `for...of` element) is evaluated once into a hidden
-local, a pointer, and the names are read off that: unoptimised that is one
-alloca and one store more than the hand-written reads, and after `opt -O2`
-the bodies are the same (`tests/cases/destructure_zero_cost`, its `member`
-pair).
+A pattern over a name or a field path off one (`p`, `xs`, `this`, `o.pt`,
+`o.items`) declares each name as an ordinary local read straight off it,
+exactly as `const x = p.x` would: a field name is one `getelementptr` and one
+`load`, with no copy of the struct; an array position is the same
+bounds-checked element read as `xs[i]`, so `[a, , c]` checks `0` and `2` and
+skips the hole. Any other receiver (a call, an index, a `?.` chain, a
+`for...of` element) is evaluated once into a hidden local, a pointer, and the
+names are read off that: unoptimised that is one alloca and one store more
+than the hand-written reads, and after `opt -O2` the bodies are the same
+(`tests/cases/destructure_zero_cost`).
 
 <!-- cookbook:begin decl-destructure -->
 ```ts
