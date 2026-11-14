@@ -14778,6 +14778,50 @@ export const main = (): void => {
 Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
 ```
 
+[`nl2771_destructure_assignment_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_destructure_assignment_object.ts):
+
+```ts
+// NL2771: an object pattern on the left of `=` is not a declaration either.
+class Point {
+  x: number
+  constructor(x: number) {
+    this.x = x
+  }
+}
+export const main = (): void => {
+  const p = new Point(1)
+  let x = 0
+  ;({ x } = p)
+  console.log(x)
+}
+```
+
+```text
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
+```
+
+[`nl2771_destructure_assignment_renamed.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_destructure_assignment_renamed.ts):
+
+```ts
+// NL2771: an object pattern on the left of `=`, renamed.
+class Point {
+  x: number
+  constructor(x: number) {
+    this.x = x
+  }
+}
+export const main = (): void => {
+  const p = new Point(1)
+  let px = 0
+  ;({ x: px } = p)
+  console.log(px)
+}
+```
+
+```text
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
+```
+
 ## NL2772
 
 The message of an error contains:
