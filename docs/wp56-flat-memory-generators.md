@@ -3,7 +3,8 @@
 **Status: accepted (2026-11-13), design only.** Nothing here is
 built. §10 records the decisions: the builder is `builder()` from
 `nish:string`, the other five questions take this note's
-recommendations, and Q7 adds S5, object graphs in an arena block. Its stages are in §9 and on
+recommendations, and Q7 adds S5, object graphs in an arena block. Its stages
+are in §9 and on
 [the roadmap page](roadmap/wp56-flat-memory-generators.md). The plan that
 tracks them is
 [`.claude/plans/wp56-flat-memory-generators.plan.md`](../.claude/plans/wp56-flat-memory-generators.plan.md).
@@ -143,8 +144,8 @@ makes an object whose constructor stores an array, and calls a method that
 pushes onto that array or sets a `Map` field, is accepted. A method that
 writes through a field into a second object, such as
 `this.root.kids.push(n)`, is refused as "writes memory its caller can see".
-The `using arena()` rule is stricter than both: it refuses the constructor
-alone. D7 uses one analysis, a graph confined to the block, and S5 builds
+The `using arena()` rule is stricter than the parallel-body rule: it refuses
+the constructor alone. D7 uses one analysis, a graph confined to the block, and S5 builds
 it for the arena block. Applying the same analysis to parallel bodies and
 `scope()` tasks is deferred (§9).
 
@@ -280,8 +281,8 @@ before or after S2 to S4.
 | **S1** The patterns with today's tools | `tests/cases`/`tests/link` for file I/O inside `enter` (read and write), and `region_per_target`; the guide page with shapes 1 to 3 written over `parts` + `join`; `mem-file-per-function.ts` and `mem-region-per-target.ts` in the cookbook; memory.md and regions.md link to it | `node tests/run.js region` and `node tests/run.js cookbook` pass; the page's examples run under `nish:ok` |
 | **S2** `builder()` from `nish:string` | runtime (§5) with its security record rows; the *makes builders* fact, the builder-stack brackets and the refusals (§6), the wasm32 refusal among them; the `nish:string` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; `--emit-arena` pins which scopes take the bracket; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp reports no difference, because no existing program makes a builder (§5) |
 | **S3** Files from a builder | `writeFileSync`/`appendFileSync` overloads; `fileCreate`, `fileWrite`, `fileWriteBytes`; capability rows; guide flush section; `flush.ts` | G2's flush bound; `tests/link` covers a short write and `EINTR` as WP44's tests do on the read side |
-| **S5** Object graphs in an arena block (D7) | the confined-graph analysis in `src/escape.ts` and the split callee summary (§6); `mem_using_arena_graph` (a constructor storing an array, a method pushing onto a nested object's array, a `Map` field, the file written inside the block); one negative test per route a graph member can leave by; the NL2424 row of LANGUAGE.md's `using arena()` table rewritten; memory.md's "Freeing a batch yourself" and the guide page's shape 2 using a graph; `docs/reference/` regenerated | `mem_using_arena_graph` holds `Arena.mark()` unmoved over 2,000 iterations; every existing `reject_using_arena_*` case still refuses; nish-cmp reports no difference; the `wasi` and `performance` sections pass with no new NL9007 |
 | **S4** Diagnostics and the gate | NL9002, NL9016 and NL9018 hints naming the builder, with their wordings and goldens; `docs/AI.md`; `gen_flat_memory` (G3) | G1 to G3 green in CI, and the roadmap page ticked |
+| **S5** Object graphs in an arena block (D7) | the confined-graph analysis in `src/escape.ts` and the split callee summary (§6); `mem_using_arena_graph` (a constructor storing an array, a method pushing onto a nested object's array, a `Map` field, the file written inside the block); one negative test per route a graph member can leave by; the NL2424 row of LANGUAGE.md's `using arena()` table rewritten; memory.md's "Freeing a batch yourself" and the guide page's shape 2 using a graph; `docs/reference/` regenerated | `mem_using_arena_graph` holds `Arena.mark()` unmoved over 2,000 iterations; every existing `reject_using_arena_*` case still refuses; nish-cmp reports no difference; the `wasi` and `performance` sections pass with no new NL9007 |
 
 **Deferred.** These are wanted, but no stage is scheduled for them:
 
