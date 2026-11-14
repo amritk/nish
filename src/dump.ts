@@ -280,7 +280,7 @@ const walkBody = (
     if (local !== null) {
       const kind = local.mutable ? "let" : "const"
       out.push(
-        `  local ${position(source, node.start)} ${local.name}: ${table.typeName(local.type)} (${kind})`
+        `  local ${position(source, node.start)} ${program.localText(local)}: ${table.typeName(local.type)} (${kind})`
       )
     }
   } else if (node.kind === NodeKind.Call) {

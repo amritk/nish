@@ -675,6 +675,9 @@ export const nodeName = (kind: NodeKind): string => {
  */
 export const patternReceiverName = (pattern: Node): string => `pattern.${pattern.start}`
 
+/** Whether `name` is a hidden receiver's (`patternReceiverName`), which no program can write. */
+export const isPatternReceiverName = (name: string): boolean => name.startsWith("pattern.")
+
 /**
  * The destructuring pattern a declarator stands for, or null: the fourth
  * child of the first declarator `Parser.lowerPattern` wrote for it (the

@@ -24,7 +24,7 @@ import {
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
 import { checkGenericCall, genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
-import { FLAG_GATHERED, FLAG_USING, Node, NodeKind } from "./nodes"
+import { FLAG_GATHERED, FLAG_USING, isPatternReceiverName, Node, NodeKind } from "./nodes"
 import { StringSet } from "./map"
 import { crossesByCopy, parallelRole } from "./parallel"
 import {
@@ -1088,11 +1088,15 @@ export class SlotOverwrite {
   }
 }
 
-/** `xs`, `this.bodies`, `a.b.c` — how two references are told apart. */
+/**
+ * `xs`, `this.bodies`, `a.b.c` — how two references are told apart. A
+ * pattern's hidden receiver holds a value no path names, `getItems(o)`, so
+ * its reads are rooted where the hand-written `getItems(o)[0]` is: nowhere.
+ */
 export const referenceRoot = (expr: Node): string => {
   const inner = unwrapParens(expr)
   if (inner.kind === NodeKind.Ident) {
-    return inner.text
+    return isPatternReceiverName(inner.text) ? UNNAMED : inner.text
   }
   if (inner.kind === NodeKind.This) {
     return "this"
@@ -1504,7 +1508,7 @@ class RefWalk {
       if (ref.invalidatedBy !== "" && !this.reported) {
         this.report(
           node,
-          `\`${ref.local.written}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
+          `\`${this.program.localText(ref.local)}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
         )
         return
       }

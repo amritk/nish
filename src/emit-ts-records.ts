@@ -677,8 +677,8 @@ const patternChecks = (walk: Walk, indices: string[], t: string): string => {
 
 /**
  * `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t,
- * 2), t))(xs)`. A receiver read directly is a name or `this`, which no row
- * rewrites, so it is spliced from the source.
+ * 2), t))(xs)`. A receiver read directly is a field path, `xs` or `o.items`,
+ * which no row rewrites, so it is spliced from the source.
  */
 const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
   const pattern = patternOf(node)

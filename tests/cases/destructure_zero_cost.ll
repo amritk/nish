@@ -1459,44 +1459,40 @@ entry:
 
 define noundef i32 @member_pattern(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(16) nocapture %h) #1 {
 entry:
-  %pattern.4668.addr = alloca %struct.Point*, align 8
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
-  %pattern.4692.addr = alloca %struct.nish_array*, align 8
   %a.addr = alloca i32, align 4
   %b.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
   %1 = load %struct.Point*, %struct.Point** %0, align 8, !tbaa !23
-  store %struct.Point* %1, %struct.Point** %pattern.4668.addr, align 8
-  %2 = load %struct.Point*, %struct.Point** %pattern.4668.addr, align 8
-  %3 = getelementptr inbounds %struct.Point, %struct.Point* %2, i32 0, i32 0
-  %4 = load i32, i32* %3, align 4, !tbaa !4
-  store i32 %4, i32* %x.addr, align 4
-  %5 = load %struct.Point*, %struct.Point** %pattern.4668.addr, align 8
+  %2 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 0
+  %3 = load i32, i32* %2, align 4, !tbaa !4
+  store i32 %3, i32* %x.addr, align 4
+  %4 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %5 = load %struct.Point*, %struct.Point** %4, align 8, !tbaa !23
   %6 = getelementptr inbounds %struct.Point, %struct.Point* %5, i32 0, i32 1
   %7 = load i32, i32* %6, align 4, !tbaa !5
   store i32 %7, i32* %y.addr, align 4
   %8 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 1
   %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !24
-  store %struct.nish_array* %9, %struct.nish_array** %pattern.4692.addr, align 8
-  %10 = load %struct.nish_array*, %struct.nish_array** %pattern.4692.addr, align 8
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %13 = icmp ult i64 0, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %12 = icmp ult i64 0, %11
+  br i1 %12, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %12)
+  call void @nish_panic_index(i64 0, i64 %11)
   unreachable
 
 bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  %16 = bitcast i8* %15 to i32*
-  %17 = getelementptr inbounds i32, i32* %16, i64 0
-  %18 = load i32, i32* %17, align 4, !alias.scope !10, !noalias !9, !tbaa !17
-  store i32 %18, i32* %a.addr, align 4
-  %19 = load %struct.nish_array*, %struct.nish_array** %pattern.4692.addr, align 8
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %15 = bitcast i8* %14 to i32*
+  %16 = getelementptr inbounds i32, i32* %15, i64 0
+  %17 = load i32, i32* %16, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  store i32 %17, i32* %a.addr, align 4
+  %18 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 1
+  %19 = load %struct.nish_array*, %struct.nish_array** %18, align 8, !tbaa !24
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %19, i64 0, i32 0
   %21 = load i64, i64* %20, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %22 = icmp ult i64 1, %21

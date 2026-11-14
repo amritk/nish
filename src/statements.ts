@@ -670,7 +670,7 @@ const declareLocal = (
   const local = new Local(name, type, mutable, STORAGE_LOCAL)
   local.origin = origin
   if (decl.kind === NodeKind.VarDecl && bindsHiddenReceiver(decl)) {
-    local.written = ctx.textOf(decl.children[3])
+    ctx.program.nameHiddenReceiver(name, ctx.textOf(decl.children[3]))
   }
   if (!scope.declare(local)) {
     ctx.error(site, `Duplicate declaration of \`${name}\``)

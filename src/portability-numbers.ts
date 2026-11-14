@@ -358,7 +358,7 @@ const wideFinding = (node: Node, what: string): PortabilityFinding =>
 const localFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
   const local = walk.program.nodeLocals[node.id]
   if (local !== null && isWide(local.type)) {
-    out.push(wideFinding(node.children[0], `\`${local.written}\``))
+    out.push(wideFinding(node.children[0], `\`${walk.program.localText(local)}\``))
   }
 }
 

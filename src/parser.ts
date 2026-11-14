@@ -261,10 +261,34 @@ const isAssignment = (kind: i32): boolean =>
   kind === TOK_STAR_STAR_ASSIGN
 
 /**
- * Whether a pattern's names may each read `receiver`, a name or `this`, where
- * it is written (`Parser.lowerPattern`): every slot is a hole or binds a
- * plain name, at least one binds one, and none is the receiver's, which would
- * shadow it for the reads after it.
+ * The name or `this` a field path starts at, `o` of `o.a.items`, or null when
+ * `expr` is not one: a path reads no storage it writes and calls nothing (an
+ * accessor is refused), so each of a pattern's names may read it again
+ * where the source wrote it, rooted where its hand-written twin is.
+ */
+const fieldPathRoot = (expr: Node): Node | null => {
+  let at = expr
+  while (at.kind === NodeKind.Member && at.flags === 0) {
+    at = at.children[0]
+  }
+  return at.kind === NodeKind.Ident || at.kind === NodeKind.This ? at : null
+}
+
+/** A copy of `path`, a field path (`fieldPathRoot`), at the source's spans. */
+const copyPath = (parser: Parser, path: Node): Node => {
+  const copy = parser.node(path.kind, path.start, path.end)
+  copy.text = path.text
+  if (path.kind === NodeKind.Member) {
+    copy.children.push(copyPath(parser, path.children[0]))
+  }
+  return copy
+}
+
+/**
+ * Whether a pattern's names may each read `receiver`, a field path named by
+ * its root, a name or `this`, where it is written (`Parser.lowerPattern`):
+ * every slot is a hole or binds a plain name, at least one binds one, and
+ * none is the root's, which would shadow it for the reads after it.
  */
 const readsDirectly = (pattern: Node, receiver: string): boolean => {
   let names = 0
@@ -2315,10 +2339,9 @@ export class Parser {
     while (base.kind === NodeKind.Paren) {
       base = base.children[0]
     }
+    const root = fieldPathRoot(base)
     const direct =
-      declaration.children[1].kind === NodeKind.Empty &&
-      (base.kind === NodeKind.Ident || base.kind === NodeKind.This) &&
-      readsDirectly(pattern, base.text)
+      declaration.children[1].kind === NodeKind.Empty && root !== null && readsDirectly(pattern, root.text)
     // Each read's receiver spans what the source wrote on the right, so a
     // message quotes `p.inner` (`CheckContext.textOf`), never the hidden name.
     const written = base
@@ -2345,10 +2368,14 @@ export class Parser {
         object ? slot.start + slot.text.length : slot.end
       )
       // A `for...of` head's pattern has no right-hand side until the loop's.
-      const at = written.kind === NodeKind.Empty ? slot : written
-      const receiver = this.node(base.kind, at.start, at.end)
-      receiver.text = base.text
-      read.children.push(receiver)
+      if (direct) {
+        read.children.push(copyPath(this, base))
+      } else {
+        const at = written.kind === NodeKind.Empty ? slot : written
+        const receiver = this.node(base.kind, at.start, at.end)
+        receiver.text = base.text
+        read.children.push(receiver)
+      }
       if (object) {
         read.text = slot.text
       } else {

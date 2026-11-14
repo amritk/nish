@@ -14612,22 +14612,27 @@ if (dealtHere("arrayChecks")) {
         text
       )
     }
-    // Loop-flow reads a pattern's names as it reads hand-written locals: the
-    // pattern loop is refused exactly where its twin is.
-    const flow = ["reject_destructure_loop_flow", "reject_destructure_loop_flow_plain"].map((c) =>
-      fs.readFileSync(path.join(casesDir, `${c}.err`), "utf8")
-    )
-    check(
-      "reject_destructure_loop_flow: the pattern loop and its hand-written twin are refused with the same diagnostic",
-      flow[0] === flow[1],
-      `${flow[0]}\n----\n${flow[1]}`
-    )
+    // Loop-flow reads a pattern's names as it reads hand-written locals, and
+    // the element-reference pass roots them where the twin's are (R5-1): each
+    // pattern is refused exactly where its twin is.
+    for (const name of ["loop_flow", "moved_field", "moved_nested", "moved_this", "moved_call"]) {
+      const twins = [`reject_destructure_${name}`, `reject_destructure_${name}_plain`].map((c) =>
+        fs.readFileSync(path.join(casesDir, `${c}.err`), "utf8")
+      )
+      check(
+        `reject_destructure_${name}: the pattern and its hand-written twin are refused with the same diagnostic`,
+        twins[0] === twins[1],
+        `${twins[0]}\n----\n${twins[1]}`
+      )
+    }
     // A pattern is the reads it stands for: each `<form>_pattern` body is its
     // `<form>_plain` twin's, unoptimised (local names aside) and after `opt -O2`.
     const zero = path.join(buildDir, "destructure_zero_cost.ll")
-    const forms = ["object", "array", "for", "local", "fresh", "guard", "guard_loop", "call", "hole", "let", "rows"]
+    // `member` reads through `h.pt` and `h.items`, a field path the pattern
+    // reads again where it is written, as the twin does.
+    const forms = ["object", "array", "for", "local", "fresh", "guard", "guard_loop", "call", "hole", "let", "rows", "member"]
     // The local a `<form>_plain` twin names its receiver, which the pattern
-    // holds in its hidden `pattern.N` instead (a name receiver has none).
+    // holds in its hidden `pattern.N` instead (a field path has none).
     const twinReceiver = { for: "point", local: "point", fresh: "xs", call: "p", rows: "row" }
     const bodyOf = (ir, name) => {
       const m = new RegExp(`^define [^\\n]*@${name}\\([^]*?^\\}`, "m").exec(ir)
@@ -14677,9 +14682,7 @@ if (dealtHere("arrayChecks")) {
         const b = bodyOf(o2.stdout, name)
         return b ? b.replace(/!(alias\.scope|noalias) !\d+/g, "!$1 !N").replace(/%\.not\d+\b/g, "%.not") : null
       }
-      // `member` reads through `h.pt` and `h.items`: its hidden receiver is one
-      // alloca and one store more unoptimised, so it is compared here only.
-      for (const form of [...forms, "member"]) {
+      for (const form of forms) {
         const pattern = body(`${form}_pattern`)
         check(
           `destructure_zero_cost: after opt -O2, ${form}_pattern compiles to the body of ${form}_plain`,
