@@ -1,0 +1,1 @@
+The callback of `forEach` on a `Set` takes 2 parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names

@@ -3311,6 +3311,7 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `filter(pred)` | arrays | `T[]` |
 | `some(pred)`, `every(pred)` | arrays | `boolean` |
 | `findIndex(pred)` | arrays | `number` |
+| `forEach(f)` | arrays | `void` |
 | `slice(start?, end?)` | arrays | `T[]` |
 | `length` | strings | `number` |
 | `charCodeAt(i)` | strings | `number` |
@@ -3649,15 +3650,30 @@ and parameters (`arr_sort_capture`), under the rule in [Function parameters](dec
 
 ### Callback methods and `slice`
 
-`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
-and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
-a template of `std/array.ts`, which a call of one of those names loads, and the
-callback is a compile-time function parameter, so each callback gets an
-instantiation of its own whose loop calls it directly. `xs.map(f)` and
-`map(xs, f)` with `map` imported from `nish/array` are the same call and
-compile to one instance (`arr_map_template`). The template is picked by the
-callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
-`slice`, `sliceFrom` or `sliceAll` by the argument count.
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
+`xs.forEach(f)` and `xs.slice(...)` are lowered as `sort` is: the checker
+rewrites the call to a template of `std/array.ts`, which a call of one of those
+names loads, and the callback is a compile-time function parameter, so each
+callback gets an instantiation of its own whose loop calls it directly.
+`xs.map(f)` and `map(xs, f)` with `map` imported from `nish/array` are the same
+call and compile to one instance (`arr_map_template`). The template is picked by
+the callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`,
+and `slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+`xs.forEach(f)` answers `void`, so its answer cannot be bound
+(`reject_foreach_answer`), and its callback is written to answer nothing: a
+concise body such as `(x) => console.log(x)` or `(x) => ys.push(x)` is a
+statement, and what it computes is dropped. It compiles to a counted loop over
+the array with the callback inlined into its body, as `for...of` does, but the
+loop stops at the length the array had when the call began, as Node does,
+where `for...of` reads the length on every pass. With a callback that does not
+resize the array, `opt -O2` leaves the same instruction count for both: 18 on
+the `walk` function measured in
+[IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#map-and-set-iteration). An arrow argument
+never assigns a name of the function it is written in (NL2586), and a
+`forEach` callback is no exception, so a running total is a `for...of` loop,
+whose body may assign it; the refusal says so (`reject_foreach_capture_sum`):
+`for (const x of xs) { sum += x }`.
 
 The callback takes the element, or the element and its index, as TypeScript
 allows. JavaScript passes a third argument, the array itself; Nish refuses a
@@ -3673,7 +3689,10 @@ Each method walks the array from index 0 and calls the callback once per
 element, in order, up to the length the array had when the call began, as
 `Array.prototype` does; `some`, `every` and `findIndex` stop at the first
 element that decides. A callback that shrinks the array ends the walk at the
-new length, where JavaScript goes on and skips the missing indices. `map` and
+new length, where JavaScript goes on and skips the missing indices. So a
+`forEach` callback that pushes onto its receiver does not visit what it
+pushed, one that stores ahead of the walk is handed the stored value, and one
+that pops stops the walk early, as Node does (`arr_foreach`). `map` and
 `filter` answer a new array, so writing into it does not touch the receiver;
 an element that is an `interface` record is stored inline and copied, so
 `filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
@@ -3706,10 +3725,10 @@ message reads `expected f64`. Neither conversion works in the other mode. An arr
 proof at the call removes, and `--deny-panics` refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
-words, so the two agree on every input; `map`, `filter`, `some`, `every` and
-`findIndex` are the platform's own `Array.prototype` methods there, and an
-answer that holds records inline is copied with the runtime's `copyRecords`,
-as the native `push` copies.
+words, so the two agree on every input; `map`, `filter`, `some`, `every`,
+`findIndex` and `forEach` are the platform's own `Array.prototype` methods
+there, and an answer that holds records inline is copied with the runtime's
+`copyRecords`, as the native `push` copies.
 
 ## Bulk writes: `set` and `fill`
 
@@ -3829,8 +3848,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
-  passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`,
+  `forEach`, `slice`, passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -4120,17 +4139,42 @@ export const main = (): i32 => {
 ```
 
 - **The members are JavaScript's, less what this version defers.** A `Map` has
-  `size`, `get`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
-  `has`, `delete` and `clear`. `set` and `add` answer the receiver, so they
-  chain, and `delete` answers whether the key was there
-  (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
-  `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
+  `size`, `get`, `set`, `has`, `delete`, `clear` and `forEach`; a `Set` has
+  `size`, `add`, `has`, `delete`, `clear` and `forEach`. `set` and `add`
+  answer the receiver, so they chain, and `delete` answers whether the key was
+  there (`tests/cases/map_key_str`, `set_str`). `size` is a read-only
+  `number`: `` `size` of `Map<string, i32>` is read-only ``
+  (`reject_map_size_assign`).
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
-  iterable of a `for...of`, below. There is no `entries` or
-  `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`,
-  `reject_map_iter_entries_call`). Everything else in the
+  iterable of a `for...of`, below. There is no `entries`, because there is no
+  destructuring (`reject_map_entries`, `reject_map_iter_entries_call`):
+  `m.forEach((value, key) => ...)` visits each key with its value.
+- **`forEach` is the `for...of` walk with the callback inlined.**
+  `m.forEach(f)` on a `Map` calls `f` with each value, and with its key too
+  when `f` is written with two parameters, value first, as JavaScript does;
+  `s.forEach(f)` on a `Set` calls `f` with each element. The checker rewrites
+  the call to a template of `std/collections.ts` (`forEachEntry`,
+  `forEachValue`, `forEachElement`), whose body is the same walk as
+  `for...of` over the table, below: the same insertion order, an entry set
+  during the walk visited and one deleted before the walk reaches it not, and
+  `clear` ending it (`map_foreach`, `set_foreach`). It allocates nothing and
+  looks no key up, where `for (const k of m.keys())` with `m.get(k) ?? 0`
+  calls `Map.probe` and takes the nullish branch once per key, and rewinds
+  the arena on every pass: under `opt -O2`, 92 instructions against 112 for
+  a `Map` and 78 against 89 for a `Set`
+  ([IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#map-and-set-iteration)). JavaScript passes
+  a `Map`'s callback the map as a third argument, and a `Set`'s callback the
+  element twice and the set third; Nish refuses a callback written with more
+  than two parameters on a `Map` (NL2771, `reject_map_foreach_third_param`)
+  or more than one on a `Set` (NL2772, `reject_set_foreach_second_param`),
+  since the receiver is the one the call already names. The callback follows the array callbacks' rules
+  above: a top-level function or an arrow written at the call
+  (`reject_map_foreach`), at least one parameter, an answer of `void`, no
+  assignment to a name of the function around it (NL2586), and `m.forEach`
+  named without a call is refused (`reject_map_foreach_uncalled`). An arrow
+  inside another arrow reads only its own parameters, so a nested walk goes
+  through a top-level function (`set_foreach`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
   `reject_map_internal_method`, `reject_set_set`).

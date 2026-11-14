@@ -1,1 +1,1 @@
-`entries` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`
+`entries` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries`, because there is no destructuring; `forEach((value, key) => ...)` visits each key with its value
