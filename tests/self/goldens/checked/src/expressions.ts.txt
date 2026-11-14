@@ -710,8 +710,8 @@ function refuseReferenceHole(ctx: CheckContext, part: Node): void -> @refuseRefe
 function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkTemplate
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
-  calls: CheckContext.error TypeTable.isFnRef TypeTable.isSecret TypeTable.stripNull TypeTable.typeName checkExpression isNumeric nish_str_concat refuseReferenceHole templateMessage
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 refuseReferenceHole#0 CheckContext.error#0
+  calls: CheckContext.error TypeTable.isFnRef TypeTable.isSecret TypeTable.stripNull TypeTable.typeName checkExpression isNumeric nish_str_concat refuseReferenceHole stringEnumMismatch templateMessage
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 refuseReferenceHole#0 stringEnumMismatch#0 CheckContext.error#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -724,10 +724,13 @@ function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @che
   callee +12:9 TypeTable.isFnRef -> @TypeTable.isFnRef
   callee +12:27 TypeTable.stripNull -> @TypeTable.stripNull
   callee +13:7 refuseReferenceHole -> @refuseReferenceHole
-  callee +16:10 isNumeric -> @isNumeric
-  local +17:13 spelled: string (const)
-  callee +17:23 TypeTable.typeName -> @TypeTable.typeName
+  local +16:11 enumText: string | null (const)
+  callee +16:22 stringEnumMismatch -> @stringEnumMismatch
   callee +18:7 CheckContext.error -> @CheckContext.error
+  callee +21:10 isNumeric -> @isNumeric
+  local +22:13 spelled: string (const)
+  callee +22:23 TypeTable.typeName -> @TypeTable.typeName
+  callee +23:7 CheckContext.error -> @CheckContext.error
 function checkNull(ctx: CheckContext, expr: Node, want: i32): i32 -> @checkNull
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -1120,11 +1123,11 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: left op right
-  calls: CheckContext.errorType CheckContext.textOf TypeTable.isMask TypeTable.isNullable TypeTable.isSecret TypeTable.isVector TypeTable.typeName equalityMessage memberSetName memberSetOf nish_str_concat nish_str_eq setsDisjoint simdCompareMessage
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 setsDisjoint#0 memberSetOf#0 memberSetOf#0 CheckContext.errorType#0 CheckContext.textOf#0 memberSetName#0 CheckContext.textOf#0 memberSetName#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
-  pointer leftNode: size=40 writesThrough=true captured=true passedTo=setsDisjoint#1 memberSetOf#1 CheckContext.textOf#1
-  pointer rightNode: size=40 writesThrough=true captured=true passedTo=setsDisjoint#2 memberSetOf#1 CheckContext.textOf#1
+  calls: CheckContext.errorType CheckContext.textOf TypeTable.isMask TypeTable.isNullable TypeTable.isSecret TypeTable.isVector TypeTable.typeName equalityMessage memberSetName memberSetOf nish_str_concat nish_str_eq setsDisjoint simdCompareMessage stringEnumComparison
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 stringEnumComparison#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 setsDisjoint#0 memberSetOf#0 memberSetOf#0 CheckContext.errorType#0 CheckContext.textOf#0 memberSetName#0 CheckContext.textOf#0 memberSetName#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
+  pointer leftNode: size=40 writesThrough=true captured=true passedTo=stringEnumComparison#4 setsDisjoint#1 memberSetOf#1 CheckContext.textOf#1
+  pointer rightNode: size=40 writesThrough=true captured=true passedTo=stringEnumComparison#5 setsDisjoint#2 memberSetOf#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 secretLeft: boolean (const)
   callee +0:22 TypeTable.isSecret -> @TypeTable.isSecret
@@ -1139,25 +1142,28 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   callee +10:9 TypeTable.isNullable -> @TypeTable.isNullable
   callee +10:39 TypeTable.isNullable -> @TypeTable.isNullable
   callee +11:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +16:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +18:7 TypeTable.isVector -> @TypeTable.isVector
-  callee +18:35 TypeTable.isMask -> @TypeTable.isMask
-  callee +19:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +19:32 simdCompareMessage -> @simdCompareMessage
-  callee +19:55 TypeTable.typeName -> @TypeTable.typeName
-  callee +21:7 setsDisjoint -> @setsDisjoint
-  local +22:11 leftSet: i32[] (const)
-  callee +22:21 memberSetOf -> @memberSetOf
-  local +23:11 rightSet: i32[] (const)
-  callee +23:22 memberSetOf -> @memberSetOf
-  callee +24:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +26:73 CheckContext.textOf -> @CheckContext.textOf
-  callee +26:104 memberSetName -> @memberSetName
-  callee +26:143 CheckContext.textOf -> @CheckContext.textOf
-  callee +26:175 memberSetName -> @memberSetName
-  callee +31:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +32:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +34:31 TypeTable.typeName -> @TypeTable.typeName
+  local +16:11 enumText: string | null (const)
+  callee +16:22 stringEnumComparison -> @stringEnumComparison
+  callee +18:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +20:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +22:7 TypeTable.isVector -> @TypeTable.isVector
+  callee +22:35 TypeTable.isMask -> @TypeTable.isMask
+  callee +23:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +23:32 simdCompareMessage -> @simdCompareMessage
+  callee +23:55 TypeTable.typeName -> @TypeTable.typeName
+  callee +25:7 setsDisjoint -> @setsDisjoint
+  local +26:11 leftSet: i32[] (const)
+  callee +26:21 memberSetOf -> @memberSetOf
+  local +27:11 rightSet: i32[] (const)
+  callee +27:22 memberSetOf -> @memberSetOf
+  callee +28:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +30:73 CheckContext.textOf -> @CheckContext.textOf
+  callee +30:104 memberSetName -> @memberSetName
+  callee +30:143 CheckContext.textOf -> @CheckContext.textOf
+  callee +30:175 memberSetName -> @memberSetName
+  callee +35:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +36:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +38:31 TypeTable.typeName -> @TypeTable.typeName
 function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkLogical
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -2548,6 +2554,53 @@ function stringCallFix(ctx: CheckContext, call: Node, global: boolean, scope: Sc
   callee +6:9 isNumeric -> @isNumeric
   local +7:11 none: Edit[] (const)
   callee +10:10 templateFix -> @templateFix
+function stringEnumMismatch(ctx: CheckContext, want: i32, got: i32, node: Node): string | null -> @stringEnumMismatch [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: got want
+  calls: CheckContext.textOf TypeTable.enumStrings TypeTable.stringEnumMember TypeTable.typeName nish_str_concat
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0 CheckContext.textOf#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1 CheckContext.textOf#1
+  stackSites=0 stackLocals=0
+  callee +0:28 TypeTable.enumStrings -> @TypeTable.enumStrings
+  callee +1:19 TypeTable.typeName -> @TypeTable.typeName
+  callee +1:80 CheckContext.textOf -> @CheckContext.textOf
+  callee +3:27 TypeTable.enumStrings -> @TypeTable.enumStrings
+  local +4:11 text: string (const)
+  local +5:11 member: string (const)
+  callee +5:20 TypeTable.stringEnumMember -> @TypeTable.stringEnumMember
+  callee +6:17 CheckContext.textOf -> @CheckContext.textOf
+  callee +6:60 TypeTable.typeName -> @TypeTable.typeName
+function stringEnumComparison(ctx: CheckContext, op: string, left: i32, right: i32, leftNode: Node, rightNode: Node): string | null -> @stringEnumComparison
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: left leftNode right rightNode
+  calls: TypeTable.enumStrings TypeTable.stringEnumMember TypeTable.typeName nish_str_concat
+  pointer ctx: size=344 writesThrough=false captured=false
+  pointer leftNode: size=40 writesThrough=true captured=true
+  pointer rightNode: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:9 leftEnum: boolean (const)
+  callee +0:20 TypeTable.enumStrings -> @TypeTable.enumStrings
+  callee +1:67 TypeTable.enumStrings -> @TypeTable.enumStrings
+  local +4:9 type: i32 (const)
+  local +5:9 other: Node (const)
+  local +6:9 member: string (const)
+  callee +6:18 TypeTable.stringEnumMember -> @TypeTable.stringEnumMember
+  callee +7:32 TypeTable.typeName -> @TypeTable.typeName
+function checkEnumString(ctx: CheckContext, call: Node, scope: Scope): i32 -> @checkEnumString
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  calls: CheckContext.errorFix TypeTable.enumStrings checkExpression nish_panic_index nish_str_concat stringCallFix
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.errorFix#0 stringCallFix#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=stringCallFix#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 stringCallFix#3
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +1:9 arg: Node (const)
+  local +2:9 type: i32 (const)
+  callee +2:16 checkExpression -> @checkExpression
+  callee +6:7 TypeTable.enumStrings -> @TypeTable.enumStrings
+  callee +9:3 CheckContext.errorFix -> @CheckContext.errorFix
+  callee +9:63 stringCallFix -> @stringCallFix
 function templateFix(ctx: CheckContext, call: Node, value: Node): Edit[] -> @templateFix [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit CheckContext.textOf nish_array_grow nish_str_concat unwrapParens
@@ -2577,70 +2630,71 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: want
-  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.builtinImport FunctionBindings.get FunctionSig.foreign FunctionSig.isAsync Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.isFnRef TypeTable.typeName asyncBuiltinOf checkAsyncBuiltin checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkReferenceCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nullableReference outerFunctionMessage outerReference promiseMethodMessage refuseForeignNullable refuseNullableCall refuseOnce refuseSecretArguments refuseUnawaitedCall simdImportMessage stringCallFix unwrapParens
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkExpression#0 promiseMethodMessage#0 CheckContext.errorType#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorType#0 checkExpression#0 checkReferenceCall#0 nullableReference#0 refuseNullableCall#0 CheckContext.capturesOuter#0 outerReference#0 checkExpression#0 nullableReference#0 refuseNullableCall#0 checkReferenceCall#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkAsyncBuiltin#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 refuseUnawaitedCall#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 checkReferenceCall#1 CheckContext.errorType#1 checkReferenceCall#1 checkReferenceCall#1 checkDirectCall#1 checkGenericCall#1 checkAsyncBuiltin#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 CheckContext.errorType#1 CheckContext.errorType#1 stringCallFix#1 refuseUnawaitedCall#1 fitArguments#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 promiseMethodMessage#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 checkExpression#2 checkReferenceCall#4 Scope.lookup#0 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 checkDirectCall#4 checkGenericCall#3 checkAsyncBuiltin#2 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
+  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.builtinImport FunctionBindings.get FunctionSig.foreign FunctionSig.isAsync Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.isFnRef TypeTable.typeName asyncBuiltinOf checkAsyncBuiltin checkBuiltinCall checkBuiltinFunction checkDirectCall checkEnumString checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkReferenceCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nullableReference outerFunctionMessage outerReference promiseMethodMessage refuseForeignNullable refuseNullableCall refuseOnce refuseSecretArguments refuseUnawaitedCall simdImportMessage stringCallFix unwrapParens
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=checkExpression#0 promiseMethodMessage#0 CheckContext.errorType#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorType#0 checkExpression#0 checkReferenceCall#0 nullableReference#0 refuseNullableCall#0 CheckContext.capturesOuter#0 outerReference#0 checkExpression#0 nullableReference#0 refuseNullableCall#0 checkReferenceCall#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkAsyncBuiltin#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 checkEnumString#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 refuseUnawaitedCall#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 checkReferenceCall#1 CheckContext.errorType#1 checkReferenceCall#1 checkReferenceCall#1 checkDirectCall#1 checkGenericCall#1 checkAsyncBuiltin#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 checkEnumString#1 CheckContext.errorType#1 CheckContext.errorType#1 stringCallFix#1 refuseUnawaitedCall#1 fitArguments#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 promiseMethodMessage#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 checkExpression#2 checkReferenceCall#4 Scope.lookup#0 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 checkDirectCall#4 checkGenericCall#3 checkAsyncBuiltin#2 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 checkEnumString#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
   stackSites=0 stackLocals=0
-  local -142:9 callee: Node (const)
-  callee -140:12 checkExpression -> @checkExpression
-  local -137:11 promised: string (const)
-  callee -137:22 promiseMethodMessage -> @promiseMethodMessage
-  callee -135:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -131:9 isValueReceiver -> @isValueReceiver
-  callee -130:14 checkMethodCall -> @checkMethodCall
-  callee -127:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -127:35 neverNullMessage -> @neverNullMessage
-  local -122:11 receiver: Node (const)
-  callee -119:7 refuseSecretArguments -> @refuseSecretArguments
-  callee -115:12 checkBuiltinCall -> @checkBuiltinCall
-  local -111:11 computed: i32 (const)
-  callee -111:22 checkExpression -> @checkExpression
-  callee -107:9 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -106:14 checkReferenceCall -> @checkReferenceCall
-  callee -106:54 CheckContext.textOf -> @CheckContext.textOf
-  callee -104:9 nullableReference -> @nullableReference
-  callee -103:14 refuseNullableCall -> @refuseNullableCall
-  callee -103:46 CheckContext.textOf -> @CheckContext.textOf
-  callee -101:12 CheckContext.errorType -> @CheckContext.errorType
-  local -96:9 local: Local | null (const)
-  callee -96:17 Scope.lookup -> @Scope.lookup
-  callee -94:25 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -94:43 Scope.typeOf -> @Scope.typeOf
-  local -93:11 held: i32 (const)
-  callee -93:18 checkExpression -> @checkExpression
-  callee -92:41 checkReferenceCall -> @checkReferenceCall
-  callee -90:25 nullableReference -> @nullableReference
-  callee -90:48 Scope.typeOf -> @Scope.typeOf
-  callee -89:12 refuseNullableCall -> @refuseNullableCall
-  callee -86:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee -83:11 outerReference -> @outerReference
-  local -82:15 held: i32 (const)
-  callee -82:22 checkExpression -> @checkExpression
-  callee -81:33 nullableReference -> @nullableReference
-  callee -80:18 refuseNullableCall -> @refuseNullableCall
-  callee -78:45 checkReferenceCall -> @checkReferenceCall
-  callee -76:7 refuseOnce -> @refuseOnce
-  callee -76:31 outerFunctionMessage -> @outerFunctionMessage
-  local -73:11 bound: FunctionSig | null (const)
-  callee -73:19 FunctionBindings.get -> @FunctionBindings.get
-  callee -71:14 checkDirectCall -> @checkDirectCall
-  local -68:9 template: TemplateInfo | null (const)
-  callee -68:20 CheckContext.template -> @CheckContext.template
-  callee -66:12 checkGenericCall -> @checkGenericCall
-  local -64:9 sig: FunctionSig | null (const)
-  callee -64:15 CheckContext.signature -> @CheckContext.signature
-  local -60:11 imported: BuiltinExport | null (const)
-  callee -60:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee -58:11 asyncBuiltinOf -> @asyncBuiltinOf
-  callee -57:16 checkAsyncBuiltin -> @checkAsyncBuiltin
-  callee -55:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -52:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee -50:9 isResultConstructor -> @isResultConstructor
-  callee -46:14 checkResultConstructor -> @checkResultConstructor
-  callee -44:9 isBuiltinFunction -> @isBuiltinFunction
-  callee -43:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -40:14 checkBuiltinFunction -> @checkBuiltinFunction
+  local -145:9 callee: Node (const)
+  callee -143:12 checkExpression -> @checkExpression
+  local -140:11 promised: string (const)
+  callee -140:22 promiseMethodMessage -> @promiseMethodMessage
+  callee -138:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -134:9 isValueReceiver -> @isValueReceiver
+  callee -133:14 checkMethodCall -> @checkMethodCall
+  callee -130:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -130:35 neverNullMessage -> @neverNullMessage
+  local -125:11 receiver: Node (const)
+  callee -122:7 refuseSecretArguments -> @refuseSecretArguments
+  callee -118:12 checkBuiltinCall -> @checkBuiltinCall
+  local -114:11 computed: i32 (const)
+  callee -114:22 checkExpression -> @checkExpression
+  callee -110:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -109:14 checkReferenceCall -> @checkReferenceCall
+  callee -109:54 CheckContext.textOf -> @CheckContext.textOf
+  callee -107:9 nullableReference -> @nullableReference
+  callee -106:14 refuseNullableCall -> @refuseNullableCall
+  callee -106:46 CheckContext.textOf -> @CheckContext.textOf
+  callee -104:12 CheckContext.errorType -> @CheckContext.errorType
+  local -99:9 local: Local | null (const)
+  callee -99:17 Scope.lookup -> @Scope.lookup
+  callee -97:25 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -97:43 Scope.typeOf -> @Scope.typeOf
+  local -96:11 held: i32 (const)
+  callee -96:18 checkExpression -> @checkExpression
+  callee -95:41 checkReferenceCall -> @checkReferenceCall
+  callee -93:25 nullableReference -> @nullableReference
+  callee -93:48 Scope.typeOf -> @Scope.typeOf
+  callee -92:12 refuseNullableCall -> @refuseNullableCall
+  callee -89:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee -86:11 outerReference -> @outerReference
+  local -85:15 held: i32 (const)
+  callee -85:22 checkExpression -> @checkExpression
+  callee -84:33 nullableReference -> @nullableReference
+  callee -83:18 refuseNullableCall -> @refuseNullableCall
+  callee -81:45 checkReferenceCall -> @checkReferenceCall
+  callee -79:7 refuseOnce -> @refuseOnce
+  callee -79:31 outerFunctionMessage -> @outerFunctionMessage
+  local -76:11 bound: FunctionSig | null (const)
+  callee -76:19 FunctionBindings.get -> @FunctionBindings.get
+  callee -74:14 checkDirectCall -> @checkDirectCall
+  local -71:9 template: TemplateInfo | null (const)
+  callee -71:20 CheckContext.template -> @CheckContext.template
+  callee -69:12 checkGenericCall -> @checkGenericCall
+  local -67:9 sig: FunctionSig | null (const)
+  callee -67:15 CheckContext.signature -> @CheckContext.signature
+  local -63:11 imported: BuiltinExport | null (const)
+  callee -63:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee -61:11 asyncBuiltinOf -> @asyncBuiltinOf
+  callee -60:16 checkAsyncBuiltin -> @checkAsyncBuiltin
+  callee -58:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -55:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee -53:9 isResultConstructor -> @isResultConstructor
+  callee -49:14 checkResultConstructor -> @checkResultConstructor
+  callee -47:9 isBuiltinFunction -> @isBuiltinFunction
+  callee -46:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -43:14 checkBuiltinFunction -> @checkBuiltinFunction
+  callee -40:14 checkEnumString -> @checkEnumString
   callee -36:27 Scope.typeOf -> @Scope.typeOf
   callee -30:14 CheckContext.errorType -> @CheckContext.errorType
   callee -27:14 CheckContext.errorType -> @CheckContext.errorType

@@ -129,7 +129,7 @@ function referenceTypeOf(table: TypeTable, sig: FunctionSig): i32 -> @referenceT
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.fnRefOf
   calls: FunctionSig.writtenArity TypeTable.fnRefOf nish_array_grow nish_panic_index
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.fnRefOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.fnRefOf#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
   stackSites=1 stackLocals=1
   local +0:9 params: i32[] (const)
@@ -202,7 +202,7 @@ function holdsFnRef(table: TypeTable, type: i32): boolean -> @holdsFnRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.errOf TypeTable.isArray TypeTable.isFnRef TypeTable.isMaybe TypeTable.isNullable TypeTable.isResult TypeTable.okOf TypeTable.refOf holdsFnRef
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isFnRef#0 TypeTable.isArray#0 TypeTable.isNullable#0 TypeTable.isMaybe#0 holdsFnRef#0 TypeTable.refOf#0 TypeTable.isResult#0 holdsFnRef#0 TypeTable.okOf#0 holdsFnRef#0 TypeTable.errOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isFnRef#0 TypeTable.isArray#0 TypeTable.isNullable#0 TypeTable.isMaybe#0 holdsFnRef#0 TypeTable.refOf#0 TypeTable.isResult#0 holdsFnRef#0 TypeTable.okOf#0 holdsFnRef#0 TypeTable.errOf#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isFnRef -> @TypeTable.isFnRef
   callee +3:7 TypeTable.isArray -> @TypeTable.isArray
@@ -220,7 +220,7 @@ function classesOf(table: TypeTable, type: i32, into: i32[]): void -> @classesOf
   sharedWrite: +0:5
   escaping: type
   calls: TypeTable.errOf TypeTable.isArray TypeTable.isMaybe TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.okOf TypeTable.refOf classesOf nish_array_grow
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isNullable#0 TypeTable.isMaybe#0 classesOf#0 TypeTable.refOf#0 TypeTable.isResult#0 classesOf#0 TypeTable.okOf#0 classesOf#0 TypeTable.errOf#0 TypeTable.isStruct#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isNullable#0 TypeTable.isMaybe#0 classesOf#0 TypeTable.refOf#0 TypeTable.isResult#0 classesOf#0 TypeTable.okOf#0 classesOf#0 TypeTable.errOf#0 TypeTable.isStruct#0
   pointer into: size=0 writesThrough=true captured=false passedTo=classesOf#2 classesOf#2 classesOf#2
   stackSites=0 stackLocals=0
   callee -6:7 TypeTable.isArray -> @TypeTable.isArray

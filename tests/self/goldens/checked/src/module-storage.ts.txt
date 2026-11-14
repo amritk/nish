@@ -139,7 +139,7 @@ function storageRecord(program: CheckedProgram, table: TypeTable, elem: i32): St
   escaping: elem
   calls: inlineElementStruct
   pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=inlineElementStruct#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=inlineElementStruct#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +0:16 inlineElementStruct -> @inlineElementStruct
@@ -166,7 +166,7 @@ function rootClass(program: CheckedProgram | null, table: TypeTable, elem: i32):
   escaping: elem
   calls: CheckedProgram.struct TypeTable.isNullable TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
   pointer program: size=912 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:40 TypeTable.isNullable -> @TypeTable.isNullable
   local +3:9 inner: i32 (const)

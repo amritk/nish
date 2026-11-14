@@ -40,7 +40,7 @@ function resultLayout(table: TypeTable, type: i32): ResultLayout -> @resultLayou
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
   escaping: type
   calls: ResultLayout.constructor TypeTable.alignOf TypeTable.errOf TypeTable.okOf TypeTable.resultStructName nish_alloc_struct nish_panic_overflow roundUpTo
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.resultStructName#0 TypeTable.okOf#0 TypeTable.errOf#0 TypeTable.alignOf#0 TypeTable.alignOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.resultStructName#0 TypeTable.okOf#0 TypeTable.errOf#0 TypeTable.alignOf#0 TypeTable.alignOf#0
   stackSites=0 stackLocals=0
   local +0:9 layout: ResultLayout (const)
   callee +0:18 new ResultLayout -> @ResultLayout.constructor
@@ -228,7 +228,7 @@ function narrowResultTest(cond: Node, scope: Scope, table: TypeTable, whenTrue: 
   calls: Scope.lookup Scope.narrow Scope.typeOf TypeTable.isResult TypeTable.withState nish_panic_index nish_str_eq
   pointer cond: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.typeOf#0 Scope.narrow#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.withState#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.withState#0
   stackSites=0 stackLocals=0
   local +0:7 receiver: Node | null (let)
   local +1:7 positive: boolean (let)
@@ -313,7 +313,7 @@ function collectResultLocals(program: CheckedProgram, table: TypeTable, node: No
   escaping: node
   calls: TypeTable.isResult collectResultLocals nish_array_grow nish_panic_index
   pointer program: size=912 writesThrough=false captured=false passedTo=collectResultLocals#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isResult#0 collectResultLocals#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isResult#0 collectResultLocals#1
   pointer node: size=40 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false passedTo=collectResultLocals#3
   stackSites=0 stackLocals=0

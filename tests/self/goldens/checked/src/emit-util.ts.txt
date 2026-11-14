@@ -21,7 +21,7 @@ function coalescesMaybe(program: CheckedProgram, table: TypeTable, coalesce: Nod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isMaybe nish_panic_index unwrapParens
   pointer program: size=912 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isMaybe#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isMaybe#0
   pointer coalesce: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 left: Node (const)
@@ -57,7 +57,7 @@ function rangedStoreOf(program: CheckedProgram, table: TypeTable, node: Node): i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged isAssignmentOperator nish_panic_index nish_str_eq
   pointer program: size=912 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 writesBack: boolean (const)
@@ -84,7 +84,7 @@ function arrayMethodName(program: CheckedProgram, table: TypeTable, call: Node):
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray methodReceiver nish_panic_index
   pointer program: size=912 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isArray#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isArray#0
   pointer call: size=40 writesThrough=false captured=false passedTo=methodReceiver#0
   stackSites=0 stackLocals=0
   local +0:9 receiver: Node | null (const)
@@ -138,7 +138,7 @@ function isPushCall(program: CheckedProgram, table: TypeTable, node: Node): bool
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: arrayMethodName nish_str_eq
   pointer program: size=912 writesThrough=false captured=false passedTo=arrayMethodName#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=arrayMethodName#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=arrayMethodName#1
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2
   stackSites=0 stackLocals=0
   callee +0:3 arrayMethodName -> @arrayMethodName
@@ -146,7 +146,7 @@ function storesInlineElements(program: CheckedProgram, table: TypeTable, expr: N
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray TypeTable.refOf inlineElementStruct nish_panic_index
   pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isArray#0 inlineElementStruct#1 TypeTable.refOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isArray#0 inlineElementStruct#1 TypeTable.refOf#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -157,7 +157,7 @@ function isJoinCall(program: CheckedProgram, table: TypeTable, node: Node): bool
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: arrayMethodName nish_str_eq
   pointer program: size=912 writesThrough=false captured=false passedTo=arrayMethodName#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=arrayMethodName#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=arrayMethodName#1
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2
   stackSites=0 stackLocals=0
   callee +0:3 arrayMethodName -> @arrayMethodName

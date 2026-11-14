@@ -1099,6 +1099,7 @@ struct JsonDecoder (class) size=40 align=8 exported
   method reset -> @nish.JsonDecoder.reset
   method fail -> @nish.JsonDecoder.fail
   method wrongType -> @nish.JsonDecoder.wrongType
+  method enumString -> @nish.JsonDecoder.enumString
   method take -> @nish.JsonDecoder.take
   method beginObject -> @nish.JsonDecoder.beginObject
   method nextField -> @nish.JsonDecoder.nextField
@@ -1251,6 +1252,15 @@ function JsonDecoder.wrongType(this: JsonDecoder): void -> @nish.JsonDecoder.wro
   pointer this: size=40 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
   stackSites=0 stackLocals=0
   callee +0:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+function JsonDecoder.enumString(this: JsonDecoder): boolean -> @nish.JsonDecoder.enumString [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDecoder.take
+  calls: nish.JsonDecoder.take nish.JsonDecoder.wrongType
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.wrongType#0
+  stackSites=0 stackLocals=0
+  local +0:11 k: i32 (const)
+  callee +0:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee +5:7 JsonDecoder.wrongType -> @nish.JsonDecoder.wrongType
 function JsonDecoder.take(this: JsonDecoder): i32 -> @nish.JsonDecoder.take [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

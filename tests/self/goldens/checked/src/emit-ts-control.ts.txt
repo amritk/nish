@@ -6,6 +6,7 @@ import splice from "./emit-ts-edits" -> function @splice
 import Walk from "./emit-ts-edits" -> struct Walk
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
 import Node from "./nodes" -> struct Node
+import jsonQuote from "./strings" -> function @jsonQuote
 import StringBuilder from "./strings" -> struct StringBuilder
 function controlRow(walk: Walk, node: Node, operands: Operands): string | null -> @controlRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -101,7 +102,7 @@ function callsOrReturn(walk: Walk, node: Node): boolean -> @callsOrReturn
   callee +9:7 callsOrReturn -> @callsOrReturn
 function enumText(walk: Walk, node: Node): string | null -> @enumText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: CheckedProgram.ownEnum StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: CheckedProgram.ownEnum StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get jsonQuote nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
   pointer walk: size=256 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -128,12 +129,14 @@ function enumText(walk: Walk, node: Node): string | null -> @enumText
   local +22:11 member: Node (const)
   local +23:11 index: i32 (const)
   callee +23:19 StringMap.get -> @StringMap.get
-  callee +24:5 StringBuilder.add -> @StringBuilder.add
-  callee +25:5 StringBuilder.add -> @StringBuilder.add
-  callee +28:3 StringBuilder.add -> @StringBuilder.add
-  local +29:9 exported: string (const)
-  callee +30:3 StringBuilder.add -> @StringBuilder.add
-  callee +31:10 StringBuilder.toText -> @StringBuilder.toText
+  local +26:11 value: string (const)
+  callee +26:35 jsonQuote -> @jsonQuote
+  callee +27:5 StringBuilder.add -> @StringBuilder.add
+  callee +28:5 StringBuilder.add -> @StringBuilder.add
+  callee +31:3 StringBuilder.add -> @StringBuilder.add
+  local +32:9 exported: string (const)
+  callee +33:3 StringBuilder.add -> @StringBuilder.add
+  callee +34:10 StringBuilder.toText -> @StringBuilder.toText
 function typeRef(walk: Walk, node: Node, operands: Operands): string | null -> @typeRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.helperName

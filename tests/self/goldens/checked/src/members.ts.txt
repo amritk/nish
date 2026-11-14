@@ -197,7 +197,7 @@ function checkEnumMember(ctx: CheckContext, expr: Node, info: EnumInfo): i32 -> 
   calls: CheckContext.errorAtProperty EnumInfo.hasMember EnumInfo.memberValue nish_panic_index nish_str_concat
   pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
-  pointer info: size=64 writesThrough=false captured=false passedTo=EnumInfo.hasMember#0 EnumInfo.memberValue#0
+  pointer info: size=80 writesThrough=false captured=false passedTo=EnumInfo.hasMember#0 EnumInfo.memberValue#0
   stackSites=0 stackLocals=0
   callee -4:8 EnumInfo.hasMember -> @EnumInfo.hasMember
   callee -3:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty

@@ -222,7 +222,7 @@ function State.constructor(this: State, table: TypeTable): void -> @State.constr
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: table
   pointer this: size=120 writesThrough=true captured=false
-  pointer table: size=136 writesThrough=true captured=true
+  pointer table: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function cloneState(s: State): State -> @cloneState
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=120
@@ -664,7 +664,7 @@ function isIndexType(table: TypeTable, type: i32): boolean -> @isIndexType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isRanged isUnsigned
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
   stackSites=0 stackLocals=0
   callee +0:39 isUnsigned -> @isUnsigned
   callee +0:59 TypeTable.isRanged -> @TypeTable.isRanged
@@ -749,7 +749,7 @@ function identityConversionOf(program: CheckedProgram, table: TypeTable, e: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf isBuiltinConversion nish_panic_index nish_str_eq
   pointer program: size=912 writesThrough=false captured=false passedTo=isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
   pointer e: size=40 writesThrough=false captured=false passedTo=isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1
   stackSites=0 stackLocals=0
   local +0:9 own: boolean (const)
@@ -2099,7 +2099,7 @@ function recordStoreType(program: CheckedProgram, table: TypeTable, access: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: inlineElementStruct nish_panic_index
   pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=inlineElementStruct#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=inlineElementStruct#1
   pointer access: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -2623,7 +2623,7 @@ function checkedArithmeticType(program: CheckedProgram, table: TypeTable, node: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf nish_panic_index nish_str_eq unwrapBoundsParens
   pointer program: size=912 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
@@ -2635,7 +2635,7 @@ function checksOverflow(program: CheckedProgram, table: TypeTable, node: Node): 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: checkedArithmeticType
   pointer program: size=912 writesThrough=false captured=false passedTo=checkedArithmeticType#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=checkedArithmeticType#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=checkedArithmeticType#1
   pointer node: size=40 writesThrough=false captured=false passedTo=checkedArithmeticType#2
   stackSites=0 stackLocals=0
   callee +0:3 checkedArithmeticType -> @checkedArithmeticType
@@ -2854,7 +2854,7 @@ function resultConstructor(program: CheckedProgram, table: TypeTable, call: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq
   pointer program: size=912 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isResult#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isResult#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -3744,7 +3744,7 @@ function proveSliceBounds(program: CheckedProgram, table: TypeTable, opts: Optio
   sharedWrite: +0:5
   calls: BoundsWalk.constructor CheckContext.constructor DiagnosticSink.constructor State.constructor nish_alloc_struct nish_panic_index walkBoundsStatement walkExpression
   pointer program: size=912 writesThrough=true captured=true passedTo=CheckContext.constructor#2
-  pointer table: size=136 writesThrough=true captured=true passedTo=CheckContext.constructor#1 State.constructor#1
+  pointer table: size=168 writesThrough=true captured=true passedTo=CheckContext.constructor#1 State.constructor#1
   pointer opts: size=232 writesThrough=false captured=false
   pointer body: size=40 writesThrough=true captured=true passedTo=walkBoundsStatement#2 walkExpression#2
   stackSites=1 stackLocals=1

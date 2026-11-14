@@ -142,7 +142,7 @@ function holdsRange(table: TypeTable, t: i32, ranged: StringSet): boolean -> @ho
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: StringSet.has TypeTable.errOf TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf holdsRange
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsRange#0 TypeTable.refOf#0 holdsRange#0 TypeTable.refOf#0 holdsRange#0 TypeTable.okOf#0 holdsRange#0 TypeTable.errOf#0 TypeTable.nameOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsRange#0 TypeTable.refOf#0 holdsRange#0 TypeTable.refOf#0 holdsRange#0 TypeTable.okOf#0 holdsRange#0 TypeTable.errOf#0 TypeTable.nameOf#0
   pointer ranged: size=8 writesThrough=false captured=false passedTo=holdsRange#2 holdsRange#2 holdsRange#2 holdsRange#2 StringSet.has#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isRanged -> @TypeTable.isRanged
@@ -160,7 +160,7 @@ function holdsRange(table: TypeTable, t: i32, ranged: StringSet): boolean -> @ho
 function signatureHidesRange(table: TypeTable, sig: FunctionSig, ranged: StringSet): boolean -> @signatureHidesRange
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged holdsRange
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 holdsRange#0 TypeTable.isRanged#0 holdsRange#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 holdsRange#0 TypeTable.isRanged#0 holdsRange#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer ranged: size=8 writesThrough=false captured=false passedTo=holdsRange#2 holdsRange#2
   stackSites=0 stackLocals=0
@@ -172,7 +172,7 @@ function signatureHidesRange(table: TypeTable, sig: FunctionSig, ranged: StringS
 function signatureHidesVector(table: TypeTable, sig: FunctionSig, vectored: StringSet): boolean -> @signatureHidesVector
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: hidesVector
-  pointer table: size=136 writesThrough=false captured=false passedTo=hidesVector#0 hidesVector#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=hidesVector#0 hidesVector#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer vectored: size=8 writesThrough=false captured=false passedTo=hidesVector#2 hidesVector#2
   stackSites=0 stackLocals=0
@@ -183,7 +183,7 @@ function hidesVector(table: TypeTable, t: i32, vectored: StringSet): boolean -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf TypeTable.refOf holdsVector
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 TypeTable.kindOf#0 holdsVector#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 TypeTable.kindOf#0 holdsVector#0
   pointer vectored: size=8 writesThrough=false captured=false passedTo=holdsVector#2
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
@@ -194,7 +194,7 @@ function hidesVector(table: TypeTable, t: i32, vectored: StringSet): boolean -> 
 function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet -> @writtenArrayParams
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: FunctionFacts.pointerParam StringSet.add StringSet.constructor TypeTable.isArray TypeTable.isReadonlyArray nish_alloc_struct nish_panic_index
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isReadonlyArray#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isReadonlyArray#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer facts: size=432 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
@@ -215,7 +215,7 @@ function typedView(table: TypeTable, t: i32): TypedView | null -> @typedView [ex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf TypeTable.refOf TypedView.constructor nish_alloc_struct
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.kindOf#0 TypeTable.refOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.kindOf#0 TypeTable.refOf#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.kindOf -> @TypeTable.kindOf
   callee +3:11 TypeTable.kindOf -> @TypeTable.kindOf
@@ -265,7 +265,7 @@ function holdsRecordIn(table: TypeTable, t: i32, held: StringSet): boolean -> @h
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf holdsRecordIn
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 holdsRecordIn#0 TypeTable.refOf#0 holdsRecordIn#0 TypeTable.refOf#0 holdsRecordIn#0 TypeTable.okOf#0 holdsRecordIn#0 TypeTable.errOf#0 TypeTable.nameOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 holdsRecordIn#0 TypeTable.refOf#0 holdsRecordIn#0 TypeTable.refOf#0 holdsRecordIn#0 TypeTable.okOf#0 holdsRecordIn#0 TypeTable.errOf#0 TypeTable.nameOf#0
   pointer held: size=8 writesThrough=false captured=false passedTo=holdsRecordIn#2 holdsRecordIn#2 holdsRecordIn#2 holdsRecordIn#2 StringSet.has#0
   stackSites=0 stackLocals=0
   callee +0:11 TypeTable.kindOf -> @TypeTable.kindOf
@@ -283,7 +283,7 @@ function holdsVector(table: TypeTable, t: i32, held: StringSet): boolean -> @hol
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: StringSet.has TypeTable.errOf TypeTable.isVector TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf holdsVector
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.refOf#0 holdsVector#0 TypeTable.refOf#0 holdsVector#0 TypeTable.okOf#0 holdsVector#0 TypeTable.errOf#0 TypeTable.nameOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.refOf#0 holdsVector#0 TypeTable.refOf#0 holdsVector#0 TypeTable.okOf#0 holdsVector#0 TypeTable.errOf#0 TypeTable.nameOf#0
   pointer held: size=8 writesThrough=false captured=false passedTo=holdsVector#2 holdsVector#2 holdsVector#2 holdsVector#2 StringSet.has#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isVector -> @TypeTable.isVector
@@ -302,7 +302,7 @@ function cType(table: TypeTable, t: i32, position: i32, written: boolean): strin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: position t
   calls: StringSet.constructor TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue cResultName cResultWord cStructName cType holdsVector nish_str_concat
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 holdsVector#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 holdsVector#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
   stackSites=2 stackLocals=0
   callee +0:7 TypeTable.isRanged -> @TypeTable.isRanged
   callee +3:11 TypeTable.kindOf -> @TypeTable.kindOf
@@ -321,7 +321,7 @@ function cResultName(table: TypeTable, t: i32): string -> @cResultName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.resultStructName collapseSeparators
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.resultStructName#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.resultStructName#0
   stackSites=0 stackLocals=0
   callee +0:59 collapseSeparators -> @collapseSeparators
   callee +0:78 TypeTable.resultStructName -> @TypeTable.resultStructName
@@ -348,14 +348,14 @@ function cResultWord(table: TypeTable, t: i32): string -> @cResultWord [exported
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: cResultName nish_str_concat
-  pointer table: size=136 writesThrough=false captured=false passedTo=cResultName#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=cResultName#0
   stackSites=0 stackLocals=0
   callee +0:69 cResultName -> @cResultName
 function cFieldType(table: TypeTable, t: i32): string -> @cFieldType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf cResultName cType nish_str_concat
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.kindOf#0 cResultName#0 cType#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.kindOf#0 cResultName#0 cType#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.kindOf -> @TypeTable.kindOf
   callee +4:7 TypeTable.kindOf -> @TypeTable.kindOf
@@ -367,7 +367,7 @@ function resultTypesIn(table: TypeTable, t: i32, out: i32[]): void -> @resultTyp
   sharedWrite: +0:5
   escaping: t
   calls: StringSet.constructor TypeTable.errOf TypeTable.kindOf TypeTable.okOf TypeTable.refOf holdsVector nish_array_grow resultTypesIn
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 resultTypesIn#0 TypeTable.refOf#0 holdsVector#0 resultTypesIn#0 TypeTable.okOf#0 resultTypesIn#0 TypeTable.errOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 resultTypesIn#0 TypeTable.refOf#0 holdsVector#0 resultTypesIn#0 TypeTable.okOf#0 resultTypesIn#0 TypeTable.errOf#0
   pointer out: size=0 writesThrough=true captured=false passedTo=resultTypesIn#2 resultTypesIn#2 resultTypesIn#2
   stackSites=1 stackLocals=0
   local -6:9 kind: i32 (const)
@@ -390,7 +390,7 @@ function resultTypesUsed(table: TypeTable, fns: ExternalFunction[], fields: i32[
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteResultTypes
   calls: StringMap.constructor TypeTable.resultByValue nish_str_eq noteResultTypes
-  pointer table: size=136 writesThrough=false captured=false passedTo=noteResultTypes#0 TypeTable.resultByValue#0 noteResultTypes#0 TypeTable.resultByValue#0 noteResultTypes#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=noteResultTypes#0 TypeTable.resultByValue#0 noteResultTypes#0 TypeTable.resultByValue#0 noteResultTypes#0
   pointer fns: size=0 writesThrough=false captured=false
   pointer fields: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -411,7 +411,7 @@ function noteResultTypes(table: TypeTable, uses: ResultUse[], index: StringMap, 
   sharedWrite: +0:7
   escaping: t
   calls: ResultUse.constructor StringMap.get StringMap.set cResultName nish_alloc_struct nish_array_grow nish_panic_index resultLayout resultTypesIn
-  pointer table: size=136 writesThrough=false captured=false passedTo=resultTypesIn#0 cResultName#0 resultLayout#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=resultTypesIn#0 cResultName#0 resultLayout#0
   pointer uses: size=0 writesThrough=true captured=false
   pointer index: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0
   stackSites=1 stackLocals=1
@@ -429,7 +429,7 @@ function noteResultTypes(table: TypeTable, uses: ResultUse[], index: StringMap, 
 function tsSignatureLine(table: TypeTable, sig: FunctionSig, before: string, after: string): string -> @tsSignatureLine [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat tsKeyword
-  pointer table: size=136 writesThrough=false captured=false passedTo=tsKeyword#0 tsKeyword#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=tsKeyword#0 tsKeyword#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 params: string[] (const)
@@ -440,7 +440,7 @@ function tsKeyword(table: TypeTable, t: i32): string -> @tsKeyword [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.errOf TypeTable.isEnumMemberType TypeTable.isHostHandle TypeTable.isRanged TypeTable.isReadonlyArray TypeTable.isRegion TypeTable.isUnion TypeTable.isVector TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.scalarName TypeTable.typeName nish_str_concat tsKeyword
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.typeName#0 TypeTable.isEnumMemberType#0 TypeTable.typeName#0 TypeTable.isUnion#0 TypeTable.isVector#0 TypeTable.isRegion#0 TypeTable.isHostHandle#0 TypeTable.typeName#0 TypeTable.kindOf#0 TypeTable.nameOf#0 TypeTable.nameOf#0 TypeTable.isReadonlyArray#0 tsKeyword#0 TypeTable.refOf#0 tsKeyword#0 TypeTable.refOf#0 tsKeyword#0 TypeTable.refOf#0 tsKeyword#0 TypeTable.okOf#0 tsKeyword#0 TypeTable.errOf#0 TypeTable.scalarName#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.typeName#0 TypeTable.isEnumMemberType#0 TypeTable.typeName#0 TypeTable.isUnion#0 TypeTable.isVector#0 TypeTable.isRegion#0 TypeTable.isHostHandle#0 TypeTable.typeName#0 TypeTable.kindOf#0 TypeTable.nameOf#0 TypeTable.nameOf#0 TypeTable.isReadonlyArray#0 tsKeyword#0 TypeTable.refOf#0 tsKeyword#0 TypeTable.refOf#0 tsKeyword#0 TypeTable.refOf#0 tsKeyword#0 TypeTable.okOf#0 tsKeyword#0 TypeTable.errOf#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isRanged -> @TypeTable.isRanged
   callee +1:12 TypeTable.typeName -> @TypeTable.typeName
@@ -511,7 +511,7 @@ function cAliasReason(sig: FunctionSig): string -> @cAliasReason [exported]
 function cNameClashes(table: TypeTable, declared: ExternalFunction[]): ExternalFunction[] -> @cNameClashes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.constructor StringMap.get StringMap.set cFunctionName cPrototype nish_array_grow nish_str_eq
-  pointer table: size=136 writesThrough=false captured=false passedTo=cPrototype#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=cPrototype#0
   pointer declared: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 seen: StringMap (const)
@@ -528,9 +528,9 @@ function cNameClashes(table: TypeTable, declared: ExternalFunction[]): ExternalF
 function acceptsSidecars(compilation: Compilation, fns: ExternalFunction[], cDeclared: ExternalFunction[]): boolean -> @acceptsSidecars [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUninstantiated
-  calls: DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has cFunctionName cNameClashes hasFunctionParameter nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 refuseUnions reportUninstantiated sigNameNode
-  pointer compilation: size=208 writesThrough=false captured=false passedTo=reportUninstantiated#0 reportUninstantiated#0 reportUninstantiated#0 refuseUnions#0
-  pointer fns: size=0 writesThrough=false captured=false passedTo=refuseUnions#1
+  calls: DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has cFunctionName cNameClashes hasFunctionParameter nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 refuseStringEnums refuseUnions reportUninstantiated sigNameNode
+  pointer compilation: size=208 writesThrough=false captured=false passedTo=reportUninstantiated#0 reportUninstantiated#0 reportUninstantiated#0 refuseUnions#0 refuseStringEnums#0
+  pointer fns: size=0 writesThrough=false captured=false passedTo=refuseUnions#1 refuseStringEnums#1
   pointer cDeclared: size=0 writesThrough=false captured=false passedTo=cNameClashes#1
   stackSites=2 stackLocals=2
   local +0:7 ok: boolean (let)
@@ -558,15 +558,16 @@ function acceptsSidecars(compilation: Compilation, fns: ExternalFunction[], cDec
   local +67:9 opts: Options (const)
   local +68:9 laysOut: boolean (const)
   callee +69:8 refuseUnions -> @refuseUnions
-  local +74:9 clashes: ExternalFunction[] (const)
-  callee +74:19 cNameClashes -> @cNameClashes
-  local +75:7 i: i32 (let)
-  local +77:11 first: FunctionSig (const)
-  local +78:11 second: ExternalFunction (const)
-  local +79:11 at: Node (const)
-  callee +79:16 sigNameNode -> @sigNameNode
-  callee +80:5 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +84:78 cFunctionName -> @cFunctionName
+  callee +72:8 refuseStringEnums -> @refuseStringEnums
+  local +77:9 clashes: ExternalFunction[] (const)
+  callee +77:19 cNameClashes -> @cNameClashes
+  local +78:7 i: i32 (let)
+  local +80:11 first: FunctionSig (const)
+  local +81:11 second: ExternalFunction (const)
+  local +82:11 at: Node (const)
+  callee +82:16 sigNameNode -> @sigNameNode
+  callee +83:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +87:78 cFunctionName -> @cFunctionName
 function refuseUnions(compilation: Compilation, fns: ExternalFunction[], laysOut: boolean): boolean -> @refuseUnions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUnion
@@ -594,10 +595,44 @@ function refuseUnions(compilation: Compilation, fns: ExternalFunction[], laysOut
   callee +36:5 reportUnion -> @reportUnion
   callee +40:12 TypeTable.typeName -> @TypeTable.typeName
   callee +40:58 TypeTable.typeName -> @TypeTable.typeName
+function refuseStringEnums(compilation: Compilation, fns: ExternalFunction[]): boolean -> @refuseStringEnums
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.report
+  calls: DiagnosticSink.report TypeTable.typeName holdsStringEnum nish_panic_index nish_str_concat sigNameNode
+  pointer compilation: size=208 writesThrough=false captured=false
+  pointer fns: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 table: TypeTable (const)
+  local +1:14 fn: ExternalFunction (const)
+  local +2:11 sig: FunctionSig (const)
+  local +3:9 what: string (let)
+  callee +4:9 holdsStringEnum -> @holdsStringEnum
+  callee +5:49 TypeTable.typeName -> @TypeTable.typeName
+  local +7:9 i: i32 (let)
+  callee +9:11 holdsStringEnum -> @holdsStringEnum
+  callee +10:83 TypeTable.typeName -> @TypeTable.typeName
+  local +15:13 at: Node (const)
+  callee +15:18 sigNameNode -> @sigNameNode
+  callee +16:7 DiagnosticSink.report -> @DiagnosticSink.report
+function holdsStringEnum(table: TypeTable, type: i32): boolean -> @holdsStringEnum
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.enumStrings TypeTable.errOf TypeTable.kindOf TypeTable.okOf TypeTable.refOf holdsStringEnum
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.enumStrings#0 TypeTable.kindOf#0 holdsStringEnum#0 TypeTable.okOf#0 holdsStringEnum#0 TypeTable.errOf#0 holdsStringEnum#0 TypeTable.refOf#0
+  stackSites=0 stackLocals=0
+  callee +0:7 TypeTable.enumStrings -> @TypeTable.enumStrings
+  local +3:9 kind: i32 (const)
+  callee +3:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +5:12 holdsStringEnum -> @holdsStringEnum
+  callee +5:35 TypeTable.okOf -> @TypeTable.okOf
+  callee +5:56 holdsStringEnum -> @holdsStringEnum
+  callee +5:79 TypeTable.errOf -> @TypeTable.errOf
+  callee +7:55 holdsStringEnum -> @holdsStringEnum
+  callee +7:78 TypeTable.refOf -> @TypeTable.refOf
 function unionStruct(table: TypeTable, unit: ModuleUnit): StructInfo | null -> @unionStruct
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: unionField
-  pointer table: size=136 writesThrough=false captured=false passedTo=unionField#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=unionField#0
   pointer unit: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 info: StructInfo (const)
@@ -605,7 +640,7 @@ function unionStruct(table: TypeTable, unit: ModuleUnit): StructInfo | null -> @
 function unionSlot(table: TypeTable, sig: FunctionSig): i32 -> @unionSlot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsUnion
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0 TypeTable.holdsUnion#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0 TypeTable.holdsUnion#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.holdsUnion -> @TypeTable.holdsUnion
@@ -614,7 +649,7 @@ function unionSlot(table: TypeTable, sig: FunctionSig): i32 -> @unionSlot
 function unionField(table: TypeTable, info: StructInfo): FieldInfo | null -> @unionField
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsUnion
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 f: FieldInfo (const)
@@ -646,7 +681,7 @@ function sigNameNode(sig: FunctionSig): Node -> @sigNameNode
 function cPrototype(table: TypeTable, fn: ExternalFunction): string -> @cPrototype [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.has cFunctionName cParamName cType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat spaceAfter
-  pointer table: size=136 writesThrough=false captured=false passedTo=cType#0 cType#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=cType#0 cType#0
   pointer fn: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 sig: FunctionSig (const)
@@ -718,7 +753,7 @@ function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resultTypesUsed
   calls: nish_array_grow pushAll resultDefinition resultTypesUsed
-  pointer table: size=136 writesThrough=false captured=false passedTo=resultTypesUsed#0 resultDefinition#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=resultTypesUsed#0 resultDefinition#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=resultTypesUsed#1
   pointer fields: size=0 writesThrough=false captured=false passedTo=resultTypesUsed#2
   stackSites=0 stackLocals=0
@@ -731,7 +766,7 @@ function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i3
 function resultDefinition(table: TypeTable, use: ResultUse): string[] -> @resultDefinition
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: cResultName cResultWord nish_alloc_struct nish_array_grow nish_str_concat resultField tsKeyword
-  pointer table: size=136 writesThrough=false captured=false passedTo=tsKeyword#0 cResultName#0 resultField#0 resultField#0 resultField#0 resultField#0 cResultWord#0 tsKeyword#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=tsKeyword#0 cResultName#0 resultField#0 resultField#0 resultField#0 resultField#0 cResultWord#0 tsKeyword#0
   pointer use: size=24 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 layout: ResultLayout (const)
@@ -750,7 +785,7 @@ function resultField(table: TypeTable, t: i32, name: string): string -> @resultF
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
   calls: TypeTable.kindOf cFieldType nish_str_concat spaceAfter tsKeyword
-  pointer table: size=136 writesThrough=false captured=false passedTo=cFieldType#0 TypeTable.kindOf#0 tsKeyword#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=cFieldType#0 TypeTable.kindOf#0 tsKeyword#0
   stackSites=0 stackLocals=0
   local +0:9 c: string (const)
   callee +0:13 cFieldType -> @cFieldType

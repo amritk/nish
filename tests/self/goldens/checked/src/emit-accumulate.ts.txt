@@ -36,7 +36,7 @@ function RecursionLoop.constructor(this: RecursionLoop, sig: FunctionSig, entry:
 function emitsAsLoop(emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): boolean -> @emitsAsLoop [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Emitter.isLibraryCopy FunctionFacts.scopesAnyPass FunctionSig.definedIn FusionTable.roleOf
-  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.isLibraryCopy#0
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.isLibraryCopy#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 Emitter.isLibraryCopy#1
   pointer facts: size=432 writesThrough=false captured=false passedTo=FunctionFacts.scopesAnyPass#0
   stackSites=0 stackLocals=0
@@ -53,7 +53,7 @@ function openAccumulation(emitter: Emitter, sig: FunctionSig): void -> @openAccu
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.llvm IRFunction.currentBlock IRFunction.emit IRFunction.newBlock IRFunction.placeBlock RecursionLoop.constructor internalError nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat
-  pointer emitter: size=392 writesThrough=true captured=false passedTo=Emitter.llvm#0
+  pointer emitter: size=400 writesThrough=true captured=false passedTo=Emitter.llvm#0
   pointer sig: size=200 writesThrough=true captured=true passedTo=RecursionLoop.constructor#1
   stackSites=0 stackLocals=0
   local -14:9 fn: IRFunction (const)
@@ -72,7 +72,7 @@ function closeAccumulation(emitter: Emitter, acc: RecursionLoop): void -> @close
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock checkedAdd foldColdTest headPhi internalError nish_alloc_struct nish_arena_release nish_array_grow nish_exit nish_str_concat nish_str_eq paramOperand paramPhi placeAfter renameEdges
-  pointer emitter: size=392 writesThrough=true captured=false passedTo=checkedAdd#0 checkedAdd#0
+  pointer emitter: size=400 writesThrough=true captured=false passedTo=checkedAdd#0 checkedAdd#0
   pointer acc: size=56 writesThrough=false captured=false passedTo=paramPhi#0 headPhi#0 headPhi#0
   stackSites=3 stackLocals=3
   local -26:9 fn: IRFunction (const)
@@ -214,7 +214,7 @@ function emitAccumulateTail(emitter: Emitter, acc: RecursionLoop, value: Node): 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression Emitter.emitScopeExit FusionTable.roleOf IRFunction.emit IRFunction.newBlock IRFunction.placeBlock checkedAdd condBranch emitAccumulateTail emitStep nish_panic_index nish_str_concat unwrapParens
-  pointer emitter: size=392 writesThrough=true captured=false passedTo=condBranch#0 Emitter.emitExpression#0 emitAccumulateTail#0 emitAccumulateTail#0 emitStep#0 checkedAdd#0 Emitter.emitExpression#0 Emitter.emitScopeExit#0
+  pointer emitter: size=400 writesThrough=true captured=false passedTo=condBranch#0 Emitter.emitExpression#0 emitAccumulateTail#0 emitAccumulateTail#0 emitStep#0 checkedAdd#0 Emitter.emitExpression#0 Emitter.emitScopeExit#0
   pointer acc: size=56 writesThrough=false captured=false passedTo=emitAccumulateTail#1 emitAccumulateTail#1 emitStep#1
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
@@ -243,7 +243,7 @@ function emitStep(emitter: Emitter, acc: RecursionLoop, step: Node): void -> @em
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.emitArgument Emitter.emitExpression FusionTable.partnerOf IRFunction.currentBlock IRFunction.emit nish_array_grow nish_panic_index nish_str_concat
-  pointer emitter: size=392 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitArgument#0 Emitter.emitExpression#0
+  pointer emitter: size=400 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitArgument#0 Emitter.emitExpression#0
   pointer acc: size=56 writesThrough=false captured=false
   pointer step: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -267,6 +267,6 @@ function checkedAdd(emitter: Emitter, a: string, b: string): string -> @checkedA
   sharedWrite: via emitCheckedArith
   escaping: a b
   calls: emitCheckedArith
-  pointer emitter: size=392 writesThrough=false captured=false passedTo=emitCheckedArith#0
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=emitCheckedArith#0
   stackSites=0 stackLocals=0
   callee +0:3 emitCheckedArith -> @emitCheckedArith

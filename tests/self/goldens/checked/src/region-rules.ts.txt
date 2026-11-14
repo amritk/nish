@@ -249,7 +249,7 @@ function enterResultMessage(fn: FunctionSig, table: TypeTable): string -> @enter
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName fnName nish_str_concat
   pointer fn: size=200 writesThrough=false captured=false passedTo=fnName#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.typeName#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
   callee +0:30 TypeTable.typeName -> @TypeTable.typeName
@@ -263,7 +263,7 @@ function crossingMessage(table: TypeTable, what: string, type: i32): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.typeName nish_str_concat
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.typeName#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
   callee +0:19 TypeTable.typeName -> @TypeTable.typeName
 function notFreshMessage(fn: FunctionSig, ref: string, child: boolean): string -> @notFreshMessage
@@ -317,7 +317,7 @@ function isCopied(table: TypeTable, type: i32): boolean -> @isCopied
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isRegion isScalarArgument
-  pointer table: size=136 writesThrough=false captured=false passedTo=isScalarArgument#0 TypeTable.isRegion#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=isScalarArgument#0 TypeTable.isRegion#0
   stackSites=0 stackLocals=0
   callee +0:17 isScalarArgument -> @isScalarArgument
   callee +0:50 TypeTable.isRegion -> @TypeTable.isRegion
@@ -327,7 +327,7 @@ function holdsRegion(programs: CheckedProgram[], table: TypeTable, type: i32): b
   escaping: type
   calls: holdsRegionIn
   pointer programs: size=0 writesThrough=false captured=false passedTo=holdsRegionIn#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=holdsRegionIn#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=holdsRegionIn#1
   stackSites=1 stackLocals=0
   callee +0:3 holdsRegionIn -> @holdsRegionIn
 function holdsRegionIn(programs: CheckedProgram[], table: TypeTable, type: i32, seen: i32[]): boolean -> @holdsRegionIn
@@ -336,7 +336,7 @@ function holdsRegionIn(programs: CheckedProgram[], table: TypeTable, type: i32, 
   escaping: type
   calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isNullable TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.variantsOf holdsRegionIn nish_array_grow
   pointer programs: size=0 writesThrough=false captured=false passedTo=holdsRegionIn#0 holdsRegionIn#0 holdsRegionIn#0 holdsRegionIn#0 holdsRegionIn#0 holdsRegionIn#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isNullable#0 holdsRegionIn#1 TypeTable.stripNull#0 TypeTable.isArray#0 holdsRegionIn#1 TypeTable.refOf#0 TypeTable.isResult#0 holdsRegionIn#1 TypeTable.okOf#0 holdsRegionIn#1 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 holdsRegionIn#1 TypeTable.isStruct#0 TypeTable.nameOf#0 holdsRegionIn#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isNullable#0 holdsRegionIn#1 TypeTable.stripNull#0 TypeTable.isArray#0 holdsRegionIn#1 TypeTable.refOf#0 TypeTable.isResult#0 holdsRegionIn#1 TypeTable.okOf#0 holdsRegionIn#1 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 holdsRegionIn#1 TypeTable.isStruct#0 TypeTable.nameOf#0 holdsRegionIn#1
   pointer seen: size=0 writesThrough=true captured=false passedTo=holdsRegionIn#3 holdsRegionIn#3 holdsRegionIn#3 holdsRegionIn#3 holdsRegionIn#3 holdsRegionIn#3
   stackSites=0 stackLocals=0
   callee +1:7 TypeTable.isRegion -> @TypeTable.isRegion
@@ -369,7 +369,7 @@ function taskShareObstacle(programs: CheckedProgram[], table: TypeTable, type: i
   escaping: type
   calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isNullable TypeTable.isRegion TypeTable.isResult TypeTable.isSecret TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.typeName TypeTable.variantsOf isThreadsLayout nish_array_grow nish_str_concat taskShareObstacle
   pointer programs: size=0 writesThrough=false captured=false passedTo=taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isSecret#0 TypeTable.isNullable#0 taskShareObstacle#1 TypeTable.stripNull#0 TypeTable.isArray#0 taskShareObstacle#1 TypeTable.refOf#0 TypeTable.isResult#0 taskShareObstacle#1 TypeTable.okOf#0 taskShareObstacle#1 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 taskShareObstacle#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 taskShareObstacle#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isSecret#0 TypeTable.isNullable#0 taskShareObstacle#1 TypeTable.stripNull#0 TypeTable.isArray#0 taskShareObstacle#1 TypeTable.refOf#0 TypeTable.isResult#0 taskShareObstacle#1 TypeTable.okOf#0 taskShareObstacle#1 TypeTable.errOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 taskShareObstacle#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 taskShareObstacle#1
   pointer seen: size=0 writesThrough=true captured=false passedTo=taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3 taskShareObstacle#3
   stackSites=0 stackLocals=0
   callee +1:7 TypeTable.isRegion -> @TypeTable.isRegion
@@ -407,7 +407,7 @@ function mayShareMemory(programs: CheckedProgram[], table: TypeTable, from: i32,
   escaping: from into
   calls: heapTypesIn
   pointer programs: size=0 writesThrough=false captured=false passedTo=heapTypesIn#0 heapTypesIn#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=heapTypesIn#1 heapTypesIn#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=heapTypesIn#1 heapTypesIn#1
   stackSites=2 stackLocals=2
   local +0:9 fromTypes: i32[] (const)
   local +1:9 intoTypes: i32[] (const)
@@ -420,7 +420,7 @@ function heapTypesIn(programs: CheckedProgram[], table: TypeTable, type: i32, ou
   escaping: type
   calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isMaybe TypeTable.isNullable TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.variantsOf heapTypesIn isScalarArgument nish_array_grow
   pointer programs: size=0 writesThrough=false captured=false passedTo=heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isNullable#0 heapTypesIn#1 TypeTable.stripNull#0 TypeTable.isMaybe#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isResult#0 heapTypesIn#1 TypeTable.okOf#0 heapTypesIn#1 TypeTable.errOf#0 TypeTable.isArray#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 heapTypesIn#1 TypeTable.isStruct#0 isScalarArgument#0 TypeTable.nameOf#0 heapTypesIn#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isNullable#0 heapTypesIn#1 TypeTable.stripNull#0 TypeTable.isMaybe#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isResult#0 heapTypesIn#1 TypeTable.okOf#0 heapTypesIn#1 TypeTable.errOf#0 TypeTable.isArray#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 heapTypesIn#1 TypeTable.isStruct#0 isScalarArgument#0 TypeTable.nameOf#0 heapTypesIn#1
   pointer out: size=0 writesThrough=true captured=false passedTo=heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3
   stackSites=0 stackLocals=0
   callee -19:19 TypeTable.isRegion -> @TypeTable.isRegion
@@ -466,7 +466,7 @@ function RegionWalk.constructor(this: RegionWalk, program: CheckedProgram, table
   calls: insideRegion insideTask
   pointer this: size=160 writesThrough=true captured=false
   pointer program: size=912 writesThrough=true captured=true
-  pointer table: size=136 writesThrough=true captured=true
+  pointer table: size=168 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
   pointer fn: size=200 writesThrough=true captured=true passedTo=insideTask#0 insideRegion#0
   pointer fresh: size=8 writesThrough=true captured=true
@@ -1015,7 +1015,7 @@ function regionCallFindings(programs: CheckedProgram[], table: TypeTable, facts:
   escaping: scopeName
   calls: ChildSites.enter ChildSites.indexOf ChildSites.misplaced ChildSites.plainHandle FactsTable.get FreshResults.builderRef RegionFinding.constructor StringSet.constructor arenaStateMessage childPlacementMessage enterResultMessage insideRegion isChildMaker isCopied isRegionMaker nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat noFactsMessage notFreshMessage reachesThreads regionRoleOf threadsMessage walkFindings
   pointer programs: size=0 writesThrough=true captured=true passedTo=walkFindings#1
-  pointer table: size=136 writesThrough=true captured=true passedTo=isCopied#0 enterResultMessage#1 walkFindings#2
+  pointer table: size=168 writesThrough=true captured=true passedTo=isCopied#0 enterResultMessage#1 walkFindings#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=ChildSites.misplaced#1 FactsTable.get#0 reachesThreads#0 walkFindings#3
   pointer program: size=912 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 ChildSites.plainHandle#1
   pointer site: size=40 writesThrough=true captured=true passedTo=ChildSites.indexOf#1 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 ChildSites.plainHandle#2
@@ -1073,7 +1073,7 @@ function walkFindings(out: RegionFinding[], programs: CheckedProgram[], table: T
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FreshResults.resultRef FunctionSig.body FunctionSig.writtenArity RegionWalk.bind RegionWalk.constructor RegionWalk.visit StringSet.add StringSet.constructor collectCallees nish_alloc_struct nish_array_grow regionProgramOf regionRoleOf
   pointer out: size=0 writesThrough=true captured=false
   pointer programs: size=0 writesThrough=true captured=true passedTo=regionProgramOf#0
-  pointer table: size=136 writesThrough=true captured=true passedTo=RegionWalk.constructor#2
+  pointer table: size=168 writesThrough=true captured=true passedTo=RegionWalk.constructor#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=RegionWalk.constructor#3
   pointer fn: size=200 writesThrough=true captured=true passedTo=regionProgramOf#1 FunctionSig.body#0 RegionWalk.constructor#4
   pointer freshResults: size=40 writesThrough=true captured=false passedTo=FreshResults.resultRef#0
@@ -1116,7 +1116,7 @@ function taskFindings(programs: CheckedProgram[], table: TypeTable, facts: Facts
   sharedWrite: +0:5
   calls: CaptureSlot.type FactsTable.get FunctionSig.isCompileTime FunctionSig.writtenArity RegionFinding.constructor TypeTable.sharedWithTask TypeTable.typeName captureSpawnMessage capturesOf insideTask isCopied isFrameValue nestedSpawnMessage nish_alloc_struct nish_array_grow nish_panic_index noFactsMessage sharedResourceMessage taskShareObstacle walkFindings
   pointer programs: size=0 writesThrough=true captured=true passedTo=taskShareObstacle#0 taskShareObstacle#0 taskShareObstacle#0 walkFindings#1 walkFindings#1
-  pointer table: size=136 writesThrough=true captured=true passedTo=isCopied#0 taskShareObstacle#1 TypeTable.sharedWithTask#0 taskShareObstacle#1 TypeTable.typeName#0 isFrameValue#0 TypeTable.sharedWithTask#0 taskShareObstacle#1 isFrameValue#0 TypeTable.typeName#0 walkFindings#2 walkFindings#2
+  pointer table: size=168 writesThrough=true captured=true passedTo=isCopied#0 taskShareObstacle#1 TypeTable.sharedWithTask#0 taskShareObstacle#1 TypeTable.typeName#0 isFrameValue#0 TypeTable.sharedWithTask#0 taskShareObstacle#1 isFrameValue#0 TypeTable.typeName#0 walkFindings#2 walkFindings#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 FactsTable.get#0 walkFindings#3 walkFindings#3
   pointer program: size=912 writesThrough=true captured=true passedTo=RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1 RegionFinding.constructor#1
   pointer site: size=40 writesThrough=true captured=true passedTo=RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2 RegionFinding.constructor#2
@@ -1191,7 +1191,7 @@ function isFrameValue(table: TypeTable, type: i32): boolean -> @isFrameValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.enumBase isNumeric
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.enumBase#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.enumBase#0
   stackSites=0 stackLocals=0
   callee +0:3 isNumeric -> @isNumeric
   callee +0:41 TypeTable.enumBase -> @TypeTable.enumBase

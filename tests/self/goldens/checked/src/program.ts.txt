@@ -292,7 +292,7 @@ struct AliasInfo (class) size=40 align=8 exported
   field resolving: boolean index=6 offset=37
   field viaNumber: boolean index=7 offset=38
   constructor -> @AliasInfo.constructor
-struct EnumInfo (class) size=64 align=8 exported
+struct EnumInfo (class) size=80 align=8 exported
   field name: string index=0 offset=0
   field decl: Node index=1 offset=8
   field origin: SourceFile index=2 offset=16
@@ -302,7 +302,10 @@ struct EnumInfo (class) size=64 align=8 exported
   field members: StringMap index=6 offset=40
   field memberNames: string[] index=7 offset=48
   field memberValues: i32[] index=8 offset=56
+  field isString: boolean index=9 offset=64
+  field memberStrings: string[] index=10 offset=72
   constructor -> @EnumInfo.constructor
+  method addStringMember -> @EnumInfo.addStringMember
   method addMember -> @EnumInfo.addMember
   method hasMember -> @EnumInfo.hasMember
   method memberValue -> @EnumInfo.memberValue
@@ -821,37 +824,45 @@ function EnumInfo.constructor(this: EnumInfo, name: string, decl: Node, origin: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl exported name origin symbol type
   calls: StringMap.constructor nish_alloc_struct
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=80 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:20 new StringMap -> @StringMap.constructor
+function EnumInfo.addStringMember(this: EnumInfo, name: string, text: string): void -> @EnumInfo.addStringMember [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: name text
+  calls: EnumInfo.addMember nish_array_grow
+  pointer this: size=80 writesThrough=true captured=false passedTo=EnumInfo.addMember#0
+  stackSites=0 stackLocals=0
+  callee +2:5 EnumInfo.addMember -> @EnumInfo.addMember
 function EnumInfo.addMember(this: EnumInfo, name: string, value: i32): void -> @EnumInfo.addMember [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: name value
   calls: StringMap.set nish_array_grow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function EnumInfo.hasMember(this: EnumInfo, name: string): boolean -> @EnumInfo.hasMember [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.has
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 StringMap.has -> @StringMap.has
 function EnumInfo.memberValue(this: EnumInfo, name: string): i32 -> @EnumInfo.memberValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.get nish_panic_index
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:30 StringMap.get -> @StringMap.get
 function EnumInfo.memberNameOf(this: EnumInfo, value: i32): string -> @EnumInfo.memberNameOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
 function DeferredInstance.constructor(this: DeferredInstance, imp: ImportBinding, args: i32[], at: Node): void -> @DeferredInstance.constructor [exported constructor]
@@ -1267,7 +1278,7 @@ function CheckedProgram.isEnumMember(this: CheckedProgram, table: TypeTable, nod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.enumBase nish_panic_index
   pointer this: size=912 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.enumBase#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.enumBase#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 TypeTable.enumBase -> @TypeTable.enumBase
@@ -1302,7 +1313,7 @@ function CheckedProgram.addEnum(this: CheckedProgram, info: EnumInfo): void -> @
   sharedWrite: via CheckedProgram.addEnumAs
   calls: CheckedProgram.addEnumAs
   pointer this: size=912 writesThrough=false captured=false passedTo=CheckedProgram.addEnumAs#0
-  pointer info: size=64 writesThrough=true captured=true passedTo=CheckedProgram.addEnumAs#2
+  pointer info: size=80 writesThrough=true captured=true passedTo=CheckedProgram.addEnumAs#2
   stackSites=0 stackLocals=0
   callee +0:5 CheckedProgram.addEnumAs -> @CheckedProgram.addEnumAs
 function CheckedProgram.addEnumAs(this: CheckedProgram, localName: string, info: EnumInfo): void -> @CheckedProgram.addEnumAs [exported method]
@@ -1311,7 +1322,7 @@ function CheckedProgram.addEnumAs(this: CheckedProgram, localName: string, info:
   escaping: info localName
   calls: StringMap.set nish_array_grow
   pointer this: size=912 writesThrough=false captured=false
-  pointer info: size=64 writesThrough=true captured=true
+  pointer info: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function CheckedProgram.exported(this: CheckedProgram, name: string): FunctionSig | null -> @CheckedProgram.exported [exported method]
@@ -1327,7 +1338,7 @@ function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i3
   escaping: elem
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
   pointer program: size=912 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:8 TypeTable.isStruct -> @TypeTable.isStruct
   local +3:9 info: StructInfo | null (const)
@@ -1338,7 +1349,7 @@ function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i3
   escaping: elem
   calls: TypeTable.alignOf inlineElementStruct
   pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.alignOf#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.alignOf#0
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +0:16 inlineElementStruct -> @inlineElementStruct
@@ -1349,7 +1360,7 @@ function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): 
   escaping: elem
   calls: TypeTable.llvmType inlineElementStruct nish_str_concat
   pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.llvmType#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.llvmType#0
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +0:16 inlineElementStruct -> @inlineElementStruct

@@ -24,6 +24,7 @@ import narrowToTags from "./expressions" -> function @narrowToTags
 import refuseExpressionForm from "./expressions" -> function @refuseExpressionForm
 import refuseNarrowingStore from "./expressions" -> function @refuseNarrowingStore
 import resolveMaybeAnnotation from "./expressions" -> function @resolveMaybeAnnotation
+import stringEnumMismatch from "./expressions" -> function @stringEnumMismatch
 import tagVariable from "./expressions" -> function @tagVariable
 import unproven from "./expressions" -> function @unproven
 import WANT_INFERRED from "./expressions" -> const WANT_INFERRED
@@ -292,31 +293,34 @@ function checkDeclarator(ctx: CheckContext, decl: Node, scope: Scope, mutable: b
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: mutable name
-  calls: CheckContext.error CheckContext.textOf TypeTable.assignable TypeTable.isArray TypeTable.isMaybe TypeTable.stripNull TypeTable.typeName allocatesArray annotationSpelling bindsHiddenReceiver checkExpression declareLocal declaredOrigin holdMembers isMaybeAnnotation literalIndexName nish_panic_index nish_str_concat nish_str_eq refuseNarrowingStore resolveMaybeAnnotation resolveType typedArraySpelling unproven
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=resolveMaybeAnnotation#0 resolveType#1 CheckContext.error#0 declaredOrigin#0 declareLocal#0 checkExpression#0 CheckContext.textOf#0 unproven#0 CheckContext.error#0 refuseNarrowingStore#0 CheckContext.error#0 annotationSpelling#0 typedArraySpelling#0 declareLocal#0 declaredOrigin#0 holdMembers#0 allocatesArray#0
+  calls: CheckContext.error CheckContext.textOf TypeTable.assignable TypeTable.isArray TypeTable.isMaybe TypeTable.stripNull TypeTable.typeName allocatesArray annotationSpelling bindsHiddenReceiver checkExpression declareLocal declaredOrigin holdMembers isMaybeAnnotation literalIndexName nish_panic_index nish_str_concat nish_str_eq refuseNarrowingStore resolveMaybeAnnotation resolveType stringEnumMismatch typedArraySpelling unproven
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=resolveMaybeAnnotation#0 resolveType#1 CheckContext.error#0 declaredOrigin#0 declareLocal#0 checkExpression#0 CheckContext.textOf#0 unproven#0 stringEnumMismatch#0 CheckContext.error#0 CheckContext.error#0 refuseNarrowingStore#0 CheckContext.error#0 annotationSpelling#0 typedArraySpelling#0 declareLocal#0 declaredOrigin#0 holdMembers#0 allocatesArray#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 declareLocal#2 bindsHiddenReceiver#0 CheckContext.error#1 declareLocal#2
   pointer scope: size=56 writesThrough=true captured=true passedTo=declaredOrigin#3 declareLocal#1 checkExpression#2 typedArraySpelling#2 declareLocal#1 declaredOrigin#3 literalIndexName#1 holdMembers#1
   stackSites=0 stackLocals=0
-  local -73:9 annotation: Node (const)
-  local -69:7 declared: i32 (let)
-  callee -67:16 isMaybeAnnotation -> @isMaybeAnnotation
-  callee -66:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
-  callee -65:9 resolveType -> @resolveType
-  local -63:9 initializer: Node (const)
-  callee -61:5 CheckContext.error -> @CheckContext.error
-  local -60:11 origin: TypeOrigin | null (const)
-  callee -60:20 declaredOrigin -> @declaredOrigin
-  callee -59:5 declareLocal -> @declareLocal
-  local -54:7 want: i32 (let)
-  callee -51:25 TypeTable.isMaybe -> @TypeTable.isMaybe
-  local -46:9 initType: i32 (const)
-  callee -46:20 checkExpression -> @checkExpression
-  local -44:9 shown: string (const)
-  callee -44:17 bindsHiddenReceiver -> @bindsHiddenReceiver
-  callee -44:45 CheckContext.textOf -> @CheckContext.textOf
-  local -40:7 type: i32 (let)
-  callee -40:29 unproven -> @unproven
-  callee -39:49 TypeTable.assignable -> @TypeTable.assignable
+  local -77:9 annotation: Node (const)
+  local -73:7 declared: i32 (let)
+  callee -71:16 isMaybeAnnotation -> @isMaybeAnnotation
+  callee -70:9 resolveMaybeAnnotation -> @resolveMaybeAnnotation
+  callee -69:9 resolveType -> @resolveType
+  local -67:9 initializer: Node (const)
+  callee -65:5 CheckContext.error -> @CheckContext.error
+  local -64:11 origin: TypeOrigin | null (const)
+  callee -64:20 declaredOrigin -> @declaredOrigin
+  callee -63:5 declareLocal -> @declareLocal
+  local -58:7 want: i32 (let)
+  callee -55:25 TypeTable.isMaybe -> @TypeTable.isMaybe
+  local -50:9 initType: i32 (const)
+  callee -50:20 checkExpression -> @checkExpression
+  local -48:9 shown: string (const)
+  callee -48:17 bindsHiddenReceiver -> @bindsHiddenReceiver
+  callee -48:45 CheckContext.textOf -> @CheckContext.textOf
+  local -44:7 type: i32 (let)
+  callee -44:29 unproven -> @unproven
+  local -43:9 enumText: string | null (const)
+  callee -42:45 stringEnumMismatch -> @stringEnumMismatch
+  callee -40:5 CheckContext.error -> @CheckContext.error
+  callee -39:56 TypeTable.assignable -> @TypeTable.assignable
   callee -38:5 CheckContext.error -> @CheckContext.error
   callee -36:28 TypeTable.typeName -> @TypeTable.typeName
   callee -36:87 TypeTable.typeName -> @TypeTable.typeName
