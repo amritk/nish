@@ -152,9 +152,11 @@ warm-ups, interleaved, two rounds:
 
 - **`method` kernel**: median 269.6 / 223.4 ms → 263.3 / 208.3 ms. The `fn`
   kernel, which both compilers already looped, moved 319.1 / 275.3 →
-  319.0 / 258.8 ms in the same rounds, so the band here is about 7 % and the
-  method's gain (2 % and 7 %) is inside it: the walk is bound by its loads,
-  and the call it saves was cheap.
+  319.0 / 258.8 ms in the same rounds: the same code differed by 0 % in
+  one round and 6 % in the other, and main's own `method` median moved
+  17 % between rounds. The method's 2 % and 7 % are the size of that
+  same-code spread, so this measures no gain: the walk is bound by its
+  loads, and the call it saves was cheap.
 - **fib(40)** does not move: 0.92x / 0.89x of Rust before, 0.92x / 0.92x
   after (`bench/run.mjs --only fib --runs 15 --warmup 2`).
 - **AWFY `List`**, whose `Element.length` now loops: median 174.8 / 177.7 ms

@@ -32609,7 +32609,9 @@ A checked `+` stops LLVM's tail-recursion elimination: it folds
 `add`. So the compiler writes that loop itself (`src/accumulate.ts` chooses
 the functions, `src/emit-accumulate.ts` writes them, with the proof). A
 function qualifies when it is a plain function of its module, or a method of
-a non-generic class of its module, that returns
+a class of its module that is neither generic nor `nish/threads`'s
+atomic `AtomicI32` or `AtomicI64` (whose methods the compiler writes
+itself), that returns
 `i32` (an `f64` sum has no overflow check to defer, and another integer width
 is left to a later stage), every `return` that recurses is `X + self(args)`,
 or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`

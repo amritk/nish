@@ -73,11 +73,27 @@ class Box<T> {
   }
 }
 
+// `self(args) + Y` with `Y` a field: the recursion runs before the field is
+// read and could assign it, so only numbers and parameters are `Y`.
+class Tail {
+  f: i32
+  constructor(f: i32) {
+    this.f = f
+  }
+
+  m(n: i32): i32 {
+    if (n <= 0) {
+      return 0
+    }
+    return this.m(n - 1) + this.f
+  }
+}
+
 export const main = (): i32 => {
   const pong = new Pong(null)
   const ping = new Ping(pong)
   pong.other = ping
   const box = new Box<string>("x")
-  console.log(`${new Indirect(inc).run(10)} ${ping.walk(10)} ${box.count(10)}`)
+  console.log(`${new Indirect(inc).run(10)} ${ping.walk(10)} ${box.count(10)} ${new Tail(2).m(10)}`)
   return 0
 }

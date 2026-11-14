@@ -1,5 +1,6 @@
 %struct.TreeNode = type { i32, %struct.TreeNode*, %struct.TreeNode* }
 %struct.Counter = type { i32 }
+%struct.Stepper = type { i32 }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
@@ -271,6 +272,68 @@ ovf.fail:
   unreachable
 }
 
+define internal void @Stepper.constructor(%struct.Stepper* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %step) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Stepper, %struct.Stepper* %this, i32 0, i32 0
+  store i32 %step, i32* %0, align 4, !tbaa !11
+  ret void
+}
+
+define internal noundef i32 @Stepper.total(%struct.Stepper* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this.in, i32 noundef %n.in) #1 {
+entry:
+  br label %rec.head
+
+rec.head:
+  %this = phi %struct.Stepper* [ %this.in, %entry ], [ %this, %if.end ]
+  %n = phi i32 [ %n.in, %entry ], [ %6, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %5, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  %0 = icmp sle i32 %n, 0
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %2
+
+if.end:
+  %4 = getelementptr inbounds %struct.Stepper, %struct.Stepper* %this, i32 0, i32 0
+  %5 = load i32, i32* %4, align 4, !tbaa !11
+  %6 = sub nsw i32 %n, 1
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %7 = call i32 @Stepper.total(%struct.Stepper* %this, i32 %n)
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %9)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
 define internal noundef align 8 %struct.TreeNode* @build(i32 noundef %depth, i32 noundef %first) #1 {
 entry:
   %0 = icmp eq i32 %depth, 0
@@ -324,6 +387,8 @@ entry:
   %c.addr = alloca %struct.Counter*, align 8
   %Counter.obj = alloca %struct.Counter, align 8
   %t.addr = alloca i32, align 4
+  %s.addr = alloca %struct.Stepper*, align 8
+  %Stepper.obj = alloca %struct.Stepper, align 8
   %arena.mark = call i64 @nish_arena_mark()
   call void @TreeNode.constructor(%struct.TreeNode* %TreeNode.obj, i32 7, %struct.TreeNode* null, %struct.TreeNode* null)
   store %struct.TreeNode* %TreeNode.obj, %struct.TreeNode** %leaf.addr, align 8
@@ -360,6 +425,8 @@ cond.end:
   %12 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %13 = call i32 @Counter.total(%struct.Counter* %12, i32 1000)
   store i32 %13, i32* %t.addr, align 4
+  call void @Stepper.constructor(%struct.Stepper* %Stepper.obj, i32 3)
+  store %struct.Stepper* %Stepper.obj, %struct.Stepper** %s.addr, align 8
   %14 = load %struct.TreeNode*, %struct.TreeNode** %leaf.addr, align 8
   %15 = call i32 @TreeNode.sum(%struct.TreeNode* %14)
   %16 = call i8* @nish_str_from_i32(i32 %15)
@@ -387,7 +454,12 @@ cond.end:
   %38 = call i32 @Counter.twice(%struct.Counter* %37, i32 5, i32 3)
   %39 = call i8* @nish_str_from_i32(i32 %38)
   %40 = call i8* @nish_str_concat(i8* %36, i8* %39)
-  call void @nish_print(i8* %40)
+  %41 = call i8* @nish_str_concat(i8* %40, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %42 = load %struct.Stepper*, %struct.Stepper** %s.addr, align 8
+  %43 = call i32 @Stepper.total(%struct.Stepper* %42, i32 4)
+  %44 = call i8* @nish_str_from_i32(i32 %43)
+  %45 = call i8* @nish_str_concat(i8* %41, i8* %44)
+  call void @nish_print(i8* %45)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -406,7 +478,7 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!10, !11, !12, !13, !14}
+!llvm.module.flags = !{!12, !13, !14, !15, !16}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -417,8 +489,10 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !7 = !{!4, !3, i64 16}
 !8 = !{!"Counter", !2, i64 0}
 !9 = !{!8, !2, i64 0}
-!10 = !{i32 8, !"cf-protection-branch", i32 1}
-!11 = !{i32 8, !"cf-protection-return", i32 1}
-!12 = !{i32 8, !"branch-target-enforcement", i32 1}
-!13 = !{i32 8, !"sign-return-address", i32 1}
-!14 = !{i32 4, !"probe-stack", !"inline-asm"}
+!10 = !{!"Stepper", !2, i64 0}
+!11 = !{!10, !2, i64 0}
+!12 = !{i32 8, !"cf-protection-branch", i32 1}
+!13 = !{i32 8, !"cf-protection-return", i32 1}
+!14 = !{i32 8, !"branch-target-enforcement", i32 1}
+!15 = !{i32 8, !"sign-return-address", i32 1}
+!16 = !{i32 4, !"probe-stack", !"inline-asm"}

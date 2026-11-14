@@ -57,8 +57,8 @@
 // runs them — all but `Y` in a step `self(args) + Y`, which the recursion
 // reads after its call returns and the loop reads before it goes round. That
 // is one value only because `Y` is a number or a parameter, which the
-// recursion cannot assign: the argument is the recorder's, in the header of
-// `recordAccumulation` (`src/accumulate.ts`).
+// recursion cannot assign: the argument is the recorder's, in the file
+// header of `src/accumulate.ts`.
 //
 // Methods (issue #1612). A method is a function whose first parameter is
 // `this`, and its step `X + r.m(args)` is the call `m(r, args)`: the

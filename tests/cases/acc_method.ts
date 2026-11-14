@@ -51,6 +51,22 @@ class Counter {
   }
 }
 
+// A step whose `X` is a field of `this`: `step + step + ... + step`, the
+// field read on every pass as the recursion reads it.
+class Stepper {
+  step: i32
+  constructor(step: i32) {
+    this.step = step
+  }
+
+  total(n: i32): i32 {
+    if (n <= 0) {
+      return 0
+    }
+    return this.step + this.total(n - 1)
+  }
+}
+
 /** A complete tree of `depth` levels, its values numbered from `first`. */
 const build = (depth: i32, first: i32): TreeNode | null => {
   if (depth === 0) {
@@ -66,6 +82,7 @@ export const main = (): i32 => {
   const big = tree === null ? 0 : tree.sum()
   const c = new Counter()
   const t = c.total(1000)
-  console.log(`${leaf.sum()} ${spine.sum()} ${big} ${t} ${c.count} ${c.twice(5, 3)}`)
+  const s = new Stepper(3)
+  console.log(`${leaf.sum()} ${spine.sum()} ${big} ${t} ${c.count} ${c.twice(5, 3)} ${s.total(4)}`)
   return 0
 }
