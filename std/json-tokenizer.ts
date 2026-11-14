@@ -205,6 +205,8 @@ const JSON_TOK_WANT_KEY_OR_CLOSE: i32 = 2
 const JSON_TOK_WANT_COLON: i32 = 3
 const JSON_TOK_WANT_COMMA_OR_CLOSE: i32 = 4
 const JSON_TOK_WANT_NOTHING: i32 = 5
+/** After an error: `fail` sets it, so `next` answers the sticky error from its switch. */
+const JSON_TOK_WANT_FAILED: i32 = 6
 
 /** What the depth stack holds for an open container. */
 const JSON_TOK_IN_OBJECT: i32 = 1
@@ -598,6 +600,12 @@ export class JsonTokenizer {
   maxTotalBytes: i32
   /** Containers open after the current token. */
   depth: i32
+  /**
+   * The innermost open container, `JSON_TOK_IN_OBJECT` or `JSON_TOK_IN_ARRAY`,
+   * or `0` at the top level: the stack's last byte, kept here by `open` and
+   * `close` so a comma and a closer read no stack.
+   */
+  private inside: i32
   /** What `next()` expects at `pos`. */
   private want: i32
   /** The current token's kind, the last `next()` answered; `JSON_TOK_END` before the first. */
@@ -653,6 +661,7 @@ export class JsonTokenizer {
     this.end = 0
     this.pos = 0
     this.depth = 0
+    this.inside = 0
     this.want = JSON_TOK_WANT_VALUE
     this.kind = JSON_TOK_END
     this.tokStart = 0
@@ -682,6 +691,7 @@ export class JsonTokenizer {
   reset(src: u8[], off: i32, len: i32): void {
     this.src = src
     this.depth = 0
+    this.inside = 0
     this.want = JSON_TOK_WANT_VALUE
     this.kind = JSON_TOK_END
     this.tokStart = off
@@ -711,6 +721,7 @@ export class JsonTokenizer {
     if (this.failed === 0) {
       this.failed = code
       this.errorAt = at
+      this.want = JSON_TOK_WANT_FAILED
     }
     return this.failed
   }
@@ -724,14 +735,13 @@ export class JsonTokenizer {
    *   repeats.
    */
   next(): i32 {
-    if (this.failed !== 0) {
-      return this.failed
-    }
     const src: u8[] = this.src
     const end: i32 = this.end
     const at: i32 = jsonTokSkipBlank(src, this.pos, end)
     const b: i32 = jsonTokByteAt(src, at, end)
     switch (this.want) {
+      case JSON_TOK_WANT_FAILED:
+        return this.failed
       case JSON_TOK_WANT_NOTHING:
         if (b < 0) {
           this.pos = at
@@ -757,7 +767,7 @@ export class JsonTokenizer {
       case JSON_TOK_WANT_COMMA_OR_CLOSE:
         if (b === JSON_TOK_COMMA) {
           const after: i32 = jsonTokSkipBlank(src, at + 1, end)
-          if (this.top() === JSON_TOK_IN_OBJECT) {
+          if (this.inside === JSON_TOK_IN_OBJECT) {
             return this.key(after)
           }
           return this.value(after)
@@ -772,15 +782,6 @@ export class JsonTokenizer {
       default:
         return this.value(at)
     }
-  }
-
-  /** The kind of the innermost open container, or `0` at the top level. */
-  private top(): i32 {
-    const d: i32 = this.depth
-    if (d <= 0 || d > toI32(this.stack.length)) {
-      return 0
-    }
-    return toI32(this.stack[d - 1])
   }
 
   /** Records the token `src[start, stop)` of kind `k` and what may follow it. */
@@ -803,10 +804,14 @@ export class JsonTokenizer {
 
   /** A closer at `at`, which must match the innermost container, `inside`. */
   private close(at: i32, inside: i32): i32 {
-    if (this.top() !== inside) {
+    if (this.inside !== inside) {
       return this.fail(JSON_TOK_ERR_SYNTAX, at)
     }
-    this.depth -= 1
+    // The container closed was the stack's last byte, so the one now
+    // innermost is the byte before it, or none.
+    const d: i32 = this.depth - 1
+    this.depth = d
+    this.inside = d > 0 && d <= toI32(this.stack.length) ? toI32(this.stack[d - 1]) : 0
     return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_END : JSON_TOK_ARRAY_END, at, at + 1)
   }
 
@@ -818,6 +823,7 @@ export class JsonTokenizer {
     }
     this.stack[d] = toU8(inside)
     this.depth = d + 1
+    this.inside = inside
     return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_BEGIN : JSON_TOK_ARRAY_BEGIN, at, at + 1)
   }
 
@@ -1599,7 +1605,10 @@ export class JsonTokenizer {
     this.tokStart = start
     this.tokEnd = start + 1
     this.pos = start + 1
-    this.want = JSON_TOK_WANT_KEY_OR_CLOSE
+    // An error stays sticky: `next` answers it while `want` says so.
+    if (this.failed === 0) {
+      this.want = JSON_TOK_WANT_KEY_OR_CLOSE
+    }
   }
 
   /**
