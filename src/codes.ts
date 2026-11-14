@@ -34,7 +34,7 @@
 /** No rule matched: the diagnostic has no code yet. */
 const UNCODED: string = "NL0000"
 
-/** Every syntax error shares one code: stage0 takes that text from the `typescript` package. */
+/** Every syntax error shares one code, whatever its text says. */
 const SYNTAX: string = "NL0001"
 
 /**
@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 923
+export const RULE_COUNT: i32 = 930
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -77,10 +77,14 @@ const diagnosticRules = (): string[] => [
   "NL2586",
   "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter",
   "NL2505",
+  ": the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout",
+  "NL2766",
   "` go further than indexing: storage keeps its length, so a callee it is lent to only indexes the parameter, reads its `length`, loops over it, calls a method that reads it, or lends it on the same way — never passes it elsewhere, binds, returns or stores it, where it could be spelled `T[]` and resized",
   "NL2684",
   "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
   "NL2515",
+  "` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module",
+  "NL2769",
   "`, a `let` of the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so it may read only a `const` or a parameter of that function, whose value is the one the arrow is handed; bind the value to a `const` before the call",
   "NL2585",
   ": its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`",
@@ -113,6 +117,8 @@ const diagnosticRules = (): string[] => [
   "NL2393",
   "The arrow reads `this`: an arrow argument may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the arrow needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
   "NL2590",
+  "` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host",
+  "NL2770",
   "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` (`const self = this`, `const k = this.k`)",
   "NL2507",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",
@@ -141,6 +147,8 @@ const diagnosticRules = (): string[] => [
   "NL3031",
   "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type",
   "NL4013",
+  "` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own",
+  "NL2768",
   "` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock",
   "NL2467",
   "`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination",
@@ -303,6 +311,8 @@ const diagnosticRules = (): string[] => [
   "NL2347",
   " parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead",
   "NL2698",
+  "` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead",
+  "NL2767",
   "`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer",
   "NL2473",
   "` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested",
@@ -515,14 +525,10 @@ const diagnosticRules = (): string[] => [
   "NL2643",
   '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`',
   "NL2669",
-  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
-  "NL4011",
   "`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)",
   "NL2764",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
   "NL3043",
-  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
-  "NL4010",
   "` was moved into another `Secret` local and cannot be read again: one key has one owner, which is the one that wipes it",
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
@@ -537,8 +543,6 @@ const diagnosticRules = (): string[] => [
   "NL2284",
   " has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`",
   "NL2755",
-  "` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length",
-  "NL2665",
   "` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result",
   "NL2345",
   "`): an awaited call's frame is nested in its caller's, so recursion through `await` has no size — write it as a loop",
@@ -585,6 +589,8 @@ const diagnosticRules = (): string[] => [
   "NL2621",
   "` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false",
   "NL2692",
+  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement",
+  "NL4011",
   "` is only written inside an `async` function: make the function that holds it `async`, and `await` its calls",
   "NL2641",
   "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
@@ -593,6 +599,8 @@ const diagnosticRules = (): string[] => [
   "NL2155",
   "a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share",
   "NL2690",
+  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi",
+  "NL4010",
   "; C has one namespace, so every `declare function` of one name must agree on its parameter and return types",
   "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
@@ -647,6 +655,8 @@ const diagnosticRules = (): string[] => [
   "NL3010",
   "` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got ",
   "NL2395",
+  "` is a `string`: strings did not cross yet, so write the text into module storage and pass its length",
+  "NL2665",
   "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
   "NL2128",
   ", and a declared C function returns a scalar, a `CPtr` or a `string` it copies from a `const char *`",
@@ -1893,6 +1903,8 @@ const performanceRules = (): string[] => [
   "NL9014",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
+  "keeps an allocation on every call and runs on every pass of a loop that releases nothing",
+  "NL9019",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",
@@ -1907,6 +1919,8 @@ const performanceRules = (): string[] => [
   "NL9003",
   "is computed in i32 and can overflow it before",
   "NL9005",
+  "and nothing bounds how many passes it runs",
+  "NL9018",
   "this computes with overflow: the result",
   "NL9006",
   "drops the one the pass before gave it",

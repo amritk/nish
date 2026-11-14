@@ -14,7 +14,7 @@ only the guide your task touches; the rules there are authoritative:
 | copy or port code in | [`.claude/licensing.md`](.claude/licensing.md) |
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
-| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`docs/roadmap/index.md`](docs/roadmap/index.md) → "Picking up a work package"; tick its box in the PR that lands the stage |
+| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package"; tick its box in the PR that lands the stage |
 
 **An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
 types only through `walk.typeAt`, and treat a null binding table
@@ -71,7 +71,17 @@ release ships it — the rolling freeze, checked by CI's `bootstrap` job. Run
 `bash scripts/fetch-seed.sh --force` if the seed may be stale. A change to
 `src/` also runs `node tests/run.js wasi` and `node tests/run.js performance`
 before it is pushed (read the `wasi` skip line; it needs
-`WASI_SYSROOT=/usr`).
+`WASI_SYSROOT=/usr`): a new index in `src/` the prover cannot discharge is an
+NL9007 warning, and that run's ratchet fails on it. A change to `runtime/*.c`
+runs `node tests/run.js c-symbols`, which fails on a new libc call until
+`src/c-symbols.ts` reserves it (`.claude/selfhost.md` →
+["Changing the runtime"](.claude/selfhost.md#changing-the-runtime)).
+
+**CI's runners are not this container.** A spawn or sandbox check in
+`tests/run.js` runs on ubuntu with uutils coreutils and with descriptors the
+runner hands node: it proves behaviour by the exit status of a helper it
+builds, never by a tool's message text or the test process's own descriptor
+count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 
 **Generated goldens are regenerated, never edited or merged by hand.**
 `tests/self/goldens/checked/` (one file per module) moves with any change to

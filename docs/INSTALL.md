@@ -7,10 +7,10 @@ else that turns `.ll` into machine code) needs an LLVM toolchain.
 
 ## 1. Prerequisites
 
-- **Node.js 22.18 or newer** (22 is what CI uses), for the npm route and for
-  building from a checkout — the launcher, the postinstall step and the test
-  harness are Node scripts. It is the version where Node strips TypeScript
-  types without a flag, which `docs/RUN_UNDER_NODE.md` relies on. The
+- **Node.js 22.18 or newer**, for the npm route and for building from a
+  checkout — the launcher, the postinstall step and the test harness are Node
+  scripts. It is the version where Node strips TypeScript types without a
+  flag, which [running a program under Node](RUN_UNDER_NODE.md) relies on. The
   `install.sh` route below needs no Node at all.
 - **clang** (LLVM 18 recommended) and **lld**, for `--link`. Without them
   `nish` still writes the `.ll` files and exits 3 with the install
@@ -116,7 +116,7 @@ of its own architecture by the release workflow before the release existed, and
 installing is a download and an unpack.
 
 Through npm, which is also how an Nish *program* resolves its dependencies
-([wp21-packages.md](https://github.com/amritk/nish/blob/main/docs/wp21-packages.md)), so this is the one to pick if you want
+([Packages](guide/language/modules.md#packages)), so this is the one to pick if you want
 the compiler pinned per project in a `package.json`:
 
 ```bash
@@ -132,21 +132,49 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 
 That unpacks into `~/.nish` and prints the one line to add to your shell
 profile. On a platform it has no binary for it says so and names the four it
-does build — the npm route covers exactly the same four and no more, because
-since 0.6.0 there is no compiler inside that package to fall back to either.
+does build — the npm route covers exactly the same four and no more.
 
-**Upgrading is running it again.** There is no separate command: it installs
-over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and says
-`nothing to do` when the version already matches.
+**Upgrade with `nish upgrade`.** It asks GitHub for the latest release and,
+when it is newer than the compiler you are running, fetches that release's own
+`install.sh` (from its tag, never `main`) into a private file and runs it over
+your install's directory. `nish upgrade 0.4.0` installs a version you name, and
+says so when it is older; `nish upgrade --check` only prints the version you
+have and the latest. A compiler installed with npm is upgraded with npm:
+`nish upgrade` prints the `npm install -g nish@<version>` line to run and
+changes nothing. Running the install script again does the same job: it
+installs over an existing install, says `upgrading nish 0.3.0 to 0.4.0`, and
+says `nothing to do` when the version already matches.
+
+Once a day at most, a command on a terminal that exits 0 or 1 (a compile,
+`nish --version`, `nish --help` and the like) checks for a
+newer release in the background and prints one line on stderr when there is
+one. `NISH_NO_UPDATE_CHECK=1` turns it off; it is never shown in CI, with
+`--json`, in `nish run`, or when stderr is not a terminal
+([the CLI guide](guide/using-nish/cli.md#staying-up-to-date-nish-upgrade)).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh          # latest
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh -s 0.4.0 # a version
 sh install.sh --dir /opt/nish     # somewhere other than ~/.nish (or NISH_INSTALL)
 sh install.sh --force             # reinstall the version already there
-sh install.sh --uninstall         # remove it
+sh install.sh --no-modify-path    # leave shell startup files alone (or NISH_NO_MODIFY_PATH=1)
+sh install.sh --uninstall         # remove it, and the PATH line it added
 sh install.sh --help              # all of the above
 ```
+
+The script puts the install's `bin/` on your `PATH` in the startup file of the
+shell `$SHELL` names: `~/.zshrc` for zsh (under `$ZDOTDIR` when that is set),
+`~/.bashrc` for bash on Linux, for bash on macOS whichever of
+`~/.bash_profile`, `~/.bash_login` and `~/.profile` a login bash already reads
+(`~/.bash_profile` when there is none), `conf.d/nish.fish` in fish's
+configuration directory for fish, and `~/.profile` for any other shell. The
+line sits between `# >>> nish >>>` and `# <<< nish <<<` and is added once:
+running the script again, or `nish upgrade`, leaves it as it is, and
+`--uninstall` takes it out of every file it may have gone into. Nothing is
+written when the directory is already on `PATH`, or when its path holds a
+quote, a backslash, a colon or a newline (the script prints the line to add
+instead). The script cannot change the `PATH` of the shell you ran it from, so
+it ends by naming the file to `source` there.
 
 An upgrade cannot leave you without a compiler. The new one is unpacked beside
 the old, checked that it runs *and* that it reports the version that was asked
@@ -166,8 +194,11 @@ The attestation is a Sigstore-signed statement, made by
 `SHA256SUMS` was built by `.github/workflows/release.yml` at the release's tag
 on a GitHub-hosted runner. A failed verification refuses the install; with no
 `gh`, a signed-out one or one too old for those options, the check is skipped
-with a note saying so, and the SHA-256 still applies. The same command by hand,
-on a tarball you downloaded:
+with a note saying so, and the SHA-256 still applies. Set
+`NISH_REQUIRE_ATTESTATION=1` to refuse instead of skipping: the install then
+fails unless `gh` verifies the attestation, and refuses a release of 0.21.0 or
+older, which carries none. The same command by hand, on a tarball you
+downloaded:
 
 ```bash
 gh attestation verify nish-<version>-<asset>.tar.gz \
@@ -180,7 +211,7 @@ gh attestation verify nish-<version>-<asset>.tar.gz \
 It works on any file the release attaches, the npm tarballs included. Each
 release also attaches `nish-<version>.spdx.json`, an SPDX 2.3 software bill of
 materials: every attached file with its SHA-256, the clang, linker, Node.js
-and seed compiler that built each tarball (recorded by the build row itself),
+and the previous release's compiler that built each tarball,
 and the vendored code from
 [THIRD_PARTY_NOTICES.md](https://github.com/amritk/nish/blob/main/THIRD_PARTY_NOTICES.md) that each of them contains.
 How these fit the rest of the release's defences is
@@ -188,7 +219,7 @@ How these fit the rest of the release's defences is
 
 The npm route installs the **native** compiler, and it is a download rather than a
 build: nothing is compiled on your machine. The package declares one
-`nish-<os>-<arch>` package per supported platform as an `optionalDependencies`
+`@amritk/nish-<asset>` package per supported platform as an `optionalDependencies`
 entry with `os` and `cpu` set, so npm fetches exactly the one that matches and
 skips the rest. Each of those carries the self-hosted compiler — `src/`
 compiled by itself — already built, `--verify`d and smoke-tested on a machine
@@ -210,16 +241,12 @@ never fails over it.
 > directory happens to be, while `--version` and `-o` keep working. Both
 > installers above handle it by running the binary through a one-line `exec` of
 > an absolute path. If you unpack a tarball by hand, invoke it by path
-> (`nish-<version>-<asset>/bin/nish`) or write that wrapper yourself. The
-> underlying defect is [wp19 §5a](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
-> item 4.
+> (`nish-<version>-<asset>/bin/nish`) or write that wrapper yourself.
 
-**The package is `nish` from 0.20.0.** Releases up to 0.18.0 were published
-as `@amritk/nish` (0.19.0's publish to npm failed), which is deprecated and
-points here; `npm install -g nish`
-replaces it ([docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md#the-npm-name)). Versions
-0.0.0 and 0.0.1 of `nish` are an unrelated 2014 project that held the name
-before it, so pin `nish@^0.20.0` or later rather than an older range.
+**The package is `nish` from 0.20.0**; the older `@amritk/nish` is
+deprecated, and `npm install -g nish` replaces it. Versions 0.0.0 and 0.0.1 of
+`nish` are an unrelated project that held the name before it, so pin
+`nish@^0.20.0` or later rather than an older range.
 
 **On a platform this project attaches no binary for, `npm install` gets you a
 command that refuses.** The table below is the whole list, so musl, FreeBSD and
@@ -243,22 +270,15 @@ nish: no prebuilt compiler for freebsd/x64
   binary runs on this platform at all.
 ```
 
-Until 0.6.0 it ran the TypeScript compiler that shipped in the same package
-instead — the same compiler by every test here, about eight times slower, and
-no C toolchain needed. That compiler was stage0, which was deleted in R6
-([wp19](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)), so there is nothing left in the package to
-fall back to. The cost is stated where the rest of that deletion's costs are,
-in [wp19 §6](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
-and it is a real one: **musl, FreeBSD and 32-bit platforms have no `npm
-install` route to a compiler any more.**
-
-What is left for those platforms is the bootstrap, and it needs one thing this
-page cannot hand you: a compiler that already runs on the machine. The seed does
-not have to be *for* the machine — it has to run *on* it — so the practical
-routes are
+**musl, FreeBSD and 32-bit platforms have no `npm install` route to a
+compiler.** What is left for them is building one from source, and that needs
+one thing this page cannot hand you: a compiler that already runs on the
+machine. It does not have to be built *for* the machine, only to run *on* it,
+so the practical routes are
 
 - a glibc container or host to build in, when the target is musl. Build
-  `build/nish` there with `NISH_BOOTSTRAP=<released nish> scripts/bootstrap.sh`,
+  `build/nish` there with `NISH_BOOTSTRAP=<released nish> scripts/bootstrap.sh`
+  ([building from source](https://github.com/amritk/nish/blob/main/CONTRIBUTING.md#building-the-compiler-from-source)),
   and then **emit the IR in the container and link it on the musl host**:
 
   ```bash
@@ -285,13 +305,9 @@ routes are
 If you need one of these to be a first-class install, that is the conversation
 to have on the issue tracker rather than a workaround to discover here.
 
-**On the registry from 0.10.0** — as `@amritk/nish` through 0.18.0, and as
-`nish` from 0.20.0; 0.19.0 is on GitHub only, because its npm publish
-failed. Every release publishes the main package and its platform packages to
-npm from `release.yml`, by trusted publishing
-([docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md#release-procedure) step 4), so
-`npm install -g nish` is the whole install. The rest of this section is
-for a machine that cannot reach the registry, or a release before 0.10.0.
+**On the registry from 0.10.0** (0.19.0 is on GitHub only), so
+`npm install -g nish` is the whole install. The rest of this section is for a
+machine that cannot reach the registry, or a release before 0.10.0.
 
 From a release tarball on GitHub — the same package `npm publish` uploads,
 carried by the release instead of the registry. The `Release` workflow attaches
@@ -336,22 +352,8 @@ cross-compiled, so the one you take has compiled and run two programs before it
 reached you — a one-module one and a two-module one, from a directory unrelated
 to the machine that built it.
 
-The last column is there because a release is a past event and a workflow is
-not. `release.yml` builds all four, but a release already published cannot grow
-an asset: **the releases before v0.4.0 attach `x86_64-linux` only**. Those
-versions are not prose — they are `attachedSince` in
-[`.github/seed-targets.json`](https://github.com/amritk/nish/blob/main/.github/seed-targets.json),
-the same file the release workflow builds its matrix from, so this table and
-the assets cannot drift apart without a test failing.
-
-**The three newer rows say v0.4.0 rather than v0.3.0 on purpose.** Nothing in
-this repository had run on macOS or on ARM Linux before, and a row that has
-never run is not something to put in front of a release: `release` needs the
-whole matrix, so one red row blocks the publish. So they waited until a run on
-their own hardware had exercised them. The two macOS rows waited on a second
-thing as well: the bootstrap's `stage3 == stage2` check did not hold as a raw
-byte comparison under `ld64` until both stages were linked at one output path.
-`scripts/verify-binaries.sh`'s header is the long version.
+A release already published cannot grow an asset, so **the releases before
+v0.4.0 attach `x86_64-linux` only**.
 
 Check [the releases page](https://github.com/amritk/nish/releases/latest) for
 what a given version actually carries; on a platform whose row has not shipped
@@ -367,13 +369,10 @@ nish-0.16.0-x86_64-linux/bin/nish --version
 Both URLs name the version rather than using GitHub's version-neutral
 `/releases/latest/download/` form, because that form needs the asset's exact
 file name and every asset name carries the version in it. The example names
-v0.16.0; v0.1.1 was the first release with a binary attached.
-The `v0.1.0` tag exists but has no release behind it and no assets, so every
-`v0.1.0` download URL is a 404 — the tag was pushed by a workflow, and GitHub
-raises no event for that, so nothing ever built it
-([docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md#release-procedure) step 2). When a newer
-release exists, take its version from
-[the releases page](https://github.com/amritk/nish/releases/latest).
+v0.16.0; take the current version from
+[the releases page](https://github.com/amritk/nish/releases/latest). v0.1.1 was
+the first release with a binary attached; the `v0.1.0` tag has no release and
+no assets behind it.
 
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
 want it there. Keep the directory intact rather than moving the binary out of
@@ -388,22 +387,10 @@ It still needs `clang` and `lld` on `PATH` for `--link` (§1), because linking
 is the C toolchain's job, not the compiler's; what it does not need is Node.
 On a platform outside the table, build from a checkout.
 
-From a checkout:
-
-```bash
-git clone https://github.com/amritk/nish.git
-cd nish
-npm ci
-bash scripts/fetch-seed.sh   # the last release, into build/seed/
-npm run build       # seed -> stage1 -> stage2 = build/nish
-build/nish hello.ts --link hello
-```
-
-The build is a bootstrap, the way Rust and Go build themselves: the compiler
-is written in Nish, so something has to compile it first, and that is the
-previous release's `nish` binary — the seed. `scripts/fetch-seed.sh` downloads
-it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
-skips the download. §2a has what the build does with it.
+To build the compiler from a checkout instead, follow
+[building the compiler from source](https://github.com/amritk/nish/blob/main/CONTRIBUTING.md#building-the-compiler-from-source).
+It needs Node, clang and a released `nish` to start from, which the build
+fetches for you.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
 `runtime/` (the C runtime — seventeen translation units, the wasm subset and their
@@ -457,9 +444,7 @@ of `nish/bytes`, which `nish/json` steps over, `runtime-checksum.c` the CRC-32
 kernels of `nish/compress/checksum`, `runtime-sandbox.c` the confinement a
 `--sandbox` build applies, and `runtime-shm.c` the shared-memory regions of
 `nish/sync/shm`. They are separate so that each carries its own measured size
-ceiling
-([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md));
-the core is three files that call each other — `runtime-os.c` builds strings
+ceiling; the core is three files that call each other — `runtime-os.c` builds strings
 with `runtime-text.c`'s `nish_str_new` — and calls into none of the others, so a
 line that names only `runtime.c`, `runtime-text.c` and `runtime-os.c` links a
 program that uses none of the other fourteen. Leave out `runtime-text.c` and it
@@ -475,46 +460,6 @@ hand-written line. `scripts/build.sh` adds it by itself; by hand, append
 `runtime/sqlite/sqlite3.c` with the options `scripts/build.sh` lists under
 "SQLite's compile-time options" (at least `-DSQLITE_THREADSAFE=0`, or `=2`
 beside `-DNISH_THREADS=1`).
-
-## 2a. What `npm run build` does
-
-`src/` is the compiler, written in Nish, and it compiles itself
-([docs/wp14-selfhost.md](https://github.com/amritk/nish/blob/main/docs/wp14-selfhost.md)). From a checkout, with clang on
-`PATH`, `npm run build` runs `scripts/bootstrap.sh` with the seed from §2:
-
-```bash
-npm run build                                  # build/nish
-NISH_BOOTSTRAP=~/.nish/bin/nish npm run build  # the same, seeded by an installed nish
-scripts/bootstrap.sh --verify                  # and assert the fixed point
-```
-
-The seed builds stage1, stage1 builds stage2, and stage2 is installed as
-`build/nish`. `--verify` also builds stage3 and asserts
-`IR(stage1) == IR(stage2)` and `stage3 == stage2` byte for byte; the seed's
-own IR is only reported beside them, because a codegen change since the
-release is expected to move it. `--stages 1` stops one link sooner.
-
-`build/nish` is then the compiler you run: it takes the same `-o`, `--link` and
-`--profile` spellings as an installed `nish`, because it is the same program,
-and makes every directory in the way of the IR, a sidecar or the binary itself.
-It looks for `scripts/build.sh` and the `runtime/*.c` files one level up from
-wherever it was invoked (and one level up from the file a symbolic link to it
-names), so it wants a checkout or an installed package around it the way `nish`
-does. It falls back to the working directory only when the compiler itself lies
-inside that directory, so a checkout you merely `cd` into cannot hand it a
-`scripts/build.sh` to run. Keep `bin/nish` beside `scripts/`, `runtime/` and
-`std/`, as every install above does, and keep that directory's parent writable
-only by you: the package root is the parent of the compiler's directory, so a
-compiler at `/tmp/x/nish` would trust `/tmp/scripts/build.sh` (CLI-9 in
-[docs/security/cli.md](security/cli.md)).
-
-Because the seed is the last release, `src/` may only *use* in its own
-source the constructs that release compiles. A new construct is implemented
-in `src/` and becomes usable inside `src/` from the next release on; CI's
-`bootstrap` job is what checks that the released seed still builds stage1.
-Until R6 the seed was a TypeScript compiler, stage0, run under Node; it was
-deleted once the native one answered every flag it did
-([wp19](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)).
 
 ## 3. Hello world
 
@@ -546,7 +491,7 @@ nish hello.ts -o hello.ll
 
 Other build profiles: `--profile size` (smallest binary), `--profile debug`
 (no optimisation, symbols kept). Run `nish --help` for every flag, and
-see the [README](https://github.com/amritk/nish/blob/main/README.md) for the language subset.
+see the [user guide](guide/index.md) for the language.
 
 To use a program as a script rather than keep the binary, run it:
 

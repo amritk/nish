@@ -31,7 +31,7 @@ import { StringMap, StringSet } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { hasFunctionParameter } from "./generics"
 import { basename } from "./paths"
-import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { FieldInfo, FunctionSig, STRUCT_CLASS, StructInfo, TemplateInfo } from "./program"
 import { ResultLayout, resultLayout } from "./result"
 import { StringBuilder } from "./strings"
@@ -1097,7 +1097,12 @@ export const acceptsSidecars = (
       }
     }
   }
-  if (!refuseUnions(compilation, fns)) {
+  // Only a header or an N-API shim spells the classes as C structs; a page's
+  // `.d.ts` describes none, so a union field of a class only the module itself
+  // reads, root storage's graph among them (WP55), is no gap in it.
+  const opts = compilation.opts
+  const laysOut = opts.emitHeader.length > 0 || opts.emitNapi.length > 0 || opts.emitNapiAsync.length > 0
+  if (!refuseUnions(compilation, fns, laysOut)) {
     ok = false
   }
   // The clashes come in pairs, and the test on the second of each is what
@@ -1123,12 +1128,13 @@ export const acceptsSidecars = (
 
 /**
  * Refuses a discriminated union in what a sidecar describes: a parameter or
- * result of an external function, every sidecar's or none, and a field of any class or interface the
- * header lays out. A union has no C spelling yet, so the header would write it
- * as `void *` and the host could not tell the variants apart. True when there
- * is none; otherwise the first is reported.
+ * result of an external function, every sidecar's or none, and, when
+ * `laysOut` (a header or an N-API shim is written), a field of any class or
+ * interface, all of which the header lays out. A union has no C spelling yet,
+ * so the header would write it as `void *` and the host could not tell the
+ * variants apart. True when there is none; otherwise the first is reported.
  */
-const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
+const refuseUnions = (compilation: Compilation, fns: ExternalFunction[], laysOut: boolean): boolean => {
   // The loops only look; the one report is written after them, so no pass of a
   // loop keeps a message alive past itself, and the first union is the one.
   const table = compilation.table
@@ -1150,6 +1156,9 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
     reportUnion(compilation, fn.unit, sigNameNode(sig), what)
     return false
   }
+  if (!laysOut) {
+    return true
+  }
   let unit: ModuleUnit | null = null
   let info: StructInfo | null = null
   for (const each of compilation.modules) {
@@ -1164,7 +1173,12 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
     f = unionField(table, info)
   }
   if (unit !== null && info !== null && f !== null) {
-    reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+    reportUnion(
+      compilation,
+      unit,
+      f.decl,
+      `\`${table.typeName(info.type)}.${f.name}\` is \`${table.typeName(f.type)}\``
+    )
     return false
   }
   return true
@@ -1242,7 +1256,7 @@ const reportUninstantiated = (
  * which has none: `nameNode` in `src/compilation.ts`, for the same reason.
  */
 const sigNameNode = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 
 /**
  * `int32_t add(int32_t a, int32_t b)` for a function, or `""` when a type has
@@ -1369,7 +1383,7 @@ export const resultDefinitions = (table: TypeTable, fns: ExternalFunction[], fie
     return lines
   }
   lines.push("")
-  lines.push("/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a")
+  lines.push("/* `Result<T, E>`. A `Result` small enough to travel in a")
   lines.push(" * register — returned or passed — is the `_word` struct: read `ok`, then")
   lines.push(" * `as.value` or `as.error`. Every other `Result` is a pointer to the arena")
   lines.push(" * object, valid until nish_reset_arena() / nish_arena_release() like every")

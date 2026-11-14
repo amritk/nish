@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Reproduces the figures in docs/wp48-compressed-references.md: one AST-shaped
+// Reproduces WP48's figures (README.md beside this file): one AST-shaped
 // tree built and walked five ways (README.md has the layouts), at three sizes.
 //
 //   npm run build && node bench/wp48-refs/run.mjs [--rounds 9] [--sizes 20000,400000,4000000]

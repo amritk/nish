@@ -1263,7 +1263,7 @@ loopback TCP stack's work the Unix socket skips.
 `p256PublicKey` on a new private key, `p256SignSha256` on a 64-byte message,
 which is what a TLS 1.3 server's CertificateVerify costs, and
 `p256VerifySha256`. It is
-[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-baseline)'s baseline, and the
+[WP34 K5](../docs/wp34-network-stack.md#k5-p-256-the-baseline)'s baseline, and the
 measure a fixed-base table is judged by. It is not in this suite's tables, and
 it has no twins. `p256.mjs` builds it and drives it:
 
@@ -1328,9 +1328,9 @@ band. A missing compiler, libxcrypt or network leaves its row out with a note.
 `tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
 `tests/link/net_interop_server` run as `serve`, its own P-256 certificate,
 answering new connections on its h2 port. It is
-[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
+[WP34 K5](../docs/wp34-network-stack.md#k5-p-256-the-inversion--the-baseline)'s
 measure for the scalar inversion, where `bench/p256.mjs` times the signature on
-its own; [the result](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result)
+its own; [the result](../docs/wp34-network-stack.md#k5-p-256-the-inversion--the-result)
 reads both against the bar. It is not in this suite's tables. It needs `curl` with HTTP/2 and
 `taskset`.
 
@@ -1505,9 +1505,10 @@ at about 10 ms.
 
 `h3-latency.mjs` times `std/net`'s HTTP/3 server, run as
 `tests/link/net_interop_server serve`, against nginx, with h2load over HTTP/3.
-It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure, and
-[docs/h3-latency.md](../docs/h3-latency.md) records its figures and what
-they showed. It is not in this suite's tables. The tools are not
+It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure; what
+it found, a pacer that counted whole milliseconds, is QUIC-9 in
+[docs/security/quic.md](../docs/security/quic.md) and H3-8 in
+[docs/security/http3.md](../docs/security/http3.md). It is not in this suite's tables. The tools are not
 dependencies of nish: `h3-latency/build-tools.sh` builds them once, into
 `~/.cache/nish-h3-bench` by default, from pinned and checksummed tarballs:
 OpenSSL, ngtcp2, nghttp3, h2load (nghttp2) with HTTP/3, and nginx with
@@ -2437,20 +2438,53 @@ between them is the noise band. Rounds are interleaved, rotated and every
 other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
 input (default 32). It is run by hand and is not in `tests/run.js`.
 
-On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
+Against `main` at `e0a1661e`, before the load built a map with no merge key
+straight from its own pairs (the parser having checked them for repeats),
+stored scalars and keys from the source span, sized each container before
+filling it, and resolved, typed and decoded each scalar once (a plain number
+stored without the tokenizer's second check, and copied a scalar that is its
+own source span with no check per byte): `main`'s `main.ts` built twice and
+this branch's built twice (each pair `cmp` byte-identical; this branch's by
+the compiler of `main` at `4bd22892`, which it merges), the four binaries
+interleaved on both workloads, 31 rounds, the whole measurement done twice, on
+a 4-core cloud container, 1,107,038 bytes and 30 documents a run. Every run
+gave the same checksum. Milliseconds a document, the two builds' medians, and
+the band between them:
 
-| Workload | Median | Copy | Band | MB/s |
-| --- | ---: | ---: | ---: | ---: |
-| parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
-| load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
+| Workload | Run | Before | Band | After | Band | After / before |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| parse | 1 | 15.206 / 15.174 | 0.2% | 14.960 / 14.934 | 0.2% | 0.984 |
+| parse | 2 | 15.203 / 15.236 | 0.2% | 14.929 / 14.964 | 0.2% | 0.982 |
+| load | 1 | 28.388 / 28.413 | 0.1% | 21.945 / 21.985 | 0.2% | 0.773 |
+| load | 2 | 28.370 / 28.315 | 0.2% | 21.919 / 21.945 | 0.1% | 0.774 |
 
-Both rows time the whole binary, so **load** includes the parse. In wall
-clock, parse plus load is 1.94x the parse alone; the load step by itself is
-the 17.6 ms a document between them, 0.94x the parse, for 75,025 values from
-276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`, a document
-is 136M instructions to parse and 309M to parse and load, 2.27x; the load
-step alone is 173M, 1.27x the parse. The load step retires more instructions
-than the parse but takes less time than it.
+Both rows time the whole binary, so **load** includes the parse. Parse plus
+load went from 1.87x and 1.86x the parse alone to 1.47x in both runs. The
+parse read 1.6% and 1.8% faster, outside its band but with the newer compiler
+on one side; its instruction count, 0.2% lower with the verbatim mark paid, is
+the firmer figure. Under `valgrind --tool=cachegrind --cache-sim=no`, steady
+state a document:
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| parse | 135.82M | 135.50M |
+| parse + load | 298.85M | 231.44M |
+| load step alone | 163.03M | 95.94M |
+
+#1072 recorded 309M and 173M for the same input on its own head; `main` at
+`e0a1661e`, with the compiler and library changes since, measures the
+298.85M and 163.03M above, and that is the baseline here. The load step is
+41.2% cheaper, past the 40% (97.82M) that was the aim, and now 0.71x the
+parse in instructions. The last 6.3M of it came from copying scalar text
+into the document without a bounds check on each byte: the parser marks a
+flow scalar whose source span is its body (one line, and quoted, no escape or
+doubled quote), the loader copies such a span with no search for a line
+break, and both copies store each byte unchecked after one range test of the
+whole span. The mark costs the parse 0.44M of the 135.50M. What is left of the
+load step, as self costs a document: `build`'s own dispatch (about 23.6M over
+its inlined parts), copying and storing scalar text (about 18M), appending
+members (7.6M), making nodes (5.3M), recording source ranges (9.2M), reading
+node types (3.1M), merge keys (3.8M) and storing keys (4.5M).
 
 ```bash
 node bench/yaml-json/run.mjs
@@ -2591,8 +2625,9 @@ in is in parentheses.
   the result. Not part of this suite.
 - `wp48-refs/`: one AST-shaped tree in five layouts, pointer graphs against
   records in arrays addressed by `i32` (`node bench/wp48-refs/run.mjs`), the
-  measurements behind
-  [docs/wp48-compressed-references.md](../docs/wp48-compressed-references.md).
+  measurements behind the lean sibling-link layout
+  [docs/AI.md](../docs/AI.md#a-tree-links-first-child-and-next-sibling)
+  recommends; its README holds the figures. Not part of this suite.
 - `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
   accuracy figures ("Math accuracy" above).
 - `pg-batch-clock.ts`: when to start a PostgreSQL batch, adaptive against

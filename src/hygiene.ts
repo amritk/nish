@@ -21,34 +21,7 @@
 
 import { CheckContext } from "./context"
 import { Diagnostic } from "./diagnostics"
-import {
-  FLAG_USING,
-  N_ARRAY,
-  N_AS,
-  N_BIGINT,
-  N_BINARY,
-  N_CONDITIONAL,
-  N_EXPR_STMT,
-  N_FALSE,
-  N_FOR,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_NULL,
-  N_NUMBER,
-  N_PAREN,
-  N_STRING,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_THIS,
-  N_TRUE,
-  N_UNARY,
-  N_VAR,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { FLAG_USING, Node, NodeKind } from "./nodes"
 import { CheckedProgram } from "./program"
 import { Local, sourceLocal } from "./symbols"
 import { isUnsigned, T_F32, T_F64 } from "./types"
@@ -100,18 +73,18 @@ const holdFinding = (ctx: CheckContext, node: Node, message: string): void => {
  * the block's end does without naming it.
  */
 const collectDeclared = (program: CheckedProgram, node: Node, inVar: boolean, out: Declared[]): void => {
-  if (node.kind === N_VAR_DECL && inVar) {
+  if (node.kind === NodeKind.VarDecl && inVar) {
     const local = program.nodeLocals[node.id]
     if (local !== null) {
       out.push(new Declared(node, local))
     }
   }
-  if (node.kind === N_VAR && (node.flags & FLAG_USING) !== 0) {
+  if (node.kind === NodeKind.Var && (node.flags & FLAG_USING) !== 0) {
     return
   }
-  // A declarator sits in a LIST under its N_VAR; anything deeper (its
-  // initialiser) is an expression, whose arrows declare through their own N_VAR.
-  const passes = node.kind === N_VAR || (inVar && node.kind === N_LIST)
+  // A declarator sits in a LIST under its NodeKind.Var; anything deeper (its
+  // initialiser) is an expression, whose arrows declare through their own NodeKind.Var.
+  const passes = node.kind === NodeKind.Var || (inVar && node.kind === NodeKind.List)
   for (const child of node.children) {
     collectDeclared(program, child, passes, out)
   }
@@ -152,7 +125,7 @@ const isStoreOperator = (op: string): boolean =>
   op === "??="
 
 const isStepOperator = (node: Node): boolean =>
-  node.kind === N_UNARY && (node.text === "++" || node.text === "--")
+  node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")
 
 /**
  * Mark what the body does with each declared local. A bare name stored into —
@@ -162,22 +135,22 @@ const isStepOperator = (node: Node): boolean =>
  * an arrow's capture included.
  */
 const markUse = (program: CheckedProgram, node: Node, declared: Declared[], valueUsed: boolean): void => {
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const at = declaredIndex(declared, program.nodeLocals[node.id])
     if (at >= 0) {
       declared[at].read = true
     }
     return
   }
-  if (node.kind === N_EXPR_STMT) {
+  if (node.kind === NodeKind.ExprStmt) {
     // A lone name on its own line is not a use of it, so `x;` cannot quiet
     // the rule about `x`.
-    if (node.children[0].kind !== N_IDENT) {
+    if (node.children[0].kind !== NodeKind.Ident) {
       markUse(program, node.children[0], declared, false)
     }
     return
   }
-  if (node.kind === N_FOR) {
+  if (node.kind === NodeKind.For) {
     let index = 0
     for (const child of node.children) {
       markUse(program, child, declared, index !== 2)
@@ -185,12 +158,12 @@ const markUse = (program: CheckedProgram, node: Node, declared: Declared[], valu
     }
     return
   }
-  if (node.kind === N_PAREN) {
+  if (node.kind === NodeKind.Paren) {
     markUse(program, node.children[0], declared, valueUsed)
     return
   }
-  const stores = (node.kind === N_BINARY && isStoreOperator(node.text)) || isStepOperator(node)
-  if (stores && node.children[0].kind === N_IDENT) {
+  const stores = (node.kind === NodeKind.Binary && isStoreOperator(node.text)) || isStepOperator(node)
+  if (stores && node.children[0].kind === NodeKind.Ident) {
     const at = declaredIndex(declared, program.nodeLocals[node.children[0].id])
     if (at >= 0) {
       declared[at].written = true
@@ -199,7 +172,7 @@ const markUse = (program: CheckedProgram, node: Node, declared: Declared[], valu
         declared[at].read = true
       }
     }
-    if (node.kind === N_BINARY) {
+    if (node.kind === NodeKind.Binary) {
       markUse(program, node.children[1], declared, true)
     }
     return
@@ -226,14 +199,16 @@ const reportUnread = (ctx: CheckContext, d: Declared): void => {
 // ---- Expressions that cannot be what was meant -----------------------------
 
 const walkHygiene = (ctx: CheckContext, node: Node): void => {
-  if (node.kind === N_EXPR_STMT) {
+  if (node.kind === NodeKind.ExprStmt) {
     // A lone name is left to the rule above, which does not count it as a
     // read: it changes nothing, and it is how a program states a variable
     // named `try` or `var` on a line of its own (`tests/parser/names.ts`).
     const expr = hygieneUnwrap(node.children[0])
-    if (expr.kind !== N_IDENT && isPure(expr)) {
+    if (expr.kind !== NodeKind.Ident && isPure(expr)) {
       const hint =
-        expr.kind === N_BINARY && (expr.text === "===" || expr.text === "==") ? " (to assign, write `=`)" : ""
+        expr.kind === NodeKind.Binary && (expr.text === "===" || expr.text === "==")
+          ? " (to assign, write `=`)"
+          : ""
       holdFinding(
         ctx,
         node.children[0],
@@ -242,10 +217,10 @@ const walkHygiene = (ctx: CheckContext, node: Node): void => {
       return
     }
   }
-  if (node.kind === N_IF) {
+  if (node.kind === NodeKind.If) {
     checkRepeatedCondition(ctx, node)
   }
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     checkSameOperands(ctx, node)
     checkUnsignedZero(ctx, node)
   }
@@ -256,7 +231,7 @@ const walkHygiene = (ctx: CheckContext, node: Node): void => {
 
 const hygieneUnwrap = (node: Node): Node => {
   let at = node
-  while (at.kind === N_PAREN || at.kind === N_AS) {
+  while (at.kind === NodeKind.Paren || at.kind === NodeKind.As) {
     at = at.children[0]
   }
   return at
@@ -271,31 +246,31 @@ const hygieneUnwrap = (node: Node): Node => {
  */
 const isPure = (node: Node): boolean => {
   switch (node.kind) {
-    case N_IDENT:
-    case N_NUMBER:
-    case N_BIGINT:
-    case N_STRING:
-    case N_TRUE:
-    case N_FALSE:
-    case N_NULL:
-    case N_THIS:
-    case N_TEMPLATE_TEXT:
+    case NodeKind.Ident:
+    case NodeKind.Number:
+    case NodeKind.Bigint:
+    case NodeKind.String:
+    case NodeKind.True:
+    case NodeKind.False:
+    case NodeKind.Null:
+    case NodeKind.This:
+    case NodeKind.TemplateText:
       return true
-    case N_BINARY:
+    case NodeKind.Binary:
       return !isStoreOperator(node.text) && isPure(node.children[0]) && isPure(node.children[1])
-    case N_UNARY:
+    case NodeKind.Unary:
       return (
         (node.text === "!" || node.text === "-" || node.text === "+" || node.text === "~") &&
         isPure(node.children[0])
       )
-    case N_PAREN:
-    case N_AS:
-    case N_MEMBER:
+    case NodeKind.Paren:
+    case NodeKind.As:
+    case NodeKind.Member:
       return isPure(node.children[0])
-    case N_INDEX:
-    case N_CONDITIONAL:
-    case N_TEMPLATE:
-    case N_ARRAY: {
+    case NodeKind.Index:
+    case NodeKind.Conditional:
+    case NodeKind.Template:
+    case NodeKind.Array: {
       for (const child of node.children) {
         if (!isPure(child)) {
           return false
@@ -319,7 +294,7 @@ const sameValue = (program: CheckedProgram, a: Node, b: Node): boolean =>
   isPure(a) && isPure(b) && mentionsVariable(a) && sameShape(program, hygieneUnwrap(a), hygieneUnwrap(b))
 
 const mentionsVariable = (node: Node): boolean => {
-  if (node.kind === N_IDENT || node.kind === N_THIS) {
+  if (node.kind === NodeKind.Ident || node.kind === NodeKind.This) {
     return true
   }
   for (const child of node.children) {
@@ -336,7 +311,7 @@ const sameShape = (program: CheckedProgram, a: Node, b: Node): boolean => {
   if (x.kind !== y.kind || x.text !== y.text || x.children.length !== y.children.length) {
     return false
   }
-  if (x.kind === N_IDENT) {
+  if (x.kind === NodeKind.Ident) {
     const lx = sourceLocal(program.nodeLocals[x.id])
     const ly = sourceLocal(program.nodeLocals[y.id])
     if (lx === null || ly === null) {
@@ -346,7 +321,7 @@ const sameShape = (program: CheckedProgram, a: Node, b: Node): boolean => {
     }
     return lx === ly
   }
-  if (x.kind === N_UNARY && x.flags !== y.flags) {
+  if (x.kind === NodeKind.Unary && x.flags !== y.flags) {
     return false
   }
   let i = 0
@@ -425,10 +400,10 @@ const checkRepeatedCondition = (ctx: CheckContext, node: Node): void => {
   // `else if` in between, which the walk reaches as an `if` of its own, so the
   // message is built once, outside the loop.
   let next = node.children[2]
-  while (next.kind === N_IF && !sameValue(ctx.program, condition, next.children[0])) {
+  while (next.kind === NodeKind.If && !sameValue(ctx.program, condition, next.children[0])) {
     next = next.children[2]
   }
-  if (next.kind !== N_IF) {
+  if (next.kind !== NodeKind.If) {
     return
   }
   const repeated = next.children[0]
@@ -441,7 +416,7 @@ const checkRepeatedCondition = (ctx: CheckContext, node: Node): void => {
 
 const isZero = (node: Node): boolean => {
   const at = hygieneUnwrap(node)
-  return (at.kind === N_NUMBER && at.text === "0") || (at.kind === N_BIGINT && at.text === "0n")
+  return (at.kind === NodeKind.Number && at.text === "0") || (at.kind === NodeKind.Bigint && at.text === "0n")
 }
 
 /**

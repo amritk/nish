@@ -20,7 +20,7 @@ argument is a type, and a bound is a number (§4).
 | # | Question | Decision | Rejected |
 | --- | --- | --- | --- |
 | 1 | Spelling | `integer<Lo, Hi>`, both bounds integer literals, declared for `tsc` as `type integer<Lo extends number, Hi extends number> = number` (§3). | A branded type, a `Ranged<…>` class, or a name per range. |
-| 2 | The literal argument | A type node, `N_TYPE_LITERAL`, parsed wherever a type is and refused everywhere but as a bound of `integer`. An interned kind, `K_RANGED`, mangled `rng.p0.p255` (§4). | Literal type arguments in general, which are const generics. |
+| 2 | The literal argument | A type node, `NodeKind.TypeLiteral`, parsed wherever a type is and refused everywhere but as a bound of `integer`. An interned kind, `K_RANGED`, mangled `rng.p0.p255` (§4). | Literal type arguments in general, which are const generics. |
 | 3 | Representation | Always `i32`, in both number modes. Bounds must lie in `i32`. No relation to `u8`/`u16`/`u32` beyond an explicit conversion (§5). | The smallest width that fits, or `u32` above `INT_MAX`. |
 | 4 | Entering the range | A checked entry: an unproven value is compared once and the program panics outside the range; no check where the literal, the source type or the flow facts prove it; an out-of-range literal is a compile error (§6). | A compile error for every unproven value; a conversion builtin. |
 | 5 | Leaving the range | Every operator reads a ranged value as `i32`. The range survives copies, `const`, reads, returns and type arguments. Nothing computes a range (§7). | Interval arithmetic in the types. |
@@ -57,7 +57,7 @@ broke nothing.
 
 ## 4. The literal type argument
 
-`parsePrimaryType` accepts a number, or `-` and a number, as `N_TYPE_LITERAL`,
+`parsePrimaryType` accepts a number, or `-` and a number, as `NodeKind.TypeLiteral`,
 wherever a type is parsed — "lex and parse what is written; refuse in the phase
 that owns the rule" — so `const x: 5 = 5` parses and the checker refuses it by
 name. No speculative parse is needed, since a number could not start a type

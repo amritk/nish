@@ -111,6 +111,12 @@ build the trust from their certificates with `new TlsClientTrust(roots)`
 `tlsConnectWith`. There is no option to skip the check: a server you cannot
 authenticate is reached by trusting its root, never around it.
 
+To stop trusting a key the roots still lead to, a CA's or a server's,
+`tlsClientDistrustSpki(trust, hash)` adds the SHA-256 of its
+subjectPublicKeyInfo: every connection made with that trust then refuses a
+chain whose path holds a certificate with that key, with `bad_certificate`
+([Distrusting a key](tls-certificates.md#distrusting-a-key)).
+
 ## Starting a handshake
 
 A `TlsClientConfig` names the server (sent as SNI) and the ALPN protocols to

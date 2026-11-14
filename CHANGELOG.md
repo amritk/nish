@@ -1,28 +1,18 @@
 # Changelog
 
-All notable changes to `nish` are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[Semantic Versioning](https://semver.org/).
+All notable changes to Nish, newest release first. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/). Nish is on 0.x, where a breaking
+change moves the minor version.
 
-**This file is generated.** A section is written when a release is cut, from
-the commits that release contains: `scripts/changelog-gen.mjs` reads each
-commit's subject for the heading and its body for the prose, and writes
-`changelog/<version>.json`. That JSON is the record — it is what the website
-reads — and the section below is rendered from it. To fix a wording, edit the
-JSON in the release pull request and re-render; editing here is overwritten.
+Each release lists one line per change, under the heading its kind gives,
+with a link to the pull request that holds the full description and the diff.
+The same entries with their full descriptions are in
+[`changelog/`](https://github.com/amritk/nish/tree/main/changelog), one JSON
+file per release, and each release's notes and downloads are on the
+[releases page](https://github.com/amritk/nish/releases).
 
-A section is an index rather than an account: one line per change, its title
-and a link to the pull request it landed in, under the heading its type gives.
-The prose each commit wrote is in the JSON and on the website, and the pull
-request has the diff and the discussion, so a reader scanning a release sees
-what changed and one click to the rest.
-
-The release pull request is where a release is reviewed: every merge to `main`
-refreshes it with the version bump, the JSON and this section, and merging it
-creates the tag. [docs/wp12-release.md](https://github.com/amritk/nish/blob/main/docs/wp12-release.md) has the
-procedure, and `CLAUDE.md` has the commit convention the headings come from.
-Between releases `[Unreleased]` is empty, because there is nothing to write by
-hand — the git log is the working account until a release turns it into one.
+<!-- Generated: scripts/changelog-gen.mjs writes each section from changelog/<version>.json when a release is cut. Fix a wording in the JSON and re-render; edits here are overwritten. -->
 
 ## [Unreleased]
 
@@ -31,7 +21,7 @@ hand — the git log is the working account until a release turns it into one.
 ### Added
 
 - runtime: Add parent/child regions ([#1357](https://github.com/amritk/nish/pull/1357))
-- interop: Examples/wasm-arena and the ten-minute Chromium soak (WP50 stage 6) ([#1372](https://github.com/amritk/nish/pull/1372))
+- interop: Examples/wasm-arena and the ten-minute Chromium soak ([#1372](https://github.com/amritk/nish/pull/1372))
 - checker: Object spread in object literals, lowered to field copies ([#1373](https://github.com/amritk/nish/pull/1373))
 - cli: Explain which loops and functions keep their memory (--explain-memory) ([#1375](https://github.com/amritk/nish/pull/1375))
 - checker: Refuse the mistakes every type accepts ([#1380](https://github.com/amritk/nish/pull/1380))
@@ -40,21 +30,21 @@ hand — the git log is the working account until a release turns it into one.
 - std: Add toFixed and split with a limit to nish/text ([#1396](https://github.com/amritk/nish/pull/1396))
 - runtime: Read a file a window at a time with fileOpen, fileReadAt, fileSize and fileClose ([#1397](https://github.com/amritk/nish/pull/1397))
 - checker: Typed JSON decodes and encodes tagged unions ([#1400](https://github.com/amritk/nish/pull/1400))
-- checker: References to capture-free top-level functions in fields, locals, arrays and returns (WP51 stage 1) ([#1404](https://github.com/amritk/nish/pull/1404))
+- checker: References to capture-free top-level functions in fields, locals, arrays and returns ([#1404](https://github.com/amritk/nish/pull/1404))
 - checker: Attribute dependency diagnostics and refuse hostless builtins on wasm32 ([#1409](https://github.com/amritk/nish/pull/1409))
 - crypto: Expose x509 criticality, AKI issuer/serial and AIA to pki ([#1452](https://github.com/amritk/nish/pull/1452))
 - net: Secp256r1 key shares and a carrier idle timeout on the TLS server ([#1449](https://github.com/amritk/nish/pull/1449))
 - net: QUIC sends datagrams past 1,200 bytes after path MTU discovery ([#1458](https://github.com/amritk/nish/pull/1458))
-- cli: The review tier of fix in --json (WP33 R5) ([#1453](https://github.com/amritk/nish/pull/1453))
-- net: Record_size_limit on the TLS server (WP39 G3) ([#1467](https://github.com/amritk/nish/pull/1467))
-- codegen: Declare class as a C struct layout, passed by pointer (WP27 S4.1) ([#1455](https://github.com/amritk/nish/pull/1455))
-- checker: Function references as arguments, `| null` and `Map` values (WP51 stage 2) ([#1428](https://github.com/amritk/nish/pull/1428))
-- net: Cleartext HTTP/2 with prior knowledge (WP39 G7) ([#1461](https://github.com/amritk/nish/pull/1461))
-- net: Postgres over TLS in the carrier (WP39 E6) ([#1446](https://github.com/amritk/nish/pull/1446))
-- net: Steer QUIC packets to the owning process (WP39 G6) ([#1470](https://github.com/amritk/nish/pull/1470))
-- codegen: ReadStruct copies a C-owned struct out of a CPtr (WP27 S4.2) ([#1471](https://github.com/amritk/nish/pull/1471))
-- cli: A bare --compat that accepts nothing, and the erasure invariant that holds it (WP28 S3) ([#1489](https://github.com/amritk/nish/pull/1489))
-- codegen: CErrno, errno zeroed before and saved after a foreign call (WP27 S5) ([#1443](https://github.com/amritk/nish/pull/1443))
+- cli: The review tier of fix in --json ([#1453](https://github.com/amritk/nish/pull/1453))
+- net: Record_size_limit on the TLS server ([#1467](https://github.com/amritk/nish/pull/1467))
+- codegen: Declare class as a C struct layout, passed by pointer ([#1455](https://github.com/amritk/nish/pull/1455))
+- checker: Function references as arguments, `| null` and `Map` values ([#1428](https://github.com/amritk/nish/pull/1428))
+- net: Cleartext HTTP/2 with prior knowledge ([#1461](https://github.com/amritk/nish/pull/1461))
+- net: Postgres over TLS in the carrier ([#1446](https://github.com/amritk/nish/pull/1446))
+- net: Steer QUIC packets to the owning process ([#1470](https://github.com/amritk/nish/pull/1470))
+- codegen: ReadStruct copies a C-owned struct out of a CPtr ([#1471](https://github.com/amritk/nish/pull/1471))
+- cli: A bare --compat that accepts nothing, and the erasure invariant that holds it ([#1489](https://github.com/amritk/nish/pull/1489))
+- codegen: CErrno, errno zeroed before and saved after a foreign call ([#1443](https://github.com/amritk/nish/pull/1443))
 
 ### Fixed
 
@@ -62,26 +52,26 @@ hand — the git log is the working account until a release turns it into one.
 - std: Nish/regex no longer hangs under Node on a class or alternation ([#1392](https://github.com/amritk/nish/pull/1392))
 - checker: A bodiless instance must state its write facts ([#1394](https://github.com/amritk/nish/pull/1394))
 - runtime: A held HTTP/1 write keeps the write bit once a flush empties the output ([#1420](https://github.com/amritk/nish/pull/1420))
-- runtime: Refuse a granted program's interpreter as a spawn target under --sandbox (WP37, SBX-1) ([#1447](https://github.com/amritk/nish/pull/1447))
+- runtime: Refuse a granted program's interpreter as a spawn target under --sandbox (SBX-1) ([#1447](https://github.com/amritk/nish/pull/1447))
 - net: A lingering close for HTTP/1.1, SETTINGS and idle timeouts for HTTP/2, a session clock for WebTransport ([#1454](https://github.com/amritk/nish/pull/1454))
 - runtime: Hold a granted program's descendants to the exec grant ([#1486](https://github.com/amritk/nish/pull/1486))
 
 ### Performance
 
-- bench: Measure the async TFB entry against the explicit one on plaintext, json and db (WP49 stage 6) ([#1367](https://github.com/amritk/nish/pull/1367))
-- net: Serve answers pipelined requests in one write (WP49 stage 6, part 3) ([#1378](https://github.com/amritk/nish/pull/1378))
-- net: The async Postgres pool pipelines queries across tasks (WP49 stage 6, part 5) ([#1379](https://github.com/amritk/nish/pull/1379))
-- bench: The async TFB entry measured against the explicit one after the serve and pool fixes (WP49 stage 6) ([#1399](https://github.com/amritk/nish/pull/1399))
-- runtime: Close the async serve gap on plaintext and json (WP49 stage 6) ([#1421](https://github.com/amritk/nish/pull/1421))
-- net: Close the async Postgres pool gap on /db (WP49 stage 6) ([#1419](https://github.com/amritk/nish/pull/1419))
+- bench: Measure the async TFB entry against the explicit one on plaintext, json and db ([#1367](https://github.com/amritk/nish/pull/1367))
+- net: Serve answers pipelined requests in one write ([#1378](https://github.com/amritk/nish/pull/1378))
+- net: The async Postgres pool pipelines queries across tasks ([#1379](https://github.com/amritk/nish/pull/1379))
+- bench: The async TFB entry measured against the explicit one after the serve and pool fixes ([#1399](https://github.com/amritk/nish/pull/1399))
+- runtime: Close the async serve gap on plaintext and json ([#1421](https://github.com/amritk/nish/pull/1421))
+- net: Close the async Postgres pool gap on /db ([#1419](https://github.com/amritk/nish/pull/1419))
 - net: Copy QUIC stream bytes by slice, not by byte ([#1445](https://github.com/amritk/nish/pull/1445))
-- net: Serve the TechEmpower json and plaintext entry on every core (WP39 E5) ([#1448](https://github.com/amritk/nish/pull/1448))
-- runtime: Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8) ([#1451](https://github.com/amritk/nish/pull/1451))
-- runtime: Trim the async request path's instructions per request (WP49 stage 6) ([#1459](https://github.com/amritk/nish/pull/1459))
+- net: Serve the TechEmpower json and plaintext entry on every core ([#1448](https://github.com/amritk/nish/pull/1448))
+- runtime: Ship the SSSE3 and NEON Adler-32 kernels ([#1451](https://github.com/amritk/nish/pull/1451))
+- runtime: Trim the async request path's instructions per request ([#1459](https://github.com/amritk/nish/pull/1459))
 - net: Parse an HTTP/1 request head a vector at a time ([#1460](https://github.com/amritk/nish/pull/1460))
 - crypto: A safegcd field inversion and a windowed verify for P-256 ([#1469](https://github.com/amritk/nish/pull/1469))
-- net: A whole answer drives its connection once (WP49 stage 6) ([#1492](https://github.com/amritk/nish/pull/1492))
-- runtime: Recycle a finished task's frame and region instead of freeing them (WP49 stage 6) ([#1493](https://github.com/amritk/nish/pull/1493))
+- net: A whole answer drives its connection once ([#1492](https://github.com/amritk/nish/pull/1492))
+- runtime: Recycle a finished task's frame and region instead of freeing them ([#1493](https://github.com/amritk/nish/pull/1493))
 - net: Build a repeated HTTP/1 response head once per Date tick ([#1457](https://github.com/amritk/nish/pull/1457))
 - codegen: Prove vector loads and stores in range and tag them as element data ([#1480](https://github.com/amritk/nish/pull/1480))
 
@@ -96,21 +86,21 @@ hand — the git log is the working account until a release turns it into one.
 - Renumber Fast rebuilds for nish run from WP48 to WP52 ([#1393](https://github.com/amritk/nish/pull/1393))
 - Show code in page titles, add a changelog RSS feed and a writing-nish agent skill ([#1395](https://github.com/amritk/nish/pull/1395))
 - Accept WP48's recommendation and make the lean sibling layout the port convention ([#1398](https://github.com/amritk/nish/pull/1398))
-- runtime: Stream a file through an HTTP/1.1 example with flat memory (WP44 F3) ([#1403](https://github.com/amritk/nish/pull/1403))
+- runtime: Stream a file through an HTTP/1.1 example with flat memory ([#1403](https://github.com/amritk/nish/pull/1403))
 - Renumber Buffers and handles across declare function from WP40 to WP53 ([#1413](https://github.com/amritk/nish/pull/1413))
-- runtime: Profile the async TFB entry against the explicit one on plaintext, json and db (WP49 stage 6) ([#1410](https://github.com/amritk/nish/pull/1410))
+- runtime: Profile the async TFB entry against the explicit one on plaintext, json and db ([#1410](https://github.com/amritk/nish/pull/1410))
 - Disable the Ask AI agent on the docs site ([#1424](https://github.com/amritk/nish/pull/1424))
 - Print a negative http1-e2e saving as a cost, and name the baseline compiler ([#1427](https://github.com/amritk/nish/pull/1427))
 - runtime: Profile the explicit TFB entry against uWS and go-fasthttp on plaintext and json ([#1436](https://github.com/amritk/nish/pull/1436))
 - Compile the modules guide's multi-file examples, and split the P-256/P-384 module docs ([#1434](https://github.com/amritk/nish/pull/1434))
-- Design note for one handler across HTTP/1.1, 2 and 3 (WP39 G7) ([#1438](https://github.com/amritk/nish/pull/1438))
-- Design note for QUIC on more than one core (WP39 G6) ([#1439](https://github.com/amritk/nish/pull/1439))
-- bench: HTTP/2 and HTTP/3 figures from the h2load harness (WP39 G8) ([#1462](https://github.com/amritk/nish/pull/1462))
+- Design note for one handler across HTTP/1.1, 2 and 3 ([#1438](https://github.com/amritk/nish/pull/1438))
+- Design note for QUIC on more than one core ([#1439](https://github.com/amritk/nish/pull/1439))
+- bench: HTTP/2 and HTTP/3 figures from the h2load harness ([#1462](https://github.com/amritk/nish/pull/1462))
 - runtime: Re-measure WP49 stage 6's gate after the serve and pool fixes ([#1465](https://github.com/amritk/nish/pull/1465))
 - bench: WP28 spike S5 — the price of --number-mode f64 on the benchmark suite ([#1484](https://github.com/amritk/nish/pull/1484))
 - bench: WP28 spike S2 — async by contagion, counted on real TypeScript ([#1481](https://github.com/amritk/nish/pull/1481))
 - bench: WP28 spike S6 — try/catch by landing pads against a Result desugaring ([#1482](https://github.com/amritk/nish/pull/1482))
-- cli: Record x86-64-v4 and the AArch64 --cpu levels as measured, not built (WP38) ([#1432](https://github.com/amritk/nish/pull/1432))
+- cli: Record x86-64-v4 and the AArch64 --cpu levels as measured, not built ([#1432](https://github.com/amritk/nish/pull/1432))
 - Tick WP34's finished stages and WP39's G1 and G2 ([#1488](https://github.com/amritk/nish/pull/1488))
 - bench: WP28 spike S4 — Promise.all as a fork/join against parallelReduce ([#1490](https://github.com/amritk/nish/pull/1490))
 
@@ -119,12 +109,12 @@ hand — the git log is the working account until a release turns it into one.
 - Bind the file_open_errors socket by a relative name ([#1412](https://github.com/amritk/nish/pull/1412))
 - sync: Close the ring-in-place bench and test gaps ([#1435](https://github.com/amritk/nish/pull/1435))
 - Fix the three intermittent failures in the test shards ([#1450](https://github.com/amritk/nish/pull/1450))
-- runtime: The sessions server on regions holds memory flat over 2,000,000 requests (WP46 stage 3) ([#1444](https://github.com/amritk/nish/pull/1444))
+- runtime: The sessions server on regions holds memory flat over 2,000,000 requests ([#1444](https://github.com/amritk/nish/pull/1444))
 - net: Curl and Autobahn for HTTP/1.1 and WebSocket, Chrome over HTTP/1.1, in the interop job ([#1437](https://github.com/amritk/nish/pull/1437))
 - crypto: Read the ChaCha rounds, the bitsliced AES loops and the X25519 ladder by disassembly ([#1464](https://github.com/amritk/nish/pull/1464))
 - net: A TLS handshake through a HelloRetryRequest to secp256r1, to completion ([#1479](https://github.com/amritk/nish/pull/1479))
 - net: The interop runner's congestion cases ([#1477](https://github.com/amritk/nish/pull/1477))
-- net: Compare one worker against one worker in the TechEmpower gate and re-baseline (WP49 stage 6) ([#1483](https://github.com/amritk/nish/pull/1483))
+- net: Compare one worker against one worker in the TechEmpower gate and re-baseline ([#1483](https://github.com/amritk/nish/pull/1483))
 - Pin getrlimit through a declare class against ulimit -Sn / -Hn ([#1504](https://github.com/amritk/nish/pull/1504))
 
 ### CI
@@ -133,31 +123,30 @@ hand — the git log is the working account until a release turns it into one.
 - Shorten the critical path to a green ci.yml ([#1456](https://github.com/amritk/nish/pull/1456))
 - Give arm64 apt a fallback mirror and install from cache offline ([#1415](https://github.com/amritk/nish/pull/1415))
 
-
 ## [0.38.0] - 2026-11-10
 
 ### Added
 
-- net: Async fetch speaks https and resolves names without blocking (WP49 stage 5, part 6) ([#1314](https://github.com/amritk/nish/pull/1314))
-- interop: Strings cross between a wasm module and its page (WP50 stage 4) ([#1309](https://github.com/amritk/nish/pull/1309))
-- checker: A spawned task may reach the objects its spawner owns (WP49 stage 5, part 3) ([#1307](https://github.com/amritk/nish/pull/1307))
-- net: Serve, one task and one region per request (WP49 stage 5, part 4) ([#1322](https://github.com/amritk/nish/pull/1322))
-- net: The async Postgres pool (WP49 stage 5, part 5) ([#1321](https://github.com/amritk/nish/pull/1321))
-- net: Cancel a task on hang-up, deadline or shutdown (WP49 stage 5, part 7) ([#1323](https://github.com/amritk/nish/pull/1323))
+- net: Async fetch speaks https and resolves names without blocking ([#1314](https://github.com/amritk/nish/pull/1314))
+- interop: Strings cross between a wasm module and its page ([#1309](https://github.com/amritk/nish/pull/1309))
+- checker: A spawned task may reach the objects its spawner owns ([#1307](https://github.com/amritk/nish/pull/1307))
+- net: Serve, one task and one region per request ([#1322](https://github.com/amritk/nish/pull/1322))
+- net: The async Postgres pool ([#1321](https://github.com/amritk/nish/pull/1321))
+- net: Cancel a task on hang-up, deadline or shutdown ([#1323](https://github.com/amritk/nish/pull/1323))
 - codegen: Std/math.ts transcendentals and fmod, the lowering on freestanding wasm ([#1334](https://github.com/amritk/nish/pull/1334))
-- bench: The TechEmpower plaintext and json entry as serve handlers (WP49 stage 6, part 1) ([#1340](https://github.com/amritk/nish/pull/1340))
-- checker: A serve handler reaches its spawner's state and awaits the async Postgres pool (WP49 stage 5, part 8) ([#1343](https://github.com/amritk/nish/pull/1343))
-- bench: The TechEmpower database entry on the async Postgres pool (WP49 stage 6, part 2) ([#1354](https://github.com/amritk/nish/pull/1354))
+- bench: The TechEmpower plaintext and json entry as serve handlers ([#1340](https://github.com/amritk/nish/pull/1340))
+- checker: A serve handler reaches its spawner's state and awaits the async Postgres pool ([#1343](https://github.com/amritk/nish/pull/1343))
+- bench: The TechEmpower database entry on the async Postgres pool ([#1354](https://github.com/amritk/nish/pull/1354))
 - std: Split, asciiUpper, asciiLower, padStart and padEnd in nish/text ([#1361](https://github.com/amritk/nish/pull/1361))
 - checker: Array methods map, filter, some, every, findIndex and slice ([#1358](https://github.com/amritk/nish/pull/1358))
-- cli: --deterministic, the same float bits on every target (WP50 stage 5b) ([#1363](https://github.com/amritk/nish/pull/1363))
+- cli: --deterministic, the same float bits on every target ([#1363](https://github.com/amritk/nish/pull/1363))
 
 ### Fixed
 
 - bench: Build the C twins with the release hardening flags, and three bench reporting gaps ([#1315](https://github.com/amritk/nish/pull/1315))
 - net: A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout ([#1304](https://github.com/amritk/nish/pull/1304))
 - codegen: Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind ([#1308](https://github.com/amritk/nish/pull/1308))
-- runtime: Give each awaitAll lane its own region (WP49 stage 5, HF-13) ([#1320](https://github.com/amritk/nish/pull/1320))
+- runtime: Give each awaitAll lane its own region (HF-13) ([#1320](https://github.com/amritk/nish/pull/1320))
 - test: Prefork reap race, security index totals, and the nish-cmp declaration rule ([#1332](https://github.com/amritk/nish/pull/1332))
 - interop: A wasm-size guard that holds with wasm-opt, and nish/vite's two silent failures ([#1336](https://github.com/amritk/nish/pull/1336))
 - interop: Host-module tests, nish.host diagnostics and the HostHandle reference ([#1335](https://github.com/amritk/nish/pull/1335))
@@ -204,15 +193,14 @@ hand — the git log is the working account until a release turns it into one.
 - Run nish-cmp's compiles in parallel and give its job 30 minutes ([#1306](https://github.com/amritk/nish/pull/1306))
 - Fuzz the smoke's targets one per core ([#1344](https://github.com/amritk/nish/pull/1344))
 
-
 ## [0.37.0] - 2026-11-08
 
 ### Added
 
-- runtime: The async executor and nish:async readable, writable and sleep (WP49 stage 5, part 1) ([#1283](https://github.com/amritk/nish/pull/1283))
+- runtime: The async executor and nish:async readable, writable and sleep ([#1283](https://github.com/amritk/nish/pull/1283))
 - cli: Colour diagnostics on a terminal ([#1290](https://github.com/amritk/nish/pull/1290))
-- net: Async fetch in nish/net/fetch (WP49 stage 5, part 2) ([#1293](https://github.com/amritk/nish/pull/1293))
-- interop: Module storage, buffer windows and panics a wasm page can read (WP50 stage 3) ([#1273](https://github.com/amritk/nish/pull/1273))
+- net: Async fetch in nish/net/fetch ([#1293](https://github.com/amritk/nish/pull/1293))
+- interop: Module storage, buffer windows and panics a wasm page can read ([#1273](https://github.com/amritk/nish/pull/1273))
 
 ### Fixed
 
@@ -241,13 +229,12 @@ hand — the git log is the working account until a release turns it into one.
 - docs: Fail gen-reference --check on an undocumented public declaration ([#1280](https://github.com/amritk/nish/pull/1280))
 - Let a spec-first module's emitted test sit in test/spec/ ([#1285](https://github.com/amritk/nish/pull/1285))
 
-
 ## [0.36.0] - 2026-11-07
 
 ### Added
 
-- interop: Link a wasm module for a page and load it without fetch (WP50 stage 1) ([#1243](https://github.com/amritk/nish/pull/1243))
-- interop: Import a wasm module's host functions from the page's TypeScript (WP50 stage 2) ([#1264](https://github.com/amritk/nish/pull/1264))
+- interop: Link a wasm module for a page and load it without fetch ([#1243](https://github.com/amritk/nish/pull/1243))
+- interop: Import a wasm module's host functions from the page's TypeScript ([#1264](https://github.com/amritk/nish/pull/1264))
 
 ### Performance
 
@@ -282,17 +269,16 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.35.0 ([#1241](https://github.com/amritk/nish/pull/1241))
 
-
 ## [0.35.0] - 2026-11-07
 
 ### Added
 
-- checker: Async and await, the checker (WP49 stage 4, part 1) ([#1160](https://github.com/amritk/nish/pull/1160))
+- checker: Async and await, the checker ([#1160](https://github.com/amritk/nish/pull/1160))
 - checker: Run an entry module's top-level code as `main` ([#1203](https://github.com/amritk/nish/pull/1203))
-- codegen: Lower async functions to frame state machines (WP49 stage 4, part 2) ([#1202](https://github.com/amritk/nish/pull/1202))
+- codegen: Lower async functions to frame state machines ([#1202](https://github.com/amritk/nish/pull/1202))
 - checker: Allow null as the default of a nullable parameter ([#1205](https://github.com/amritk/nish/pull/1205))
 - interop: Let a PgBatcher skip the ordinal sort ([#1207](https://github.com/amritk/nish/pull/1207))
-- interop: Emit async functions as TypeScript async/await (WP49 stage 4, part 3) ([#1212](https://github.com/amritk/nish/pull/1212))
+- interop: Emit async functions as TypeScript async/await ([#1212](https://github.com/amritk/nish/pull/1212))
 - runtime: Shared-region windows and a two-buffer netWrite ([#1214](https://github.com/amritk/nish/pull/1214))
 - runtime: Follow a QUIC peer's address change with path validation ([#1218](https://github.com/amritk/nish/pull/1218))
 - runtime: Send an Http1Connection body from a caller's buffer ([#1223](https://github.com/amritk/nish/pull/1223))
@@ -329,7 +315,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - self: Deal the suite's tail eight ways to keep each shard near ten minutes ([#1200](https://github.com/amritk/nish/pull/1200))
 
-
 ## [0.34.1] - 2026-11-04
 
 ### Performance
@@ -355,7 +340,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.34.0 ([#1184](https://github.com/amritk/nish/pull/1184))
 
-
 ## [0.34.0] - 2026-11-04
 
 ### Added
@@ -380,7 +364,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.33.0 ([#1170](https://github.com/amritk/nish/pull/1170))
 
-
 ## [0.33.0] - 2026-11-03
 
 ### Added
@@ -394,7 +377,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Build
 
 - Regenerate package-lock.json for v0.32.0 ([#1167](https://github.com/amritk/nish/pull/1167))
-
 
 ## [0.32.0] - 2026-11-03
 
@@ -414,7 +396,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Fetch apt packages from mirrors other than Azure's, and cache every install ([#1162](https://github.com/amritk/nish/pull/1162))
 
-
 ## [0.31.0] - 2026-11-02
 
 ### Breaking changes
@@ -424,7 +405,7 @@ hand — the git log is the working account until a release turns it into one.
 ### Added
 
 - interop: Binary int4[] and int8[] parameters for nish/net/postgres ([#1150](https://github.com/amritk/nish/pull/1150))
-- checker: Nish:region, regions in the language (WP46 stage 2) ([#1152](https://github.com/amritk/nish/pull/1152))
+- checker: Nish:region, regions in the language ([#1152](https://github.com/amritk/nish/pull/1152))
 - interop: Every TechEmpower test type on the Postgres carrier ([#1157](https://github.com/amritk/nish/pull/1157))
 - interop: PgBatchConfig.maxRequests up to 65536 ([#1158](https://github.com/amritk/nish/pull/1158))
 - runtime: Pin prefork workers to cores and steer connections by incoming CPU ([#1159](https://github.com/amritk/nish/pull/1159))
@@ -442,14 +423,13 @@ hand — the git log is the working account until a release turns it into one.
 - Regenerate package-lock.json for v0.30.0 ([#1147](https://github.com/amritk/nish/pull/1147))
 - ci: Read release.yml's std presence lists from src/std-modules.ts ([#1156](https://github.com/amritk/nish/pull/1156))
 
-
 ## [0.30.0] - 2026-11-02
 
 ### Added
 
 - interop: Connect nish/net/postgres through a Unix socket ([#1111](https://github.com/amritk/nish/pull/1111))
 - interop: PgCarrier, Postgres queries on the handler's loop ([#1145](https://github.com/amritk/nish/pull/1145))
-- runtime: Regions in the runtime (WP46 stage 1) ([#1142](https://github.com/amritk/nish/pull/1142))
+- runtime: Regions in the runtime ([#1142](https://github.com/amritk/nish/pull/1142))
 - interop: Nish/net/upstream, non-blocking outbound HTTP on the handler's loop ([#1143](https://github.com/amritk/nish/pull/1143))
 
 ### Fixed
@@ -469,7 +449,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Build
 
 - Regenerate package-lock.json for v0.29.0 ([#1138](https://github.com/amritk/nish/pull/1138))
-
 
 ## [0.29.0] - 2026-10-31
 
@@ -523,7 +502,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Wait half an hour for the registry before giving up on the lockfile ([#1110](https://github.com/amritk/nish/pull/1110))
 
-
 ## [0.28.0] - 2026-10-30
 
 ### Added
@@ -564,13 +542,11 @@ hand — the git log is the working account until a release turns it into one.
 
 - self: Run the Nish golden runner's slices in parallel itself ([#1076](https://github.com/amritk/nish/pull/1076))
 
-
 ## [0.27.2] - 2026-10-30
 
 ### Fixed
 
 - cli: Revert the lagging platform pins that blocked 0.27.0 and 0.27.1 ([#1073](https://github.com/amritk/nish/pull/1073))
-
 
 ## [0.27.1] - 2026-10-30
 
@@ -581,7 +557,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Tests
 
 - self: Keep package modules in the program's own golden ([#1060](https://github.com/amritk/nish/pull/1060))
-
 
 ## [0.27.0] - 2026-10-30
 
@@ -608,7 +583,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Keep main's platform pins one release behind so every commit agrees with its lockfile ([#1039](https://github.com/amritk/nish/pull/1039))
 
-
 ## [0.26.0] - 2026-10-29
 
 ### Added
@@ -622,7 +596,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.25.0 ([#1035](https://github.com/amritk/nish/pull/1035))
 - deps: Bump github.com/klauspost/compress ([#1021](https://github.com/amritk/nish/pull/1021))
-
 
 ## [0.25.0] - 2026-10-29
 
@@ -658,7 +631,7 @@ hand — the git log is the working account until a release turns it into one.
 
 ### Documentation
 
-- Plan WebSocket client opening handshake (ws-client stage) ([#1015](https://github.com/amritk/nish/pull/1015))
+- Plan WebSocket client opening handshake ([#1015](https://github.com/amritk/nish/pull/1015))
 
 ### Tests
 
@@ -672,7 +645,6 @@ hand — the git log is the working account until a release turns it into one.
 ### CI
 
 - Deal the slow sections across the test shards and run the Nish runner on every core ([#1026](https://github.com/amritk/nish/pull/1026))
-
 
 ## [0.24.0] - 2026-10-28
 
@@ -692,7 +664,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.23.1 ([#981](https://github.com/amritk/nish/pull/981))
 
-
 ## [0.23.1] - 2026-10-28
 
 ### Fixed
@@ -707,7 +678,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Build
 
 - Regenerate package-lock.json for v0.23.0 ([#975](https://github.com/amritk/nish/pull/975))
-
 
 ## [0.23.0] - 2026-10-27
 
@@ -728,7 +698,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - bench: Remove the multicore Conduit server, now kept in the challenge fork ([#970](https://github.com/amritk/nish/pull/970))
 
-
 ## [0.22.1] - 2026-10-26
 
 ### Fixed
@@ -738,7 +707,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Performance
 
 - bench: Coalesce the Conduit server's same-shape reads into one array-parameter statement ([#963](https://github.com/amritk/nish/pull/963))
-
 
 ## [0.22.0] - 2026-10-25
 
@@ -763,7 +731,7 @@ hand — the git log is the working account until a release turns it into one.
 
 ### Documentation
 
-- wp38: S6c's callgrind gate, and the owner's Q5 decision ([#935](https://github.com/amritk/nish/pull/935))
+- wp38: S6c's callgrind gate, and the maintainer's Q5 decision ([#935](https://github.com/amritk/nish/pull/935))
 - Record two --emit-ts conventions in CLAUDE.md ([#951](https://github.com/amritk/nish/pull/951))
 - wp38: S6d, the per-value cuts that would let S6c reach its bar ([#954](https://github.com/amritk/nish/pull/954))
 - crypto: Name the bcrypt single-path gap as LLVM's xor order ([#957](https://github.com/amritk/nish/pull/957))
@@ -780,7 +748,6 @@ hand — the git log is the working account until a release turns it into one.
 ### CI
 
 - release: Attest build provenance, attach an SBOM, and rebuild releases from their tags ([#898](https://github.com/amritk/nish/pull/898))
-
 
 ## [0.21.0] - 2026-10-24
 
@@ -875,7 +842,6 @@ hand — the git log is the working account until a release turns it into one.
 - Disable the macOS jobs ([#865](https://github.com/amritk/nish/pull/865))
 - Refuse attacker-facing code that ships without its security record ([#893](https://github.com/amritk/nish/pull/893))
 
-
 ## [0.20.0] - 2026-10-23
 
 ### Breaking changes
@@ -919,7 +885,6 @@ hand — the git log is the working account until a release turns it into one.
 - Cache the test job's apt packages and bound each download ([#821](https://github.com/amritk/nish/pull/821))
 - Drop the PR body attribution check ([#824](https://github.com/amritk/nish/pull/824))
 
-
 ## [0.19.0] - 2026-10-22
 
 ### Breaking changes
@@ -954,7 +919,7 @@ hand — the git log is the working account until a release turns it into one.
 - codegen: Renamed and optional-with-default fields, and lossless number fields, in typed JSON ([#630](https://github.com/amritk/nish/pull/630))
 - checker: ParallelMap, parallelFrom and arrows that read the enclosing function's consts ([#609](https://github.com/amritk/nish/pull/609))
 - checker: Arrow tasks with captures, tasks without a destination, and a seeded Rng ([#644](https://github.com/amritk/nish/pull/644))
-- cli: --cpu x86-64-v3 links module and runtime at one CPU level (WP38 S2) ([#660](https://github.com/amritk/nish/pull/660))
+- cli: --cpu x86-64-v3 links module and runtime at one CPU level ([#660](https://github.com/amritk/nish/pull/660))
 - checker: AtomicI32 and AtomicI64 in nish/threads ([#654](https://github.com/amritk/nish/pull/654))
 - checker: Enum member types such as Kind.Array ([#655](https://github.com/amritk/nish/pull/655))
 - checker: Strings and scalar arrays cross threads by copy-at-join ([#669](https://github.com/amritk/nish/pull/669))
@@ -1031,7 +996,7 @@ hand — the git log is the working account until a release turns it into one.
 - codegen: Retune the parallel map's grain for the worker pool ([#607](https://github.com/amritk/nish/pull/607))
 - std: Scan JSON string bodies, whitespace and numbers in bulk ([#614](https://github.com/amritk/nish/pull/614))
 - std: Test dst's length in parallelMapInto's loop condition, so the element loop vectorises ([#645](https://github.com/amritk/nish/pull/645))
-- bench: Measure S3's bar kernels without a nish:simd surface (WP38 S3a) ([#658](https://github.com/amritk/nish/pull/658))
+- bench: Measure S3's bar kernels without a nish:simd surface ([#658](https://github.com/amritk/nish/pull/658))
 - crypto: P-256 multiplies the base point by a precomputed table ([#663](https://github.com/amritk/nish/pull/663))
 - std: Two system calls per keep-alive HTTP/1.1 request, and output buffers borrowed from a pool ([#672](https://github.com/amritk/nish/pull/672))
 - std: Pace HTTP/3 in microseconds so loopback responses stop waiting for the next millisecond ([#694](https://github.com/amritk/nish/pull/694))
@@ -1071,7 +1036,7 @@ hand — the git log is the working account until a release turns it into one.
 - Record three review lessons from the runtime cache in CLAUDE.md ([#563](https://github.com/amritk/nish/pull/563))
 - threads: Mark WP29 P3 built, with a measured example ([#568](https://github.com/amritk/nish/pull/568))
 - Name the checker's recurring escape routes, and where a Measured figure comes from ([#569](https://github.com/amritk/nish/pull/569))
-- Plan the HTTP server beyond the relay, from a TechEmpower entry to every version (WP39) ([#578](https://github.com/amritk/nish/pull/578))
+- Plan the HTTP server beyond the relay, from a TechEmpower entry to every version ([#578](https://github.com/amritk/nish/pull/578))
 - guide: Add the user guide skeleton and its Scalar config ([#576](https://github.com/amritk/nish/pull/576))
 - guide: Write the error handling, generics, modules and memory pages ([#587](https://github.com/amritk/nish/pull/587))
 - guide: Write the CLI, standard library, interop and threads pages ([#583](https://github.com/amritk/nish/pull/583))
@@ -1100,7 +1065,7 @@ hand — the git log is the working account until a release turns it into one.
 - WP42, a multi-core server from pre-forked processes ([#726](https://github.com/amritk/nish/pull/726))
 - interop: Point the WASI host's fast-call flag at its tracking issue ([#735](https://github.com/amritk/nish/pull/735))
 - Extend the guide-update rule in testing.md and ARCHITECTURE.md past constructs ([#747](https://github.com/amritk/nish/pull/747))
-- Design streaming file reads (WP44) ([#764](https://github.com/amritk/nish/pull/764))
+- Design streaming file reads ([#764](https://github.com/amritk/nish/pull/764))
 - WP45, name resolution for nish:net — getaddrinfo, a stub resolver, or both ([#766](https://github.com/amritk/nish/pull/766))
 - Write WP37's note, the OS sandbox ([#755](https://github.com/amritk/nish/pull/755))
 - plan: Stage WP33 R3 and R4, the runtime split by host and --emit-ts ([#778](https://github.com/amritk/nish/pull/778))
@@ -1147,7 +1112,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Internal
 
 - Compact agent sessions at 200k and cut the calls a pull request spends ([#648](https://github.com/amritk/nish/pull/648))
-
 
 ## [0.18.0] - 2026-10-09
 
@@ -1197,7 +1161,6 @@ hand — the git log is the working account until a release turns it into one.
 - Split the two slow jobs four ways and stop every job at 15 minutes ([#506](https://github.com/amritk/nish/pull/506))
 - The interop job — quic-interop-runner, h2spec, curl and Chrome ([#487](https://github.com/amritk/nish/pull/487))
 
-
 ## [0.17.0] - 2026-10-06
 
 ### Breaking changes
@@ -1217,18 +1180,18 @@ hand — the git log is the working account until a release turns it into one.
 - checker: Add nish:unsafe and scope the unsafe flags to the entry package ([#422](https://github.com/amritk/nish/pull/422))
 - cli: Builtins for the owner checks, and a cryptographic run-cache name (CLI-8) ([#425](https://github.com/amritk/nish/pull/425))
 - cli: Fix truthiness, String(n), Map.get and call-site type arguments mechanically ([#431](https://github.com/amritk/nish/pull/431))
-- std: Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1) ([#404](https://github.com/amritk/nish/pull/404))
+- std: Nish/net/quic-packet — QUIC packets, Initial secrets and header protection ([#404](https://github.com/amritk/nish/pull/404))
 - cli: Fix export default, export lists, type-only imports and fs imports mechanically ([#429](https://github.com/amritk/nish/pull/429))
-- std: Nish/net/hpack — HPACK with Huffman (WP34 H2, first part) ([#406](https://github.com/amritk/nish/pull/406))
+- std: Nish/net/hpack — HPACK with Huffman ([#406](https://github.com/amritk/nish/pull/406))
 - checker: Record every panic site with its kind, and --emit-panics ([#424](https://github.com/amritk/nish/pull/424))
 - checker: Deprecate Arena.release and Arena.reset in favour of using a = arena() ([#428](https://github.com/amritk/nish/pull/428))
-- std: Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1) ([#399](https://github.com/amritk/nish/pull/399))
-- std: Nish/net/tls records over TCP (WP34 T2) ([#437](https://github.com/amritk/nish/pull/437))
-- std: Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part) ([#441](https://github.com/amritk/nish/pull/441))
-- std: Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part) ([#444](https://github.com/amritk/nish/pull/444))
+- std: Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing ([#399](https://github.com/amritk/nish/pull/399))
+- std: Nish/net/tls records over TCP ([#437](https://github.com/amritk/nish/pull/437))
+- std: Nish/net/quic — QUIC connections, the handshake and stream data ([#441](https://github.com/amritk/nish/pull/441))
+- std: Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update ([#444](https://github.com/amritk/nish/pull/444))
 - checker: --deny-panics and noPanic refuse every remaining panic site ([#443](https://github.com/amritk/nish/pull/443))
 - checker: Let a nish:unsafe import opt uncheckedGet and uncheckedSet into the no-panic scope ([#455](https://github.com/amritk/nish/pull/455))
-- checker: Refuse a program that reaches a capability its policy does not grant (WP36) ([#452](https://github.com/amritk/nish/pull/452))
+- checker: Refuse a program that reaches a capability its policy does not grant ([#452](https://github.com/amritk/nish/pull/452))
 - cli: Migrate --unchecked-indexing to uncheckedGet and uncheckedSet with nish --fix ([#459](https://github.com/amritk/nish/pull/459))
 - cli: Fix an index not proven in range with a panic guard ([#460](https://github.com/amritk/nish/pull/460))
 - net: HTTP/2 frames, streams and flow control ([#465](https://github.com/amritk/nish/pull/465))
@@ -1276,7 +1239,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.16.0 ([#392](https://github.com/amritk/nish/pull/392))
 
-
 ## [0.16.0] - 2026-10-02
 
 ### Added
@@ -1319,7 +1281,6 @@ hand — the git log is the working account until a release turns it into one.
 - Keep the compiler npm test built instead of linking it twice ([#368](https://github.com/amritk/nish/pull/368))
 - Delegate the test job's fixed point to the bootstrap row ([#370](https://github.com/amritk/nish/pull/370))
 
-
 ## [0.15.0] - 2026-09-30
 
 ### Breaking changes
@@ -1329,13 +1290,13 @@ hand — the git log is the working account until a release turns it into one.
 ### Added
 
 - std: ChaCha20-Poly1305 and ChaCha20 header protection in nish/crypto/chacha20poly1305 ([#332](https://github.com/amritk/nish/pull/332))
-- runtime: Nish:net with a runtime-net.c unit and non-blocking TCP (WP34 N5) ([#341](https://github.com/amritk/nish/pull/341))
+- runtime: Nish:net with a runtime-net.c unit and non-blocking TCP ([#341](https://github.com/amritk/nish/pull/341))
 - std: Bitsliced AES-128 and AES-256 with GCM in nish/crypto/aes ([#340](https://github.com/amritk/nish/pull/340))
 - std: P-256 ECDSA with RFC 6979 nonces in nish/crypto/p256 ([#336](https://github.com/amritk/nish/pull/336))
-- runtime: Nish:net UDP with GSO, GRO, ECN and SO_REUSEPORT (WP34 N5) ([#343](https://github.com/amritk/nish/pull/343))
+- runtime: Nish:net UDP with GSO, GRO, ECN and SO_REUSEPORT ([#343](https://github.com/amritk/nish/pull/343))
 - checker: Refuse forbidden import and export forms by their rule, not NL0001 ([#337](https://github.com/amritk/nish/pull/337))
 - std: DER, PEM and X.509, and a self-signed P-256 certificate, in nish/crypto/x509 ([#346](https://github.com/amritk/nish/pull/346))
-- runtime: Nish:net readiness loop that wakes on sockets and SIGTERM (WP34 N5) ([#349](https://github.com/amritk/nish/pull/349))
+- runtime: Nish:net readiness loop that wakes on sockets and SIGTERM ([#349](https://github.com/amritk/nish/pull/349))
 
 ### Fixed
 
@@ -1362,7 +1323,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - release: Gate every std/crypto module in the release presence checks, and list the new modules ([#345](https://github.com/amritk/nish/pull/345))
 
-
 ## [0.14.0] - 2026-09-29
 
 ### Breaking changes
@@ -1382,12 +1342,12 @@ hand — the git log is the working account until a release turns it into one.
 - checker: Export a type alias and import it into another module ([#300](https://github.com/amritk/nish/pull/300))
 - checker: Portability warnings for record copies into arrays and stores over a live element ([#302](https://github.com/amritk/nish/pull/302))
 - checker: Portability warnings where UTF-8 string offsets meet an outside fact ([#304](https://github.com/amritk/nish/pull/304))
-- checker: Byte plumbing — u8[] set and fill, readFileBytesSync (WP34 N2) ([#295](https://github.com/amritk/nish/pull/295))
-- codegen: Constant-time ctSelect and ctEq behind an optimisation barrier (WP34 N6) ([#310](https://github.com/amritk/nish/pull/310))
+- checker: Byte plumbing — u8[] set and fill, readFileBytesSync ([#295](https://github.com/amritk/nish/pull/295))
+- codegen: Constant-time ctSelect and ctEq behind an optimisation barrier ([#310](https://github.com/amritk/nish/pull/310))
 - checker: Refuse forbidden expressions by their rule, not NL0001 ([#311](https://github.com/amritk/nish/pull/311))
 - checker: Refuse forbidden declarations by their rule, not NL0001 ([#313](https://github.com/amritk/nish/pull/313))
 - checker: Refuse forbidden function and binding forms by their rule, not NL0001 ([#314](https://github.com/amritk/nish/pull/314))
-- runtime: Date.now, crypto.getRandomValues, statMtimeSync and a signal descriptor (WP34 N3) ([#312](https://github.com/amritk/nish/pull/312))
+- runtime: Date.now, crypto.getRandomValues, statMtimeSync and a signal descriptor ([#312](https://github.com/amritk/nish/pull/312))
 - checker: Refuse forbidden class, interface and enum forms by their rule, not NL0001 ([#315](https://github.com/amritk/nish/pull/315))
 
 ### Fixed
@@ -1410,7 +1370,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - Regenerate package-lock.json for v0.13.0 ([#284](https://github.com/amritk/nish/pull/284))
 
-
 ## [0.13.0] - 2026-09-28
 
 ### Breaking changes
@@ -1420,9 +1379,9 @@ hand — the git log is the working account until a release turns it into one.
 
 ### Added
 
-- checker: Ranged integer types (WP31) ([#261](https://github.com/amritk/nish/pull/261))
+- checker: Ranged integer types ([#261](https://github.com/amritk/nish/pull/261))
 - checker: Threads P2, using s = scope() and s.spawn(fn, arg) ([#262](https://github.com/amritk/nish/pull/262))
-- interop: Ranged parameters at the host boundary (WP31) ([#273](https://github.com/amritk/nish/pull/273))
+- interop: Ranged parameters at the host boundary ([#273](https://github.com/amritk/nish/pull/273))
 
 ### Fixed
 
@@ -1437,7 +1396,7 @@ hand — the git log is the working account until a release turns it into one.
 
 ### Performance
 
-- checker: Prove range entries and index through declared ranges (WP31) ([#268](https://github.com/amritk/nish/pull/268))
+- checker: Prove range entries and index through declared ranges ([#268](https://github.com/amritk/nish/pull/268))
 
 ### Changed
 
@@ -1449,14 +1408,13 @@ hand — the git log is the working account until a release turns it into one.
 
 - Open the README with what the name stands for, and mark stage0's src/ citations ([#250](https://github.com/amritk/nish/pull/250))
 - wp31: Record the ranged-integer measurements ([#274](https://github.com/amritk/nish/pull/274))
-- Plan the round trip between TypeScript and Nish, at zero native cost (WP33) ([#276](https://github.com/amritk/nish/pull/276))
-- wp34: Plan hosting cs, starting with its relay on a network stack in std ([#277](https://github.com/amritk/nish/pull/277))
+- Plan the round trip between TypeScript and Nish, at zero native cost ([#276](https://github.com/amritk/nish/pull/276))
+- wp34: Plan a network stack in std, starting with a relay ([#277](https://github.com/amritk/nish/pull/277))
 
 ### Build
 
 - Regenerate package-lock.json for v0.12.0 ([#248](https://github.com/amritk/nish/pull/248))
 - Make every lint rule an error, and add the checks a clean tree allows ([#255](https://github.com/amritk/nish/pull/255))
-
 
 ## [0.12.0] - 2026-09-26
 
@@ -1481,7 +1439,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Internal
 
 - Set the lint rules and the runbook for the naming cleanup ([#243](https://github.com/amritk/nish/pull/243))
-
 
 ## [0.11.0] - 2026-09-26
 
@@ -1525,7 +1482,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - release: Publish to npm by trusted publishing ([#205](https://github.com/amritk/nish/pull/205))
 
-
 ## [0.10.0] - 2026-09-24
 
 ### Breaking changes
@@ -1548,7 +1504,7 @@ hand — the git log is the working account until a release turns it into one.
 ### Documentation
 
 - plan: M4, the reference is frozen and 1.0 is next ([#203](https://github.com/amritk/nish/pull/203))
-- plan: Nish stays on 0.x until its owner declares 1.0 ([#204](https://github.com/amritk/nish/pull/204))
+- plan: Nish stays on 0.x until its maintainer declares 1.0 ([#204](https://github.com/amritk/nish/pull/204))
 
 ### Tests
 
@@ -1563,17 +1519,16 @@ hand — the git log is the working account until a release turns it into one.
 
 - Fail a pull request whose body carries a session link or tool attribution ([#188](https://github.com/amritk/nish/pull/188))
 
-
 ## [0.9.0] - 2026-09-23
 
 ### Breaking changes
 
-- interop: Export generic instantiations under valid, injective names (WP18 G8) ([#165](https://github.com/amritk/nish/pull/165))
+- interop: Export generic instantiations under valid, injective names ([#165](https://github.com/amritk/nish/pull/165))
 
 ### Added
 
-- checker: Spell an instantiated class as written, in diagnostics and -g (WP18 G8) ([#164](https://github.com/amritk/nish/pull/164))
-- checker: Generic methods on classes (WP18 §14 q7) ([#168](https://github.com/amritk/nish/pull/168))
+- checker: Spell an instantiated class as written, in diagnostics and -g ([#164](https://github.com/amritk/nish/pull/164))
+- checker: Generic methods on classes ([#168](https://github.com/amritk/nish/pull/168))
 - checker: WP21 S3 — specific diagnostics at the package boundary ([#178](https://github.com/amritk/nish/pull/178))
 - std: Pair<A, B> as a standard-library type ([#172](https://github.com/amritk/nish/pull/172))
 
@@ -1595,36 +1550,11 @@ hand — the git log is the working account until a release turns it into one.
 
 - Teach the fuzzer to emit generic functions and classes ([#163](https://github.com/amritk/nish/pull/163))
 
-
-### Breaking changes
-
-- interop: Export generic instantiations under valid, injective names (WP18 G8)
-
-### Added
-
-- checker: Spell an instantiated class as written, in diagnostics and -g (WP18 G8)
-- checker: Generic methods on classes (WP18 §14 q7)
-- std: Pair<A, B> as a standard-library type
-- checker: WP21 S3 — specific diagnostics at the package boundary
-
-### Fixed
-
-- checker: Hold a constraint to its declaration, not its name (#161)
-
-### Performance
-
-- checker: Key bounds length facts by property path (#106), and stop proving an index a later `&&` / `||` operand or a stored value invalidates — which also closes those holes for plain locals
-
-### Documentation
-
-- Record WP18 G8 as landed and close WP18
-- Retire the last "no generics" claims and keep WP18 §16 to deferrals
-
 ## [0.8.0] - 2026-09-23
 
 ### Breaking changes
 
-- checker: Constrained type parameters (WP18 G6) ([#157](https://github.com/amritk/nish/pull/157))
+- checker: Constrained type parameters ([#157](https://github.com/amritk/nish/pull/157))
 
 ### Performance
 
@@ -1639,15 +1569,6 @@ hand — the git log is the working account until a release turns it into one.
 - self: Let nish-cmp remove each compiler's own version from the DWARF producer ([#156](https://github.com/amritk/nish/pull/156))
 - Give each differential run its own working directory ([#159](https://github.com/amritk/nish/pull/159))
 - Hold std/ and examples/ to zero performance warnings and ratchet self/ ([#158](https://github.com/amritk/nish/pull/158))
-
-
-### Breaking changes
-
-- checker: Constrained type parameters (WP18 G6) ([#157](https://github.com/amritk/nish/pull/157))
-
-### Performance
-
-- checker: Prove bounds through toI32(length) and compile std/text silent ([#154](https://github.com/amritk/nish/pull/154))
 
 ## [0.7.0] - 2026-09-23
 
@@ -1667,7 +1588,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Build
 
 - Fetch a released seed and let every tool take a stage1 compiler ([#146](https://github.com/amritk/nish/pull/146))
-
 
 ## [0.6.0] - 2026-09-22
 
@@ -1698,7 +1618,6 @@ hand — the git log is the working account until a release turns it into one.
 - Port the three ELF-assuming checks that keep macos-latest out of the test matrix ([#133](https://github.com/amritk/nish/pull/133))
 - self: Freeze the WP13 differential rewrite as goldens, with a staleness guard ([#141](https://github.com/amritk/nish/pull/141))
 
-
 ## [0.5.0] - 2026-09-20
 
 ### Added
@@ -1708,7 +1627,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Fixed
 
 - release: Ship the standard library with the native compiler ([#126](https://github.com/amritk/nish/pull/126))
-
 
 ## [0.4.0] - 2026-09-20
 
@@ -1759,7 +1677,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - release: Take @amritk/nish as the package name, and keep nish as the command ([#121](https://github.com/amritk/nish/pull/121))
 
-
 ## [0.3.0] - 2026-09-18
 
 ### Added
@@ -1803,7 +1720,6 @@ hand — the git log is the working account until a release turns it into one.
 
 - bootstrap: Skip the rolling freeze where no seed can exist, fail where one is missing ([#68](https://github.com/amritk/nish/pull/68))
 
-
 ## [0.2.0] - 2026-09-13
 
 ### Added
@@ -1844,13 +1760,11 @@ hand — the git log is the working account until a release turns it into one.
 
 - self: Pin every diagnostic wording a program can provoke ([#52](https://github.com/amritk/nish/pull/52))
 
-
 ## [0.1.1] - 2026-09-12
 
 ### Fixed
 
 - release: Start release.yml at the tag the release train pushes ([#43](https://github.com/amritk/nish/pull/43))
-
 
 ## [0.1.0] - 2026-09-12
 

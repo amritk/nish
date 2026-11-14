@@ -83,12 +83,25 @@ This needs neither Node nor npm, only `sh`, `curl` and `tar`:
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 ```
 
-The script installs into `~/.nish`. It ends by printing the `export PATH=…`
-line to add to your shell profile; run that line in your shell too, or open a
-new terminal. To upgrade later, run the same command again.
+The script installs into `~/.nish` and puts `~/.nish/bin` on your `PATH` in
+your shell's startup file: `~/.zshrc` for zsh, `~/.bashrc` for bash
+(`~/.bash_profile` on macOS), `~/.config/fish/conf.d/nish.fish` for fish, and
+`~/.profile` for any other shell. It names the file it changed. That takes
+effect in a new terminal; to use `nish` in the terminal you installed from,
+run the `source` line the script prints:
+
+```bash
+source ~/.zshrc
+```
+
+To keep your startup files untouched, end the command with
+`| sh -s -- --no-modify-path` instead of `| sh`. The script then prints the
+`export PATH=…` line to add yourself. To upgrade later, run `nish upgrade`
+([Staying up to date](../using-nish/cli.md#staying-up-to-date-nish-upgrade)).
 
 Ending the command with `| sh -s -- --help` instead of `| sh` lists the
-script's other options: another directory, and uninstalling.
+script's other options: another directory, leaving `PATH` alone, and
+uninstalling, which also takes out the `PATH` line the script added.
 
 </scalar-tab>
 
@@ -104,16 +117,20 @@ npm install -g nish
 Install it without `-g` (`npm install --save-dev nish`) to pin the
 version per project in `package.json`, and run it as `npx nish`.
 
-Releases up to 0.18.0 were published as `@amritk/nish`; if you installed that,
-uninstall it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
+If you have the old `@amritk/nish` package installed, uninstall it
+(`npm uninstall -g @amritk/nish`) and install `nish` instead.
+
+`nish upgrade` does not replace a compiler npm installed: it prints the
+`npm install -g nish@<version>` line to run instead.
 
 </scalar-tab>
 
 </scalar-tabs>
 
 Nish is pre-alpha and changes between minor releases, so you may want to pin
-an exact version: end the install script's command with `| sh -s 0.37.0`,
-or run `npm install -g nish@0.37.0`. Read the
+an exact version: end the install script's command with `| sh -s <version>`,
+or run `npm install -g nish@<version>`, with the version number in place of
+`<version>`. Read the
 [changelog](../../../CHANGELOG.md) before you upgrade.
 
 <scalar-detail title="Checking where the download came from">
@@ -127,9 +144,16 @@ one the release lists; the attestation shows where that release came from.
 
 When the [GitHub CLI](https://cli.github.com) (`gh`) is installed and signed
 in, the install script checks the attestation too, and refuses to install if
-it does not verify. Without `gh` it skips that check and says so. To check a
-tarball you downloaded yourself, with its version and platform filled in
-(for example `nish-0.37.0-x86_64-linux.tar.gz` and `refs/tags/v0.37.0`):
+it does not verify. Without `gh` it skips that check and says so, unless you
+set `NISH_REQUIRE_ATTESTATION=1`, which makes it refuse to install anything it
+cannot check:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | NISH_REQUIRE_ATTESTATION=1 sh
+```
+
+To check a tarball you downloaded yourself, fill in its version and platform
+as they appear in the file name (`x86_64-linux`, for example):
 
 ```bash
 gh attestation verify nish-<version>-<platform>.tar.gz \
@@ -154,9 +178,9 @@ nish --version
 "${CC:-clang}" --version
 ```
 
-- The first command prints `nish` and a version number, for example
-  `nish 0.37.0`. If `nish` is not found, the directory it was installed into is
-  not on your `PATH` yet.
+- The first command prints `nish` followed by its version number. If `nish` is not found, the directory it was installed into is
+  not on your `PATH` yet: open a new terminal, or run the `source` line the
+  install script printed.
 - The second runs the C compiler `nish` will use, `$CC` if you set it and
   `clang` otherwise, and prints its LLVM version. If it is not found, `nish`
   cannot build a binary either.

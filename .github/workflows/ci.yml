@@ -74,6 +74,8 @@ on:
 
 permissions:
   contents: read
+  # gh attestation verify, for the seed scripts/fetch-seed.sh checks.
+  attestations: read
 
 # Node's on-disk V8 compile cache, for every job in this file.
 #
@@ -240,7 +242,7 @@ jobs:
         with:
           # Exact: tests/differential/emit-ts-known.txt quotes Node's own
           # messages as evidence, and is regenerated under this version.
-          node-version: 22.23.4
+          node-version: 26.13.1
           cache: npm
 
       # The crypto bench's Go twins (bench/crypto/*/go) build with
@@ -325,7 +327,7 @@ jobs:
           npm --version
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Typecheck
         run: npm run check
@@ -336,6 +338,9 @@ jobs:
       # makes is stage1's, and stage1 is `src/` built by this binary -- the
       # rolling freeze (WP19 G3) asked on the platform the suite runs on.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: |
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version
@@ -769,7 +774,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The toolchain is installed on rows that have a seed to build with,
@@ -809,7 +814,7 @@ jobs:
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The tarball is .github/seed-targets.json's, resolved against the
       # release by `seeds`. This row exists *because* that asset is on the
@@ -835,6 +840,8 @@ jobs:
       - name: Download the seed
         id: download
         env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
@@ -939,7 +946,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The candidate is built by the reference through `--link`
@@ -964,7 +971,7 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The same verified download `bootstrap` makes, and the same rule about
       # the matrix reaching bash through `env:` rather than spliced into the
@@ -972,6 +979,8 @@ jobs:
       - name: Download the seed
         id: download
         env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
@@ -1059,7 +1068,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The toolchain links the candidate, and the sanitizer runtimes are for
@@ -1080,13 +1089,15 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # nish-cmp's verified download, with its refusal of a seed that is not
       # this row's.
       - name: Download the seed
         id: download
         env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
@@ -1158,7 +1169,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
@@ -1177,12 +1188,15 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The same seed, and the same compiler `npm test` builds in the `test`
       # job; see there. It comes through the same cache, so on a hit this job
       # reuses the binary the `test` job's shard 1 saved.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler with the seed
@@ -1250,7 +1264,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
@@ -1269,11 +1283,14 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs,
       # and the section's GC check compiles examples/hello.ts with it.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       # Each `node tests/run.js` below needs that stage1; this step links it, or
@@ -1438,7 +1455,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The `test` job's macOS install step, word for word.
@@ -1458,11 +1475,14 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs.
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       # Both `node tests/run.js` runs below copy this stage1 from build/cache
@@ -1552,7 +1572,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The `test` job's macOS install step, word for word.
@@ -1572,11 +1592,14 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs.
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       # One stage1 for the run under each pin below, copied from build/cache
@@ -1632,7 +1655,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld + the sanitizer runtimes
@@ -1652,10 +1675,13 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       # build/nish: a target must be compiled with this checkout's std, which
@@ -1732,7 +1758,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
@@ -1752,10 +1778,13 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler
@@ -1808,11 +1837,11 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # package-lock.json agrees with package.json, read from the two files
       # alone: `npm ls --package-lock-only` never asks the registry, where

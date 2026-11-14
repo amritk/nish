@@ -195,7 +195,7 @@ whole verify an `Err` that names the lane, before anything is hashed.
 64 bytes of salts.
 
 How many lanes are fastest per hash depends on the core: a core that issues
-more instructions a cycle gains from wider batches, and on one Xeon five and
+more instructions a cycle gains from wider batches, and on one CPU five and
 six lanes were no faster than four while on a newer one six were fastest
 ([the measurements](../../security/crypto-bcrypt.md#bmi2-and-x86-64-v3-measured-not-built)).
 So measure it rather than pick a number. `bcryptCalibrate()` times
@@ -307,7 +307,7 @@ a 5 ms hold beat a hold of 0 nowhere and added its 5 ms to light-load
 latency, since under load the logins that arrive during one run fill the next.
 Start from 0.
 
-On that 4-core machine, at cost 10, the batcher answered 1.9 to 2.3 times as
+On four cores, at cost 10, the batcher answered 1.9 to 2.3 times as
 many logins a second as a process per core once logins arrived faster than
 those processes could answer (about 67 a second): up to about 150 a second.
 On one core it never lost. **At light load on several cores one batcher is

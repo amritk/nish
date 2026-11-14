@@ -152,6 +152,10 @@ const hmacCheckKey = (key: u8[]): void => {
   }
 }
 
+/** Whether `[off, off + len)` is a window inside an array of `length` elements. */
+const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
+  off >= 0 && len >= 0 && off <= length - len
+
 /**
  * Keys `inner` with `k XOR ipad` and `outer` with `k XOR opad`, `k` no longer
  * than SHA-256's block, in one block that is rewritten between the two and
@@ -250,10 +254,18 @@ export class HmacSha256 {
   inner: Sha256
   /** H(K XOR opad, …), fed the key block in the constructor and the inner digest last. */
   outer: Sha256
+  /**
+   * Where `digestInto` puts the inner digest on its way into `outer`, so that
+   * it allocates nothing; zero except during that call, which wipes it.
+   */
+  innerDigest: u8[]
 
   /**
    * Keys the computation. A key longer than 64 bytes is replaced by its
    * SHA-256 (RFC 2104 §2), which is wiped once used (`hmacKeySha256`).
+   *
+   * Besides the two hashers it allocates the 32-byte `innerDigest` buffer
+   * that every `digest` and `digestInto` reuses.
    *
    * @param key The secret key; it is read, not kept, and the caller still
    *   wipes it.
@@ -261,6 +273,7 @@ export class HmacSha256 {
   constructor(key: u8[]) {
     this.inner = new Sha256()
     this.outer = new Sha256()
+    this.innerDigest = new Array<u8>(SHA256_SIZE)
     hmacKeySha256(this.inner, this.outer, key)
   }
 
@@ -277,18 +290,36 @@ export class HmacSha256 {
   }
 
   /**
-   * Ends the computation and wipes both hashers.
+   * Ends the computation and wipes both hashers and the inner digest. The tag
+   * is the one allocation.
    *
    * @returns A fresh 32-byte tag, which the caller owns.
    */
   digest(): u8[] {
-    const innerDigest: u8[] = this.inner.digest()
-    this.outer.update(innerDigest, HMAC_FROM, SHA256_SIZE)
-    wipe(innerDigest)
-    const tag: u8[] = this.outer.digest()
+    const tag: u8[] = new Array<u8>(SHA256_SIZE)
+    this.digestInto(tag, HMAC_FROM)
+    return tag
+  }
+
+  /**
+   * Writes the 32-byte tag at `out[at .. at + 32)`, ends the computation and
+   * wipes both hashers and the inner digest, with nothing allocated. A window
+   * outside `out` panics before anything is written; so does a second
+   * `digest` or `digestInto`, in the inner hasher.
+   *
+   * @param out The caller's array the tag is written into.
+   * @param at Where the 32 tag bytes start in `out`.
+   */
+  digestInto(out: u8[], at: i32): void {
+    if (!hmacWindowFits(toI32(out.length), at, SHA256_SIZE)) {
+      panic("HmacSha256: the tag window is outside its array")
+    }
+    this.inner.digestInto(this.innerDigest, HMAC_FROM)
+    this.outer.update(this.innerDigest, HMAC_FROM, SHA256_SIZE)
+    wipe(this.innerDigest)
+    this.outer.digestInto(out, at)
     hmacWipeSha256(this.inner)
     hmacWipeSha256(this.outer)
-    return tag
   }
 }
 
@@ -579,10 +610,6 @@ export const hmacCopySha384 = (from: Sha384, to: Sha384): void => {
   to.engine.count = from.engine.count
   to.engine.finished = from.engine.finished
 }
-
-/** Whether `[off, off + len)` is a window inside an array of `length` elements. */
-const hmacWindowFits = (length: i32, off: i32, len: i32): boolean =>
-  off >= 0 && len >= 0 && off <= length - len
 
 /**
  * HMAC-SHA-256 over hashers the caller owns: allocate one, then for each tag

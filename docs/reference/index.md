@@ -42,9 +42,15 @@ Terminal output and input, a step's input with no terminal, and command-line par
 
 </scalar-card>
 
+<scalar-card title="Graphics and sound" icon="phosphor/regular/paint-brush" href="#graphics-and-sound">
+
+Drawing into a frame of pixels and making short sounds: 2 modules.
+
+</scalar-card>
+
 <scalar-card title="Concurrency" icon="phosphor/regular/arrows-split" href="#concurrency">
 
-Threads, locks, shared memory and queues between processes or a wasm page: 5 modules.
+Threads, locks, shared memory and queues between processes or a wasm page: 6 modules.
 
 </scalar-card>
 
@@ -56,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 52 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 53 modules.
 
 </scalar-card>
 
@@ -151,10 +157,18 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/term-rate`](term-rate.md) | How fast the link to the terminal is, measured from frames sent and acknowledged, and the frame rate and drawing detail a program keeps to under it. |
 | [`nish/term`](term.md) | A terminal drawn as a grid of coloured cells, and the keys a terminal sends turned into events. |
 
+### Graphics and sound
+
+| Module | |
+| --- | --- |
+| [`nish/raster`](raster.md) | Software drawing into a frame of `0xRRGGBB` pixels: colour arithmetic, rectangles, anti-aliased discs, additive glows, a vertical gradient, a 5×7 pixel font, and two fixed pools that move and draw themselves (a particle pool and a trail). |
+| [`nish/synth`](synth.md) | Short sounds made from nothing: square, triangle and noise voices with a pitch slide and a decaying envelope, mixed into an array of `f64` samples. |
+
 ### Concurrency
 
 | Module | |
 | --- | --- |
+| [`nish/host/game`](host/game.md) | The memory a game built for `wasm32` shares with the page that runs it: the frame it draws, the input the page feeds it, the sounds it asks for and the samples the page plays them from. |
 | [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
 | [`nish/host/text`](host/text.md) | Text in module storage, for a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §7). |
 | [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
@@ -227,6 +241,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/url`](net/url.md) | The request target's path and query, split and percent-decoded in place, and its query string read as key/value pairs; and whole URLs, parsed into their parts and references resolved against them. |
 | [`nish/net/websocket`](net/websocket.md) | RFC 6455 WebSocket framing and both sides of the opening handshake, sans-IO: bytes in, events and bytes out. |
 | [`nish/net/webtransport`](net/webtransport.md) | WebTransport over HTTP/3, server side, as draft-ietf-webtrans-http3-02 has it and as Chrome and the `wtransport` 0.7 crate negotiate it: sessions made by an extended CONNECT (RFC 9220) with `:protocol` `webtransport`, HTTP datagrams (RFC 9297) carrying the session's quarter stream ID, the session's unidirectional and bidirectional streams, and CLOSE_WEBTRANSPORT_SESSION and DRAIN_WEBTRANSPORT_SESSION on the CONNECT stream's capsules. |
+| [`nish/release`](release.md) | What the newest release of a project on GitHub is, whether it is newer than the one running, and a small cache so a program asks at most once a day. |
 
 ### Cryptography
 

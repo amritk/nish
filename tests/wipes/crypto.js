@@ -32,7 +32,8 @@ export const wipeChecks = [
   // `crypto_hkdf_wycheproof` imports both modules. The roots: an HMAC
   // constructor 6 (the long-key path's hasher, three arrays, its hash and the
   // key block; the short path's key block), `digest` 7 (the inner digest, both
-  // hashers' three arrays), HKDF's `expand` 15 (T(i) in the loop and the last
+  // hashers' three arrays; SHA-256's `digest` is its `digestInto` 7, into the
+  // tag it allocates), HKDF's `expand` 15 (T(i) in the loop and the last
   // one, the constructor's 6, the digest's 7), the `Secret` HKDF 29 (the PRK,
   // `extract`'s one-shot HMAC, 13, and `expand`), and the `Secret`
   // HKDF-Expand-Label 15 (`expand`'s, the label being no secret). The scratch:
@@ -54,6 +55,7 @@ export const wipeChecks = [
       ["nish.HmacSha256.digest", 7],
       ["nish.HmacSha384.digest", 7],
       ["nish.HmacSha512.digest", 7],
+      ["nish.HmacSha256.digestInto", 7],
       ["nish.hkdfExpandSha256", 15],
       ["nish.hkdfExpandSha384", 15],
       ["nish.hkdfSha256Secret", 29],

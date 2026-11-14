@@ -1314,6 +1314,13 @@ const AREAS = [
     names: ["term*", "input", "cli*"],
   },
   {
+    title: "Graphics and sound",
+    about: "Drawing into a frame of pixels and making short sounds",
+    key: "/graphics/..",
+    icon: "paint-brush",
+    names: ["raster", "synth"],
+  },
+  {
     title: "Concurrency",
     about: "Threads, locks, shared memory and queues between processes or a wasm page",
     key: "/concurrency/..",
@@ -1332,7 +1339,7 @@ const AREAS = [
     about: "DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server",
     key: "/net",
     icon: "globe",
-    names: ["net"],
+    names: ["net", "release"],
   },
   {
     title: "Cryptography",

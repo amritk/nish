@@ -130,7 +130,7 @@ import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-root
 import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
 import { TLS_RECORD_AGAIN, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server"
-import { TlsClientTrust, tlsClientTrust, tlsClientVerdict } from "nish/net/tls/verify"
+import { TlsClientTrust, tlsClientDistrustSpki, tlsClientTrust, tlsClientVerdict } from "nish/net/tls/verify"
 
 /** No error. */
 export const HTTP_E_NONE: i32 = 0
@@ -295,6 +295,14 @@ export class HttpOptions {
   maxBodyBytes: i64 = 268435456
   /** A PEM file of the roots an https server's chain must end at; null for the system's. */
   rootsPemPath: string | null = null
+  /**
+   * Keys no https server's chain may hold, each the SHA-256 of a
+   * certificate's subjectPublicKeyInfo DER, 32 bytes: a chain with a leaf,
+   * intermediate or root whose key is listed fails with `HTTP_E_CERTIFICATE`
+   * (`tlsClientDistrustSpki`). Null, the default, for none; a hash of
+   * another length fails every https fetch rather than being skipped.
+   */
+  distrustSpkiSha256: u8[][] | null = null
   /**
    * For a URL the program did not choose: only the addresses and hosts the
    * policy allows are reached, no proxy is used, and its caps apply (see
@@ -1691,8 +1699,10 @@ class HttpClientFault {
 
 /**
  * The roots an https fetch verifies against: the caller's `rootsPemPath`, or
- * the system's bundle without one; null with `fault` set when none could be
- * read, which fails the fetch rather than trusting nothing.
+ * the system's bundle without one, distrusting the keys of
+ * `distrustSpkiSha256`; null with `fault` set when no root could be read,
+ * which fails the fetch rather than trusting nothing, or when a hash to
+ * distrust is not one, which fails it rather than trusting the key.
  */
 const httpClientLoadTrust = (options: HttpOptions, fault: HttpClientFault): TlsClientTrust | null => {
   const path: string | null = options.rootsPemPath
@@ -1702,7 +1712,15 @@ const httpClientLoadTrust = (options: HttpOptions, fault: HttpClientFault): TlsC
     fault.fail(HTTP_E_CERTIFICATE, `no trusted root certificate could be read from ${where}`)
     return null
   }
-  return tlsClientTrust(roots)
+  const trust: TlsClientTrust = tlsClientTrust(roots)
+  const distrusted: u8[][] = options.distrustSpkiSha256 ?? []
+  for (const hash of distrusted) {
+    if (!tlsClientDistrustSpki(trust, hash)) {
+      fault.fail(HTTP_E_CERTIFICATE, `a key to distrust is ${hash.length} bytes, not a SHA-256 of 32`)
+      return null
+    }
+  }
+  return trust
 }
 
 /**

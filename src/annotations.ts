@@ -1,5 +1,5 @@
 // Type annotations, for stage1 (docs/wp14-selfhost.md, milestone S3): the
-// `resolveTypeNode` of stage0's `src/types.ts`, over the `N_TYPE_*` nodes of
+// `resolveTypeNode` of stage0's `src/types.ts`, over the `NodeKind.Type*` nodes of
 // `src/nodes.ts` and against a module's own named types.
 //
 // Every message here is byte-for-byte stage0's, because the `.err` goldens
@@ -24,27 +24,7 @@ import { layoutClass } from "./structs"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
-import {
-  FLAG_DEFAULT,
-  FLAG_OPTIONAL,
-  FLAG_REST,
-  FLAG_READONLY,
-  FLAG_STATIC,
-  N_FIELD,
-  N_IDENT,
-  N_LIST,
-  N_MEMBER,
-  N_TYPE_ARRAY,
-  N_TYPE_FUNCTION,
-  N_TYPE_LITERAL,
-  N_TYPE_NULL,
-  N_TYPE_OPERATOR,
-  N_TYPE_PAREN,
-  N_TYPE_READONLY,
-  N_TYPE_REF,
-  N_TYPE_UNION,
-  Node,
-} from "./nodes"
+import { FLAG_DEFAULT, FLAG_OPTIONAL, FLAG_READONLY, FLAG_REST, FLAG_STATIC, Node, NodeKind } from "./nodes"
 import {
   CPTR_NAME,
   K_ARRAY,
@@ -319,7 +299,7 @@ export const namesRegion = (ctx: CheckContext, name: string): boolean => {
 
 /** `node` with any parentheses around it taken off. */
 const unwrapTypeParen = (node: Node): Node =>
-  node.kind === N_TYPE_PAREN ? unwrapTypeParen(node.children[0]) : node
+  node.kind === NodeKind.TypeParen ? unwrapTypeParen(node.children[0]) : node
 
 /**
  * `(x: A, y: B) => R` outside a parameter of a top-level function: the
@@ -347,7 +327,7 @@ const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
           "the caller passes"
       )
     }
-    if (unwrapTypeParen(param.children[1]).kind === N_TYPE_FUNCTION) {
+    if (unwrapTypeParen(param.children[1]).kind === NodeKind.TypeFunction) {
       return ctx.errorType(
         param,
         `\`${shown}\` takes a function parameter, so no function it could name has a single body ` +
@@ -374,27 +354,27 @@ const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
  */
 export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
-    case N_TYPE_PAREN:
+    case NodeKind.TypeParen:
       // Transparent, as `ParenthesizedType` is in stage0's `src/types.ts`: the
       // parentheses exist to group, and `(T | null)[]` is the shape that needs
       // them, because `T | null[]` groups the other way.
       return resolveType(node.children[0], ctx)
-    case N_TYPE_ARRAY:
+    case NodeKind.TypeArray:
       return ctx.table.arrayOf(elementType(node.children[0], ctx))
-    case N_TYPE_READONLY:
+    case NodeKind.TypeReadonly:
       return resolveReadonly(node, ctx)
-    case N_TYPE_UNION:
+    case NodeKind.TypeUnion:
       return resolveUnion(node, ctx)
-    case N_TYPE_REF:
+    case NodeKind.TypeRef:
       return resolveReference(node, ctx)
-    case N_TYPE_FUNCTION:
+    case NodeKind.TypeFunction:
       // WP29: a parameter of a top-level function takes a function type
       // without coming here (`collectParams`), because it names a callee the
       // checker resolves at each call. Anywhere else a function type is a
       // function reference (WP51 S1): an `i32` tag naming one capture-free
       // top-level function of this signature.
       return resolveFunctionReference(node, ctx)
-    case N_TYPE_LITERAL:
+    case NodeKind.TypeLiteral:
       if (isStringLiteralType(node)) {
         return ctx.errorType(
           node,
@@ -410,7 +390,7 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
         `A literal type \`${node.text}\` is only allowed as a bound of \`integer<Lo, Hi>\``
       )
     default:
-      // `keyof T` (N_TYPE_OPERATOR) among them, which `refuseTypeForm` says first.
+      // `keyof T` (NodeKind.TypeOperator) among them, which `refuseTypeForm` says first.
       return ctx.errorType(node, unsupportedType(ctx, node))
   }
 }
@@ -428,9 +408,9 @@ const unsupportedType = (ctx: CheckContext, node: Node): string =>
  * compile.
  */
 export const refuseTypeForm = (ctx: CheckContext, node: Node): void => {
-  if (node.kind === N_TYPE_OPERATOR) {
+  if (node.kind === NodeKind.TypeOperator) {
     ctx.error(node, unsupportedType(ctx, node))
-  } else if (node.kind === N_IDENT && (node.flags & FLAG_DEFAULT) !== 0) {
+  } else if (node.kind === NodeKind.Ident && (node.flags & FLAG_DEFAULT) !== 0) {
     ctx.error(
       node,
       "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments"
@@ -473,18 +453,18 @@ export const ASYNC_RETURN_MESSAGE: string =
 
 /** `T` of a `Promise<T>` annotation, or null when the annotation is not one. */
 export const promiseArgument = (annotation: Node): Node | null => {
-  if (annotation.kind !== N_TYPE_REF || annotation.text !== "Promise") {
+  if (annotation.kind !== NodeKind.TypeRef || annotation.text !== "Promise") {
     return null
   }
   const args = annotation.children[0]
-  return args.kind === N_LIST && args.children.length === 1 ? args.children[0] : null
+  return args.kind === NodeKind.List && args.children.length === 1 ? args.children[0] : null
 }
 
 /** A named type, with or without type arguments. */
 const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   const name = node.text
   const args = node.children[0]
-  const argc = args.kind === N_LIST ? args.children.length : 0
+  const argc = args.kind === NodeKind.List ? args.children.length : 0
 
   if (name === "Result") {
     return resolveResult(node, args, argc, ctx)
@@ -771,7 +751,7 @@ const BOUND_REFUSED: i64 = 1099511627776
  * `typeof`, which Phase 0 forbids (WP31 §11).
  */
 const rangedBound = (ctx: CheckContext, bound: Node): i64 => {
-  if (bound.kind !== N_TYPE_LITERAL || isStringLiteralType(bound)) {
+  if (bound.kind !== NodeKind.TypeLiteral || isStringLiteralType(bound)) {
     ctx.error(
       bound,
       `A bound of \`integer<Lo, Hi>\` must be an integer literal, got \`${ctx.textOf(bound)}\` (a type or a constant cannot state a bound)`
@@ -842,12 +822,6 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
     return ctx.errorType(node, secretContainerMessage(spelled))
   }
-  if (ctx.table.holdsUnion(ok) || ctx.table.holdsUnion(err)) {
-    return ctx.errorType(
-      node,
-      unionArgumentMessage(`Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`)
-    )
-  }
   if (resultArmIsReference(ctx, ok) || resultArmIsReference(ctx, err)) {
     const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
     return ctx.errorType(
@@ -867,16 +841,6 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
 const UNION_REFUSED: string = "Union types other than `T | null` are forbidden in "
 
 /**
- * A union where a type argument would carry it: `Box<Shape>`,
- * `Result<Shape, string>`, or a type parameter a call binds to one. A `Map`'s
- * value is the one type argument a union may be. Narrower than TypeScript,
- * which allows all of them (docs/LANGUAGE.md, Discriminated unions).
- */
-export const unionArgumentMessage = (spelled: string): string =>
-  `\`${spelled}\` cannot take a union as a type argument: in this version a union is the type of a local, ` +
-  "a parameter, a field, a return value, an array element or a `Map`'s value, and not of a generic's, a `Set`'s or a `Result`'s type argument"
-
-/**
  * `T | null`, or a discriminated union of tagged classes and interfaces,
  * nullable or not. The validator has refused every other shape it can see;
  * what it cannot see is what a name is, so a member that turns out not to be
@@ -886,7 +850,7 @@ const resolveUnion = (node: Node, ctx: CheckContext): i32 => {
   let nulls = 0
   const members: Node[] = []
   for (const member of node.children) {
-    if (member.kind === N_TYPE_NULL) {
+    if (member.kind === NodeKind.TypeNull) {
       nulls = nulls + 1
     } else {
       members.push(member)
@@ -1062,7 +1026,7 @@ const declaredMembers = (info: StructInfo): Node[] =>
 /** A variant's first instance field, as declared; `null` when it declares none. */
 const firstField = (info: StructInfo): Node | null => {
   for (const member of declaredMembers(info)) {
-    if (member.kind === N_FIELD && (member.flags & FLAG_STATIC) === 0) {
+    if (member.kind === NodeKind.Field && (member.flags & FLAG_STATIC) === 0) {
       return member
     }
   }
@@ -1083,7 +1047,7 @@ const wholeEnumTag = (ctx: CheckContext, info: StructInfo): string => {
   }
   const annotation = field.children[1]
   if (
-    annotation.kind !== N_TYPE_REF ||
+    annotation.kind !== NodeKind.TypeRef ||
     annotation.text.indexOf(".") >= 0 ||
     (annotation.children.length > 0 && annotation.children[0].children.length > 0)
   ) {
@@ -1095,8 +1059,8 @@ const wholeEnumTag = (ctx: CheckContext, info: StructInfo): string => {
   }
   const init = field.children[2]
   if (
-    init.kind === N_MEMBER &&
-    init.children[0].kind === N_IDENT &&
+    init.kind === NodeKind.Member &&
+    init.children[0].kind === NodeKind.Ident &&
     init.children[0].text === annotation.text &&
     declared.hasMember(init.text)
   ) {
@@ -1122,7 +1086,7 @@ const variantTag = (ctx: CheckContext, info: StructInfo): i32 => {
     return -1
   }
   const annotation = field.children[1]
-  if (annotation.kind !== N_TYPE_REF || annotation.text.indexOf(".") < 0) {
+  if (annotation.kind !== NodeKind.TypeRef || annotation.text.indexOf(".") < 0) {
     return -1
   }
   return resolveType(annotation, ctx)

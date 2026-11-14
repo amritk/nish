@@ -34,44 +34,7 @@
 import { FunctionFacts, FactsTable, PointerParamFacts } from "./attributes"
 import { terminatesControlFlow } from "./builtins"
 import { CheckContext } from "./context"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CASE,
-  N_CONDITIONAL,
-  N_CONSTRUCTOR,
-  N_CONTINUE,
-  N_DEFAULT,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FOR,
-  N_FOR_OF,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LABELED,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_NULL,
-  N_OBJECT,
-  N_PAREN,
-  N_RETURN,
-  N_SWITCH,
-  N_THIS,
-  N_THROW,
-  N_TRUE,
-  N_VAR,
-  N_VAR_DECL,
-  N_WHILE,
-  Node,
-  FLAG_OPTIONAL,
-} from "./nodes"
+import { FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   FieldInfo,
@@ -402,11 +365,11 @@ export const namesSecret = (ctx: CheckContext, arg: Node, scope: Scope): boolean
 /** The type of a chain of names and fields as written, or -1 for anything else. */
 const writtenType = (ctx: CheckContext, node: Node, scope: Scope): i32 => {
   const at = unwrapSecretNode(node)
-  if (at.kind === N_IDENT) {
+  if (at.kind === NodeKind.Ident) {
     const local = scope.lookup(at.text)
     return local === null ? -1 : scope.typeOf(local)
   }
-  if (at.kind === N_THIS) {
+  if (at.kind === NodeKind.This) {
     const sig = ctx.current
     if (sig === null) {
       return -1
@@ -414,7 +377,7 @@ const writtenType = (ctx: CheckContext, node: Node, scope: Scope): i32 => {
     const owner = sig.owner
     return owner === null ? -1 : owner.type
   }
-  if (at.kind !== N_MEMBER) {
+  if (at.kind !== NodeKind.Member) {
     return -1
   }
   const receiver = writtenType(ctx, at.children[0], scope)
@@ -717,7 +680,7 @@ class SecretFlow {
 
   /** The slot `this.f` names, or -1: a member read of something else, or a body with no slots. */
   slotIndex(member: Node): i32 {
-    if (unwrapSecretNode(member.children[0]).kind !== N_THIS) {
+    if (unwrapSecretNode(member.children[0]).kind !== NodeKind.This) {
       return -1
     }
     let i = 0
@@ -828,15 +791,15 @@ class SecretFlow {
 
   statement(stmt: Node, state: FlowState, block: Node): void {
     switch (stmt.kind) {
-      case N_BLOCK:
+      case NodeKind.Block:
         this.statements(stmt.children, state, stmt)
         this.checkScopeEnd(state, stmt)
         return
-      case N_VAR:
+      case NodeKind.Var:
         this.declarations(stmt, state, block)
         return
-      case N_EXPR_STMT:
-        if (stmt.children[0].kind === N_BINARY && stmt.children[0].text === "=") {
+      case NodeKind.ExprStmt:
+        if (stmt.children[0].kind === NodeKind.Binary && stmt.children[0].text === "=") {
           this.assignment(stmt.children[0], state, true)
         } else {
           this.expression(stmt.children[0], ROLE_READ, state)
@@ -845,39 +808,39 @@ class SecretFlow {
           state.reachable = false // the process ends, and the key with it
         }
         return
-      case N_RETURN:
+      case NodeKind.Return:
         this.returnValue(stmt, stmt.children[0], state)
         return
-      case N_THROW:
+      case NodeKind.Throw:
         this.expression(stmt.children[0], ROLE_READ, state)
         state.reachable = false
         return
-      case N_IF:
+      case NodeKind.If:
         this.ifStatement(stmt, state, block)
         return
-      case N_WHILE:
+      case NodeKind.While:
         this.loop(stmt, stmt.children[0], stmt.children[1], null, false, state, block)
         return
-      case N_DO:
+      case NodeKind.Do:
         this.loop(stmt, stmt.children[1], stmt.children[0], null, true, state, block)
         return
-      case N_FOR:
+      case NodeKind.For:
         this.forStatement(stmt, state, block)
         return
-      case N_FOR_OF:
+      case NodeKind.ForOf:
         this.expression(stmt.children[1], ROLE_READ, state)
         this.loop(stmt, null, stmt.children[2], null, false, state, block)
         return
-      case N_SWITCH:
+      case NodeKind.Switch:
         this.switchStatement(stmt, state)
         return
-      case N_BREAK:
+      case NodeKind.Break:
         this.leave(stmt, state, false)
         return
-      case N_CONTINUE:
+      case NodeKind.Continue:
         this.leave(stmt, state, true)
         return
-      case N_LABELED:
+      case NodeKind.Labeled:
         this.labeled(stmt, state, block)
         return
       default:
@@ -887,11 +850,11 @@ class SecretFlow {
 
   declarations(stmt: Node, state: FlowState, block: Node): void {
     for (const decl of stmt.children[0].children) {
-      if (decl.kind !== N_VAR_DECL) {
+      if (decl.kind !== NodeKind.VarDecl) {
         continue
       }
       const init = decl.children[2]
-      if (init.kind !== N_EMPTY) {
+      if (init.kind !== NodeKind.Empty) {
         this.expression(init, ROLE_INIT, state)
       }
       const local = this.ctx.program.nodeLocals[decl.id]
@@ -911,9 +874,9 @@ class SecretFlow {
 
   returnValue(at: Node, value: Node, state: FlowState): void {
     let keep = -1
-    if (value.kind !== N_EMPTY) {
+    if (value.kind !== NodeKind.Empty) {
       const named = unwrapSecretNode(value)
-      keep = named.kind === N_IDENT ? this.varIndex(this.ctx.program.nodeLocals[named.id]) : -1
+      keep = named.kind === NodeKind.Ident ? this.varIndex(this.ctx.program.nodeLocals[named.id]) : -1
       this.expression(value, ROLE_RETURN, state)
     }
     this.checkExit(state, at, -1, keep)
@@ -926,7 +889,7 @@ class SecretFlow {
     const whenFalse = copyState(state)
     this.narrowNull(stmt.children[0], whenTrue, whenFalse)
     this.statement(stmt.children[1], whenTrue, block)
-    if (stmt.children[2].kind !== N_EMPTY) {
+    if (stmt.children[2].kind !== NodeKind.Empty) {
       this.statement(stmt.children[2], whenFalse, block)
     }
     const merged = whenTrue
@@ -944,7 +907,7 @@ class SecretFlow {
    */
   labeled(stmt: Node, state: FlowState, block: Node): void {
     const body = stmt.children[0]
-    if (body.kind !== N_BLOCK) {
+    if (body.kind !== NodeKind.Block) {
       this.label = stmt.text
       this.statement(body, state, block)
       return
@@ -961,14 +924,14 @@ class SecretFlow {
   /** `k === null` holds no secret in its true branch, `k !== null` in its false one. */
   narrowNull(cond: Node, whenTrue: FlowState, whenFalse: FlowState): void {
     const test = unwrapSecretNode(cond)
-    if (test.kind !== N_BINARY || (test.text !== "===" && test.text !== "!==")) {
+    if (test.kind !== NodeKind.Binary || (test.text !== "===" && test.text !== "!==")) {
       return
     }
     const left = unwrapSecretNode(test.children[0])
     const right = unwrapSecretNode(test.children[1])
-    const named = left.kind === N_NULL ? right : left
-    const other = left.kind === N_NULL ? left : right
-    if (named.kind !== N_IDENT || other.kind !== N_NULL) {
+    const named = left.kind === NodeKind.Null ? right : left
+    const other = left.kind === NodeKind.Null ? left : right
+    if (named.kind !== NodeKind.Ident || other.kind !== NodeKind.Null) {
       return
     }
     const at = this.varIndex(this.ctx.program.nodeLocals[named.id])
@@ -984,15 +947,15 @@ class SecretFlow {
 
   forStatement(stmt: Node, state: FlowState, block: Node): void {
     const init = stmt.children[0]
-    if (init.kind === N_VAR) {
+    if (init.kind === NodeKind.Var) {
       this.declarations(init, state, stmt)
-    } else if (init.kind !== N_EMPTY) {
+    } else if (init.kind !== NodeKind.Empty) {
       this.expression(init, ROLE_READ, state)
     }
     const cond = stmt.children[1]
     this.loop(
       stmt,
-      cond.kind === N_EMPTY ? null : cond,
+      cond.kind === NodeKind.Empty ? null : cond,
       stmt.children[3],
       stmt.children[2],
       false,
@@ -1063,7 +1026,7 @@ class SecretFlow {
       if (!isLiteralTrue(cond)) {
         mergeInto(exits, state)
       }
-    } else if (!once && stmt.kind === N_FOR_OF) {
+    } else if (!once && stmt.kind === NodeKind.ForOf) {
       mergeInto(exits, state) // an empty iterable runs no pass
     }
     this.targets.push(target)
@@ -1072,7 +1035,7 @@ class SecretFlow {
     this.targets.pop()
     mergeInto(state, target.continues)
     if (state.reachable) {
-      if (step !== null && step.kind !== N_EMPTY) {
+      if (step !== null && step.kind !== NodeKind.Empty) {
         this.expression(step, ROLE_READ, state)
       }
       if (once && cond !== null) {
@@ -1101,16 +1064,16 @@ class SecretFlow {
     fall.reachable = false
     let hasDefault = false
     for (const clause of stmt.children[1].children) {
-      if (clause.kind === N_DEFAULT) {
+      if (clause.kind === NodeKind.Default) {
         hasDefault = true
       }
       const here = copyState(entry)
       mergeInto(here, fall)
-      if (clause.kind === N_CASE) {
+      if (clause.kind === NodeKind.Case) {
         this.expression(clause.children[0], ROLE_READ, here)
       }
-      const body = clause.kind === N_CASE ? clause.children[1] : clause.children[0]
-      if (clause.kind === N_CASE || clause.kind === N_DEFAULT) {
+      const body = clause.kind === NodeKind.Case ? clause.children[1] : clause.children[0]
+      if (clause.kind === NodeKind.Case || clause.kind === NodeKind.Default) {
         this.statements(body.children, here, body)
         this.checkScopeEnd(here, body)
       }
@@ -1167,13 +1130,13 @@ class SecretFlow {
   expression(node: Node, role: i32, state: FlowState): void {
     const program = this.ctx.program
     switch (node.kind) {
-      case N_PAREN:
+      case NodeKind.Paren:
         this.expression(node.children[0], role, state)
         return
-      case N_IDENT:
+      case NodeKind.Ident:
         this.name(node, role, state)
         return
-      case N_ARROW: {
+      case NodeKind.Arrow: {
         // An arrow's body is checked as its own, but one given to a
         // data-parallel form runs here and reads what it captures (WP29).
         const reads: Node[] = []
@@ -1183,7 +1146,7 @@ class SecretFlow {
         }
         return
       }
-      case N_CONDITIONAL: {
+      case NodeKind.Conditional: {
         this.expression(node.children[0], ROLE_READ, state)
         const arm = role === ROLE_RETURN || role === ROLE_INIT || role === ROLE_ARM ? ROLE_ARM : ROLE_READ
         const whenTrue = copyState(state)
@@ -1194,19 +1157,19 @@ class SecretFlow {
         assign(state, whenTrue)
         return
       }
-      case N_BINARY:
+      case NodeKind.Binary:
         this.binary(node, state)
         return
-      case N_CALL:
+      case NodeKind.Call:
         this.call(node, role, state)
         return
-      case N_NEW:
+      case NodeKind.New:
         for (const arg of node.children[2].children) {
           this.expression(arg, isBorrowable(arg) ? ROLE_BORROW : ROLE_READ, state)
         }
         this.produced(node, role)
         return
-      case N_MEMBER:
+      case NodeKind.Member:
         if (this.ctx.table.isSecret(program.nodeTypes[node.id])) {
           this.fieldRead(node, role, state)
           return
@@ -1218,7 +1181,7 @@ class SecretFlow {
     for (const child of node.children) {
       this.expression(child, ROLE_READ, state)
     }
-    if (node.kind !== N_EMPTY && program.nodeTypes[node.id] >= 0) {
+    if (node.kind !== NodeKind.Empty && program.nodeTypes[node.id] >= 0) {
       this.produced(node, role)
     }
   }
@@ -1226,7 +1189,12 @@ class SecretFlow {
   /** A `Secret` made by `node` (a call or a `new`) in a place nobody will own it. */
   produced(node: Node, role: i32): void {
     const type = this.ctx.program.nodeTypes[node.id]
-    if (type < 0 || !this.ctx.table.isSecret(type) || node.kind === N_IDENT || node.kind === N_NULL) {
+    if (
+      type < 0 ||
+      !this.ctx.table.isSecret(type) ||
+      node.kind === NodeKind.Ident ||
+      node.kind === NodeKind.Null
+    ) {
       return
     }
     if (
@@ -1290,7 +1258,7 @@ class SecretFlow {
       return
     }
     const made = unwrapSecretNode(value)
-    if (made.kind === N_CALL && secretRoleOf(this.ctx.program.nodeCallees[made.id]) === SECRET_MAKE) {
+    if (made.kind === NodeKind.Call && secretRoleOf(this.ctx.program.nodeCallees[made.id]) === SECRET_MAKE) {
       this.call(made, ROLE_FIELD_INIT, state)
       if (state.live[at]) {
         this.error(target, refillMessage(this.vars[at].name))
@@ -1302,7 +1270,7 @@ class SecretFlow {
       }
       return
     }
-    if (made.kind === N_BINARY && made.text === "=") {
+    if (made.kind === NodeKind.Binary && made.text === "=") {
       // `this.k = this.j = secret(v)`: `this.j` is set, and then read.
       this.expression(made, ROLE_READ, state)
       this.error(made, fieldReadMessage(unwrapSecretNode(made.children[0]).text))
@@ -1310,7 +1278,7 @@ class SecretFlow {
     }
     // `this.k = k`: the one diagnostic is where the key came from, and a
     // local it names is the field's problem now, not its scope's.
-    if (made.kind === N_IDENT) {
+    if (made.kind === NodeKind.Ident) {
       const named = this.varIndex(this.ctx.program.nodeLocals[made.id])
       if (named >= 0) {
         state.live[named] = false
@@ -1383,8 +1351,8 @@ class SecretFlow {
     }
     if (op === "===" || op === "!==") {
       const nullTest =
-        unwrapSecretNode(node.children[0]).kind === N_NULL ||
-        unwrapSecretNode(node.children[1]).kind === N_NULL
+        unwrapSecretNode(node.children[0]).kind === NodeKind.Null ||
+        unwrapSecretNode(node.children[1]).kind === NodeKind.Null
       for (const side of node.children) {
         this.expression(side, nullTest ? ROLE_NULL_TEST : ROLE_BORROW, state)
       }
@@ -1402,8 +1370,8 @@ class SecretFlow {
   storedType(target: Node): i32 {
     const program = this.ctx.program
     const receiver = unwrapSecretNode(target.children[0])
-    let type = receiver.kind === N_EMPTY ? -1 : program.nodeTypes[receiver.id]
-    if (receiver.kind === N_THIS) {
+    let type = receiver.kind === NodeKind.Empty ? -1 : program.nodeTypes[receiver.id]
+    if (receiver.kind === NodeKind.This) {
       const sig = this.ctx.current
       if (sig !== null) {
         const owner = sig.owner
@@ -1427,11 +1395,11 @@ class SecretFlow {
   assignment(node: Node, state: FlowState, statement: boolean): void {
     const target = unwrapSecretNode(node.children[0])
     const value = node.children[1]
-    if (target.kind === N_MEMBER && this.ctx.table.isSecret(this.storedType(target))) {
+    if (target.kind === NodeKind.Member && this.ctx.table.isSecret(this.storedType(target))) {
       this.fieldStore(target, value, state, statement)
       return
     }
-    if (target.kind !== N_IDENT) {
+    if (target.kind !== NodeKind.Ident) {
       for (const side of node.children) {
         this.expression(side, ROLE_READ, state)
       }
@@ -1459,7 +1427,7 @@ class SecretFlow {
     const args = node.children[1].children
     const sig = program.nodeCallees[node.id]
     const calleeRole = secretRoleOf(sig)
-    if (callee.kind === N_MEMBER) {
+    if (callee.kind === NodeKind.Member) {
       this.expression(callee.children[0], ROLE_READ, state)
     }
     let i = 0
@@ -1477,7 +1445,7 @@ class SecretFlow {
       i = i + 1
     }
     // `r.orReturn()` returns early, and leaves what every `return` must not.
-    if (callee.kind === N_MEMBER && callee.text === "orReturn" && args.length === 0) {
+    if (callee.kind === NodeKind.Member && callee.text === "orReturn" && args.length === 0) {
       const receiver = program.nodeTypes[callee.children[0].id]
       if (receiver >= 0 && this.ctx.table.isResult(this.ctx.table.stripNull(receiver))) {
         this.checkExit(state, node, -1, -1)
@@ -1493,7 +1461,7 @@ class SecretFlow {
    */
   move(arg: Node, state: FlowState): void {
     const named = unwrapSecretNode(arg)
-    if (named.kind === N_CONDITIONAL) {
+    if (named.kind === NodeKind.Conditional) {
       this.expression(named.children[0], ROLE_READ, state)
       const whenTrue = copyState(state)
       const whenFalse = copyState(state)
@@ -1503,7 +1471,7 @@ class SecretFlow {
       assign(state, whenTrue)
       return
     }
-    if (named.kind === N_IDENT) {
+    if (named.kind === NodeKind.Ident) {
       const local = this.ctx.program.nodeLocals[named.id]
       if (local !== null && local.storage === STORAGE_PARAM) {
         this.error(named, unmovableMessage())
@@ -1518,7 +1486,7 @@ class SecretFlow {
       }
       return
     }
-    if (named.kind === N_MEMBER || named.kind === N_INDEX) {
+    if (named.kind === NodeKind.Member || named.kind === NodeKind.Index) {
       this.error(named, unmovableMessage())
       return
     }
@@ -1541,27 +1509,27 @@ class LoopPass {
 
 const unwrapSecretNode = (node: Node): Node => {
   let at = node
-  while (at.kind === N_PAREN) {
+  while (at.kind === NodeKind.Paren) {
     at = at.children[0]
   }
   return at
 }
 
-const isLiteralTrue = (node: Node): boolean => unwrapSecretNode(node).kind === N_TRUE
+const isLiteralTrue = (node: Node): boolean => unwrapSecretNode(node).kind === NodeKind.True
 
 /** An argument a call borrows rather than takes: a name, or a holder's field. */
 const isBorrowable = (arg: Node): boolean => {
   const kind = unwrapSecretNode(arg).kind
-  return kind === N_IDENT || kind === N_MEMBER
+  return kind === NodeKind.Ident || kind === NodeKind.Member
 }
 
 /** `h.f`: a field read, which `fieldRead` refuses as an owner, so it hands nothing to own. */
-const isMemberRead = (init: Node): boolean => unwrapSecretNode(init).kind === N_MEMBER
+const isMemberRead = (init: Node): boolean => unwrapSecretNode(init).kind === NodeKind.Member
 
 /** Whether an initialiser can leave a secret in its variable: anything but `null` or nothing. */
 const mayHoldSecret = (init: Node): boolean => {
   const value = unwrapSecretNode(init)
-  return value.kind !== N_EMPTY && value.kind !== N_NULL
+  return value.kind !== NodeKind.Empty && value.kind !== NodeKind.Null
 }
 
 /** Copy `from` into `into`, element by element, so callers holding `into` see the change. */
@@ -1584,10 +1552,10 @@ const assign = (into: FlowState, from: FlowState): void => {
 const collectFlow = (flow: SecretFlow, node: Node): void => {
   const program = flow.ctx.program
   const table = flow.ctx.table
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const local = program.nodeLocals[node.id]
     if (local !== null && table.isSecret(local.type) && flow.varIndex(local) < 0) {
       flow.vars.push(local)
@@ -1598,7 +1566,7 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
       flow.slots.push("")
     }
   }
-  if (node.kind === N_IDENT) {
+  if (node.kind === NodeKind.Ident) {
     const local = program.nodeLocals[node.id]
     if (
       local !== null &&
@@ -1616,14 +1584,14 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
   }
   // `const j = k` and `j = k`: the owned secret `k` moves, and is then not read.
   let source = node
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     source = node.children[2]
-  } else if (node.kind === N_BINARY && node.text === "=") {
+  } else if (node.kind === NodeKind.Binary && node.text === "=") {
     source = node.children[1]
   }
   if (source !== node) {
     const named = unwrapSecretNode(source)
-    const local: Local | null = named.kind === N_IDENT ? program.nodeLocals[named.id] : null
+    const local: Local | null = named.kind === NodeKind.Ident ? program.nodeLocals[named.id] : null
     if (
       local !== null &&
       local.storage !== STORAGE_PARAM &&
@@ -1633,7 +1601,7 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
       flow.movable.push(local)
     }
   }
-  if (node.kind === N_CALL && secretRoleOf(program.nodeCallees[node.id]) === SECRET_MAKE) {
+  if (node.kind === NodeKind.Call && secretRoleOf(program.nodeCallees[node.id]) === SECRET_MAKE) {
     flow.sites.push(node)
     const args = node.children[1].children
     if (args.length > 0) {
@@ -1648,12 +1616,12 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
 /** The locals `secret(arg)` moves: `arg` itself, or either arm of a ternary. */
 const collectMoved = (flow: SecretFlow, arg: Node): void => {
   const named = unwrapSecretNode(arg)
-  if (named.kind === N_CONDITIONAL) {
+  if (named.kind === NodeKind.Conditional) {
     collectMoved(flow, named.children[1])
     collectMoved(flow, named.children[2])
     return
   }
-  if (named.kind !== N_IDENT) {
+  if (named.kind !== NodeKind.Ident) {
     return
   }
   const local = flow.ctx.program.nodeLocals[named.id]
@@ -1685,7 +1653,7 @@ export const checkSecretFlow = (ctx: CheckContext, body: Node): void => {
     state.live[i] = releaser && flow.slots[i] !== ""
     i = i + 1
   }
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     flow.statements(body.children, state, body)
     flow.checkScopeEnd(state, body)
   } else {
@@ -1732,10 +1700,10 @@ const collectSlots = (flow: SecretFlow, body: Node): boolean => {
 
 /** Whether any expression in `node` has a `Secret` type: a body with none needs no walk. */
 const producesSecret = (ctx: CheckContext, node: Node): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return false
   }
-  const type = node.kind === N_EMPTY ? -1 : ctx.program.nodeTypes[node.id]
+  const type = node.kind === NodeKind.Empty ? -1 : ctx.program.nodeTypes[node.id]
   if (type >= 0 && ctx.table.isSecret(type)) {
     return true
   }
@@ -1818,16 +1786,16 @@ const quoteAt = (program: CheckedProgram, node: Node, owner: string): string => 
 
 /** Whether `node` is a statement: what `quoteAt` quotes an expression inside. */
 const isStatement = (node: Node): boolean =>
-  node.kind === N_VAR ||
-  node.kind === N_EXPR_STMT ||
-  node.kind === N_RETURN ||
-  node.kind === N_IF ||
-  node.kind === N_WHILE ||
-  node.kind === N_DO ||
-  node.kind === N_FOR ||
-  node.kind === N_FOR_OF ||
-  node.kind === N_SWITCH ||
-  node.kind === N_THROW
+  node.kind === NodeKind.Var ||
+  node.kind === NodeKind.ExprStmt ||
+  node.kind === NodeKind.Return ||
+  node.kind === NodeKind.If ||
+  node.kind === NodeKind.While ||
+  node.kind === NodeKind.Do ||
+  node.kind === NodeKind.For ||
+  node.kind === NodeKind.ForOf ||
+  node.kind === NodeKind.Switch ||
+  node.kind === NodeKind.Throw
 
 /** The `Result` methods that answer the `Ok` payload of their receiver: what `Ok(v)` carries comes back out. */
 const answersPayload = (method: string): boolean =>
@@ -1890,32 +1858,37 @@ class ReferenceScan {
   }
 
   visit(node: Node, inArrow: boolean): void {
-    if (node.kind === N_VAR_DECL && this.names(node) && node.children[2].kind !== N_EMPTY) {
+    if (node.kind === NodeKind.VarDecl && this.names(node) && node.children[2].kind !== NodeKind.Empty) {
       this.sources.push(node.children[2])
       this.sourceOuters.push(this.statementAround(node))
     }
-    if (node.kind === N_FOR_OF && node.children[0].kind === N_VAR && this.leak.length === 0) {
+    if (node.kind === NodeKind.ForOf && node.children[0].kind === NodeKind.Var && this.leak.length === 0) {
       for (const decl of node.children[0].children[0].children) {
-        if (decl.kind === N_VAR_DECL && this.names(decl)) {
+        if (decl.kind === NodeKind.VarDecl && this.names(decl)) {
           this.leak = `${this.judge.quote(node.children[0])} binds an element of an array`
         }
       }
     }
-    if (node.kind === N_BINARY && node.text === "=") {
+    if (node.kind === NodeKind.Binary && node.text === "=") {
       const target = unwrapSecretNode(node.children[0])
-      if (target.kind === N_IDENT && this.names(target)) {
+      if (target.kind === NodeKind.Ident && this.names(target)) {
         this.sources.push(node.children[1])
         this.sourceOuters.push(this.statementAround(node))
       }
     }
-    if (node.kind === N_IDENT && node !== this.consumer && this.names(node) && this.leak.length === 0) {
+    if (
+      node.kind === NodeKind.Ident &&
+      node !== this.consumer &&
+      this.names(node) &&
+      this.leak.length === 0
+    ) {
       if (inArrow || !this.harmless(node)) {
         this.leak = this.judge.quote(this.statementAround(node))
       }
     }
     this.ancestors.push(node)
     for (const child of node.children) {
-      this.visit(child, inArrow || node.kind === N_ARROW)
+      this.visit(child, inArrow || node.kind === NodeKind.Arrow)
     }
     this.ancestors.pop()
   }
@@ -1967,27 +1940,27 @@ class ReferenceScan {
     }
     const parent = this.ancestors[i]
     switch (parent.kind) {
-      case N_VAR_DECL:
+      case NodeKind.VarDecl:
         return child === parent.children[0]
-      case N_BINARY:
+      case NodeKind.Binary:
         if (parent.text === "=") {
           return child === parent.children[0] && this.harmlessUse(parent, i - 1, field)
         }
         return parent.text === "===" || parent.text === "!=="
-      case N_INDEX:
+      case NodeKind.Index:
         return (
           child === parent.children[0] &&
           !holdsReference(this.judge.table, this.judge.program.nodeTypes[parent.id])
         )
-      case N_MEMBER:
+      case NodeKind.Member:
         return this.member(parent, i)
-      case N_LIST:
+      case NodeKind.List:
         return i > 0 && this.argument(child, parent, this.ancestors[i - 1])
-      case N_FOR_OF:
+      case NodeKind.ForOf:
         return child === parent.children[1]
-      case N_EXPR_STMT:
+      case NodeKind.ExprStmt:
         return true
-      case N_FOR:
+      case NodeKind.For:
         return child === parent.children[0] || child === parent.children[2]
       default:
         return false
@@ -2008,9 +1981,9 @@ class ReferenceScan {
     }
     const parent = this.ancestors[at]
     if (
-      parent.kind === N_PAREN ||
-      (parent.kind === N_CONDITIONAL && parent.children[0] !== child) ||
-      (parent.kind === N_BINARY && parent.text === "??")
+      parent.kind === NodeKind.Paren ||
+      (parent.kind === NodeKind.Conditional && parent.children[0] !== child) ||
+      (parent.kind === NodeKind.Binary && parent.text === "??")
     ) {
       return 1
     }
@@ -2018,18 +1991,18 @@ class ReferenceScan {
       return 0
     }
     const call = this.ancestors[at - 1]
-    if (call.kind !== N_CALL) {
+    if (call.kind !== NodeKind.Call) {
       return 0
     }
     const program = this.judge.program
     const table = this.judge.table
-    if (parent.kind === N_LIST && call.children[1] === parent) {
+    if (parent.kind === NodeKind.List && call.children[1] === parent) {
       if (isResultConstructorCall(program, table, call)) {
         return 2
       }
       return resultMethodName(program, table, call) === "unwrapOr" ? 2 : 0
     }
-    if (parent.kind === N_MEMBER && call.children[0] === parent) {
+    if (parent.kind === NodeKind.Member && call.children[0] === parent) {
       return answersPayload(resultMethodName(program, table, call)) ? 2 : 0
     }
     return 0
@@ -2042,14 +2015,14 @@ class ReferenceScan {
    */
   consumed(value: Node, at: i32): boolean {
     if (this.judge.mode === FRESH_RETURN) {
-      return at < 0 || this.ancestors[at].kind === N_RETURN
+      return at < 0 || this.ancestors[at].kind === NodeKind.Return
     }
-    if (at < 1 || this.ancestors[at].kind !== N_LIST) {
+    if (at < 1 || this.ancestors[at].kind !== NodeKind.List) {
       return false
     }
     const call = this.ancestors[at - 1]
     return (
-      call.kind === N_CALL &&
+      call.kind === NodeKind.Call &&
       call.children[1] === this.ancestors[at] &&
       call.children[1].children[0] === value &&
       secretRoleOf(this.judge.program.nodeCallees[call.id]) === SECRET_MAKE
@@ -2064,7 +2037,7 @@ class ReferenceScan {
    */
   member(access: Node, at: i32): boolean {
     const call: Node | null = at > 0 ? this.ancestors[at - 1] : null
-    if (call !== null && call.kind === N_CALL && call.children[0] === access) {
+    if (call !== null && call.kind === NodeKind.Call && call.children[0] === access) {
       const sig = this.judge.program.nodeCallees[call.id]
       if (sig !== null) {
         this.keep(sig, "this", call)
@@ -2075,7 +2048,7 @@ class ReferenceScan {
     }
     // A store into one of the local's fields (`local.n = v`) names the local
     // once more only as the place written; the checker types no store target.
-    if (call !== null && call.kind === N_BINARY && call.text === "=" && call.children[0] === access) {
+    if (call !== null && call.kind === NodeKind.Binary && call.text === "=" && call.children[0] === access) {
       return true
     }
     if (!holdsReference(this.judge.table, this.judge.program.nodeTypes[access.id])) {
@@ -2091,11 +2064,11 @@ class ReferenceScan {
     if (index < 0) {
       return false
     }
-    if (owner.kind === N_NEW && owner.children[2] === list) {
+    if (owner.kind === NodeKind.New && owner.children[2] === list) {
       const ctor = program.nodeCallees[owner.id]
       return ctor !== null && this.keepParameter(ctor, index, owner)
     }
-    if (owner.kind !== N_CALL || owner.children[1] !== list) {
+    if (owner.kind !== NodeKind.Call || owner.children[1] !== list) {
       return false
     }
     const sig = program.nodeCallees[owner.id]
@@ -2225,30 +2198,30 @@ class FreshJudge {
   judge(expr: Node): boolean {
     const e = unwrapSecretNode(expr)
     switch (e.kind) {
-      case N_ARRAY:
-      case N_OBJECT:
-      case N_NULL:
+      case NodeKind.Array:
+      case NodeKind.Object:
+      case NodeKind.Null:
         return true
-      case N_CONDITIONAL:
+      case NodeKind.Conditional:
         return this.judge(e.children[1]) && this.judge(e.children[2])
-      case N_NEW: {
+      case NodeKind.New: {
         const ctor = this.program.nodeCallees[e.id]
         if (ctor !== null) {
           this.need(ctor, "this", this.quote(e))
         }
         return true
       }
-      case N_CALL:
+      case NodeKind.Call:
         return this.call(e)
-      case N_IDENT: {
+      case NodeKind.Ident: {
         const local = this.program.nodeLocals[e.id]
         if (local === null) {
           return this.fail(`${this.quote(e)} is not a local this function made`)
         }
         return this.local(local, e)
       }
-      case N_MEMBER:
-      case N_INDEX:
+      case NodeKind.Member:
+      case NodeKind.Index:
         return this.fail(`${this.quote(e)} reads a field or an element something else holds`)
       default:
         return this.fail(`${this.quote(e)} is not a value this function made`)
@@ -2342,10 +2315,10 @@ class FreshJudge {
    */
   judgeSource(source: Node, outer: Node): boolean {
     const e = unwrapSecretNode(source)
-    if (e.kind === N_CONDITIONAL) {
+    if (e.kind === NodeKind.Conditional) {
       return this.judgeSource(e.children[1], outer) && this.judgeSource(e.children[2], outer)
     }
-    if (e.kind === N_IDENT) {
+    if (e.kind === NodeKind.Ident) {
       return this.fail(`${this.quote(outer)}, where \`${e.text}\` still names the value`)
     }
     return this.judge(e)
@@ -2374,7 +2347,7 @@ const checkSoleReference = (ctx: CheckContext, body: Node, arg: Node): void => {
   const program = ctx.program
   const named = unwrapSecretNode(arg)
   const judge = new FreshJudge(program, ctx.table, body, FRESH_SITE, "", arg)
-  judge.copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === N_IDENT ? named.text : "")
+  judge.copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === NodeKind.Ident ? named.text : "")
   judge.subject = `\`${ctx.textOf(arg)}\``
   if (!judge.judge(arg)) {
     ctx.error(arg, aliasMessage(judge.failSubject, judge.failure, judge.copy))
@@ -2398,10 +2371,10 @@ const recordSecretNeed = (program: CheckedProgram, need: SecretNeed): void => {
 
 /** Every `return` value of a block body, outside the arrows it holds. */
 const collectReturnValues = (node: Node, out: Node[]): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_RETURN && node.children[0].kind !== N_EMPTY) {
+  if (node.kind === NodeKind.Return && node.children[0].kind !== NodeKind.Empty) {
     out.push(node.children[0])
   }
   for (const child of node.children) {
@@ -2549,7 +2522,7 @@ export class FreshResults {
     const judge = new FreshJudge(program, this.table, body, FRESH_RETURN, sig.sourceName, body)
     judge.fieldUses = fieldUses
     let fresh = true
-    if (body.kind === N_BLOCK) {
+    if (body.kind === NodeKind.Block) {
       const values: Node[] = []
       collectReturnValues(body, values)
       for (const value of values) {
@@ -2601,7 +2574,7 @@ class FreshSummary {
 /** How a diagnostic names the function `sig`: `keep`, `Key.enrol`, the constructor of `Holder`. */
 const calleeName = (sig: FunctionSig): string => {
   const owner = sig.owner
-  return sig.decl.kind === N_CONSTRUCTOR && owner !== null
+  return sig.decl.kind === NodeKind.Constructor && owner !== null
     ? `the constructor of \`${owner.name}\``
     : `\`${sig.sourceName}\``
 }
@@ -2770,7 +2743,7 @@ export const exposeMessages = (
   if (table.holdsSecret(fn.returnType) || fn.returnType === T_ERROR) {
     out.push(exposeResultMessage(name, intrinsic, table.typeName(fn.returnType)))
   }
-  if (fn.lifted && fn.decl.children.length > 2 && fn.decl.children[2].kind === N_EMPTY) {
+  if (fn.lifted && fn.decl.children.length > 2 && fn.decl.children[2].kind === NodeKind.Empty) {
     out.push(undeclaredMessage(intrinsic))
   }
   if (capturesOf(fn).length > 0) {

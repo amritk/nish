@@ -8,7 +8,8 @@
  * the subprotocols it offers, and `websocketUpgradeResponse(key, protocol)`
  * writes the 101 that accepts it, with `Sec-WebSocket-Accept` from
  * `websocketAcceptKey` (§4.2.2): the base64 of the SHA-1 of the key and a
- * fixed GUID. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
+ * fixed GUID. `websocketOriginAllowed(parser, allowed)` is the opt-in check
+ * of `Origin` a server makes first, against a page on another site. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
  * input for the decoder.
  *
  * **The client's handshake** (§4.1). `websocketClientKey(nonce)` spells 16
@@ -988,6 +989,78 @@ export const websocketOfferedProtocols = (p: Http1Parser): string[] | null => {
     }
   }
   return out
+}
+
+/**
+ * Whether the request's `Origin` is one of `allowed`: the check a server makes
+ * before `acceptWebSocket` so that a page on another site cannot open a
+ * WebSocket that rides the user's cookies (cross-site WebSocket hijacking,
+ * RFC 6455 §10.2). A browser always sends `Origin` on the opening handshake
+ * and a page cannot change it; the handshake itself is not refused without
+ * one, because a client that is not a browser need not send it, so the check
+ * is the program's to opt into.
+ *
+ * An origin is compared whole, in any ASCII case, as the browser serializes
+ * it: `https://example.com`, or `https://example.com:8443` for a port that is
+ * not the scheme's default, with no path and no trailing slash. Answers false
+ * for a request with no `Origin` or with more than one, so a program that also
+ * serves clients that are not browsers lets those through itself. Allocates
+ * nothing.
+ *
+ * @param p the parser holding the request's head, as `Http1Connection.parser` does at `H1_REQUEST`
+ * @param allowed the origins to accept, each written as a browser sends it; "null" accepts an opaque origin, which any sandboxed page can send
+ * @returns true when exactly one `Origin` field is present and its value is one of `allowed`
+ */
+export const websocketOriginAllowed = (p: Http1Parser, allowed: string[]): boolean => {
+  const head: u8[] = p.head
+  const spans: i32[] = p.spans
+  let found: i32 = -1
+  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
+    if (websocketSpanIs(head, spans[4 * i], spans[4 * i + 1], "origin")) {
+      if (found >= 0) {
+        return false
+      }
+      found = i
+    }
+  }
+  if (found < 0) {
+    return false
+  }
+  for (let k: i32 = 0; k < toI32(allowed.length); k += 1) {
+    if (websocketSpanFolds(head, spans[4 * found + 2], spans[4 * found + 3], allowed[k])) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether `bytes[a .. b)` is `text` with ASCII letters in either case on
+ * either side, as an origin's scheme and host compare. Allocates nothing.
+ */
+const websocketSpanFolds = (bytes: u8[], a: i32, b: i32, text: string): boolean => {
+  const n: i32 = toI32(text.length)
+  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < n; k += 1) {
+    const at: i32 = a + k
+    if (at < 0 || at >= toI32(bytes.length) || k >= toI32(text.length)) {
+      return false
+    }
+    let c: i32 = toI32(bytes[at])
+    if (c >= 65 && c <= 90) {
+      c += 32
+    }
+    let w: i32 = toI32(text.charCodeAt(k))
+    if (w >= 65 && w <= 90) {
+      w += 32
+    }
+    if (c !== w) {
+      return false
+    }
+  }
+  return true
 }
 
 /** Whether `bytes[a .. b)` is `word`, which is lower case, in any ASCII case. Allocates nothing. */

@@ -43,42 +43,25 @@
 //   type-checks; `Ok` and `Err` come with the ambient builtins.
 
 import { Operands, splice, Walk } from "./emit-ts-edits"
-import {
-  FLAG_EXPORTED,
-  N_ARROW,
-  N_BLOCK,
-  N_CALL,
-  N_ENUM,
-  N_FALSE,
-  N_FUNCTION,
-  N_IDENT,
-  N_MEMBER,
-  N_METHOD,
-  N_NULL,
-  N_NUMBER,
-  N_STRING,
-  N_TRUE,
-  N_TYPE_REF,
-  Node,
-} from "./nodes"
+import { FLAG_EXPORTED, Node, NodeKind } from "./nodes"
 import { StringBuilder } from "./strings"
 
 /** The control row's rewrite of `node`, or `null` to leave it to the next row. */
 export const controlRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const kind = node.kind
-  if (kind === N_CALL) {
+  if (kind === NodeKind.Call) {
     return isOrReturn(walk, node) ? hoistOrReturn(walk, node, operands) : lazyArgument(walk, node, operands)
   }
-  if (kind === N_FUNCTION || kind === N_METHOD || kind === N_ARROW) {
+  if (kind === NodeKind.FunctionDecl || kind === NodeKind.Method || kind === NodeKind.Arrow) {
     return wrapBody(walk, node, operands)
   }
-  if (kind === N_ENUM) {
+  if (kind === NodeKind.Enum) {
     return enumText(walk, node)
   }
-  if (kind === N_TYPE_REF) {
+  if (kind === NodeKind.TypeRef) {
     return typeRef(walk, node, operands)
   }
-  if (kind === N_MEMBER) {
+  if (kind === NodeKind.Member) {
     return arenaMember(walk, node)
   }
   return null
@@ -88,7 +71,7 @@ export const controlRow = (walk: Walk, node: Node, operands: Operands): string |
 const isOrReturn = (walk: Walk, call: Node): boolean => {
   const callee = call.children[0]
   const named =
-    callee.kind === N_MEMBER &&
+    callee.kind === NodeKind.Member &&
     callee.text === "orReturn" &&
     call.children.length > 1 &&
     call.children[1].children.length === 0
@@ -126,7 +109,7 @@ const hoistOrReturn = (walk: Walk, call: Node, operands: Operands): string | nul
 const lazyArgument = (walk: Walk, call: Node, operands: Operands): string | null => {
   const callee = call.children[0]
   if (
-    callee.kind !== N_MEMBER ||
+    callee.kind !== NodeKind.Member ||
     (callee.text !== "expect" && callee.text !== "unwrapOr") ||
     call.children.length < 2 ||
     call.children[1].children.length !== 1 ||
@@ -136,12 +119,12 @@ const lazyArgument = (walk: Walk, call: Node, operands: Operands): string | null
   }
   const kind = call.children[1].children[0].kind
   if (
-    kind === N_IDENT ||
-    kind === N_NUMBER ||
-    kind === N_STRING ||
-    kind === N_TRUE ||
-    kind === N_FALSE ||
-    kind === N_NULL
+    kind === NodeKind.Ident ||
+    kind === NodeKind.Number ||
+    kind === NodeKind.String ||
+    kind === NodeKind.True ||
+    kind === NodeKind.False ||
+    kind === NodeKind.Null
   ) {
     return null
   }
@@ -170,7 +153,9 @@ const wrapBody = (walk: Walk, node: Node, operands: Operands): string | null => 
   const e = walk.temporary()
   const handler = ` catch (${e}) { return ${walk.helperName("caught")}(${e}) } }`
   const wrapped =
-    node.children[3].kind === N_BLOCK ? `{ try ${body}${handler}` : `{ try { return ${body} }${handler}`
+    node.children[3].kind === NodeKind.Block
+      ? `{ try ${body}${handler}`
+      : `{ try { return ${body} }${handler}`
   operands.texts[3] = wrapped
   operands.changed[3] = true
   operands.any = true
@@ -179,12 +164,17 @@ const wrapBody = (walk: Walk, node: Node, operands: Operands): string | null => 
 
 /** Whether `node`, outside the functions nested in it, calls a `Result`'s `orReturn`. */
 const callsOrReturn = (walk: Walk, node: Node): boolean => {
-  if (node.kind === N_CALL && isOrReturn(walk, node)) {
+  if (node.kind === NodeKind.Call && isOrReturn(walk, node)) {
     return true
   }
   for (const child of node.children) {
     const kind = child.kind
-    if (kind !== N_FUNCTION && kind !== N_METHOD && kind !== N_ARROW && callsOrReturn(walk, child)) {
+    if (
+      kind !== NodeKind.FunctionDecl &&
+      kind !== NodeKind.Method &&
+      kind !== NodeKind.Arrow &&
+      callsOrReturn(walk, child)
+    ) {
       return true
     }
   }
@@ -245,7 +235,7 @@ const typeRef = (walk: Walk, node: Node, operands: Operands): string | null => {
 const arenaMember = (walk: Walk, node: Node): string | null => {
   const receiver = node.children[0]
   if (
-    receiver.kind !== N_IDENT ||
+    receiver.kind !== NodeKind.Ident ||
     receiver.text !== "Arena" ||
     walk.program.nodeLocals[receiver.id] !== null
   ) {

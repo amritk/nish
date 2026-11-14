@@ -357,7 +357,9 @@ Decisions from the flip that still hold:
 3. **A function name stays unique across the program, exported or not.**
    `internal` linkage does not buy a second namespace, because the fact
    fixpoint is keyed by `FunctionSig.name`. The bootstrap found this within the
-   hour (`tests/link/duplicate_internal`).
+   hour (`tests/link/duplicate_internal`). A module qualifier for a private
+   symbol that would clash is proposed in
+   [wp57-module-scoped-names.md](wp57-module-scoped-names.md).
 
 The flip also produced two measurements. `bench/nbody` shrank from 12,000 to
 10,856 bytes through dead-stripping. A 4% `fib` "regression" was code layout:

@@ -40,6 +40,21 @@ plan, with the conventions every agent follows in §7 and a brief template in §
 and [`docs/roadmap/`](./docs/roadmap/index.md) holds each package's state, a box
 per stage, and the stage to do next.
 
+## Picking up a work package
+
+For a contributor, or an agent asked to "pick up WP50":
+
+1. Open the package's page, `docs/roadmap/wpN-*.md`. The work is the item
+   under **Next**; if that item is an *(open question)*, ask the maintainer
+   instead of starting.
+2. Read the section of the design note that **Next** links, the package's
+   plan in `.claude/plans/` if it has one, and the open pull requests and
+   issues that name the package, so the work is not done twice.
+3. In the pull request that lands the stage, tick its box on the page, move
+   **Next** on, update the page's "Done" count and its row in
+   [`docs/roadmap/index.md`](./docs/roadmap/index.md), and update that
+   page's Up next list if the order changed.
+
 ## Workflow
 
 ```bash
@@ -81,7 +96,7 @@ itself.
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
 | where the program can panic | `nish --emit-panics <file.json> <files>` | one JSON object in the file, every function with its panic sites, each with its kind and whether the checker proved it away ([LANGUAGE.md](./docs/LANGUAGE.md#panic-sites)); the IR is unchanged |
 | that a module cannot panic | `nish --deny-panics <files>`, or `"nish": { "noPanic": [...] }` in the root `package.json` | every unproven panic site in scope is an error (NL2457, or NL2458 at a call out of the scope) naming its kind and the guard that proves it; out of memory is allowed; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#the-no-panic-scope)) |
-| that a program keeps no unreachable memory | `nish --deny-retention <files>` | each arena-retention warning in the root package (NL9002, NL9003, NL9011, NL9016) is an error (NL2462) that keeps the warning's code and text; a dependency's stay warnings; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#retention-as-an-error)) |
+| that a program keeps no unreachable memory | `nish --deny-retention <files>` | each arena-retention warning in the root package (NL9002, NL9003, NL9011, NL9016, NL9018, NL9019) is an error (NL2462) that keeps the warning's code and text; a dependency's stay warnings; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#retention-as-an-error)) |
 | where each allocation's memory goes | `nish --emit-arena <file.json> <files>` | one JSON object in the file, every function with its allocation sites, each with its kind, its placement (`stack`, `pass`, `block`, `function`, `returned`, `caller`, `kept`, `unscoped`) and whether it accumulates pass after pass; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#arena-placement)) |
 | which loops and functions keep their memory, and why | `nish --explain-memory <files>` | one stderr line per loop whose passes keep what they allocate and per function with a scalar result that keeps it, each with the reason and where the memory goes back, then a summary count; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#explaining-kept-memory)) |
 | what the program can reach | `nish <files> --emit-capabilities <file.json>` | the capabilities every function, module and package can reach (files, processes, the network, the environment, the clock, entropy, signals, `exit`, C calls), each with a witness call chain, and each function's panic sites, as byte-stable JSON; `nish run --capabilities` prints the one-line summary on stderr before the program runs ([LANGUAGE.md](./docs/LANGUAGE.md#capabilities)) |
@@ -222,7 +237,7 @@ assumed:
   as the release-note heading. `node scripts/changelog-gen.mjs --check-subject`
   is the same rule `pr-title.yml` enforces. A break (`type!` or a
   `BREAKING CHANGE:` trailer) moves the minor, because the project stays on
-  0.x until its owner says otherwise: do not propose or cut 1.0.0, and do not
+  0.x until the maintainer says otherwise: do not propose or cut 1.0.0, and do not
   add a `Release-As:` trailer. The stability rule at the head of
   [LANGUAGE.md](./docs/LANGUAGE.md) says what counts as a break in the
   language.

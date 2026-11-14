@@ -123,11 +123,6 @@ database; a statement or connection used after it is freed answers
 `step()` answers `true` when a row is ready to read and `false` when the
 statement has finished. Columns count from 0.
 
-Check `step()`'s `Result` inside the loop, as the examples here do, rather
-than assigning it to a variable declared outside: a `Result` made in one pass
-of a loop does not yet survive the loop
-([#899](https://github.com/amritk/nish/issues/899)).
-
 | Read | Answers |
 | --- | --- |
 | `columnCount()` | the number of columns in a row |
@@ -252,8 +247,8 @@ of either side's own runs. Otherwise it is "not measurable".
 | Insert a post, autocommit | 14,213 ns | 14,078 ns | not measurable (commit cost dominates) |
 | Insert a post, in a transaction | 4,196 ns | 4,294 ns | not measurable |
 
-The figures are medians per call, on a four-core Xeon virtual machine. The
-difference includes the module's own checks.
+The figures are medians per call, on four cores. The difference includes the
+module's own checks.
 
 - **Reading many columns is where the module shows.** Reading the 20 newest
   posts reads 100 columns, steps 21 times and resets once, and costs under

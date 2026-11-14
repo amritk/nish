@@ -72,10 +72,17 @@ import {
   drawTextCentred,
   drawTextShadow,
   fontScaleFor,
-  gfxRgb,
   viewFor,
 } from "./break-gfx"
-import { GAME_PLAYING, BreakGame, drawBreakGame, newBreakGame, stepBreakGame } from "./break-game"
+import { rasterRgb } from "../std/raster"
+import {
+  GAME_PLAYING,
+  BreakGame,
+  aimBreakPaddle,
+  drawBreakGame,
+  newBreakGame,
+  stepBreakGame,
+} from "./break-game"
 import {
   BreakIntro,
   INTRO_DONE,
@@ -97,6 +104,7 @@ import {
   newBreakMenuWith,
   resolutionChoice,
   stepBreakMenu,
+  tapBreakMenu,
 } from "./break-menu"
 
 /** How long a toast stays up, in steps (two seconds). */
@@ -437,6 +445,50 @@ const directorStepMenu = (d: BreakDirector, input: StepInput, resolution: i32, s
   return true
 }
 
+/** The world x under frame pixel column `px` in `view`, shake left out; `view` has been drawn. */
+const directorWorldX = (view: View, px: f64): f64 => (px + 0.5 - view.offsetX) / view.scale + view.shakeX
+
+/** The world y under frame pixel row `py` in `view`, shake left out; `view` has been drawn. */
+const directorWorldY = (view: View, py: f64): f64 => (py + 0.5 - view.offsetY) / view.scale + view.shakeY
+
+/**
+ * Hold the paddle toward the frame pixel column `px`, through the view the
+ * game last drew with, as a finger held on the screen does; a negative `px`
+ * lets go. Outside a game, or before the game's first frame, it does nothing.
+ *
+ * @param d The director.
+ * @param px The frame column, or negative for none.
+ */
+export const aimBreakDirector = (d: BreakDirector, px: f64): void => {
+  if (d.scene !== SCENE_GAME) {
+    return
+  }
+  const view: View = d.game.view
+  aimBreakPaddle(d.game, px < 0.0 || view.scale <= 0.0 ? -1.0 : Math.max(directorWorldX(view, px), 0.0))
+}
+
+/**
+ * A tap at frame pixel `px`, `py`, as a finger's on a phone: on the menu it
+ * acts on the line under it (`tapBreakMenu`), through the view the menu last
+ * drew with, at the next step. Elsewhere a tap means what Space does, which
+ * the host is to send instead.
+ *
+ * @param d The director.
+ * @param px The frame column.
+ * @param py The frame row.
+ * @returns Whether the menu took the tap; false when the host is to press Space for it.
+ */
+export const tapBreakDirector = (d: BreakDirector, px: f64, py: f64): boolean => {
+  if (d.scene !== SCENE_MENU) {
+    return false
+  }
+  const view: View = d.menu.view
+  if (view.scale > 0.0) {
+    tapBreakMenu(d.menu, directorWorldX(view, px), directorWorldY(view, py))
+  }
+  return true
+}
+
 /**
  * One step: the director's keys, then the scene's step and what its answer
  * asks for. The director's keys are taken out of `input.events`.
@@ -567,7 +619,7 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
   const view: View = d.view
   viewFor(view, fb, 0.0, 0.0)
   const scale: i32 = Math.max(fontScaleFor(view, 6.0), 1)
-  const shadow: i32 = gfxRgb(0, 0, 0)
+  const shadow: i32 = rasterRgb(0, 0, 0)
   // The stats lines are built afresh each frame while F3 has them on; off,
   // nothing is built. They are a diagnostic, so the strings are not cached.
   if (d.settings.stats) {
@@ -579,7 +631,7 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
       2.0,
       scale,
       `${stats.tier}fps ${directorWhole(stats.rttMs)}ms ${directorWhole(stats.bytesPerSec / 1000.0)}kB/s ${directorWhole(stats.frameCostMs)}ms drop ${stats.dropped}`,
-      gfxRgb(255, 255, 255),
+      rasterRgb(255, 255, 255),
       shadow
     )
     // With no terminal there is no graphics backend or frame-rate setting to name: only the size.
@@ -592,13 +644,13 @@ const directorDrawText = (d: BreakDirector, fb: Framebuffer, stats: TermStats): 
       d.terminal
         ? `${breakGraphicsLabel(stats.backend)} ${fb.width}x${fb.height} ${fps === 0 ? "auto" : `${fps}`}fps`
         : `${fb.width}x${fb.height}`,
-      gfxRgb(200, 200, 200),
+      rasterRgb(200, 200, 200),
       shadow
     )
   }
   if (d.toastSteps > 0 && d.toast !== "") {
     blendRect(view, 0.0, WORLD_H - 14.0, WORLD_W, 14.0, shadow, 0.7)
-    drawTextCentred(view, WORLD_W / 2.0, WORLD_H - 11.0, scale, d.toast, gfxRgb(255, 230, 120), shadow)
+    drawTextCentred(view, WORLD_W / 2.0, WORLD_H - 11.0, scale, d.toast, rasterRgb(255, 230, 120), shadow)
   }
 }
 
