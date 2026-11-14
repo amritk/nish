@@ -1255,7 +1255,7 @@ const withSeedWpComments = (text) =>
 
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
-const RECURSION_LOOP = "emit self-recursive checked sums as a loop"
+const RECURSION_LOOP = "Emit self-recursive checked sums as a loop"
 const RECURSION_LOOP_WHY =
   "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
