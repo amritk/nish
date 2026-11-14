@@ -173,8 +173,8 @@ export const main = (): i32 => {
 
 This prints `ada`, `grace`, `total 121`, `x` and `y`, one to a line.
 
-There is no `entries()`, because Nish has no destructuring to take a
-`[key, value]` pair apart, and no `forEach`, because a method cannot take a
+There is no `entries()`, because a `[key, value]` pair holds two types, a
+tuple, which Nish does not have, and no `forEach`, because a method cannot take a
 function. Walking a `Map` directly would mean walking its entries, so it is
 refused with the rewrite: walk `keys()` and call `get`, or walk `values()`.
 

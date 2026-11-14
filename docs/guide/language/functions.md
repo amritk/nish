@@ -35,7 +35,8 @@ export const main = (): i32 => {
 - **A call passes every argument it has no default for**, each of exactly
   the parameter's type. See [Default and rest
   parameters](#default-and-rest-parameters); optional (`n?: i32`) and
-  destructured parameters are not supported.
+  destructured parameters are not supported: take the value, then
+  [destructure](destructuring.md) it in the body.
 - **A non-`void` function returns on every path**, or ends in
   `panic(message)` or `process.exit(code)`.
 

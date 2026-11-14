@@ -200,7 +200,7 @@ rejects. This table is the highest-value part of the page.
 | `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
-| `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
+| `[a, b] = [b, a]`, `const { x = 0 } = p`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring assignment is not supported` / `A default in a destructuring pattern is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
@@ -2279,7 +2279,13 @@ export const main = (): i32 => {
 - `let` / `const` need an initializer and take their type from it; an
   annotation must match **exactly**. `const` freezes the binding, not the
   contents: `xs[0] = 1` and `xs.push(1)` on a `const xs` are fine.
-- `var` is forbidden. Destructuring is not supported.
+- `var` is forbidden.
+- A local or a `for...of` head may destructure: `const { x, y: py } = p`,
+  `let [a, , c] = xs`, `for (const { x, y } of points)`. Each name is one
+  field read, or one bounds-checked element read (past the end panics; it is
+  never `undefined`). No defaults, rests, nested patterns, computed keys or
+  assignment patterns; no pattern over a `Map`, a `string`, a nullable value,
+  a parameter or a module constant.
 - **Semicolons are optional**, where TypeScript would insert one: at a line
   break, before `}` and at the end of the file. It is TypeScript's rule, so a
   line starting with `(` or `[` continues the one before it, and `return`
@@ -2807,8 +2813,8 @@ console.log(`${total}`);                 // 121
 
 - An iterator is not a value: `keys()` / `values()` stored, passed, returned or
   spread are refused. Pass the map itself and walk it where it is used.
-- `for (const e of m)` over a `Map` itself is refused, because it would need
-  `[key, value]` destructuring: walk `m.keys()` and call `m.get(k)`.
+- `for (const e of m)` over a `Map` itself is refused, because its
+  `[key, value]` pairs are two-type tuples: walk `m.keys()` and call `m.get(k)`.
 
 ```ts nish:err-body NL2375
 const m = new Map<string, i32>();

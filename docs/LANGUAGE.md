@@ -1275,9 +1275,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try` is refused by Nish on its own, destructuring is too but for
-`const [a, b] = await awaitAll(…)`, which declares fresh `const`s rather than
-storing to a variable, and an arrow may read a local it captures but never
+`try` is refused by Nish on its own, a destructuring pattern only ever
+declares fresh names rather than storing to a variable (a destructuring
+assignment is NL2771, [Destructuring declarations](#destructuring-declarations)),
+and an arrow may read a local it captures but never
 assign it (NL2586, [Function parameters](#function-parameters)), so no loop
 that compiles stores through any of them. A loop that holds a
 labelled statement or a labelled `break` or `continue` anywhere in its body,
@@ -7463,12 +7464,10 @@ loop body that is a single statement rather than a block is accepted
   *(CLI only)*) and takes its type from it; an annotation must match the
   initializer exactly (`Cannot initialize ... with ...`).
 - Declaring a `void`-typed variable is `Cannot declare a variable of type void`
-  *(CLI only)*. Destructuring is not supported: `const [a, b] = xs` is
-  `Destructuring is not supported` in a body and in a `for...of` head
-  (`reject_destructure_local`), but for the answers of
-  `const [a, b] = await awaitAll(f(x), g(y))`
-  ([Async functions](#async-functions-async-and-await)), and `Destructured constants are not supported`
-  at the top level (`reject_const_destructured`). `var` is forbidden
+  *(CLI only)*. A local may be a destructuring pattern, `const { x, y } = p`
+  or `let [a, b] = xs` ([Destructuring declarations](#destructuring-declarations));
+  a module constant may not: `Destructured constants are not supported`
+  (`reject_const_destructured`). `var` is forbidden
   (`tests/cases/reject_var_keyword`, `reject_var_in_for`).
 - `const` freezes the binding, not the contents: `xs[0] = 1` and
   `xs.push(1)` on a `const xs` are fine, `xs = []` is not
@@ -7476,6 +7475,60 @@ loop body that is a single statement rather than a block is accepted
   `reject_assign_const`, `reject_cf_compound_const`).
 - Locals live in an `alloca` slot; `opt -mem2reg` promotes them
   (`tests/cases/locals`).
+
+### Destructuring declarations
+
+A `const` or `let` in a function body, and the head of a `for...of`, may be an
+object or an array pattern. Each name it binds is one read off the value on
+the right, which is evaluated once and never copied:
+
+```ts
+const { x, y: py } = p        // x = p.x, py = p.y
+let [a, , c] = xs             // a = xs[0], c = xs[2]
+for (const { x, y } of points) { ... }
+```
+
+- **An object pattern** reads a class or interface value. Each entry is a
+  field's name, `x`, or a field renamed, `y: py`; the name's type is the
+  field's. A missing field is `` Cannot destructure field `z`: Point has no
+  such field `` (NL2776, `reject_destructure_field`).
+- **An array pattern** reads an array. Each name is one element read by its
+  position, with the bounds check of `xs[i]`; a hole, `[a, , c]`, skips a
+  position. An element past the end panics, `index out of range: 5 >= 3`
+  (`destructure_out_of_range`), where TypeScript would bind `undefined`: a
+  name in Nish always holds a value of its type.
+- **A `for...of` head** destructures each element of an array
+  (`destructure_for_of`). Over a `Map`, a `Set` or an iterator it is NL2783
+  (`reject_destructure_for_of_set`); a `Map`'s entries are `[key, value]`
+  pairs of two types, a tuple, which this version does not have
+  (`reject_map_iter_entries`).
+- A name is a fresh local: `let` names may be assigned, `const` names may
+  not. A struct's fields are read through its pointer, so
+  `const { x } = p` on a stack-allocated `p` costs one load
+  (`destructure_stack`).
+
+Refused, each with its own diagnostic and test:
+
+| Pattern | Diagnostic | Test |
+| --- | --- | --- |
+| `[a, b] = xs`, `({ x } = p)` (assignment) | NL2771 `Destructuring assignment is not supported` | `reject_destructure_assignment` |
+| `{ x = 0 }`, `[a = 1]` (a default) | NL2772 | `reject_destructure_default` |
+| `[a, ...rest]`, `{ x, ...others }` | NL2773 | `reject_destructure_rest` |
+| `{ p: { x } }`, `[[a]]` (nested) | NL2774 | `reject_destructure_nested` |
+| `{ ["x"]: a }`, `{ "x": a }` | NL2775 | `reject_destructure_key` |
+| a nullable value, `Point \| null` | NL2777, narrow it first | `reject_destructure_nullable` |
+| a `Map` | NL2778, read each value with `get` | `reject_destructure_map` |
+| a `string` | NL2779, read each character by its index | `reject_destructure_string` |
+| an object pattern over a number | NL2780 | `reject_destructure_object_of_number` |
+| an array pattern over an object | NL2781 | `reject_destructure_array_of_object` |
+| `let { x }: Point;` (no initializer) | NL2782 | `reject_destructure_uninitialized` |
+| a parameter, `({ x }: Point) => x` | `Destructured parameters are not supported` | `reject_param_destructured` |
+| a module constant | `Destructured constants are not supported` | `reject_const_destructured` |
+
+A pattern over `await` is refused with `Destructuring is not supported`
+(`nl2193_destructuring_local`), but for the answers of
+`const [a, b] = await awaitAll(f(x), g(y))`
+([Async functions](#async-functions-async-and-await)).
 
 ### Expression statements
 
@@ -13123,7 +13176,7 @@ export const main = (): i32 => {
     | anywhere else, a dropped result or an uncalled `m.keys` included | `` can only be the iterable of a `for...of` `` | `reject_map_iter_statement`, `reject_map_iter_uncalled`, `reject_map_values` (NL2358) |
 
     `for (const e of m)` over a `Map` itself would walk `entries()`, whose
-    `[key, value]` pairs need destructuring:
+    `[key, value]` pairs are two-type tuples:
     `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
     rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
     It reports once: the variable is an error that its body reads without a
@@ -16079,11 +16132,14 @@ messages are exact for the cases cited; other entries quote the checker
   `Functions must have a body` (`nl2204_function_without_body`)
 - **`export default function ()`**: `Functions must be named`
   (`reject_fn_anonymous`)
-- **a destructuring pattern, but for `const [a, b] = await awaitAll(…)`**:
+- **a destructuring pattern as a parameter or a module constant, over
+  `await` but for `const [a, b] = await awaitAll(…)`, or with a default, a
+  rest, a nested pattern or a computed key**:
   `Destructured constants are not supported` /
   `Destructured parameters are not supported` /
-  `Destructuring is not supported` (a local) (`reject_const_destructured`,
-  `reject_param_destructured`, `reject_destructure_local`)
+  `Destructuring is not supported` / NL2771 to NL2783
+  (`reject_const_destructured`, `reject_param_destructured`,
+  `reject_destructure_*`; [Destructuring declarations](#destructuring-declarations))
 - **an optional parameter; a default or rest outside a function, method,
   constructor or `const` arrow; a spread argument**:
   `Optional parameters are not supported` /

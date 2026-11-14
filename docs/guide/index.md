@@ -130,6 +130,7 @@ and the language specification.
   [functions](language/functions.md), [control flow](language/control-flow.md),
   [arrays and strings](language/arrays-and-strings.md),
   [classes and interfaces](language/classes-and-interfaces.md),
+  [destructuring](language/destructuring.md),
   [discriminated unions](language/unions.md),
   [errors and `Result`](language/errors.md),
   [maps and sets](language/maps-and-sets.md), [generics](language/generics.md),
