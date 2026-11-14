@@ -38,6 +38,7 @@ import {
   compoundIntegerOpcode,
   emitBitwiseCombine,
   emitIntBinary,
+  floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
 import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
@@ -61,6 +62,7 @@ import {
 } from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
+import { irEscapeByte, StringBuilder } from "./strings"
 import { elementTbaa, headerTbaa, sliceTbaa } from "./tbaa"
 import {
   accessAlign,
@@ -72,6 +74,7 @@ import {
   T_I32,
   T_STRING,
   T_U32,
+  T_U8,
   TypeTable,
 } from "./types"
 
@@ -2153,6 +2156,60 @@ export const storageGlobals = (emitter: Emitter, info: ConstInfo, traces: RootTr
   emitter.declareGlobal(
     `@${info.storageSymbol} = ${info.exported ? "" : "internal "}global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
   )
+}
+
+/**
+ * The two globals of constant table `info` (`docs/LANGUAGE.md`, "Constant
+ * tables"): its folded elements and a header over them, both `constant`, so
+ * the table is read-only data the optimiser may read through, and no code
+ * runs to build it. A byte table is a `c"…"` string, as LLVM prints one. The
+ * data is `private`: nothing but the header names it. The header is
+ * `internal` unless another module imports it, the storage rule; its symbol
+ * is `nish_const_<module>_<name>` (`Compilation.nameStorage`).
+ */
+export const tableGlobals = (emitter: Emitter, info: ConstInfo): void => {
+  const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
+  const data = `[${info.intValue} x ${slot}]`
+  emitter.declareType(ARRAY_TYPE)
+  emitter.declareGlobal(
+    `@${info.storageSymbol}.data = private unnamed_addr constant ${data} ${tableInitializer(info, slot)}, align 16`
+  )
+  emitter.declareGlobal(
+    `@${info.storageSymbol} = ${info.exported ? "" : "internal "}constant ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
+  )
+}
+
+/** A constant table's elements as an LLVM array constant: `c"\\00\\01"` for bytes, `[i32 1, i32 2]` otherwise. */
+const tableInitializer = (info: ConstInfo, slot: string): string => {
+  const out = new StringBuilder()
+  if (info.storageElem === T_U8) {
+    out.add('c"')
+    for (const v of info.tableInts) {
+      irEscapeByte(out, toI32(v))
+    }
+    out.add('"')
+    return out.toText()
+  }
+  out.add("[")
+  let i = 0
+  const n = info.storageElem === T_F64 ? info.tableFloats.length : info.tableInts.length
+  while (i < n) {
+    if (i > 0) {
+      out.add(", ")
+    }
+    out.add(slot)
+    out.add(" ")
+    out.add(info.storageElem === T_F64 ? floatText(info.tableFloats[i], T_F64) : `${info.tableInts[i]}`)
+    i = i + 1
+  }
+  out.add("]")
+  return out.toText()
+}
+
+/** The table another module declares, as this module reaches it: by its header. */
+export const tableDeclaration = (emitter: Emitter, info: ConstInfo): void => {
+  emitter.declareType(ARRAY_TYPE)
+  emitter.declareGlobal(`@${info.storageSymbol} = external constant ${ARRAY_STRUCT}, align 8`)
 }
 
 /** The storage another module declares, as this module reaches it: by its header. */

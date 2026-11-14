@@ -22,7 +22,7 @@ import {
 import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression, WANT_INFERRED } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
-import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
+import { enumMemberValue, foldConstant, isTableElement, parseIntegerLiteral } from "./constants"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 import {
   isBuiltinSpecifier,
@@ -938,6 +938,14 @@ export class Checker {
       const type = resolveType(decl.children[1], this.ctx)
       if (
         type !== T_ERROR &&
+        this.ctx.table.isArray(type) &&
+        unwrapParens(decl.children[2]).kind === NodeKind.Array
+      ) {
+        this.collectTable(decl, name, exported, type)
+        continue
+      }
+      if (
+        type !== T_ERROR &&
         type !== T_I32 &&
         type !== T_I64 &&
         type !== T_F64 &&
@@ -947,7 +955,7 @@ export class Checker {
         const spelled = this.ctx.table.typeName(type)
         this.ctx.error(
           decl.children[1],
-          `Module constant \`${name}\` must be a number, boolean, or string, not ${spelled}; there is no top-level code to build anything else`
+          `Module constant \`${name}\` must be a number, boolean, string, or a \`readonly\` array of numbers written out as a literal, not ${spelled}; there is no top-level code to build anything else`
         )
         continue
       }
@@ -960,6 +968,48 @@ export class Checker {
       info.scope = this.program
       this.program.addConstant(info)
     }
+  }
+
+  /**
+   * `const TAB: readonly u8[] = [0, 1, 2]` at the top level: a constant
+   * table (`docs/LANGUAGE.md`, "Constant tables"). Its elements are folded
+   * with the other constants, once every module has its signatures.
+   */
+  collectTable(decl: Node, name: string, exported: boolean, type: i32): void {
+    const table = this.ctx.table
+    const elem = table.refOf(type)
+    if (!isTableElement(elem)) {
+      this.ctx.error(
+        decl.children[1],
+        `Constant table \`${name}\` cannot hold ${table.typeName(elem)}: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value`
+      )
+      return
+    }
+    const readonly = `readonly ${table.typeName(elem)}[]`
+    if (!table.isReadonlyArray(type)) {
+      this.ctx.error(
+        decl.children[1],
+        `Constant table \`${name}\` must be declared \`${readonly}\`: its elements are constant data that nothing may write, and a \`${table.typeName(type)}\` could be written through`
+      )
+      return
+    }
+    if (unwrapParens(decl.children[2]).children.length === 0) {
+      this.ctx.error(
+        decl.children[2],
+        `Constant table \`${name}\` has no elements; a table holds at least one`
+      )
+      return
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
+      return
+    }
+    const info = new ConstInfo(name, type, decl, this.program.source)
+    info.exported = exported
+    info.scope = this.program
+    info.table = true
+    info.storageElem = elem
+    this.program.addConstant(info)
   }
 
   /**
