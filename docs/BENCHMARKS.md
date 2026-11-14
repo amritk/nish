@@ -2191,6 +2191,10 @@ The async-db medians, before → after: `/queries` 25,848, 31,287, 30,373 → 26
 
 **What is left.** By cell: `/plaintext` is 20% to 36% below the explicit entry at 256 to 4,096 connections against bands of 1.7% to 6.2%, and `/json` is 3.6% to 9.0% below at 16, 128 and 256 against bands of 1.3% to 5.2%; `/json` at 512 cannot be judged in this container. By frame: the async entry runs 2,043 more instructions a request than the explicit one on `plaintext` and 2,429 more on `json`, down from 2,227 and 2,539. Net of the explicit loop's own dispatch (about 815 and 1,015), the serve layer (`serveOn`'s and `serveTask`'s resumes and `ServeConns`) is still about 1,600 and 2,060 of it, the router about 430 and 330, and the task region and executor about 225. Taking the `HttpHandler` layer out was one step of the hand-off redesign [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) calls for; the two resumes per request and the router's walk are the rest of it.
 
+## TechEmpower: the gate after the resume build (WP49 stage 6)
+
+This re-runs the gate after #1621 (measurement in progress).
+
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 
