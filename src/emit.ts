@@ -295,13 +295,13 @@ export class Emitter {
   current: FunctionFacts
   /** Its signature, which is how the prologue finds the class `this` belongs to. */
   currentSig: FunctionSig | null
+  /** Issue #1582: the loop a self-recursive checked sum is emitted as (`src/emit-accumulate.ts`), or null. */
+  accumulator: RecursionLoop | null
   /**
    * WP6: node id of the call this function's `return` lowers as a tail call,
    * or `-1` for none. See `planTailCall`.
    */
   tailCallId: i32
-  /** Issue #1582: the loop a self-recursive checked sum is emitted as (`src/emit-accumulate.ts`), or null. */
-  accumulator: RecursionLoop | null
   /** The node `emitUncopied` is emitting, whose guarded string read `guardedRead` leaves uncopied; `-1` for none. */
   uncopied: i32
   /** The index of `@llvm.global_ctors` in the module's globals, or `-1` before the first constructor. */

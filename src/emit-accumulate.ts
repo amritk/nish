@@ -169,12 +169,16 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   const operands: string[] = []
   const names = acc.sig.paramNames
   for (let i = 0; i < names.length; i++) {
+    const name = names[i]
+    const type = i < acc.types.length ? acc.types[i] : "i32"
     const passed: string[] = []
     for (const args of acc.args) {
-      passed.push(args[i])
+      if (i < args.length) {
+        passed.push(args[i])
+      }
     }
-    lines.push(headPhi(acc, paramValue(names[i]), acc.types[i], `%${incomingName(names[i])}`, passed))
-    operands.push(`${acc.types[i]} ${paramValue(names[i])}`)
+    lines.push(paramPhi(acc, name, type, passed))
+    operands.push(paramOperand(name, type))
   }
   const sums: string[] = []
   for (let e = 0; e < acc.edges.length; e++) {
@@ -214,6 +218,13 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   emitter.accumulator = null
 }
 
+/** The header's `phi` of parameter `name`: the entry passes the incoming value, a step what it passed. */
+const paramPhi = (acc: RecursionLoop, name: string, type: string, passed: string[]): string =>
+  headPhi(acc, paramValue(name), type, `%${incomingName(name)}`, passed)
+
+/** Parameter `name` as an operand of the cold call. */
+const paramOperand = (name: string, type: string): string => `${type} ${paramValue(name)}`
+
 /** The header's `phi` named `value`: `entry` passes `initial`, edge `e` passes `incoming[e]`. */
 const headPhi = (
   acc: RecursionLoop,
@@ -222,11 +233,11 @@ const headPhi = (
   initial: string,
   incoming: string[]
 ): string => {
-  let line = `${value} = phi ${type} [ ${initial}, %${acc.entry} ]`
-  for (let e = 0; e < acc.edges.length; e++) {
-    line = `${line}, [ ${incoming[e]}, %${acc.edges[e]} ]`
+  const parts: string[] = [`${value} = phi ${type} [ ${initial}, %${acc.entry} ]`]
+  for (let e = 0; e < acc.edges.length && e < incoming.length; e++) {
+    parts.push(`, [ ${incoming[e]}, %${acc.edges[e]} ]`)
   }
-  return line
+  return parts.join("")
 }
 
 /**
@@ -259,18 +270,14 @@ const foldColdTest = (fn: IRFunction, head: IRBlock, body: string[], call: IRBlo
   if (whenTrue === whenFalse) {
     return false
   }
-  let k = 0
-  while (k < n - 1) {
+  for (let k = 0; k < n - 1 && k < body.length; k++) {
     if (!onlyComputes(body[k])) {
       return false
     }
-    k = k + 1
   }
   const exit = fn.newBlock("rec.exit")
-  k = 0
-  while (k < n - 1) {
+  for (let k = 0; k < n - 1 && k < body.length; k++) {
     head.instructions.push(body[k])
-    k = k + 1
   }
   head.instructions.push(`%rec.leave = or i1 ${flag}, %rec.cold`)
   head.instructions.push(`br i1 %rec.leave, label %${exit.label}, label %${whenFalse}`)
@@ -355,14 +362,16 @@ const renamePhiEdges = (block: IRBlock, from: string, to: string): void => {
   for (const line of block.instructions) {
     let text = line
     if (text.indexOf(" = phi ") >= 0) {
-      let done = ""
+      const parts: string[] = []
       let at = text.indexOf(old)
-      while (at >= 0) {
-        done = `${done}${text.substring(0, at)}, %${to} ]`
+      while (at >= 0 && at <= text.length) {
+        parts.push(text.substring(0, at))
+        parts.push(`, %${to} ]`)
         text = text.substring(at + old.length)
         at = text.indexOf(old)
       }
-      text = `${done}${text}`
+      parts.push(text)
+      text = parts.join("")
     }
     updated.push(text)
   }
