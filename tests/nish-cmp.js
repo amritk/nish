@@ -528,6 +528,7 @@ const pageMath = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
   )
+const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1218,6 +1219,9 @@ const quicRebind = byFinding(
  * names its title; each entry's `why` says which fix moved the file.
  */
 const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+
+/** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
+const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
 
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
@@ -6416,6 +6420,13 @@ const DECLARED = [
       "tests/link/std_yaml_json/main.ts": ["main.h"],
     }
   ),
+  ...byFinding(YAML_LOAD_CUTS)(
+    "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickCount` and `quickPart` over `quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
+    {
+      "tests/link/std_yaml_json_golden/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+    }
+  ),
   ...byFinding(SECURITY_PATHS)(
     "X509Certificate gains `spki`, PkiTrustStore gains a `distrusted` set and HttpOptions gains `distrustSpkiSha256`, so every module laying them out moves and a program naming `PKI_ERR_DISTRUSTED` or `spki` compiles only under the candidate",
     {
@@ -6460,6 +6471,19 @@ const DECLARED = [
     "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
     { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
   ),
+  // WP58 S1: a discriminated union is a generic's type argument, which the
+  // seed refuses as NL2533, as it refuses a class passed where a generic
+  // call bound `T` to an interface the class implements.
+  ...[
+    "tests/cases/union_generic_call.ts",
+    "tests/cases/union_result.ts",
+    "tests/cases/generic_interface_class_arg.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: UNION_GENERICS,
+    why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
 ]
 
 /**

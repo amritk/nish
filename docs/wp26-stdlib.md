@@ -135,7 +135,9 @@ builtin.
 ### 3e. One flat symbol namespace
 
 A function name is unique within its package whether or not it is exported,
-because the attribute fixpoint is keyed by symbol (`tests/link/duplicate_internal`).
+because the attribute fixpoint is keyed by symbol (`tests/link/duplicate_internal`;
+[wp57-module-scoped-names.md](wp57-module-scoped-names.md) proposes relaxing it
+for private functions).
 When `std/` landed it shared its importer's namespace, so a program declaring
 its own `isBlank` could not import `std/text`. Since WP21 S2 a module reached
 as `nish/<module>` is package `nish` — decided by the specifier, not by the

@@ -415,6 +415,8 @@ export class BreakGame {
   prevPaddleX: f64
   /** The paddle's speed, signed. */
   paddleV: f64
+  /** The world x a pointer holds the paddle toward, or negative when none does; set by `aimBreakPaddle`. */
+  paddleAim: f64
   /** The wide power-up's share of the paddle, eased: 1 normal, 1.5 wide. */
   widthScale: f64
   prevWidthScale: f64
@@ -505,6 +507,7 @@ export class BreakGame {
     this.paddleX = 160.0
     this.prevPaddleX = 160.0
     this.paddleV = 0.0
+    this.paddleAim = -1.0
     this.widthScale = 1.0
     this.prevWidthScale = 1.0
     this.speed = 90.0
@@ -806,7 +809,12 @@ const stepPlay = (game: BreakGame, input: StepInput): void => {
     game.phase = PHASE_PAUSE
     return
   }
-  movePaddle(game, heldDirection(input))
+  const dir: i32 = heldDirection(input)
+  if (dir === 0 && game.paddleAim >= 0.0) {
+    aimPaddle(game)
+  } else {
+    movePaddle(game, dir)
+  }
   if (pressed(input, KEY_SPACE, 0) || pressed(input, KEY_UP, 0)) {
     launch(game)
   }
@@ -843,6 +851,23 @@ const movePaddle = (game: BreakGame, dir: i32): void => {
       game.paddleV = d * Math.min(Math.abs(game.paddleV) + PADDLE_ACCEL * DT, PADDLE_MAX)
     }
   }
+  placePaddle(game)
+}
+
+/**
+ * A pointer holds the paddle: it heads for `paddleAim` at up to `PADDLE_MAX`,
+ * stopping on it rather than passing it, so a still finger holds it still.
+ */
+const aimPaddle = (game: BreakGame): void => {
+  const half: f64 = paddleWidth(game) / 2.0
+  const reach: f64 = PADDLE_MAX * DT
+  const gap: f64 = clamp(game.paddleAim, FIELD_LEFT + half, FIELD_RIGHT - half) - game.paddleX
+  game.paddleV = clamp(gap, -reach, reach) / DT
+  placePaddle(game)
+}
+
+/** Move the paddle a step at its speed, held inside the walls (where it stops), and carry stuck balls with it. */
+const placePaddle = (game: BreakGame): void => {
   const half: f64 = paddleWidth(game) / 2.0
   game.paddleX = clamp(game.paddleX + game.paddleV * DT, FIELD_LEFT + half, FIELD_RIGHT - half)
   if (game.paddleX <= FIELD_LEFT + half || game.paddleX >= FIELD_RIGHT - half) {
@@ -854,6 +879,18 @@ const movePaddle = (game: BreakGame, dir: i32): void => {
       b.y = PADDLE_Y - BALL_R
     }
   }
+}
+
+/**
+ * Hold the paddle toward world `x`, as a finger or a mouse on the field does:
+ * while it is set and no arrow is held, the paddle heads there at up to its
+ * top speed instead of following the keys. A negative `x` lets go.
+ *
+ * @param game The game whose paddle is held.
+ * @param x The world x to head for, or negative for none.
+ */
+export const aimBreakPaddle = (game: BreakGame, x: f64): void => {
+  game.paddleAim = x < 0.0 ? -1.0 : x
 }
 
 /** Send every stuck ball off the paddle, angled by where it sits; a centred serve leans a little at random. */

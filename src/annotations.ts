@@ -822,12 +822,6 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
     return ctx.errorType(node, secretContainerMessage(spelled))
   }
-  if (ctx.table.holdsUnion(ok) || ctx.table.holdsUnion(err)) {
-    return ctx.errorType(
-      node,
-      unionArgumentMessage(`Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`)
-    )
-  }
   if (resultArmIsReference(ctx, ok) || resultArmIsReference(ctx, err)) {
     const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
     return ctx.errorType(
@@ -845,16 +839,6 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
 }
 
 const UNION_REFUSED: string = "Union types other than `T | null` are forbidden in "
-
-/**
- * A union where a type argument would carry it: `Box<Shape>`,
- * `Result<Shape, string>`, or a type parameter a call binds to one. A `Map`'s
- * value is the one type argument a union may be. Narrower than TypeScript,
- * which allows all of them (docs/LANGUAGE.md, Discriminated unions).
- */
-export const unionArgumentMessage = (spelled: string): string =>
-  `\`${spelled}\` cannot take a union as a type argument: in this version a union is the type of a local, ` +
-  "a parameter, a field, a return value, an array element or a `Map`'s value, and not of a generic's, a `Set`'s or a `Result`'s type argument"
 
 /**
  * `T | null`, or a discriminated union of tagged classes and interfaces,
