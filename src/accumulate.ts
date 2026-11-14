@@ -49,23 +49,22 @@ import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig, ROLE_FUNCTION } from ".
 import { STORAGE_PARAM } from "./symbols"
 import { T_I32 } from "./types"
 
-/** What `tailKind` found in one tail position. */
-const TAIL_BASE: i32 = 0
-const TAIL_STEP: i32 = 1
-const TAIL_BOTH: i32 = 2
+/** What `tailKind` found in one tail position, as a bitmask. */
+const TAIL_BASE: i32 = 1
+const TAIL_STEP: i32 = 2
+/** `TAIL_BASE | TAIL_STEP`: a constant may not use `|`. */
+const TAIL_BOTH: i32 = 3
 
 /**
  * Record `sig` as one loop, with its steps and splits, when its body is the
  * shape the comment above describes. `body` is the checked body.
  */
 export const recordAccumulation = (ctx: CheckContext, sig: FunctionSig, body: Node): void => {
-  if (!signatureQualifies(ctx, sig)) {
+  if (!signatureQualifies(ctx, sig) || containsArrow(body)) {
     return
   }
   const steps: Node[] = []
   const splits: Node[] = []
-  let sawStep = false
-  let sawBase = false
   const returns: Node[] = []
   if (body.kind === NodeKind.Block) {
     if (!collectTailValues(body, returns)) {
@@ -74,12 +73,11 @@ export const recordAccumulation = (ctx: CheckContext, sig: FunctionSig, body: No
   } else {
     returns.push(body)
   }
+  let seen = 0
   for (const value of returns) {
-    const kind = tailKind(ctx, sig, value, steps, splits)
-    sawStep = sawStep || kind === TAIL_STEP || kind === TAIL_BOTH
-    sawBase = sawBase || kind === TAIL_BASE || kind === TAIL_BOTH
+    seen = seen | tailKind(ctx, sig, value, steps, splits)
   }
-  if (!sawStep || !sawBase) {
+  if (seen !== TAIL_BOTH) {
     return
   }
   const table = ctx.program.accumulate
@@ -135,22 +133,20 @@ const collectTailValues = (node: Node, out: Node[]): boolean => {
       return true
     case NodeKind.If:
       return (
-        !containsArrow(node.children[0]) &&
         collectTailValues(node.children[1], out) &&
         (node.children.length < 3 || collectTailValues(node.children[2], out))
       )
     case NodeKind.Return: {
       const value = node.children[0]
-      if (value.kind === NodeKind.Empty || containsArrow(value)) {
+      if (value.kind === NodeKind.Empty) {
         return false
       }
       out.push(value)
       return true
     }
     case NodeKind.Var:
-      return (node.flags & (FLAG_USING | FLAG_DEFER)) === 0 && !containsArrow(node)
+      return (node.flags & (FLAG_USING | FLAG_DEFER)) === 0
     case NodeKind.ExprStmt:
-      return !containsArrow(node)
     case NodeKind.Empty:
       return true
     default:
@@ -185,11 +181,11 @@ const tailKind = (ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   if (inner.kind === NodeKind.Conditional && isPlainI32(ctx, inner)) {
     const a = tailKind(ctx, sig, inner.children[1], steps, splits)
     const b = tailKind(ctx, sig, inner.children[2], steps, splits)
-    if (a === TAIL_BASE && b === TAIL_BASE) {
-      return TAIL_BASE
+    const kind = a | b
+    if (kind !== TAIL_BASE) {
+      splits.push(inner)
     }
-    splits.push(inner)
-    return a === TAIL_STEP && b === TAIL_STEP ? TAIL_STEP : TAIL_BOTH
+    return kind
   }
   if (isStep(ctx, sig, inner)) {
     steps.push(inner)

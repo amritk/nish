@@ -16,35 +16,34 @@ import FunctionSig from "./program" -> struct FunctionSig
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import T_I32 from "./types" -> const T_I32
-const TAIL_BASE: i32 = 0
-const TAIL_STEP: i32 = 1
-const TAIL_BOTH: i32 = 2
+const TAIL_BASE: i32 = 1
+const TAIL_STEP: i32 = 2
+const TAIL_BOTH: i32 = 3
 function recordAccumulation(ctx: CheckContext, sig: FunctionSig, body: Node): void -> @recordAccumulation [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via tailKind
   escaping: body
-  calls: FusionTable.record collectTailValues nish_array_grow signatureQualifies stepCall tailKind
+  calls: FusionTable.record collectTailValues containsArrow nish_array_grow signatureQualifies stepCall tailKind
   pointer ctx: size=344 writesThrough=false captured=false passedTo=signatureQualifies#0 tailKind#0 stepCall#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=signatureQualifies#1 tailKind#1 stepCall#1
-  pointer body: size=40 writesThrough=true captured=true passedTo=collectTailValues#0
+  pointer body: size=40 writesThrough=true captured=true passedTo=containsArrow#0 collectTailValues#0
   stackSites=3 stackLocals=3
   callee +0:8 signatureQualifies -> @signatureQualifies
+  callee +0:40 containsArrow -> @containsArrow
   local +3:9 steps: Node[] (const)
   local +4:9 splits: Node[] (const)
-  local +5:7 sawStep: boolean (let)
-  local +6:7 sawBase: boolean (let)
-  local +7:9 returns: Node[] (const)
-  callee +9:10 collectTailValues -> @collectTailValues
-  local +15:14 value: Node (const)
-  local +16:11 kind: i32 (const)
-  callee +16:18 tailKind -> @tailKind
-  local +23:9 table: FusionTable (const)
-  callee +24:3 FusionTable.record -> @FusionTable.record
-  local +25:14 step: Node (const)
+  local +5:9 returns: Node[] (const)
+  callee +7:10 collectTailValues -> @collectTailValues
+  local +13:7 seen: i32 (let)
+  local +14:14 value: Node (const)
+  callee +15:19 tailKind -> @tailKind
+  local +20:9 table: FusionTable (const)
+  callee +21:3 FusionTable.record -> @FusionTable.record
+  local +22:14 step: Node (const)
+  callee +23:5 FusionTable.record -> @FusionTable.record
+  callee +23:37 stepCall -> @stepCall
+  local +25:14 split: Node (const)
   callee +26:5 FusionTable.record -> @FusionTable.record
-  callee +26:37 stepCall -> @stepCall
-  local +28:14 split: Node (const)
-  callee +29:5 FusionTable.record -> @FusionTable.record
 function signatureQualifies(ctx: CheckContext, sig: FunctionSig): boolean -> @signatureQualifies
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.defaultOf FunctionSig.foreign FunctionSig.isAsync TypeTable.isRanged TypeTable.isResult isGenericFunction
@@ -62,19 +61,15 @@ function signatureQualifies(ctx: CheckContext, sig: FunctionSig): boolean -> @si
 function collectTailValues(node: Node, out: Node[]): boolean -> @collectTailValues
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: collectTailValues containsArrow nish_array_grow nish_panic_index
-  pointer node: size=40 writesThrough=false captured=false passedTo=containsArrow#0 containsArrow#0
+  calls: collectTailValues nish_array_grow nish_panic_index
+  pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=collectTailValues#1 collectTailValues#1 collectTailValues#1
   stackSites=0 stackLocals=0
-  local -17:18 statement: Node (const)
-  callee -16:14 collectTailValues -> @collectTailValues
-  callee -9:10 containsArrow -> @containsArrow
+  local -16:18 statement: Node (const)
+  callee -15:14 collectTailValues -> @collectTailValues
   callee -8:9 collectTailValues -> @collectTailValues
   callee -7:38 collectTailValues -> @collectTailValues
   local -4:13 value: Node (const)
-  callee -3:44 containsArrow -> @containsArrow
-  callee +4:65 containsArrow -> @containsArrow
-  callee +6:15 containsArrow -> @containsArrow
 function containsArrow(node: Node): boolean -> @containsArrow
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: containsArrow
@@ -84,7 +79,7 @@ function containsArrow(node: Node): boolean -> @containsArrow
   callee +1:9 containsArrow -> @containsArrow
 function tailKind(ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[], splits: Node[]): i32 -> @tailKind
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: value
   calls: isPlainI32 isStep nish_array_grow nish_panic_index tailKind
   pointer ctx: size=344 writesThrough=false captured=false passedTo=isPlainI32#0 isPlainI32#0 tailKind#0 tailKind#0 isStep#0
@@ -93,14 +88,15 @@ function tailKind(ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   pointer steps: size=0 writesThrough=true captured=false passedTo=tailKind#3 tailKind#3
   pointer splits: size=0 writesThrough=true captured=false passedTo=tailKind#4 tailKind#4
   stackSites=0 stackLocals=0
-  local -10:7 inner: Node (let)
-  callee -9:43 isPlainI32 -> @isPlainI32
-  callee -6:46 isPlainI32 -> @isPlainI32
-  local -5:11 a: i32 (const)
-  callee -5:15 tailKind -> @tailKind
-  local -4:11 b: i32 (const)
+  local -9:7 inner: Node (let)
+  callee -8:43 isPlainI32 -> @isPlainI32
+  callee -5:46 isPlainI32 -> @isPlainI32
+  local -4:11 a: i32 (const)
   callee -4:15 tailKind -> @tailKind
-  callee +3:7 isStep -> @isStep
+  local -3:11 b: i32 (const)
+  callee -3:15 tailKind -> @tailKind
+  local -2:11 kind: i32 (const)
+  callee +4:7 isStep -> @isStep
 function isStep(ctx: CheckContext, sig: FunctionSig, node: Node): boolean -> @isStep
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isPlainI32 isSelfCall isStable nish_panic_index nish_str_eq

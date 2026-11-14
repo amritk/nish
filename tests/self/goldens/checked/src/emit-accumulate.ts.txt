@@ -3,6 +3,7 @@
 entry: src/emit-accumulate.ts src/emit-control.ts src/emit-arrays.ts src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-root.ts src/ice.ts src/branding.ts src/codes.ts src/program.ts src/region.ts src/std-modules.ts src/paths.ts src/strings.ts src/context.ts src/diagnostics.ts std/cli.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/annotations.ts src/simd.ts src/builtins.ts src/expressions.ts src/constants.ts src/async-check.ts src/emit-util.ts src/region-rules.ts src/escape.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/emit-classes.ts src/tbaa.ts src/emit-ops.ts src/emit-map.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/parallel.ts src/parents.ts src/checker.ts src/accumulate.ts src/members.ts src/result.ts src/structs.ts src/declarations.ts src/host-module.ts src/parser.ts src/fusion.ts src/fnrefs.ts src/visibility.ts src/options.ts src/region-check.ts src/module-storage.ts src/assignment.ts src/script.ts src/hygiene.ts src/statements.ts src/validator.ts src/loop-flow.ts src/runtime.ts src/target.ts src/emit-region.ts src/emit-shm-window.ts src/shm-window.ts src/emit-json.ts src/emit-async.ts src/capabilities.ts src/debug.ts src/emit-fnrefs.ts src/emit-parallel.ts
 import condBranch from "./emit-control" -> function @condBranch
 import Emitter from "./emit" -> struct Emitter
+import emitCheckedArith from "./emit-ops" -> function @emitCheckedArith
 import OVERFLOW_ADD from "./emit-ops" -> const OVERFLOW_ADD
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import FunctionFacts from "./attributes" -> struct FunctionFacts
@@ -15,19 +16,19 @@ import ACC_SPLIT from "./program" -> const ACC_SPLIT
 import ACC_STEP from "./program" -> const ACC_STEP
 import FunctionSig from "./program" -> struct FunctionSig
 struct RecursionLoop (class) size=48 align=8 exported
-  field head: IRBlock index=0 offset=0
-  field names: string[] index=1 offset=8
+  field sig: FunctionSig index=0 offset=0
+  field head: IRBlock index=1 offset=8
   field types: string[] index=2 offset=16
   field edges: string[] index=3 offset=24
   field args: string[][] index=4 offset=32
   field addends: string[] index=5 offset=40
   constructor -> @RecursionLoop.constructor
-function RecursionLoop.constructor(this: RecursionLoop, head: IRBlock, names: string[], types: string[]): void -> @RecursionLoop.constructor [exported constructor]
+function RecursionLoop.constructor(this: RecursionLoop, sig: FunctionSig, head: IRBlock, types: string[]): void -> @RecursionLoop.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  escaping: head names types
+  escaping: head sig types
   pointer this: size=48 writesThrough=true captured=false
+  pointer sig: size=200 writesThrough=true captured=true
   pointer head: size=16 writesThrough=true captured=true
-  pointer names: size=0 writesThrough=true captured=true
   pointer types: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function emitsAsLoop(emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): boolean -> @emitsAsLoop [exported]
@@ -51,7 +52,7 @@ function openAccumulation(emitter: Emitter, sig: FunctionSig): void -> @openAccu
   sharedWrite: +0:3
   calls: Emitter.llvm IRFunction.emit IRFunction.newBlock IRFunction.placeBlock RecursionLoop.constructor nish_alloc_struct nish_array_grow nish_str_concat
   pointer emitter: size=400 writesThrough=true captured=false passedTo=Emitter.llvm#0
-  pointer sig: size=200 writesThrough=false captured=false
+  pointer sig: size=200 writesThrough=true captured=true passedTo=RecursionLoop.constructor#1
   stackSites=0 stackLocals=0
   local -8:9 fn: IRFunction (const)
   local -7:9 types: string[] (const)
@@ -72,15 +73,16 @@ function closeAccumulation(emitter: Emitter, acc: RecursionLoop): void -> @close
   local -22:9 fn: IRFunction (const)
   local -21:9 lines: string[] (const)
   local -20:9 operands: string[] (const)
-  local -19:7 i: i32 (let)
-  local -17:11 name: string (const)
-  callee -16:16 headPhi -> @headPhi
-  callee -16:32 paramValue -> @paramValue
-  callee -16:70 incomingName -> @incomingName
-  callee -15:38 paramValue -> @paramValue
-  local -12:9 sums: string[][] (const)
-  local -11:9 addends: string[][] (const)
-  local -10:14 x: string (const)
+  local -19:9 names: string[] (const)
+  local -18:12 i: i32 (let)
+  local -17:11 passed: string[] (const)
+  local -16:16 args: string[] (const)
+  callee -13:16 headPhi -> @headPhi
+  callee -13:29 paramValue -> @paramValue
+  callee -13:69 incomingName -> @incomingName
+  callee -12:38 paramValue -> @paramValue
+  local -10:9 sums: string[] (const)
+  local -9:12 e: i32 (let)
   callee -6:14 headPhi -> @headPhi
   callee -5:14 headPhi -> @headPhi
   local -1:9 body: string[] (const)
@@ -92,22 +94,19 @@ function closeAccumulation(emitter: Emitter, acc: RecursionLoop): void -> @close
   callee +7:5 renameEdges -> @renameEdges
   callee +8:5 placeAfter -> @placeAfter
   callee +10:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +11:9 sig: FunctionSig | null (const)
-  local +12:9 name: string (const)
-  local +13:9 answer: string (const)
-  callee +13:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +14:3 IRFunction.emit -> @IRFunction.emit
-  callee +14:22 checkedAdd -> @checkedAdd
-  callee +14:55 checkedAdd -> @checkedAdd
-function headPhi(acc: RecursionLoop, value: string, type: string, initial: string, incoming: string[][], slot: i32): string -> @headPhi
+  local +11:9 answer: string (const)
+  callee +11:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +12:3 IRFunction.emit -> @IRFunction.emit
+  callee +12:22 checkedAdd -> @checkedAdd
+  callee +12:55 checkedAdd -> @checkedAdd
+function headPhi(acc: RecursionLoop, value: string, type: string, initial: string, incoming: string[]): string -> @headPhi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: slot
   calls: nish_panic_index nish_str_concat
   pointer acc: size=48 writesThrough=false captured=false
   pointer incoming: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 line: string (let)
-  local +1:7 e: i32 (let)
+  local +1:12 e: i32 (let)
 function foldColdTest(fn: IRFunction, head: IRBlock, body: string[], call: IRBlock): boolean -> @foldColdTest
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -219,41 +218,31 @@ function emitAccumulateTail(emitter: Emitter, acc: RecursionLoop, value: Node): 
 function emitStep(emitter: Emitter, acc: RecursionLoop, step: Node): void -> @emitStep
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: Emitter.emitArgument Emitter.emitExpression FusionTable.partnerOf IRFunction.currentBlock IRFunction.emit nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat
-  pointer emitter: size=400 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitArgument#0 Emitter.emitExpression#0
+  calls: Emitter.emitArgument Emitter.emitExpression FusionTable.partnerOf IRFunction.currentBlock IRFunction.emit nish_array_grow nish_panic_index nish_str_concat
+  pointer emitter: size=400 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitArgument#0 Emitter.emitExpression#0
   pointer acc: size=48 writesThrough=false captured=false
   pointer step: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -19:9 fn: IRFunction (const)
-  local -18:9 partner: i32 (const)
-  callee -18:19 FusionTable.partnerOf -> @FusionTable.partnerOf
-  local -17:9 callFirst: boolean (const)
-  local -16:9 call: Node (const)
-  local -15:9 other: Node (const)
-  local -14:9 sig: FunctionSig | null (const)
-  local -13:7 x: string (let)
-  callee -11:9 Emitter.emitExpression -> @Emitter.emitExpression
-  local -9:9 args: string[] (const)
-  local -8:7 i: i32 (let)
-  local -7:14 arg: Node (const)
-  callee -6:30 Emitter.emitExpression -> @Emitter.emitExpression
-  callee -6:60 Emitter.emitArgument -> @Emitter.emitArgument
+  local -17:9 fn: IRFunction (const)
+  local -16:9 partner: i32 (const)
+  callee -16:19 FusionTable.partnerOf -> @FusionTable.partnerOf
+  local -15:9 callFirst: boolean (const)
+  local -14:9 call: Node (const)
+  local -13:9 other: Node (const)
+  local -12:7 x: string (let)
+  callee -10:9 Emitter.emitExpression -> @Emitter.emitExpression
+  local -8:9 args: string[] (const)
+  local -7:9 written: Node[] (const)
+  local -6:12 i: i32 (let)
+  callee -5:15 Emitter.emitArgument -> @Emitter.emitArgument
   callee -2:9 Emitter.emitExpression -> @Emitter.emitExpression
   callee +0:18 IRFunction.currentBlock -> @IRFunction.currentBlock
   callee +3:3 IRFunction.emit -> @IRFunction.emit
 function checkedAdd(emitter: Emitter, a: string, b: string): string -> @checkedAdd
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via IRFunction.emitValue
-  calls: Emitter.useRuntime IRFunction.branchOnOverflow IRFunction.emitValue nish_str_concat
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via emitCheckedArith
+  escaping: a b
+  calls: emitCheckedArith
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=emitCheckedArith#0
   stackSites=0 stackLocals=0
-  local +0:9 fn: IRFunction (const)
-  local +1:9 pair: string (const)
-  callee +1:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +2:25 Emitter.useRuntime -> @Emitter.useRuntime
-  local +4:9 sum: string (const)
-  callee +4:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local +5:9 failed: string (const)
-  callee +5:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:3 IRFunction.branchOnOverflow -> @IRFunction.branchOnOverflow
-  callee +6:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +0:3 emitCheckedArith -> @emitCheckedArith

@@ -73,7 +73,7 @@
 
 import { condBranch } from "./emit-control"
 import { Emitter } from "./emit"
-import { OVERFLOW_ADD } from "./emit-ops"
+import { emitCheckedArith, OVERFLOW_ADD } from "./emit-ops"
 import { unwrapParens } from "./emit-util"
 import { FunctionFacts } from "./attributes"
 import { IRBlock, IRFunction, paramValue } from "./ir"
@@ -82,18 +82,19 @@ import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig } from "./program"
 
 /** One function's loop while its body is emitted: the header and every edge back into it. */
 export class RecursionLoop {
+  /** The function the loop is. */
+  sig: FunctionSig
   head: IRBlock
-  /** The parameters' names and LLVM types, in order. */
-  names: string[]
+  /** The parameters' LLVM types, in order. */
   types: string[]
   /** For each edge back into the header, the block it leaves, the arguments it passes and the `X` it adds. */
   edges: string[]
   args: string[][]
   addends: string[]
 
-  constructor(head: IRBlock, names: string[], types: string[]) {
+  constructor(sig: FunctionSig, head: IRBlock, types: string[]) {
+    this.sig = sig
     this.head = head
-    this.names = names
     this.types = types
     this.edges = []
     this.args = []
@@ -144,7 +145,7 @@ export const openAccumulation = (emitter: Emitter, sig: FunctionSig): void => {
   const head = fn.newBlock("rec.head")
   fn.emit(`br label %${head.label}`)
   fn.placeBlock(head)
-  emitter.accumulator = new RecursionLoop(head, sig.paramNames, types)
+  emitter.accumulator = new RecursionLoop(sig, head, types)
 }
 
 /**
@@ -156,21 +157,21 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   const fn = emitter.fn
   const lines: string[] = []
   const operands: string[] = []
-  let i = 0
-  while (i < acc.names.length) {
-    const name = acc.names[i]
-    lines.push(headPhi(acc, `${paramValue(name)}`, acc.types[i], `%${incomingName(name)}`, acc.args, i))
-    operands.push(`${acc.types[i]} ${paramValue(name)}`)
-    i = i + 1
+  const names = acc.sig.paramNames
+  for (let i = 0; i < names.length; i++) {
+    const passed: string[] = []
+    for (const args of acc.args) {
+      passed.push(args[i])
+    }
+    lines.push(headPhi(acc, paramValue(names[i]), acc.types[i], `%${incomingName(names[i])}`, passed))
+    operands.push(`${acc.types[i]} ${paramValue(names[i])}`)
   }
-  const sums: string[][] = []
-  const addends: string[][] = []
-  for (const x of acc.addends) {
-    sums.push(["%rec.sum"])
-    addends.push([x])
+  const sums: string[] = []
+  for (let e = 0; e < acc.edges.length; e++) {
+    sums.push("%rec.sum")
   }
-  lines.push(headPhi(acc, "%rec.prev", "i32", "0", sums, 0))
-  lines.push(headPhi(acc, "%rec.last", "i32", "0", addends, 0))
+  lines.push(headPhi(acc, "%rec.prev", "i32", "0", sums))
+  lines.push(headPhi(acc, "%rec.last", "i32", "0", acc.addends))
   lines.push("%rec.sum = add i32 %rec.prev, %rec.last")
   lines.push("%rec.signs = or i32 %rec.last, %rec.sum")
   lines.push("%rec.cold = icmp slt i32 %rec.signs, 0")
@@ -186,27 +187,16 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
     placeAfter(fn, acc.head, rest)
   }
   fn.placeBlock(call)
-  const sig = emitter.currentSig
-  const name = sig === null ? "" : sig.name
-  const answer = fn.emitValue(`call i32 @${name}(${operands.join(", ")})`)
+  const answer = fn.emitValue(`call i32 @${acc.sig.name}(${operands.join(", ")})`)
   fn.emit(`ret i32 ${checkedAdd(emitter, "%rec.prev", checkedAdd(emitter, "%rec.last", answer))}`)
   emitter.accumulator = null
 }
 
-/** The header's `phi` named `value`: `entry` passes `initial`, edge `e` passes `incoming[e][slot]`. */
-const headPhi = (
-  acc: RecursionLoop,
-  value: string,
-  type: string,
-  initial: string,
-  incoming: string[][],
-  slot: i32
-): string => {
+/** The header's `phi` named `value`: `entry` passes `initial`, edge `e` passes `incoming[e]`. */
+const headPhi = (acc: RecursionLoop, value: string, type: string, initial: string, incoming: string[]): string => {
   let line = `${value} = phi ${type} [ ${initial}, %entry ]`
-  let e = 0
-  while (e < acc.edges.length) {
-    line = `${line}, [ ${incoming[e][slot]}, %${acc.edges[e]} ]`
-    e = e + 1
+  for (let e = 0; e < acc.edges.length; e++) {
+    line = `${line}, [ ${incoming[e]}, %${acc.edges[e]} ]`
   }
   return line
 }
@@ -377,16 +367,14 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   const callFirst = step.children[0].id === partner
   const call = callFirst ? step.children[0] : step.children[1]
   const other = callFirst ? step.children[1] : step.children[0]
-  const sig = emitter.currentSig
   let x = ""
   if (!callFirst) {
     x = emitter.emitExpression(other)
   }
   const args: string[] = []
-  let i = 0
-  for (const arg of call.children[1].children) {
-    args.push(sig === null ? emitter.emitExpression(arg) : emitter.emitArgument(arg, sig, i))
-    i = i + 1
+  const written = call.children[1].children
+  for (let i = 0; i < written.length; i++) {
+    args.push(emitter.emitArgument(written[i], acc.sig, i))
   }
   if (callFirst) {
     x = emitter.emitExpression(other)
@@ -397,14 +385,6 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   fn.emit(`br label %${acc.head.label}`)
 }
 
-/** `a + b` over `i32`, panicking with `OVERFLOW_ADD` as the checked `+` does. */
-const checkedAdd = (emitter: Emitter, a: string, b: string): string => {
-  const fn = emitter.fn
-  const pair = fn.emitValue(
-    `call { i32, i1 } ${emitter.useRuntime("llvm.sadd.with.overflow.i32")}(i32 ${a}, i32 ${b})`
-  )
-  const sum = fn.emitValue(`extractvalue { i32, i1 } ${pair}, 0`)
-  const failed = fn.emitValue(`extractvalue { i32, i1 } ${pair}, 1`)
-  fn.branchOnOverflow(failed, OVERFLOW_ADD, emitter.useRuntime("nish_panic_overflow"))
-  return sum
-}
+/** `a + b` over `i32`, panicking with `OVERFLOW_ADD` as the checked `+` does: never `nsw`, whatever the step's proofs say. */
+const checkedAdd = (emitter: Emitter, a: string, b: string): string =>
+  emitCheckedArith(emitter, "add", "i32", a, b, OVERFLOW_ADD)

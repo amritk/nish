@@ -73,22 +73,31 @@ function isOverflowOpcode(opcode: string): boolean -> @isOverflowOpcode
 function emitSignedArith(emitter: Emitter, opcode: string, ty: string, lhs: string, rhs: string, node: Node, panicCode: i32): string -> @emitSignedArith
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
-  escaping: panicCode
-  calls: Emitter.useRuntime IRFunction.branchOnOverflow IRFunction.emitValue nish_panic_index nish_str_concat
-  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
+  escaping: lhs opcode panicCode rhs ty
+  calls: IRFunction.emitValue emitCheckedArith nish_panic_index nish_str_concat
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=emitCheckedArith#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   callee +2:12 IRFunction.emitValue -> @IRFunction.emitValue
-  local +4:9 pair: string (const)
-  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +5:27 Emitter.useRuntime -> @Emitter.useRuntime
-  local +7:9 value: string (const)
-  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +8:9 overflow: string (const)
-  callee +8:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +9:3 IRFunction.branchOnOverflow -> @IRFunction.branchOnOverflow
-  callee +9:44 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +4:10 emitCheckedArith -> @emitCheckedArith
+function emitCheckedArith(emitter: Emitter, opcode: string, ty: string, lhs: string, rhs: string, panicCode: i32): string -> @emitCheckedArith [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  escaping: panicCode
+  calls: Emitter.useRuntime IRFunction.branchOnOverflow IRFunction.emitValue nish_str_concat
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 pair: string (const)
+  callee +1:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:27 Emitter.useRuntime -> @Emitter.useRuntime
+  local +4:9 value: string (const)
+  callee +4:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 overflow: string (const)
+  callee +5:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:3 IRFunction.branchOnOverflow -> @IRFunction.branchOnOverflow
+  callee +6:44 Emitter.useRuntime -> @Emitter.useRuntime
 function overflowCode(opcode: string): i32 -> @overflowCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
