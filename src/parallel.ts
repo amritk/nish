@@ -4207,6 +4207,21 @@ export const isAtomicArrayMethod = (sig: FunctionSig): boolean => {
   return isAtomicMethod(sig) && owner !== null && owner.field("values") !== null
 }
 
+/**
+ * Whether `sig` is the constructor of an `AtomicI32Array` or an
+ * `AtomicI64Array`, whose `new Array` the emitter places on its own cache
+ * lines (`emitNewArray`).
+ */
+export const isAtomicArrayConstructor = (sig: FunctionSig | null): boolean => {
+  if (sig === null) {
+    return false
+  }
+  const owner = sig.owner
+  return (
+    isAtomicClass(owner) && sig.role === ROLE_CONSTRUCTOR && owner !== null && owner.field("values") !== null
+  )
+}
+
 /** Whether `info` is one of `nish/threads`'s atomics. */
 const isAtomicClass = (info: StructInfo | null): boolean => info !== null && info.atomic
 
@@ -4214,7 +4229,12 @@ const isAtomicClass = (info: StructInfo | null): boolean => info !== null && inf
  * Whether `name` is a field of the atomic `type` a program may read: one
  * declared `readonly`, an array's `length`, which no method writes.
  */
-const isAtomicReadonlyField = (program: CheckedProgram, table: TypeTable, type: i32, name: string): boolean => {
+const isAtomicReadonlyField = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  name: string
+): boolean => {
   const info = classLayoutOf(program, table, type)
   if (info !== null) {
     for (const field of info.fields) {
@@ -4904,7 +4924,10 @@ const walkMutexes = (
     node.kind === NodeKind.Member &&
     isAtomicType(program, table, program.nodeTypes[node.children[0].id])
   ) {
-    if (!called && !isAtomicReadonlyField(program, table, program.nodeTypes[node.children[0].id], node.text)) {
+    if (
+      !called &&
+      !isAtomicReadonlyField(program, table, program.nodeTypes[node.children[0].id], node.text)
+    ) {
       out.push(new ScopeFinding(node, atomicMemberMessage(node.text)))
       return
     }

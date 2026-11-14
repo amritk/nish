@@ -44,7 +44,7 @@ import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-ut
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
-import { isChannelReader, isGuardedAccess } from "./parallel"
+import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
@@ -1210,6 +1210,25 @@ const emitData = (emitter: Emitter, site: Node, elem: i32, count: i32, bytes: st
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`)
 }
 
+/**
+ * An atomic array's elements (docs/IR_COOKBOOK.md, "an atomic array"): `bytes`
+ * from the arena, starting on a 64-byte boundary with at least one whole line
+ * of slack before and after them. Every task writes the elements and reads the
+ * header and the object beside them on each update; on one line, each write
+ * would evict the line every other thread is reading. The slack is never
+ * named, and the arena takes it back with the rest.
+ */
+const emitLineData = (emitter: Emitter, bytes: string): string => {
+  const fn = emitter.fn
+  const room = fn.emitValue(`add i64 ${bytes}, 192`)
+  const raw = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${room})`)
+  const at = fn.emitValue(`ptrtoint i8* ${raw} to i64`)
+  const back = fn.emitValue(`sub i64 0, ${at}`)
+  const gap = fn.emitValue(`and i64 ${back}, 63`)
+  const offset = fn.emitValue(`add i64 ${gap}, 64`)
+  return fn.emitValue(`getelementptr inbounds i8, i8* ${raw}, i64 ${offset}`)
+}
+
 const storeData = (emitter: Emitter, arr: string, data: string): void => {
   storeHeaderField(emitter, arr, 2, data, "i8*")
 }
@@ -1357,7 +1376,9 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   if (count < 0 && emitter.isStackSite(expr)) {
     process.exit(internalErrorFor("emitter: a stack array whose length is not a literal", emitter.opts.json))
   }
-  const data = emitData(emitter, expr, elem, count, bytes)
+  const data = isAtomicArrayConstructor(emitter.currentSig)
+    ? emitLineData(emitter, bytes)
+    : emitData(emitter, expr, elem, count, bytes)
   // `sortWith`'s scratch is copied over whole before it is read, and no
   // optimizer pass drops a fill the copy loop then overwrites.
   if (!isSortInstance(emitter.program.activeInstance)) {

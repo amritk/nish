@@ -2914,8 +2914,31 @@ bounds.ok:
 
 The other methods differ only in the last instruction, which is the
 `AtomicI32` method's. No element is an object of its own, so there is no
-element pointer to load between the buffer and the `atomicrmw`. Below, the
-caller; every instance, exactly as emitted, is in
+element pointer to load between the buffer and the `atomicrmw`.
+
+The constructor's `new Array` is the one place the lowering differs from an
+ordinary array's: the buffer is not the next bytes of the arena after the
+24-byte header, where the header, the object and whatever the program
+allocates next would share its cache line, and every core's read of the
+header would wait on the line another core's `atomicrmw` holds. It is asked
+for with 192 bytes of slack and starts on the first 64-byte boundary at least
+one line in, so the elements begin a line of their own and the line after the
+last one holds nothing else either. Sixteen counters cost four times their
+bytes; on the four-task histogram (bench/par-histogram-atomic.ts) the
+placement took the scope from 93 ms to 71 ms:
+
+```llvm
+  %7 = mul i64 %1, 4
+  %8 = add i64 %7, 192
+  %9 = call i8* @nish_alloc_struct(i64 %8)
+  %10 = ptrtoint i8* %9 to i64
+  %11 = sub i64 0, %10
+  %12 = and i64 %11, 63
+  %13 = add i64 %12, 64
+  %14 = getelementptr inbounds i8, i8* %9, i64 %13
+```
+
+Below, the caller; every instance, exactly as emitted, is in
 `tests/link/thread_atomic_array/threads.ll`.
 
 <!-- cookbook:begin thread-atomic-array -->
