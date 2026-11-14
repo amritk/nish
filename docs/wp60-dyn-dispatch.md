@@ -697,7 +697,7 @@ what the proposal does to it.
 | [wp28-compatibility-mode.md](wp28-compatibility-mode.md) `:144`, `:481`; [roadmap/wp28-compatibility-mode.md](roadmap/wp28-compatibility-mode.md) `:19` | C7: `extends` with virtual dispatch, in compat mode | the compat plan | unchanged; strict `Dyn` covers the interface half of C7, not `extends` |
 | [wp51-function-references.md](wp51-function-references.md) `:1077` | dispatch over classes is out of scope | WP51 | this note is that scope |
 | [FAQ.md](FAQ.md) `:12`, [wp0-validator.md](wp0-validator.md) `:40` | JavaScript's dynamic dispatch is out | the strict subset | true: prototype dispatch stays out; a pointer to this note is added |
-| [README.md](../README.md) `:473` | "There is no dynamic dispatch (classes have no inheritance, so every method call names one function)" | the front page | repointed here by this PR |
+| [README.md](../README.md) | (formerly) "There is no dynamic dispatch (classes have no inheritance, so every method call names one function)" | the front page | the sentence left the front page on `main`; nothing to repoint |
 | `std/` | no interface declares a method (NL2048) | — | nothing to change until stage 4 |
 | `.claude/`, `CLAUDE.md` | no sentence on either premise | — | nothing to change |
 

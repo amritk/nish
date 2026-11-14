@@ -1,6 +1,6 @@
 # WP34: The network stack
 
-**State:** Landed · **Done:** 16 of 16 · **Design note:** [`docs/wp34-network-stack.md`](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md)
+**State:** Landed · **Done:** 24 of 24 · **Design note:** [`docs/wp34-network-stack.md`](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md)
 
 ## Stages
 
@@ -20,6 +20,14 @@
 - [x] T2, H1, H2: `curl --http1.1`, Autobahn and Chrome over HTTP/1.1 in the interop job (WP39 G1, [#1437](https://github.com/amritk/nish/pull/1437)); the lingering close, the HTTP/2 SETTINGS and idle timeouts and WebTransport's session clock (WP39 G2, [#1454](https://github.com/amritk/nish/pull/1454)); H3-5, an HTTP/3 server clock, and WebTransport's rate cap kept as drop-and-count (WT-2) ([#1513](https://github.com/amritk/nish/pull/1513))
 - [x] Q3: the interop runner's goodput and crosstraffic cases, both passing for quic-go and ngtcp2 ([#1477](https://github.com/amritk/nish/pull/1477))
 - [x] A1: QUIC DPLPMTUD, so DATA down is no longer held to 1,164 bytes ([#1458](https://github.com/amritk/nish/pull/1458))
+- [x] Phase two, N7: `atan2`, `tan`, `hypot`, `sign`, `imul` and `f32ToBits`, and JavaScript's `-0` and NaN from `Math.round`, `min` and `max` ([#847](https://github.com/amritk/nish/pull/847))
+- [x] Phase two, N8 and the host half of N9: host imports on wasm and a module the page drives every frame, built as [WP50](wp50-wasm-host.md)
+- [x] Phase two, N9 for the game server: memory reclaimed per match, built as [WP46](wp46-long-running-memory.md)'s regions
+- [x] Phase two, N10: `sort` with a comparator ([#1108](https://github.com/amritk/nish/pull/1108)), and `split` and `toFixed` in `nish/text` ([#1361](https://github.com/amritk/nish/pull/1361), [#1396](https://github.com/amritk/nish/pull/1396))
+- [x] Phase two, N11: typed JSON, `jsonDecode` and `jsonEncode` over `nish/json-tokenizer` and `JsonWriter` ([#571](https://github.com/amritk/nish/pull/571), [#572](https://github.com/amritk/nish/pull/572), [#573](https://github.com/amritk/nish/pull/573))
+- [x] Phase two, N12: `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory` in `nish:process`
+- [x] Phase two, N13: the TLS 1.3 client ([#1018](https://github.com/amritk/nish/pull/1018)), and Postgres over TLS in the carrier ([#1446](https://github.com/amritk/nish/pull/1446))
+- [x] Phase two, N14: discriminated unions ([#682](https://github.com/amritk/nish/pull/682), [#716](https://github.com/amritk/nish/pull/716), [#798](https://github.com/amritk/nish/pull/798))
 
 ## Next
 
