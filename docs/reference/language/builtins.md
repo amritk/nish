@@ -4128,8 +4128,8 @@ export const main = (): i32 => {
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
   iterable of a `for...of`, below. There is no `entries` or
-  `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`,
+  `forEach`, because a `[key, value]` pair is a two-type tuple and a
+  method cannot take a function (`reject_map_entries`, `reject_map_foreach`,
   `reject_map_iter_entries_call`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
@@ -4490,7 +4490,7 @@ export const main = (): i32 => {
     | anywhere else, a dropped result or an uncalled `m.keys` included | `` can only be the iterable of a `for...of` `` | `reject_map_iter_statement`, `reject_map_iter_uncalled`, `reject_map_values` (NL2358) |
 
     `for (const e of m)` over a `Map` itself would walk `entries()`, whose
-    `[key, value]` pairs need destructuring:
+    `[key, value]` pairs are two-type tuples:
     `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
     rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
     It reports once: the variable is an error that its body reads without a
