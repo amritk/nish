@@ -527,16 +527,16 @@ table.t-editor__table tbody tr:hover {
   }
 }
 
-/* The name, unpacked (site.js builds it from the NAME list). It reads
-   "NISH", initials together, and once the headline has risen in each word
-   opens out of its initial, one after the other. A word's trailing space is
-   part of what opens, so folded there is no gap between the initials. At
-   rest, and with motion off, the whole name shows.
+/* The name, unpacked (site.js builds it from the NAME list). It rests as
+   "NISH", initials together, and each word opens out of its initial, one
+   after the other, only while the name is hovered or focused (a tap focuses
+   it): the hero moves enough without it. A word's trailing space is part of what
+   opens, so folded there is no gap between the initials.
 
-   The unfolding changes the row's width, so on a screen too narrow for the
+   The opening changes the row's width, so on a screen too narrow for the
    whole name on one line it would change the height too and push the page
-   down. Under the animated row, in the same grid cell, sits a hidden copy
-   that never animates: the cell is always the unfolded name's height. */
+   down. Under the live row, in the same grid cell, sits a hidden copy that is
+   always open: the cell is always the open name's height. */
 .nish-hero__name {
   display: grid;
   margin: 0 0 18px;
@@ -546,6 +546,8 @@ table.t-editor__table tbody tr:hover {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--scalar-color-2);
+  cursor: pointer;
+  outline-offset: 4px;
 }
 .nish-hero__name-row {
   grid-area: 1 / 1;
@@ -556,10 +558,6 @@ table.t-editor__table tbody tr:hover {
 .nish-hero__name-row--ghost {
   visibility: hidden;
 }
-.nish-hero__name-row--ghost .nish-hero__rest,
-.nish-hero__name-row--ghost .nish-hero__rest > span {
-  animation: none;
-}
 .nish-hero__word {
   display: inline-flex;
   white-space: nowrap;
@@ -569,33 +567,36 @@ table.t-editor__table tbody tr:hover {
   color: var(--scalar-color-accent);
   text-shadow: 0 0 14px color-mix(in srgb, var(--nish-violet), transparent 40%);
 }
-.nish-hero__rest {
-  display: inline-block;
-  overflow: hidden;
-  max-width: 14em;
-  vertical-align: bottom;
-  animation: nish-unfold 0.9s var(--nish-ease) both;
-  animation-delay: calc(0.9s + var(--i) * 0.22s);
-}
-.nish-hero__word:not(:last-child) .nish-hero__rest {
-  padding-right: 0.7em;
-}
+.nish-hero__rest,
 .nish-hero__rest > span {
   display: inline-block;
-  animation: nish-unfold-text 0.9s var(--nish-ease) both;
-  animation-delay: calc(0.9s + var(--i) * 0.22s);
+  transition: 0.6s var(--nish-ease) calc(var(--i) * 0.08s);
+  transition-property: max-width, padding, opacity, transform;
 }
-@keyframes nish-unfold {
-  from {
-    max-width: 0;
-    padding-right: 0;
-  }
+.nish-hero__rest {
+  overflow: hidden;
+  max-width: 0;
+  vertical-align: bottom;
 }
-@keyframes nish-unfold-text {
-  from {
-    opacity: 0;
-    transform: translateX(-0.6em);
-  }
+.nish-hero__rest > span {
+  opacity: 0;
+  transform: translateX(-0.6em);
+}
+.nish-hero__name:hover .nish-hero__rest,
+.nish-hero__name:focus .nish-hero__rest,
+.nish-hero__name-row--ghost .nish-hero__rest {
+  max-width: 14em;
+}
+.nish-hero__name:hover .nish-hero__word:not(:last-child) .nish-hero__rest,
+.nish-hero__name:focus .nish-hero__word:not(:last-child) .nish-hero__rest,
+.nish-hero__name-row--ghost .nish-hero__word:not(:last-child) .nish-hero__rest {
+  padding-right: 0.7em;
+}
+.nish-hero__name:hover .nish-hero__rest > span,
+.nish-hero__name:focus .nish-hero__rest > span,
+.nish-hero__name-row--ghost .nish-hero__rest > span {
+  opacity: 1;
+  transform: none;
 }
 
 .nish-hero__title {

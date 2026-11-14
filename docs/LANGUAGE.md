@@ -5,7 +5,7 @@ This is the normative reference for Nish, the subset of TypeScript that
 what each construct means, and how every rejection is worded. The design
 notes (`docs/wp*.md`) explain *why*; this page says *what*.
 
-**Nish is 0.x, and stays there until its owner declares 1.0.** No date is set.
+**Nish is 0.x, and 1.0 has no date.**
 Until then any minor release may change the language: a change that withdraws
 or narrows an accepted construct, or changes what one means, is marked breaking
 (`type!`) and named in the release notes. From 1.0 the rule tightens: a minor

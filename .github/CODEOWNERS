@@ -1,6 +1,6 @@
 # What runs with the repository's tokens, publishes a release, or steers an
-# agent's session. A change to any of these needs the owner's review once the
-# branch ruleset on `main` requires code-owner review (SC-31 in
+# agent's session. A change to any of these needs review from the account below
+# once the branch ruleset on `main` requires it (SC-31 in
 # docs/security/supply-chain.md).
 /.github/                  @amritk
 /.claude/                  @amritk
