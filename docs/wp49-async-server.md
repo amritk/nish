@@ -1042,6 +1042,7 @@ body. Lifting that needs facts per function value, in `src/region-rules.ts`.
   connection (§6 item 2), and heavy CPU work goes to a job worker over
   `nish/sync/ring` (`examples/prefork-jobs.ts`).
 - `async` iterators and `for await`.
-- `async` on `--profile wasm`.
+- `async` on `--profile wasm`: [wp54-async-wasm.md](wp54-async-wasm.md),
+  proposed, with the page as the executor.
 - The handler over HTTP/2 and HTTP/3 (WP43). `serve` starts on HTTP/1.1, as
   the handler did.
