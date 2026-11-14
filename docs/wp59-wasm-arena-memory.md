@@ -194,12 +194,24 @@ following held under Node v22.23.4 and headless Chromium 153.0.8010.12
 - fixed at 2 pages, `grow1(1)` answered `-1`, `memory.grow(1)` from
   JavaScript threw `RangeError`, and the old buffer stayed attached.
 
-The rewrite belongs in `scripts/build.sh`'s `wasm-host` link, directly after
-`wasm-ld` and before the optional `wasm-opt` (`:1066`). Until the rewrite
-runs the module is invalid, and `wasm-opt` validates its input. `wasm-opt`
-then needs `--enable-multimemory` beside `--enable-bulk-memory`. Binaryen
-supports multi-memory (features.json, §6). The script lives in `scripts/`. It
-uses no construct, so the rolling freeze (§7) does not touch it.
+The rewrite belongs in `scripts/build.sh`'s `wasm-host` link, after
+`wasm-ld` and before any `wasm-opt`. Until the rewrite runs the module is
+invalid, and `wasm-opt` validates its input. Today's default link cannot
+make room for it. `NISH_WASM_OPT=1` compiles and links in one `clang` call
+with an `-O` flag (`:1060`–`:1063`), and "clang 18 runs it itself after any
+link with an -O flag, finding it on PATH" (`:1031`–`:1035`). On a machine
+with binaryen installed, that inner `wasm-opt` would get the invalid module
+before the rewrite has run, and since it validates its input, fail the
+link. So the two-memory link takes
+the shape `NISH_WASM_OPT=0` already has (`:1041`–`:1058`): each source is
+compiled to an object with its `-O` flags, the objects are linked with no `-O`
+flag, so clang starts no `wasm-opt`, and then the rewrite runs. Only after
+that does the build run `wasm-opt` itself, as `:1066` does, with
+`--enable-multimemory` beside `--enable-bulk-memory`. Binaryen supports
+multi-memory (`features.json`, §6). §12 ran without binaryen installed, so it
+never met the inner `wasm-opt`. S1's tests cover the build with it. The
+script lives in `scripts/`. It uses no construct, so the rolling freeze (§7)
+does not touch it.
 
 ## 4. What moves and what stays, with a reason each
 
@@ -398,8 +410,12 @@ measurement of real modules (§9).
 ## 6. Engines, and the fallback
 
 Multi-memory is phase 5 (standardised, in Wasm 3.0). This table is the
-`multiMemory` key of `features.json` in the WebAssembly/website repository,
-cross-checked against the web-features `wasm-multi-memory` entry:
+`multiMemory` key of
+[`features.json`](https://github.com/WebAssembly/website/blob/d9b8e4dc0bd46c316922048e5e9c7a2a6d649134/features.json)
+in the WebAssembly/website repository at `d9b8e4dc`, cross-checked against
+the web-features entry
+[`features/wasm-multi-memory.yml`](https://github.com/web-platform-dx/web-features/blob/6248b5d7613eaba47649700083a04f1815104129/features/wasm-multi-memory.yml)
+at `6248b5d7`:
 
 | Engine | First version | Notes |
 | --- | --- | --- |
@@ -417,7 +433,8 @@ cross-checked against the web-features `wasm-multi-memory` entry:
 
 The `wasi` profile is not touched. It links `runtime.c` and wasi-libc, has no
 loader and no arena handed back between calls, and exports only `memory` and
-`_start` (`scripts/build.sh:65`–`:69`). The plain `wasm` profile
+`_start`: its link (`scripts/build.sh:1124`–`:1127`) passes no `--export`, and
+`:222`–`:223` say so. The plain `wasm` profile
 (`--export-all`, `:916`) has no loader either and keeps one memory; see
 §10.4.
 
@@ -476,7 +493,13 @@ What lands:
 
 - `scripts/wasm-memories.mjs`, the rewrite in §3.2;
 - the `wasm-host` link step that runs it (behind `NISH_WASM_MEMORIES=2`, off
-  by default), and `--enable-multimemory` on `wasm-opt`;
+  by default). It compiles objects with `-O` and links them with none, as
+  `NISH_WASM_OPT=0` does, so clang runs no `wasm-opt` inside the link (§3.2).
+  The build then runs the rewrite, and after it `wasm-opt` with
+  `--enable-multimemory`;
+- `nish_memory_bytes()`, an export that answers memory 0's size in bytes
+  (`memory.size 0` × 64 KiB), for the tests that today read
+  `memory.buffer.byteLength` to see whether the arena grew;
 - in `runtime/runtime-wasm.c`, `nish_page_copy_in`, `nish_page_copy_out`,
   `nish_page_fill` and `nish_page_grow` over memory 1, compiled with
   `-mmultimemory`;
@@ -489,7 +512,7 @@ Tests:
   exported at index 1, no other memory exported, and every other section
   byte-identical;
 - a built module that `WebAssembly.validate`s and instantiates under the
-  Node CI pins;
+  Node CI pins, both with binaryen on `PATH` and without it;
 - `WebAssembly.Module.exports(m)` lists one memory;
 - without `--memory`, `memory.grow 1` grows the exported memory and the
   page's views are rebuilt; under `--memory`, memory 1 declares `min = max`,
@@ -510,6 +533,10 @@ What lands:
 Tests:
 
 - `wasm-host`, `persist` and every page example green with the flag on;
+- `tests/persist/drive.mjs`'s growth checks (`:73` and `:281`) read
+  `mod.memory.buffer.byteLength`, which under the flag measures memory 1, not
+  the arena. They move to `nish_memory_bytes()` (S1), so "memory did not
+  grow" still means the arena did not grow;
 - a new test per crossing:
   - an array in, out and copied back;
   - a string result from the arena and from static data;
@@ -544,8 +571,9 @@ Tests:
     random bits;
   - it asserts the kept graph's answers are unchanged, call after call.
 
-  A forged in-arena pointer then cannot be written at all: no value the page
-  holds names memory 0. The old in-arena forgeries become a check that the
+  A forged in-arena pointer then cannot be written through memory: no view
+  the page holds reaches memory 0. The exports that take an arena offset
+  stay callable, and §10.2 covers them. The old in-arena forgeries become a check that the
   page cannot reach them, and the bounds tests stay against the
   single-memory build.
 - **The budget, measured as #1571 measured.**
@@ -590,9 +618,12 @@ What lands:
    two-memory build is immune either way.
 2. **The arena's entry points stay exported.** `nish_arena_release`,
    `nish_alloc_array` and the rest (`scripts/build.sh:1020`) are exports the
-   loader calls. The loader keeps the instance to itself, but a page that
-   instantiates the bytes itself can call `nish_arena_release(0)` while a
-   graph is kept. That is outside WH-10. It belongs to the same "keep the
+   loader calls. §5 adds more that take an offset into memory 0:
+   `nish_alloc_array_from(offset, n, elem)`, `nish_export_out(hdr)` and
+   `nish_copy_back(hdr, offset)`. The loader keeps the instance to itself,
+   but a page that instantiates the bytes itself can call any of them with a
+   value it chose: `nish_arena_release(0)` while a graph is kept, or a forged
+   `hdr`. That is outside WH-10. It belongs to the same "keep the
    page out" line and might be closed by checking the mark against the
    floor.
 3. **Narrowing the sync.** A storage annotation for direction (page writes,
@@ -616,11 +647,14 @@ What lands:
 
 ## 12. Appendix: the experiment, re-runnable
 
-Every claim in §3.1, §3.2, §4.2, §5.6 and §5.7 comes from the runs below. Each
-input is printed in full, and each command is followed by what it printed.
-The toolchain was `llc`, `clang`, `llvm-mc` and `wasm-ld` 18.1.3, Node v22.23.4 and headless Chromium 153.0.8010.12, on a 4-core Intel
-Xeon @ 2.10 GHz. Put the files in one empty directory and run the commands
-from it.
+Every observed result in §3.1, §3.2, §4.2, §5.6 and §5.7 comes from the runs
+below. Each input is printed in full, and each command is followed by what it
+printed. The toolchain was `llc`, `clang`, `llvm-mc` and `wasm-ld` 18.1.3,
+Node v22.23.4 and headless Chromium 153.0.8010.12, on a 4-core Intel Xeon @
+2.10 GHz. Binaryen was not installed (`command -v wasm-opt` printed nothing
+and exited 1), so no link below ran `wasm-opt`, and none met the one clang
+runs inside an `-O` link (§3.2). Put the files in one empty directory and run
+the commands from it.
 
 ### 12.1 What LLVM 18 does with a second memory
 
