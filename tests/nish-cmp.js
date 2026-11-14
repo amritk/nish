@@ -1437,12 +1437,6 @@ const DECLARED = [
   },
   // An `i64` checked sum loops as an `i32` one does (issue #1612).
   {
-    program: "tests/cases/acc_ineligible.ts",
-    file: "acc_ineligible.ll",
-    changelog: RECURSION_WIDTH,
-    why: RECURSION_WIDTH_WHY,
-  },
-  {
     program: "tests/cases/acc_width_i64.ts",
     file: "acc_width_i64.ll",
     changelog: RECURSION_WIDTH,

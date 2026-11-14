@@ -175,14 +175,19 @@ byte-identical IR, so the rounds below measure only the machine. 15 runs after
 - **fib(40)**: main 237/242 and 227/237, branch 233/240 and 229/238
   (0.93x / 0.89x of Rust, then 0.92x / 0.91x). main's two runs differ by 2 %
   at the median, the band. No change, as expected.
-- **treesum**: `fn` medians main 336 / 319, branch 304 / 258; `method` main
-  301 / 213, branch 218 / 275. main's own `method` median moved 41 % between
-  rounds, a band wider than any difference here. No change, as expected:
-  the IR is the same.
+- **treesum `fn`**: medians main 336 / 319, branch 304 / 258. main's own
+  spread is 5 %, and the second round's branch median sits 19 % below
+  main's, outside it. That is noise, not the change: main's compiler and
+  this one give treesum byte-identical IR, so the two binaries are the same
+  program.
+- **treesum `method`**: medians main 301 / 213, branch 218 / 275. main's own
+  median moved 41 % between rounds, and both branch rounds sit inside that
+  band. No change.
 
 `tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
 effects, the soundness shapes (permuted arguments, a nested split, a panic
-other than overflow while one is pending) and the sums that stay recursion; `--no-elision` drops the records, so the soundness differential
+other than overflow while one is pending) and the sums that stay recursion;
+`--no-elision` drops the records, so the soundness differential
 compares each such function with its plain recursive self.
 
 ### `dereferenceable(24)` on array parameters and returns

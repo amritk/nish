@@ -32613,8 +32613,8 @@ a class of its module that is neither generic nor `nish/threads`'s
 atomic `AtomicI32` or `AtomicI64` (whose methods the compiler writes
 itself), that returns a type whose `+` is checked, `i32` or `i64` (an `f64`
 sum has no overflow check to defer, and a `u8`..`u64` sum wraps by
-definition, so it has none either: `tests/cases/acc_width_unsigned`), every `return` that recurses is `X + self(args)`,
-or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`
+definition, so it has none either: `tests/cases/acc_width_unsigned`),
+every `return` that recurses is `X + self(args)`, or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`
 ahead of the call cannot move an effect), at least one `return` does not, and
 the body is only blocks, `if`, declarations, expression statements and
 `return`s. It may not open an arena scope (a string template does), hold a
