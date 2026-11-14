@@ -193,7 +193,13 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
 }
 
 /** The header's `phi` named `value`: `entry` passes `initial`, edge `e` passes `incoming[e]`. */
-const headPhi = (acc: RecursionLoop, value: string, type: string, initial: string, incoming: string[]): string => {
+const headPhi = (
+  acc: RecursionLoop,
+  value: string,
+  type: string,
+  initial: string,
+  incoming: string[]
+): string => {
   let line = `${value} = phi ${type} [ ${initial}, %entry ]`
   for (let e = 0; e < acc.edges.length; e++) {
     line = `${line}, [ ${incoming[e]}, %${acc.edges[e]} ]`
