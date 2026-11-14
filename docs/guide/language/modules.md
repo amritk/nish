@@ -224,6 +224,56 @@ export const main = (): i32 => {
 
 `nish run main.ts` prints `4149877227 BLAKE3`.
 
+### Installing a package from git
+
+A Nish package is its source, so a git repository is all it needs to be
+shared: no build step, no registry, and a tag is a release. `nish install`
+fetches one into `node_modules`, where the import above finds it:
+
+```bash
+nish install git@github.com:you/hash.git          # the newest vX.Y.Z tag
+nish install https://github.com/you/hash.git#v1.0.0
+nish install ../hash                               # a repository on disk
+```
+
+It writes the dependency into `package.json` the way npm writes a git
+dependency, and the commit it installed into `nish.lock`:
+
+```json
+{
+  "dependencies": {
+    "hash": "git+ssh://git@github.com:you/hash.git#v1.1.0"
+  }
+}
+```
+
+The import does not change: `import { fnv1a } from "hash"` compiles against
+`node_modules/hash`, and its source is compiled into your binary with the rest
+of the program. Commit `package.json` and `nish.lock`. On another checkout,
+`nish install` with no URL installs every git dependency `package.json`
+records, each at the commit `nish.lock` holds for it, so a tag moved upstream
+does not change what you compile. Installing a package by URL again is how its
+lock entry moves.
+
+npm reads the same line, so `npm install` installs the same tree and either
+tool works for a project; a package published to npm is installed with npm as
+usual. Without a `#ref`, the newest tag of the form `v1.2.3` (or `1.2.3`) is
+installed, skipping prereleases, or the default branch at its current commit
+when there is none.
+
+`nish install` refuses, and leaves `node_modules` as it was, when:
+
+- the source is not `https://`, `ssh://`, `git@host:path`, `file://` or a
+  directory (plain `http://` and `git://` are not encrypted);
+- the package's `exports` offers no `nish` condition, so there is nothing to
+  import;
+- its `name` is not an npm package name, or its tree holds a symbolic link or
+  a git submodule.
+
+It runs nothing from the package. A package's own dependencies are not
+installed for it: install each one in your project. The
+[security record](../../security/install.md) says what it trusts.
+
 - An ordinary npm package has no `nish` condition, so importing it is an
   error saying it has no Nish entry point: there is nothing in a `.js` file
   for Nish to compile.

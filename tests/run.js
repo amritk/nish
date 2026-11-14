@@ -28913,6 +28913,246 @@ export const main = (): number => {
       }
     }
   }
+
+  // `nish install` (src/install.ts, docs/security/install.md). Every source is
+  // a repository this check makes on disk, reached as a directory or a
+  // file:// URL, so no check here touches the network. What a check asserts
+  // is the exit status, the files the command wrote and what the program that
+  // imports the package prints, never git's own message text.
+  if (selects("install", "packages")) {
+    if (!has("git")) {
+      skip("nish install: git not on PATH")
+    } else {
+      const inDir = path.join(buildDir, "install")
+      fs.rmSync(inDir, { recursive: true, force: true })
+      fs.mkdirSync(inDir, { recursive: true })
+      const gitIn = (dir, ...args) =>
+        spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "init.defaultBranch=main", ...args], {
+          cwd: dir,
+          encoding: "utf8",
+        })
+      // A repository holding `files`, committed, with each of `tags` on that commit.
+      const repo = (name, files, tags = []) => {
+        const dir = path.join(inDir, "repos", name)
+        fs.mkdirSync(dir, { recursive: true })
+        gitIn(dir, "init", "-q")
+        for (const [file, text] of Object.entries(files)) {
+          fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true })
+          fs.writeFileSync(path.join(dir, file), text)
+        }
+        gitIn(dir, "add", "-A")
+        gitIn(dir, "commit", "-qm", "c")
+        for (const tag of tags) gitIn(dir, "tag", "-f", tag)
+        return fs.realpathSync(dir)
+      }
+      const manifest = (name, version, exportsJson) =>
+        JSON.stringify({ name, version, exports: exportsJson }, null, 2) + "\n"
+      const hashSource = (seed) =>
+        `export const fnv1a = (text: string): u32 => {\n  let h: u32 = ${seed}\n  for (let i = 0; i < text.length; i++) {\n    h = (h ^ toU32(text.charCodeAt(i))) * 16777619\n  }\n  return h\n}\n`
+      const hashRepo = repo(
+        "hash",
+        { "package.json": manifest("hash", "1.0.0", { ".": { nish: "./src/index.ts" } }), "src/index.ts": hashSource(2166136261) },
+        ["v1.0.0"],
+      )
+      // v1.1.0 is the newest release; v2.0.0-rc.1 is a prerelease and sdk@9.9.9 some other package's tag.
+      fs.writeFileSync(path.join(hashRepo, "package.json"), manifest("hash", "1.1.0", { ".": { nish: "./src/index.ts" } }))
+      gitIn(hashRepo, "commit", "-qam", "1.1.0")
+      gitIn(hashRepo, "tag", "v1.1.0")
+      gitIn(hashRepo, "tag", "v2.0.0-rc.1")
+      gitIn(hashRepo, "tag", "sdk@9.9.9")
+      const commitOf = (dir, ref) => gitIn(dir, "rev-parse", `${ref}^{commit}`).stdout.trim()
+      const v110 = commitOf(hashRepo, "v1.1.0")
+      const v100 = commitOf(hashRepo, "v1.0.0")
+
+      const app = path.join(inDir, "app")
+      fs.mkdirSync(app)
+      fs.writeFileSync(
+        path.join(app, "package.json"),
+        '{\n\t"name": "app",\n\t"dependencies": {\n\t\t"left-pad": "^1.3.0"\n\t}\n}\n',
+      )
+      fs.writeFileSync(
+        path.join(app, "main.ts"),
+        'import { fnv1a } from "hash"\n\nexport const main = (): i32 => {\n  console.log(`${fnv1a("nish")}`)\n  return 0\n}\n',
+      )
+      const inst = (args, cwd = app) => spawnSync(NISH, ["install", ...args], { cwd, encoding: "utf8", timeout: 120000 })
+      const readJson = (file) => {
+        try {
+          return JSON.parse(fs.readFileSync(file, "utf8"))
+        } catch {
+          return null
+        }
+      }
+      const lockOf = (dir) => readJson(path.join(dir, "nish.lock"))
+      const modules = path.join(app, "node_modules")
+      const leftovers = () => (fs.existsSync(modules) ? fs.readdirSync(modules).filter((n) => n.startsWith(".nish-")) : [])
+      const spec = (ref) => `git+file://${hashRepo}#${ref}`
+
+      const first = inst([hashRepo])
+      const pkg = readJson(path.join(app, "package.json"))
+      const lock = lockOf(app)
+      check(
+        "nish install <dir>: the newest vX.Y.Z tag, into node_modules, recorded as npm writes it and locked to its commit",
+        first.status === 0 &&
+          pkg?.dependencies?.hash === spec("v1.1.0") &&
+          pkg?.dependencies?.["left-pad"] === "^1.3.0" &&
+          pkg?.name === "app" &&
+          lock?.lockfileVersion === 1 &&
+          lock?.packages?.hash?.source === spec("v1.1.0") &&
+          lock?.packages?.hash?.commit === v110 &&
+          readJson(path.join(modules, "hash", "package.json"))?.version === "1.1.0" &&
+          !fs.existsSync(path.join(modules, "hash", ".git")) &&
+          leftovers().length === 0,
+        `${first.status}: ${first.stderr}\n${JSON.stringify(pkg)}\n${JSON.stringify(lock)}`,
+      )
+      check(
+        "nish install: the manifest keeps its tab indentation",
+        fs.readFileSync(path.join(app, "package.json"), "utf8").includes(`\n\t\t"hash": `),
+        fs.readFileSync(path.join(app, "package.json"), "utf8"),
+      )
+
+      if (!HAS_CLANG) {
+        skip("nish install: clang not on PATH, so the program importing the package is not linked")
+      } else {
+        const exe = path.join(app, "app")
+        const linked = spawnSync(NISH, ["main.ts", "--link", exe], { cwd: app, encoding: "utf8", timeout: 120000 })
+        const ran = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+        check(
+          "nish install: a program importing the installed package links and runs",
+          linked.status === 0 && ran?.status === 0 && ran.stdout === "4149877227\n",
+          `${linked.status}: ${linked.stderr}\n${JSON.stringify(ran)}`,
+        )
+      }
+
+      // The tag moves; with node_modules gone, a bare `nish install` puts back the locked commit, not the tag's new one.
+      fs.writeFileSync(path.join(hashRepo, "moved"), "x")
+      gitIn(hashRepo, "add", "moved")
+      gitIn(hashRepo, "commit", "-qm", "moved")
+      gitIn(hashRepo, "tag", "-f", "v1.1.0")
+      fs.rmSync(modules, { recursive: true, force: true })
+      const again = inst([])
+      check(
+        "nish install with no operand: every git dependency, at its locked commit after its tag moved",
+        again.status === 0 &&
+          fs.existsSync(path.join(modules, "hash", "src", "index.ts")) &&
+          !fs.existsSync(path.join(modules, "hash", "moved")) &&
+          lockOf(app)?.packages?.hash?.commit === v110 &&
+          leftovers().length === 0,
+        `${again.status}: ${again.stderr}`,
+      )
+
+      const pinned = inst([`${hashRepo}#v1.0.0`])
+      check(
+        "nish install <dir>#<tag>: that tag, and the dependency and the lock move to it",
+        pinned.status === 0 &&
+          readJson(path.join(app, "package.json"))?.dependencies?.hash === spec("v1.0.0") &&
+          lockOf(app)?.packages?.hash?.commit === v100 &&
+          readJson(path.join(modules, "hash", "package.json"))?.version === "1.0.0",
+        `${pinned.status}: ${pinned.stderr}`,
+      )
+
+      // npm reads the line nish wrote and puts the same tree at the same path.
+      if (!has("npm")) {
+        skip("nish install: npm not on PATH, so its reading of the dependency is not compared")
+      } else {
+        const viaNpm = path.join(inDir, "via-npm")
+        fs.mkdirSync(viaNpm)
+        fs.copyFileSync(path.join(app, "package.json"), path.join(viaNpm, "package.json"))
+        const npmPkg = readJson(path.join(viaNpm, "package.json"))
+        delete npmPkg.dependencies["left-pad"]
+        fs.writeFileSync(path.join(viaNpm, "package.json"), JSON.stringify(npmPkg))
+        const npm = spawnSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock"], {
+          cwd: viaNpm,
+          encoding: "utf8",
+          timeout: 120000,
+        })
+        const tree = (dir) =>
+          fs
+            .readdirSync(dir, { recursive: true })
+            .sort()
+            .map((f) => {
+              const p = path.join(dir, f)
+              return fs.statSync(p).isFile() ? `${f}:${fs.readFileSync(p, "utf8")}` : f
+            })
+            .join("\n")
+        const ours = tree(path.join(modules, "hash"))
+        const theirs = fs.existsSync(path.join(viaNpm, "node_modules", "hash")) ? tree(path.join(viaNpm, "node_modules", "hash")) : ""
+        check(
+          "nish install: npm install of the recorded dependency yields the same package tree",
+          npm.status === 0 && ours === theirs,
+          `${npm.status}: ${npm.stderr}\nours:\n${ours}\nnpm's:\n${theirs}`,
+        )
+      }
+
+      // Refused packages: exit 1, and the package that was installed is still there.
+      const jsRepo = repo("js", { "package.json": manifest("leftpad", "1.0.0", { ".": "./index.js" }), "index.js": "" })
+      const linkRepo = repo("link", { "package.json": manifest("lnk", "1.0.0", { ".": { nish: "./i.ts" } }) })
+      fs.symlinkSync("/etc/passwd", path.join(linkRepo, "i.ts"))
+      gitIn(linkRepo, "add", "-A")
+      gitIn(linkRepo, "commit", "-qm", "link")
+      const nameRepo = repo("name", { "package.json": manifest("../../escape", "1.0.0", { ".": { nish: "./i.ts" } }), "i.ts": "" })
+      const bareRepo = repo("bare", { "README.md": "no manifest" })
+      for (const [what, source] of [
+        ["a package with no nish condition", jsRepo],
+        ["a tree with a symbolic link", linkRepo],
+        ["a name that is a path", nameRepo],
+        ["a repository with no package.json", bareRepo],
+        ["a ref the repository does not have", `${hashRepo}#v9.9.9`],
+      ]) {
+        const r = inst([source])
+        check(
+          `nish install: ${what} is refused (exit 1) and node_modules keeps what it had`,
+          r.status === 1 &&
+            r.stderr.includes("install: ") &&
+            fs.readdirSync(modules).join(",") === "hash" &&
+            readJson(path.join(modules, "hash", "package.json"))?.version === "1.0.0" &&
+            !fs.existsSync(path.join(inDir, "escape")),
+          `${r.status}: ${r.stderr}`,
+        )
+      }
+
+      // Usage errors: exit 2, before git is asked anything, and nothing written.
+      const before = fs.readFileSync(path.join(app, "package.json"), "utf8")
+      for (const bad of [
+        "http://example.com/x.git",
+        "git://example.com/x.git",
+        "ext::sh -c id",
+        "ext::id",
+        "--upload-pack=id",
+        `${hashRepo}#--upload-pack=id`,
+        `${hashRepo}#a..b`,
+        "not-a-url",
+        path.join(inDir, "missing"),
+      ]) {
+        const r = inst([bad])
+        check(
+          `nish install ${JSON.stringify(bad.replace(inDir, "<dir>"))}: a usage error, exit 2, nothing changed`,
+          r.status === 2 && r.stderr.includes("usage: nish install") && fs.readFileSync(path.join(app, "package.json"), "utf8") === before,
+          `${r.status}: ${r.stderr}`,
+        )
+      }
+      const help = inst(["--help"])
+      check(
+        "nish install --help: the usage on stdout, exit 0",
+        help.status === 0 && help.stdout.startsWith("usage: nish install") && help.stderr === "",
+        `${help.status}: ${help.stderr}`,
+      )
+
+      // A directory with no package.json anywhere above it gets one. It is made
+      // under the system's temporary directory: under build/, the search
+      // upward would find this repository's own package.json and edit it.
+      const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "nish-install-"))
+      try {
+        const made = inst([hashRepo], fresh)
+        check(
+          "nish install: a project with no package.json gets one holding the dependency",
+          made.status === 0 && readJson(path.join(fresh, "package.json"))?.dependencies?.hash === spec("v1.1.0"),
+          `${made.status}: ${made.stderr}`,
+        )
+      } finally {
+        fs.rmSync(fresh, { recursive: true, force: true })
+      }
+    }
+  }
 }
 
 // A filtered run's `tail` groups are shard 1's, and the line below names them.

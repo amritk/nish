@@ -61,6 +61,7 @@
 // is a name no other module can use — which the bootstrap found the moment this
 // file arrived. The stage0 twin keeps the same names so the two stay diffable.
 
+import { PACKAGE_CONDITION, packageConditionFor } from "./branding"
 import { isDigit } from "./lexer"
 import { splitByte, StringBuilder } from "./strings"
 
@@ -96,7 +97,7 @@ const OPEN_BRACKET: i32 = 91
 const CLOSE_BRACKET: i32 = 93
 
 /** The first index at or after `at` that is not JSON whitespace. */
-const manifestSkipBlank = (text: string, at: i32): i32 => {
+export const manifestSkipBlank = (text: string, at: i32): i32 => {
   let i = at
   while (i < text.length) {
     const code = text.charCodeAt(i)
@@ -363,7 +364,7 @@ const manifestHexDigit = (code: i32): i32 => {
  * closing brace; the members before it are kept. Every position is tested
  * against the length before it is stepped past.
  */
-class ManifestMembers {
+export class ManifestMembers {
   keys: string[]
   keyAt: i32[]
   keyEnd: i32[]
@@ -381,7 +382,7 @@ class ManifestMembers {
   }
 }
 
-const manifestMembers = (text: string, at: i32): ManifestMembers => {
+export const manifestMembers = (text: string, at: i32): ManifestMembers => {
   const out = new ManifestMembers()
   if (at < 0 || at >= text.length || text.charCodeAt(at) !== OPEN_BRACE) {
     out.broken = at
@@ -1339,4 +1340,55 @@ export const manifestEngineCheck = (manifest: string, condition: string, version
     i = i + 1
   }
   return ENGINE_OK
+}
+
+/**
+ * `object`'s `name` field decoded as `JSON.parse` decodes a string, or null
+ * when the field is missing or is not a string. `nish install` reads a
+ * package's `name` and a dependency's spec through it, and either one decides
+ * a path, so an escape is decoded here rather than compared as written.
+ */
+export const manifestString = (object: string, name: string): string | null => {
+  const at = manifestFieldAt(object, name)
+  if (at < 0 || at >= object.length || object.charCodeAt(at) !== QUOTE) {
+    return null
+  }
+  return manifestDecodeString(object, at)
+}
+
+/** Whether `subpath` of `manifest` offers a Nish file under either number mode. */
+const manifestSubpathOffersNish = (manifest: string, subpath: string): boolean => {
+  const f64 = nishExportEntry(
+    manifest,
+    subpath,
+    packageConditionFor("f64"),
+    PACKAGE_CONDITION,
+    packageConditionFor("i32")
+  )
+  return f64.status === MANIFEST_FOUND || f64.status === MANIFEST_OTHER_MODE
+}
+
+/**
+ * Whether the package offers a Nish consumer anything to compile: its `.`, or
+ * one of its `./`-subpaths, names a file under `nish`, `nish-f64` or
+ * `nish-i32`. `nish install` refuses a package that does not, since nothing
+ * could import it, and saying so at the install is kinder than at the first
+ * compile. A mode is either mode here: which one a program compiles in is the
+ * importing compile's question, and it asks it (`nishExportEntry`).
+ */
+export const manifestOffersNish = (manifest: string): boolean => {
+  const exports = manifestField(manifest, "exports")
+  if (exports.length === 0) {
+    return false
+  }
+  if (manifestSubpathOffersNish(manifest, ".")) {
+    return true
+  }
+  const members = manifestMembers(exports, manifestSkipBlank(exports, 0))
+  for (const key of members.keys) {
+    if (key.startsWith("./") && manifestSubpathOffersNish(manifest, key)) {
+      return true
+    }
+  }
+  return false
 }

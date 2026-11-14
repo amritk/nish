@@ -11,6 +11,7 @@ nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
 nish run [flags] <file.ts> [args ...]  build, cache and run it
 nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
 nish upgrade [<version>] [--check]     install a newer release
+nish install [<git-url>[#<ref>] ...]   add packages from git
 nish -v, --version | -h, --help
 ```
 

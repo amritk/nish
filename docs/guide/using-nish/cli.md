@@ -15,6 +15,7 @@ usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
        nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
        nish upgrade [<version>] [--check]     install a newer release
+       nish install [<git-url>[#<ref>] ...]   add packages from git
        nish -v, --version | -h, --help
 ```
 
@@ -582,6 +583,24 @@ first) in the installed package, and the flags an agent's loop needs —
 variables is set for some other reason. If the package's `docs/AI.md` cannot
 be found, the section names it without a path.
 
+## Installing packages: `nish install`
+
+`nish install` fetches a Nish package from a git repository into
+`node_modules`, records it in `package.json` as npm records a git dependency,
+and keeps the commit it installed in `nish.lock`:
+
+```bash
+nish install git@github.com:you/hash.git       # the newest vX.Y.Z tag
+nish install https://github.com/you/hash.git#main
+nish install                                   # every git dependency, at its locked commit
+```
+
+It needs `git` on your `PATH`, and exits 3 without it. A package that cannot
+be installed (no Nish entry point, a ref the repository does not have, a
+symbolic link in its tree) is exit 1, and a source it does not accept is a
+usage error, exit 2, before anything is fetched. [Packages](../language/modules.md#installing-a-package-from-git)
+covers what it writes and how npm reads the same line.
+
 ## Staying up to date: `nish upgrade`
 
 `nish upgrade` installs the latest release when it is newer than the compiler
@@ -647,9 +666,9 @@ else chooses what the line says. What the check trusts is in the
 | Code | Meaning |
 | ---: | --- |
 | 0 | success |
-| 1 | the program was rejected: a compile error, or an input file that does not exist |
+| 1 | the program was rejected: a compile error, or an input file that does not exist; for `nish install`, a package that could not be installed |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
-| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed |
+| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed; for `nish install`, no `git` |
 | 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own

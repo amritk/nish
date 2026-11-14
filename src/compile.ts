@@ -88,6 +88,7 @@ import {
   simulatedUnlabelledBuiltin,
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { install } from "./install"
 import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
@@ -684,6 +685,11 @@ const commandMain = (): number => {
   // file named `upgrade` in the working directory, as `run` does.
   if (process.argv[1] === "upgrade") {
     return upgrade()
+  }
+  // `nish install` is documented too, and wins over a file named `install`
+  // for the same reason (`src/install.ts`).
+  if (process.argv[1] === "install") {
+    return install(process.argv, 2)
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()

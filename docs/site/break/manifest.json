@@ -1,12 +1,12 @@
 {
   "compiler": "nish 0.39.0",
-  "help": "5f22a639aac8c42b4ba1efacafde9f60fcd1999d18e4a9b7a77ed036e6ee360f",
+  "help": "86d481ecbe45a3d1426a55d0a7caf6ce714ad3c131f6697377fd7236ba606e29",
   "memory": "32",
   "inputs": {
     "examples/break-web/break.mjs": "f80bc0b98739cab80dd483aa8b3f61e61be348b8a551faf1fbd472b19cbc1dd1",
     "examples/break-web/build.mjs": "b5d82f646ea13d94fc5f595553b07a103966f9448b7957d7beda804526caa218",
     "examples/break-web/game.ts": "9dc90f94c79843e3dffef2e382e21b7a38cc20f92fd44be2c4c8b19a01eb8b73",
-    "examples/break-web/help.ts": "93aceb5079d090308418ba990da03a8598727efbba5cd03cfe6168d882aad53b",
+    "examples/break-web/help.ts": "e09f18c946b5ffee240f5136036e562b36afdce40a1086b2b384aba2391bcdd5",
     "examples/break-web/shell.mjs": "823d9e6cb4a7f3696249390029a500f9f588b62a951da596464050746309ef48",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
     "runtime/page-game.mjs": "e04a2f9298c97b0876de51794d6d912331e07b5e3d1d3e075d457c1ff987c87b",
@@ -32,10 +32,10 @@
     "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
   },
   "outputs": {
-    "game.wasm": "5856f79d8f53d76c19755b9bb26cfedb37a2abac723e6ac69d03c9a3eb75775f",
+    "game.wasm": "49cd4539d9ef7268a85fefa21519af2ec756d06a252d3b3d7714acedb769fc7c",
     "game.mjs": "fdb3215218131d562e357773f8f7517190841b26677bf6b128fad3f1666dae3b",
     "break.mjs": "449da9e55996c04bd58b2774a04e6e60ef658aec513028da6b100133235351e3",
-    "shell.mjs": "f69e1b10aa2a82f8a402a882b788e76cd88ccead316040ecd9762d974e6b759c",
+    "shell.mjs": "2afab052d7fa9f9c5bbc57c8de7994c309b4423e353567359f7d1ba3732aac23",
     "nish/page-game.mjs": "e04a2f9298c97b0876de51794d6d912331e07b5e3d1d3e075d457c1ff987c87b",
     "nish/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
     "nish/page.mjs": "30a94f7965d6d44ad58053e4b3d42028c797c1afab5f914a20c63e433ff31d7c"

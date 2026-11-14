@@ -2246,6 +2246,10 @@ export const main = (): i32 => {
   `"engines": {"nish": ">=X.Y.Z"}` is above this compiler `` needs a newer
   compiler ``, and a `package.json` that is not JSON names its line and
   column — each with its own `--json` code (`NL3017`–`NL3021`).
+- **`nish install <git-url>[#<ref>]` puts a package from git into
+  `node_modules`** and records it in `package.json` as npm records a git
+  dependency, with its commit in `nish.lock`; `nish install` alone installs
+  every git dependency at its locked commit. The import is the same either way.
 - Functions and enums may be renamed on import; classes and interfaces may
   not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
