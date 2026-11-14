@@ -5,8 +5,8 @@
 //     return fib(n - 1) + fib(n - 2)
 //   }
 //
-// Every return that is not a base case is a *step*, `X + self(args)` over the
-// checked `i32` `+`: the frame's answer is its own `X` plus whatever the
+// Every return that is not a base case is a *step*, `X + self(args)` over a
+// checked `+`: the frame's answer is its own `X` plus whatever the
 // recursion answers. LLVM's tail-recursion elimination folds such a return
 // into a loop and an accumulator only when the `+` is a plain `add`; the
 // checked one, `llvm.sadd.with.overflow` and a branch, defeats it, and `fib`
@@ -23,7 +23,15 @@
 //   arrow, async, a generator, foreign or generic, not a method of a generic
 //   or atomic class, and with no compile-time, defaulted or rest parameter
 //   and no captures.
-// - It returns `i32`, and no parameter is ranged or a `Result`.
+// - It returns a type whose `+` is checked, and no parameter is ranged or a
+//   `Result`. That set is the signed integers, `i32` and `i64` — the types
+//   `emitIntBinary` in `src/emit-ops.ts` sends through `emitCheckedArith` —
+//   and the loop's proof (beside the emitter) holds at the MAX and MIN of
+//   either. `u8`, `u16`, `u32` and `u64` stay out: their `+` wraps by
+//   definition (`docs/LANGUAGE.md`, "Unsigned integers"), there is no
+//   overflow check for LLVM's tail-recursion elimination to trip on, and so
+//   nothing for this loop to do. `f64` and `f32` stay out for the same
+//   reason: their `+` has no check.
 // - Its body is blocks, `if`, `const` / `let` (no `using`), expression
 //   statements and `return`: no loop, `switch`, `try`, `throw` or `defer`,
 //   and no arrow anywhere in it, so no closure can see a local.
@@ -38,7 +46,7 @@
 //   method in an interface, no method call on a union), so that call reaches
 //   this very body; a call through a function-valued field is no method call
 //   and is never a step.
-//   - `X + self(a, ...)` with `X` any `i32` expression. `X` is evaluated
+//   - `X + self(a, ...)` with `X` any expression of the return type. `X` is evaluated
 //     before the arguments in the source and in the loop alike.
 //   - `self(a, ...) + Y` with `Y` a number or a parameter: reading `Y` after
 //     the recursion and reading it before are one value, because the
@@ -64,7 +72,7 @@ import {
   STRUCT_CLASS,
 } from "./program"
 import { STORAGE_PARAM } from "./symbols"
-import { T_I32 } from "./types"
+import { isInteger, isUnsigned } from "./types"
 
 /** What `tailKind` found in one tail position, as a bitmask. */
 const TAIL_BASE: i32 = 1
@@ -107,7 +115,7 @@ export const recordAccumulation = (ctx: CheckContext, sig: FunctionSig, body: No
   }
 }
 
-/** The declaration-level conditions: a plain `i32` function or method of this module. */
+/** The declaration-level conditions: a plain function or method of this module, returning a checked sum's type. */
 const signatureQualifies = (ctx: CheckContext, sig: FunctionSig): boolean => {
   if (
     sig.instance !== null ||
@@ -121,7 +129,7 @@ const signatureQualifies = (ctx: CheckContext, sig: FunctionSig): boolean => {
     sig.captures.length > 0 ||
     sig.compileTime.length > 0 ||
     sig.restIndex >= 0 ||
-    sig.returnType !== T_I32
+    !hasCheckedSum(sig.returnType)
   ) {
     return false
   }
@@ -133,6 +141,13 @@ const signatureQualifies = (ctx: CheckContext, sig: FunctionSig): boolean => {
   }
   return true
 }
+
+/**
+ * Whether `+` on `type` is the checked add the loop defers: a signed integer,
+ * by `emitIntBinary`'s own test. An unsigned `+` wraps and a float's has no
+ * check, so neither has an overflow the loop could hand back.
+ */
+const hasCheckedSum = (type: i32): boolean => isInteger(type) && !isUnsigned(type)
 
 /** A plain function, or a method of a class that is neither generic nor atomic. */
 const ownerQualifies = (sig: FunctionSig): boolean => {
@@ -203,10 +218,10 @@ const tailKind = (ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   // A parenthesis or a conditional that converts its value is a base: the
   // loop would skip the conversion, so neither is looked through.
   let inner = value
-  while (inner.kind === NodeKind.Paren && isPlainI32(ctx, inner)) {
+  while (inner.kind === NodeKind.Paren && isPlainSum(ctx, sig, inner)) {
     inner = inner.children[0]
   }
-  if (inner.kind === NodeKind.Conditional && isPlainI32(ctx, inner)) {
+  if (inner.kind === NodeKind.Conditional && isPlainSum(ctx, sig, inner)) {
     const a = tailKind(ctx, sig, inner.children[1], steps, splits)
     const b = tailKind(ctx, sig, inner.children[2], steps, splits)
     const kind = a | b
@@ -222,14 +237,14 @@ const tailKind = (ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   return TAIL_BASE
 }
 
-/** Whether `node` is `X + self(...)` or `self(...) + Y` over `i32`, with every coercion absent. */
+/** Whether `node` is `X + self(...)` or `self(...) + Y` over the return type, with every coercion absent. */
 const isStep = (ctx: CheckContext, sig: FunctionSig, node: Node): boolean => {
   if (node.kind !== NodeKind.Binary || node.text !== "+") {
     return false
   }
   const left = node.children[0]
   const right = node.children[1]
-  if (!isPlainI32(ctx, node) || !isPlainI32(ctx, left) || !isPlainI32(ctx, right)) {
+  if (!isPlainSum(ctx, sig, node) || !isPlainSum(ctx, sig, left) || !isPlainSum(ctx, sig, right)) {
     return false
   }
   if (isSelfCall(ctx, sig, right)) {
@@ -244,9 +259,9 @@ const stepCall = (ctx: CheckContext, sig: FunctionSig, step: Node): Node => {
   return isSelfCall(ctx, sig, right) ? right : step.children[0]
 }
 
-/** An `i32` value as the checker typed it, with no coercion on it. */
-const isPlainI32 = (ctx: CheckContext, node: Node): boolean =>
-  ctx.program.nodeTypes[node.id] === T_I32 && ctx.program.nodeCoercions[node.id] < 0
+/** A value the checker typed as `sig`'s return type, with no coercion on it. */
+const isPlainSum = (ctx: CheckContext, sig: FunctionSig, node: Node): boolean =>
+  ctx.program.nodeTypes[node.id] === sig.returnType && ctx.program.nodeCoercions[node.id] < 0
 
 /**
  * A direct call of `sig` that passes every parameter it has: `self(a, ...)`,

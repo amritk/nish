@@ -32611,9 +32611,9 @@ the functions, `src/emit-accumulate.ts` writes them, with the proof). A
 function qualifies when it is a plain function of its module, or a method of
 a class of its module that is neither generic nor `nish/threads`'s
 atomic `AtomicI32` or `AtomicI64` (whose methods the compiler writes
-itself), that returns
-`i32` (an `f64` sum has no overflow check to defer, and another integer width
-is left to a later stage), every `return` that recurses is `X + self(args)`,
+itself), that returns a type whose `+` is checked, `i32` or `i64` (an `f64`
+sum has no overflow check to defer, and a `u8`..`u64` sum wraps by
+definition, so it has none either: `tests/cases/acc_width_unsigned`), every `return` that recurses is `X + self(args)`,
 or `self(args) + Y` with `Y` a number literal or a parameter (so moving `Y`
 ahead of the call cannot move an effect), at least one `return` does not, and
 the body is only blocks, `if`, declarations, expression statements and
@@ -32641,7 +32641,8 @@ from a base, so the hot loop takes no branch of its own. Code with an effect
 stays a call and `fib(n - 2)` is the back edge. `--no-elision` and a debug or
 wasm-panic-site build keep the recursion (`tests/cases/acc_fib`, `acc_tree`,
 `acc_shapes`, `acc_overflow`, `acc_effects`, `acc_soundness`,
-`acc_ineligible`, `acc_ineligible_f64`).
+`acc_width_i64`, `acc_width_unsigned`, `acc_ineligible`,
+`acc_ineligible_f64`).
 
 <!-- cookbook:begin opt-recursion-loop -->
 ```ts
@@ -32731,6 +32732,110 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-recursion-loop -->
+
+An `i64` sum is the same loop at `i64`: the `phi`s, the wrapping add and the
+sign test are at the return type's width, and every checked add is
+`llvm.sadd.with.overflow.i64`, the instruction the recursion's own `+` is.
+The proof only needs MAX and MIN of the width (`src/emit-accumulate.ts`,
+"Widths").
+
+<!-- cookbook:begin opt-recursion-i64 -->
+```ts
+const total = (n: i64): i64 => {
+  if (n <= toI64(0)) {
+    return toI64(0)
+  }
+  return n + total(n - toI64(1))
+}
+
+export const test = (): i64 => total(toI64(100000))
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #2
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #2
+
+define internal noundef i64 @total(i64 noundef %n.in) #0 {
+entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i64 [ %n.in, %entry ], [ %8, %ovf.ok.1 ]
+  %rec.prev = phi i64 [ 0, %entry ], [ %rec.sum, %ovf.ok.1 ]
+  %rec.last = phi i64 [ 0, %entry ], [ %n, %ovf.ok.1 ]
+  %rec.sum = add i64 %rec.prev, %rec.last
+  %rec.signs = or i64 %rec.last, %rec.sum
+  %rec.cold = icmp slt i64 %rec.signs, 0
+  %0 = sext i32 0 to i64
+  %1 = icmp sle i64 %n, %0
+  %rec.leave = or i1 %1, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %2 = sext i32 0 to i64
+  %3 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.sum, i64 %2)
+  %4 = extractvalue { i64, i1 } %3, 0
+  %5 = extractvalue { i64, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i64 %4
+
+if.end:
+  %6 = sext i32 1 to i64
+  %7 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %n, i64 %6)
+  %8 = extractvalue { i64, i1 } %7, 0
+  %9 = extractvalue { i64, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %10 = call i64 @total(i64 %n)
+  %11 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.last, i64 %10)
+  %12 = extractvalue { i64, i1 } %11, 0
+  %13 = extractvalue { i64, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %14 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.prev, i64 %12)
+  %15 = extractvalue { i64, i1 } %14, 0
+  %16 = extractvalue { i64, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  ret i64 %15
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %if.then ], [ 1, %if.end ], [ 0, %rec.call ], [ 0, %ovf.ok.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
+}
+
+define noundef i64 @test() #0 {
+entry:
+  %0 = sext i32 100000 to i64
+  %1 = tail call i64 @total(i64 %0)
+  ret i64 %1
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-i64 -->
 
 A method's self call is `r.m(args)` on a receiver the checker typed as the
 method's own class, written with `.`, not `?.`. Nish binds every method call

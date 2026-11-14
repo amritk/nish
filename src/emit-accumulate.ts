@@ -7,7 +7,8 @@
 //     return fib(n - 1) + fib(n - 2)
 //   }
 //
-// becomes, in outline (`docs/IR_COOKBOOK.md` has the exact IR):
+// becomes, in outline (`docs/IR_COOKBOOK.md` has the exact IR; an `i64` sum
+// is the same code at `i64`, "Widths" below):
 //
 //   entry:     br label %rec.head
 //   rec.head:  %n = phi i32 [ %n.in, %entry ], [ <n - 2>, <step> ]
@@ -60,6 +61,25 @@
 // recursion cannot assign: the argument is the recorder's, in the file
 // header of `src/accumulate.ts`.
 //
+// Widths (issue #1612). The sum is the function's return type, every value
+// above is of that type, and MAX and MIN are its bounds: 2^31 - 1 and -2^31
+// for `i32`, 2^63 - 1 and -2^63 for `i64`, the two types whose `+` is checked
+// (`emitIntBinary`). Nothing in the argument depends on the width but these:
+// `%rec.prev` and `%rec.last` each in [0, MAX] make their true sum at most
+// 2 MAX = 2^w - 2, which the w-bit add holds as a negative number exactly
+// when it passes MAX, so the sign test of `%rec.last | %rec.sum` at that
+// width is the cold test; and every add the loop and the cold call make is
+// `llvm.sadd.with.overflow` at that width, the instruction the recursion's own
+// `+` is, panicking with the same `OVERFLOW_ADD`.
+//
+// The unsigned widths have no proof here because they have no loop. Their `+`
+// wraps by definition (`docs/LANGUAGE.md`, "Unsigned integers"): it is a plain
+// `add`, so there is no overflow to defer and no panic to reproduce, and a
+// plain `add` is what LLVM's tail-recursion elimination already folds. The
+// recorder keeps them out (`hasCheckedSum` in `src/accumulate.ts`). The
+// header's sign test would not even be theirs: an unsigned addend of 2^(w-1)
+// or more is an ordinary value, not a negative one.
+//
 // Methods (issue #1612). A method is a function whose first parameter is
 // `this`, and its step `X + r.m(args)` is the call `m(r, args)`: the
 // receiver is evaluated first, then the arguments, as `emitMethodCall` does,
@@ -106,16 +126,19 @@ export class RecursionLoop {
   head: IRBlock
   /** The parameters' LLVM types, in order. */
   types: string[]
+  /** The LLVM type of the sum: the return type, `i32` or `i64`. */
+  width: string
   /** For each edge back into the header, the block it leaves, the arguments it passes and the `X` it adds. */
   edges: string[]
   args: string[][]
   addends: string[]
 
-  constructor(sig: FunctionSig, entry: string, head: IRBlock, types: string[]) {
+  constructor(sig: FunctionSig, entry: string, head: IRBlock, types: string[], width: string) {
     this.sig = sig
     this.entry = entry
     this.head = head
     this.types = types
+    this.width = width
     this.edges = []
     this.args = []
     this.addends = []
@@ -171,7 +194,7 @@ export const openAccumulation = (emitter: Emitter, sig: FunctionSig): void => {
   const head = fn.newBlock("rec.head")
   fn.emit(`br label %${head.label}`)
   fn.placeBlock(head)
-  emitter.accumulator = new RecursionLoop(sig, entry.label, head, types)
+  emitter.accumulator = new RecursionLoop(sig, entry.label, head, types, emitter.llvm(sig.returnType))
 }
 
 /**
@@ -200,11 +223,12 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   for (let e = 0; e < acc.edges.length; e++) {
     sums.push("%rec.sum")
   }
-  lines.push(headPhi(acc, "%rec.prev", "i32", "0", sums))
-  lines.push(headPhi(acc, "%rec.last", "i32", "0", acc.addends))
-  lines.push("%rec.sum = add i32 %rec.prev, %rec.last")
-  lines.push("%rec.signs = or i32 %rec.last, %rec.sum")
-  lines.push("%rec.cold = icmp slt i32 %rec.signs, 0")
+  const width = acc.width
+  lines.push(headPhi(acc, "%rec.prev", width, "0", sums))
+  lines.push(headPhi(acc, "%rec.last", width, "0", acc.addends))
+  lines.push(`%rec.sum = add ${width} %rec.prev, %rec.last`)
+  lines.push(`%rec.signs = or ${width} %rec.last, %rec.sum`)
+  lines.push(`%rec.cold = icmp slt ${width} %rec.signs, 0`)
   const body = acc.head.instructions
   acc.head.instructions = lines
   const call = fn.newBlock("rec.call")
@@ -229,8 +253,8 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
     placeAfter(fn, acc.head, rest)
   }
   fn.placeBlock(call)
-  const answer = fn.emitValue(`call i32 @${acc.sig.name}(${operands.join(", ")})`)
-  fn.emit(`ret i32 ${checkedAdd(emitter, "%rec.prev", checkedAdd(emitter, "%rec.last", answer))}`)
+  const answer = fn.emitValue(`call ${width} @${acc.sig.name}(${operands.join(", ")})`)
+  fn.emit(`ret ${width} ${checkedAdd(emitter, acc, "%rec.prev", checkedAdd(emitter, acc, "%rec.last", answer))}`)
   emitter.accumulator = null
 }
 
@@ -410,9 +434,9 @@ export const emitAccumulateTail = (emitter: Emitter, acc: RecursionLoop, value: 
   } else if (role === ACC_STEP) {
     emitStep(emitter, acc, inner)
   } else {
-    const total = checkedAdd(emitter, "%rec.sum", emitter.emitExpression(value))
+    const total = checkedAdd(emitter, acc, "%rec.sum", emitter.emitExpression(value))
     emitter.emitScopeExit()
-    emitter.fn.emit(`ret i32 ${total}`)
+    emitter.fn.emit(`ret ${acc.width} ${total}`)
   }
 }
 
@@ -451,6 +475,6 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   fn.emit(`br label %${acc.head.label}`)
 }
 
-/** `a + b` over `i32`, panicking with `OVERFLOW_ADD` as the checked `+` does: never `nsw`, whatever the step's proofs say. */
-const checkedAdd = (emitter: Emitter, a: string, b: string): string =>
-  emitCheckedArith(emitter, "add", "i32", a, b, OVERFLOW_ADD)
+/** `a + b` at the loop's width, panicking with `OVERFLOW_ADD` as the checked `+` does: never `nsw`, whatever the step's proofs say. */
+const checkedAdd = (emitter: Emitter, acc: RecursionLoop, a: string, b: string): string =>
+  emitCheckedArith(emitter, "add", acc.width, a, b, OVERFLOW_ADD)
