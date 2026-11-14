@@ -4,7 +4,7 @@
 
 ## Stages
 
-- [x] Q1 to Q9 answered *(owner's decision)*
+- [x] Q1 to Q9 answered
 - [x] F1: `fileOpen`, `fileReadAt`, `fileSize` and `fileClose`, native and Node
 - [x] F2: the same on the wasm targets
 - [x] F3: the HTTP/1.1 example of [#710](https://github.com/amritk/nish/issues/710) with flat memory

@@ -1,9 +1,8 @@
 # The relay
 
-cs's WebTransport relay (`services/relay` in
-[`amritk/cs`](https://github.com/amritk/cs), Rust over `wtransport` 0.7),
-written in Nish on `std/net`: WP34's lane A1
-([`docs/wp34-hosting-cs.md`](../../docs/wp34-hosting-cs.md) §2 and §5). A
+A game's WebTransport relay, a port of a production relay written in Rust over
+`wtransport` 0.7, written in Nish on `std/net`: WP34's lane A1
+([`docs/wp34-network-stack.md`](../../docs/wp34-network-stack.md) §2 and §5). A
 browser sends unreliable WebTransport datagrams over QUIC; the relay forwards
 each payload verbatim over UDP to the game server a signed grant names, one
 upstream socket per session, and sends the game server's datagrams back the
@@ -12,7 +11,7 @@ same way. It knows nothing about the game.
 ```bash
 nish examples/relay/main.ts --link build/relay
 build/relay --help
-build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/relay.json
+build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/relay/relay.json
 ```
 
 ## Files
@@ -147,7 +146,7 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 ## Tests
 
 - [`tests/link/net_relay`](../../tests/link/net_relay) (and `_f64`): the frame
-  and grant fixtures cs's `cargo test` uses, every case those tests have and a
+  and grant fixtures the Rust relay's `cargo test` uses, every case those tests have and a
   negative for each error; the JSON reader; the options and identity (tls.rs's
   tests); and the relay across loopback in one loop — a Nish WebTransport
   client (`net_webtransport/peer.ts`'s, by import), a Nish UDP game server and

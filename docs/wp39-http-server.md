@@ -15,7 +15,7 @@ resumption, G4's AES kernel, G5's address change, G8's harness and G10 are
 built; §3 says what each row has left. The anchors below are at `ce9d394`;
 §1 says where each row stands now (*2026-11-08*).
 
-[WP34](wp34-hosting-cs.md) built a network stack for one program: cs's relay.
+[WP34](wp34-network-stack.md) built a network stack for one program: a game's relay.
 That stack serves HTTP/1.1 with WebSocket, HTTP/2, HTTP/3 and WebTransport, and
 S2's interop job (`.github/workflows/interop.yml`) runs it against real
 clients:
@@ -81,7 +81,7 @@ model; TFB accepts it, and many entries use it.
 
 #478's second half is WP34 N12: non-blocking `spawn`, `kill` and `waitpid`,
 the available parallelism, and the total memory, so that the supervisor can
-be written in Nish. It is wanted for the relay and cs's master too. TFB does
+be written in Nish. It is wanted for the relay and a game's master server too. TFB does
 not wait for it.
 
 **Acceptance.** #478's own: a `tests/link/` case with two listeners on one
@@ -230,7 +230,7 @@ closes.
 | **G9** | WebTransport's draft: when Chrome moves past the draft `std/net/webtransport.ts` is pinned to, re-record the exchange and move the pin | [webtransport.md](security/webtransport.md), "The draft" | continuous |
 | **G10** | ~~The client role of TLS against the web PKI (WP34 N13)~~, built: `nish/net/tls/client`, chain validation against the system store in `nish/net/tls/verify`, and outbound HTTPS in `nish/net/fetch` ("The client" in [tls.md](security/tls.md)). Postgres over TLS (E6) is what is left | WP34 §8 | L |
 
-## 4. Decisions for the owner
+## 4. Decisions
 
 | | Question | Recommendation |
 | --- | --- | --- |

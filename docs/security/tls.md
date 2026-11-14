@@ -1,7 +1,7 @@
 # Security record: TLS 1.3 — the server and client handshakes, their records and the TCP carrier
 
-The record of `nish/net/tls`, WP34's lane T1, and of the record layer and the
-TCP carrier lane T2 put around it (`nish/net/tls/record`,
+The record of `nish/net/tls`, the TLS 1.3 server handshake, and of the record
+layer and the TCP carrier put around it (`nish/net/tls/record`,
 `nish/net/tls/record-server`, `nish/net/tls-tcp`): what each refuses, what it
 keeps secret and how, which secrets it leaves in memory, and the test that
 pins each property. It is written with the code rather than after an audit,

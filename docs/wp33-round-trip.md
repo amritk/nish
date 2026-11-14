@@ -146,7 +146,7 @@ the checker already answers.
 ## 3. The ledger
 
 Every known difference between the two readings, its class, and what closes or
-translates it. "Resolution" is a proposal, and the owner's decisions are
+translates it. "Resolution" is a proposal, and the decisions are
 collected in §7.
 
 ### 3.1 Numbers
@@ -509,7 +509,7 @@ This is what "keep it in mind as we design the language" means in practice.
 
 ## 7. Decisions
 
-The owner took every recommendation below on 2026-09-28, with not losing
+Every recommendation below was accepted on 2026-09-28, with not losing
 performance as the deciding constraint (§1 rule 6). Each row is now the plan,
 and the stages in §9 build it.
 

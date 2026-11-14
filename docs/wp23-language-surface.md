@@ -278,8 +278,8 @@ illegal in another is answered by precedent: `Map.get`'s maybe has had
 exactly this rule, a value whose only use is the left of `??`, since 0.11.0.
 The statement form `a?.m();` stays refused, because it has no `??` to say
 what the chain stands for. The rule and its cases are in
-[LANGUAGE.md](LANGUAGE.md#nullable-types); the plan that argued it is
-`.claude/plans/nullish-on-null.plan.md`.
+[LANGUAGE.md](LANGUAGE.md#nullable-types); the change that landed it is
+[#596](https://github.com/amritk/nish/pull/596).
 
 ## 10. Where the answer is genuinely open
 

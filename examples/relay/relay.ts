@@ -1,6 +1,6 @@
 /**
  * The relay: WebTransport datagrams in, UDP out, one upstream socket per
- * session. A port of the session half of cs's `services/relay/src/main.rs`
+ * session. A port of the session half of the Rust relay's `services/relay/src/main.rs`
  * (`Limits`, `SessionSlot`, `serve` and `pump`) onto `nish/net/http3-server`
  * and `nish/net/webtransport`, with the same caps, timeouts, close codes and
  * reasons.

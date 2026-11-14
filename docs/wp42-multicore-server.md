@@ -39,7 +39,7 @@ differs from this note:
 A Nish server today runs on one core. [WP39](wp39-http-server.md) E1 named
 the way out, `SO_REUSEPORT` on TCP, and left its second half, the process that
 spawns and supervises the workers, to WP34 N12
-([wp34-hosting-cs.md](wp34-hosting-cs.md), the N12 row at `:734`). Issue
+([wp34-network-stack.md](wp34-network-stack.md), the N12 row at `:734`). Issue
 [#478](https://github.com/amritk/nish/issues/478) asks for both: a parent that
 spawns one child per core, each listening on the same port, that restarts a
 child that dies and shuts down cleanly on `SIGTERM`.

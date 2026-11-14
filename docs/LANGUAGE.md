@@ -12441,7 +12441,7 @@ whole.
   length the bounds proof holds.
 - **A window into a buffer is `(buf, offset, length)` by convention**, not a
   view type: a second array layout would be one every array path in the emitter
-  has to handle ([wp34-hosting-cs.md](wp34-hosting-cs.md) §4 N2).
+  has to handle ([wp34-network-stack.md](wp34-network-stack.md) §4 N2).
 
 The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2): `fill` is
 **class A** — a `u8[]` is a plain `Array` under Node, and `Array.prototype.fill`

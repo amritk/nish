@@ -9,7 +9,7 @@ on them, [`tests/nish/run.ts`](../tests/nish/run.ts) and
 the global `Map` and `Set` and `nish/map` ([wp32-map.md](wp32-map.md)),
 `nish/threads` ([wp29-thread-surface.md](wp29-thread-surface.md)), the source
 of `nish:secret`, and the `nish/crypto/*` and `nish/net/*` stacks
-([wp34-hosting-cs.md](wp34-hosting-cs.md)).
+([wp34-network-stack.md](wp34-network-stack.md)).
 [`std/README.md`](../std/README.md) is the current module list and the
 operational rules; [LANGUAGE.md](LANGUAGE.md) is normative for the language.
 This note keeps the *why* behind both.

@@ -5,8 +5,8 @@ would change still holds:
 [LANGUAGE.md](LANGUAGE.md#export-and-import) says a function name is unique
 across the whole program, and where this note and LANGUAGE.md disagree,
 LANGUAGE.md wins. The stages are in §8 and on
-[the roadmap page](roadmap/wp57-module-scoped-names.md). S2 waits on the
-owner (§6). The plan that tracks the stages is
+[the roadmap page](roadmap/wp57-module-scoped-names.md). S2 waits on a
+decision (§6). The plan that tracks the stages is
 [`.claude/plans/wp57-module-scoped-names.plan.md`](../.claude/plans/wp57-module-scoped-names.plan.md).
 
 Every claim about today's compiler is anchored at commit `0bf1ddbb`, on
@@ -151,7 +151,7 @@ Three kinds of name need three different answers:
 | Name | Stage | Why separate |
 | --- | --- | --- |
 | A private function or generic template | S1 | Its symbol is the compiler's own business: `internal`, on no host's surface |
-| An exported function, or exported template, of the root package | S2 | Its symbol is the C ABI. Changing it is the owner's call |
+| An exported function, or exported template, of the root package | S2 | Its symbol is the C ABI. Changing it is the maintainer's call |
 | A class or interface | S3 | Its name is a *type's* identity, not only a symbol's |
 
 ## 4. S1: private functions and generic templates
@@ -306,7 +306,7 @@ golden has no two definitions with one symbol, and §4b renames only symbols
 that have two. S1 confirms this by running nish-cmp and the goldens update
 with no diff. A diff there is a bug in S1, not a declared change.
 
-## 6. S2: exported names that clash inside one package *(owner's decision)*
+## 6. S2: exported names that clash inside one package *(open question)*
 
 Two modules of the root package that each export `f` are NL3024 today. Inside
 a package, `import { f } from "./a"` already says which `f` is meant, so the
@@ -360,7 +360,7 @@ whatever S2's option costs for exported classes.
 | | Stage | Status |
 | ---: | --- | --- |
 | S1 | Private functions and generic templates qualified by their module when they would clash (§4) | Proposed |
-| S2 | Exported names that clash inside one package and are not on the C surface (§6) | *(owner's decision)* |
+| S2 | Exported names that clash inside one package and are not on the C surface (§6) | *(open question)* |
 | S3 | Module-scoped class and interface names, type identity (module, name) (§7) | Proposed, large; to be split |
 
 **S1's gate:** `tests/link/duplicate_internal` passes as a positive test,
