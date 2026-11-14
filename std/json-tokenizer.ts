@@ -205,6 +205,8 @@ const JSON_TOK_WANT_KEY_OR_CLOSE: i32 = 2
 const JSON_TOK_WANT_COLON: i32 = 3
 const JSON_TOK_WANT_COMMA_OR_CLOSE: i32 = 4
 const JSON_TOK_WANT_NOTHING: i32 = 5
+/** After an error: `fail` sets it, so `next` answers the sticky error from its switch. */
+const JSON_TOK_WANT_FAILED: i32 = 6
 
 /** What the depth stack holds for an open container. */
 const JSON_TOK_IN_OBJECT: i32 = 1
@@ -590,6 +592,12 @@ export class JsonTokenizer {
   private pos: i32
   private maxDepth: i32
   private maxStringBytes: i32
+  /**
+   * The first opening quote whose string could pass `maxStringBytes` before
+   * `end`: `end - 1 - maxStringBytes`, set with `end`, so `string` finds its
+   * limit with one comparison.
+   */
+  private stringFrom: i32
   private maxNumberBytes: i32
   /**
    * @internal Read by std/yaml-json.ts, which caps the text a YAML load stores
@@ -598,6 +606,12 @@ export class JsonTokenizer {
   maxTotalBytes: i32
   /** Containers open after the current token. */
   depth: i32
+  /**
+   * The innermost open container, `JSON_TOK_IN_OBJECT` or `JSON_TOK_IN_ARRAY`,
+   * or `0` at the top level: the stack's last byte, kept here by `open` and
+   * `close` so a comma and a closer read no stack.
+   */
+  private inside: i32
   /** What `next()` expects at `pos`. */
   private want: i32
   /** The current token's kind, the last `next()` answered; `JSON_TOK_END` before the first. */
@@ -651,8 +665,10 @@ export class JsonTokenizer {
     this.src = src
     this.off = 0
     this.end = 0
+    this.stringFrom = -1 - this.maxStringBytes
     this.pos = 0
     this.depth = 0
+    this.inside = 0
     this.want = JSON_TOK_WANT_VALUE
     this.kind = JSON_TOK_END
     this.tokStart = 0
@@ -682,6 +698,7 @@ export class JsonTokenizer {
   reset(src: u8[], off: i32, len: i32): void {
     this.src = src
     this.depth = 0
+    this.inside = 0
     this.want = JSON_TOK_WANT_VALUE
     this.kind = JSON_TOK_END
     this.tokStart = off
@@ -694,12 +711,15 @@ export class JsonTokenizer {
     if (off < 0 || len < 0 || off > toI32(src.length) - len || off + len > JSON_TOK_END_CEILING) {
       this.off = 0
       this.end = 0
+      this.stringFrom = -1 - this.maxStringBytes
       this.pos = 0
       this.fail(JSON_TOK_ERR_WINDOW, off)
       return
     }
     this.off = off
     this.end = off + len
+    // Fits: `end` and `maxStringBytes` are both at least 0.
+    this.stringFrom = off + len - 1 - this.maxStringBytes
     this.pos = off
     if (len > this.maxTotalBytes) {
       this.fail(JSON_TOK_ERR_TOTAL_LIMIT, off + this.maxTotalBytes)
@@ -711,6 +731,7 @@ export class JsonTokenizer {
     if (this.failed === 0) {
       this.failed = code
       this.errorAt = at
+      this.want = JSON_TOK_WANT_FAILED
     }
     return this.failed
   }
@@ -724,14 +745,65 @@ export class JsonTokenizer {
    *   repeats.
    */
   next(): i32 {
-    if (this.failed !== 0) {
-      return this.failed
-    }
     const src: u8[] = this.src
     const end: i32 = this.end
-    const at: i32 = jsonTokSkipBlank(src, this.pos, end)
-    const b: i32 = jsonTokByteAt(src, at, end)
-    switch (this.want) {
+    // `jsonTokSkipBlank` and then `jsonTokByteAt`, fused: both bounds are
+    // folded into `to` once, and the byte the skip stops at is the one read.
+    const n: i32 = toI32(src.length)
+    const to: i32 = end < n ? end : n
+    let at: i32 = this.pos
+    let b: i32 = -1
+    if (at >= 0 && at < to) {
+      b = toI32(src[at])
+      if (jsonTokIsBlank(b)) {
+        at = jsonTokSkipBlank(src, at + 1, to)
+        b = at >= 0 && at < to ? toI32(src[at]) : -1
+      }
+    }
+    const want: i32 = this.want
+    // The byte is switched on first, so a quote, colon, comma or closer, most
+    // of a document's tokens, takes one switch and one test of `want`.
+    // Anything else, and any of these where `want` refuses it, goes on to the
+    // switch on `want` below, which answers it as it always has.
+    switch (b) {
+      case JSON_TOK_QUOTE:
+        if (want === JSON_TOK_WANT_KEY_OR_CLOSE) {
+          return this.string(at, JSON_TOK_KEY)
+        }
+        if (want === JSON_TOK_WANT_VALUE || want === JSON_TOK_WANT_VALUE_OR_CLOSE) {
+          return this.string(at, JSON_TOK_STRING)
+        }
+        break
+      case JSON_TOK_COLON:
+        if (want === JSON_TOK_WANT_COLON) {
+          return this.value(jsonTokSkipBlank(src, at + 1, end))
+        }
+        break
+      case JSON_TOK_COMMA:
+        if (want === JSON_TOK_WANT_COMMA_OR_CLOSE) {
+          const after: i32 = jsonTokSkipBlank(src, at + 1, end)
+          if (this.inside === JSON_TOK_IN_OBJECT) {
+            return this.key(after)
+          }
+          return this.value(after)
+        }
+        break
+      case JSON_TOK_CLOSE_BRACE:
+        if (want === JSON_TOK_WANT_COMMA_OR_CLOSE || want === JSON_TOK_WANT_KEY_OR_CLOSE) {
+          return this.close(at, JSON_TOK_IN_OBJECT)
+        }
+        break
+      case JSON_TOK_CLOSE_BRACKET:
+        if (want === JSON_TOK_WANT_COMMA_OR_CLOSE || want === JSON_TOK_WANT_VALUE_OR_CLOSE) {
+          return this.close(at, JSON_TOK_IN_ARRAY)
+        }
+        break
+      default:
+        break
+    }
+    switch (want) {
+      case JSON_TOK_WANT_FAILED:
+        return this.failed
       case JSON_TOK_WANT_NOTHING:
         if (b < 0) {
           this.pos = at
@@ -739,48 +811,16 @@ export class JsonTokenizer {
           return JSON_TOK_END
         }
         return this.fail(JSON_TOK_ERR_TRAILING, at)
+      // A byte the switch above took is not met again here: each case
+      // below answers only what its `want` refuses or reads on to.
       case JSON_TOK_WANT_COLON:
-        if (b === JSON_TOK_COLON) {
-          return this.value(jsonTokSkipBlank(src, at + 1, end))
-        }
+      case JSON_TOK_WANT_COMMA_OR_CLOSE:
         return this.fail(b < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_SYNTAX, at)
       case JSON_TOK_WANT_KEY_OR_CLOSE:
-        if (b === JSON_TOK_CLOSE_BRACE) {
-          return this.close(at, JSON_TOK_IN_OBJECT)
-        }
         return this.key(at)
-      case JSON_TOK_WANT_VALUE_OR_CLOSE:
-        if (b === JSON_TOK_CLOSE_BRACKET) {
-          return this.close(at, JSON_TOK_IN_ARRAY)
-        }
-        return this.value(at)
-      case JSON_TOK_WANT_COMMA_OR_CLOSE:
-        if (b === JSON_TOK_COMMA) {
-          const after: i32 = jsonTokSkipBlank(src, at + 1, end)
-          if (this.top() === JSON_TOK_IN_OBJECT) {
-            return this.key(after)
-          }
-          return this.value(after)
-        }
-        if (b === JSON_TOK_CLOSE_BRACE) {
-          return this.close(at, JSON_TOK_IN_OBJECT)
-        }
-        if (b === JSON_TOK_CLOSE_BRACKET) {
-          return this.close(at, JSON_TOK_IN_ARRAY)
-        }
-        return this.fail(b < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_SYNTAX, at)
       default:
         return this.value(at)
     }
-  }
-
-  /** The kind of the innermost open container, or `0` at the top level. */
-  private top(): i32 {
-    const d: i32 = this.depth
-    if (d <= 0 || d > toI32(this.stack.length)) {
-      return 0
-    }
-    return toI32(this.stack[d - 1])
   }
 
   /** Records the token `src[start, stop)` of kind `k` and what may follow it. */
@@ -803,10 +843,14 @@ export class JsonTokenizer {
 
   /** A closer at `at`, which must match the innermost container, `inside`. */
   private close(at: i32, inside: i32): i32 {
-    if (this.top() !== inside) {
+    if (this.inside !== inside) {
       return this.fail(JSON_TOK_ERR_SYNTAX, at)
     }
-    this.depth -= 1
+    // The container closed was the stack's last byte, so the one now
+    // innermost is the byte before it, or none.
+    const d: i32 = this.depth - 1
+    this.depth = d
+    this.inside = d > 0 && d <= toI32(this.stack.length) ? toI32(this.stack[d - 1]) : 0
     return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_END : JSON_TOK_ARRAY_END, at, at + 1)
   }
 
@@ -818,6 +862,7 @@ export class JsonTokenizer {
     }
     this.stack[d] = toU8(inside)
     this.depth = d + 1
+    this.inside = inside
     return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_BEGIN : JSON_TOK_ARRAY_BEGIN, at, at + 1)
   }
 
@@ -1007,9 +1052,9 @@ export class JsonTokenizer {
     const src: u8[] = this.src
     const end: i32 = this.end
     // Where the string would pass its limit, or `end` when it cannot pass it
-    // before the window ends, which also keeps the sum from overflowing.
-    const room: i32 = end - at - 1
-    const limit: i32 = this.maxStringBytes >= room ? end : at + 1 + this.maxStringBytes
+    // before the window ends, which also keeps the sum from overflowing:
+    // below `stringFrom`, `at + 1 + maxStringBytes` is less than `end`.
+    const limit: i32 = at >= this.stringFrom ? end : at + 1 + this.maxStringBytes
     let i: i32 = at + 1
     let decoded: i32 = 0
     while (true) {
@@ -1138,6 +1183,12 @@ export class JsonTokenizer {
       // No escape (see `keyEquals`): the bytes are copied as they are, as one
       // `copyBytes` of as many as both arrays hold, which the caller's test
       // above has made all of them.
+      // The source window still in `src` is the case met; the clamps below
+      // are for one shrunk since it was scanned.
+      if (i >= 0 && o >= 0 && end <= toI32(src.length)) {
+        copyBytes(out, o, src, i, n)
+        return n
+      }
       if (i >= 0 && o >= 0) {
         const srcLength: i32 = toI32(src.length)
         const outLength: i32 = toI32(out.length)
@@ -1157,6 +1208,28 @@ export class JsonTokenizer {
     }
     while (i < end) {
       const b: i32 = jsonTokByteAt(src, i, end)
+      // The plain run before the next escape is copied whole. In a string
+      // `string` passed, only a backslash stops the run before `end`; any
+      // other byte it stops at is copied alone below, as before. A backslash
+      // here, as in a run of escapes, skips the scan.
+      const stop: i32 = b === JSON_TOK_BACKSLASH ? i : jsonTokSkipPlain(src, i, end)
+      if (stop > i) {
+        const count: i32 = stop - i
+        if (o >= 0) {
+          // The entry guard sized `out` for the decoded length the scan
+          // measured, but the source can change after the scan: a backslash
+          // turned plain lets a run outgrow that length, so the copy is cut
+          // to the room left.
+          const room: i32 = toI32(out.length) - o
+          const c: i32 = room < count ? room : count
+          if (c > 0) {
+            copyBytes(out, o, src, i, c)
+          }
+        }
+        o += count
+        i = stop
+        continue
+      }
       if (b !== JSON_TOK_BACKSLASH) {
         if (o >= 0 && o < toI32(out.length)) {
           out[o] = toU8(b)
@@ -1599,7 +1672,10 @@ export class JsonTokenizer {
     this.tokStart = start
     this.tokEnd = start + 1
     this.pos = start + 1
-    this.want = JSON_TOK_WANT_KEY_OR_CLOSE
+    // An error stays sticky: `next` answers it while `want` says so.
+    if (this.failed === 0) {
+      this.want = JSON_TOK_WANT_KEY_OR_CLOSE
+    }
   }
 
   /**
