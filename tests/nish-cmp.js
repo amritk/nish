@@ -1223,14 +1223,55 @@ const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
 /** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
 const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
 
+/**
+ * The generated comment lines that named a work package, as the seed writes
+ * them and as they read now: `[seed, candidate]`.
+ */
+const WP_COMMENT_LINES = [
+  [
+    "; WP49 stage 5: the loop over the executor in runtime-async.c (docs/wp49-async-server.md)",
+    "; the loop over the executor in runtime-async.c",
+  ],
+  [
+    "// Module storage for the TypeScript reading (WP50 §5.4), written by",
+    "// Module storage for the TypeScript reading, written by",
+  ],
+  ["/* `Result<T, E>` (WP16/WP17). A `Result`", "/* `Result<T, E>`. A `Result`"],
+  ["/* The arena is thread-local (WP20 T0), so", "/* The arena is thread-local, so"],
+  ["/* WP17: a `Result` as the object JS", "/* A `Result` as the object JS"],
+  ["/** A Result in one i64 (WP17): bit 0", "/** A Result in one i64: bit 0"],
+  [
+    " * Where module storage lives in `memory` (WP50 §5.2). `length`",
+    " * Where module storage lives in `memory`. `length`",
+  ],
+]
+
+/**
+ * `text` with each work-package comment line put back as the seed wrote it. A
+ * declaration's `undo`: it touches only those lines, so any other change differs.
+ */
+const withSeedWpComments = (text) =>
+  WP_COMMENT_LINES.reduce((acc, [seed, now]) => acc.split(now).join(seed), text)
+
 const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
 
 const DECLARED = [
+  {
+    changelog: "internal work-package references from diagnostics and generated files",
+    why: "generated comments in async .ll, interop headers, N-API sidecars and wasm loaders no longer name a work package",
+    undo: (text) => withSeedWpComments(text),
+  },
   {
     program: "tests/cases/res_let_reassign.ts",
     file: "res_let_reassign.ll",
     changelog: LET_REASSIGN,
     why: "an `Ok`/`Err` assigned to a `let` of the frame follows the `let`, so the sites outside a loop are allocas and the functions keep their arena scope",
+  },
+  {
+    program: "tests/cases/perf_kept_memory_quiet.ts",
+    file: "perf_kept_memory_quiet.ll",
+    changelog: LET_REASSIGN,
+    why: "`pick` assigns an `Ok`/`Err` to a `let` of its frame outside a loop, so the Result is an alloca rather than an arena allocation",
   },
   {
     program: "tests/cases/res_proof_consumers.ts",
@@ -7354,7 +7395,13 @@ const judge = (pair, job, reference, candidate, limit) => {
     }
     const wantPlain = withoutOwnVersion(wantRooted, pair.reference.version)
     const gotPlain = withoutOwnVersion(gotRooted, pair.candidate.version)
-    const undone = DECLARED.find((entry) => entry.undo !== undefined && entry.undo(gotPlain) === wantPlain)
+    // An `undo` is tried on the files as written too: removing a root can
+    // rewrite a relative path on one side only (a `--host` import that climbs
+    // out of the temporary directory), which no undo can put back.
+    const undone = DECLARED.find(
+      (entry) =>
+        entry.undo !== undefined && (entry.undo(gotPlain) === wantPlain || entry.undo(gotText) === wantText)
+    )
     const where = excerpt(wantText, gotText, limit)
     differences.push({
       surface: name,

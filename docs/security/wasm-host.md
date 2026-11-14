@@ -24,12 +24,13 @@ crosses as bytes inside memory" below).
 WP55 (`docs/wp55-persistent-root.md`) adds root storage: after each export
 call the loader hands the arena to `nish_root_keep`, which traces the object
 graph the roots reach from compiler-written descriptors, slides it down and
-rewrites every pointer to it. It adds WH-10: the trace follows whatever the
-slots hold, and the page can write any byte of memory (see "The kept graph is
-the compiler's" below).
+rewrites every pointer to it. It adds WH-10: the trace followed whatever the
+slots held, and the page can write any byte of memory; the trace now holds
+every pointer and length to the arena before it reads it (see "A forged
+kept graph is refused" below).
 
-There are ten findings. Eight are fixed by the stage that found them, and
-WH-8 and WH-10 are recorded open:
+There are ten findings. Eight are fixed by the stage that found them, WH-10
+by a later change, and WH-8 is recorded open:
 
 - **WH-1 (High):** a window's `at + n`, added in 32 bits, wraps, so a host
   call is lent memory past the end of the array.
@@ -48,10 +49,10 @@ WH-8 and WH-10 are recorded open:
   ranged or `boolean` storage element can hold a value outside its type.
 - **WH-9 (Low):** a string's `(p, n)` or `{ i64 len }` header the module
   places outside memory.
-- **WH-10 (Low, open):** a pointer or length the page forges into the kept
-  graph is believed by the next compaction: a forged array `len` walks up to
-  2^64 elements, and a forged pointer has the compactor read, and rewrite the
-  slot of, any byte of linear memory.
+- **WH-10 (Low):** a pointer or length the page forges into the kept
+  graph was believed by the next compaction: a forged array `len` walked up
+  to 2^64 elements, and a forged pointer had the compactor read, and rewrite
+  the slot of, any byte of linear memory.
 
 ## Scope
 
@@ -120,7 +121,7 @@ code, and the guide says to read only `[at, at + n)`.
 | WH-6 | Low | `runtime/page.mjs:20`–`:65` (`HostTable`) | A handle the program forged, 0, a fraction or a taken slot read as `undefined`, which a host function would pass on. | **Fixed.** `#check` throws a `RangeError` for each, which inside an import kills the module (WH-3), and slot 0 is never handed out ("page: HostTable hands out 1 and up, never 0, reuses a taken slot, and throws on a taken, zero, forged or fractional handle"). A stale handle kept after `take` names the newer object once its slot is reused: the program is trusted (threat model), so that is its bug, not a win, and the table carries no generation count. |
 | WH-7 | Low | `src/interop-wasm.ts:750`–`:756` (`payloadIn`), `:757`–`:775` (`resultIn`), `:1088`–`:1114` (`arrayIn`) | Only a number of the wrong type was refused before the module ran. A malformed `Result`, a payload of the wrong JavaScript type, or a Proxy or re-prototyped `DataView` passed as a typed array threw from inside `guarded`, which then marked the module dead: one bad call from the page ended it for good. | **Fixed.** Every argument is checked before the call: a `Result` must be an object whose `ok` is a boolean and whose payload has its arm's JavaScript type, read once through a `try` so a throwing getter is the caller's error; an array must pass the `%TypedArray%` brand getter and is measured with the `length` getter, neither of which runs caller code. A typed array over a detached buffer is not refused: `length` reads 0, so it is copied in as an empty array and the call runs (pinned: the check expects `ok 0`). Each refusal is a `TypeError` tagged so `guarded` lets it through and the module stays alive ("panic: an argument of the wrong JavaScript type is a TypeError before the module runs, which stays alive", whose lines include a BigInt given to an `i32`; "panic: a Result payload or an array of the wrong shape is a TypeError before the module runs, which stays alive"). |
 | WH-8 | Low | module storage, as the module reads it | The page can write any bits into storage, so an enum, ranged or `boolean` storage element may hold a value outside its type, and the module reads it as written. | **Open.** The page is trusted (threat model), so a value it forged is its own bug; a program that reads storage the page writes checks the value where it matters, as `std/host/ring` does (WH-2). See "Storage holds what the module wrote" below. |
-| WH-10 | Low | `runtime/runtime-wasm.c`, `nish_slot` and `nish_visit` under `nish_root_compact` | The trace believes the graph: a root slot, an object's pointer field, an array's `len`, `cap` or `data`, a string's length. The page holds all of memory, so it can write any of them, and the next compaction follows a forged pointer, reads a forged length and rewrites the slot holding a pointer into the region. | **Open.** The page is trusted (threat model): a forged graph is its bug, as a forged storage value is (WH-8). Two things bound the damage a mistake does: `layout` leaves root storage out, so no `views()` row names a root slot ("persist: world's loader hands each call's arena to nish_root_keep, not nish_arena_release" reads the loader; `src/interop-wasm.ts`, `layoutLoader`), and a block is clamped at `off` (`nish_block`), so a forged `cap` or length moves nothing past the region. What it does not bound: a forged array `len` makes the trace visit up to 2^64 elements (a hang, or a trap reading past memory), and a forged pointer, in the region or out of it, is followed, so the compactor reads whatever it points at as a block of the type its descriptor names and rewrites any slot it finds there that points into the region: reads and writes of arbitrary linear memory, which the page could make directly. |
+| WH-10 | Low | `runtime/runtime-wasm.c`, `nish_slot` and `nish_visit` under `nish_root_compact` | The trace believed the graph: a root slot, an object's pointer field, an array's `len`, `cap` or `data`, a string's length. The page holds all of memory, so it can write any of them, and the next compaction followed a forged pointer, read a forged length and rewrote the slot holding a pointer into the region: a forged root slot or pointer field had the compactor rewrite a word of a fake object outside the arena, and a forged array `len` walked the elements until a bare `memory access out of bounds` trap. | **Fixed** (bounds on every pointer and length): before the trace reads a block it holds the pointer to the arena below `off`, or, for a string, to the static data too (`nish_area_end`); an array's `len` must not pass its `cap`, its `cap` elements must fit before `off`, and a string's length must fit its area. Anything else is a `panic` NishPanic, "root storage: a pointer in the kept graph names memory outside the arena" or "... a length in the kept graph runs past its block", thrown during the trace, before any slot is rewritten or block moved. "persist: forge refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)" forges each and checks the fake's bytes; against the runtime before the fix it fails, with the fake's field rewritten and the bare trap. What stays: a forged pointer *inside* the arena is still followed as its descriptor's type, so a page can scramble its own kept graph, but every read and write stays in the arena, the memory the page already holds. Cost: none measurable (graph drive, 9,999 compactions, 1.00×, noise ±5%). The structural fix is to keep the arena out of the page's reach, a second wasm memory the module does not export, which `views()` and the rings do not need. |
 | WH-9 | Low | `src/interop-wasm.ts:1144`–`:1153` (`guardLoader`'s `stringOut`), `:1355`–`:1365` (`hostImportsOf`'s `text`), lines at `cc201043` | A string crosses as a pair the module makes: `(p, n)` for a host import's argument, a `{ i64 len, data }` header for an export's result. A pair past the end of memory, or one whose address wraps, would read the wrong bytes or none, and bytes that are not UTF-8 would reach the page as whatever a decoder makes of them. Only the module makes these pairs, so this is hardening, the shape of WH-5. | **Fixed** (stage 4, by construction): each pair is read as `u32` into `new Uint8Array(buffer, p, n)` or a `DataView`, which throw a `RangeError` for any view past the end, so nothing outside memory is read; inside an export that error kills the module (WH-3); `TextDecoder` reads bytes that are not UTF-8 as U+FFFD ("host-import-text: WH-9: a forged string pair or header past the end of memory is a RangeError, and bytes that are not UTF-8 read as U+FFFD", which forges both through the adapter and through a string export). |
 
 ## Properties verified
@@ -254,6 +255,23 @@ next call's allocations reuse; the test fails past 10× live or the worst-case
 bound. A module that cannot grow memory for it panics `memory`, as an
 allocation would, and the loader records that kind, not `trap`.
 
+**A forged kept graph is refused.** (WH-10.) The page can write every byte
+the trace reads, so the trace trusts no pointer or length it finds. An
+object, an array's header and its elements must lie in the arena below
+`off`, a string there or in the static data; an array's `len` must not pass
+its `cap`, and `cap` elements, or a string's length, must fit before the end
+of that area. Anything else panics `panic` while the trace is still
+reading, so no slot is rewritten and no block moved. "persist: forge refuses
+a forged root slot, pointer field, array len and len with cap with a
+NishPanic, reading and writing nothing outside the arena (WH-10)" points a
+root slot and a pointer field at a fake cell past the arena and sets an
+array's `len`, then its `len` and `cap`, to 2^40; each compaction throws and
+the fake's bytes stay as written. The checks cost nothing measurable: the
+graph drive's 9,999 compactions ran 1.00× the time before them, inside a ±5%
+band two identical builds showed. A forged pointer into the arena is still
+followed, as the type its slot names, which scrambles only memory the page
+already holds.
+
 **A keep that fails after the call returned kills the module and replaces
 the result.** `guardLoader` runs `nish_root_keep` in `finally`, after the
 export's result was read. If the keep panics or traps, the module is marked
@@ -284,4 +302,5 @@ memory the next call hands out again.
   code.
 - **Root storage.** A native program never hands its arena back between
   calls, so its root storage is ordinary module storage and nothing is traced
-  or moved; only a page module compacts what the roots reach (WH-10).
+  or moved; only a page module compacts what the roots reach, and refuses
+  a forged pointer or length in what they reach (WH-10).

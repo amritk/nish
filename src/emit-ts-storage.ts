@@ -79,7 +79,7 @@ const fieldAccessors = (name: string, view: string, offset: i32, flag: boolean):
 /** `STORAGE_FILE`'s text for `layouts`, which is not empty. */
 export const storageFileText = (layouts: StorageLayout[]): string => {
   const lines: string[] = []
-  lines.push("// Module storage for the TypeScript reading (WP50 §5.4), written by `nish --emit-ts`:")
+  lines.push("// Module storage for the TypeScript reading, written by `nish --emit-ts`:")
   lines.push("// one buffer laid out as `layout` says, each storage a view of it, so a page")
   lines.push("// reads `memory.buffer` and `layout` here as it reads them from the wasm build.")
   lines.push(`const heap = new ArrayBuffer(${storageEnd(layouts)})`)

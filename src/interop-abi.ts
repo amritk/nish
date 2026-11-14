@@ -1383,7 +1383,7 @@ export const resultDefinitions = (table: TypeTable, fns: ExternalFunction[], fie
     return lines
   }
   lines.push("")
-  lines.push("/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a")
+  lines.push("/* `Result<T, E>`. A `Result` small enough to travel in a")
   lines.push(" * register — returned or passed — is the `_word` struct: read `ok`, then")
   lines.push(" * `as.value` or `as.error`. Every other `Result` is a pointer to the arena")
   lines.push(" * object, valid until nish_reset_arena() / nish_arena_release() like every")
