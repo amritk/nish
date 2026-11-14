@@ -1334,6 +1334,7 @@
                   "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
                   "/wp56-flat-memory-generators": { "type": "page", "title": "WP56: Generators whose memory stays flat", "filepath": "docs/roadmap/wp56-flat-memory-generators.md" },
                   "/wp57-module-scoped-names": { "type": "page", "title": "WP57: Module-scoped names", "filepath": "docs/roadmap/wp57-module-scoped-names.md" },
+                  "/wp59-wasm-arena-memory": { "type": "page", "title": "WP59: The wasm arena in a second, unexported memory", "filepath": "docs/roadmap/wp59-wasm-arena-memory.md" },
                   "/wp44-streaming-files": { "type": "page", "title": "WP44: Streaming file reads", "filepath": "docs/roadmap/wp44-streaming-files.md" },
                   "/wp48-compressed-references": { "type": "page", "title": "WP48: Compressed 32-bit references", "filepath": "docs/roadmap/wp48-compressed-references.md" },
                   "/wp51-function-references": { "type": "page", "title": "WP51: References to capture-free top-level functions", "filepath": "docs/roadmap/wp51-function-references.md" }

@@ -497,6 +497,11 @@ same world, pools and instance list.
    a string or array that the loader decodes or copies *inside* the bracket
    (§7). An import receives windows that are lent for the call only.
 
+The rules keep the module's own stores from reaching the arena. The page still
+can: it holds the one memory, arena included.
+[WP59](wp59-wasm-arena-memory.md) proposes a second memory, not exported, for
+the arena.
+
 Together the two rules mean the arena's mark is the same at the end of every
 call as at its start. That is a property of the types, not of the program's
 care: no rewrite of the program can break it while it still compiles. In fixed
