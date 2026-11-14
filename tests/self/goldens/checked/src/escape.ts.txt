@@ -31,14 +31,11 @@ import isTemplateExpression from "./emit-util" -> function @isTemplateExpression
 import storesInlineElements from "./emit-util" -> function @storesInlineElements
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import unwrapStringPassthrough from "./emit-util" -> function @unwrapStringPassthrough
-import FLAG_CONST from "./nodes" -> const FLAG_CONST
-import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_USING from "./nodes" -> const FLAG_USING
 import Node from "./nodes" -> struct Node
 import literalLength from "./emit-arrays" -> function @literalLength
 import isResultConstructorCall from "./emit-result" -> function @isResultConstructorCall
 import resultMethodName from "./emit-result" -> function @resultMethodName
-import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
@@ -207,22 +204,6 @@ struct ArenaFinding (class) size=16 align=8 exported
   field node: Node index=0 offset=0
   field message: string index=1 offset=8
   constructor -> @ArenaFinding.constructor
-struct Reach (class) size=56 align=8
-  field reached: StringSet index=0 offset=0
-  field fixed: StringMap index=1 offset=8
-  field work: string[] index=2 offset=16
-  field latches: Latches index=3 offset=24
-  field homes: StringMap index=4 offset=32
-  field sigs: FunctionSig[] index=5 offset=40
-  field programs: CheckedProgram[] index=6 offset=48
-  constructor -> @Reach.constructor
-  method add -> @Reach.add
-  method call -> @Reach.call
-struct Latches (class) size=16 align=8
-  field names: string[] index=0 offset=0
-  field params: i32[] index=1 offset=8
-  constructor -> @Latches.constructor
-  method paramOf -> @Latches.paramOf
 struct MemoryReport (class) size=24 align=8 exported
   field notes: ArenaFinding[] index=0 offset=0
   field loops: i32 index=1 offset=8
@@ -1761,352 +1742,39 @@ function holdsFacts(list: FunctionFacts[], f: FunctionFacts): boolean -> @holdsF
 function loopReachedFunctions(units: AnalysisUnit[], table: TypeTable, facts: FactsTable): StringSet -> @loopReachedFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via CheckedProgram.enterInstance
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn Reach.add Reach.constructor StringMap.add StringMap.get StringSet.at StringSet.constructor StringSet.has StringSet.size collectPassCalls collectReachedCalls latchParameter nish_array_grow nish_panic_index
-  pointer units: size=0 writesThrough=false captured=false passedTo=latchParameter#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=latchParameter#1 collectPassCalls#1 collectReachedCalls#1
-  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
-  stackSites=2 stackLocals=2
-  local +0:9 reach: Reach (const)
-  callee +0:17 new Reach -> @Reach.constructor
-  local +1:14 unit: AnalysisUnit (const)
-  local +2:16 sig: FunctionSig (const)
-  local +3:13 body: Node | null (const)
-  callee +3:20 FunctionSig.body -> @FunctionSig.body
-  callee +4:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +5:15 at: i32 (const)
-  callee +5:20 latchParameter -> @latchParameter
-  local +13:14 unit: AnalysisUnit (const)
-  local +14:11 program: CheckedProgram (const)
-  local +15:16 sig: FunctionSig (const)
-  local +16:13 f: FunctionFacts | null (const)
-  callee +16:17 FactsTable.get -> @FactsTable.get
-  local +17:13 body: Node | null (const)
-  callee +17:20 FunctionSig.body -> @FunctionSig.body
-  callee +18:12 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee +21:11 StringMap.add -> @StringMap.add
-  local +25:13 instance: Instantiation | null (const)
-  callee +27:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee +29:7 collectPassCalls -> @collectPassCalls
-  callee +31:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +38:7 i: i32 (let)
-  local +40:11 name: string (const)
-  local +41:11 g: FunctionFacts | null (const)
-  callee +41:15 FactsTable.get -> @FactsTable.get
-  local +43:13 seen: StringSet (const)
-  callee +43:20 new StringSet -> @StringSet.constructor
-  local +44:13 home: i32 (const)
-  callee +44:20 StringMap.get -> @StringMap.get
-  local +45:13 sig: FunctionSig | null (const)
-  local +46:13 body: Node | null (const)
-  callee +46:55 FunctionSig.body -> @FunctionSig.body
-  local +48:15 program: CheckedProgram (const)
-  local +49:15 instance: Instantiation | null (const)
-  callee +51:11 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee +53:9 collectReachedCalls -> @collectReachedCalls
-  callee +53:62 StringMap.get -> @StringMap.get
-  callee +55:11 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +58:11 c: i32 (let)
-  callee +59:18 StringSet.size -> @StringSet.size
-  local +60:15 callee: string (const)
-  callee +60:24 StringSet.at -> @StringSet.at
-  callee +61:14 StringSet.has -> @StringSet.has
-  callee +62:11 Reach.add -> @Reach.add
-function Reach.constructor(this: Reach): void -> @Reach.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: Latches.constructor StringMap.constructor StringSet.constructor nish_alloc_struct
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  callee +0:20 new StringSet -> @StringSet.constructor
-  callee +1:18 new StringMap -> @StringMap.constructor
-  callee +3:20 new Latches -> @Latches.constructor
-  callee +4:18 new StringMap -> @StringMap.constructor
-function Reach.add(this: Reach, name: string, mask: i32): void -> @Reach.add [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  escaping: mask name
-  calls: StringMap.get StringMap.set StringSet.add nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  callee -2:9 StringSet.add -> @StringSet.add
-  callee -1:7 StringMap.set -> @StringMap.set
-  local +3:11 old: i32 (const)
-  callee +3:17 StringMap.get -> @StringMap.get
-  callee +5:7 StringMap.set -> @StringMap.set
-function Reach.call(this: Reach, callee: FunctionSig, mask: i32): void -> @Reach.call [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Reach.add
-  escaping: mask
-  calls: Latches.paramOf Reach.add
-  pointer this: size=56 writesThrough=false captured=false passedTo=Reach.add#0
-  pointer callee: size=200 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:11 at: i32 (const)
-  callee +0:16 Latches.paramOf -> @Latches.paramOf
-  callee +4:5 Reach.add -> @Reach.add
-function Latches.constructor(this: Latches): void -> @Latches.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=16 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Latches.paramOf(this: Latches, name: string): i32 -> @Latches.paramOf [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_eq
-  pointer this: size=16 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 i: i32 (let)
-function latchParameter(units: AnalysisUnit[], table: TypeTable, sig: FunctionSig, body: Node): i32 -> @latchParameter
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fieldPath guardPath isAliasRead isLoneReturn isNullLiteral leavesEarly nish_panic_index nish_panic_overflow nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new noResets unwrapParens
-  pointer units: size=0 writesThrough=false captured=false passedTo=noResets#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=noResets#1
-  pointer sig: size=200 writesThrough=false captured=false
-  pointer body: size=40 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  local +0:9 stmts: Node[] (const)
-  local +2:9 aliases: string[] (const)
-  local +3:7 at: i32 (let)
-  callee +4:31 isAliasRead -> @isAliasRead
-  local +10:9 test: Node (const)
-  callee +14:6 isLoneReturn -> @isLoneReturn
-  local +18:9 cond: Node (const)
-  callee +18:16 unwrapParens -> @unwrapParens
-  local +19:7 read: Node (let)
-  local +20:7 nonNull: boolean (let)
-  callee +21:63 isNullLiteral -> @isNullLiteral
-  callee +24:70 isNullLiteral -> @isNullLiteral
-  local +28:9 guard: string (const)
-  callee +28:17 guardPath -> @guardPath
-  local +32:7 next: Node (let)
-  local +33:7 held: string (let)
-  local +39:11 decl: Node (const)
-  callee +40:35 leavesEarly -> @leavesEarly
-  local +49:9 store: Node (const)
-  callee +49:17 unwrapParens -> @unwrapParens
-  callee +50:63 fieldPath -> @fieldPath
-  local +53:9 value: Node (const)
-  callee +53:17 unwrapParens -> @unwrapParens
-  callee +57:8 noResets -> @noResets
-  callee +57:31 unwrapParens -> @unwrapParens
-  local +60:9 root: string (const)
-  local +66:7 i: i32 (let)
-function isAliasRead(stmt: Node, aliases: string[]): boolean -> @isAliasRead
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: fieldPath nish_array_grow nish_panic_index nish_str_eq
-  pointer stmt: size=40 writesThrough=false captured=false
-  pointer aliases: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -6:14 decl: Node (const)
-  callee -5:9 fieldPath -> @fieldPath
-  local -1:14 decl: Node (const)
-  callee +1:18 fieldPath -> @fieldPath
-function isLoneReturn(stmt: Node): boolean -> @isLoneReturn
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer stmt: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function leavesEarly(node: Node): boolean -> @leavesEarly
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: leavesEarly nish_str_eq
-  pointer node: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:14 child: Node (const)
-  callee +1:9 leavesEarly -> @leavesEarly
-function fieldPath(node: Node): string -> @fieldPath
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fieldPath nish_panic_index nish_str_concat nish_str_eq unwrapParens
-  pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
-  stackSites=0 stackLocals=0
-  local +0:9 read: Node (const)
-  callee +0:16 unwrapParens -> @unwrapParens
-  local +4:9 receiver: Node (const)
-  callee +4:20 unwrapParens -> @unwrapParens
-  local +11:9 base: string (const)
-  callee +11:16 fieldPath -> @fieldPath
-function latchPathOf(node: Node): string -> @latchPathOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fieldPath unwrapParens
-  pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
-  stackSites=0 stackLocals=0
-  local +0:9 n: Node (const)
-  callee +0:13 unwrapParens -> @unwrapParens
-  callee +7:10 fieldPath -> @fieldPath
-function guardPath(read: Node, aliases: string[]): string -> @guardPath
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: fieldPath nish_panic_overflow nish_str_eq unwrapParens
-  pointer read: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
-  pointer aliases: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 node: Node (const)
-  callee +0:16 unwrapParens -> @unwrapParens
-  callee +2:12 fieldPath -> @fieldPath
-  local +4:7 i: i32 (let)
-function isNullLiteral(node: Node): boolean -> @isNullLiteral
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: unwrapParens
-  pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
-  stackSites=0 stackLocals=0
-  callee +0:48 unwrapParens -> @unwrapParens
-function noResets(units: AnalysisUnit[], table: TypeTable, field: string, nonNull: boolean): boolean -> @noResets
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: field nonNull
-  calls: latchingStoresIn
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.body FunctionSig.definedIn StringSet.constructor collectPassCalls nish_alloc_struct
   pointer units: size=0 writesThrough=false captured=false
-  pointer table: size=136 writesThrough=false captured=false passedTo=latchingStoresIn#1
+  pointer table: size=136 writesThrough=false captured=false passedTo=collectPassCalls#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
-  local +0:14 unit: AnalysisUnit (const)
-  callee +1:10 latchingStoresIn -> @latchingStoresIn
-function latchingStoresIn(program: CheckedProgram, table: TypeTable, node: Node, field: string, nonNull: boolean, ctor: boolean): boolean -> @latchingStoresIn
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: field node nonNull
-  calls: TypeTable.isNullable isAssignmentOperator latchingStoresIn nish_panic_index nish_str_eq unwrapParens
-  pointer program: size=888 writesThrough=false captured=false passedTo=latchingStoresIn#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 latchingStoresIn#1
-  pointer node: size=40 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
-  local +0:9 inCtor: boolean (const)
-  local +1:9 stores: boolean (const)
-  callee +2:39 isAssignmentOperator -> @isAssignmentOperator
-  local +4:9 target: Node (const)
-  callee +4:27 unwrapParens -> @unwrapParens
-  local +6:11 own: boolean (const)
-  callee +6:27 unwrapParens -> @unwrapParens
-  local +11:13 value: Node (const)
-  callee +11:21 unwrapParens -> @unwrapParens
-  local +12:13 fresh: boolean (const)
-  local +14:13 type: i32 (const)
-  callee +15:80 TypeTable.isNullable -> @TypeTable.isNullable
-  local +20:14 child: Node (const)
-  callee +21:10 latchingStoresIn -> @latchingStoresIn
-function passedPath(call: Node, callee: FunctionSig, at: i32): string -> @passedPath
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: latchPathOf nish_panic_index nish_panic_overflow unwrapParens
-  pointer call: size=40 writesThrough=false captured=false
-  pointer callee: size=200 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:11 target: Node (const)
-  callee +0:20 unwrapParens -> @unwrapParens
-  callee +1:46 latchPathOf -> @latchPathOf
-  local +6:9 index: i32 (const)
-  local +7:9 args: Node (const)
-  callee +8:41 latchPathOf -> @latchPathOf
-function extendsPath(long: string, short: string): boolean -> @extendsPath
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_at
-  stackSites=0 stackLocals=0
-function rootOf(path: string): string -> @rootOf
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: path
-  calls: nish_str_index_of nish_str_index_of_from nish_str_new
-  stackSites=0 stackLocals=0
-  local +0:9 dot: i32 (const)
-function sameObjectIn(scope: Node, path: string): boolean -> @sameObjectIn
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: path
-  calls: loopBindsName nish_str_eq rootOf touchesPath
-  pointer scope: size=40 writesThrough=true captured=true passedTo=loopBindsName#0 touchesPath#0
-  stackSites=0 stackLocals=0
-  local +0:9 root: string (const)
-  callee +0:16 rootOf -> @rootOf
-  callee +1:26 loopBindsName -> @loopBindsName
-  callee +4:11 touchesPath -> @touchesPath
-function touchesPath(node: Node, parent: Node | null, outer: Node | null, path: string): boolean -> @touchesPath
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  escaping: path
-  calls: extendsPath isAssignmentOperator latchPathOf nish_arena_mark nish_arena_release nish_panic_index nish_str_eq touchesPath unwrapParens
-  pointer node: size=40 writesThrough=true captured=true passedTo=latchPathOf#0 touchesPath#1
-  pointer parent: size=40 writesThrough=false captured=false passedTo=touchesPath#2
-  pointer outer: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 stores: boolean (const)
-  callee +1:39 isAssignmentOperator -> @isAssignmentOperator
-  local +6:9 walk: Node (let)
-  callee +6:16 unwrapParens -> @unwrapParens
-  local +7:9 target: Node (let)
-  callee +10:18 unwrapParens -> @unwrapParens
-  callee +12:14 unwrapParens -> @unwrapParens
-  local +14:11 t: string (const)
-  callee +14:15 latchPathOf -> @latchPathOf
-  callee +15:36 extendsPath -> @extendsPath
-  local +19:9 p: string (const)
-  callee +19:13 latchPathOf -> @latchPathOf
-  callee +20:19 extendsPath -> @extendsPath
-  local +22:11 read: boolean (const)
-  local +31:14 child: Node (const)
-  callee +32:9 touchesPath -> @touchesPath
-function passMask(call: Node, callee: FunctionSig, loop: Node): i32 -> @passMask
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq passedPath sameObjectIn
-  pointer call: size=40 writesThrough=false captured=false passedTo=passedPath#0
-  pointer callee: size=200 writesThrough=false captured=false passedTo=passedPath#1
-  pointer loop: size=40 writesThrough=true captured=true passedTo=sameObjectIn#0
-  stackSites=0 stackLocals=0
-  local +0:7 mask: i32 (let)
-  local +1:7 at: i32 (let)
-  local +3:11 path: string (const)
-  callee +3:18 passedPath -> @passedPath
-  callee +4:24 sameObjectIn -> @sameObjectIn
-function reachedMask(call: Node, callee: FunctionSig, sig: FunctionSig, body: Node, mask: i32): i32 -> @reachedMask
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: extendsPath nish_str_eq passedPath sameObjectIn
-  pointer call: size=40 writesThrough=false captured=false passedTo=passedPath#0
-  pointer callee: size=200 writesThrough=false captured=false passedTo=passedPath#1
-  pointer sig: size=200 writesThrough=false captured=false
-  pointer body: size=40 writesThrough=true captured=true passedTo=sameObjectIn#0
-  stackSites=0 stackLocals=0
-  local +0:7 out: i32 (let)
-  local +1:7 at: i32 (let)
-  local +3:11 path: string (const)
-  callee +3:18 passedPath -> @passedPath
-  local +4:9 p: i32 (let)
-  local +6:13 name: string (const)
-  callee +7:29 extendsPath -> @extendsPath
-  callee +7:84 sameObjectIn -> @sameObjectIn
-function collectReachedCalls(program: CheckedProgram, table: TypeTable, sig: FunctionSig, body: Node, node: Node, mask: i32, seen: StringSet, reach: Reach): void -> @collectReachedCalls
+  local +0:9 reached: StringSet (const)
+  callee +0:19 new StringSet -> @StringSet.constructor
+  local +1:14 unit: AnalysisUnit (const)
+  local +2:11 program: CheckedProgram (const)
+  local +3:16 sig: FunctionSig (const)
+  local +4:13 f: FunctionFacts | null (const)
+  callee +4:17 FactsTable.get -> @FactsTable.get
+  local +5:13 body: Node | null (const)
+  callee +5:20 FunctionSig.body -> @FunctionSig.body
+  callee +6:12 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +9:13 instance: Instantiation | null (const)
+  callee +11:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee +13:7 collectPassCalls -> @collectPassCalls
+  callee +15:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+function collectPassCalls(program: CheckedProgram, table: TypeTable, f: FunctionFacts, node: Node, inLoop: boolean, released: boolean, reached: StringSet): void -> @collectPassCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
-  escaping: mask
-  calls: Reach.call StringSet.add calleeAt collectReachedCalls reachedMask
-  pointer program: size=888 writesThrough=false captured=false passedTo=calleeAt#0 collectReachedCalls#0
-  pointer table: size=136 writesThrough=false captured=false passedTo=calleeAt#1 collectReachedCalls#1
-  pointer sig: size=200 writesThrough=false captured=false passedTo=reachedMask#2 collectReachedCalls#2
-  pointer body: size=40 writesThrough=true captured=true passedTo=reachedMask#3 collectReachedCalls#3
-  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2 reachedMask#0
-  pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 collectReachedCalls#6
-  pointer reach: size=56 writesThrough=false captured=false passedTo=Reach.call#0 collectReachedCalls#7
-  stackSites=0 stackLocals=0
-  local +0:9 callee: FunctionSig | null (const)
-  callee +0:18 calleeAt -> @calleeAt
-  callee +2:5 StringSet.add -> @StringSet.add
-  callee +3:5 Reach.call -> @Reach.call
-  callee +3:24 reachedMask -> @reachedMask
-  local +5:14 child: Node (const)
-  callee +6:5 collectReachedCalls -> @collectReachedCalls
-function loopBindsName(node: Node, name: string): boolean -> @loopBindsName
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: name
-  calls: isAssignmentOperator loopBindsName nish_panic_index nish_str_eq unwrapParens
-  pointer node: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  callee +0:39 isAssignmentOperator -> @isAssignmentOperator
-  local +3:11 target: Node (const)
-  callee +3:20 unwrapParens -> @unwrapParens
-  local +8:14 child: Node (const)
-  callee +9:9 loopBindsName -> @loopBindsName
-function collectPassCalls(program: CheckedProgram, table: TypeTable, f: FunctionFacts, node: Node, loop: Node | null, released: boolean, reach: Reach): void -> @collectPassCalls
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Reach.call
   escaping: released
-  calls: Reach.call calleeAt collectPassCalls isArenaUsing isLoopKind loopScopeOf passMask
+  calls: StringSet.add calleeAt collectPassCalls isArenaUsing isLoopKind loopScopeOf
   pointer program: size=888 writesThrough=false captured=false passedTo=calleeAt#0 isArenaUsing#0 collectPassCalls#0
   pointer table: size=136 writesThrough=false captured=false passedTo=calleeAt#1 collectPassCalls#1
   pointer f: size=432 writesThrough=false captured=false passedTo=loopScopeOf#0 collectPassCalls#2
-  pointer node: size=40 writesThrough=true captured=true passedTo=calleeAt#2 passMask#0 isLoopKind#0 loopScopeOf#1 collectPassCalls#4
-  pointer loop: size=40 writesThrough=true captured=true passedTo=passMask#2 collectPassCalls#4
-  pointer reach: size=56 writesThrough=false captured=false passedTo=Reach.call#0 collectPassCalls#6
+  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2 isLoopKind#0 loopScopeOf#1
+  pointer reached: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 collectPassCalls#6
   stackSites=0 stackLocals=0
   local +0:11 callee: FunctionSig | null (const)
   callee +0:20 calleeAt -> @calleeAt
-  callee +2:7 Reach.call -> @Reach.call
-  callee +2:26 passMask -> @passMask
+  callee +2:7 StringSet.add -> @StringSet.add
   local +5:9 isLoop: boolean (const)
   callee +5:18 isLoopKind -> @isLoopKind
   local +6:9 scope: LoopScope | null (const)

@@ -137,14 +137,17 @@ The warning (NL9019) names the function and the line it keeps. Give each
 value its own `const` (``const s = n > 2 ? `b${n}` : "none"``), or open a
 block with `using a = arena()` around the work. A loop whose passes are
 released already, because nothing a pass makes outlives it, takes back what
-the call kept, so that one does not warn; nor does a function run only behind
-a once-guard or a cache on the same object every pass (`if (this.ready) { return }`
-as its first statement, `this.ready = true` right after it, and no store
-anywhere in the program that clears it), since only its first call does the
-work. A re-entrancy guard that resets its flag, work before the guard, a
-counter, or a guard on an object the loop replaces still warns. The warning counts
-passes, not how many there are, so a short fixed loop warns like an unbounded
-one.
+the call kept, so that one does not warn. The warning counts passes, not how
+many there are, so a short fixed loop warns like an unbounded one.
+
+NL9019 judges only the functions a loop calls directly, each on what it
+allocates itself. When the loop calls a function that returns memory, and
+that function calls the one keeping it, the warning stays quiet: run
+`nish --explain-memory` to see which loop keeps it and why. A function that
+does its work only once, behind a guard such as `if (this.ready) { return }`,
+still warns when it keeps an array of its own, because the compiler does not
+prove that the same object reaches it on every pass. Open a block with
+`using a = arena()` around that work.
 
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:

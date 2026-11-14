@@ -1,6 +1,8 @@
 // NL9019 reports each function below: each keeps an array of its own on
-// every call, and each sits behind a guard that is not a latch, so the work
-// runs on every pass of the loop in `main`, not once.
+// every call, and a loop pass in `main` that releases nothing calls it
+// directly. No guard exempts it, whatever object the call receives: a
+// re-entrancy guard, a negated or compound guard and a counter run the work
+// again, and a once-guard on a field is reported even where it holds.
 
 class State {
   busy: boolean = false;
@@ -82,20 +84,6 @@ const stamp = (item: State): i32 => {
   return xs.length;
 };
 
-// The same latch again, reached through a helper that hands on an object
-// made every pass. The helper answers a string, so it takes no scope that
-// would release what `primed` keeps.
-const primed = (item: State): i32 => {
-  if (item.seen) {
-    return 0;
-  }
-  item.seen = true;
-  const xs: string[] = [];
-  xs.push(`${item.n}`);
-  return xs.length;
-};
-const primeVia = (item: State): string => `${primed(item)}`;
-
 // A latch the program clears elsewhere: `invalidate` stores `false` back.
 const armedWork = (s: State): i32 => {
   if (s.armed) {
@@ -159,6 +147,11 @@ class Holder {
   }
 }
 
+// A callee replaces the object during the pass: `renewG` stores a new one.
+const renewG = (g: Holder): void => {
+  g.cur = new State();
+};
+
 // A latch run on a field the loop stores a new object into on every pass.
 const prep = (item: State): i32 => {
   if (item.seen) {
@@ -181,6 +174,45 @@ const prepNext = (item: State): i32 => {
   return xs.length;
 };
 
+// The same latch, run on a field the loop replaces through `renewG`.
+const prepG = (item: State): i32 => {
+  if (item.seen) {
+    return 0;
+  }
+  item.seen = true;
+  const xs: string[] = [];
+  xs.push(`${item.n}`);
+  return xs.length;
+};
+
+// The same latch, run on a field the loop replaces through a name for the
+// holder made before the loop.
+const prepAlias = (item: State): i32 => {
+  if (item.seen) {
+    return 0;
+  }
+  item.seen = true;
+  const xs: string[] = [];
+  xs.push(`${item.n}`);
+  return xs.length;
+};
+
+class Once {
+  done: boolean = false;
+}
+
+// A once-guard on one object the loop never replaces: the work runs once,
+// but the rule does not prove which object reaches it, so it still warns.
+const warmOnce = (o: Once): i32 => {
+  if (o.done) {
+    return 0;
+  }
+  o.done = true;
+  const xs: string[] = [];
+  xs.push(`${o.done}`);
+  return xs.length;
+};
+
 export const main = (): void => {
   const s = new State();
   const items: State[] = [];
@@ -190,11 +222,11 @@ export const main = (): void => {
   let cur = new State();
   const names: string[] = [];
   for (let i = 0; i < 1000; i++) {
-    names.push(`${guarded(s) + whenReady(s) + untilDone(s) + capped(s) + stamp(cur)}${primeVia(cur)}`);
+    names.push(`${guarded(s) + whenReady(s) + untilDone(s) + capped(s) + stamp(cur)}`);
     cur = new State();
   }
-  // Each call below is on the same object every pass; the latches still do
-  // not hold.
+  // Each call below is on the same object every pass, and the guard is
+  // cleared, bypassed or preceded by the work.
   const t = new State();
   const h = new Holder();
   for (let i = 0; i < 1000; i++) {
@@ -207,6 +239,21 @@ export const main = (): void => {
     names.push(`${prep(h.cur)}`);
     h.renew();
     names.push(`${prepNext(h.next)}`);
+  }
+  const g = new Holder();
+  for (let i = 0; i < 1000; i++) {
+    renewG(g);
+    names.push(`${prepG(g.cur)}`);
+  }
+  const hh = new Holder();
+  const alias = hh;
+  for (let i = 0; i < 1000; i++) {
+    alias.cur = new State();
+    names.push(`${prepAlias(hh.cur)}`);
+  }
+  const once = new Once();
+  for (let i = 0; i < 1000; i++) {
+    names.push(`${warmOnce(once)}`);
   }
   let marked = 0;
   for (const item of items) {

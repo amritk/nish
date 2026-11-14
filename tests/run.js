@@ -5632,45 +5632,48 @@ if (dealtHere("performance")) {
     kept.stderr
   )
 
-  // The once-guard exemption is narrow. Only a function that returns early on
-  // a field it then sets and never clears, called on the same object every
-  // pass, is quiet; a re-entrancy guard that clears its flag, a negated or
-  // compound condition, a counter, a per-item flag and a fresh receiver each
-  // pass, directly or through a helper that hands it on, all still keep
-  // memory every pass and warn. So do the bypasses of a latch on the same
-  // object: one cleared elsewhere, directly or through another name, work
-  // before the guard, a second way out before the store, and a field the
-  // loop stores a new object into, itself or through a method. This is also the control
-  // that fails if the reach walk stops finding loop calls at all.
-  const latch = compile("perf_kept_memory_latch", "perf_kept_memory_latch_report.ll")
-  const latchLines = summaries(latch.stderr)
-  const latchNames = [
+  // No guard exempts a direct callee of an unscoped pass, whatever object the
+  // call receives. A re-entrancy guard, a negated or compound condition, a
+  // counter, a per-item flag and a fresh receiver each pass warn; so do a
+  // once-guard cleared elsewhere, directly or through another name, work
+  // before the guard, a second way out before the store, a field the loop
+  // replaces itself, through a method, through a callee (`prepG`) or through
+  // a name for the holder made before the loop (`prepAlias`), and a
+  // once-guard on one object the loop never replaces (`warmOnce`), which the
+  // rule does not try to prove. This is also the control that fails if the
+  // reach walk stops finding loop calls at all.
+  const direct = compile("perf_kept_memory_direct", "perf_kept_memory_direct_report.ll")
+  const directLines = summaries(direct.stderr)
+  const directNames = [
     "guarded",
     "whenReady",
     "untilDone",
     "capped",
     "mark",
     "stamp",
-    "primed",
     "armedWork",
     "loadedWork",
     "early",
     "gated",
     "prep",
     "prepNext",
+    "prepG",
+    "prepAlias",
+    "warmOnce",
   ]
-  const latchFirst = [25, 37, 48, 58, 70, 81, 94, 106, 120, 131, 149, 169, 180]
+  const directFirst = [27, 39, 50, 60, 72, 83, 94, 108, 119, 137, 162, 173, 184, 196, 212]
   check(
-    "performance: a guard that is not a once-latch on a fixed receiver does not exempt a function from NL9019",
-    latch.status === 0 &&
-      latchLines.length === 13 &&
-      positions(latchLines) === "19:1,31:1,42:1,53:1,64:1,75:1,88:1,100:1,114:1,129:1,140:1,163:1,174:1" &&
-      latchLines.every(
+    "performance: NL9019 reports every direct callee of an unscoped pass that keeps an allocation, guarded or not",
+    direct.status === 0 &&
+      directLines.length === 15 &&
+      positions(directLines) ===
+        "21:1,33:1,44:1,55:1,66:1,77:1,88:1,102:1,117:1,128:1,156:1,167:1,178:1,190:1,206:1" &&
+      directLines.every(
         (l, i) =>
-          l.includes(`\`${latchNames[i]}\` keeps an allocation on every call`) &&
-          l.includes(`the first allocation it holds is on line ${latchFirst[i]},`)
+          l.includes(`\`${directNames[i]}\` keeps an allocation on every call`) &&
+          l.includes(`the first allocation it holds is on line ${directFirst[i]},`)
       ),
-    latch.stderr
+    direct.stderr
   )
 
   // A `let` result handed back after reassignment is the arena stage's own
@@ -5968,11 +5971,10 @@ if (dealtHere("performance")) {
     "perf_arena_pass_quiet",
     // A function that keeps nothing past its call, one whose arena block
     // releases it, one run only where each pass, block or scoped caller
-    // releases it, one run only behind a once-guard or a cache on a fixed
-    // receiver (directly or through a helper that hands it on), a `getenv`
-    // result only handed to a callee, and a template
-    // handed on as an element of an array or object literal or joined in
-    // place: NL9019 is silent on each.
+    // releases it, one no loop calls directly (two deep, behind a callee that
+    // answers memory, silent by design), a `getenv` result only handed to a
+    // callee, and a template handed on as an element of an array or object
+    // literal or joined in place: NL9019 is silent on each.
     "perf_kept_memory_quiet",
     // Every index proven, so no check survives and nothing is reported.
     "perf_bounds_quiet",

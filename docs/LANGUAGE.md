@@ -14762,49 +14762,29 @@ by the caller.
     parameter does not count, nor does one it only places in an array or
     object literal that is itself handed to a parameter or to `spawnSync`, or
     only reads in place, as in `[a, b].join(",")`), so that it has no arena
-    scope of its own, and that a loop runs on every pass
-    while the pass releases nothing — directly, or through callees that have
-    no scope of their own either. Every pass adds the allocation the call kept,
-    and nothing releases it while the loop runs. Reported once, at the
-    function's declaration, naming the line of the first allocation it holds;
-    the hints are a `const` per value, a block that opens with
+    scope of its own, and that a loop pass which releases nothing calls
+    directly. Every pass adds the allocation the call kept, and nothing
+    releases it while the loop runs. Reported once, at the function's
+    declaration, naming the line of the first allocation it holds; the hints
+    are a `const` per value, a block that opens with
     [`using a = arena()`](#using-a--arena) around the work, or a region for
     what must outlive the call (`tests/cases/perf_kept_memory`). The rule
     counts passes, not their number: a short fixed loop such as
     `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
     when the function returns a value that is not a number, a boolean, an enum
     or nothing, because then its caller owns the memory; when it manages the
-    arena itself, feeds tasks, or fills a parameter; when every loop that
-    runs it releases what it kept — a pass with a scope of its own, a call
-    inside a `using a = arena()` block, or a caller between the loop and the
-    function whose own scope releases it on return; or when the loop calls it
-    through a once-latch on the same object every pass. A once-latch is a
-    function whose body is exactly: optional leading `const`s that only read
-    a field; an `if (<field>) return …` guard with no `else` and nothing in
-    its branch but the `return`, its condition one field of a parameter alone
-    (`s.ready`, not `s.inner.ready`) or `<field> !== null`, read directly or through such a `const`; and at
-    once an assignment to that field that keeps the guard true (`true`, a
-    `new` object or an array literal, or for the `!== null` form a value
-    whose type is not nullable), with at most one `const` between them
-    naming the value stored and holding no `orReturn`. Every store anywhere
-    in the program into a field of that name, on any object and through any
-    name, must keep the guard true as well; only a constructor's own
-    `this.<field> =` is exempt. So only the first call does the work: a
-    once-guard or a cache (`tests/cases/perf_kept_memory_quiet`). The value
-    the guard returns is computed on every call and is not followed. The
-    same object is `this`, a name, or a field path off one, where the loop
-    neither declares nor assigns the name, stores into neither it nor a
-    shorter path it runs through (a store into a field under it leaves the
-    object in place, and the rule above answers for the guard's own field),
-    and uses no shorter path it runs through as a value (handed to a
-    call, or a method's receiver); for a call inside a function the loop
-    reaches, the same holds of a parameter every call reaching it passes the
-    same object, within that function's body. A negated or compound
-    condition, a counter, a guard that is cleared again here or elsewhere,
-    work before the guard, another statement between the guard and the
-    store, or an object the loop replaces, whether a fresh object each pass
-    or a field it stores a new one into, is not a latch and still warns.
-    (`tests/cases/perf_kept_memory_latch`). A value handed to a callee's
+    arena itself, feeds tasks, or fills a parameter; or when every loop that
+    calls it releases what it kept — a pass with a scope of its own, or a
+    call inside a `using a = arena()` block. Only a loop's direct callees are
+    judged, each on its own allocations: memory kept deeper in the chain,
+    behind a direct callee that answers memory, is not this warning's, and
+    [`--explain-memory`](#explaining-kept-memory) lists it
+    (`tests/cases/perf_kept_memory_quiet`). No call is excused for the object
+    it receives: a function that does its work once, behind a guard on a
+    field (`if (s.ready) return; s.ready = true`), still warns when it keeps
+    an array of its own, because the rule does not prove which object reaches
+    it on each pass; open a block with `using a = arena()` around that work
+    (`tests/cases/perf_kept_memory_direct`). A value handed to a callee's
     parameter is not counted as kept even when the callee stores it into
     something older (`add(list, makeItem())`): this rule does not report
     that retention.

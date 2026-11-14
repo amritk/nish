@@ -3060,9 +3060,9 @@ export class Compilation {
    * The performance warnings that need the whole-program facts: a loop over
    * a call that leaves arena memory behind, in a function that gets no
    * automatic scope (`arenaLoopFindings`, escape.ts), and a function of the
-   * root package that keeps an allocation on every call and runs on every pass
-   * of a loop that releases nothing (`keptMemoryFindings`), wherever that loop
-   * is: a dependency's event loop calls the program's handler. It is reported here, at
+   * root package that keeps an allocation on every call and is called directly
+   * by a pass of a loop that releases nothing (`keptMemoryFindings`), wherever
+   * that loop is: a dependency's event loop calls the program's handler. It is reported here, at
    * the end of checking, so that it reaches the report with every other
    * warning, which the driver prints before it emits anything. The analysis is
    * the one `emit` runs, memoised by `analyze`, so it is not paid twice.

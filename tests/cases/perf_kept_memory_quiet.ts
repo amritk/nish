@@ -1,8 +1,10 @@
 import { getenv } from "nish:process";
 
 // NL9019 is silent on each function below: either the function keeps nothing
-// past its call, or every loop that runs it releases what it keeps, or it runs
-// only behind a guard that does its work once.
+// past its call, or every loop that runs it releases what it keeps, or no
+// loop calls it directly. NL9019 judges only a loop's direct callees, each on
+// its own allocations; memory kept deeper in the chain is `--explain-memory`'s
+// to name, so the two-deep chains below are silent by design.
 
 // A string `let` reassigned in its own function: the function keeps that
 // allocation, but only the scoped passes and the single calls below run it.
@@ -43,7 +45,8 @@ const pick = (n: i32): i32 => {
 // `outer`'s own scope releases what `relabel` keeps on each call.
 const outer = (n: i32): i32 => relabel(n) + 1;
 
-// Keeps an array of its own on every call, but only latched callers run it.
+// Keeps an array of its own on every call, but no loop calls it directly:
+// only `prepare` and `Style.get` do, and neither keeps an allocation itself.
 const tally = (n: i32): i32 => {
   const xs: string[] = [];
   xs.push(`${n}`);
@@ -55,8 +58,8 @@ class Setup {
   label: string = "";
 }
 
-// Once-guarded: every call after the first returns at the guard, because the
-// field it reads is set before the work.
+// A direct callee whose only allocation is the string it stores into its
+// parameter: it fills a parameter, so it keeps that memory on purpose.
 const prepare = (s: Setup): void => {
   if (s.prepared) {
     return;
@@ -68,7 +71,7 @@ const prepare = (s: Setup): void => {
 class Style {
   value: string | null = null;
 
-  // Cached: a call after the first answers the field the first one filled.
+  // A direct callee that answers a string: its caller owns that memory.
   get(n: i32): string {
     const known = this.value;
     if (known !== null) {
@@ -101,32 +104,24 @@ const paired = (n: i32): i32 => keyLength({ k: `${n}` });
 // A literal that is only read: `join` copies its elements into a new string.
 const joined = (n: i32): i32 => ["a", `${n}`].join(",").length;
 
-class Once {
-  done: boolean = false;
-}
-
-// Latched, and reached only through a helper that hands on, unchanged, the
-// object its loop passes on every pass. The helper answers a string, so it
-// takes no scope that would release what `warmOnce` keeps.
-const warmOnce = (o: Once): i32 => {
-  if (o.done) {
-    return 0;
-  }
-  o.done = true;
+// Two deep, silent by design: the loop calls `keepVia`, which answers a
+// string and so takes no scope, and `keepDeep` keeps an array of its own
+// behind it on every pass. Neither is a direct callee that keeps memory of
+// its own, so NL9019 says nothing; `--explain-memory` names the loop.
+const keepDeep = (n: i32): i32 => {
   const xs: string[] = [];
-  xs.push(`${o.done}`);
+  xs.push(`${n}`);
   return xs.length;
 };
-const warmVia = (o: Once): string => `${warmOnce(o)}`;
+const keepVia = (n: i32): string => `${keepDeep(n)}`;
 
 export const main = (): void => {
   const setup = new Setup();
   const style = new Style();
-  const once = new Once();
   const names: string[] = [];
   // Passes that grow an older array: only functions that keep nothing run here.
   for (let i = 0; i < 1000; i++) {
-    names.push(`${fixed(i) + scoped(i) + pick(i) + outer(i) + listed(i) + paired(i) + joined(i)}${warmVia(once)}`);
+    names.push(`${fixed(i) + scoped(i) + pick(i) + outer(i) + listed(i) + paired(i) + joined(i)}${keepVia(i)}`);
     prepare(setup);
     names.push(`${style.get(i)}${envSaysNo("NISH_KEPT_MEMORY_UNSET") ? 1 : 0}`);
   }
