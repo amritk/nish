@@ -82,7 +82,7 @@ specified.
 | [WP30: Bytes across the interop boundary](wp30-bytes-interop.md) | Landed | 1 of 3 |
 | [WP31: Ranged integers](wp31-ranged-integers.md) | Landed | 1 of 4 |
 | [WP32: `Map` and `Set`](wp32-map.md) | Landed | 2 of 2 |
-| [WP34: The network stack](wp34-network-stack.md) | Landed | 16 of 16 |
+| [WP34: The network stack](wp34-network-stack.md) | Landed | 24 of 24 |
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
 | [WP38: SIMD](wp38-simd.md) | Landed | 10 of 10 |
