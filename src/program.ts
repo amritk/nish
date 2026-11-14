@@ -494,7 +494,11 @@ export class FusionTable {
 // What a node is to a self-recursive checked sum emitted as a loop (`src/accumulate.ts`
 // records, `src/emit-accumulate.ts` lowers). Kept in a `FusionTable` keyed by node id.
 
-/** The declaration of a function whose recursive returns are all folded into one loop. */
+/**
+ * The declaration of a function whose recursive returns are all folded into
+ * one loop. Its partner is its own id when every step passes only values no
+ * step can have allocated, -1 when one may (`passesOnlyHeld`).
+ */
 export const ACC_FUNCTION: i32 = 1
 /** `X + self(args)`, or `self(args) + Y`, in tail position: one turn of the loop. Its partner is the call. */
 export const ACC_STEP: i32 = 2

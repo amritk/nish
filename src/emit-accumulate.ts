@@ -101,6 +101,41 @@
 // the call does. A cold call may itself loop, and each sign change of the
 // sum makes one more call, never more frames than the recursion had.
 //
+// Arena scope (issue #1612). A function with an automatic arena scope
+// (`arenaScope` in `src/attributes.ts`) marks the arena in its prologue and
+// releases to the mark before every `ret`; each frame of the recursion does
+// so, and frees what it allocated as it returns. The loop marks once, in
+// `entry`, and releases to that mark at the end of every step, before the
+// edge back into the header, before the cold call's `ret` and before a base's
+// (`releaseScope`). It does so only where `releasesPerStep` holds:
+//
+//   - The recorder found that every argument of every step is a scalar, or a
+//     parameter or `this` passed on unchanged (`passesOnlyHeld` in
+//     `src/accumulate.ts`). The header's first entry holds the caller's
+//     values, all older than the mark. If the i-th entry's parameters name
+//     no memory, or only memory older than the mark, so do the arguments its
+//     step passes, so the next entry's do. A step's `X` is a number, and so
+//     is `Y`, or `Y` is a parameter. Parameters are never assigned.
+//   - The facts that set `arenaScope` say no allocation the function makes is
+//     stored into memory older than the call, returned, or handed to a task.
+//     They are flow-insensitive, so they cover every pass of the loop.
+//
+// So nothing a step allocated is reachable once it ends: not through a
+// parameter, not through the sum, not through older memory. The release
+// frees only what the recursion's frame would have freed on its return, and
+// earlier. Between a release and the next test the header only computes, or
+// runs nothing before the test (`rec.body`), so a cold entry has allocated
+// nothing. Its release before the `ret` is the epilogue's, after the call
+// returns. A base reached through the loop releases as it did before
+// (`emitScopeExit`). A panic releases nothing, in either form.
+//
+// What differs is only the bump position. The recursion's i-th frame starts
+// above everything frames 0..i-1 still held. The loop's i-th pass starts at
+// the mark. `Arena.mark` and `Arena.used` read that position, so a function
+// that may reach either (`readsArenaState`) keeps its recursion. Otherwise the
+// loop peaks lower than the recursion did, which nothing observes, as it
+// peaks lower on the stack.
+//
 // A function emitted this way may run deeper than its recursion could before
 // the stack ran out, as tail-call elimination lets any loop do; nothing that
 // completed before completes differently. A cycle in the call graph already
@@ -149,7 +184,8 @@ export class RecursionLoop {
  * Whether `sig` is emitted as a loop: the checker recorded it, and nothing
  * this emitter adds to a function is in play — no debug info or wasm panic
  * sites (both name the `+` that overflowed, which the loop no longer has), no
- * arena bracket, stack object or scope a loop would have to repeat.
+ * stack object or scope a loop would have to repeat. An automatic arena scope
+ * is the one bracket the loop repeats, when `releasesPerStep` allows it.
  */
 export const emitsAsLoop = (emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): boolean => {
   if (
@@ -158,7 +194,7 @@ export const emitsAsLoop = (emitter: Emitter, sig: FunctionSig, facts: FunctionF
     emitter.isLibraryCopy(sig) ||
     emitter.debug !== null ||
     emitter.panicSites !== null ||
-    facts.arenaScope ||
+    (facts.arenaScope && !releasesPerStep(emitter, sig, facts)) ||
     facts.stackLocals.length > 0 ||
     facts.scopesAnyPass()
   ) {
@@ -171,6 +207,16 @@ export const emitsAsLoop = (emitter: Emitter, sig: FunctionSig, facts: FunctionF
   }
   return true
 }
+
+/**
+ * Whether the loop may release `sig`'s arena scope on every turn ("Arena
+ * scope" above): every step passes only values no step allocated, as the
+ * recorder found (`passesOnlyHeld` in `src/accumulate.ts`), and nothing the
+ * function runs reads the bump position, which a release per turn lowers
+ * where the recursion's still counted the frames above.
+ */
+const releasesPerStep = (emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): boolean =>
+  emitter.program.accumulate.partnerOf(sig.decl.id) === sig.decl.id && !facts.readsArenaState
 
 /** The name an accumulating function's parameter `name` arrives under; the header's `phi` takes the parameter's own. */
 export const incomingName = (name: string): string => `${name}.in`
@@ -255,6 +301,7 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   fn.placeBlock(call)
   const answer = fn.emitValue(`call ${width} @${acc.sig.name}(${operands.join(", ")})`)
   const total = checkedAdd(emitter, acc, "%rec.prev", checkedAdd(emitter, acc, "%rec.last", answer))
+  releaseScope(emitter)
   fn.emit(`ret ${width} ${total}`)
   emitter.accumulator = null
 }
@@ -470,6 +517,7 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   if (callFirst) {
     x = emitter.emitExpression(other)
   }
+  releaseScope(emitter)
   acc.edges.push(fn.currentBlock().label)
   acc.args.push(args)
   acc.addends.push(x)
@@ -479,3 +527,15 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
 /** `a + b` at the loop's width, panicking with `OVERFLOW_ADD` as the checked `+` does: never `nsw`, whatever the step's proofs say. */
 const checkedAdd = (emitter: Emitter, acc: RecursionLoop, a: string, b: string): string =>
   emitCheckedArith(emitter, "add", acc.width, a, b, OVERFLOW_ADD)
+
+/**
+ * Release the function's automatic arena scope back to the mark its prologue
+ * took, when it has one: at the end of every step, before the edge back into
+ * the header, and before the cold call's `ret`, as the epilogue of every frame
+ * of the recursion does ("Arena scope" above).
+ */
+const releaseScope = (emitter: Emitter): void => {
+  if (emitter.current.arenaScope) {
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
+  }
+}
