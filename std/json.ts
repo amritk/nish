@@ -1176,6 +1176,48 @@ export class JsonWriter {
   }
 
   /**
+   * `key(name)` from a key already quoted: when the writer is minified, in an
+   * object, owes a key and has room for all of it, the comma and `quoted` go
+   * in as one copy; any other way, `key(name)` runs, so the bytes and
+   * `failed` are always the ones `key(name)` leaves.
+   *
+   * @internal Called by the code `jsonEncode` writes for a class (src/emit-json.ts).
+   * @param name - the key, unquoted.
+   * @param quoted - `name` quoted and escaped as `key` escapes it, then a colon.
+   */
+  keyQuoted(name: string, quoted: string): void {
+    const buf: u8[] = this.buf
+    const cap: i32 = toI32(buf.length)
+    const sep: i32 = this.sep
+    const n: i32 = toI32(quoted.length)
+    const at: i32 = this.end
+    if (
+      this.failed !== JSON_WRITE_OK ||
+      sep < JSON_WRITER_SEP_NONE ||
+      sep > JSON_WRITER_SEP_COMMA ||
+      this.afterKey ||
+      !jsonWriterInObject(this) ||
+      at < 0 ||
+      at > cap - sep - n
+    ) {
+      this.key(name)
+      return
+    }
+    if (sep === JSON_WRITER_SEP_COMMA && at < cap) {
+      buf[at] = toU8(JSON_COMMA)
+    }
+    let j: i32 = at + sep
+    let k: i32 = 0
+    while (k < n && j >= 0 && j < cap) {
+      buf[j] = toU8(quoted.charCodeAt(k))
+      j += 1
+      k += 1
+    }
+    this.end = j
+    this.afterKey = true
+  }
+
+  /**
    * `s` quoted and escaped as `JSON.stringify` escapes it; every other byte
    * goes through as itself.
    *

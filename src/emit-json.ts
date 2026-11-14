@@ -52,8 +52,10 @@
 // is no more calls: `if (d.keyIs("x")) goto x; else if (d.keyIs("y")) goto y;
 // else goto unknown`.
 //
-// The encoding is `w.beginObject()`, `w.key("id")` and `w.i32(v.id)` per field
-// in declaration order, then `w.endObject()`. Every call into the decoder and
+// The encoding is `w.beginObject()`, `w.keyQuoted("id", "\"id\":")` and
+// `w.i32(v.id)` per field in declaration order, then `w.endObject()`: the key
+// is quoted and escaped here, once, so a minified writer copies it in one
+// step (`emitJsonFieldKey`). Every call into the decoder and
 // the writer is a call of one of their methods, and every error is theirs and
 // sticky, so this code has no error path of its own.
 //
@@ -112,6 +114,7 @@ import {
 } from "./program"
 import { StringSet } from "./map"
 import { ARRAY_TYPE } from "./runtime"
+import { jsonQuote } from "./strings"
 import { T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
 
 /** What one written function is for. */
@@ -1612,6 +1615,16 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
 // ---- Encoding -----------------------------------------------------------------------------
 
 /**
+ * `w.keyQuoted(name, quoted)`: the field's key with its quoting and escaping
+ * done at compile time, by the rule `JsonWriter.key` applies at run time.
+ */
+const emitJsonFieldKey = (emitter: Emitter, part: JsonPart, wireName: string): void => {
+  const name = emitter.stringConstant(wireName)
+  const quoted = emitter.stringConstant(`${jsonQuote(wireName)}:`)
+  jsonCallMethod(emitter, part.receiver, "keyQuoted", "%r", [`i8* ${name}`, `i8* ${quoted}`])
+}
+
+/**
  * A class's object: `{`, each field's key and value, `}`. A variant's tag
  * goes first, as its string on the wire, so a decoder reads it with no
  * looking ahead.
@@ -1624,7 +1637,7 @@ const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   for (const f of fields) {
     const field = f.field
     if (field !== null && f.kind === JSON_FIELD_TAG) {
-      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
+      emitJsonFieldKey(emitter, part, field.wireName)
       const wire = emitter.stringConstant(jsonWireTag(emitter.table, info, field))
       jsonCallMethod(emitter, part.receiver, "string", "%r", [`i8* ${wire}`])
     }
@@ -1632,7 +1645,7 @@ const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   for (const f of fields) {
     const field = f.field
     if (field !== null && f.kind !== JSON_FIELD_TAG) {
-      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
+      emitJsonFieldKey(emitter, part, field.wireName)
       emitJsonEncodeValue(emitter, part, f, loadField(emitter, info, "%v", field))
     }
   }
