@@ -184,6 +184,31 @@ byte-identical IR, so the rounds below measure only the machine. 15 runs after
   median moved 41 % between rounds, and both branch rounds sit inside that
   band. No change.
 
+A function with an automatic arena scope qualifies too (issue #1612), when
+every step passes only numbers and its own parameters, unchanged, and nothing
+it runs reads `Arena.mark` or `Arena.used`. The loop marks the arena once on
+entry and releases to that mark at the end of every step, so each pass frees
+what it built, as each frame of the recursion did on its return. A step that
+passes memory it built (`` f(`${n}`) ``, `f(s + "y")`) would have that
+memory freed under the next pass, and such a function keeps its recursion
+(`tests/cases/acc_arena_ineligible`). The proof is "Arena scope" in the
+header of `src/emit-accumulate.ts`. fib and treesum have no scope, and main's
+compiler and this one give them byte-identical IR. 15 runs after 2 warm-ups,
+interleaved, two rounds, minimum / median ms:
+
+- **fib(40)**: main 235/240 and 237/240, branch 238/250 and 228/237. No
+  change.
+- **treesum `fn`**: main 242/265 and 242/262, branch 233/248 and 241/254.
+  No change.
+- **treesum `method`**: main 199/211 and 201/212, branch 278/287 and
+  206/290. The binaries are the same program, so the branch's first round is
+  the machine's noise, not the change.
+- **A template per frame** (`digits(10000)`, which builds `` `${n}` `` and
+  adds its length, summed over 2000 calls; the `opt-recursion-arena` cookbook
+  entry's shape), 20 runs of each of two copies of each binary,
+  interleaved: main 226.0 / 221.4 ms median, branch 178.9 / 179.6 ms. The
+  copies of one binary differ by 2 %, and the loop is 20 % faster.
+
 `tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
 effects, the soundness shapes (permuted arguments, a nested split, a panic
 other than overflow while one is pending) and the sums that stay recursion;

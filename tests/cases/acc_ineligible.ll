@@ -2,6 +2,7 @@
 
 @nish_argv = external global %struct.nish_array*, align 8
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"12\00" }, align 8
 
 declare void @nish_free_arena() #3
 declare noundef i64 @nish_arena_mark() #3
@@ -242,9 +243,8 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @digits(i32 noundef %n) #0 {
+define internal noundef i32 @digits(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #0 {
 entry:
-  %s.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = icmp sle i32 %n, 0
   br i1 %0, label %if.then, label %if.end
@@ -254,15 +254,14 @@ if.then:
   ret i32 0
 
 if.end:
-  %1 = call i8* @nish_str_from_i32(i32 %n)
-  store i8* %1, i8** %s.addr, align 8
-  %2 = load i8*, i8** %s.addr, align 8
-  %3 = bitcast i8* %2 to i64*
-  %4 = load i64, i64* %3, align 8
-  %5 = trunc i64 %4 to i32
+  %1 = bitcast i8* %s to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = trunc i64 %2 to i32
+  %4 = sub nsw i32 %n, 1
+  %5 = call i8* @nish_str_from_i32(i32 %4)
   %6 = sub nsw i32 %n, 1
-  %7 = call i32 @digits(i32 %6)
-  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %7)
+  %7 = call i32 @digits(i8* %5, i32 %6)
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %3, i32 %7)
   %9 = extractvalue { i32, i1 } %8, 0
   %10 = extractvalue { i32, i1 } %8, 1
   br i1 %10, label %ovf.fail, label %ovf.ok
@@ -327,7 +326,7 @@ cond.end:
   %33 = call i8* @nish_str_from_i32(i32 %32)
   %34 = call i8* @nish_str_concat(i8* %31, i8* %33)
   %35 = call i8* @nish_str_concat(i8* %34, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %36 = call i32 @digits(i32 12)
+  %36 = call i32 @digits(i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*), i32 12)
   %37 = call i8* @nish_str_from_i32(i32 %36)
   %38 = call i8* @nish_str_concat(i8* %35, i8* %37)
   call void @nish_print(i8* %38)

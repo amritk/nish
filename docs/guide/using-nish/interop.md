@@ -865,6 +865,22 @@ A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
 [Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
+A numeric enum crosses as its number. A string enum has no spelling in C or
+in the typings yet, so a function that takes or returns one is refused under
+`--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
+
+```ts nish:err NL4019 --emit-header build/docs-ai/nl4019.h
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest);
+```
+
+Give the host the member's text instead, a `string` from `String(r)`, or an
+`i32` of your own choosing.
+
 ## Calling C from Nish: `declare function`
 
 `declare function` names a C function the program calls but does not define.

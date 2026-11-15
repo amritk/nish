@@ -1393,10 +1393,17 @@ export class EnumInfo {
   type: i32
   /** `export enum`: another module may import it. */
   exported: boolean
+  /** A string enum: every member is a string literal and its value is its ordinal. */
+  isString: boolean
   /** Member name -> index into `memberValues`; iteration order is declaration order. */
   members: StringMap
   memberNames: string[]
   memberValues: i32[]
+  /**
+   * The strings of a string enum's members, in ordinal order: the table
+   * `String(r)` and typed JSON read. Empty for a numeric enum.
+   */
+  memberStrings: string[]
 
   constructor(name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean) {
     this.name = name
@@ -1408,6 +1415,15 @@ export class EnumInfo {
     this.members = new StringMap()
     this.memberNames = []
     this.memberValues = []
+    this.isString = false
+    this.memberStrings = []
+  }
+
+  /** A string member: its value is the next ordinal and `text` its string. */
+  addStringMember(name: string, text: string): void {
+    this.isString = true
+    this.memberStrings.push(text)
+    this.addMember(name, this.memberValues.length)
   }
 
   addMember(name: string, value: i32): void {

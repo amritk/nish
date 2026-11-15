@@ -531,6 +531,7 @@ const pageMath = (why, filesByProgram) =>
 const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const DESTRUCTURING = "Destructuring declarations over objects and arrays"
 const CONST_TABLES = "Add module-level constant arrays of numeric literals"
+const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1274,9 +1275,13 @@ const RECURSION_LOOP_WHY =
 const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop"
 const RECURSION_METHOD_WHY =
   "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
-const RECURSION_WIDTH = "Emit self-recursive checked sums of every checked integer width as a loop"
+const RECURSION_WIDTH = "Emit self-recursive checked i64 sums as a loop"
 const RECURSION_WIDTH_WHY =
   "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`"
+
+const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena scope as a loop"
+const RECURSION_ARENA_WHY =
+  "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
   {
@@ -1448,6 +1453,25 @@ const DECLARED = [
     file: "opt-recursion-i64.ll",
     changelog: RECURSION_WIDTH,
     why: RECURSION_WIDTH_WHY,
+  },
+  // A sum whose frames allocate loops, releasing the arena per step (issue #1612).
+  {
+    program: "tests/cases/acc_arena.ts",
+    file: "acc_arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "tests/cases/acc_arena_overflow.ts",
+    file: "acc_arena_overflow.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-arena.ts",
+    file: "opt-recursion-arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
   },
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
@@ -6820,6 +6844,17 @@ const DECLARED = [
     file: "exit",
     changelog: UNION_GENERICS,
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/enum_string.ts",
+    "tests/cases/enum_string_union_tag.ts",
+    "docs/cookbook/decl-enum-string.ts",
+    "tests/link/json_enum_string/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: STRING_ENUMS,
+    why: "the program declares an enum whose members are strings, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
   ...[
     "tests/cases/destructure_array.ts",

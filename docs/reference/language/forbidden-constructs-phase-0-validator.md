@@ -50,10 +50,10 @@ fragment `tests/run.js` matches and the case that proves it.
   (`reject_async_method`)
 - **`var`**: `` `var` is forbidden; use `let` or `const` ``
   (`reject_var_keyword`, `reject_var_in_for`)
-- **enum members that are not numeric literals**:
-  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
-  (`reject_enum_string`, `reject_enum_computed`; the numeric form compiles
-  ([Enums](declarations.md#enums)))
+- **enum members that are neither all numeric nor all string literals**:
+  `` Enum members must be numeric literals in Nish, or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings) ``
+  (NL1043, `reject_enum_string_mixed`, `reject_enum_computed`; the numeric
+  and the [string](declarations.md#string-enums) forms compile ([Enums](declarations.md#enums)))
 - **`namespace` / `module` blocks, `declare module "m"`**:
   `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) ``
   (`reject_namespace`, `reject_module_declared`)

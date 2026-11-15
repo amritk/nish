@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 781 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 786 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -8649,7 +8649,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not; so are a union of classes, alone, with `| null` or in an array, and a variant's tag
+`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and an enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not; so are a union of classes, alone, with `| null` or in an array, and a variant's tag
 ```
 
 ## NL2486
@@ -15188,7 +15188,24 @@ A destructuring `for...of` head walks an array only; bind the element to a name 
 The message of an error contains:
 
 ```text
-…: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value
+…`: each member of a string enum has its own string, because the string is how JSON and `String` name the member
+```
+
+[`nl2786_string_enum_same_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2786_string_enum_same_value.ts):
+
+```ts
+// Two members with one string would decode to the same member, so the second
+// is refused: the string is how JSON and `String` name a member.
+enum Role {
+  Admin = "admin",
+  Root = "admin",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member
 ```
 
 ## NL2787
@@ -15196,7 +15213,22 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-`: its elements are constant data that nothing may write, and a `
+…` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8
+```
+
+[`nl2787_string_enum_utf8.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2787_string_enum_utf8.ts):
+
+```ts
+// A string enum's values are matched against JSON, so each is valid UTF-8.
+enum Role {
+  Bad = "\uD800",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8
 ```
 
 ## NL2788
@@ -15204,10 +15236,105 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` has no elements; a table holds at least one
+…`: an enum value is not its string, so compare it with a member, such as `…
+```
+
+[`nl2788_string_enum_compare_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2788_string_enum_compare_string.ts):
+
+```ts
+// A string enum is not a `string`: compare it with a member, not with text.
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const isAdmin = (r: Role): boolean => r === "admin";
+
+export const test = (): i32 => (isAdmin(Role.Admin) ? 1 : 0);
+```
+
+```text
+Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin`
 ```
 
 ## NL2789
+
+The message of an error contains:
+
+```text
+…` is not a string: write `String(…
+```
+
+[`nl2789_string_enum_to_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2789_string_enum_to_string.ts):
+
+```ts
+// A string enum does not convert to `string` on its own: `String(r)` does it.
+enum Role {
+  Admin = "admin",
+}
+
+export const test = (): i32 => {
+  const r: Role = Role.Admin;
+  const s: string = r;
+  return s.length;
+};
+```
+
+```text
+A `Role` is not a string: write `String(r)` for the member's string
+```
+
+## NL2790
+
+The message of an error contains:
+
+```text
+…` is not one: write the member itself, such as `…
+```
+
+[`nl2790_string_enum_from_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2790_string_enum_from_string.ts):
+
+```ts
+// A string does not become a member: write the member.
+enum Role {
+  Admin = "admin",
+}
+
+export const test = (): i32 => {
+  const r: Role = "admin";
+  return r === Role.Admin ? 1 : 0;
+};
+```
+
+```text
+`"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin`
+```
+
+## NL2791
+
+The message of an error contains:
+
+```text
+…: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value
+```
+
+## NL2792
+
+The message of an error contains:
+
+```text
+`: its elements are constant data that nothing may write, and a `
+```
+
+## NL2793
+
+The message of an error contains:
+
+```text
+` has no elements; a table holds at least one
+```
+
+## NL2794
 
 The message of an error contains:
 

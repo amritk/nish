@@ -221,7 +221,7 @@ or of a `T | null` holds a pointer to each element instead
 A top-level `const` declared `readonly u8[]` (or `u16`, `u32`, `i32`, `i64`
 or `f64`) and given an array literal of constants is a *constant table*. Its
 elements are worked out when the program compiles and kept as read-only
-data in the binary: nothing runs to build it, and nothing can write it.
+data in the binary: nothing runs to build it, and nothing can write it
 ([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
 
 ```ts nish:ok
@@ -246,7 +246,7 @@ export const main = (): i32 => {
   `push`, `sort`, or handing it where a writable `u8[]` is expected is
   refused:
 
-```ts nish:err NL2787
+```ts nish:err NL2792
 const XS: i32[] = [1, 2, 3];
 
 export const main = (): i32 => {

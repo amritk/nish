@@ -1,0 +1,1 @@
+--emit-napi build/test/interop/reject_enum_string_export_napi.c
