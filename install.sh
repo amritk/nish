@@ -777,13 +777,6 @@ nish_write_wrapper "$stage"
 # an absolute path, and at this point that path is the staging directory, which
 # is about to stop existing. It is rewritten after the move.
 got="$(nish_version_of "$stage/libexec/nish")"
-if [ -z "$got" ]; then
-  echo "DEBUG: uname $(uname -a)" >&2
-  ls -la "$stage" "$stage/libexec" >&2 || true
-  "$stage/libexec/nish" --version >&2; echo "DEBUG: exit $?" >&2
-  ( cd / && "$stage/libexec/nish" --version >&2; echo "DEBUG: from / exit $?" >&2 )
-  "$stage/libexec/nish" --help >/dev/null; echo "DEBUG: help exit $?" >&2
-fi
 [ -n "$got" ] || die "the compiler in $name.tar.gz did not run on this machine"
 [ "$got" = "$plain" ] || die "$name.tar.gz contains nish $got, not $plain"
 
