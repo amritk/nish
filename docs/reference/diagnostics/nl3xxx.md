@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 54 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 56 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -425,7 +425,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` field is one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once
+` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host` and `compat`, each written once
 ```
 
 ## NL3037
@@ -693,4 +693,20 @@ export const main = (): i32 => tag(new Item());
 
 ```text
 Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: Node copies every own field of the instance a value holds, and the native copy only the interface's, so spread a value of a class type, or set the fields by name
+```
+
+## NL3056
+
+The message of an error contains:
+
+```text
+… is no feature of the compatibility dialect: `
+```
+
+## NL3057
+
+The message of an error contains:
+
+```text
+…, which the root package's `compat` does not allow: a program is compiled in its root package's dialect
 ```

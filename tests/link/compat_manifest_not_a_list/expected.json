@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_manifest_not_a_list/package.json","line":5,"column":15,"endLine":5,"endColumn":22,"severity":"error","code":"NL3036","message":"`compat` is neither `true` nor an array: the root package's `nish` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host` and `compat`, each written once"}
