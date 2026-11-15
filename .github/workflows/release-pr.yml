@@ -39,7 +39,8 @@ permissions:
   contents: write
   pull-requests: write
   actions: write # dispatch release.yml at the tag this job pushes
-  attestations: read # gh attestation verify, for the seed the break-web rebuild fetches
+  # gh attestation verify, for the seed the break-web rebuild fetches.
+  attestations: read
 
 concurrency:
   group: release-pr
