@@ -3562,6 +3562,9 @@ export class Compilation {
         if (info.storage && info.origin === program.source) {
           info.storageSymbol = `nish_storage_${k}_${info.name}`
         }
+        if (info.table && info.origin === program.source) {
+          info.storageSymbol = `nish_const_${k}_${info.name}`
+        }
       }
       k = k + 1
     }

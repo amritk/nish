@@ -1906,11 +1906,13 @@ having no top-level code and therefore no initialisation order.
   (`` Module constant `answer` needs a type annotation ``,
   `tests/cases/reject_const_no_annotation`), and so is an initialiser.
 - **The type must be `i32`, `i64`, `f64`, `number`, `boolean`, or `string`.**
-  An array, class, or interface constant would need an allocation, and there is
-  no code to run it (`` must be a number, boolean, or string ``,
-  `tests/cases/reject_const_array`). The exception is a `new Array<T>(n)` or
-  typed-array `new` of a compile-time length, which is
-  [module storage](#module-storage) and has rules of its own.
+  A class or interface constant would need an allocation, and there is
+  no code to run it (`` must be a number, boolean, string, or a `readonly`
+  array of numbers ``, `tests/cases/reject_ffi_handle_module_binding`). There
+  are two exceptions with rules of their own: a `readonly` array of numbers
+  written out as a literal, which is a [constant table](#constant-tables), and
+  a `new Array<T>(n)` or typed-array `new` of a compile-time length, which is
+  [module storage](#module-storage).
 - **The initialiser is an ordinary Nish expression restricted to literals
   and other constants**: the operators of [Operators](#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
@@ -1959,6 +1961,48 @@ having no top-level code and therefore no initialisation order.
 - **A string constant is a value**, so it is a receiver like any other string:
   `NAME.length` is the folded literal's byte length
   (`tests/cases/const_string_member`).
+
+### Constant tables
+
+```ts
+const CLASS: readonly u8[] = [0, 0, 1, 1, 2, 3]
+const STEPS: readonly i32[] = [-1, 0, 1, LIMIT]
+```
+
+**A top-level `const` of type `readonly T[]` whose initialiser is an array
+literal is a constant table**: its elements are folded at compile time and laid
+out as one read-only data global, with a constant array header over it, so no
+code runs to build it and nothing can write it (`tests/cases/const_array_u8`,
+`const_array_numeric`). A use of the name is the header's address — the same
+`readonly T[]` value any other read-only array is — so `CLASS[c]`,
+`CLASS.length`, `for (const v of CLASS)` and passing it to a `readonly T[]`
+parameter all work, and `CLASS[c]` with `c: u8` into a 256-entry table is one
+load the bounds prover has already discharged.
+
+- **The element type is `u8`, `u16`, `u32`, `i32`, `i64` or `f64`** — the
+  numbers whose bytes are their value. Anything else is
+  `` Constant table `XS` cannot hold string ``
+  (`tests/cases/reject_const_array_element_type`).
+- **The annotation must be `readonly T[]`** (or `ReadonlyArray<T>`): the data
+  is constant, and a plain `T[]` could be written through. `const XS: i32[] =
+  [1, 2, 3]` is `` must be declared `readonly i32[]` ``
+  (`tests/cases/reject_const_array`).
+- **Each element is a constant expression** under the rule above — literals,
+  other module constants and arithmetic over them
+  (`tests/cases/reject_const_array_nonconst`) — and must fit the element type:
+  `256` in a `readonly u8[]` is `` Element 2 of constant table `XS` does not fit
+  in u8 `` (`tests/cases/reject_const_array_element`). An empty literal is
+  refused (`` has no elements ``, `reject_const_array_empty`).
+- **Writing is refused like any write to a `readonly` array**: an element
+  store, `push`, `pop` or any other mutating method
+  (`tests/cases/reject_const_array_write`, `reject_const_array_push`), and
+  handing the table to a mutable `T[]` — a parameter or a local
+  (`reject_const_array_mutable`, `reject_const_array_alias`).
+- **The symbols are `@nish_const_<module>_<name>.data`** (`private unnamed_addr
+  constant`) **and `@nish_const_<module>_<name>`** (the header, `internal
+  constant`), `<module>` the module's index. An exported table follows module
+  storage's rule: the header in its own module is not `internal`, and an
+  importer declares it `external constant`.
 
 ### Module storage
 
@@ -4003,7 +4047,7 @@ export const main = (): void => {
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
-  (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
+  (`` Module constant `alias` must be a number, boolean, string, or a `readonly` array of numbers written out as a literal, not (i32) => i32; there is no top-level code to build anything else ``).
   An arrow argument may capture a `const` reference local like any other
   value (`fnref_capture`).
 - **What a reference does.** It is called — `h(3)`, `this.op(4)`, or

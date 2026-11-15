@@ -265,7 +265,7 @@ struct StructInfo (class) size=176 align=8 exported
   method method -> @StructInfo.method
   method hasMember -> @StructInfo.hasMember
   method methodTemplate -> @StructInfo.methodTemplate
-struct ConstInfo (class) size=96 align=8 exported
+struct ConstInfo (class) size=112 align=8 exported
   field name: string index=0 offset=0
   field type: i32 index=1 offset=8
   field intValue: i64 index=2 offset=16
@@ -281,6 +281,9 @@ struct ConstInfo (class) size=96 align=8 exported
   field storageElem: i32 index=12 offset=76
   field storageSymbol: string index=13 offset=80
   field root: boolean index=14 offset=88
+  field table: boolean index=15 offset=89
+  field tableInts: i64[] index=16 offset=96
+  field tableFloats: f64[] index=17 offset=104
   constructor -> @ConstInfo.constructor
 struct AliasInfo (class) size=40 align=8 exported
   field name: string index=0 offset=0
@@ -806,9 +809,9 @@ function StructInfo.methodTemplate(this: StructInfo, name: string): TemplateInfo
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
 function ConstInfo.constructor(this: ConstInfo, name: string, type: i32, decl: Node, origin: SourceFile): void -> @ConstInfo.constructor [exported constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl name origin type
-  pointer this: size=96 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -1097,7 +1100,7 @@ function CheckedProgram.addConstant(this: CheckedProgram, info: ConstInfo): void
   escaping: info
   calls: StringMap.set nish_array_grow
   pointer this: size=912 writesThrough=false captured=false
-  pointer info: size=96 writesThrough=true captured=true
+  pointer info: size=112 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function CheckedProgram.alias(this: CheckedProgram, name: string): AliasInfo | null -> @CheckedProgram.alias [exported method]

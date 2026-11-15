@@ -23,10 +23,11 @@ import { outsideAsyncMessage } from "./async-check"
 import { CheckContext } from "./context"
 import { withoutSeparators } from "./lexer"
 import { Node, NodeKind } from "./nodes"
+import { unwrapParens } from "./emit-util"
 import { acceptStorageLength, checkStorage } from "./module-storage"
 import { ConstInfo } from "./program"
 import { StringBuilder } from "./strings"
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING } from "./types"
+import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_U16, T_U32, T_U8 } from "./types"
 
 /**
  * A folded value. One class with a type discriminant rather than the
@@ -231,6 +232,10 @@ export const foldConstant = (ctx: CheckContext, info: ConstInfo): void => {
     foldStorage(ctx, info)
     return
   }
+  if (info.table) {
+    foldTable(ctx, info)
+    return
+  }
   info.folding = true
   const initializer = info.decl.children[2]
   const value = fold(ctx, info, initializer, info.type)
@@ -285,6 +290,99 @@ const foldStorage = (ctx: CheckContext, info: ConstInfo): void => {
     return
   }
   acceptStorageLength(ctx, info, length, value.type === T_I32 || value.type === T_I64, value.intValue)
+}
+
+/** Whether a constant table may hold `elem`: a fixed-width number whose bytes are its value. */
+export const isTableElement = (elem: i32): boolean =>
+  elem === T_U8 || elem === T_U16 || elem === T_U32 || elem === T_I32 || elem === T_I64 || elem === T_F64
+
+/** The largest value of a table's unsigned element, or -1 for a signed one. */
+const unsignedMax = (elem: i32): i64 => {
+  if (elem === T_U8) {
+    return toI64(255)
+  }
+  if (elem === T_U16) {
+    return toI64(65535)
+  }
+  if (elem === T_U32) {
+    return (toI64(1) << toI64(32)) - toI64(1)
+  }
+  return toI64(-1)
+}
+
+/**
+ * A constant table's elements, each folded as a constant of the element type
+ * would be: a bare literal takes the element's width (`u32` folds in 64
+ * bits, so 4294967295 is written as it reads), and a value outside the
+ * element's range is an error, never a wrap. It is marked folded either way,
+ * so an error is reported once; `folding` catches a table that names itself.
+ */
+const foldTable = (ctx: CheckContext, info: ConstInfo): void => {
+  info.folding = true
+  const elem = info.storageElem
+  const max = unsignedMax(elem)
+  // The type a bare literal folds at: u32 needs 64 bits to hold 4294967295.
+  let expected = T_I32
+  if (elem === T_U32 || elem === T_I64) {
+    expected = T_I64
+  } else if (elem === T_F64) {
+    expected = T_F64
+  }
+  const elements = unwrapParens(info.decl.children[2]).children
+  const spelled = ctx.table.typeName(elem)
+  let ok = true
+  // The first element whose value is not of the table's type, and that type.
+  let mistyped = -1
+  let mistypedAs = T_ERROR
+  let i = 0
+  while (i < elements.length) {
+    const element = elements[i]
+    const value = fold(ctx, info, element, expected)
+    if (ctx.errored) {
+      info.folding = false
+      return
+    }
+    if (value.type === T_ERROR) {
+      ok = false
+    } else if (
+      elem === T_F64 ? value.type !== T_F64 : value.type !== T_I32 && (value.type !== T_I64 || elem === T_I32)
+    ) {
+      // Reported after the loop, which keeps the type's name out of each pass.
+      mistyped = i
+      mistypedAs = value.type
+      break
+    } else if (elem === T_F64) {
+      info.tableFloats.push(value.floatValue)
+    } else {
+      const v = value.intValue
+      const fits = max >= toI64(0) ? v >= toI64(0) && v <= max : elem === T_I64 || v === toI64(toI32(v))
+      if (!fits) {
+        reject(
+          ctx,
+          info,
+          element,
+          `Element ${i} of constant table \`${info.name}\` does not fit in ${spelled}: its value is ${v}`
+        )
+        ok = false
+      }
+      info.tableInts.push(v)
+    }
+    i = i + 1
+  }
+  if (mistyped >= 0) {
+    reject(
+      ctx,
+      info,
+      elements[mistyped],
+      `Element ${mistyped} of constant table \`${info.name}\` is declared ${spelled} but its value is ${ctx.table.typeName(mistypedAs)}`
+    )
+    ok = false
+  }
+  info.folding = false
+  info.folded = true
+  if (ok) {
+    info.intValue = toI64(elements.length)
+  }
 }
 
 const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {

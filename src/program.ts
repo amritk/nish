@@ -1291,6 +1291,18 @@ export class ConstInfo {
    * releases the rest (`nish_root_keep`). Set by `checkStorage`.
    */
   root: boolean
+  /**
+   * A constant table, `const T: readonly u8[] = [0, 1, 2]` at the top level
+   * (`docs/LANGUAGE.md`, "Constant tables"). Its value is folded at compile
+   * time into `tableInts` (or `tableFloats` for an `f64` element) and emitted
+   * as two `constant` globals, `@<storageSymbol>.data` and the header
+   * `@<storageSymbol>`. `type` is `readonly <storageElem>[]` and `intValue`
+   * the length once folded. Never `storage`: nothing writes it, so it has no
+   * layout a page reads.
+   */
+  table: boolean
+  tableInts: i64[]
+  tableFloats: f64[]
 
   constructor(name: string, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -1299,6 +1311,9 @@ export class ConstInfo {
     this.storageElem = -1
     this.storageSymbol = ""
     this.root = false
+    this.table = false
+    this.tableInts = []
+    this.tableFloats = []
     this.intValue = toI64(0)
     this.floatValue = 0.0
     this.textValue = ""

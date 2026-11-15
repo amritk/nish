@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 954
+export const RULE_COUNT: i32 = 958
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -805,6 +805,8 @@ const diagnosticRules = (): string[] => [
   "NL2226",
   ": a shift by the width or more moves every bit out, and a rotate by it is a rotate by ",
   "NL2631",
+  ": a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value",
+  "NL2791",
   "` cannot be an array element: a C struct layout is lent to C one at a time, by pointer",
   "NL2740",
   "` is a function reference: it can be called, compared, stored and passed, nothing else",
@@ -1029,6 +1031,8 @@ const diagnosticRules = (): string[] => [
   "NL2438",
   "` takes two vectors of one type and one lane index per lane, got ",
   "NL2634",
+  "`: its elements are constant data that nothing may write, and a `",
+  "NL2792",
   "Function names starting with `nish_` are reserved for the runtime",
   "NL2202",
   "the environment and the terminal answer differently on every host",
@@ -1308,6 +1312,8 @@ const diagnosticRules = (): string[] => [
   "NL1009",
   "` directory above the importing module has it",
   "NL3015",
+  "` has no elements; a table holds at least one",
+  "NL2793",
   "` is already declared as a class or interface",
   "NL2074",
   "` takes no type argument (it is an alias of `",
@@ -1818,6 +1824,8 @@ const diagnosticRules = (): string[] => [
   "NL2198",
   "Non-integer literal `",
   "NL2222",
+  " of constant table `",
+  "NL2794",
   "` cannot be optional",
   "NL2046",
   "` is missing field `",

@@ -188,15 +188,19 @@ export const irEscape = (s: string): string => {
 export const irEscapeInto = (out: StringBuilder, s: string): void => {
   let i = 0
   while (i < s.length) {
-    const c = s.charCodeAt(i)
-    if (c >= 32 && c <= 126 && c !== 34 && c !== 92) {
-      out.addChar(c)
-    } else {
-      out.addChar(92)
-      out.add(hexDigitUpper(c >> 4))
-      out.add(hexDigitUpper(c))
-    }
+    irEscapeByte(out, s.charCodeAt(i))
     i = i + 1
+  }
+}
+
+/** One byte `c` of an LLVM `c"..."` constant, escaped as `irEscape` escapes it. */
+export const irEscapeByte = (out: StringBuilder, c: i32): void => {
+  if (c >= 32 && c <= 126 && c !== 34 && c !== 92) {
+    out.addChar(c)
+  } else {
+    out.addChar(92)
+    out.add(hexDigitUpper(c >> 4))
+    out.add(hexDigitUpper(c))
   }
 }
 

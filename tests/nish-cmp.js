@@ -530,6 +530,7 @@ const pageMath = (why, filesByProgram) =>
   )
 const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const DESTRUCTURING = "Destructuring declarations over objects and arrays"
+const CONST_TABLES = "Add module-level constant arrays of numeric literals"
 const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
@@ -6870,6 +6871,28 @@ const DECLARED = [
     file: "exit",
     changelog: DESTRUCTURING,
     why: "the program declares names with an object or array pattern, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/const_array_numeric.ts",
+    "tests/cases/const_array_u8.ts",
+    "docs/cookbook/const-table.ts",
+    "bench/const-table.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: CONST_TABLES,
+    why: "the program declares a module-level `readonly` array of numbers written out as a literal, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.h"],
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.napi.c"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.h"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.napi.c"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: CONST_TABLES,
+    why: "a function returning `readonly T[]` returns `const nish_array *`, since the array may be a constant table in read-only memory",
   })),
   ...[
     "bench/par-histogram-atomic.ts",

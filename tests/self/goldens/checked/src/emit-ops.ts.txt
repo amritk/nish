@@ -61,7 +61,7 @@ function constantText(emitter: Emitter, info: ConstInfo): string -> @constantTex
   sharedWrite: via Emitter.stringConstant
   calls: Emitter.stringConstant floatText isFloat nish_str_from_i64
   pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.stringConstant#0
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 Emitter.stringConstant -> @Emitter.stringConstant
   callee +2:7 isFloat -> @isFloat

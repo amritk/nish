@@ -74,6 +74,8 @@ import {
   emitJsonPutF64Kernel,
   storageDeclaration,
   storageGlobals,
+  tableDeclaration,
+  tableGlobals,
 } from "./emit-arrays"
 import {
   checksArgumentRange,
@@ -492,6 +494,9 @@ export class Emitter {
     for (const info of this.program.constantList) {
       if (info.storage && info.origin === this.program.source) {
         storageGlobals(this, info, traces)
+      }
+      if (info.table && info.origin === this.program.source) {
+        tableGlobals(this, info)
       }
     }
     for (const sig of this.program.functions) {
@@ -1725,6 +1730,13 @@ export class Emitter {
       // WP50 S3: module storage is its static header, declared where imported.
       if (constant.origin !== this.program.source) {
         storageDeclaration(this, constant)
+      }
+      return `@${constant.storageSymbol}`
+    }
+    if (constant !== null && constant.table) {
+      // A constant table is its constant header, declared where imported.
+      if (constant.origin !== this.program.source) {
+        tableDeclaration(this, constant)
       }
       return `@${constant.storageSymbol}`
     }

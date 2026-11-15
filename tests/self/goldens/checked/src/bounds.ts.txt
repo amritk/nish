@@ -1672,14 +1672,16 @@ function judge(walk: BoundsWalk, state: State, node: Node, receiver: Node, index
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: node
-  calls: holderOf indexLocal lengthHolder nish_array_grow noteProof offsetIndex proves provesByRange recordPassedCheck
-  pointer walk: size=184 writesThrough=false captured=false passedTo=holderOf#0 provesByRange#0 recordPassedCheck#0 noteProof#0
-  pointer state: size=120 writesThrough=false captured=false passedTo=proves#1 provesByRange#1 recordPassedCheck#1
-  pointer node: size=40 writesThrough=true captured=true passedTo=noteProof#1
-  pointer receiver: size=40 writesThrough=true captured=true passedTo=holderOf#1 lengthHolder#1
-  pointer index: size=40 writesThrough=true captured=true passedTo=proves#3 provesByRange#3 recordPassedCheck#3 indexLocal#1 offsetIndex#1
+  calls: holderOf indexLocal lengthHolder nish_array_grow noteProof offsetIndex proves provesByRange provesTableIndex recordPassedCheck
+  pointer walk: size=184 writesThrough=false captured=false passedTo=provesTableIndex#0 noteProof#0 holderOf#0 provesByRange#0 recordPassedCheck#0 noteProof#0
+  pointer state: size=120 writesThrough=false captured=false passedTo=provesTableIndex#1 proves#1 provesByRange#1 recordPassedCheck#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=noteProof#1 noteProof#1
+  pointer receiver: size=40 writesThrough=true captured=true passedTo=provesTableIndex#2 holderOf#1 lengthHolder#1
+  pointer index: size=40 writesThrough=true captured=true passedTo=provesTableIndex#3 proves#3 provesByRange#3 recordPassedCheck#3 indexLocal#1 offsetIndex#1
   stackSites=0 stackLocals=0
-  local -24:9 ctx: CheckContext (const)
+  local -28:9 ctx: CheckContext (const)
+  callee -27:7 provesTableIndex -> @provesTableIndex
+  callee -26:5 noteProof -> @noteProof
   local -23:9 holder: Local | null (const)
   callee -23:18 holderOf -> @holderOf
   local -19:9 proven: boolean (const)
@@ -1850,6 +1852,26 @@ function provesByRange(walk: BoundsWalk, state: State, holder: Local, index: Nod
   local +9:9 range: Interval (const)
   callee +9:17 valueRange -> @valueRange
   callee +10:56 knownMinLength -> @knownMinLength
+function provesTableIndex(walk: BoundsWalk, state: State, receiver: Node, index: Node): boolean -> @provesTableIndex
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via valueRange
+  calls: TypeTable.baseOf declaredValueRange nish_panic_index unwrapBoundsParens valueRange writesSomething
+  pointer walk: size=184 writesThrough=false captured=false passedTo=valueRange#0
+  pointer state: size=120 writesThrough=false captured=false passedTo=valueRange#1
+  pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
+  pointer index: size=40 writesThrough=true captured=true passedTo=declaredValueRange#1 writesSomething#0 valueRange#2
+  stackSites=0 stackLocals=0
+  local +0:9 e: Node (const)
+  callee +0:13 unwrapBoundsParens -> @unwrapBoundsParens
+  local +4:9 table: ConstInfo | null (const)
+  local +8:9 declared: DeclaredRange | null (const)
+  callee +8:20 declaredValueRange -> @declaredValueRange
+  local +12:9 written: i32 (const)
+  callee +13:22 writesSomething -> @writesSomething
+  local +16:9 type: i32 (const)
+  callee +16:16 TypeTable.baseOf -> @TypeTable.baseOf
+  local +20:9 range: Interval (const)
+  callee +20:17 valueRange -> @valueRange
 function writesSomething(node: Node): boolean -> @writesSomething
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBoundsAssignment nish_str_eq writesSomething

@@ -2641,6 +2641,21 @@ in is in parentheses.
   not part of this suite either. It times both shapes against each other inside
   one process and prints the two figures, so `nish bench/substr.ts --link x &&
   ./x` is the whole protocol: no baseline compiler and no second build.
+- `const-table.ts`: what a constant table is worth (#1628), not part of this
+  suite either. One byte classifier over 4 MiB of text-like bytes, written as
+  a lookup in a 256-entry `readonly u8[]` (`tableA`, and `tableB`, its
+  byte-identical copy, whose distance from `tableA` is the run's noise band)
+  and as a chain of compares (`chain`), timed in alternating rounds inside one
+  process:
+
+  ```bash
+  build/nish bench/const-table.ts --link build/const-table --profile speed
+  taskset -c 2 build/const-table
+  ```
+
+  Measured on a four-core x86-64 virtual machine, clang 18, three runs: the
+  table took 144 ms a round and the chain 608 to 620 ms, 4.20x to 4.27x;
+  `tableB/tableA` was 0.97 to 1.00.
 - `hoist-field.ts`: what hoisting an array header out of a loop is worth
   (WP15 §2c candidate 2), not part of this suite either. Three scans do the same
   arithmetic over the same 8192 doubles and differ only in where the source

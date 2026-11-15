@@ -859,7 +859,10 @@ An array is a `nish_array` (a length, a capacity and a data pointer), and a
 string is a `nish_str`. Both live in the runtime's arena: a value a function
 returns stays valid until you call `nish_reset_arena()` or
 `nish_arena_release()`. The comment at the top of the header says how to pass
-a buffer of your own.
+a buffer of your own. A function that returns a `readonly T[]` returns a
+`const nish_array *`: the array may be a
+[constant table](../language/arrays-and-strings.md#lookup-tables) in read-only memory, so
+the host must not write through it.
 
 A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See

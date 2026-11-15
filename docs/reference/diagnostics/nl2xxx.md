@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 782 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 786 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15308,4 +15308,36 @@ export const test = (): i32 => {
 
 ```text
 `"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin`
+```
+
+## NL2791
+
+The message of an error contains:
+
+```text
+…: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value
+```
+
+## NL2792
+
+The message of an error contains:
+
+```text
+`: its elements are constant data that nothing may write, and a `
+```
+
+## NL2793
+
+The message of an error contains:
+
+```text
+` has no elements; a table holds at least one
+```
+
+## NL2794
+
+The message of an error contains:
+
+```text
+… of constant table `
 ```
