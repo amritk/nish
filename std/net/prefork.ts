@@ -83,10 +83,12 @@
  * `preforkUdpCount(args)` (`--nish-prefork-udp=<fd>,<N>`, before the listener
  * flag), and sets `QuicServerConfig.workerIndex` to k and `.workerCount` to N
  * so every ID it issues starts with k. A connection then stays with its
- * worker when the client's address or port changes. More than 255 workers
- * panics; where the kernel refuses the steering (off Linux, or under a
- * seccomp profile that refuses it) the supervisor says so on stderr and runs
- * one worker.
+ * worker when the client's address or port changes. Port 0 is a port no UDP
+ * or TCP socket holds when the group binds, never another reuseport group's,
+ * which a port-0 bind with `SO_REUSEPORT` can be given on Linux. More than
+ * 255 workers panics; where the kernel refuses the steering (off Linux, or
+ * under a seccomp profile that refuses it) the supervisor says so on stderr
+ * and runs one worker.
  *
  * **How many.** `NISH_WORKERS` when it is a positive whole number, else
  * `PreforkConfig.workers` when that is positive, else
@@ -455,6 +457,40 @@ export const preforkUdpCount = (args: string[]): i32 => {
 }
 
 /**
+ * A port on `host` that no UDP or TCP socket holds, for a group asked for port
+ * 0; a negative errno when a plain UDP socket cannot bind, -98 (`EADDRINUSE`)
+ * after 16 ports whose TCP side was taken. The port of a plain UDP bind,
+ * closed again: Linux gives a port-0 bind with `SO_REUSEPORT` a port another
+ * reuseport socket of the same user may hold, and the two groups would become
+ * one, each handed the other's datagrams. Between this close and the group's
+ * bind another process can still take the port; a plain bind there makes the
+ * group's fail, and only a reuseport bind at that instant to that one port
+ * joins it.
+ */
+const preforkFreePort = (host: string): i32 => {
+  for (let k: i32 = 0; k < 16; k++) {
+    const probe: i32 = udpBind(host, 0, 0)
+    if (probe < 0) {
+      return probe
+    }
+    const port: i32 = netLocalPort(probe)
+    // The TCP listeners bind the same port after the group, with SO_REUSEPORT.
+    const listener: i32 = port > 0 ? tcpListenFlags(host, port, 1, 0) : -1
+    if (listener >= 0) {
+      netClose(listener)
+    }
+    netClose(probe)
+    if (port <= 0) {
+      return port < 0 ? port : -22
+    }
+    if (listener >= 0) {
+      return port
+    }
+  }
+  return -98
+}
+
+/**
  * The UDP group of `listenUdp`, socket i for worker i, bound before anything
  * else on the port: steered by connection ID (`udpBind` flag 4 with the count
  * in bits 8 to 15) for more than one worker. When the kernel refuses the
@@ -467,9 +503,14 @@ const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
   const out: i32[] = []
   // Flag 1 (SO_REUSEPORT) and 4 (steer), the group's size in bits 8 to 15.
   const steered: i32 = (count << 8) | 4 | 1
-  const first: i32 = udpBind(host, config.listenPort, count > 1 ? steered : 1)
+  const asked: i32 = config.listenPort === 0 ? preforkFreePort(host) : config.listenPort
+  if (asked < 0) {
+    console.error(`nish/net/prefork: cannot find a free UDP and TCP port on ${host} (${asked})`)
+    return out
+  }
+  const first: i32 = udpBind(host, asked, count > 1 ? steered : 1)
   if (first < 0 && count > 1) {
-    const plain: i32 = udpBind(host, config.listenPort, 1)
+    const plain: i32 = udpBind(host, asked, 1)
     if (plain >= 0) {
       console.error(`nish/net/prefork: QUIC steering refused (${first}), running one worker`)
       out.push(plain)
@@ -477,16 +518,11 @@ const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
     }
   }
   if (first < 0) {
-    console.error(`nish/net/prefork: cannot bind UDP ${host}:${config.listenPort} (${first})`)
+    console.error(`nish/net/prefork: cannot bind UDP ${host}:${asked} (${first})`)
     return out
   }
   out.push(first)
-  const port: i32 = config.listenPort === 0 ? netLocalPort(first) : config.listenPort
-  if (port <= 0) {
-    console.error(`nish/net/prefork: cannot read the UDP port bound (${port})`)
-    netClose(first)
-    return []
-  }
+  const port: i32 = asked
   for (let i: i32 = 1; i < count; i++) {
     const fd: i32 = udpBind(host, port, steered)
     if (fd < 0) {

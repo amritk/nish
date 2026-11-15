@@ -17,10 +17,11 @@ PASS  and the retried Initial completes on worker 1
 PASS  SIGTERM stops the retrying group
 PASS  three workers, worker 1 killed: byte 0 = 1 reaches the new worker 1, not worker 2
 PASS  SIGTERM stops the light group
+PASS  24 groups on port 0 each bind a port no other reuseport socket holds
 PASS  NISH_WORKERS=256 panics in the supervisor with the count, before any worker starts
 PASS  255 starts, every worker on a socket of a group of 255
 PASS  and byte 0 = 254 reaches worker 254
 PASS  SIGTERM stops the group of 255
 PASS  NISH_WORKERS=1 runs one worker, whose count is 1
 PASS  SIGTERM stops the group of one
-quic prefork: 25 passed, 0 failed, 0 skipped
+quic prefork: 26 passed, 0 failed, 0 skipped
