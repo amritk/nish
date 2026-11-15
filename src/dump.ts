@@ -227,6 +227,17 @@ const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
     // Module storage folds to its length; its elements are zero-filled.
     return `new Array<${table.typeName(info.storageElem)}>(${info.intValue})`
   }
+  if (info.table) {
+    // A constant table folds to its elements, written back as the literal.
+    const parts: string[] = []
+    for (const v of info.tableInts) {
+      parts.push(`${v}`)
+    }
+    for (const v of info.tableFloats) {
+      parts.push(`${v}`)
+    }
+    return `[${parts.join(", ")}]`
+  }
   if (info.type === T_STRING) {
     return jsonQuote(info.textValue)
   }

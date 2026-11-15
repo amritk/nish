@@ -191,7 +191,9 @@ switch (node.kind) {
 
 - The discriminant is an **integer** (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`;
   so a `number` in the default mode but not under `--number-mode f64`) or a
-  numeric **`enum`** ([Enums](declarations.md#enums)), which is an `i32` in the jump table.
+  **`enum`** of either kind ([Enums](declarations.md#enums)), which is an `i32` in the jump
+  table: a string enum switches on its members' ordinals, never on their
+  strings.
   Any other type is `` `switch` requires an integer discriminant, got <type> ``
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain

@@ -129,18 +129,25 @@ function irEscape(s: string): string -> @irEscape [exported]
   callee +2:10 StringBuilder.toText -> @StringBuilder.toText
 function irEscapeInto(out: StringBuilder, s: string): void -> @irEscapeInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via irEscapeByte
+  calls: irEscapeByte
+  pointer out: size=8 writesThrough=false captured=false passedTo=irEscapeByte#0
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  callee +2:5 irEscapeByte -> @irEscapeByte
+function irEscapeByte(out: StringBuilder, c: i32): void -> @irEscapeByte [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.addChar
+  escaping: c
   calls: StringBuilder.add StringBuilder.addChar hexDigitUpper
   pointer out: size=8 writesThrough=false captured=false passedTo=StringBuilder.addChar#0 StringBuilder.addChar#0 StringBuilder.add#0 StringBuilder.add#0
   stackSites=0 stackLocals=0
-  local +0:7 i: i32 (let)
-  local +2:11 c: i32 (const)
-  callee +4:7 StringBuilder.addChar -> @StringBuilder.addChar
-  callee +6:7 StringBuilder.addChar -> @StringBuilder.addChar
-  callee +7:7 StringBuilder.add -> @StringBuilder.add
-  callee +7:15 hexDigitUpper -> @hexDigitUpper
-  callee +8:7 StringBuilder.add -> @StringBuilder.add
-  callee +8:15 hexDigitUpper -> @hexDigitUpper
+  callee +0:5 StringBuilder.addChar -> @StringBuilder.addChar
+  callee +2:5 StringBuilder.addChar -> @StringBuilder.addChar
+  callee +3:5 StringBuilder.add -> @StringBuilder.add
+  callee +3:13 hexDigitUpper -> @hexDigitUpper
+  callee +4:5 StringBuilder.add -> @StringBuilder.add
+  callee +4:13 hexDigitUpper -> @hexDigitUpper
 function splitByte(text: string, separator: i32): string[] -> @splitByte [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_str_new

@@ -7,7 +7,8 @@
 //     return fib(n - 1) + fib(n - 2)
 //   }
 //
-// becomes, in outline (`docs/IR_COOKBOOK.md` has the exact IR):
+// becomes, in outline (`docs/IR_COOKBOOK.md` has the exact IR; an `i64` sum
+// is the same code at `i64`, "Widths" below):
 //
 //   entry:     br label %rec.head
 //   rec.head:  %n = phi i32 [ %n.in, %entry ], [ <n - 2>, <step> ]
@@ -54,7 +55,42 @@
 // Every one of these adds panics with `OVERFLOW_ADD`, and nothing the
 // recursion does between its base and the failing add can be observed: the
 // adds are all it does. Each step's `X` and arguments run where the recursion
-// runs them.
+// runs them — all but `Y` in a step `self(args) + Y`, which the recursion
+// reads after its call returns and the loop reads before it goes round. That
+// is one value only because `Y` is a number or a parameter, which the
+// recursion cannot assign: the argument is the recorder's, in the file
+// header of `src/accumulate.ts`.
+//
+// Widths (issue #1612). The sum is the function's return type, every value
+// above is of that type, and MAX and MIN are its bounds: 2^31 - 1 and -2^31
+// for `i32`, 2^63 - 1 and -2^63 for `i64`, the two types whose `+` is checked
+// (`emitIntBinary`). Nothing in the argument depends on the width but these:
+// `%rec.prev` and `%rec.last` each in [0, MAX] make their true sum at most
+// 2 MAX = 2^w - 2, which the w-bit add holds as a negative number exactly
+// when it passes MAX, so the sign test of `%rec.last | %rec.sum` at that
+// width is the cold test; and every add the loop and the cold call make is
+// `llvm.sadd.with.overflow` at that width, the instruction the recursion's own
+// `+` is, panicking with the same `OVERFLOW_ADD`.
+//
+// The unsigned widths have no proof here because they have no loop. Their `+`
+// wraps by definition (`docs/LANGUAGE.md`, "Unsigned integers"): it is a plain
+// `add`, so there is no overflow to defer and no panic to reproduce, and a
+// plain `add` is what LLVM's tail-recursion elimination already folds. The
+// recorder keeps them out (`hasCheckedSum` in `src/accumulate.ts`). The
+// header's sign test would not even be theirs: an unsigned addend of 2^(w-1)
+// or more is an ordinary value, not a negative one.
+//
+// Methods (issue #1612). A method is a function whose first parameter is
+// `this`, and its step `X + r.m(args)` is the call `m(r, args)`: the
+// receiver is evaluated first, then the arguments, as `emitMethodCall` does,
+// and loops back as the header's `this`. Nish binds every method call
+// statically, so `r.m` is this body whatever `r` holds, and the loop is the
+// same function called with another first argument. Fields are not
+// parameters: `X` may read or write fields of `this` or of anything else,
+// and it runs where the recursion runs it, before the receiver and the
+// arguments, with nothing deferred past it but the checked adds, which touch
+// no memory. A field is never `Y`, so nothing reads memory after the call it
+// skips.
 //
 // What runs between the header and its test. Where the header's own code
 // only computes (`onlyComputes`), the test is folded into the branch that
@@ -64,6 +100,41 @@
 // and the code moves to `rec.body`, so a cold entry runs none of it before
 // the call does. A cold call may itself loop, and each sign change of the
 // sum makes one more call, never more frames than the recursion had.
+//
+// Arena scope (issue #1612). A function with an automatic arena scope
+// (`arenaScope` in `src/attributes.ts`) marks the arena in its prologue and
+// releases to the mark before every `ret`; each frame of the recursion does
+// so, and frees what it allocated as it returns. The loop marks once, in
+// `entry`, and releases to that mark at the end of every step, before the
+// edge back into the header, before the cold call's `ret` and before a base's
+// (`releaseScope`). It does so only where `releasesPerStep` holds:
+//
+//   - The recorder found that every argument of every step is a scalar, or a
+//     parameter or `this` passed on unchanged (`passesOnlyHeld` in
+//     `src/accumulate.ts`). The header's first entry holds the caller's
+//     values, all older than the mark. If the i-th entry's parameters name
+//     no memory, or only memory older than the mark, so do the arguments its
+//     step passes, so the next entry's do. A step's `X` is a number, and so
+//     is `Y`, or `Y` is a parameter. Parameters are never assigned.
+//   - The facts that set `arenaScope` say no allocation the function makes is
+//     stored into memory older than the call, returned, or handed to a task.
+//     They are flow-insensitive, so they cover every pass of the loop.
+//
+// So nothing a step allocated is reachable once it ends: not through a
+// parameter, not through the sum, not through older memory. The release
+// frees only what the recursion's frame would have freed on its return, and
+// earlier. Between a release and the next test the header only computes, or
+// runs nothing before the test (`rec.body`), so a cold entry has allocated
+// nothing. Its release before the `ret` is the epilogue's, after the call
+// returns. A base reached through the loop releases as it did before
+// (`emitScopeExit`). A panic releases nothing, in either form.
+//
+// What differs is only the bump position. The recursion's i-th frame starts
+// above everything frames 0..i-1 still held. The loop's i-th pass starts at
+// the mark. `Arena.mark` and `Arena.used` read that position, so a function
+// that may reach either (`readsArenaState`) keeps its recursion. Otherwise the
+// loop peaks lower than the recursion did, which nothing observes, as it
+// peaks lower on the stack.
 //
 // A function emitted this way may run deeper than its recursion could before
 // the stack ran out, as tail-call elimination lets any loop do; nothing that
@@ -79,7 +150,7 @@ import { FunctionFacts } from "./attributes"
 import { internalError } from "./ice"
 import { IRBlock, IRFunction, paramValue } from "./ir"
 import { Node } from "./nodes"
-import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig } from "./program"
+import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig, ROLE_METHOD } from "./program"
 
 /** One function's loop while its body is emitted: the header and every edge back into it. */
 export class RecursionLoop {
@@ -90,16 +161,19 @@ export class RecursionLoop {
   head: IRBlock
   /** The parameters' LLVM types, in order. */
   types: string[]
+  /** The LLVM type of the sum: the return type, `i32` or `i64`. */
+  width: string
   /** For each edge back into the header, the block it leaves, the arguments it passes and the `X` it adds. */
   edges: string[]
   args: string[][]
   addends: string[]
 
-  constructor(sig: FunctionSig, entry: string, head: IRBlock, types: string[]) {
+  constructor(sig: FunctionSig, entry: string, head: IRBlock, types: string[], width: string) {
     this.sig = sig
     this.entry = entry
     this.head = head
     this.types = types
+    this.width = width
     this.edges = []
     this.args = []
     this.addends = []
@@ -110,7 +184,8 @@ export class RecursionLoop {
  * Whether `sig` is emitted as a loop: the checker recorded it, and nothing
  * this emitter adds to a function is in play — no debug info or wasm panic
  * sites (both name the `+` that overflowed, which the loop no longer has), no
- * arena bracket, stack object or scope a loop would have to repeat.
+ * stack object or scope a loop would have to repeat. An automatic arena scope
+ * is the one bracket the loop repeats, when `releasesPerStep` allows it.
  */
 export const emitsAsLoop = (emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): boolean => {
   if (
@@ -119,7 +194,7 @@ export const emitsAsLoop = (emitter: Emitter, sig: FunctionSig, facts: FunctionF
     emitter.isLibraryCopy(sig) ||
     emitter.debug !== null ||
     emitter.panicSites !== null ||
-    facts.arenaScope ||
+    (facts.arenaScope && !releasesPerStep(emitter, sig, facts)) ||
     facts.stackLocals.length > 0 ||
     facts.scopesAnyPass()
   ) {
@@ -132,6 +207,16 @@ export const emitsAsLoop = (emitter: Emitter, sig: FunctionSig, facts: FunctionF
   }
   return true
 }
+
+/**
+ * Whether the loop may release `sig`'s arena scope on every turn ("Arena
+ * scope" above): every step passes only values no step allocated, as the
+ * recorder found (`passesOnlyHeld` in `src/accumulate.ts`), and nothing the
+ * function runs reads the bump position, which a release per turn lowers
+ * where the recursion's still counted the frames above.
+ */
+const releasesPerStep = (emitter: Emitter, sig: FunctionSig, facts: FunctionFacts): boolean =>
+  emitter.program.accumulate.partnerOf(sig.decl.id) === sig.decl.id && !facts.readsArenaState
 
 /** The name an accumulating function's parameter `name` arrives under; the header's `phi` takes the parameter's own. */
 export const incomingName = (name: string): string => `${name}.in`
@@ -155,7 +240,7 @@ export const openAccumulation = (emitter: Emitter, sig: FunctionSig): void => {
   const head = fn.newBlock("rec.head")
   fn.emit(`br label %${head.label}`)
   fn.placeBlock(head)
-  emitter.accumulator = new RecursionLoop(sig, entry.label, head, types)
+  emitter.accumulator = new RecursionLoop(sig, entry.label, head, types, emitter.llvm(sig.returnType))
 }
 
 /**
@@ -184,11 +269,12 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
   for (let e = 0; e < acc.edges.length; e++) {
     sums.push("%rec.sum")
   }
-  lines.push(headPhi(acc, "%rec.prev", "i32", "0", sums))
-  lines.push(headPhi(acc, "%rec.last", "i32", "0", acc.addends))
-  lines.push("%rec.sum = add i32 %rec.prev, %rec.last")
-  lines.push("%rec.signs = or i32 %rec.last, %rec.sum")
-  lines.push("%rec.cold = icmp slt i32 %rec.signs, 0")
+  const width = acc.width
+  lines.push(headPhi(acc, "%rec.prev", width, "0", sums))
+  lines.push(headPhi(acc, "%rec.last", width, "0", acc.addends))
+  lines.push(`%rec.sum = add ${width} %rec.prev, %rec.last`)
+  lines.push(`%rec.signs = or ${width} %rec.last, %rec.sum`)
+  lines.push(`%rec.cold = icmp slt ${width} %rec.signs, 0`)
   const body = acc.head.instructions
   acc.head.instructions = lines
   const call = fn.newBlock("rec.call")
@@ -213,8 +299,10 @@ export const closeAccumulation = (emitter: Emitter, acc: RecursionLoop): void =>
     placeAfter(fn, acc.head, rest)
   }
   fn.placeBlock(call)
-  const answer = fn.emitValue(`call i32 @${acc.sig.name}(${operands.join(", ")})`)
-  fn.emit(`ret i32 ${checkedAdd(emitter, "%rec.prev", checkedAdd(emitter, "%rec.last", answer))}`)
+  const answer = fn.emitValue(`call ${width} @${acc.sig.name}(${operands.join(", ")})`)
+  const total = checkedAdd(emitter, acc, "%rec.prev", checkedAdd(emitter, acc, "%rec.last", answer))
+  releaseScope(emitter)
+  fn.emit(`ret ${width} ${total}`)
   emitter.accumulator = null
 }
 
@@ -394,9 +482,9 @@ export const emitAccumulateTail = (emitter: Emitter, acc: RecursionLoop, value: 
   } else if (role === ACC_STEP) {
     emitStep(emitter, acc, inner)
   } else {
-    const total = checkedAdd(emitter, "%rec.sum", emitter.emitExpression(value))
+    const total = checkedAdd(emitter, acc, "%rec.sum", emitter.emitExpression(value))
     emitter.emitScopeExit()
-    emitter.fn.emit(`ret i32 ${total}`)
+    emitter.fn.emit(`ret ${acc.width} ${total}`)
   }
 }
 
@@ -414,20 +502,40 @@ const emitStep = (emitter: Emitter, acc: RecursionLoop, step: Node): void => {
   if (!callFirst) {
     x = emitter.emitExpression(other)
   }
+  // A method's self call passes its receiver first, as `emitMethodCall` does:
+  // the receiver is the loop's `this`.
   const args: string[] = []
+  let first = 0
+  if (acc.sig.role === ROLE_METHOD) {
+    args.push(emitter.emitExpression(call.children[0].children[0]))
+    first = 1
+  }
   const written = call.children[1].children
   for (let i = 0; i < written.length; i++) {
-    args.push(emitter.emitArgument(written[i], acc.sig, i))
+    args.push(emitter.emitArgument(written[i], acc.sig, i + first))
   }
   if (callFirst) {
     x = emitter.emitExpression(other)
   }
+  releaseScope(emitter)
   acc.edges.push(fn.currentBlock().label)
   acc.args.push(args)
   acc.addends.push(x)
   fn.emit(`br label %${acc.head.label}`)
 }
 
-/** `a + b` over `i32`, panicking with `OVERFLOW_ADD` as the checked `+` does: never `nsw`, whatever the step's proofs say. */
-const checkedAdd = (emitter: Emitter, a: string, b: string): string =>
-  emitCheckedArith(emitter, "add", "i32", a, b, OVERFLOW_ADD)
+/** `a + b` at the loop's width, panicking with `OVERFLOW_ADD` as the checked `+` does: never `nsw`, whatever the step's proofs say. */
+const checkedAdd = (emitter: Emitter, acc: RecursionLoop, a: string, b: string): string =>
+  emitCheckedArith(emitter, "add", acc.width, a, b, OVERFLOW_ADD)
+
+/**
+ * Release the function's automatic arena scope back to the mark its prologue
+ * took, when it has one: at the end of every step, before the edge back into
+ * the header, and before the cold call's `ret`, as the epilogue of every frame
+ * of the recursion does ("Arena scope" above).
+ */
+const releaseScope = (emitter: Emitter): void => {
+  if (emitter.current.arenaScope) {
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
+  }
+}

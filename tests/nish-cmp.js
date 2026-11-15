@@ -530,6 +530,8 @@ const pageMath = (why, filesByProgram) =>
   )
 const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
 const DESTRUCTURING = "Destructuring declarations over objects and arrays"
+const CONST_TABLES = "Add module-level constant arrays of numeric literals"
+const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1270,6 +1272,17 @@ const RECURSION_LOOP = "Emit self-recursive checked sums as a loop"
 const RECURSION_LOOP_WHY =
   "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
+const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop"
+const RECURSION_METHOD_WHY =
+  "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+const RECURSION_WIDTH = "Emit self-recursive checked i64 sums as a loop"
+const RECURSION_WIDTH_WHY =
+  "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`"
+
+const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena scope as a loop"
+const RECURSION_ARENA_WHY =
+  "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+
 const DECLARED = [
   {
     changelog: "internal work-package references from diagnostics and generated files",
@@ -1396,6 +1409,69 @@ const DECLARED = [
     file: "recursion.ll",
     changelog: RECURSION_LOOP,
     why: RECURSION_LOOP_WHY,
+  },
+  // Self-recursive checked-sum methods become a loop too (issue #1612).
+  {
+    program: "tests/cases/acc_method.ts",
+    file: "acc_method.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "tests/cases/acc_method_overflow.ts",
+    file: "acc_method_overflow.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "tests/cases/mem_callee_scope.ts",
+    file: "mem_callee_scope.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-method.ts",
+    file: "opt-recursion-method.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "list.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  // An `i64` checked sum loops as an `i32` one does (issue #1612).
+  {
+    program: "tests/cases/acc_width_i64.ts",
+    file: "acc_width_i64.ll",
+    changelog: RECURSION_WIDTH,
+    why: RECURSION_WIDTH_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-i64.ts",
+    file: "opt-recursion-i64.ll",
+    changelog: RECURSION_WIDTH,
+    why: RECURSION_WIDTH_WHY,
+  },
+  // A sum whose frames allocate loops, releasing the arena per step (issue #1612).
+  {
+    program: "tests/cases/acc_arena.ts",
+    file: "acc_arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "tests/cases/acc_arena_overflow.ts",
+    file: "acc_arena_overflow.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-arena.ts",
+    file: "opt-recursion-arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
   },
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
@@ -6770,6 +6846,17 @@ const DECLARED = [
     why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
   ...[
+    "tests/cases/enum_string.ts",
+    "tests/cases/enum_string_union_tag.ts",
+    "docs/cookbook/decl-enum-string.ts",
+    "tests/link/json_enum_string/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: STRING_ENUMS,
+    why: "the program declares an enum whose members are strings, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
     "tests/cases/destructure_array.ts",
     "tests/cases/destructure_empty.ts",
     "tests/cases/destructure_for_of.ts",
@@ -6784,6 +6871,28 @@ const DECLARED = [
     file: "exit",
     changelog: DESTRUCTURING,
     why: "the program declares names with an object or array pattern, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/const_array_numeric.ts",
+    "tests/cases/const_array_u8.ts",
+    "docs/cookbook/const-table.ts",
+    "bench/const-table.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: CONST_TABLES,
+    why: "the program declares a module-level `readonly` array of numbers written out as a literal, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.h"],
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.napi.c"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.h"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.napi.c"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: CONST_TABLES,
+    why: "a function returning `readonly T[]` returns `const nish_array *`, since the array may be a constant table in read-only memory",
   })),
   ...[
     "bench/par-histogram-atomic.ts",

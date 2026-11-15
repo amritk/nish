@@ -57,6 +57,11 @@ crosses to C, then the exact rules.
   function reference is the tag `0` ([Function references](declarations.md#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](declarations.md#enums)).
+- **A record's type has a name.** Its fields are declared once, in an
+  `interface` or a `class`; an inline object type, `{ x: i32 }`, is refused
+  wherever a type is written, and `type` only renames a type that already
+  exists ([Interfaces and object literals](declarations.md#interfaces-and-object-literals),
+  [Type aliases](declarations.md#type-aliases)).
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](result-and-error-handling.md)).
@@ -91,8 +96,9 @@ type `--emit-header` writes; a dash means the type cannot cross to C.
   the operations ([Unsigned integers](#unsigned-integers)). `i64` and `u64`
   cross to JavaScript as a `bigint`.
 - A `boolean` is `zeroext` at the ABI boundary.
-- `K.A` is the member's integer, so nothing is emitted for an `enum`
-  declaration.
+- `K.A` is the member's integer (its ordinal, for a string enum), so nothing
+  is emitted for a numeric `enum` declaration; a string enum adds one private
+  table of its members' strings ([String enums](declarations.md#string-enums)).
 
 Every other type is a pointer, 8 bytes and 8-aligned, to:
 
@@ -156,7 +162,7 @@ interned, and two types are the same type exactly when they are the same
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
-  a `type` alias or a numeric `enum` declared or imported in the module
+  a `type` alias or an `enum` (numeric or string) declared or imported in the module
   ([Type aliases](declarations.md#type-aliases), [Enums](declarations.md#enums)), one of that enum's
   members as a type, `Kind.If` ([Enums](declarations.md#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
@@ -648,7 +654,9 @@ pointer to whichever variant it holds, and its first field says which. A
 variant is a class or an interface whose first field is its **tag**: a field
 of an [enum member type](declarations.md#enums), conventionally
 `readonly kind: Kind.Circle = Kind.Circle` (`tests/cases/union_types`,
-`tests/link/union_export` across modules).
+`tests/link/union_export` across modules). The enum may be numeric or a
+[string enum](declarations.md#string-enums), whose member is the tag in memory as its
+ordinal (`tests/cases/enum_string_union_tag`).
 
 ```ts
 enum Kind {
@@ -667,7 +675,10 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
-Typed JSON reads and writes a union of classes by its tag ([Typed JSON](builtins.md#typed-json-nishjson-typed)).
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](builtins.md#typed-json-nishjson-typed)),
+whose value on the wire is the tag member's name, or a string enum member's
+string, unless the variant's `tag` option names another
+(`tests/link/json_enum_string`).
 
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
@@ -1153,4 +1164,6 @@ parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions
-cross Nish modules freely (`tests/link/union_export`).
+cross Nish modules freely (`tests/link/union_export`). A string enum in an
+exported function's signature is refused under the same flags for a reason
+of its own (NL4019, [String enums](declarations.md#string-enums)).

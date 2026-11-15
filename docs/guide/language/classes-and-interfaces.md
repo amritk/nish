@@ -101,6 +101,28 @@ it, as `add` does here. An object literal has fields only: no methods and
 no computed keys. It may spread another record into itself, as the next
 section shows.
 
+### A record type always has a name
+
+If you are coming from TypeScript, you may reach for an inline object type,
+or a `type` alias of one. Nish has neither: every type you write is a name,
+and the parser stops at the `{`:
+
+```ts nish:err NL0001
+const getX = (p: { x: i32 }): i32 => p.x;
+
+export const main = (): i32 => {
+  return getX({ x: 1 });
+};
+```
+
+`type Point = { x: i32; y: i32 }` is refused with the same message,
+`` expected a type name, found `{` ``, because a `type` alias only gives a
+second name to a type that already exists. Declare the shape once as an
+interface, as the first example in this section does with `Point`, and name
+it wherever the type is written. Nish tells records apart by their
+declaration rather than their fields, so two interfaces with the same fields
+are still two different types.
+
 A literal can also stand for a class without methods. A class
 with methods is different: it is made only by `new`. Compiled, a literal
 would get the class's methods, but under Node it is a plain object, and

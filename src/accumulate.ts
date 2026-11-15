@@ -5,8 +5,8 @@
 //     return fib(n - 1) + fib(n - 2)
 //   }
 //
-// Every return that is not a base case is a *step*, `X + self(args)` over the
-// checked `i32` `+`: the frame's answer is its own `X` plus whatever the
+// Every return that is not a base case is a *step*, `X + self(args)` over a
+// checked `+`: the frame's answer is its own `X` plus whatever the
 // recursion answers. LLVM's tail-recursion elimination folds such a return
 // into a loop and an accumulator only when the `+` is a plain `add`; the
 // checked one, `llvm.sadd.with.overflow` and a branch, defeats it, and `fib`
@@ -18,23 +18,57 @@
 // A function qualifies when all of this holds, and compiles as it always did
 // when any of it does not — so this module only records; it reports nothing:
 //
-// - It is a plain function of this module: not a method, a constructor, an
-//   instantiation, a lifted arrow, async, a generator, foreign or generic, and
-//   with no compile-time, defaulted or rest parameter and no captures.
-// - It returns `i32`, and no parameter is ranged or a `Result`.
+// - It is a plain function of this module, or a method of a class of this
+//   module (issue #1612): not a constructor, an instantiation, a lifted
+//   arrow, async, a generator, foreign or generic, not a method of a generic
+//   or atomic class, and with no compile-time, defaulted or rest parameter
+//   and no captures.
+// - It returns a type whose `+` is checked, and no parameter is ranged or a
+//   `Result`. That set is the signed integers, `i32` and `i64` — the types
+//   `emitIntBinary` in `src/emit-ops.ts` sends through `emitCheckedArith` —
+//   and the loop's proof (beside the emitter) holds at the MAX and MIN of
+//   either. `u8`, `u16`, `u32` and `u64` stay out: their `+` wraps by
+//   definition (`docs/LANGUAGE.md`, "Unsigned integers"), there is no
+//   overflow check for LLVM's tail-recursion elimination to trip on, and so
+//   nothing for this loop to do. `f64` and `f32` stay out for the same
+//   reason: their `+` has no check.
 // - Its body is blocks, `if`, `const` / `let` (no `using`), expression
 //   statements and `return`: no loop, `switch`, `try`, `throw` or `defer`,
 //   and no arrow anywhere in it, so no closure can see a local.
 // - Each `return` value, under parentheses and through either arm of a
 //   `c ? A : B` (neither converting the value), is a step or a base, there
-//   is at least one of each, and the recursion it folds is a step's own call. Any other call of the function
-//   (`fib(n - 1)` in `fib`'s `X`) stays the ordinary call it is.
-//   - `X + self(a, ...)` with `X` any `i32` expression. `X` is evaluated
+//   is at least one of each, and the recursion it folds is a step's own call.
+//   Any other call of the function (`fib(n - 1)` in `fib`'s `X`) stays the
+//   ordinary call it is. A method's self call is `r.m(a, ...)`, written with
+//   `.` and not `?.`, on a receiver `r` the checker typed as the method's own
+//   class: the receiver is the loop's first parameter, `this`. Nish binds
+//   every method call statically (`docs/LANGUAGE.md`: no inheritance, no
+//   method in an interface, no method call on a union), so that call reaches
+//   this very body; a call through a function-valued field is no method call
+//   and is never a step.
+//   - `X + self(a, ...)` with `X` any expression of the return type. `X` is evaluated
 //     before the arguments in the source and in the loop alike.
 //   - `self(a, ...) + Y` with `Y` a number or a parameter: reading `Y` after
 //     the recursion and reading it before are one value, because the
 //     recursion cannot assign this frame's parameters.
 //   - anything else is a base, whose value is what the whole sum ends on.
+//
+// One more fact is recorded for the emitter, not required of the function:
+// whether every step passes only values a step cannot have allocated
+// (`passesOnlyHeld`, issue #1612). Each argument of every step's call, and a
+// method's receiver, is either of a type that names no memory (a number, a
+// `boolean`, an `enum`, a host handle: `isScalarArgument` in `src/escape.ts`)
+// or a parameter of the function, read as it is, with no coercion. By
+// induction over the loop's turns, every parameter then holds, on every
+// entry of the header, a value that names no memory or one the call was
+// handed: on the first entry each is what the caller passed, and a step
+// passes on only numbers and those values. That is what lets a function with
+// an automatic arena scope release the scope on every turn
+// (`src/emit-accumulate.ts`, "Arena scope"): nothing a step hands the next
+// turn lies above the mark the function took on entry. A step passing
+// `s + "x"` or `` `${n}` `` passes memory it allocated, which a release before
+// the next turn would free under it, and such a function keeps its recursion
+// whenever it has a scope.
 //
 // The checker calls `recordAccumulation` once a body has checked cleanly and
 // its proofs are in (`checkFunctionBody`); `forgetProofs` in `src/bounds.ts`
@@ -42,12 +76,21 @@
 // compares every such function with its plain recursive self.
 
 import { CheckContext } from "./context"
+import { isScalarArgument } from "./escape"
 import { isGenericFunction } from "./generics"
 import { hasSpread } from "./members"
 import { FLAG_GENERATOR, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
-import { ACC_FUNCTION, ACC_SPLIT, ACC_STEP, FunctionSig, ROLE_FUNCTION } from "./program"
+import {
+  ACC_FUNCTION,
+  ACC_SPLIT,
+  ACC_STEP,
+  FunctionSig,
+  ROLE_FUNCTION,
+  ROLE_METHOD,
+  STRUCT_CLASS,
+} from "./program"
 import { STORAGE_PARAM } from "./symbols"
-import { T_I32 } from "./types"
+import { isInteger, isUnsigned } from "./types"
 
 /** What `tailKind` found in one tail position, as a bitmask. */
 const TAIL_BASE: i32 = 1
@@ -80,8 +123,12 @@ export const recordAccumulation = (ctx: CheckContext, sig: FunctionSig, body: No
   if (seen !== TAIL_BOTH) {
     return
   }
+  let holds = true
+  for (const step of steps) {
+    holds = holds && passesOnlyHeld(ctx, sig, stepCall(ctx, sig, step))
+  }
   const table = ctx.program.accumulate
-  table.record(sig.decl.id, ACC_FUNCTION, sig.decl.id)
+  table.record(sig.decl.id, ACC_FUNCTION, holds ? sig.decl.id : -1)
   for (const step of steps) {
     table.record(step.id, ACC_STEP, stepCall(ctx, sig, step).id)
   }
@@ -90,13 +137,12 @@ export const recordAccumulation = (ctx: CheckContext, sig: FunctionSig, body: No
   }
 }
 
-/** The declaration-level conditions: a plain `i32` function of this module. */
+/** The declaration-level conditions: a plain function or method of this module, returning a checked sum's type. */
 const signatureQualifies = (ctx: CheckContext, sig: FunctionSig): boolean => {
   if (
     sig.instance !== null ||
     sig.lifted ||
-    sig.role !== ROLE_FUNCTION ||
-    sig.owner !== null ||
+    !ownerQualifies(sig) ||
     sig.dispatcher ||
     sig.foreign() ||
     sig.isAsync() ||
@@ -105,7 +151,7 @@ const signatureQualifies = (ctx: CheckContext, sig: FunctionSig): boolean => {
     sig.captures.length > 0 ||
     sig.compileTime.length > 0 ||
     sig.restIndex >= 0 ||
-    sig.returnType !== T_I32
+    !hasCheckedSum(sig.returnType)
   ) {
     return false
   }
@@ -116,6 +162,25 @@ const signatureQualifies = (ctx: CheckContext, sig: FunctionSig): boolean => {
     }
   }
   return true
+}
+
+/**
+ * Whether `+` on `type` is the checked add the loop defers: a signed integer,
+ * by `emitIntBinary`'s own test. An unsigned `+` wraps and a float's has no
+ * check, so neither has an overflow the loop could hand back.
+ */
+const hasCheckedSum = (type: i32): boolean => isInteger(type) && !isUnsigned(type)
+
+/** A plain function, or a method of a class that is neither generic nor atomic. */
+const ownerQualifies = (sig: FunctionSig): boolean => {
+  const owner = sig.owner
+  if (sig.role === ROLE_FUNCTION) {
+    return owner === null
+  }
+  if (sig.role !== ROLE_METHOD || owner === null) {
+    return false
+  }
+  return owner.kind === STRUCT_CLASS && owner.instance === null && !owner.atomic
 }
 
 /**
@@ -175,10 +240,10 @@ const tailKind = (ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   // A parenthesis or a conditional that converts its value is a base: the
   // loop would skip the conversion, so neither is looked through.
   let inner = value
-  while (inner.kind === NodeKind.Paren && isPlainI32(ctx, inner)) {
+  while (inner.kind === NodeKind.Paren && isPlainSum(ctx, sig, inner)) {
     inner = inner.children[0]
   }
-  if (inner.kind === NodeKind.Conditional && isPlainI32(ctx, inner)) {
+  if (inner.kind === NodeKind.Conditional && isPlainSum(ctx, sig, inner)) {
     const a = tailKind(ctx, sig, inner.children[1], steps, splits)
     const b = tailKind(ctx, sig, inner.children[2], steps, splits)
     const kind = a | b
@@ -194,14 +259,14 @@ const tailKind = (ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   return TAIL_BASE
 }
 
-/** Whether `node` is `X + self(...)` or `self(...) + Y` over `i32`, with every coercion absent. */
+/** Whether `node` is `X + self(...)` or `self(...) + Y` over the return type, with every coercion absent. */
 const isStep = (ctx: CheckContext, sig: FunctionSig, node: Node): boolean => {
   if (node.kind !== NodeKind.Binary || node.text !== "+") {
     return false
   }
   const left = node.children[0]
   const right = node.children[1]
-  if (!isPlainI32(ctx, node) || !isPlainI32(ctx, left) || !isPlainI32(ctx, right)) {
+  if (!isPlainSum(ctx, sig, node) || !isPlainSum(ctx, sig, left) || !isPlainSum(ctx, sig, right)) {
     return false
   }
   if (isSelfCall(ctx, sig, right)) {
@@ -216,21 +281,32 @@ const stepCall = (ctx: CheckContext, sig: FunctionSig, step: Node): Node => {
   return isSelfCall(ctx, sig, right) ? right : step.children[0]
 }
 
-/** An `i32` value as the checker typed it, with no coercion on it. */
-const isPlainI32 = (ctx: CheckContext, node: Node): boolean =>
-  ctx.program.nodeTypes[node.id] === T_I32 && ctx.program.nodeCoercions[node.id] < 0
+/** A value the checker typed as `sig`'s return type, with no coercion on it. */
+const isPlainSum = (ctx: CheckContext, sig: FunctionSig, node: Node): boolean =>
+  ctx.program.nodeTypes[node.id] === sig.returnType && ctx.program.nodeCoercions[node.id] < 0
 
-/** A direct call of `sig` that passes every parameter it has. */
+/**
+ * A direct call of `sig` that passes every parameter it has: `self(a, ...)`,
+ * or for a method `r.m(a, ...)` on a receiver of the method's own class.
+ */
 const isSelfCall = (ctx: CheckContext, sig: FunctionSig, node: Node): boolean => {
   if (node.kind !== NodeKind.Call || (node.flags & FLAG_OPTIONAL) !== 0) {
     return false
   }
   const callee = ctx.program.nodeCallees[node.id]
+  if (callee === null || callee !== sig || hasSpread(node.children[1])) {
+    return false
+  }
+  if (sig.role !== ROLE_METHOD) {
+    return node.children[1].children.length === sig.writtenArity()
+  }
+  const access = node.children[0]
   return (
-    callee !== null &&
-    callee === sig &&
-    node.children[1].children.length === sig.writtenArity() &&
-    !hasSpread(node.children[1])
+    access.kind === NodeKind.Member &&
+    (access.flags & FLAG_OPTIONAL) === 0 &&
+    node.children[1].children.length === sig.writtenArity() - 1 &&
+    ctx.program.nodeTypes[access.children[0].id] === sig.paramTypes[0] &&
+    ctx.program.nodeCoercions[access.children[0].id] < 0
   )
 }
 
@@ -243,5 +319,50 @@ const isStable = (ctx: CheckContext, node: Node): boolean => {
     return false
   }
   const local = ctx.program.nodeLocals[node.id]
+  return local !== null && local.storage === STORAGE_PARAM
+}
+
+/**
+ * Whether the self call `call` passes only values no step can have allocated:
+ * each argument, and a method's receiver, is either of a type that names no
+ * memory or a parameter of `sig` read as it is (the file header, and
+ * "Arena scope" in `src/emit-accumulate.ts`).
+ */
+const passesOnlyHeld = (ctx: CheckContext, sig: FunctionSig, call: Node): boolean => {
+  let first = 0
+  if (sig.role === ROLE_METHOD) {
+    if (!isHeld(ctx, sig, call.children[0].children[0], 0)) {
+      return false
+    }
+    first = 1
+  }
+  const written = call.children[1].children
+  for (let i = 0; i < written.length; i++) {
+    if (!isHeld(ctx, sig, written[i], i + first)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Whether `arg`, passed as parameter `index` of `sig`, names no memory a step
+ * allocated: the parameter's type holds no pointer, so no conversion into it
+ * allocates, or `arg` is `this` or a parameter, unconverted.
+ */
+const isHeld = (ctx: CheckContext, sig: FunctionSig, arg: Node, index: i32): boolean => {
+  if (index < sig.paramTypes.length && isScalarArgument(ctx.table, sig.paramTypes[index])) {
+    return true
+  }
+  if (ctx.program.nodeCoercions[arg.id] >= 0) {
+    return false
+  }
+  if (arg.kind === NodeKind.This) {
+    return true
+  }
+  if (arg.kind !== NodeKind.Ident) {
+    return false
+  }
+  const local = ctx.program.nodeLocals[arg.id]
   return local !== null && local.storage === STORAGE_PARAM
 }

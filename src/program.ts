@@ -1291,6 +1291,18 @@ export class ConstInfo {
    * releases the rest (`nish_root_keep`). Set by `checkStorage`.
    */
   root: boolean
+  /**
+   * A constant table, `const T: readonly u8[] = [0, 1, 2]` at the top level
+   * (`docs/LANGUAGE.md`, "Constant tables"). Its value is folded at compile
+   * time into `tableInts` (or `tableFloats` for an `f64` element) and emitted
+   * as two `constant` globals, `@<storageSymbol>.data` and the header
+   * `@<storageSymbol>`. `type` is `readonly <storageElem>[]` and `intValue`
+   * the length once folded. Never `storage`: nothing writes it, so it has no
+   * layout a page reads.
+   */
+  table: boolean
+  tableInts: i64[]
+  tableFloats: f64[]
 
   constructor(name: string, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -1299,6 +1311,9 @@ export class ConstInfo {
     this.storageElem = -1
     this.storageSymbol = ""
     this.root = false
+    this.table = false
+    this.tableInts = []
+    this.tableFloats = []
     this.intValue = toI64(0)
     this.floatValue = 0.0
     this.textValue = ""
@@ -1378,10 +1393,17 @@ export class EnumInfo {
   type: i32
   /** `export enum`: another module may import it. */
   exported: boolean
+  /** A string enum: every member is a string literal and its value is its ordinal. */
+  isString: boolean
   /** Member name -> index into `memberValues`; iteration order is declaration order. */
   members: StringMap
   memberNames: string[]
   memberValues: i32[]
+  /**
+   * The strings of a string enum's members, in ordinal order: the table
+   * `String(r)` and typed JSON read. Empty for a numeric enum.
+   */
+  memberStrings: string[]
 
   constructor(name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean) {
     this.name = name
@@ -1393,6 +1415,15 @@ export class EnumInfo {
     this.members = new StringMap()
     this.memberNames = []
     this.memberValues = []
+    this.isString = false
+    this.memberStrings = []
+  }
+
+  /** A string member: its value is the next ordinal and `text` its string. */
+  addStringMember(name: string, text: string): void {
+    this.isString = true
+    this.memberStrings.push(text)
+    this.addMember(name, this.memberValues.length)
   }
 
   addMember(name: string, value: i32): void {

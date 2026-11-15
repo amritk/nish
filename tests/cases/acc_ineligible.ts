@@ -19,12 +19,12 @@ const product = (n: i32): i32 => {
   return n * product(n - 1)
 }
 
-// An `i64` result.
-const wide = (n: i32): i64 => {
+// A `u64` result: its `+` wraps, so there is no checked add to defer.
+const wide = (n: i32): u64 => {
   if (n <= 0) {
-    return toI64(0)
+    return toU64(0)
   }
-  return toI64(n) + wide(n - 1)
+  return toU64(n) + wide(n - 1)
 }
 
 // No base: every return is a step.
@@ -69,35 +69,20 @@ const callAfter = (n: i32): i32 => {
   return callAfter(n - 1) + twice(n)
 }
 
-// A string in the body: its arena bracket would have to repeat on every
-// pass, so the emitter keeps the recursion though the checker took the sum.
-const digits = (n: i32): i32 => {
+// A string the step builds, passed to the next frame: a release of the arena
+// at the end of the step would free it under that frame, so the emitter keeps
+// the recursion though the checker took the sum.
+const digits = (s: string, n: i32): i32 => {
   if (n <= 0) {
     return 0
   }
-  const s = `${n}`
-  return s.length + digits(n - 1)
-}
-
-// A method.
-class Counter {
-  step: i32
-  constructor(step: i32) {
-    this.step = step
-  }
-  total(n: i32): i32 {
-    if (n <= 0) {
-      return 0
-    }
-    return this.step + this.total(n - 1)
-  }
+  return s.length + digits(`${n - 1}`, n - 1)
 }
 
 export const main = (): i32 => {
-  const c = new Counter(3)
   // `noBase` never ends, so it runs only when an argument asks for it.
   const endless: i32 = process.argv.length > 5 ? noBase(1) : -1
-  console.log(`${afterLocal(5)} ${product(5)} ${wide(5)} ${looped(5)} ${c.total(4)} ${endless}`)
-  console.log(`${lessSelf(4)} ${selfLess(4)} ${callAfter(4)} ${digits(12)}`)
+  console.log(`${afterLocal(5)} ${product(5)} ${wide(5)} ${looped(5)} ${endless}`)
+  console.log(`${lessSelf(4)} ${selfLess(4)} ${callAfter(4)} ${digits("12", 12)}`)
   return 0
 }
