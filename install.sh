@@ -245,6 +245,17 @@ nish_is_install() {
 # resolves from `libexec/..` -- the install directory -- whatever the caller
 # typed and wherever they are. It goes in `libexec` because the wrapper has to
 # take the name `nish`, and the two cannot both be that file.
+# Whether $1 is a wrapper nish_write_wrapper wrote: a `#!/bin/sh` script whose
+# second line is the marker. Only those two lines, never "the marker anywhere":
+# the compiler itself names the marker (`nish upgrade` reads a wrapper's text
+# for it), and 0.40.1's aarch64 builds carry the string literally, so a
+# whole-file grep took the real compiler for its wrapper, skipped the move and
+# wrote the wrapper over it -- an install with nothing left to run.
+nish_is_wrapper() {
+  LC_ALL=C sed -n '1p;1q' "$1" 2>/dev/null | LC_ALL=C grep -qx '#!/bin/sh' &&
+    LC_ALL=C sed -n '2p;2q' "$1" 2>/dev/null | LC_ALL=C grep -q '^# Written by install\.sh\.'
+}
+
 nish_write_wrapper() {
   _dir="$1"
   mkdir -p "$_dir/libexec" "$_dir/bin"
@@ -254,7 +265,7 @@ nish_write_wrapper() {
   # binary and point a new wrapper at it, silently. The marker is what stops a
   # second call with no unpack in between moving the wrapper on top of the
   # compiler.
-  if [ -e "$_dir/bin/nish" ] && ! grep -q 'Written by install.sh' "$_dir/bin/nish" 2>/dev/null; then
+  if [ -e "$_dir/bin/nish" ] && ! nish_is_wrapper "$_dir/bin/nish"; then
     mv -f "$_dir/bin/nish" "$_dir/libexec/nish"
   fi
   {

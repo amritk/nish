@@ -26631,6 +26631,35 @@ if (dealtHere("releaseChecks")) {
           noUnpack.status === 0 && stillWorks.status === 8,
           `exit ${stillWorks.status}, ${JSON.stringify(stillWorks.stdout + stillWorks.stderr)}`
         )
+        // The compiler names the marker itself (`nish upgrade` looks for it in a
+        // wrapper), and 0.40.1's aarch64 builds carry it as a literal string. A guard
+        // that grepped the whole file took that compiler for the wrapper, skipped the
+        // move and wrote the wrapper over it, so arm Linux and Apple silicon installed
+        // nothing that ran. A fresh compiler that mentions the marker anywhere but the
+        // wrapper's second line must still move.
+        fs.writeFileSync(staged, '#!/bin/sh\n# a compiler, not a wrapper\necho "third"\nexit 7\n: Written by install.sh\n')
+        fs.chmodSync(staged, 0o755)
+        const namesMarker = spawnSync(
+          "sh",
+          ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_write_wrapper "$2"`, "sh", installSh, home],
+          { encoding: "utf8" }
+        )
+        const third = spawnSync(path.join(home, "bin", "nish"), [], { cwd: root, encoding: "utf8" })
+        check(
+          "install.sh: a compiler whose text names the wrapper's marker still moves to libexec/",
+          namesMarker.status === 0 && third.status === 7 && third.stdout.trim() === "third",
+          `exit ${third.status}, ${JSON.stringify(third.stdout + third.stderr)}; ` +
+            "the wrapper step took the compiler for its own wrapper and wrote over it"
+        )
+        // ...and the stale-wrapper checks below expect exit 8, so put that compiler back.
+        fs.writeFileSync(staged, '#!/bin/sh\necho "second"\nexit 8\n')
+        fs.chmodSync(staged, 0o755)
+        const restored = spawnSync(
+          "sh",
+          ["-c", `NISH_INSTALL_SOURCE_ONLY=1 . "$1"; nish_write_wrapper "$2"`, "sh", installSh, home],
+          { encoding: "utf8" }
+        )
+        check("install.sh: nish_write_wrapper succeeds again", restored.status === 0, restored.stdout + restored.stderr)
         // The wrapper holds an ABSOLUTE path, so it does not survive the directory
         // moving -- and the script stages the install in a temporary directory beside
         // the destination and renames it into place, which moves it every time. Writing
