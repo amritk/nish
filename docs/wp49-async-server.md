@@ -2,11 +2,12 @@
 
 **Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
 #1343), stage 6 measured, gate not met: re-measured on 2026-11-14 after the
-hand-off build (#1601), with 4 of 11 judged cells inside (`json` 32 and 64,
-`db` 64 and 256), `plaintext` 256/1024/4096 and `json` 16/128/256 outside, and
-`json` 512 not judgeable, and the recorded `/queries` at 64 connections worse
-than before by more than its band; what is left is the rest of the serve/handler/router
-hand-off redesign, an open question (§6, §10).** The language half — `async`,
+resume build (#1621), with 4 of 11 judged cells inside (`json` 64 and 128,
+`db` 64 and 256), `plaintext` 256/1024/4096 and `json` 16/256 outside, and
+`json` 32 and 512 not judgeable; #1621 cut the async entry's peak RSS at
+`plaintext` 16,384 connections from 32.4 to 26.9 MiB; what is left is the
+second task per request, the router and the request copy, the rest of the
+serve/handler/router hand-off redesign, an open question (§6, §10).** The language half — `async`,
 `await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
 and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
@@ -14,7 +15,7 @@ tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
 cancellation (part 7). D1's condition does not hold yet: the async TFB entries
 are still outside the explicit ones' noise band on `plaintext` and `json`
-([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-the-hand-off-build-wp49-stage-6)).
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-the-resume-build-wp49-stage-6)).
 The anchors below are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays
 normative; the API in this note beyond what it states is a proposal and is not
 compiled by `npm test`. This note reopens
@@ -565,6 +566,48 @@ about 815 and 1,015. Part of what `HttpHandler` did now runs in
 the hand-off redesign is the two resumes per request and the router's walk;
 stage 6 stays open.
 
+**After the resume build (2026-11-14).** #1621 cuts `serve`'s answer path and
+holds a request record only from parse to copy; its own figures were −0.8%
+instructions a request on the async entry and −17% peak RSS at `plaintext`
+16,384 connections. The gate was re-run with `run.sh` unchanged, before
+(`main` at `79b2ea4e`) and after (`main` at `798636cb`), in one container, and
+every test was re-run once on both sides because each had a bimodal judged
+cell ([BENCHMARKS.md](BENCHMARKS.md#techempower-the-gate-after-the-resume-build-wp49-stage-6)):
+
+| test | connections | band | async vs entry | verdict | before |
+| --- | ---: | ---: | ---: | --- | --- |
+| `plaintext` | 256 | 5.0% | −24.2% | outside (re-run) | not judgeable |
+| `plaintext` | 1024 | 21.9% | −28.7% | outside (re-run) | not judgeable |
+| `plaintext` | 4096 | 0.2% | −26.7% | outside | outside |
+| `json` | 16 | 13.3% | −14.8% | outside | inside |
+| `json` | 32 | 7.2% | −11.4% | not judgeable: bimodal twice | outside |
+| `json` | 64 | 11.4% | −0.6% | inside (re-run) | outside |
+| `json` | 128 | 9.8% | −4.6% | inside (re-run) | inside |
+| `json` | 256 | 14.8% | −28.0% | outside (re-run) | inside |
+| `json` | 512 | 16.8% | −2.4% | not judgeable: bimodal twice | inside |
+| `db` | 64 | 10.8% | +9.6% | inside (re-run) | inside |
+| `db` | 256 | 7.0% | −3.4% | inside | inside |
+
+Four of the eleven are inside, so the gate is not met. Before #1621 the same
+rule gave six inside, three outside and two not judgeable. This session's
+bands were wide (up to 22% on `plaintext` and 33% on `json`), and most cells
+moved within them. The one move larger than the noise is memory: the async
+entry's peak RSS at `plaintext` 16,384 connections fell from 32.4 to 26.9 MiB
+(−17%), as #1621 reported. The recorded `/updates` at 64 and 256 read worse
+than before by more than both bands in the first runs (−4.0% and −3.6%), and
+better in the re-runs (+17% and +12%).
+
+Where the gap is, by frame, from the #1468 profile (self instructions a
+request, `plaintext` then `json`): the async entry runs about 2,054 and 2,425
+more than the explicit one. Of that:
+- the structural cost of a second task per request (`serveOn`'s resume, the
+  task region, the executor) is about 424 and 426;
+- `Router.match` is about 455 and 348;
+- `serveTask`'s copy of the request is about 378.
+
+#1621's −0.8% does not move any of these by a share the throughput cells can
+show. What is left is the same three frames; stage 6 stays open.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,
@@ -683,7 +726,7 @@ page for anything a user sees.
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
 | 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); after the hand-off build (#1601) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/128/256 outside and `json` 512 not judgeable, and the recorded `/queries` at 64 connections worse than before by more than its band (§6, re-measured 2026-11-14 on `e9730272`, about 2,040 and 2,430 more instructions a request than the explicit entry); the follow-up is the rest of the serve/handler/router hand-off redesign, the owner's decision |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379), the profile-led ones (#1421, #1419, #1459), task recycling (#1493) and the cached response head (#1457) the async entry is still outside the band on `plaintext` 256/1024/4096 and `json` 512, with `json` 128 and `db` 64 now inside (§6, re-measured 2026-11-13 on `5c0cd6b2`); after the hand-off build (#1601) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/128/256 outside and `json` 512 not judgeable, and the recorded `/queries` at 64 connections worse than before by more than its band (§6, re-measured 2026-11-14 on `e9730272`, about 2,040 and 2,430 more instructions a request than the explicit entry); after the resume build (#1621) 4 of the 11 judged cells are inside, `plaintext` 256/1024/4096 and `json` 16/256 outside, `json` 32 and 512 not judgeable, and the async entry's peak RSS at `plaintext` 16,384 connections down from 32.4 to 26.9 MiB (§6, re-measured 2026-11-14 on `798636cb`, about 2,054 and 2,425 more instructions a request than the explicit entry, in the second task, the router and the request copy); the follow-up is the rest of the serve/handler/router hand-off redesign, the owner's decision |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.

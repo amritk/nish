@@ -13,7 +13,7 @@
 
 ## Next
 
-Meet stage 6's gate. [The latest measurement](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#techempower-the-gate-after-the-hand-off-build-wp49-stage-6) (2026-11-14, after the hand-off build #1601) has 4 of the 11 judged cells inside: `plaintext` 256/1024/4096 and `json` 16/128/256 are outside, and `json` 512 cannot be judged; the recorded `/queries` at 64 connections fell 9.3% against itself, beyond its band. The async entry still runs about 2,040 more instructions a request than the explicit one on `plaintext` and 2,430 on `json`, most of it in `serve`'s two resumes per request and the router.
+Meet stage 6's gate. [The latest measurement](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#techempower-the-gate-after-the-resume-build-wp49-stage-6) (2026-11-14, after the resume build #1621) has 4 of the 11 judged cells inside: `plaintext` 256/1024/4096 and `json` 16/256 are outside, and `json` 32 and 512 cannot be judged in that container. #1621 cut the async entry's peak RSS at `plaintext` 16,384 connections from 32.4 to 26.9 MiB. The async entry still runs about 2,054 more instructions a request than the explicit one on `plaintext` and 2,425 on `json`: the second task per request (about 425), the router (about 455 and 348) and `serveTask`'s request copy (about 378).
 
 ## Open questions
 
