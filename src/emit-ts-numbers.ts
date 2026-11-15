@@ -245,17 +245,19 @@ const soleTypeArgument = (ref: Node): Node | null => {
 
 /** A constant table's array literal with every element written at `type`. */
 const tableText = (walk: Walk, init: Node, type: i32): string | null => {
-  let text = ""
+  const parts: string[] = []
   let at = init.start
   for (const element of init.children) {
     const value = foldedText(walk, element, type)
     if (value === null) {
       return null
     }
-    text = `${text}${between(walk, at, element.start)}${value}`
+    parts.push(between(walk, at, element.start))
+    parts.push(value)
     at = element.end
   }
-  return `${text}${between(walk, at, init.end)}`
+  parts.push(between(walk, at, init.end))
+  return parts.join("")
 }
 
 /** The integer type a type name spells, or -1. */

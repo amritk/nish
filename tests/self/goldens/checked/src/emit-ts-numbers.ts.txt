@@ -133,17 +133,17 @@ function tableText(walk: Walk, init: Node, type: i32): string | null -> @tableTe
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via foldedText
   escaping: type
-  calls: between foldedText nish_str_concat
+  calls: between foldedText nish_alloc_struct nish_array_grow
   pointer walk: size=256 writesThrough=false captured=false passedTo=foldedText#0 between#0 between#0
   pointer init: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 text: string (let)
+  stackSites=1 stackLocals=1
+  local +0:9 parts: string[] (const)
   local +1:7 at: i32 (let)
   local +2:14 element: Node (const)
   local +3:11 value: string | null (const)
   callee +3:19 foldedText -> @foldedText
-  callee +7:22 between -> @between
-  callee +10:20 between -> @between
+  callee +7:16 between -> @between
+  callee +11:14 between -> @between
 function spelledType(name: string): i32 -> @spelledType
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: kindName nish_str_eq

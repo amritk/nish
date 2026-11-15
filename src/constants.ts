@@ -331,6 +331,9 @@ const foldTable = (ctx: CheckContext, info: ConstInfo): void => {
   const elements = unwrapParens(info.decl.children[2]).children
   const spelled = ctx.table.typeName(elem)
   let ok = true
+  // The first element whose value is not of the table's type, and that type.
+  let mistyped = -1
+  let mistypedAs = T_ERROR
   let i = 0
   while (i < elements.length) {
     const element = elements[i]
@@ -341,25 +344,15 @@ const foldTable = (ctx: CheckContext, info: ConstInfo): void => {
     }
     if (value.type === T_ERROR) {
       ok = false
+    } else if (
+      elem === T_F64 ? value.type !== T_F64 : value.type !== T_I32 && (value.type !== T_I64 || elem === T_I32)
+    ) {
+      // Reported after the loop, which keeps the type's name out of each pass.
+      mistyped = i
+      mistypedAs = value.type
+      break
     } else if (elem === T_F64) {
-      if (value.type !== T_F64) {
-        reject(
-          ctx,
-          info,
-          element,
-          `Element ${i} of constant table \`${info.name}\` is declared ${spelled} but its value is ${valueTypeName(ctx, value)}`
-        )
-        ok = false
-      }
       info.tableFloats.push(value.floatValue)
-    } else if (value.type !== T_I32 && (value.type !== T_I64 || elem === T_I32)) {
-      reject(
-        ctx,
-        info,
-        element,
-        `Element ${i} of constant table \`${info.name}\` is declared ${spelled} but its value is ${valueTypeName(ctx, value)}`
-      )
-      ok = false
     } else {
       const v = value.intValue
       const fits = max >= toI64(0) ? v >= toI64(0) && v <= max : elem === T_I64 || v === toI64(toI32(v))
@@ -375,6 +368,15 @@ const foldTable = (ctx: CheckContext, info: ConstInfo): void => {
       info.tableInts.push(v)
     }
     i = i + 1
+  }
+  if (mistyped >= 0) {
+    reject(
+      ctx,
+      info,
+      elements[mistyped],
+      `Element ${mistyped} of constant table \`${info.name}\` is declared ${spelled} but its value is ${ctx.table.typeName(mistypedAs)}`
+    )
+    ok = false
   }
   info.folding = false
   info.folded = true

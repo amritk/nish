@@ -60,6 +60,10 @@ const chain = (buf: u8[], counts: i32[]): void => {
   }
 }
 
+/** Whether two runs counted the same number of bytes in every class. */
+const agree = (x: readonly i32[], y: readonly i32[]): boolean =>
+  x[0] === y[0] && x[1] === y[1] && x[2] === y[2] && x[3] === y[3]
+
 export const main = (): i32 => {
   const buf: u8[] = new Array<u8>(SIZE)
   // Text-like bytes from a fixed xorshift, so the compares of `chain` are not
@@ -110,6 +114,6 @@ export const main = (): i32 => {
   console.log(`chain  ${cUs} us`)
   console.log(`chain/tableA  ${toF64(cUs) / toF64(aUs)}`)
   console.log(`tableB/tableA ${toF64(bUs) / toF64(aUs)}`)
-  console.log(`classes ${a[0]} ${a[1]} ${a[2]} ${a[3]} agree ${a[3] === b[3] && a[3] === c[3]}`)
+  console.log(`classes ${a[0]} ${a[1]} ${a[2]} ${a[3]} agree ${agree(a, b) && agree(a, c)}`)
   return 0
 }

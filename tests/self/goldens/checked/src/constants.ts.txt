@@ -169,9 +169,9 @@ function unsignedMax(elem: i32): i64 -> @unsignedMax
 function foldTable(ctx: CheckContext, info: ConstInfo): void -> @foldTable
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: TypeTable.typeName fold nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nish_str_from_i64 reject unsignedMax unwrapParens valueTypeName
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=fold#0 reject#0 valueTypeName#0 reject#0 valueTypeName#0 reject#0
-  pointer info: size=112 writesThrough=true captured=false passedTo=fold#1 reject#1 reject#1 reject#1
+  calls: TypeTable.typeName fold nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nish_str_from_i64 reject unsignedMax unwrapParens
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=fold#0 reject#0 reject#0
+  pointer info: size=112 writesThrough=true captured=false passedTo=fold#1 reject#1 reject#1
   stackSites=0 stackLocals=0
   local +1:9 elem: i32 (const)
   local +2:9 max: i64 (const)
@@ -182,17 +182,17 @@ function foldTable(ctx: CheckContext, info: ConstInfo): void -> @foldTable
   local +11:9 spelled: string (const)
   callee +11:19 TypeTable.typeName -> @TypeTable.typeName
   local +12:7 ok: boolean (let)
-  local +13:7 i: i32 (let)
-  local +15:11 element: Node (const)
-  local +16:11 value: ConstValue (const)
-  callee +16:19 fold -> @fold
-  callee +25:9 reject -> @reject
-  callee +29:102 valueTypeName -> @valueTypeName
-  callee +35:7 reject -> @reject
-  callee +39:100 valueTypeName -> @valueTypeName
-  local +43:13 v: i64 (const)
-  local +44:13 fits: boolean (const)
-  callee +46:9 reject -> @reject
+  local +14:7 mistyped: i32 (let)
+  local +15:7 mistypedAs: i32 (let)
+  local +16:7 i: i32 (let)
+  local +18:11 element: Node (const)
+  local +19:11 value: ConstValue (const)
+  callee +19:19 fold -> @fold
+  local +36:13 v: i64 (const)
+  local +37:13 fits: boolean (const)
+  callee +39:9 reject -> @reject
+  callee +52:5 reject -> @reject
+  callee +56:105 TypeTable.typeName -> @TypeTable.typeName
 function fold(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue -> @fold
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via fold
