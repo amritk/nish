@@ -8,7 +8,8 @@ R4 (`fix` in `--json` and `nish --fix`, #421, #429, #431, #459, #460), R3,
 the runtime split by host (#848, #851), and R4, `--emit-ts <dir>` with its
 live differential (#853, #859, #864, #866, #867, and the oracle that holds
 it), and R5's `review` tier (`review` in `--json`, NL8006's rewrite). Next:
-R6, which waits on WP28. §9 has each stage's state.** This is the plan of record for one
+R6, which is WP28: its spikes are measured and its stages have started
+([roadmap](roadmap/wp28-compatibility-mode.md)). §9 has each stage's state.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 **2026-10-30:** an arrow passed to a function-typed parameter of a top-level
@@ -468,7 +469,7 @@ and 4 against strict today, with `nish --fix` as step 2, names
 `--warn-portability`, step 3's warnings, and states step 6 with `--emit-ts`
 (R4), and step 3's `review` edits, which an agent applies by hand after
 reading them (R5). Step 7 waits on wp28's
-compat mode; an agent skill that wraps the whole loop waits with them.
+compat mode, of which only a bare `--compat` that admits nothing is built; an agent skill that wraps the whole loop waits with them.
 
 ---
 
@@ -552,7 +553,7 @@ and the stages in §9 build it.
 | **R3** | The runtime split by host (§4.3) | `--emit-ts` imports from it, and Bun and the browser need it anyway. |
 | **R4** | `--emit-ts` (§4), with the live differential (§4.5) | The exit door, and the oracle §5.3 step 6 leans on. |
 | **R5** | `fix` in `--json` and `nish fix` (§5.1); the AI.md section | The agent loop, once the compiler can say where the risks are. |
-| **R6** | wp28's compat mode, on wp28's own staging | The way in widens once there is a safe way back out. |
+| **R6** | wp28's compat mode, on wp28's own staging. In progress: its spikes are measured ([wp28](wp28-compatibility-mode.md) §7.4 to §7.9) and no compatibility construct is built | The way in widens once there is a safe way back out. |
 
 **R1's portability half is built.** `--warn-portability` runs the pass
 (`src/portability.ts`), the band is NL8xxx with every row's code registered

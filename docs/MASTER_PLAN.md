@@ -181,7 +181,7 @@ table with each message and the idiom to write instead.
 
 | Question | Options | Recommendation |
 | --- | --- | --- |
-| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. |
+| Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag. [wp28](wp28-compatibility-mode.md) §5.3 proposes the answer that a second dialect forces: `i32` in strict, `f64` in compat, because a ported codebase that truncates at 2\*\*31 diverges quietly. Measured since (wp28 §7.8): the flag costs 1.10x to 1.19x on two integer-heavy programs and nothing measurable on ten others, and refuses 20 of the 34 benchmark programs as written, so whether compat implies it is open (wp28 §10). |
 | Overflow | wrap / trap / `nsw` UB | **Decided (#426): trap — a checked panic by default, `nsw` only where proven, `wrapping*` from `nish:unsafe` to opt out at one site.** WP15 §3 had chosen `nsw` UB. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | **Decided:** arena + escape-analysed `alloca` (WP6), with `using a = arena()` as the explicit bracket (#420). Reference counting is not built. |
