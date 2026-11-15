@@ -6884,6 +6884,17 @@ const DECLARED = [
     why: "the program declares a module-level `readonly` array of numbers written out as a literal, which the seed refuses and the candidate compiles, so only the candidate compiles it",
   })),
   ...[
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.h"],
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.napi.c"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.h"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.napi.c"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: CONST_TABLES,
+    why: "a function returning `readonly T[]` returns `const nish_array *`, since the array may be a constant table in read-only memory",
+  })),
+  ...[
     "bench/par-histogram-atomic.ts",
     "docs/cookbook/thread-atomic-array.ts",
     "examples/histogram-atomic.ts",
