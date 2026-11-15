@@ -53,12 +53,30 @@
 //     recursion cannot assign this frame's parameters.
 //   - anything else is a base, whose value is what the whole sum ends on.
 //
+// One more fact is recorded for the emitter, not required of the function:
+// whether every step passes only values a step cannot have allocated
+// (`passesOnlyHeld`, issue #1612). Each argument of every step's call, and a
+// method's receiver, is either of a type that names no memory (a number, a
+// `boolean`, an `enum`, a host handle: `isScalarArgument` in `src/escape.ts`)
+// or a parameter of the function, read as it is, with no coercion. By
+// induction over the loop's turns, every parameter then holds, on every
+// entry of the header, a value that names no memory or one the call was
+// handed: on the first entry each is what the caller passed, and a step
+// passes on only numbers and those values. That is what lets a function with
+// an automatic arena scope release the scope on every turn
+// (`src/emit-accumulate.ts`, "Arena scope"): nothing a step hands the next
+// turn lies above the mark the function took on entry. A step passing
+// `s + "x"` or `` `${n}` `` passes memory it allocated, which a release before
+// the next turn would free under it, and such a function keeps its recursion
+// whenever it has a scope.
+//
 // The checker calls `recordAccumulation` once a body has checked cleanly and
 // its proofs are in (`checkFunctionBody`); `forgetProofs` in `src/bounds.ts`
 // takes the records back for `--no-elision`, so the soundness differential
 // compares every such function with its plain recursive self.
 
 import { CheckContext } from "./context"
+import { isScalarArgument } from "./escape"
 import { isGenericFunction } from "./generics"
 import { hasSpread } from "./members"
 import { FLAG_GENERATOR, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
@@ -105,8 +123,12 @@ export const recordAccumulation = (ctx: CheckContext, sig: FunctionSig, body: No
   if (seen !== TAIL_BOTH) {
     return
   }
+  let holds = true
+  for (const step of steps) {
+    holds = holds && passesOnlyHeld(ctx, sig, stepCall(ctx, sig, step))
+  }
   const table = ctx.program.accumulate
-  table.record(sig.decl.id, ACC_FUNCTION, sig.decl.id)
+  table.record(sig.decl.id, ACC_FUNCTION, holds ? sig.decl.id : -1)
   for (const step of steps) {
     table.record(step.id, ACC_STEP, stepCall(ctx, sig, step).id)
   }
@@ -297,5 +319,50 @@ const isStable = (ctx: CheckContext, node: Node): boolean => {
     return false
   }
   const local = ctx.program.nodeLocals[node.id]
+  return local !== null && local.storage === STORAGE_PARAM
+}
+
+/**
+ * Whether the self call `call` passes only values no step can have allocated:
+ * each argument, and a method's receiver, is either of a type that names no
+ * memory or a parameter of `sig` read as it is (the file header, and
+ * "Arena scope" in `src/emit-accumulate.ts`).
+ */
+const passesOnlyHeld = (ctx: CheckContext, sig: FunctionSig, call: Node): boolean => {
+  let first = 0
+  if (sig.role === ROLE_METHOD) {
+    if (!isHeld(ctx, sig, call.children[0].children[0], 0)) {
+      return false
+    }
+    first = 1
+  }
+  const written = call.children[1].children
+  for (let i = 0; i < written.length; i++) {
+    if (!isHeld(ctx, sig, written[i], i + first)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Whether `arg`, passed as parameter `index` of `sig`, names no memory a step
+ * allocated: the parameter's type holds no pointer, so no conversion into it
+ * allocates, or `arg` is `this` or a parameter, unconverted.
+ */
+const isHeld = (ctx: CheckContext, sig: FunctionSig, arg: Node, index: i32): boolean => {
+  if (index < sig.paramTypes.length && isScalarArgument(ctx.table, sig.paramTypes[index])) {
+    return true
+  }
+  if (ctx.program.nodeCoercions[arg.id] >= 0) {
+    return false
+  }
+  if (arg.kind === NodeKind.This) {
+    return true
+  }
+  if (arg.kind !== NodeKind.Ident) {
+    return false
+  }
+  const local = ctx.program.nodeLocals[arg.id]
   return local !== null && local.storage === STORAGE_PARAM
 }

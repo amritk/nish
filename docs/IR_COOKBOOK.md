@@ -32775,10 +32775,16 @@ every `return` that recurses is `X + self(args)`, or `self(args) + Y` with
 `Y` a number literal or a parameter (so moving `Y`
 ahead of the call cannot move an effect), at least one `return` does not, and
 the body is only blocks, `if`, declarations, expression statements and
-`return`s. It may not open an arena scope (a string template does), hold a
-stack-allocated local or site, or bracket a loop's passes with arena scopes
-(`scopesAnyPass`): each of those ties memory's lifetime to one call, which
-the loop's steps would share. `self(args) - X`,
+`return`s. It may not hold a stack-allocated local or site, or bracket a
+loop's passes with arena scopes (`scopesAnyPass`): each of those ties
+memory's lifetime to one call, which the loop's steps would share. It may
+open an arena scope (a string template does) when every step passes only
+numbers, booleans, enums, or a parameter or `this` unchanged, and nothing it
+runs reads `Arena.mark` or `Arena.used`: then nothing a step allocated is
+reachable from the next, and the loop releases the scope at the end of every
+step, before the cold call's `ret` and before the base's
+(`tests/cases/acc_arena`). A step that passes a string it built keeps the
+recursion (`tests/cases/acc_arena_ineligible`). `self(args) - X`,
 `X - self(args)` and `self(args) + f()` stay recursion.
 
 Each parameter becomes a `phi` of `rec.head`, and a step evaluates `X` and the
@@ -32994,6 +33000,115 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-recursion-i64 -->
+
+A frame that allocates on the arena marks it once, in `entry`, and releases
+to that mark at the end of every step, before the edge back to `rec.head`,
+and before each `ret`: what a step built is garbage before the next begins,
+as it was when each frame returned. The proof is `src/emit-accumulate.ts`,
+"Arena scope".
+
+<!-- cookbook:begin opt-recursion-arena -->
+```ts
+const digits = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0
+  }
+  const s = `${n}`
+  return s.length + digits(n - 1)
+}
+
+export const test = (): i32 => digits(100000)
+```
+
+```llvm
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define internal noundef i32 @digits(i32 noundef %n.in) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %9, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %8, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  %0 = icmp sle i32 %n, 0
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %2
+
+if.end:
+  %4 = call i8* @nish_str_from_i32(i32 %n)
+  store i8* %4, i8** %s.addr, align 8
+  %5 = load i8*, i8** %s.addr, align 8
+  %6 = bitcast i8* %5 to i64*
+  %7 = load i64, i64* %6, align 8
+  %8 = trunc i64 %7 to i32
+  %9 = sub nsw i32 %n, 1
+  call void @nish_arena_release(i64 %arena.mark)
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %10 = call i32 @digits(i32 %n)
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %12)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %15
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test() #0 {
+entry:
+  %0 = tail call i32 @digits(i32 100000)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-arena -->
 
 A method's self call is `r.m(args)` on a receiver the checker typed as the
 method's own class, written with `.`, not `?.`. Nish binds every method call
