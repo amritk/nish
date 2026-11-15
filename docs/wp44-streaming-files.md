@@ -7,7 +7,7 @@ each return the entire file as one arena value, and refuse a file past
 2^31 − 1 bytes ([LANGUAGE.md](LANGUAGE.md#file-io)). This package adds four
 builtins. With them, a program reads a file a window at a time, into a `u8[]`
 the program owns, and memory follows the window rather than the file. The
-questions the owner settled are in §9: every recommendation was accepted, so
+questions settled are in §9: every recommendation was accepted, so
 the rest of the note describes what is built.
 
 [LANGUAGE.md](LANGUAGE.md) stays normative. Nothing here changes the language
@@ -376,7 +376,7 @@ same gap noted beside a new refusal is a separate fix, not this package's.
 
 ## 9. Open questions
 
-The owner accepted every recommendation on 2026-11-11.
+Every recommendation was accepted on 2026-11-11.
 
 | # | Question | Recommendation | Decided |
 | --- | --- | --- | --- |

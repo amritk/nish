@@ -1,5 +1,5 @@
 // Rust twin of fib.ts: same shape, same checksum line. Release builds wrap on
-// overflow (like Nish); fib(40) does not overflow an i32 anyway.
+// overflow, where Nish panics; fib(40) does not overflow an i32 either way.
 const N: i32 = 40; // bench:n
 
 fn fib(n: i32) -> i32 {

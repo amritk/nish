@@ -5,7 +5,7 @@ This is the normative reference for Nish, the subset of TypeScript that
 what each construct means, and how every rejection is worded. The design
 notes (`docs/wp*.md`) explain *why*; this page says *what*.
 
-**Nish is 0.x, and stays there until its owner declares 1.0.** No date is set.
+**Nish is 0.x, and 1.0 has no date.**
 Until then any minor release may change the language: a change that withdraws
 or narrows an accepted construct, or changes what one means, is marked breaking
 (`type!`) and named in the release notes. From 1.0 the rule tightens: a minor
@@ -202,6 +202,11 @@ crosses to C, then the exact rules.
   function reference is the tag `0` ([Function references](#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](#enums)).
+- **A record's type has a name.** Its fields are declared once, in an
+  `interface` or a `class`; an inline object type, `{ x: i32 }`, is refused
+  wherever a type is written, and `type` only renames a type that already
+  exists ([Interfaces and object literals](#interfaces-and-object-literals),
+  [Type aliases](#type-aliases)).
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](#result-and-error-handling)).
@@ -236,8 +241,9 @@ type `--emit-header` writes; a dash means the type cannot cross to C.
   the operations ([Unsigned integers](#unsigned-integers)). `i64` and `u64`
   cross to JavaScript as a `bigint`.
 - A `boolean` is `zeroext` at the ABI boundary.
-- `K.A` is the member's integer, so nothing is emitted for an `enum`
-  declaration.
+- `K.A` is the member's integer (its ordinal, for a string enum), so nothing
+  is emitted for a numeric `enum` declaration; a string enum adds one private
+  table of its members' strings ([String enums](#string-enums)).
 
 Every other type is a pointer, 8 bytes and 8-aligned, to:
 
@@ -301,7 +307,7 @@ interned, and two types are the same type exactly when they are the same
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
-  a `type` alias or a numeric `enum` declared or imported in the module
+  a `type` alias or an `enum` (numeric or string) declared or imported in the module
   ([Type aliases](#type-aliases), [Enums](#enums)), one of that enum's
   members as a type, `Kind.If` ([Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
@@ -793,7 +799,9 @@ pointer to whichever variant it holds, and its first field says which. A
 variant is a class or an interface whose first field is its **tag**: a field
 of an [enum member type](#enums), conventionally
 `readonly kind: Kind.Circle = Kind.Circle` (`tests/cases/union_types`,
-`tests/link/union_export` across modules).
+`tests/link/union_export` across modules). The enum may be numeric or a
+[string enum](#string-enums), whose member is the tag in memory as its
+ordinal (`tests/cases/enum_string_union_tag`).
 
 ```ts
 enum Kind {
@@ -812,7 +820,10 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
-Typed JSON reads and writes a union of classes by its tag ([Typed JSON](#typed-json-nishjson-typed)).
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](#typed-json-nishjson-typed)),
+whose value on the wire is the tag member's name, or a string enum member's
+string, unless the variant's `tag` option names another
+(`tests/link/json_enum_string`).
 
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
@@ -865,13 +876,25 @@ field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
 spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
 and a `Map`'s value is any of those: `Map<string, Shape>`,
 `Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
+A union is also a type argument: a generic class's (`Box<Shape>`,
+`Box<Box<Shape>>`, `Stack<Shape>`, `union_generic_class`), a generic
+function's or method's type parameter bound to one by its arguments
+(`union_generic_call`), either side of a `Result`, `Result<Shape, E>` and
+`Result<T, Shape>` (`union_result`), and `nish/map`'s `getOrInsert` and
+`reserve` on a `Map<K, Shape>` (`union_map_helpers`). The instance is
+monomorphised as for any other type argument, so `Box<Shape>` is laid out as
+a class with a `Shape` field would be, and a `T` slot holds the union's one
+pointer.
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
 converts to the union wherever the union is expected: an argument, a
 `return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
 arm or a `??` default whose other side is the union
-(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+(`tests/cases/union_forms`), and the same places where a generic's `T` is
+the union: a constructor's or a generic call's argument, `Ok(new Circle())`
+in a function that returns `Result<Shape, E>` (`union_generic_class`,
+`union_generic_call`, `union_result`). Equality on two unions compares the pointers, as
 on any object.
 
 **Reading.** The tag is the one member a union has until a test of the tag
@@ -1125,22 +1148,26 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
-  function or method whose type parameter would bind to a union, and
-  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
-  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_result_ok`,
-  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
-  its value as it is, the way an array stores an element of a union, and
-  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
-  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
-  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
-  and is NL2533 as any generic call is. A union is not a
-  `Map` or `Set` key, which is the key rule's refusal
-  (`reject_union_map_key`, `reject_union_set`).
+- **A union is a type argument, but not a key.** `Box<Shape>`, a generic
+  function or method whose type parameter binds to a union, `Result<Shape, E>`
+  / `Result<T, Shape>` and `nish/map`'s helpers on a `Map<K, Shape>` are
+  accepted (above), as in `tsc`. Three things stay refused, each under its own
+  rule: a union is not a `Map` or `Set` key, which is the key rule's refusal
+  (NL2353, `reject_union_map_key`, `reject_union_set`); a generic class is
+  not a variant (NL2522, `reject_union_generic_variant`); and a store of a
+  bare variant into a generic instance's union field, `b.value = new
+  Square()` on a `Box<Shape>`, is NL2534 as into any union field
+  (`reject_union_generic_field_store`). A union does not meet a constraint
+  (`<T extends HasKind>`, NL2328, `reject_union_generic_constraint`), and an instance
+  over a union is not key material for `nish:secret`
+  (NL2428, `reject_union_generic_secret`), nor a class typed JSON writes
+  (NL2486, `reject_union_generic_json`), nor something a C header or N-API bridge
+  spells (`reject_union_generic_export`, `reject_union_result_export`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
   or array literal of two variants is the existing same-type refusal
-  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`; so is
+  one a generic call would bind `T` to, `first([new Square(), new Circle()])`,
+  `reject_union_generic_inferred`), an arrow
   returning one needs its annotation (`reject_union_arrow_result`), and a
   local initialised from the tag without an annotation, `const k = s.kind`
   or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
@@ -1259,9 +1286,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try` is refused by Nish on its own, destructuring is too but for
-`const [a, b] = await awaitAll(…)`, which declares fresh `const`s rather than
-storing to a variable, and an arrow may read a local it captures but never
+`try` is refused by Nish on its own, a destructuring pattern only ever
+declares fresh names rather than storing to a variable (a destructuring
+assignment is NL2773, [Destructuring declarations](#destructuring-declarations)),
+and an arrow may read a local it captures but never
 assign it (NL2586, [Function parameters](#function-parameters)), so no loop
 that compiles stores through any of them. A loop that holds a
 labelled statement or a labelled `break` or `continue` anywhere in its body,
@@ -1271,14 +1299,19 @@ gives up on: it keeps the checker's widened state.
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
 union is refused, and so is a union-holding field of any class or interface
-the compilation declares, exported or not, under any sidecar flag
-(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
-lays out every class and interface of the program, a private one too
-(`reject_union_private_field`). The message is
+the compilation declares, exported or not, under a flag that lays the classes
+out as C structs (`--emit-header`, `--emit-napi`, `--emit-napi-async`): a
+header lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). A build with `--emit-dts` alone describes no
+class, so there a union field of a class only the module reads — root
+storage's graph among them — is accepted; a union in an exported function's
+parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions
-cross Nish modules freely (`tests/link/union_export`).
+cross Nish modules freely (`tests/link/union_export`). A string enum in an
+exported function's signature is refused under the same flags for a reason
+of its own (NL4019, [String enums](#string-enums)).
 
 ## Result and error handling
 
@@ -1873,11 +1906,13 @@ having no top-level code and therefore no initialisation order.
   (`` Module constant `answer` needs a type annotation ``,
   `tests/cases/reject_const_no_annotation`), and so is an initialiser.
 - **The type must be `i32`, `i64`, `f64`, `number`, `boolean`, or `string`.**
-  An array, class, or interface constant would need an allocation, and there is
-  no code to run it (`` must be a number, boolean, or string ``,
-  `tests/cases/reject_const_array`). The exception is a `new Array<T>(n)` or
-  typed-array `new` of a compile-time length, which is
-  [module storage](#module-storage) and has rules of its own.
+  A class or interface constant would need an allocation, and there is
+  no code to run it (`` must be a number, boolean, string, or a `readonly`
+  array of numbers ``, `tests/cases/reject_ffi_handle_module_binding`). There
+  are two exceptions with rules of their own: a `readonly` array of numbers
+  written out as a literal, which is a [constant table](#constant-tables), and
+  a `new Array<T>(n)` or typed-array `new` of a compile-time length, which is
+  [module storage](#module-storage).
 - **The initialiser is an ordinary Nish expression restricted to literals
   and other constants**: the operators of [Operators](#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
@@ -1926,6 +1961,48 @@ having no top-level code and therefore no initialisation order.
 - **A string constant is a value**, so it is a receiver like any other string:
   `NAME.length` is the folded literal's byte length
   (`tests/cases/const_string_member`).
+
+### Constant tables
+
+```ts
+const CLASS: readonly u8[] = [0, 0, 1, 1, 2, 3]
+const STEPS: readonly i32[] = [-1, 0, 1, LIMIT]
+```
+
+**A top-level `const` of type `readonly T[]` whose initialiser is an array
+literal is a constant table**: its elements are folded at compile time and laid
+out as one read-only data global, with a constant array header over it, so no
+code runs to build it and nothing can write it (`tests/cases/const_array_u8`,
+`const_array_numeric`). A use of the name is the header's address — the same
+`readonly T[]` value any other read-only array is — so `CLASS[c]`,
+`CLASS.length`, `for (const v of CLASS)` and passing it to a `readonly T[]`
+parameter all work, and `CLASS[c]` with `c: u8` into a 256-entry table is one
+load the bounds prover has already discharged.
+
+- **The element type is `u8`, `u16`, `u32`, `i32`, `i64` or `f64`** — the
+  numbers whose bytes are their value. Anything else is
+  `` Constant table `XS` cannot hold string ``
+  (`tests/cases/reject_const_array_element_type`).
+- **The annotation must be `readonly T[]`** (or `ReadonlyArray<T>`): the data
+  is constant, and a plain `T[]` could be written through. `const XS: i32[] =
+  [1, 2, 3]` is `` must be declared `readonly i32[]` ``
+  (`tests/cases/reject_const_array`).
+- **Each element is a constant expression** under the rule above — literals,
+  other module constants and arithmetic over them
+  (`tests/cases/reject_const_array_nonconst`) — and must fit the element type:
+  `256` in a `readonly u8[]` is `` Element 2 of constant table `XS` does not fit
+  in u8 `` (`tests/cases/reject_const_array_element`). An empty literal is
+  refused (`` has no elements ``, `reject_const_array_empty`).
+- **Writing is refused like any write to a `readonly` array**: an element
+  store, `push`, `pop` or any other mutating method
+  (`tests/cases/reject_const_array_write`, `reject_const_array_push`), and
+  handing the table to a mutable `T[]` — a parameter or a local
+  (`reject_const_array_mutable`, `reject_const_array_alias`).
+- **The symbols are `@nish_const_<module>_<name>.data`** (`private unnamed_addr
+  constant`) **and `@nish_const_<module>_<name>`** (the header, `internal
+  constant`), `<module>` the module's index. An exported table follows module
+  storage's rule: the header in its own module is not `internal`, and an
+  importer declares it `external constant`.
 
 ### Module storage
 
@@ -1979,7 +2056,8 @@ export const step = (): void => {
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of
-  these. A string, an array, a class, a `Map` or a `| null` is
+  these. A string, an array, a class, a `Map` or a `| null` (but `C | null`
+  for a class `C`, which is [root storage](#root-storage-an-object-graph-kept-between-calls)) is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
   (NL2686, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
@@ -2061,6 +2139,101 @@ export const step = (): void => {
   `f32[]` is still a plain JavaScript array there: only module storage is a
   view.
 
+#### Root storage: an object graph kept between calls
+
+**Module storage whose element is `C | null` for a class `C` is root
+storage**: each slot holds one object, and everything that object reaches —
+its fields, their arrays and strings, the objects they hold — outlives the
+call that built it (`tests/cases/root_storage`,
+`docs/wp55-persistent-root.md`). It is how a wasm module keeps a game, a
+document or any class instance across `init`, `step` and `draw`.
+
+```ts
+class World {
+  balls: Ball[]
+  tick: i32 = 0
+  constructor() {
+    this.balls = []
+  }
+}
+
+const world = new Array<World | null>(1)
+
+export const init = (): void => {
+  world[0] = new World()
+}
+
+export const step = (): void => {
+  const w = world[0]
+  if (w !== null) {
+    w.tick = w.tick + 1
+  }
+}
+```
+
+On a page module each root is a record of its data, its length and the
+descriptor of its class, gathered into one table the keep walks
+(`tests/cases/root_storage_page`, whose root is `head`, a list of `Node`):
+
+```llvm
+%nish.root = type { i8*, i32, i8* }
+@nish_storage_0_head.root = constant %nish.root { i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*), i32 1, i8* bitcast (%nish.trace* @nish.trace.0 to i8*) }
+@nish.roots = internal constant [1 x %nish.root*] [%nish.root* @nish_storage_0_head.root]
+
+define void @nish_root_keep(i64 %mark) {
+  call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+```
+
+- **Natively it is module storage and nothing more.** A native program never
+  hands its arena back between calls, so the graph simply stays.
+- **On a page module the loader keeps the graph and releases the rest.**
+  Where the loader of a program without root storage releases each export
+  call's arena, this one calls `nish_root_keep`. The runtime traces what the
+  roots reach from descriptors the compiler writes (`%nish.trace`, one per
+  class, string and array type the roots reach;
+  `tests/cases/root_storage_page`), slides it down over the garbage, rewrites
+  every pointer to it, and frees what is left. It does so only once the kept
+  region passes twice the live bytes and 64 KiB, so a call that changes a
+  little copies nothing, and memory stays bounded however long the page runs
+  (`node tests/run.js persist`: 100,000 steps with memory flat).
+- **What a root reaches is traceable.** A number, a `boolean`, an enum, a
+  string, an array, a class or a discriminated union of classes. Anything
+  else — a `Map`, a `Set`, an interface a class implements, a `Region`, a
+  `Secret`, a `CPtr`, a handle class or a C struct layout — is
+  `` Root storage `X` cannot keep C.f (T): the runtime moves what a root reaches between calls, … ``
+  (NL2766, `tests/wordings/nl2766_root_storage_map`).
+- **It is not exported**: the objects move, so a page has no layout to read.
+  `export const world = new Array<World | null>(1)` is
+  `` Root storage `X` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead ``
+  (NL2767, `tests/wordings/nl2767_root_storage_export`), and `layout` leaves
+  root storage out.
+- **No threads, no regions.** Each allocates from an arena of its own, which
+  a root could be left pointing into, so root storage in a program that
+  loads `nish/threads` or `nish:region` is
+  `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
+  (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
+- **No WASI loader.** A `--profile wasi` build with `--emit-dts` writes a
+  loader that releases the arena after every call, and only a page module
+  emits the `nish_root_keep` a loader calls instead, so root storage there is
+  `` Root storage `X` cannot be kept in a WASI build that writes a loader (`--emit-dts`): … ``
+  (NL2770, `tests/wordings/nl2770_root_storage_wasi_dts`).
+- **A freestanding module without a loader** (`--target wasm32` and no
+  `--emit-dts`) still emits `nish_root_keep(mark)`; the host that calls its
+  exports writes its own loader, and must call `nish_root_keep(mark)` where it
+  would call `nish_arena_release(mark)`, or what a root reaches is freed.
+- **Every function may store through a root**, so a program with root
+  storage does not prove a parameter-only allocation stays in its caller's
+  scope from the signature alone; the compiler's other proofs are unchanged.
+
 ### Type aliases
 
 ```ts
@@ -2083,7 +2256,10 @@ program twice, with one golden between them.
   declared class or interface, or another alias
   (`tests/cases/type_alias_ir`). Everything is refused exactly where it would
   be in an annotation, so `type Bad = any` is `` `any` is forbidden `` and not
-  a rule of its own.
+  a rule of its own, and an object type, `type Point = { x: i32; y: i32 }`,
+  is the syntax error an inline object type is anywhere else
+  (`tests/cases/reject_type_object_literal_alias`): declare
+  `interface Point` instead.
 - **Order does not matter.** An alias may name a class, an interface or an
   alias declared further down the file, because resolution is by need rather
   than in source order — the rule module constants follow. A cycle is
@@ -2164,18 +2340,28 @@ enum Level {
   Mid,   // 1
   High,  // 2
 }
+
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
 ```
 
-A numeric `enum` declares a **distinct type whose representation is `i32`**.
-Distinct is the point, and it is stricter than TypeScript, where a numeric enum
-member is assignable to `number`: the rule this language is built on is that
+An `enum` is of one of two kinds. A **numeric** enum's members are integers;
+a **string** enum's members are each given a string literal, and its rules
+past the ones below are in [String enums](#string-enums). Either kind
+declares a **distinct type whose representation is `i32`**: a numeric
+member's integer, or a string member's ordinal. Distinct is the point, and it
+is stricter than TypeScript, where a numeric enum member is assignable to
+`number` and a string one to `string`: the rule this language is built on is that
 two values are compatible only when their types are identical
 ([Types](#types)), and an enum that were silently `i32` would be the one type
 compatible with something it is not spelled as. So `Kind` and `i32` are two
-types, in both directions, and the only values of `Kind` are the members it
-declares.
+types, in both directions, as `Role` and `string` are, and the only values of
+`Kind` are the members it declares.
 
-Nothing is emitted for one. A member is folded to its integer the way a module
+Nothing is emitted for a numeric enum (a string enum adds its one table of
+strings, [String enums](#string-enums)). A member is folded to its integer the way a module
 constant is folded to its value, so `Kind.While` lowers to the literal `2`, a
 `Kind` parameter is an `i32` parameter, and there is no symbol, no table and no
 `%struct` anywhere. `tests/cases/enum_ir` and `tests/cases/enum_expanded` are
@@ -2184,9 +2370,11 @@ and their `.ll` goldens are byte-identical files.
 
 - **A member's value is a numeric literal, or the one before it plus one.**
   Auto-numbering is TypeScript's: the first member without an initialiser is
-  `0`. A member that is not a numeric literal is Phase 0's
-  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
-  (`tests/cases/reject_enum_string`, `reject_enum_computed`); a numeric literal
+  `0`. An enum any of whose members is given a string literal is a
+  [string enum](#string-enums) instead. A member that is neither — a computed
+  value in a numeric enum, or a numeric member beside a string one — is
+  `` Enum members must be numeric literals in Nish, or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings) ``
+  (NL1043, `tests/cases/reject_enum_computed`, `reject_enum_string_mixed`); a numeric literal
   that is not an integer is `` Enum member `Kind.Half` must be an integer literal ``
   (`reject_enum_float`), and one outside the width is
   `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`).
@@ -2302,7 +2490,8 @@ and their `.ll` goldens are byte-identical files.
     `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
     One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
   - **Two members of one value are one type**, as `tsc` reads them, spelled
-    by the member declared first: with `List = 1` beside `Array`, a
+    by the member declared first (a string enum has no two such members,
+    [String enums](#string-enums)): with `List = 1` beside `Array`, a
     `Kind.List` slot is reported as `` `Kind.Array` ``
     (`reject_enum_member_type_same_value`), and `Kind.List` enters a
     `Kind.Array[]` (`tests/cases/enum_member_type_slots`).
@@ -2333,8 +2522,9 @@ and their `.ll` goldens are byte-identical files.
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
     it reads an enum as any of its members, which a member type cannot hold.
     The one exception is a union's tag: a member that tags a variant of a
-    union is written as its name, the union's [typed JSON](#typed-json-nishjson-typed)
-    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
+    union is written as its name, or a string enum's member as its string,
+    the union's [typed JSON](#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`, `tests/link/json_enum_string`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
@@ -2389,12 +2579,154 @@ and their `.ll` goldens are byte-identical files.
   is written first).
 - **An enum does not cross to C or JavaScript.** `--emit-header`, `--emit-dts`
   and `--emit-napi` have no spelling for one, so a function whose signature
-  mentions an enum is skipped with the note those generators write for every
-  type they cannot carry (`weight(k: Kind): number: not declared; no C spelling
-  for one of its types.`). An enum is a type inside one module, as it is across
-  a module boundary: give a host an `i32` and keep the enum behind it.
+  mentions a numeric enum is skipped with the note those generators write for
+  every type they cannot carry (`weight(k: Kind): number: not declared; no C
+  spelling for one of its types.`), and one whose signature holds a string
+  enum is refused (NL4019, [String enums](#string-enums)). An enum is a type
+  inside one module, as it is across a module boundary: give a host an `i32`
+  or a `string` and keep the enum behind it.
 - **Enums are top-level only.** `enum K { A = 1 }` inside a function body is
   `Unsupported statement in Phase 1: EnumDeclaration` *(CLI only)*.
+
+#### String enums
+
+An enum whose members are each given a string literal is a **string enum**.
+It is the spelling Nish takes for a closed set of strings: a union of string
+literals, `"admin" | "guest"`, is refused (NL1053, and a lone string literal
+type is NL2668), because a value has one fixed layout and a string enum's is
+an `i32`.
+
+```ts
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+  Nobody = "",
+}
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 3;
+    case Role.Guest:
+      return 1;
+    default:
+      return 0;
+  }
+};
+
+const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
+```
+
+- **A value is its member's ordinal.** A string enum is a distinct type, as a
+  numeric one is, stored as an `i32`: the member's position in declaration
+  order, `0`, `1`, `2`, and never the bytes of its string. Every rule of
+  [Enums](#enums) above holds for it as it does for a numeric enum: `===` and
+  `!==` between two of its values are the only operators, and they compare
+  ordinals; a `switch` over one lowers to LLVM's `switch` on the ordinal; a
+  member is also a type (`kind: Role.Admin`), and so tags a variant of a
+  [discriminated union](#discriminated-unions)
+  (`tests/cases/enum_string_union_tag`); a value is a `Map` or `Set` key, an
+  element, a field and a `Result` arm; it crosses a thread, a channel and a
+  task as the `i32` it is; and it is exported and imported as a numeric enum
+  is (`tests/cases/enum_string`, `tests/link/enum_string_export`). It is never
+  `| null` (NL2010), as no enum is.
+- **Its strings are one table per module.** Each module that names the enum's
+  strings holds them as `@.enumstr.<Name>`, an array of the module's string
+  constants indexed by ordinal; an importer gets its own copy of the table, so
+  nothing is looked up across a module boundary
+  (`tests/link/enum_string_export`). Nothing else is emitted: `Role.Guest`
+  folds to `1` as `Kind.While` folds to `2`.
+
+  ```llvm
+  @.enumstr.Role = private unnamed_addr constant [3 x i8*] [i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*)], align 8
+
+  define internal noundef i32 @rank(i32 noundef %r) #0 {
+  entry:
+    switch i32 %r, label %sw.default [
+      i32 0, label %sw.case
+      i32 1, label %sw.case.1
+    ]
+  ```
+- **`String(r)` is the member's string.** It loads the table's entry at the
+  ordinal, so it allocates nothing and its answer is the module's constant:
+
+  ```llvm
+  %19 = sext i32 %18 to i64
+  %20 = getelementptr inbounds [3 x i8*], [3 x i8*]* @.enumstr.Role, i64 0, i64 %19
+  %21 = load i8*, i8** %20, align 8
+  call void @nish_print(i8* %21)
+  ```
+
+  `String` takes a string enum's value and nothing else; on any other
+  argument it is `` Unknown function `String` `` (NL2247,
+  `reject_string_call_non_enum`).
+- **A member's value is a string literal, written once.** Every member of a
+  string enum has an initializer:
+  `` String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal ``
+  (NL1064, `tests/cases/reject_enum_string_missing`). A numeric member beside
+  a string one is NL1043 (`reject_enum_string_mixed`, and in typed JSON
+  `json_reject_enum_mixed`), and a template literal is
+  `` An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared ``
+  (NL1065, `reject_enum_string_template`); a computed value, `"gu" + "est"`,
+  is
+  `` A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared ``
+  (NL1066, `reject_enum_string_computed`). The value is valid UTF-8, since it
+  is written to and matched against JSON: a lone surrogate, `"\uD800"`, is
+  `` Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8 ``
+  (NL2787, `reject_enum_string_utf8`). The empty string is a value like any
+  other (`tests/cases/enum_string`).
+- **Two members do not share a string.**
+  `` Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member ``
+  (NL2786, `tests/cases/reject_enum_string_same_value`). A numeric enum
+  allows two members of one value, which are one type; a string enum does
+  not, because its string is how the member is named outside the program: a
+  decoded `"admin"` must name one member, and `String` must answer one
+  string per member. `tsc` would also read two members of one string as one
+  value, where Nish's ordinals would make them two.
+- **A `Role` is not a `string`, in either direction.** A string is never
+  compared with one:
+  `` Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin` ``
+  (NL2788, `tests/cases/reject_enum_string_compare_literal`). A `Role` where
+  a string is wanted, `const s: string = r` or `${r}` in a template, is
+  `` A `Role` is not a string: write `String(r)` for the member's string ``
+  (NL2789, `reject_enum_string_to_string`, `reject_enum_string_template_use`),
+  and a string where a `Role` is wanted, `const r: Role = "admin"`, is
+  `` `"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin` ``
+  (NL2790, `reject_enum_string_from_string`). Arithmetic is refused as on any
+  enum, `r + 1` being
+  `` Operator `+` requires two operands of the same numeric type or two strings, got Role and i32 ``
+  (NL2231, `reject_enum_string_arith`), and `const enum` is NL2285 as above.
+- **Typed JSON reads and writes its string.** A string-enum field, array,
+  `| null` array or `Map` value is the member's string on the wire, and a
+  union tagged by a string enum's member writes that string as its tag
+  ([Typed JSON](#typed-json-nishjson-typed)).
+- **Under `--emit-ts` it is a `const` object.** `enum Role { Admin = "admin" }`
+  is written as
+
+  ```ts
+  export const Role = { Admin: "admin", Guest: "guest" } as const;
+  export type Role = (typeof Role)[keyof typeof Role];
+  ```
+
+  so each member is the string `tsc` gives it, `String(r)` is the identity
+  and prints what the native program reads from its table, and a member type
+  is `typeof Role.Admin` (`tests/emit-ts/control/string-enums`). `tsc` would
+  accept `r === "admin"`, `const s: string = r` and `const r: Role = "admin"`
+  on that output; Nish refuses all three, so it is the stricter of the two,
+  and every program it accepts is one `tsc` accepts too.
+- **A string enum does not cross to C, N-API or wasm yet.** An exported
+  function whose parameter or result is a string enum, or an array, `| null`
+  or `Result` that holds one, is refused under `--emit-header`, `--emit-dts`,
+  `--emit-napi` and `--emit-napi-async`:
+  `` `rank`'s parameter `r` is `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch` ``
+  (NL4019, `tests/cases/reject_enum_string_export`,
+  `reject_enum_string_export_napi`). It is an ordinal natively and a string in
+  TypeScript, and a sidecar cannot yet say which a host passes.
+- **Open questions.** A `Role.parse(s)` that answers the member a string
+  names is not built: today a program tests `s === String(Role.Admin)` for
+  each member, or decodes the string with typed JSON; the C, N-API and wasm spelling of a string enum is open
+  (NL4019); and a union of string literals stays refused, string enums being
+  the spelling Nish takes instead.
 
 ### `export` and `import`
 
@@ -2846,7 +3178,9 @@ and their `.ll` goldens are byte-identical files.
   second namespace: the whole-program attribute analysis is keyed by symbol
   name, so two functions sharing one would be emitted with each other's
   attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag.
+  does not depend on the flag. A proposal to qualify a private function's
+  symbol by its module when it would clash is
+  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
 
 ### `main`
 
@@ -3105,7 +3439,12 @@ export const main = (): i32 => {
   (NL4008, `tests/cases/reject_interop_generic_clash`). They also refuse a
   signature or an exported struct field that holds a
   [discriminated union](#discriminated-unions), which has no C spelling yet
-  (NL4009, `tests/cases/reject_union_export_param`).
+  (NL4009, `tests/cases/reject_union_export_param`), and a signature that
+  holds a [string enum](#string-enums), alone or in an array, a `| null` or
+  a `Result`:
+  `` `rank`'s parameter `r` is `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch` ``
+  (NL4019, `tests/cases/reject_enum_string_export`,
+  `reject_enum_string_export_napi`).
 - **A template may be exported and instantiated from another module, and each
   instantiation is defined exactly once**, in the module that declares the
   template. Everywhere else it is a `declare` carrying that definition's
@@ -3708,7 +4047,7 @@ export const main = (): void => {
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
-  (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
+  (`` Module constant `alias` must be a number, boolean, string, or a `readonly` array of numbers written out as a literal, not (i32) => i32; there is no top-level code to build anything else ``).
   An arrow argument may capture a `const` reference local like any other
   value (`fnref_capture`).
 - **What a reference does.** It is called — `h(3)`, `this.op(4)`, or
@@ -3878,7 +4217,11 @@ async function run(): Promise<void> {
   for two to eight calls at once and is awaited into one name per call,
   `const [a, b] = await awaitAll(f(x), g(y))`; one call, or an `awaitAll` not
   so destructured, is NL2647 (`reject_async_await_all_one`,
-  `reject_async_await_all_bare`).
+  `reject_async_await_all_bare`). So is a pattern over it that is not one
+  plain name per call, each with the reason: an object pattern (the answers
+  are read by position), a hole (it would drop an answer; name it `_b`), or
+  a default, rest or nested slot (`reject_async_await_all_object`,
+  `reject_async_await_all_hole`, `reject_async_await_all_default`).
 - **An `async` arrow is passed only where it is awaited.** The parameter's
   function type answers `Promise<T>`, and the callee awaits each call to it.
   An `async` arrow where the type answers a plain `T` is NL2639
@@ -5401,7 +5744,7 @@ answer the same natively and under Node:
   object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
   `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
   Node, without the methods, and is refused with
-  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
   (NL2515, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
   `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
   `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
@@ -5499,15 +5842,111 @@ author's obligation, as it is for a `Mutex`'s critical sections; the checker
 does not try to prove it.
 
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
-round into 256 bins, four rounds, on four tasks. On a four-core machine, over
-seven interleaved rounds whose seeds move every round, the medians are: each
-task counting into a local tally and adding it with one `add` per bin, 24 ms
-(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
-thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
-value, 677 ms (28× slower), because every increment contends for a cache line
-another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+round into one `AtomicI32Array` of 256 bins, four rounds, on four tasks. On a
+four-core machine, over seven interleaved rounds whose seeds move every round,
+the medians are: each task counting into a local tally and adding it with one
+`add` per bin, 29 ms (a byte-identical copy of it, the noise band, 23 ms; the
+two copies' runs 22–49 ms); one thread binning into plain counters, 80 ms
+(2.8× slower); one atomic `add` per value, 554 ms (19× slower), because every
+increment contends for a cache line another core is writing; and one `Mutex`
+taken per value, 2,155 ms. An atomic
 is far cheaper than a lock and still far dearer than a counter no other core
 touches: update it once per batch, not once per value.
+
+### Atomic arrays: `AtomicI32Array` and `AtomicI64Array`
+
+An atomic array is `length` atomic counters in one contiguous buffer. It is
+`AtomicI32` (or `AtomicI64`) with the element's index first: every method of
+the one has a twin on the other, with the same meaning, the same ordering and
+the same rules, R1, R7 and R8 above, and the same one shared write a task or a
+parallel body may make. Where an `AtomicI32[]` is one object per counter, each
+its own allocation, so sixteen counters land on several cache lines that the
+cores writing them pass back and forth, an `AtomicI32Array(16)` is sixteen
+adjacent `i32`s in 64 contiguous bytes, which is the layout Rust's
+`[AtomicI32; 16]` and Go's `[16]atomic.Int32` have. The buffer starts on a
+64-byte boundary at least one line into its own allocation, which ends past the
+line the last element is on, so no other object shares a line with the
+elements, the lines the counters' writers fight over.
+
+```typescript
+import { AtomicI32Array, AtomicI64Array, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32Array;
+  constructor(xs: i32[], bins: AtomicI32Array) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    s.bins.add(x & 3, 1);            // one indivisible add on element x & 3
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins = new AtomicI32Array(4);   // four counters in one buffer, each 0
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const bytes = new AtomicI64Array(2);
+  const one: i64 = 1;
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => {
+    bytes.add(x & 1, one);             // the one shared write a body may make
+    return x;
+  });
+  console.log(`${bins.load(0)} ${bins.load(1)} ${bins.length} ${bytes.load(1)}`); // 2 2 4 2
+  return 0;
+};
+```
+
+- **The methods.** `load(i)` and `store(i, v)`; `add(i, n)`, `sub(i, n)`,
+  `min(i, v)`, `max(i, v)` and `exchange(i, v)`, each answering the value
+  element `i` held before it; and `compareExchange(i, expected, desired)`.
+  `length` is a `readonly` field, fixed by `new AtomicI32Array(n)`, which
+  makes `n` elements, each `0`; a negative `n` stops the program as
+  `new Array` of one does. `AtomicI64Array` is the same over `i64`, its index
+  still an `i32`.
+- **An index is checked as an array index is**: one out of range stops the
+  program with `index out of range: 16 >= 16` and exit status 1, and never
+  touches memory outside the buffer (`tests/link/atomic_array_out_of_range`).
+  The check is an ordinary one, which the prover may discharge.
+- **Natively each method is the bounds check and then one instruction** on a
+  `getelementptr` into the buffer: a `load atomic` or `store atomic ...
+  seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a
+  `cmpxchg ... seq_cst seq_cst`, aligned to the element (`align 4`,
+  `align 8`); no element is an object of its own, so there is no per-element
+  pointer to load (`tests/link/thread_atomic_array`, whose `threads.ll` is the
+  lowering; docs/IR_COOKBOOK.md, "an atomic array").
+- **Under Node each method is the plain operation** on an element of an
+  ordinary array, exact for the reason an `AtomicI32`'s is, with the same
+  ±2^53 limit on an `AtomicI64Array`'s elements.
+- **The rules are `AtomicI32`'s.** Its buffer, `values`, is a field no program
+  may name (R1, NL2514, `reject_atomic_array_member_read`,
+  `reject_atomic_array_member_store`), and a method named without a call is
+  refused as any class's is (`reject_atomic_array_member_unbound`); `length`
+  is assigned only by the constructor
+  (`reject_atomic_array_length_store`); an object literal of either class is
+  refused by NL2515 (`reject_atomic_array_literal`); the parent does not
+  touch one a scope's tasks reach before the scope joins (R7, NL2513,
+  `reject_atomic_array_region_direct`); the tasks of sibling scopes share none
+  (NL2516, `reject_atomic_array_sibling_load`); and a parallel body may update
+  one and write nothing else shared
+  (`reject_atomic_array_par_shared_write`, `tests/link/par_atomic_array`).
+
+Choose an atomic array over an `AtomicI32[]` when the counters are many or hot
+— a histogram's bins, a counter per route or per worker — and an `AtomicI32`
+for one counter, or for counters that live in different objects. A counter no
+other core writes is still cheaper than either: count into a task's own tally
+and add it once per batch, as the example under "Atomics" does.
 
 ### Channels: `Channel<T>`
 
@@ -6108,6 +6547,17 @@ interface Pair { first: number; second: number; }
 const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 ```
 
+- **A record type is always a declared name.** There is no inline object
+  type: `(p: { x: i32 }) => p.x` is
+  `` syntax error: expected a type name, found `{` `` (NL0001), and so is the
+  same type after `type Point =`, in a field, a return type or a type
+  argument (`tests/cases/reject_type_object_literal_param`,
+  `reject_type_object_literal_alias`, `_field`, `_return`, `_type_arg`).
+  A record type is identified by its declaration, not by its fields: two
+  interfaces that declare the same fields are two types, and a value of one
+  is refused where the other is wanted, the only widening being a class to an
+  interface it `implements` ([Types](#types)). So a record's fields are declared
+  once, in an `interface` or a `class`, and every annotation names it.
 - An interface is a struct type with the same layout rules as a class, with
   fields only: a method, or an accessor signature `get x(): i32`, is
   `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
@@ -6484,28 +6934,39 @@ function owned(s: string): string {
 ```llvm
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %copy.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %copy.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
 ```
 
 - **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
   for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
   pointer that is dangling, already freed, or to a buffer with no NUL is
   undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
-  So the call is an `unchecked` [panic site](#panic-sites) that is allowed
-  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
-  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
-  which is `ffi`.
-- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  It is an `unsafe` call to `--deny unsafe`, and the `CPtr` it reads came from
+  a `declare function`, which is `ffi`.
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](#panic-sites) kind, as
+  [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)'s does:
+  `` `readCString` read a NULL pointer ``, exit 1
+  (`tests/cases/panics_ffi_read_cstring_null`). The parameter is `CPtr`, so
   an unnarrowed pointer is
   `` `readCString` expects an argument of type CPtr, got CPtr | null ``
-  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
-  compiler trusts is the declaration: a `declare function` whose result is
-  declared `CPtr` gets no check after the call, so a C function that may
-  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
-  through. Declare such a result `CPtr | null`.
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
+  `declare function` declared to answer `CPtr` may still answer `NULL`, so
+  the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
+  above. No proof removes the test, so `--deny-panics` refuses a call in its
+  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
   constructor and released with its owner, and refused inside a `using a =
@@ -6517,6 +6978,73 @@ if.end:
   a `nish_str_new`, which every runtime has, so `readCString` adds nothing to
   the link; whether the program links there is the `declare function`'s
   question, answered by the libc the target has.
+
+#### `cErrno`: the errno a C call left
+
+**`cErrno(): i32`, from
+[`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), answers the
+errno the most recent `declare function` call on this thread left, and 0
+before any.** In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+per-thread runtime slot immediately after it returns, before any result is
+marshalled; `cErrno()` reads the slot (`tests/cases/ffi_errno`,
+[cookbook](IR_COOKBOOK.md#cerrno-errno-after-a-foreign-call),
+[design](wp27-ffi.md#10-s5-as-built-cerrno)):
+
+```ts
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10);
+  return cErrno() === 0 ? n : -1;
+};
+```
+
+```llvm
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+```
+
+- **Saved before anything else runs.** The copy of a `string` result, an arena
+  allocation or a `console.log` may call into libc and move errno, so the save
+  is the first instruction after the call, ahead of the `NULL` check of a
+  `string` result. A C function that sets errno and answers a string is read
+  correctly after the copy.
+- **Zeroed before, so a success reads 0.** `strtol` reports an out-of-range
+  number only through errno; with the zeroing, `cErrno()` after an in-range
+  call is 0 unless the callee set it. No setter is exposed.
+- **Per thread.** errno is per thread in every libc, and the slot is
+  `_Thread_local` under `--threads` (`thread_local(initialexec)` in the IR), so
+  a thread reads what its own last call left (`ffi_errno_threads`).
+- **Program-wide, and free when unnamed.** One `cErrno` anywhere makes every
+  `declare function` call in every module of the program pay the zero and the
+  save, and none of them is then a tail call. A program that never names it
+  emits none of it.
+- **Not covered:** a host-module import (`--host`) is not a C call; the close a
+  `using` handle runs at scope exit is the compiler's call, not the program's,
+  and is not captured.
+- **Not a global.** errno is a macro over a thread-local accessor in every
+  libc, so there is no `errno` symbol to declare, and `declare let errno: i32`
+  is the parser's
+  `` a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT` ``
+  (`reject_ffi_errno_global`).
+- **Refused:** an argument (`` `cErrno` expects exactly 0 arguments, got 1 ``,
+  `reject_ffi_errno_arg`), a call without the import (NL2456,
+  `reject_ffi_errno_import`), and a freestanding wasm32 build, which has no
+  operating system:
+  `` `cErrno` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_ffi_errno_wasm`). `--profile wasi` links wasi-libc and keeps it.
+- **It is `nish:unsafe` and an `unsafe` call** to `--deny unsafe`, like every
+  export of the module; it reads a defined value and is no panic site.
 
 #### A `u8[]` parameter: a buffer and its count
 
@@ -7268,12 +7796,13 @@ loop body that is a single statement rather than a block is accepted
   *(CLI only)*) and takes its type from it; an annotation must match the
   initializer exactly (`Cannot initialize ... with ...`).
 - Declaring a `void`-typed variable is `Cannot declare a variable of type void`
-  *(CLI only)*. Destructuring is not supported: `const [a, b] = xs` is
-  `Destructuring is not supported` in a body and in a `for...of` head
-  (`reject_destructure_local`), but for the answers of
-  `const [a, b] = await awaitAll(f(x), g(y))`
-  ([Async functions](#async-functions-async-and-await)), and `Destructured constants are not supported`
-  at the top level (`reject_const_destructured`). `var` is forbidden
+  *(CLI only)*. A local may be a destructuring pattern, `const { x, y } = p`
+  or `let [a, b] = xs` ([Destructuring declarations](#destructuring-declarations));
+  a module constant may not: `Destructured constants are not supported`
+  (`reject_const_destructured`): a module constant's initialiser is a
+  literal, another constant or arithmetic over them ([Module constants](#module-constants)),
+  folded into each use with no storage of its own, and a pattern's names are
+  reads of a receiver at run time. `var` is forbidden
   (`tests/cases/reject_var_keyword`, `reject_var_in_for`).
 - `const` freezes the binding, not the contents: `xs[0] = 1` and
   `xs.push(1)` on a `const xs` are fine, `xs = []` is not
@@ -7281,6 +7810,83 @@ loop body that is a single statement rather than a block is accepted
   `reject_assign_const`, `reject_cf_compound_const`).
 - Locals live in an `alloca` slot; `opt -mem2reg` promotes them
   (`tests/cases/locals`).
+
+### Destructuring declarations
+
+A `const` or `let` in a function body, and the head of a `for...of`, may be an
+object or an array pattern. Each name it binds is one read off the value on
+the right, which is evaluated once and never copied:
+
+```ts
+const { x, y: py } = p        // x = p.x, py = p.y
+let [a, , c] = xs             // a = xs[0], c = xs[2]
+for (const { x, y } of points) { ... }
+```
+
+- **An object pattern** reads a class or interface value. Each entry is a
+  field's name, `x`, or a field renamed, `y: py`; the name's type is the
+  field's. A missing field is `` Cannot destructure field `z`: Point has no
+  such field `` (NL2778, `reject_destructure_field`).
+- **An array pattern** reads an array. Each name is one element read by its
+  position, with the bounds check of `xs[i]`; a hole, `[a, , c]`, skips a
+  position. An element past the end panics, `index out of range: 5 >= 3`
+  (`destructure_out_of_range`), where TypeScript would bind `undefined`: a
+  name in Nish always holds a value of its type.
+- **A `for...of` head** destructures each element of an array
+  (`destructure_for_of`). Over a `Set` or an iterator it is NL2785
+  (`reject_destructure_for_of_set`). Over a `Map` it is NL2375, the
+  refusal any `for...of` over a `Map` gets, before the pattern is read: a
+  `Map`'s entries are `[key, value]` pairs of two types, a tuple, which this
+  version does not have (`reject_destructure_for_of_map`,
+  `reject_map_iter_entries`).
+- A name is a fresh local: `let` names may be assigned, `const` names may
+  not. A struct's fields are read through its pointer, so
+  `const { x } = p` on a stack-allocated `p` costs one load
+  (`destructure_stack`).
+- **The receiver.** Over a name or a field path (`p`, `xs`, `this`,
+  `o.pt`, `this.a.items`) each name is read straight off it, and the function
+  compiles to the body of its hand-written reads, so every rule about an
+  element of `o.items` applies to the pattern as to `o.items[0]`
+  (`reject_destructure_moved_field`). Any other receiver (a call, a
+  `for...of` element) is evaluated once into a hidden copy of its pointer,
+  which no rule names, as no rule names the call in `f()[0]`
+  (`reject_destructure_moved_call`): unoptimised that is one alloca and one
+  store more than the hand-written reads, and after `opt -O2` the bodies are
+  the same (`destructure_zero_cost`). A pattern works over `this`
+  in a method, in an arrow's or an async body, and in a C-style `for`
+  initialiser (`destructure_forms`).
+- **An empty pattern**, `const {} = p`, `const [] = xs` or `const [,] = xs`,
+  binds nothing; its receiver is still evaluated once, for any effect it has
+  (`destructure_empty`).
+
+Refused, each with its own diagnostic and test:
+
+| Pattern | Diagnostic | Test |
+| --- | --- | --- |
+| `[a, b] = xs`, `({ x } = p)`, `({ x: px } = p)` (assignment) | NL2773 `Destructuring assignment is not supported` | `reject_destructure_assignment`, `reject_destructure_assignment_object`, `reject_destructure_assignment_renamed` |
+| `{ x = 0 }`, `[a = 1]` (a default) | NL2774 | `reject_destructure_default`, `reject_destructure_default_array`, `reject_destructure_for_of_default` |
+| `[a, ...rest]`, `{ x, ...others }` | NL2775 | `reject_destructure_rest`, `reject_destructure_for_of_rest` |
+| `{ p: { x } }`, `[[a]]` (nested) | NL2776 | `reject_destructure_nested`, `reject_destructure_nested_object`, `reject_destructure_for_of_nested` |
+| `{ ["x"]: a }`, `{ "x": a }` | NL2777 | `reject_destructure_key`, `reject_destructure_key_computed` |
+| `{ default: d }` (a keyword key) | NL2778, the key is read as a field's name and no class has that field | `reject_destructure_key_keyword` |
+| `{ norm }` where `norm` is a method | NL2778, call it instead | `reject_destructure_method` |
+| `const { x }: Other = p` (an annotation the receiver does not match) | NL2185 ``Cannot initialize Other variable `{ x }` with Point`` | `reject_destructure_annotated` |
+| a name never read | NL2712, rename it ``{ y: _y }`` (a shorthand) or `_a` | `reject_destructure_unread` |
+| a value that may be absent, `Point \| null` or a `V \| undefined` from `Map.get` | NL2779, narrow it first | `reject_destructure_nullable`, `reject_destructure_undefined` |
+| a `Map` | NL2780, read each value with `get` | `reject_destructure_map` |
+| a `string` | NL2781, read each character by its index | `reject_destructure_string` |
+| an object pattern over a number | NL2782 | `reject_destructure_object_of_number` |
+| an array pattern over an object or a `Set` | NL2783 | `reject_destructure_array_of_object`, `reject_destructure_set` |
+| `let { x }: Point;` (no initializer) | NL2784 | `reject_destructure_uninitialized` |
+| a parameter, `({ x }: Point) => x` | `Destructured parameters are not supported` | `reject_param_destructured` |
+| a module constant | `Destructured constants are not supported` | `reject_const_destructured` |
+| `var [a] = xs`, `var { x } = p`, `for (var [a] of rows)` | NL1036 `` `var` is forbidden; use `let` or `const` ``, as for `var a` | `reject_destructure_var_array`, `reject_destructure_var_object`, `reject_destructure_var_for_of` |
+| `using [a] = xs`, `using { s } = scope()` | none of its own: as in TypeScript, `using` binds only a plain name, so `using [a]` reads a variable named `using` and `using {` is a syntax error | `reject_destructure_using_array`, `reject_destructure_using_object` |
+
+A pattern over `await` is refused with ``A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name``
+(`nl2193_destructuring_local`), but for the answers of
+`const [a, b] = await awaitAll(f(x), g(y))`
+([Async functions](#async-functions-async-and-await)).
 
 ### Expression statements
 
@@ -7358,7 +7964,9 @@ switch (node.kind) {
 
 - The discriminant is an **integer** (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`;
   so a `number` in the default mode but not under `--number-mode f64`) or a
-  numeric **`enum`** ([Enums](#enums)), which is an `i32` in the jump table.
+  **`enum`** of either kind ([Enums](#enums)), which is an `i32` in the jump
+  table: a string enum switches on its members' ordinals, never on their
+  strings.
   Any other type is `` `switch` requires an integer discriminant, got <type> ``
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
@@ -8516,7 +9124,7 @@ global too ([`nish:term`](#nishterm-terminal-input)).
 
 **[`nish:unsafe`](reference/nish-unsafe.md)** exports `uncheckedGet`,
 `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`,
-`readCString`, `readStruct`. They are **reached only through the import**
+`readCString`, `readStruct`, `cErrno`. They are **reached only through the import**
 ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 
 **[`nish:async`](reference/nish-async.md)** exports `spawn`, `awaitAll`,
@@ -8934,8 +9542,9 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 Two things the language otherwise never does are each a decision about one
 site: reading or writing an element without the bounds check, and letting a
 signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
-and two, `readCString` and `readStruct`, that read a C string or a C struct
-through a pointer nothing proves. A program reaches them only through an import, so every module that
+two, `readCString` and `readStruct`, that read a C string or a C struct
+through a pointer nothing proves, and an eighth, `cErrno`, that reads the
+errno a C call left. A program reaches them only through an import, so every module that
 gives up a check or defines a wrap says so at its top and every site that does
 is a call a reader can find.
 
@@ -8948,8 +9557,9 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
-| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
-| `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `readCString(p: CPtr): string` | a NULL test that panics `ffi-null`, then a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates; may panic | `ffi_owned_string`, `panics_ffi_read_cstring_null`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
+| `readStruct(p: CPtr): T` | a NULL test that panics `ffi-null`, then `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates; may panic | `ffi_struct_read`, `panics_ffi_read_struct_null`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
@@ -9002,10 +9612,11 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
-  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
-  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
-  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
+  its pointer for `NULL`, an `ffi-null` site no proof removes
+  (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
+  refuses a call to either in its scope. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -9067,9 +9678,15 @@ check for the whole vector, `i < len` and `i + N <= len`.
 
 - *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
   the element's address bitcast to `<N x T>*` and one `load` aligned to the
-  lane.
-- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
-  `simd_access_oob_negative`; `reject_simd_lane_type`.
+  lane, with the `!alias.scope`, `!noalias` and `!tbaa` of a scalar element
+  access of the lane type. The check is left out where the bounds proof
+  (`src/bounds.ts`, `judgeVectorAccess`) already knows every lane is in range:
+  `i` non-negative under a guard such as `i <= n - N` or `i + N - 1 < n` on the
+  array's length, or a literal index into an array of known length. A guard one
+  lane short proves nothing, and the access keeps its check.
+- *Tests:* `simd_access`, `simd_access_proven`, `simd_access_alias`,
+  `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`,
+  `simd_access_oob_guard`; `reject_simd_lane_type`.
 
 **`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
 It is a statement.
@@ -11742,6 +12359,7 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `filter(pred)` | arrays | `T[]` |
 | `some(pred)`, `every(pred)` | arrays | `boolean` |
 | `findIndex(pred)` | arrays | `number` |
+| `forEach(f)` | arrays | `void` |
 | `slice(start?, end?)` | arrays | `T[]` |
 | `length` | strings | `number` |
 | `charCodeAt(i)` | strings | `number` |
@@ -12080,15 +12698,30 @@ and parameters (`arr_sort_capture`), under the rule in [Function parameters](#fu
 
 #### Callback methods and `slice`
 
-`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
-and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
-a template of `std/array.ts`, which a call of one of those names loads, and the
-callback is a compile-time function parameter, so each callback gets an
-instantiation of its own whose loop calls it directly. `xs.map(f)` and
-`map(xs, f)` with `map` imported from `nish/array` are the same call and
-compile to one instance (`arr_map_template`). The template is picked by the
-callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
-`slice`, `sliceFrom` or `sliceAll` by the argument count.
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
+`xs.forEach(f)` and `xs.slice(...)` are lowered as `sort` is: the checker
+rewrites the call to a template of `std/array.ts`, which a call of one of those
+names loads, and the callback is a compile-time function parameter, so each
+callback gets an instantiation of its own whose loop calls it directly.
+`xs.map(f)` and `map(xs, f)` with `map` imported from `nish/array` are the same
+call and compile to one instance (`arr_map_template`). The template is picked by
+the callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`,
+and `slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+`xs.forEach(f)` answers `void`, so its answer cannot be bound
+(`reject_foreach_answer`), and its callback is written to answer nothing: a
+concise body such as `(x) => console.log(x)` or `(x) => ys.push(x)` is a
+statement, and what it computes is dropped. It compiles to a counted loop over
+the array with the callback inlined into its body, as `for...of` does, but the
+loop stops at the length the array had when the call began, as Node does,
+where `for...of` reads the length on every pass. With a callback that does not
+resize the array, `opt -O2` leaves the same instruction count for both: 18 on
+the `walk` function measured in
+[IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration). An arrow argument
+never assigns a name of the function it is written in (NL2586), and a
+`forEach` callback is no exception, so a running total is a `for...of` loop,
+whose body may assign it; the refusal says so (`reject_foreach_capture_sum`):
+`for (const x of xs) { sum += x }`.
 
 The callback takes the element, or the element and its index, as TypeScript
 allows. JavaScript passes a third argument, the array itself; Nish refuses a
@@ -12104,7 +12737,10 @@ Each method walks the array from index 0 and calls the callback once per
 element, in order, up to the length the array had when the call began, as
 `Array.prototype` does; `some`, `every` and `findIndex` stop at the first
 element that decides. A callback that shrinks the array ends the walk at the
-new length, where JavaScript goes on and skips the missing indices. `map` and
+new length, where JavaScript goes on and skips the missing indices. So a
+`forEach` callback that pushes onto its receiver does not visit what it
+pushed, one that stores ahead of the walk is handed the stored value, and one
+that pops stops the walk early, as Node does (`arr_foreach`). `map` and
 `filter` answer a new array, so writing into it does not touch the receiver;
 an element that is an `interface` record is stored inline and copied, so
 `filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
@@ -12137,10 +12773,10 @@ message reads `expected f64`. Neither conversion works in the other mode. An arr
 proof at the call removes, and `--deny-panics` refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
-words, so the two agree on every input; `map`, `filter`, `some`, `every` and
-`findIndex` are the platform's own `Array.prototype` methods there, and an
-answer that holds records inline is copied with the runtime's `copyRecords`,
-as the native `push` copies.
+words, so the two agree on every input; `map`, `filter`, `some`, `every`,
+`findIndex` and `forEach` are the platform's own `Array.prototype` methods
+there, and an answer that holds records inline is copied with the runtime's
+`copyRecords`, as the native `push` copies.
 
 ### Bulk writes: `set` and `fill`
 
@@ -12237,7 +12873,7 @@ whole.
   length the bounds proof holds.
 - **A window into a buffer is `(buf, offset, length)` by convention**, not a
   view type: a second array layout would be one every array path in the emitter
-  has to handle ([wp34-hosting-cs.md](wp34-hosting-cs.md) §4 N2).
+  has to handle ([wp34-network-stack.md](wp34-network-stack.md) §4 N2).
 
 The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2): `fill` is
 **class A** — a `u8[]` is a plain `Array` under Node, and `Array.prototype.fill`
@@ -12260,8 +12896,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
-  passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`,
+  `forEach`, `slice`, passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -12549,17 +13185,43 @@ export const main = (): i32 => {
 ```
 
 - **The members are JavaScript's, less what this version defers.** A `Map` has
-  `size`, `get`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
-  `has`, `delete` and `clear`. `set` and `add` answer the receiver, so they
-  chain, and `delete` answers whether the key was there
-  (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
-  `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
+  `size`, `get`, `set`, `has`, `delete`, `clear` and `forEach`; a `Set` has
+  `size`, `add`, `has`, `delete`, `clear` and `forEach`. `set` and `add`
+  answer the receiver, so they chain, and `delete` answers whether the key was
+  there (`tests/cases/map_key_str`, `set_str`). `size` is a read-only
+  `number`: `` `size` of `Map<string, i32>` is read-only ``
+  (`reject_map_size_assign`).
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
-  iterable of a `for...of`, below. There is no `entries` or
-  `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`,
-  `reject_map_iter_entries_call`). Everything else in the
+  iterable of a `for...of`, below. There is no `entries`, because a `[key, value]`
+  pair is a two-type tuple (`reject_map_entries`,
+  `reject_map_iter_entries_call`):
+  `m.forEach((value, key) => ...)` visits each key with its value.
+- **`forEach` is the `for...of` walk with the callback inlined.**
+  `m.forEach(f)` on a `Map` calls `f` with each value, and with its key too
+  when `f` is written with two parameters, value first, as JavaScript does;
+  `s.forEach(f)` on a `Set` calls `f` with each element. The checker rewrites
+  the call to a template of `std/collections.ts` (`forEachEntry`,
+  `forEachValue`, `forEachElement`), whose body is the same walk as
+  `for...of` over the table, below: the same insertion order, an entry set
+  during the walk visited and one deleted before the walk reaches it not, and
+  `clear` ending it (`map_foreach`, `set_foreach`). It allocates nothing and
+  looks no key up, where `for (const k of m.keys())` with `m.get(k) ?? 0`
+  calls `Map.probe` and takes the nullish branch once per key, and rewinds
+  the arena on every pass: under `opt -O2`, 92 instructions against 112 for
+  a `Map` and 78 against 89 for a `Set`
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration)). JavaScript passes
+  a `Map`'s callback the map as a third argument, and a `Set`'s callback the
+  element twice and the set third; Nish refuses a callback written with more
+  than two parameters on a `Map` (NL2771, `reject_map_foreach_third_param`)
+  or more than one on a `Set` (NL2772, `reject_set_foreach_second_param`),
+  since the receiver is the one the call already names. The callback follows the array callbacks' rules
+  above: a top-level function or an arrow written at the call
+  (`reject_map_foreach`), at least one parameter, an answer of `void`, no
+  assignment to a name of the function around it (NL2586), and `m.forEach`
+  named without a call is refused (`reject_map_foreach_uncalled`). An arrow
+  inside another arrow reads only its own parameters, so a nested walk goes
+  through a top-level function (`set_foreach`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
   `reject_map_internal_method`, `reject_set_set`).
@@ -12919,7 +13581,7 @@ export const main = (): i32 => {
     | anywhere else, a dropped result or an uncalled `m.keys` included | `` can only be the iterable of a `for...of` `` | `reject_map_iter_statement`, `reject_map_iter_uncalled`, `reject_map_values` (NL2358) |
 
     `for (const e of m)` over a `Map` itself would walk `entries()`, whose
-    `[key, value]` pairs need destructuring:
+    `[key, value]` pairs are two-type tuples:
     `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
     rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
     It reports once: the variable is an error that its body reads without a
@@ -13030,6 +13692,7 @@ export const main = (): i32 => {
   | `i32`, `u32`, `i64` | an integer written without a fraction or an exponent, in the type's range | `d.i32()`, `d.u32()`, `d.i64()` | `w.i32`, `w.u32`, `w.i64` |
   | `u64` | an integer written in digits alone, with no sign, fraction or exponent, up to 2^64 - 1 | `d.u64()`, through the tokenizer's `numberU64` | `jsonEncodeU64` |
   | a numeric `enum` `E` | the number of one of `E`'s members | `d.i32()`, then a `switch` over the members' values | `w.i32` |
+  | a [string `enum`](#string-enums) `E` | the string of one of `E`'s members | `d.enumString()`, then the string's bytes against the members' strings | `w.string` of the member's string |
   | `f64` (and `number` under `--number-mode f64`) | any number; past the double range an infinity, which the writer writes as `null` | `d.f64()` | `w.f64` |
   | `boolean` | `true`, `false` | `d.boolean()` | `w.boolean` |
   | `string`, `string \| null` | a string, and `null` for the second | `d.string(cur)` | `w.string`, `jsonEncodeStringOrNull` |
@@ -13046,15 +13709,19 @@ export const main = (): i32 => {
   `json_reject_map_value_class`; `i32[][]`, `json_reject_nested_array`, and
   `Level[][]`, `json_reject_enum_nested_array`; a generic class of the
   program's own, `json_reject_generic_field`). The message goes on to name the
-  kinds added since: `` a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
+  kinds added since: `` a `u64` and an enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
   A JSON object's keys are strings, so a `Map` keyed by anything else is
   refused, an enum included (`json_reject_map_key`, `json_reject_map_key_enum`),
   and so is a map whose values typed JSON cannot write, at any depth
   (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
   array of maps are refused as well (`json_reject_set_field`,
-  `json_reject_map_array`). An enum whose members are strings, or a mix of
-  strings and numbers, is not one the language declares at all
-  (NL1043, `json_reject_enum_string`, `json_reject_enum_mixed`), and a
+  `json_reject_map_array`). A `Map` keyed by a string enum is refused with
+  the rest (`json_reject_map_key_enum_string`): a map's keys are read and written as `string`s, and a string
+  enum is not one. An enum that mixes strings and numbers is not one the
+  language declares at all (NL1043, `json_reject_enum_mixed`), an enum is
+  never `| null`, numeric or string, so a `Role | null` field is refused where
+  it is written (NL2010, `json_reject_enum_nullable`) while a `Role[] | null`
+  is a field like any other, and a
   `const enum` is refused where it is declared (NL2285,
   `json_reject_const_enum`). A value that is not a declared class is
   `` `jsonEncode`'s value is `Point`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version ``
@@ -13074,7 +13741,7 @@ export const main = (): i32 => {
 
   | Outcome | Code | `errorAt` |
   | --- | --- | --- |
-  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for an enum | `JSON_DECODE_TYPE` (-20) | the value |
+  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for a numeric enum, a string that is no member's value, or a value that is not a string, for a string enum | `JSON_DECODE_TYPE` (-20) | the value |
   | a number its field cannot hold: a fraction or an exponent for an integer, or out of range, a negative number (`-0` included) for a `u64` | `JSON_DECODE_RANGE` (-21) | the number |
   | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
@@ -13095,13 +13762,25 @@ export const main = (): i32 => {
   read. After an error every field of `out` holds a value of its type, some
   decoded and some as they were: an enum field or element never holds a
   number that is no member's, because such a number is not stored.
-- **An enum is its number.** A numeric enum is read with `d.i32()`, so a
+- **A numeric enum is its number.** It is read with `d.i32()`, so a
   number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
   an integer that is not the value of one of its members is
   `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
   too. Two members of one value are one number (`tests/link/std_json_typed`,
   "enum: two members of one value both read 1"). It is written as `w.i32` of
   its value, as `JSON.stringify` writes a TypeScript numeric enum.
+- **A string enum is its member's string.** It is read with
+  `d.enumString()`, which takes the value as a string without copying it,
+  and its bytes are matched against the members' strings the way a key is
+  sent to its field: by length, then by one byte, then with `keyIs`, so the
+  read allocates nothing, and an escaped string, `"\u0061dmin"`, is the
+  member its unescaped bytes spell. A string that is no member's, a prefix of
+  one included, and a value that is not a string are `JSON_DECODE_TYPE`, and
+  the field or element keeps the member it held. It is written as `w.string`
+  of the member's string, which is what `JSON.stringify` writes for a
+  TypeScript string enum (`tests/link/json_enum_string`;
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)). A field, an array, a
+  `| null` array and a `Map<string, Role>`'s values are read and written so.
 - **A `u64` is exact to 2^64 - 1.** It is read through the tokenizer's
   `numberU64`, so `18446744073709551615` decodes and `18446744073709551616`,
   `-1`, `-0` and `1.5` are `JSON_DECODE_RANGE`. It is written as its digits,
@@ -13248,7 +13927,7 @@ export const main = (): i32 => {
   or the value of `jsonEncode` may be a [discriminated union](#discriminated-unions)
   whose variants are all declared classes, and the union is written as the
   variant's object with its tag key first, the tag's value the name of its
-  enum member:
+  enum member, or for a [string enum](#string-enums) the member's string:
 
   ```typescript
   enum Kind { Num, Neg }
@@ -13269,14 +13948,18 @@ export const main = (): i32 => {
   jsonEncode(w, e);                      // the same text back
   ```
 
-  A variant's `tag` option replaces its member's name on the wire, and
+  With `enum Kind { Num = "num", Neg = "neg" }` the same union writes
+  `"kind":"num"`, and `Neg`'s `tag` still writes `"negate"`
+  (`tests/link/json_enum_string`). A variant's `tag` option replaces its
+  member's name or string on the wire, and
   `rename` renames the tag key as it renames any field. Every variant writes
   its tag under one key and as a different string, or the union is refused
   where a call reaches it (NL2721, `json_reject_union_tag_key`; NL2720,
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
   NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
   type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
-  `tag: ""` is the same as no `tag`: the variant writes its member's name. A
+  `tag: ""` is the same as no `tag`: the variant writes its member's name,
+  or string. A
   `tag` on a class that has such a field but that no union holds is not
   refused and does nothing: the class compiles while no JSON call reaches it,
   and one that does refuses the field (below). A variant
@@ -13377,7 +14060,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
-| `unsafe` | the seven `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call") |
+| `unsafe` | the eight `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct`, `cErrno` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,
@@ -13580,6 +14263,25 @@ without one grants the capability whole, as before:
   `process.spawn=<program>` grant allows, null when none is named:
   `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
   The four-operand call in "The sandbox" below predates it.
+- `process.spawn=exec:<program>` grants the program as `process.spawn=<program>`
+  does, and lets it start others: under `--sandbox` a granted program is held
+  to its own start (no program it starts may exec again), and an `exec:` one
+  is not, so its subtree may run anything the allowlist's EXECUTE reaches, its
+  loaders included. The prefix is read before the program is resolved:
+  `process.spawn=exec:` with no program is NL3046
+  (`caps_dep_manifest_spawn_exec_refused`); the literal check treats
+  `exec:<program>` as `<program>` (`caps_dep_arg_spawn_exec_too_narrow`,
+  `caps_dep_spawn_exec_granted`); a program granted both ways is `exec:`; and
+  the lockfile records the prefix, so adding it is NL2593
+  (`caps_dep_lock_spawn_exec_widened`). The program is
+  listed with three leading slashes, the same file to the kernel. For
+  `tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`, on an
+  x86_64 glibc machine (illustrative: the paths, the loader and the length
+  are the machine's; `tests/run.js` pins only the `///` entry for `env`):
+
+  ```llvm
+  @.sandbox.exec = private unnamed_addr constant [78 x i8] c"///usr/bin/env\00/usr/bin/true\00//usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"
+  ```
 
 ##### The capability lockfile
 
@@ -14036,7 +14738,15 @@ where its memory lives and when it is reused.
    pushed, assigned to another variable (`let q = p` included), held by a
    reassigned `let`, or passed to a callee that captures it
    (`tests/cases/mem_stack_escape`). A site inside a loop gets one slot,
-   reused every iteration (`tests/cases/mem_stack_loop`). Stack arrays are
+   reused every iteration (`tests/cases/mem_stack_loop`). A `Result` is the
+   exception to "held by a reassigned `let`": an `Ok`/`Err`, or a call
+   returning a by-value `Result`, assigned to a `let` of the same function
+   goes where that `let` goes, so a `let r = Ok(n)` assigned again keeps its
+   function's arena scope. Outside a loop each such site is its own alloca;
+   inside one it is arena memory the scope gives back. A `let` assigned from
+   itself (`r = c ? r : Ok(0)`) keeps the arena answer
+   (`tests/cases/res_let_reassign`, whose 100000 calls leave `Arena.used()`
+   unchanged). Stack arrays are
    capped at 4096 bytes of data; a later `push` moves the elements to the
    arena and the header stays valid. The slot's type spells the length out,
    and the length is read from the literal that made the site stackable in the
@@ -14334,7 +15044,7 @@ by the caller.
   checked when one of its instantiations is finished, and the padding rule below
   is decided a whole pass earlier than the others
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
-  The thirteen below each name the rewrite; the class also holds NL9012, a
+  The fourteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
   ([Data parallelism](#data-parallelism-nishthreads)), and the retired NL9014
   and NL9015, which noted the removed `--unchecked-indexing` and `--wrapping`:
@@ -14369,7 +15079,9 @@ by the caller.
     nothing and has no rewrite — that function still loses its arena scope and
     still retains its memory, silently, unless it earns the scope through its
     callees ([Memory model](#memory-model), item 2), which is a known gap
-    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
+    rather than a guarantee ([wp6-memory.md](wp6-memory.md), "Left out") —
+    a `let` holding a `Result` is no longer in it ([Memory model](#memory-model),
+    item 1); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; when the value being dropped may already be reachable from
@@ -14377,7 +15089,8 @@ by the caller.
     enclosing loop, or one that finishes before the assignment starts, leaves
     the old value reachable and the `const` rewrite inapplicable (a capture is
     the value passed to a call or a constructor, either arm of a conditional
-    included, a method called on it unless it is a string or an array, a
+    included, a method called on it unless it is a string, an array or a
+    `Result`, whose methods hand back a flag or the payload and never the box, a
     `return`, an element of an array or object literal, or the right-hand side
     of an assignment or a declaration); or when the
     quadratic-string rule is already reporting the same line
@@ -14392,7 +15105,10 @@ by the caller.
     `last = \`item ${i}\`` peaked at 392 MB where the rewrite peaks at 11 MB.
     The hints are a `const` inside the loop when only the pass reads the value,
     or numbers kept across passes and the value built once after the loop
-    (`tests/cases/perf_arena_pass_drop`). Reported whatever the local was
+    (`tests/cases/perf_arena_pass_drop`). An `Ok(...)` or `Err(...)` inside
+    a loop is such an allocation unless its `Result` is passed by value, so a
+    `let r` given a new one on every pass is reported, and so is one assigned
+    over another inside the pass (NL9003). Reported whatever the local was
     declared holding and whatever the function returns, since the dropped
     values are this assignment's own; a line the rule above already reports is
     its alone. Not reported for an assignment inside a branch, which may run
@@ -14428,6 +15144,133 @@ by the caller.
     when the result is returned, stored, pushed or passed on; or in a loop
     whose pass can `return` what it allocated, which no bracket could
     release, so there is no rewrite to name.
+  - **a pass of an unbounded loop that keeps what it allocates** (NL9018) —
+    an allocation that `--emit-arena` marks `"accumulates":true`, where some
+    loop between it and its release has nothing bounding how many passes it
+    runs. `"accumulates"` means the allocation runs on every pass of a loop
+    that releases nothing per pass, and nothing reaches it once the pass ends.
+
+    That is the shape of a request loop on `Http1Server`. Its pass calls
+    `accept` or `respond`, which store into the server's memory, so the pass
+    is refused its scope. A reply string built in the handler then stays
+    allocated for as long as the server runs:
+    `tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests,
+    and the rewrite grew none.
+
+    A loop is bounded, and NL9018 stays silent for it, when one of these
+    holds:
+
+    - It is a `while`, `do` or `for` whose condition has an order comparison
+      (`<`, `<=`, `>`, `>=`) as a conjunct of its top-level `&&` chain. The
+      condition must call nothing but the numeric conversions (`toI32` and
+      its kin), and read nothing but locals, fields (`.length` among them)
+      and constants. A call to any function of the program or of `std/`
+      anywhere in the condition makes the loop unbounded.
+    - It is a `for...of` whose body cannot extend the collection it walks:
+      an array or a map, named by a local or a field path such as
+      `log.items`. The body extends it only through the same walked
+      expression, by one of these:
+      - adding to it: `push`, `unshift`, `splice`, `set` or `add` on it, or
+        a write through `walked[k]`;
+      - `++` or `--` on it, or spreading it;
+      - passing it to a call or a `new` whose callee may resize an array,
+        or that goes through a function reference;
+      - assigning it, or storing it in a variable, field, array or object.
+
+      Any other use leaves the walk bounded, and so does a call in the body
+      that resizes some other array.
+
+    Every other loop is unbounded:
+    - `while (true)` and `for (;;)`;
+    - a flag with no comparison (`while (running)`);
+    - equalities only (`while (a !== X && a !== Y)`);
+    - a top-level `||` (`while (next >= 0 || next === FULL)`);
+    - a call in the condition (`while (more(log))`,
+      `while (k < n && poll())`);
+    - a `for...of` whose body extends what it walks, as above;
+    - a bounded loop inside an unbounded one that releases nothing.
+
+    The rule has known blind spots. A comparison loop whose body never
+    moves toward its bound still counts as bounded. So does a `for...of`
+    whose collection grows by a way the rule does not follow: through an
+    alias (`const a = q; for (const x of q) a.push(x)`), through a method
+    that grows `this.items` while it is walked, or when the walked
+    expression is not a local, `this` or a field path (a call result or an
+    index expression).
+
+    There is at most one warning per loop, at the innermost loop whose pass
+    releases nothing. It names:
+    - the first site and its kind, and how many more there are;
+    - where the memory goes back;
+    - why the pass has no scope;
+    - the rewrite.
+
+    The rewrite moves the per-pass work that builds the temporary into a
+    block inside the loop body that opens with
+    [`using a = arena()`](#using-a--arena). The compiler refuses that block
+    (NL2416 and its family) if anything allocated there could outlive it
+    (`tests/cases/perf_arena_unbounded_pass`).
+
+    Only a temporary the pass drops counts. These do not: an array a `push`
+    grows, a value stored or passed on, and a call to a function that stores
+    what it allocates. A temporary handed to a callee that keeps it is passed
+    on, so it is not counted. A temporary from which every path leaves the
+    loop, by `return`, `throw` or a `break` out of it, is built at most once
+    each time the loop runs, so it is not counted either. Inside nested
+    loops it has to leave every unbounded loop out to where its memory is
+    released, not only the innermost: an unlabelled `break` ends only its
+    own loop, so a temporary that breaks out of a `for...of` inside a
+    `while (poll())` still counts, while a `return` or a `break` to a label
+    on the outer loop leaves both. The walk that proves it gives up at a
+    `switch`, a `try` or a nested loop, so a temporary that a `return`
+    inside a `switch` leaves with still counts.
+
+    Not reported for:
+    - a bounded loop;
+    - the same temporary inside the block;
+    - a loop whose pass takes its scope;
+    - a site NL9002, NL9003, NL9011 or NL9016 already reports, as the value
+      of the assignment or the call that warning sits on
+      (`tests/cases/perf_arena_unbounded_quiet`).
+
+    It reads the `"accumulates"` fact `--emit-arena` prints, then keeps only
+    the temporaries a pass drops, and changes no byte of the IR.
+  - **a function that keeps memory on every call** (NL9019) — a function
+    that keeps an allocation of its own past the call (a local assigned more
+    than once, or an array of its own; a value it only hands to a function's
+    parameter does not count, nor does one it only places in an array or
+    object literal that is itself handed to a parameter or to `spawnSync`, or
+    only reads in place, as in `[a, b].join(",")`), so that it has no arena
+    scope of its own, and that a loop pass which releases nothing calls
+    directly. Every pass adds the allocation the call kept, and nothing
+    releases it while the loop runs. Reported once, at the function's
+    declaration, naming the line of the first allocation it holds; the hints
+    are a `const` per value, a block that opens with
+    [`using a = arena()`](#using-a--arena) around the work, or a region for
+    what must outlive the call (`tests/cases/perf_kept_memory`). The rule
+    counts passes, not their number: a short fixed loop such as
+    `for (let i = 0; i < 3; i++)` warns as an unbounded one does. Not reported
+    when the function returns a value that is not a number, a boolean, an enum
+    or nothing, because then its caller owns the memory; when it manages the
+    arena itself, feeds tasks, or fills a parameter; when it is a
+    constructor reached by `new`; or when every loop that calls it releases
+    what it kept — a pass with a scope of its own, or a call inside a
+    `using a = arena()` block. A loop nested in such a block, or in a pass of
+    an outer loop that has a scope of its own, counts as released, because
+    the memory goes back when that block or pass ends: a block around a loop
+    that never ends silences the warning without bounding the growth. Only a loop's direct callees are
+    judged, each on its own allocations: memory kept deeper in the chain,
+    behind a direct callee that answers memory, is not this warning's, and
+    [`--explain-memory`](#explaining-kept-memory) lists it
+    (`tests/cases/perf_kept_memory_quiet`). No call is excused for the object
+    it receives: a function that does its work once, behind a guard on a
+    field (`if (s.ready) return; s.ready = true`), still warns when it keeps
+    an array of its own, because the rule does not prove which object reaches
+    it on each pass; open a block with `using a = arena()` around that work
+    (`tests/cases/perf_kept_memory_direct`). A value handed to a callee's
+    parameter is not counted as kept even when the callee stores it into
+    something older (`add(list, makeItem())`): this rule does not report
+    that retention.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
@@ -15032,12 +15875,16 @@ holds a NUL byte, which C would read as the end of the string:
 is `NULL`:
 `` `name` returned NULL for a `string` result; declare it `string | null` ``;
 or the pointer of a [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)
-call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``
+call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``;
+or the pointer of a
+[`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) call that is
+`NULL`: `` `readCString` read a NULL pointer ``
 
 - *What proves it away:* nothing: a result declared `string | null` reads
   `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`); the
-  `readStruct` test stays at every call
-  (`tests/cases/panics_ffi_read_struct_null`)
+  `readStruct` and `readCString` tests stay at every call
+  (`tests/cases/panics_ffi_read_struct_null`,
+  `tests/cases/panics_ffi_read_cstring_null`)
 
 **`ffi-length`**: a call to a
 [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is
@@ -15067,12 +15914,11 @@ through further calls
 
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
-behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated (`readStruct` tests its pointer for `NULL`, so it is an
-`ffi-null` site below)
+behaviour (`readCString` and `readStruct` test their pointer for `NULL`, so
+each is an `ffi-null` site above)
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
-  author's word that the index is in range, or that the pointer is, not a
+  author's word that the index is in range, not a
   proof, and the `nish:unsafe` import its module must write is the opt-in to
   that word, so it is listed with `"allowed": true` and, like `oom`, never
   makes a function one that may panic (`tests/cases/deny_panics_unsafe`)
@@ -15203,7 +16049,7 @@ performance warning about the same check is not printed beside the error.
 A program that runs for a long time, a server above all, cannot afford memory
 that stays allocated after nothing can reach it: in a command-line tool it is
 returned when `main` does, and in a server it grows until the process is
-killed. Four performance warnings are exactly that finding, and
+killed. Six performance warnings are exactly that finding, and
 **`--deny-retention`** makes each of them an error (NL2462) in the program's own
 modules:
 
@@ -15213,19 +16059,24 @@ modules:
 | NL9003, an allocation dropped by an assignment | the value the local held |
 | NL9011, a loop that leaves a callee's memory behind | what the callee left on every pass |
 | NL9016, an allocation dropped on every pass | the value each pass replaced |
+| NL9018, a pass of an unbounded loop that keeps what it allocates | the temporary each pass built, for as long as the loop runs |
+| NL9019, a function that keeps memory on every call | what each call a loop makes keeps |
 
 - **The error keeps the warning.** Its text is the warning's, after the code of
   the rule that found it, so it names the same rewrite:
   `` `--deny-retention` refuses this NL9016 finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more: `last` is given a new allocation on every pass of this loop … ``
   (`tests/cases/reject_deny_retention_pass_drop`, `reject_deny_retention_drop`,
-  `reject_deny_retention_loop`, `reject_deny_retention_concat`). The warning it
+  `reject_deny_retention_loop`, `reject_deny_retention_concat`,
+  `reject_deny_retention_unbounded_pass`, `reject_deny_retention_kept`, and for
+  a `Result` assigned over another, `reject_deny_retention_result_drop` and
+  `reject_deny_retention_result_reassign`). The warning it
   restates is not printed as well, and `--no-warn-performance` does not
   silence the error.
 - **The program's own modules only.** A module of the root package is held to
   it; a dependency's warnings stay warnings, as its panic sites stay outside
   the [no-panic scope](#the-no-panic-scope), because the program's author
   cannot change that code (`tests/link/deny_retention_dependency`).
-- **What it does not promise.** The four warnings are conservative in the
+- **What it does not promise.** The five warnings are conservative in the
   direction of silence: each fires only where the compiler can name the memory
   and the rewrite, so a program it accepts can still retain memory in a shape
   no rule recognises ([wp6-memory.md](wp6-memory.md), "Left out"). Nor does it
@@ -15326,6 +16177,9 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   listed on its own line — both, when both do — because it runs outside the
   bracket a pass takes whether or not the body has one; a `do...while`
   condition's line follows the lines of the loops in its body.
+- **A listed loop with no bound** — one that is not bounded, by NL9018's rule — is
+  the loop NL9018 warns about when what its pass keeps is a temporary the
+  pass drops; the report lists it either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not, nor is a constructor,
@@ -15417,10 +16271,10 @@ fragment `tests/run.js` matches and the case that proves it.
   (`reject_async_method`)
 - **`var`**: `` `var` is forbidden; use `let` or `const` ``
   (`reject_var_keyword`, `reject_var_in_for`)
-- **enum members that are not numeric literals**:
-  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
-  (`reject_enum_string`, `reject_enum_computed`; the numeric form compiles
-  ([Enums](#enums)))
+- **enum members that are neither all numeric nor all string literals**:
+  `` Enum members must be numeric literals in Nish, or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings) ``
+  (NL1043, `reject_enum_string_mixed`, `reject_enum_computed`; the numeric
+  and the [string](#string-enums) forms compile ([Enums](#enums)))
 - **`namespace` / `module` blocks, `declare module "m"`**:
   `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) ``
   (`reject_namespace`, `reject_module_declared`)
@@ -15704,11 +16558,15 @@ messages are exact for the cases cited; other entries quote the checker
   `Functions must have a body` (`nl2204_function_without_body`)
 - **`export default function ()`**: `Functions must be named`
   (`reject_fn_anonymous`)
-- **a destructuring pattern, but for `const [a, b] = await awaitAll(…)`**:
+- **a destructuring pattern as a parameter or a module constant, over
+  `await` but for `const [a, b] = await awaitAll(…)`, or with a default, a
+  rest, a nested pattern or a computed key**:
   `Destructured constants are not supported` /
   `Destructured parameters are not supported` /
-  `Destructuring is not supported` (a local) (`reject_const_destructured`,
-  `reject_param_destructured`, `reject_destructure_local`)
+  ``A pattern may destructure an `await` only of `awaitAll(...)` …`` /
+  NL2773 to NL2785
+  (`reject_const_destructured`, `reject_param_destructured`,
+  `reject_destructure_*`; [Destructuring declarations](#destructuring-declarations))
 - **an optional parameter; a default or rest outside a function, method,
   constructor or `const` arrow; a spread argument**:
   `Optional parameters are not supported` /

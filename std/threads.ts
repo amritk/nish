@@ -783,6 +783,304 @@ export class AtomicI64 {
 }
 
 /**
+ * `length` `i32` counters in one contiguous buffer, each of which a scope's
+ * tasks and a parallel body may update together (docs/LANGUAGE.md,
+ * "Atomic arrays"). It is `AtomicI32` with the element's index first: each
+ * method checks `i` as an array index is checked, so an index out of range
+ * stops the program, and is then one indivisible operation on that element.
+ * Natively the compiler emits each body itself, as a sequentially consistent
+ * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on the element
+ * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+ * which is what runs under Node. `add` and `sub` wrap
+ * at 32 bits, as the native instruction does.
+ *
+ * Choose it over an `AtomicI32[]` when the counters are many or hot: an
+ * `AtomicI32[]` is one object per counter, each its own allocation, so
+ * neighbouring counters land on several cache lines; here they are adjacent
+ * `i32`s, as Rust's `[AtomicI32; N]` is. It reaches a task and a parallel body
+ * by the routes `AtomicI32` does, and is refused where it is.
+ */
+export class AtomicI32Array {
+  /** How many elements the array holds, fixed when it is made. */
+  readonly length: i32
+  /** The elements; named only by this class's methods, which the compiler emits. */
+  private values: i32[]
+
+  /**
+   * An array of `length` elements, each `0`.
+   *
+   * @param length how many elements; a negative one stops the program, as
+   *   `new Array` of one does.
+   */
+  constructor(length: i32) {
+    this.length = length
+    this.values = new Array<i32>(length)
+    this.values.fill(0)
+  }
+
+  /**
+   * Element `i`.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @returns the element at the moment of the read.
+   */
+  load(i: i32): i32 {
+    return this.values[i]
+  }
+
+  /**
+   * Sets element `i` to `value`.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the new value.
+   */
+  store(i: i32, value: i32): void {
+    this.values[i] = value
+  }
+
+  /**
+   * Adds `delta` to element `i`, wrapping at 32 bits, and answers the
+   * element before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param delta how much to add; a negative one subtracts.
+   * @returns the element just before the addition.
+   */
+  add(i: i32, delta: i32): i32 {
+    const old = this.values[i]
+    this.values[i] = wrappingAdd(old, delta)
+    return old
+  }
+
+  /**
+   * Subtracts `delta` from element `i`, wrapping at 32 bits, and answers
+   * the element before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param delta how much to subtract; a negative one adds.
+   * @returns the element just before the subtraction.
+   */
+  sub(i: i32, delta: i32): i32 {
+    const old = this.values[i]
+    this.values[i] = wrappingSub(old, delta)
+    return old
+  }
+
+  /**
+   * Keeps the smaller of element `i` and `value`, and answers the element
+   * before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the candidate, stored only when it is below the element.
+   * @returns the element just before the update.
+   */
+  min(i: i32, value: i32): i32 {
+    const old = this.values[i]
+    if (value < old) {
+      this.values[i] = value
+    }
+    return old
+  }
+
+  /**
+   * Keeps the larger of element `i` and `value`, and answers the element
+   * before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the candidate, stored only when it is above the element.
+   * @returns the element just before the update.
+   */
+  max(i: i32, value: i32): i32 {
+    const old = this.values[i]
+    if (value > old) {
+      this.values[i] = value
+    }
+    return old
+  }
+
+  /**
+   * Sets element `i` to `value` and answers the element before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the new value.
+   * @returns the value it replaced.
+   */
+  exchange(i: i32, value: i32): i32 {
+    const old = this.values[i]
+    this.values[i] = value
+    return old
+  }
+
+  /**
+   * Sets element `i` to `desired` if it is `expected`, and answers the value
+   * it saw.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param expected the value the update requires.
+   * @param desired the value stored when the element is `expected`.
+   * @returns the element seen before the update: `expected` exactly when the
+   *   update happened.
+   */
+  compareExchange(i: i32, expected: i32, desired: i32): i32 {
+    const old = this.values[i]
+    if (old === expected) {
+      this.values[i] = desired
+    }
+    return old
+  }
+}
+
+/**
+ * `length` `i64` counters in one contiguous buffer, each of which a scope's
+ * tasks and a parallel body may update together (docs/LANGUAGE.md,
+ * "Atomic arrays"). It is `AtomicI64` with the element's index first: each
+ * method checks `i` as an array index is checked, so an index out of range
+ * stops the program, and is then one indivisible operation on that element.
+ * Natively the compiler emits each body itself, as a sequentially consistent
+ * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on the element
+ * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+ * which is what runs under Node. Node holds each
+ * element as a `number`, so `add` and `sub` are `+` and `-` there, and agree
+ * with native while values stay within ±2^53; wrapping at 2^63 is native-only,
+ * as it is for `AtomicI64`.
+ *
+ * Choose it over an `AtomicI64[]` when the counters are many or hot: an
+ * `AtomicI64[]` is one object per counter, each its own allocation, so
+ * neighbouring counters land on several cache lines; here they are adjacent
+ * `i64`s, as Rust's `[AtomicI64; N]` is. It reaches a task and a parallel body
+ * by the routes `AtomicI64` does, and is refused where it is.
+ */
+export class AtomicI64Array {
+  /** How many elements the array holds, fixed when it is made. */
+  readonly length: i32
+  /** The elements; named only by this class's methods, which the compiler emits. */
+  private values: i64[]
+
+  /**
+   * An array of `length` elements, each `0`.
+   *
+   * @param length how many elements; a negative one stops the program, as
+   *   `new Array` of one does.
+   */
+  constructor(length: i32) {
+    this.length = length
+    this.values = new Array<i64>(length)
+    this.values.fill(0)
+  }
+
+  /**
+   * Element `i`.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @returns the element at the moment of the read.
+   */
+  load(i: i32): i64 {
+    return this.values[i]
+  }
+
+  /**
+   * Sets element `i` to `value`.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the new value.
+   */
+  store(i: i32, value: i64): void {
+    this.values[i] = value
+  }
+
+  /**
+   * Adds `delta` to element `i` and answers the element before; natively
+   * the sum wraps at 64 bits.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param delta how much to add; a negative one subtracts.
+   * @returns the element just before the addition.
+   */
+  add(i: i32, delta: i64): i64 {
+    const old = this.values[i]
+    this.values[i] = old + delta
+    return old
+  }
+
+  /**
+   * Subtracts `delta` from element `i` and answers the element before;
+   * natively the difference wraps at 64 bits.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param delta how much to subtract; a negative one adds.
+   * @returns the element just before the subtraction.
+   */
+  sub(i: i32, delta: i64): i64 {
+    const old = this.values[i]
+    this.values[i] = old - delta
+    return old
+  }
+
+  /**
+   * Keeps the smaller of element `i` and `value`, and answers the element
+   * before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the candidate, stored only when it is below the element.
+   * @returns the element just before the update.
+   */
+  min(i: i32, value: i64): i64 {
+    const old = this.values[i]
+    if (value < old) {
+      this.values[i] = value
+    }
+    return old
+  }
+
+  /**
+   * Keeps the larger of element `i` and `value`, and answers the element
+   * before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the candidate, stored only when it is above the element.
+   * @returns the element just before the update.
+   */
+  max(i: i32, value: i64): i64 {
+    const old = this.values[i]
+    if (value > old) {
+      this.values[i] = value
+    }
+    return old
+  }
+
+  /**
+   * Sets element `i` to `value` and answers the element before.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param value the new value.
+   * @returns the value it replaced.
+   */
+  exchange(i: i32, value: i64): i64 {
+    const old = this.values[i]
+    this.values[i] = value
+    return old
+  }
+
+  /**
+   * Sets element `i` to `desired` if it is `expected`, and answers the value
+   * it saw.
+   *
+   * @param i the element's index, from `0` to `length - 1`.
+   * @param expected the value the update requires.
+   * @param desired the value stored when the element is `expected`.
+   * @returns the element seen before the update: `expected` exactly when the
+   *   update happened.
+   */
+  compareExchange(i: i32, expected: i64, desired: i64): i64 {
+    const old = this.values[i]
+    if (old === expected) {
+      this.values[i] = desired
+    }
+    return old
+  }
+}
+
+/**
  * A channel of scalars or strings between a scope's tasks (docs/wp29-thread-surface.md
  * §4.4); a string is copied out of the sender's arena at `send` and into the
  * receiver's at the loop: `send` from the tasks that produce, `for (const x of ch)` in the one

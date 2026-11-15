@@ -127,12 +127,14 @@ the decoded bytes of the current key or string into the caller's array, and
 
 </scalar-detail>
 
-<scalar-detail title="Numbers are checked against the grammar and parsed on request">
+<scalar-detail title="Numbers are read in the pass that checks them against the grammar">
 
-`numberF64` is correctly rounded, ties to even, in one of three ways. A
-number of at most 19 significant digits is read into a `u64`. When that is at
-most 2^53 and the decimal exponent is within ±22, the answer is one exact
-multiply or divide of two exact doubles (Clinger's fast path).
+The scan adds the digits into a `u64` as it steps over them, eight at a time
+where eight digits fit before the window's end, and keeps that mantissa, the
+decimal exponent and the digit count for `numberF64`, which is correctly
+rounded, ties to even, in one of three ways. When the mantissa of at most 19
+digits is at most 2^53 and the decimal exponent is within ±22, the answer is
+one exact multiply or divide of two exact doubles (Clinger's fast path).
 
 Any other number of at most 19 digits is the Eisel–Lemire algorithm as
 fast_float computes it: one or two 64×64-bit products with a truncated power
@@ -186,8 +188,9 @@ the program that imports it and the symbol namespace is flat
 (`std/README.md`). Every offset is a byte offset, and every constant is an
 `i32`, so the module is the same under `--number-mode f64`
 (`docs/wp26-stdlib.md` §4). Written from RFC 8259 and RFC 3629, except
-`numberF64`'s Eisel–Lemire path and its table of powers of five, which are
-adapted from fast_float under the notice above `jsonTokW64`.
+`numberF64`'s Eisel–Lemire path, its table of powers of five and the scan's
+eight-digit reads, which are adapted from fast_float under the notice above
+`jsonTokW64`.
 
 ## Classes
 

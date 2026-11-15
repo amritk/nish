@@ -842,7 +842,7 @@ After the medians on the noisy host E cleared it (below), the fastest round was
 adopted as the estimator to judge on: on a shared host another tenant can only
 slow a CPU-bound round, never speed it up, so the fastest round is the robust
 one. Every bench script here prints both, the median with the spread of its
-rounds and the fastest round, and the maintainer kept the verdict on that
+rounds and the fastest round, and the verdict was kept on that
 basis. The band is the module timed against a byte-identical copy of itself
 (`unroll.mjs`), which here moved by up to 18% (five lanes, once) and otherwise
 by 8.4% or less.
@@ -928,8 +928,8 @@ told inside the noise: on F's fastest rounds the spill-free baseline
 
 The medians on F move each row's ratio by up to
 0.17 between two runs (`rorx-ah` 0.86 to 1.03), which is why they are not the estimator to judge
-on. The stop rule's outcome was put to the project's maintainer, who kept
-this verdict: no runtime kernel is built. A quiet run on a core of another
+on. The stop rule's outcome was reviewed, and this verdict was
+kept: no runtime kernel is built. A quiet run on a core of another
 family whose fastest rounds clear 20% twice would reopen it.
 
 `unroll.mjs`, rerun for this review on a noisy host at 2 to 6 lanes and nine

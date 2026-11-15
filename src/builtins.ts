@@ -33,7 +33,7 @@ import {
   netSignature,
   unsafeModule,
 } from "./nish-modules"
-import { N_CALL, N_IDENT, N_INDEX, N_MEMBER, N_PAREN, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { checkSimdCall } from "./simd"
 import { opaqueReferenceMessage } from "./fnrefs"
 import { routedBuiltinLocal } from "./std-modules"
@@ -433,7 +433,7 @@ const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name:
 }
 
 /**
- * A `nish:unsafe` function called by its global name. The six are declared
+ * A `nish:unsafe` function called by its global name. The eight are declared
  * as globals in `runtime/nish.d.ts`, as every `nish:` export is, but a
  * program reaches them only through the import: an unchecked index and a
  * defined wrap are each a decision about one site, and the import is what
@@ -517,11 +517,11 @@ const SUPPORTED_BUILTINS: string =
  * argument is left unchecked, as the call is refused either way.
  */
 const namesReference = (ctx: CheckContext, arg: Node, scope: Scope): boolean => {
-  if (arg.kind === N_MEMBER || arg.kind === N_INDEX) {
+  if (arg.kind === NodeKind.Member || arg.kind === NodeKind.Index) {
     const got = checkExpression(ctx, arg, scope, -1)
     return got !== T_ERROR && ctx.table.isFnRef(ctx.table.stripNull(got))
   }
-  if (arg.kind !== N_IDENT) {
+  if (arg.kind !== NodeKind.Ident) {
     return false
   }
   const local = scope.lookup(arg.text)
@@ -552,7 +552,7 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
   const access = call.children[0]
   const receiver = access.children[0]
   const args = call.children[1]
-  if (receiver.kind !== N_IDENT) {
+  if (receiver.kind !== NodeKind.Ident) {
     return ctx.errorType(call, "Only direct calls to named functions are supported")
   }
   const namespace = receiver.text
@@ -880,11 +880,11 @@ const checkCrypto = (
  * `readCString(p)`, from `nish:unsafe` (WP27 S3.3, `docs/wp27-ffi.md` §8e):
  * the `NUL`-terminated bytes at `p`, copied into the arena as a `string`.
  *
- * The argument is a `CPtr` and never a `CPtr | null`, so a null address cannot
- * reach the copy: the only `CPtr` a program holds came back from a C function,
- * and one that may be null is narrowed with `!== null` before it is accepted
- * here. What the type cannot say — that the address is a C string, and still
- * live — is why the call is in `nish:unsafe`.
+ * The argument is a `CPtr`, but a C function declared to answer a plain
+ * `CPtr` may still answer `NULL`, so the emitter tests the pointer first and
+ * panics with `ffi-null`, as `readStruct` does (`emitFfiNullTest`). What
+ * nothing can test — that the address is a C string, and still live — is why
+ * the call is in `nish:unsafe`.
  */
 const checkReadCString = (ctx: CheckContext, call: Node, scope: Scope, args: Node): i32 => {
   if (checkBuiltinArity(ctx, call, "readCString", args, 1)) {
@@ -923,6 +923,20 @@ const checkReadStruct = (ctx: CheckContext, call: Node, scope: Scope, args: Node
     )
   }
   return layout
+}
+
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5, `docs/wp27-ffi.md` §10): the errno
+ * the most recent `declare function` call on this thread left. Naming it is
+ * what makes every foreign call in the program zero errno before and save it
+ * after (`capturesErrno`); a freestanding wasm32 build has no libc and so no
+ * errno, and refuses it.
+ */
+const checkCErrno = (ctx: CheckContext, call: Node, args: Node): i32 => {
+  if (!refuseOnFreestandingWasm(ctx, call, "cErrno") && checkBuiltinArity(ctx, call, "cErrno", args, 0)) {
+    ctx.program.capturesErrno = true
+  }
+  return T_I32
 }
 
 // ---- Plain calls ----------------------------------------------------------------------
@@ -1000,6 +1014,9 @@ export const checkBuiltinFunctionNamed = (
     }
     if (name === "readStruct") {
       return checkReadStruct(ctx, call, scope, args, want)
+    }
+    if (name === "cErrno") {
+      return checkCErrno(ctx, call, args)
     }
     return name === "uncheckedGet" || name === "uncheckedSet"
       ? checkUncheckedAccess(ctx, call, scope, name, args)
@@ -1521,11 +1538,11 @@ const checkBuffer = (
  * Every caller asks after the expression has been checked.
  */
 export const terminatesControlFlow = (ctx: CheckContext, expr: Node): boolean => {
-  if (expr.kind !== N_CALL || ctx.program.nodeCallees[expr.id] !== null) {
+  if (expr.kind !== NodeKind.Call || ctx.program.nodeCallees[expr.id] !== null) {
     return false
   }
   const callee = expr.children[0]
-  if (callee.kind === N_IDENT) {
+  if (callee.kind === NodeKind.Ident) {
     // An import is unambiguous: `exit` from `nish:process` ends the path, and
     // so does an `as` rename of it, while an identifier that only looks like
     // one still has to pass the test below.
@@ -1535,7 +1552,7 @@ export const terminatesControlFlow = (ctx: CheckContext, expr: Node): boolean =>
     }
     return callee.text === "panic" && ctx.signature("panic") === null
   }
-  if (callee.kind !== N_MEMBER || callee.children[0].kind !== N_IDENT) {
+  if (callee.kind !== NodeKind.Member || callee.children[0].kind !== NodeKind.Ident) {
     return false
   }
   return callee.children[0].text === "process" && callee.text === "exit"
@@ -1551,21 +1568,21 @@ export const isArgvExpression = (ctx: CheckContext, expr: Node, scope: Scope): b
   // `(process.argv).push(...)` is the same write as `process.argv.push(...)`,
   // so the parentheses are stepped through rather than hiding it.
   let inner = expr
-  while (inner.kind === N_PAREN) {
+  while (inner.kind === NodeKind.Paren) {
     inner = inner.children[0]
   }
   // The same array under `import { argv } from "nish:process"`, where there is
   // no `process.` to match on. Read-only is a fact about the array the entry
   // wrapper built, not about how a module spells its name.
-  if (inner.kind === N_IDENT) {
+  if (inner.kind === NodeKind.Ident) {
     const imported = ctx.program.builtinImport(inner.text)
     return imported !== null && imported.canonical === "process.argv" && scope.lookup(inner.text) === null
   }
-  if (inner.kind !== N_MEMBER || inner.text !== "argv") {
+  if (inner.kind !== NodeKind.Member || inner.text !== "argv") {
     return false
   }
   const receiver = inner.children[0]
-  if (receiver.kind !== N_IDENT || receiver.text !== "process") {
+  if (receiver.kind !== NodeKind.Ident || receiver.text !== "process") {
     return false
   }
   // A local called `process` shadows the namespace, as it would in TypeScript.

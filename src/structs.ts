@@ -43,22 +43,8 @@ import {
   FLAG_READONLY,
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
-  N_CLASS,
-  N_CONSTRUCTOR,
-  N_EMPTY,
-  N_FALSE,
-  N_FIELD,
-  N_IDENT,
-  N_MEMBER,
-  N_METHOD,
-  N_NULL,
-  N_NUMBER,
-  N_STRING,
-  N_TEMPLATE,
-  N_TRUE,
-  N_TYPE_REF,
-  N_UNARY,
   Node,
+  NodeKind,
 } from "./nodes"
 import {
   CheckedProgram,
@@ -327,7 +313,7 @@ const declaredFieldCount = (iface: StructInfo): i32 => {
   }
   let count = 0
   for (const member of iface.decl.children[1].children) {
-    if (member.kind === N_FIELD) {
+    if (member.kind === NodeKind.Field) {
       count = count + 1
     }
   }
@@ -518,7 +504,7 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
 const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void => {
   for (const member of decl.children[3].children) {
     if (
-      member.kind === N_FIELD &&
+      member.kind === NodeKind.Field &&
       (member.flags & FLAG_STATIC) === 0 &&
       isHandleFieldAnnotation(member.children[1])
     ) {
@@ -547,21 +533,21 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
   // a number is not one, though both are an `i32`.
   const number = ctx.table.isFnRef(ctx.table.stripNull(want)) ? T_I32 : want
   switch (expr.kind) {
-    case N_NUMBER:
+    case NodeKind.Number:
       return number
-    case N_STRING:
+    case NodeKind.String:
       return ctx.table.stripNull(want) === T_STRING ? want : T_STRING
-    case N_TEMPLATE:
+    case NodeKind.Template:
       // A template with no holes is one text child, and is a plain string literal.
       return expr.children.length === 1 ? T_STRING : -1
-    case N_TRUE:
+    case NodeKind.True:
       return T_BOOL
-    case N_FALSE:
+    case NodeKind.False:
       return T_BOOL
-    case N_NULL:
+    case NodeKind.Null:
       return ctx.table.isNullable(want) ? want : -1
-    case N_UNARY:
-      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? number : -1
+    case NodeKind.Unary:
+      return expr.text === "-" && expr.children[0].kind === NodeKind.Number ? number : -1
     default:
       return -1
   }
@@ -582,7 +568,7 @@ const checkEnumInitializer = (
   notLiteral: string
 ): void => {
   const receiver = init.children[0]
-  const info = ctx.program.enumNamed(receiver.kind === N_IDENT ? receiver.text : "")
+  const info = ctx.program.enumNamed(receiver.kind === NodeKind.Ident ? receiver.text : "")
   if (info === null) {
     ctx.error(init, notLiteral)
     return
@@ -628,7 +614,7 @@ export const checkLiteralInitializer = (
   exact: boolean
 ): void => {
   const type = field.type
-  if (init.kind === N_MEMBER) {
+  if (init.kind === NodeKind.Member) {
     checkEnumInitializer(ctx, field, init, what, notLiteral)
     return
   }
@@ -641,7 +627,7 @@ export const checkLiteralInitializer = (
   } else if (ctx.table.isHostHandle(type)) {
     // A handle is the page's to give out: the one number a slot may start as
     // is `0`, the handle that names nothing, as for any other literal.
-    if (init.kind !== N_NUMBER || init.text !== "0") {
+    if (init.kind !== NodeKind.Number || init.text !== "0") {
       ctx.error(
         init,
         `${what} is ${ctx.table.typeName(type)}, and a handle starts as \`0\`, the handle that names nothing: every other one is given out by the page`
@@ -650,7 +636,7 @@ export const checkLiteralInitializer = (
   } else if (initType === type && ((exact && isNumeric(type)) || ctx.table.isRanged(type))) {
     // The literal is stored as written, so it has to be one of the type's
     // values: a whole number for an integer, inside a range's bounds (WP31 §6).
-    const negated = init.kind === N_UNARY
+    const negated = init.kind === NodeKind.Unary
     checkNumericLiteral(ctx, negated ? init.children[0] : init, type, negated, init)
   }
 }
@@ -715,7 +701,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   // and the escape analysis walks (`src/annotations.ts`).
   if (owner.handle && ctx.table.stripNull(type) === T_CPTR) {
     const sole = name === owner.handleField && isHandleFieldAnnotation(decl.children[1])
-    if (!sole || (decl.flags & FLAG_READONLY) === 0 || decl.children[2].kind !== N_EMPTY) {
+    if (!sole || (decl.flags & FLAG_READONLY) === 0 || decl.children[2].kind !== NodeKind.Empty) {
       ctx.error(decl.children[1], handleFieldMessage(owner.name))
       return
     }
@@ -741,7 +727,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   field.readonly = (decl.flags & FLAG_READONLY) !== 0
   field.spelling = annotationSpelling(ctx, true, decl.children[1])
   const initializer = decl.children[2]
-  if (initializer.kind !== N_EMPTY) {
+  if (initializer.kind !== NodeKind.Empty) {
     const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
     checkLiteralInitializer(ctx, field, initializer, what, notLiteral, false)
     // The field keeps its initializer even when that initializer was refused.
@@ -797,7 +783,7 @@ const collectHandleDispose = (ctx: CheckContext, owner: StructInfo, decl: Node):
     if (member === decl) {
       break
     }
-    if (member.kind === N_METHOD && member.children[0].text === DISPOSE_METHOD) {
+    if (member.kind === NodeKind.Method && member.children[0].text === DISPOSE_METHOD) {
       ctx.error(decl.children[0], `Duplicate member \`${DISPOSE_METHOD}\` in class \`${shown}\``)
       return
     }
@@ -876,7 +862,7 @@ export const collectMethodSignature = (
   sig.role = ROLE_METHOD
   collectParams(ctx, sig, decl.children[1], owner.type, false)
   const returnAnnotation = decl.children[2]
-  if (returnAnnotation.kind === N_EMPTY) {
+  if (returnAnnotation.kind === NodeKind.Empty) {
     // The pass 1 sweep has refused it (NL2096, `refuseUnsupportedForms`).
     sig.returnType = T_ERROR
   } else {
@@ -1000,7 +986,7 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     )
     return
   }
-  if (decl.children[2].kind !== N_EMPTY) {
+  if (decl.children[2].kind !== NodeKind.Empty) {
     ctx.error(decl.children[2], `${what} cannot have an initializer: \`new\` zero-fills a C struct`)
     return
   }
@@ -1055,8 +1041,8 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
 const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
   const decl = info.decl
   info.laying = true
-  if (decl.children[1].kind !== N_EMPTY || decl.children[2].children.length > 0) {
-    const clause = decl.children[1].kind !== N_EMPTY ? decl.children[1] : decl.children[2].children[0]
+  if (decl.children[1].kind !== NodeKind.Empty || decl.children[2].children.length > 0) {
+    const clause = decl.children[1].kind !== NodeKind.Empty ? decl.children[1] : decl.children[2].children[0]
     ctx.error(
       clause,
       `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
@@ -1064,15 +1050,15 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
     info.poisoned = true
   }
   for (const member of decl.children[3].children) {
-    if (member.kind === N_FIELD) {
+    if (member.kind === NodeKind.Field) {
       collectLayoutField(ctx, info, member)
     } else {
       // An index signature or a `static` block is neither, and a C struct has
       // no member of its kind either.
       let word = "a member other than a field"
-      if (member.kind === N_CONSTRUCTOR) {
+      if (member.kind === NodeKind.Constructor) {
         word = "a constructor"
-      } else if (member.kind === N_METHOD) {
+      } else if (member.kind === NodeKind.Method) {
         word = "a method or accessor"
       }
       ctx.error(
@@ -1126,7 +1112,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
   let prefix: StructInfo | null = null
   if (info.kind === STRUCT_CLASS) {
     const extendsName = decl.children[1]
-    if (extendsName.kind !== N_EMPTY) {
+    if (extendsName.kind !== NodeKind.Empty) {
       // WP25. The rule lives in the checker rather than in Phase 0 because
       // inheritance needs nothing Phase 0 exists to refuse — it compiled until
       // WP25 — and the message names the rewrite, the way a removed spelling's
@@ -1149,7 +1135,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       // type parameter is never a type in this implementation.
       // `implements a.B` reads as a dotted reference, the shape of an enum
       // member type, and is the same mistake.
-      if (iface.kind !== N_TYPE_REF || iface.text.indexOf(".") >= 0) {
+      if (iface.kind !== NodeKind.TypeRef || iface.text.indexOf(".") >= 0) {
         // `implements number[]`: stage0 sees a heritage expression that is not
         // an identifier and says this, so stage1 says it where its own grammar
         // puts the same mistake.
@@ -1179,18 +1165,18 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       }
     }
     for (const member of decl.children[3].children) {
-      if (member.kind === N_FIELD) {
+      if (member.kind === NodeKind.Field) {
         collectField(ctx, info, member)
-      } else if (member.kind === N_METHOD) {
+      } else if (member.kind === NodeKind.Method) {
         collectMethod(ctx, info, member)
-      } else if (member.kind === N_CONSTRUCTOR) {
+      } else if (member.kind === NodeKind.Constructor) {
         collectConstructor(ctx, info, member)
       }
     }
     checkHolderReleaser(ctx, info)
   } else {
     for (const member of decl.children[1].children) {
-      if (member.kind === N_FIELD) {
+      if (member.kind === NodeKind.Field) {
         collectField(ctx, info, member)
       }
     }
@@ -1214,11 +1200,11 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
  * resolves it with `T` bound for the layout check.
  */
 export const markTemplateImplements = (program: CheckedProgram, decl: Node): void => {
-  if (decl.kind !== N_CLASS) {
+  if (decl.kind !== NodeKind.Class) {
     return
   }
   for (const iface of decl.children[2].children) {
-    if (iface.kind !== N_TYPE_REF) {
+    if (iface.kind !== NodeKind.TypeRef) {
       continue
     }
     if (iface.children[0].children.length === 0) {

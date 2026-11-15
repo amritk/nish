@@ -1,5 +1,5 @@
-// `examples/relay/grant.ts` and its JSON reader against the fixtures cs's
-// `grant.rs` tests use: a token `signGrant` in `@cs/protocol` produced, and
+// `examples/relay/grant.ts` and its JSON reader against the fixtures the Rust
+// relay's `grant.rs` tests use: a token `signGrant` in the game's protocol package produced, and
 // its secret. Every case grant.rs tests, each mapped to grant.rs's close code
 // and reason, and the payloads only a signed token can reach — bad JSON,
 // wrong types, a port out of range — signed here with the same secret, since

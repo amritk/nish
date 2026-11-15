@@ -143,7 +143,7 @@ import {
 } from "./bounds"
 import { CheckContext } from "./context"
 import { Diagnostic } from "./diagnostics"
-import { N_ARROW, N_BINARY, N_CALL, N_INDEX, N_MEMBER, N_NEW, N_UNARY, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig, Instantiation, ROLE_CONSTRUCTOR, ROLE_FUNCTION } from "./program"
 import { isShmWindowIntrinsic } from "./shm-window"
 import { Local } from "./symbols"
@@ -719,7 +719,7 @@ const forceCalls = (
   callees: (FunctionSig | null)[],
   node: Node
 ): void => {
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     const callee = callees[node.id]
     const target: RangeBody | null = callee === null ? null : bodyOf(tables, bodies, callee)
     if (target !== null && target.candidate) {
@@ -956,17 +956,17 @@ const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
   const ctx = scan.ctx
   const program = ctx.program
   const kind = node.kind
-  if (kind === N_BINARY) {
+  if (kind === NodeKind.Binary) {
     if (isBoundsAssignment(node.text)) {
       noteStore(program, ctx, node.children[0], scan)
     }
     noteOpenArithmetic(node, scan, inArrow)
-  } else if (kind === N_UNARY) {
+  } else if (kind === NodeKind.Unary) {
     if (node.text === "++" || node.text === "--") {
       noteStore(program, ctx, node.children[0], scan)
     }
     noteOpenArithmetic(node, scan, inArrow)
-  } else if (kind === N_INDEX) {
+  } else if (kind === NodeKind.Index) {
     if (!program.nodeProvenIndex[node.id]) {
       scan.openAny = true
       // An arrow's accesses are proved in its own lifted body, never in this one's walk.
@@ -974,7 +974,7 @@ const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
         scan.open = true
       }
     }
-  } else if (kind === N_CALL) {
+  } else if (kind === NodeKind.Call) {
     if (isBoundedCall(node)) {
       scan.openAny = true
       if (!scan.open && !inArrow && isOpenAccess(ctx, node)) {
@@ -984,10 +984,10 @@ const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
     if (!callsNothing(ctx, node)) {
       noteCall(node, scan)
     }
-  } else if (kind === N_NEW) {
+  } else if (kind === NodeKind.New) {
     noteCall(node, scan)
   }
-  const arrow = inArrow || node.kind === N_ARROW
+  const arrow = inArrow || node.kind === NodeKind.Arrow
   for (const child of node.children) {
     // Nothing a leaf is can store, call or be checked.
     if (child.children.length > 0) {
@@ -1042,7 +1042,7 @@ const noteCall = (node: Node, scan: StoreScan): void => {
   if (node.id < known.length) {
     known[node.id] = at + 1
   }
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     scan.userCalls.push(node)
     scan.userCallees.push(at)
   }
@@ -1054,12 +1054,12 @@ const noteCall = (node: Node, scan: StoreScan): void => {
 /** `s.charCodeAt(i)` or `s.substring(a, b)`: a call bounds.ts judges, whatever its receiver turns out to be. */
 const isBoundedCall = (call: Node): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
-  return callee.kind === N_MEMBER && (callee.text === "charCodeAt" || callee.text === "substring")
+  return callee.kind === NodeKind.Member && (callee.text === "charCodeAt" || callee.text === "substring")
 }
 
 const noteStore = (program: CheckedProgram, ctx: CheckContext, target: Node, scan: StoreScan): void => {
   const t = unwrapBoundsParens(target)
-  if (t.kind === N_MEMBER) {
+  if (t.kind === NodeKind.Member) {
     // Nothing assigns an array's `length` today; if anything ever does, it
     // resizes, and a summary is a promise that nothing does.
     if (t.text === "length") {
@@ -1069,7 +1069,7 @@ const noteStore = (program: CheckedProgram, ctx: CheckContext, target: Node, sca
       scan.fields.push(t.text)
     }
   }
-  if (t.kind === N_INDEX) {
+  if (t.kind === NodeKind.Index) {
     const stored = recordStoreType(program, ctx.table, t)
     if (stored !== NO_RECORD && scan.records.indexOf(stored) < 0) {
       scan.records.push(stored)
@@ -1128,10 +1128,13 @@ const answeredBy = (ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
   for (const access of proved) {
     // A division or a `pop` is proved here too (`judgeDivision`, `judgePop`),
     // and has no index the warning could sit on.
-    if (access.kind !== N_INDEX && (access.kind !== N_CALL || access.children[1].children.length !== 1)) {
+    if (
+      access.kind !== NodeKind.Index &&
+      (access.kind !== NodeKind.Call || access.children[1].children.length !== 1)
+    ) {
       continue
     }
-    const index = access.kind === N_INDEX ? access.children[1] : access.children[1].children[0]
+    const index = access.kind === NodeKind.Index ? access.children[1] : access.children[1].children[0]
     if (warning.start === index.start && warning.end === index.end) {
       return true
     }

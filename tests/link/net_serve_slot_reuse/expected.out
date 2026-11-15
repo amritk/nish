@@ -1,0 +1,4 @@
+first, after its await (answered false, cancelled true): POST /first tag=one body=alpha
+second: PUT /second/x tag=two body=bravo!
+the second client read: 200 [text/plain; charset=utf-8] bravo!
+serve: 0, answered 2

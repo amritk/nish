@@ -99,6 +99,8 @@ entry:
   %each.addr = alloca %struct.nish_result.i32.i32*, align 8
   %forof.idx = alloca i64, align 8
   %s.addr = alloca %struct.nish_result.i32.i32*, align 8
+  %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
+  %nish_result.i32.i32.obj.1 = alloca %struct.nish_result.i32.i32, align 8
   %p.addr = alloca %struct.Cell*, align 8
   %0 = call { i1, i32, i32 } @parse(i32 -2)
   %1 = call i8* @nish_alloc_struct(i64 12)
@@ -230,122 +232,118 @@ forof.end:
 
 if.end:
   %66 = call { i1, i32, i32 } @parse(i32 4)
-  %67 = call i8* @nish_alloc_struct(i64 12)
-  %68 = bitcast i8* %67 to %struct.nish_result.i32.i32*
-  %69 = extractvalue { i1, i32, i32 } %66, 0
-  %70 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %68, i32 0, i32 0
-  store i1 %69, i1* %70, align 1
-  %71 = extractvalue { i1, i32, i32 } %66, 1
-  %72 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %68, i32 0, i32 1
+  %67 = extractvalue { i1, i32, i32 } %66, 0
+  %68 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 0
+  store i1 %67, i1* %68, align 1
+  %69 = extractvalue { i1, i32, i32 } %66, 1
+  %70 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
+  store i32 %69, i32* %70, align 4
+  %71 = extractvalue { i1, i32, i32 } %66, 2
+  %72 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 2
   store i32 %71, i32* %72, align 4
-  %73 = extractvalue { i1, i32, i32 } %66, 2
-  %74 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %68, i32 0, i32 2
-  store i32 %73, i32* %74, align 4
-  store %struct.nish_result.i32.i32* %68, %struct.nish_result.i32.i32** %s.addr, align 8
-  %75 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %s.addr, align 8
-  %76 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %75, i32 0, i32 0
-  %77 = load i1, i1* %76, align 1
-  %78 = xor i1 %77, true
-  br i1 %78, label %land.rhs.1, label %land.end.1
+  store %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, %struct.nish_result.i32.i32** %s.addr, align 8
+  %73 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %s.addr, align 8
+  %74 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %73, i32 0, i32 0
+  %75 = load i1, i1* %74, align 1
+  %76 = xor i1 %75, true
+  br i1 %76, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %79 = call { i1, i32, i32 } @parse(i32 -5)
-  %80 = call i8* @nish_alloc_struct(i64 12)
-  %81 = bitcast i8* %80 to %struct.nish_result.i32.i32*
-  %82 = extractvalue { i1, i32, i32 } %79, 0
-  %83 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %81, i32 0, i32 0
-  store i1 %82, i1* %83, align 1
-  %84 = extractvalue { i1, i32, i32 } %79, 1
-  %85 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %81, i32 0, i32 1
-  store i32 %84, i32* %85, align 4
-  %86 = extractvalue { i1, i32, i32 } %79, 2
-  %87 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %81, i32 0, i32 2
-  store i32 %86, i32* %87, align 4
-  store %struct.nish_result.i32.i32* %81, %struct.nish_result.i32.i32** %s.addr, align 8
-  %88 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %81, i32 0, i32 0
-  %89 = load i1, i1* %88, align 1
-  %90 = call i1 @g(i1 %89)
+  %77 = call { i1, i32, i32 } @parse(i32 -5)
+  %78 = extractvalue { i1, i32, i32 } %77, 0
+  %79 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
+  store i1 %78, i1* %79, align 1
+  %80 = extractvalue { i1, i32, i32 } %77, 1
+  %81 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
+  store i32 %80, i32* %81, align 4
+  %82 = extractvalue { i1, i32, i32 } %77, 2
+  %83 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
+  store i32 %82, i32* %83, align 4
+  store %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, %struct.nish_result.i32.i32** %s.addr, align 8
+  %84 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
+  %85 = load i1, i1* %84, align 1
+  %86 = call i1 @g(i1 %85)
   br label %land.end.1
 
 land.end.1:
-  %91 = phi i1 [ false, %if.end ], [ %90, %land.rhs.1 ]
-  br i1 %91, label %land.rhs, label %land.end
+  %87 = phi i1 [ false, %if.end ], [ %86, %land.rhs.1 ]
+  br i1 %87, label %land.rhs, label %land.end
 
 land.rhs:
-  %92 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %s.addr, align 8
-  %93 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %92, i32 0, i32 0
-  %94 = load i1, i1* %93, align 1
+  %88 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %s.addr, align 8
+  %89 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %88, i32 0, i32 0
+  %90 = load i1, i1* %89, align 1
   br label %land.end
 
 land.end:
-  %95 = phi i1 [ false, %land.end.1 ], [ %94, %land.rhs ]
-  br i1 %95, label %if.then.3, label %if.end.3
+  %91 = phi i1 [ false, %land.end.1 ], [ %90, %land.rhs ]
+  br i1 %91, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %96 = load i32, i32* %total.addr, align 4
-  %97 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %s.addr, align 8
-  %98 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %97, i32 0, i32 1
-  %99 = load i32, i32* %98, align 4
-  %100 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %96, i32 %99)
-  %101 = extractvalue { i32, i1 } %100, 0
-  %102 = extractvalue { i32, i1 } %100, 1
-  br i1 %102, label %ovf.fail, label %ovf.ok.1
+  %92 = load i32, i32* %total.addr, align 4
+  %93 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %s.addr, align 8
+  %94 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %93, i32 0, i32 1
+  %95 = load i32, i32* %94, align 4
+  %96 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %92, i32 %95)
+  %97 = extractvalue { i32, i1 } %96, 0
+  %98 = extractvalue { i32, i1 } %96, 1
+  br i1 %98, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %101, i32* %total.addr, align 4
+  store i32 %97, i32* %total.addr, align 4
   br label %if.end.3
 
 if.end.3:
-  %103 = call i8* @nish_alloc_struct(i64 4)
-  %104 = bitcast i8* %103 to %struct.Cell*
-  %105 = getelementptr inbounds %struct.Cell, %struct.Cell* %104, i32 0, i32 0
-  store i32 1, i32* %105, align 4, !tbaa !17
-  store %struct.Cell* %104, %struct.Cell** %p.addr, align 8
-  %106 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
-  %107 = icmp ne %struct.Cell* %106, null
-  br i1 %107, label %land.rhs.3, label %land.end.3
+  %99 = call i8* @nish_alloc_struct(i64 4)
+  %100 = bitcast i8* %99 to %struct.Cell*
+  %101 = getelementptr inbounds %struct.Cell, %struct.Cell* %100, i32 0, i32 0
+  store i32 1, i32* %101, align 4, !tbaa !17
+  store %struct.Cell* %100, %struct.Cell** %p.addr, align 8
+  %102 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
+  %103 = icmp ne %struct.Cell* %102, null
+  br i1 %103, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %108 = call i8* @nish_alloc_struct(i64 4)
-  %109 = bitcast i8* %108 to %struct.Cell*
-  %110 = getelementptr inbounds %struct.Cell, %struct.Cell* %109, i32 0, i32 0
-  store i32 1, i32* %110, align 4, !tbaa !17
-  store %struct.Cell* %109, %struct.Cell** %p.addr, align 8
-  %111 = icmp ne %struct.Cell* %109, null
-  %112 = call i1 @g(i1 %111)
+  %104 = call i8* @nish_alloc_struct(i64 4)
+  %105 = bitcast i8* %104 to %struct.Cell*
+  %106 = getelementptr inbounds %struct.Cell, %struct.Cell* %105, i32 0, i32 0
+  store i32 1, i32* %106, align 4, !tbaa !17
+  store %struct.Cell* %105, %struct.Cell** %p.addr, align 8
+  %107 = icmp ne %struct.Cell* %105, null
+  %108 = call i1 @g(i1 %107)
   br label %land.end.3
 
 land.end.3:
-  %113 = phi i1 [ false, %if.end.3 ], [ %112, %land.rhs.3 ]
-  br i1 %113, label %land.rhs.2, label %land.end.2
+  %109 = phi i1 [ false, %if.end.3 ], [ %108, %land.rhs.3 ]
+  br i1 %109, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %114 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
-  %115 = icmp ne %struct.Cell* %114, null
+  %110 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
+  %111 = icmp ne %struct.Cell* %110, null
   br label %land.end.2
 
 land.end.2:
-  %116 = phi i1 [ false, %land.end.3 ], [ %115, %land.rhs.2 ]
-  br i1 %116, label %if.then.4, label %if.end.4
+  %112 = phi i1 [ false, %land.end.3 ], [ %111, %land.rhs.2 ]
+  br i1 %112, label %if.then.4, label %if.end.4
 
 if.then.4:
-  %117 = load i32, i32* %total.addr, align 4
-  %118 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
-  %119 = getelementptr inbounds %struct.Cell, %struct.Cell* %118, i32 0, i32 0
-  %120 = load i32, i32* %119, align 4, !tbaa !17
-  %121 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %117, i32 %120)
-  %122 = extractvalue { i32, i1 } %121, 0
-  %123 = extractvalue { i32, i1 } %121, 1
-  br i1 %123, label %ovf.fail, label %ovf.ok.2
+  %113 = load i32, i32* %total.addr, align 4
+  %114 = load %struct.Cell*, %struct.Cell** %p.addr, align 8
+  %115 = getelementptr inbounds %struct.Cell, %struct.Cell* %114, i32 0, i32 0
+  %116 = load i32, i32* %115, align 4, !tbaa !17
+  %117 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %113, i32 %116)
+  %118 = extractvalue { i32, i1 } %117, 0
+  %119 = extractvalue { i32, i1 } %117, 1
+  br i1 %119, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  store i32 %122, i32* %total.addr, align 4
+  store i32 %118, i32* %total.addr, align 4
   br label %if.end.4
 
 if.end.4:
-  %124 = load i32, i32* %total.addr, align 4
-  %125 = call i8* @nish_str_from_i32(i32 %124)
-  call void @nish_print(i8* %125)
+  %120 = load i32, i32* %total.addr, align 4
+  %121 = call i8* @nish_str_from_i32(i32 %120)
+  call void @nish_print(i8* %121)
   ret i32 0
 
 ovf.fail:

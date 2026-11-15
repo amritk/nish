@@ -1,0 +1,1 @@
+--threads --emit-napi-async build/test/wordings/nl2769_root_storage_napi_async.c

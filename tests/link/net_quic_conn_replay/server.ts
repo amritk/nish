@@ -8,6 +8,7 @@ import { Secret, secret, wipe } from "nish:secret";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
 import { QUIC_CONN_ENTROPY_SIZE, QUIC_CONN_STATIC_KEY_SIZE, QuicConnection, QuicServerConfig, QuicStreamData } from "nish/net/quic";
+import { QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
 import { textOf } from "../crypto_x509/hex";
 
@@ -57,6 +58,8 @@ export const echoConfig = (): QuicServerConfig => {
     retryTokenKey: tokenKey(),
     workerIndex: toI32(-1),
     workerCount: toI32(0),
+    // Pinned to NewReno: the windows and flights these checks expect were worked out under it.
+    congestion: QUIC_RECOVERY_NEWRENO,
     retry: false,
     retryTokenLifetime: toI64(10000),
   };

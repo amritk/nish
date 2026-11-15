@@ -21,6 +21,8 @@ import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_
 import { netClose, netLocalPort, tcpListen } from "nish:net";
 import { spawn } from "nish:process";
 import { writeFileSync } from "nish:fs";
+import { PkiRoots, pkiLoadRoots } from "nish/crypto/pki-roots";
+import { sha256 } from "nish/crypto/sha256";
 import { strangerRootPem, trustedRootPem } from "./certs";
 import { Servers, Site, Tally, parsePort, selfPath } from "./servers";
 
@@ -51,6 +53,12 @@ const fails = (client: FetchSyncClient, res: HttpResponse | null, code: i32): bo
   return true;
 };
 
+
+/** The SHA-256 of the subjectPublicKeyInfo of the first root in `pem`, or no bytes. */
+const rootKey = (pem: string): u8[] => {
+  const roots: PkiRoots = pkiLoadRoots(pem, [], []);
+  return toI32(roots.roots.length) > 0 ? sha256(roots.roots[0].spki) : [];
+};
 
 /** Options trusting the roots in `pem`, with no proxy from the environment. */
 const trusting = (pem: string): HttpOptions => {
@@ -101,6 +109,21 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   t.check(fails(other, other.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "and so is a good server under roots that are not its own");
   const system: FetchSyncClient = new FetchSyncClient(trusting(""));
   t.check(fails(system, system.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "the system roots do not trust the test's root");
+
+  // --- keys the caller distrusts
+  const shunning: HttpOptions = trusting(trusted);
+  shunning.distrustSpkiSha256 = [rootKey(trusted)];
+  const shunned: FetchSyncClient = new FetchSyncClient(shunning);
+  t.check(fails(shunned, shunned.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "a chain to a trusted root whose key is distrusted is HTTP_E_CERTIFICATE");
+  const sparing: HttpOptions = trusting(trusted);
+  sparing.distrustSpkiSha256 = [rootKey(stranger)];
+  const spared: FetchSyncClient = new FetchSyncClient(sparing);
+  t.check(bodyOf(spared.fetch(get(`${good}/spared`))) === "GET /spared HTTP/1.1", "a distrusted key no certificate of the chain holds changes nothing");
+  const garbled: HttpOptions = trusting(trusted);
+  garbled.distrustSpkiSha256 = [rootKey(trusted).slice(0, 20)];
+  const misread: FetchSyncClient = new FetchSyncClient(garbled);
+  t.check(fails(misread, misread.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "a key to distrust that is not 32 bytes fails the fetch");
+  t.check(misread.errorText.indexOf("not a SHA-256") >= 0, "and the error says the hash is not one");
 
   // --- no roots at all: refused before any connection
   const fresh: FetchSyncClient = new FetchSyncClient(options);

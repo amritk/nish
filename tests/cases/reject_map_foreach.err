@@ -1,1 +1,1 @@
-`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`
+Argument 1 of `forEach` must be the name of a top-level function or an arrow written at the call, because `f` is a function parameter, resolved at compile time; a function parameter is bound to a callee, not a value computed at run time

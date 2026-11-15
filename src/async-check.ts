@@ -19,18 +19,7 @@ import { AwaitEdge, FunctionSig } from "./program"
 import { recordRegionCall } from "./region-rules"
 import { Scope } from "./symbols"
 import { T_BOOL, T_ERROR, T_I32, T_I64, T_STRING, T_VOID, isNumeric } from "./types"
-import {
-  N_BINARY,
-  N_BINDING_PATTERN,
-  N_BLOCK,
-  N_CALL,
-  N_EXPR_STMT,
-  N_IDENT,
-  N_RETURN,
-  N_UNARY,
-  N_VAR,
-  Node,
-} from "./nodes"
+import { Node, NodeKind, isPlainSlot } from "./nodes"
 
 /** `awaitAll`'s arity, WP24 §9.3's fixed-arity join. */
 const AWAIT_ALL_MIN: i32 = 2
@@ -58,7 +47,7 @@ const directCallMessage = (what: string): string =>
  */
 const directCall = (operand: Node): Node | null => {
   const call = unwrapParens(operand)
-  return call.kind === N_CALL && call.children[0].kind === N_IDENT ? call : null
+  return call.kind === NodeKind.Call && call.children[0].kind === NodeKind.Ident ? call : null
 }
 
 /**
@@ -111,19 +100,19 @@ const isAwaitSite = (ctx: CheckContext, expr: Node): boolean => {
   if (stmt === null) {
     const current = ctx.current
     const body: Node | null = current !== null ? current.body() : null
-    return body !== null && body.kind !== N_BLOCK && unwrapParens(body) === expr
+    return body !== null && body.kind !== NodeKind.Block && unwrapParens(body) === expr
   }
-  if (stmt.kind === N_EXPR_STMT) {
+  if (stmt.kind === NodeKind.ExprStmt) {
     const whole = unwrapParens(stmt.children[0])
     if (whole === expr) {
       return true
     }
-    return whole.kind === N_BINARY && whole.text === "=" && unwrapParens(whole.children[1]) === expr
+    return whole.kind === NodeKind.Binary && whole.text === "=" && unwrapParens(whole.children[1]) === expr
   }
-  if (stmt.kind === N_RETURN) {
+  if (stmt.kind === NodeKind.Return) {
     return stmt.children.length > 0 && unwrapParens(stmt.children[0]) === expr
   }
-  if (stmt.kind === N_VAR) {
+  if (stmt.kind === NodeKind.Var) {
     for (const decl of stmt.children[0].children) {
       if (decl.children.length > 2 && unwrapParens(decl.children[2]) === expr) {
         return true
@@ -267,7 +256,7 @@ export const refuseUnawaitedCall = (ctx: CheckContext, expr: Node, isAsync: bool
  */
 export const promiseMethodMessage = (ctx: CheckContext, callee: Node, scope: Scope): string => {
   const receiver = unwrapParens(callee.children[0])
-  if (receiver.kind === N_IDENT && receiver.text === "Promise" && scope.lookup("Promise") === null) {
+  if (receiver.kind === NodeKind.Ident && receiver.text === "Promise" && scope.lookup("Promise") === null) {
     return `\`Promise.${callee.text}\` is not supported: a promise is never a value — \`await\` each call where it is made, or \`awaitAll(f(x), g(y))\` from \`nish:async\` to wait on several together`
   }
   if (
@@ -433,18 +422,60 @@ const isSpawnable = (ctx: CheckContext, type: i32): boolean =>
 
 /**
  * `const [a, b] = await awaitAll(f(x), g(y))`, read off the tree: a
- * declarator whose names the parser kept (`parseNamePattern`) and whose
- * initializer is an `await` of a call. The checker decides whether the call
+ * declarator whose pattern is a list of plain names and whose initializer is
+ * an `await` of a call. The checker decides whether the call
  * is to `awaitAll`; the sweep that refuses every other pattern leaves this
  * one to it.
  */
 export const isAwaitAllShape = (decl: Node): boolean => {
   const pattern = decl.children[0]
-  if (pattern.kind !== N_BINDING_PATTERN || pattern.children.length === 0 || decl.children.length < 3) {
+  if (pattern.kind !== NodeKind.BindingPattern || pattern.text !== "[" || pattern.children.length === 0) {
     return false
   }
+  for (const slot of pattern.children) {
+    if (!isPlainSlot(slot)) {
+      return false
+    }
+  }
   const init = unwrapParens(decl.children[2])
-  return init.kind === N_UNARY && init.text === "await" && directCall(init.children[0]) !== null
+  return init.kind === NodeKind.Unary && init.text === "await" && directCall(init.children[0]) !== null
+}
+
+/** NL2193: a pattern over an `await` that is not `awaitAll(...)`'s. */
+const AWAIT_PATTERN: string =
+  "A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name"
+
+/**
+ * What to say of a pattern over an `await` that `isAwaitAllShape` turned
+ * down: NL2193 when the call is not `awaitAll`'s, and when it is, the slot
+ * or the brace in the way, under `AWAIT_ALL_FORM`'s code.
+ */
+export const awaitPatternMessage = (ctx: CheckContext, decl: Node, pattern: Node): string => {
+  const init = unwrapParens(decl.children[2])
+  const call = directCall(init.children[0])
+  if (call === null) {
+    return AWAIT_PATTERN
+  }
+  // The pass 1 sweep runs before imports are bound, so the import is read
+  // as written.
+  let awaitAll = false
+  for (const imp of ctx.program.imports) {
+    if (imp.localName === call.children[0].text) {
+      awaitAll = imp.specifier === "nish:async" && imp.importedName === "awaitAll"
+    }
+  }
+  if (!awaitAll) {
+    return AWAIT_PATTERN
+  }
+  if (pattern.text !== "[") {
+    return `${AWAIT_ALL_FORM}; the answers are read by position, so the pattern is an array, not an object`
+  }
+  for (const slot of pattern.children) {
+    if (slot.kind === NodeKind.Empty && slot.flags === 0) {
+      return `${AWAIT_ALL_FORM}; a hole would drop a call's answer, so name it (\`_b\` if it goes unread)`
+    }
+  }
+  return `${AWAIT_ALL_FORM}; each slot is a plain name, with no default, rest or nested pattern`
 }
 
 /**
@@ -462,7 +493,7 @@ export const checkAwaitAllDeclaration = (ctx: CheckContext, decl: Node, scope: S
     imported === null ||
     asyncBuiltinOf(imported) !== "awaitAll"
   ) {
-    ctx.error(decl, "Destructuring is not supported")
+    ctx.error(decl, AWAIT_PATTERN)
     return null
   }
   ctx.program.nodeBuiltins[call.id] = imported.canonical

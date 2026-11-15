@@ -18,9 +18,11 @@ fi
 
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$(dirname "$(dirname "$(readlink -f "$0")")")")}"
 
-# The one runtime dependency (`typescript`) plus biome. `install`, not `ci`:
-# the container state is cached after the hook, and install reuses it.
-npm install --no-audit --no-fund
+# The development dependencies (`typescript`, biome, knip, typedoc). `ci`, not
+# `install`: it installs exactly what package-lock.json names and never
+# rewrites it, and `--ignore-scripts` runs no dependency's install code, as in
+# CI (SC-30 in docs/security/supply-chain.md).
+npm ci --ignore-scripts --no-audit --no-fund
 
 # The six binaries tests/run.js and scripts/build.sh look for by plain name.
 TOOLS=(clang llc llvm-as opt ld.lld wasm-ld)

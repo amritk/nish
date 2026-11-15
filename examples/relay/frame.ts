@@ -1,5 +1,5 @@
 /**
- * The browser <-> relay wire format, ported from cs's
+ * The browser <-> relay wire format, ported from the Rust relay's
  * `services/relay/src/frame.rs`, which is itself a second implementation of
  * `packages/protocol/src/session.ts`. The numbers are read off those two, and
  * the tests in `tests/link/net_relay` decode the fixtures `session.ts`

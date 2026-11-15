@@ -22,7 +22,7 @@
 
 C0: the allow-list, `nish.compat` and the `!nish.compat` metadata, with no feature. The bare `--compat` flag and the erasure test that is C0's acceptance test are built (spike S3). WP33's R6 is this package. Spec: [§7.3 The stages](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md#73-the-stages), [§5.2 The proposal](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md#52-the-proposal).
 
-## Waiting on a decision
+## Open questions
 
 The questions the spikes measured and did not settle: whether `async` belongs in compat or only `--async-model threads` (S2), whether `--compat` implies `--number-mode f64` (S5), which lowering C5 uses (S6 recommends the `Result` desugaring), and how C4 picks the `Promise.all` to fork (S4). Also a per-dependency ceiling, and what the interop emitters do with a compat program. None of them blocks C0 or C1. Spec: [§10 Open](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md#10-open), [§7.5 to §7.9](https://github.com/amritk/nish/blob/main/docs/wp28-compatibility-mode.md#75-s2-measured-async-by-contagion).
 

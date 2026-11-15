@@ -128,23 +128,32 @@
     return button
   }
 
-  /**
-   * The name, unpacked: it reads "NISH" and then each initial unfolds into its
-   * word. A screen reader gets the whole phrase once, from the label, rather
-   * than eight fragments.
-   */
-  const unpackedName = () =>
+  /** One row of the name: each initial, then the rest of its word. */
+  const nameRow = (spec) =>
     el(
-      "p.nish-hero__name",
-      { "aria-label": "Nish: Native Instruction Static Host" },
+      spec,
+      { "aria-hidden": "true" },
       ...NAME.map(([initial, rest], index) =>
         el(
           "span.nish-hero__word",
-          { style: `--i:${index}`, "aria-hidden": "true" },
+          { style: `--i:${index}` },
           el("b", {}, initial),
           el("span.nish-hero__rest", {}, el("span", {}, rest))
         )
       )
+    )
+
+  /**
+   * "NISH", whose initials open into words while hovered or focused (a tap
+   * focuses it). A hidden open copy in the same grid cell holds the height.
+   * A screen reader reads the label once: an img role, as a p's is not read.
+   */
+  const unpackedName = () =>
+    el(
+      "p.nish-hero__name",
+      { role: "img", "aria-label": "Nish: Native Instruction Static Host", tabindex: "0" },
+      nameRow("span.nish-hero__name-row"),
+      nameRow("span.nish-hero__name-row.nish-hero__name-row--ghost")
     )
 
   const hero = () =>
@@ -166,19 +175,19 @@
         copyButton()
       ),
       // The stage is a picture of what the text beside it already says, so it
-      // is hidden from assistive technology rather than read out line by line.
+      // is hidden from assistive technology, all but the terminal's input.
       el(
         "div.nish-hero__stage",
-        { "aria-hidden": "true" },
+        {},
         el(
           "div.nish-hero__window.nish-hero__editor",
-          {},
+          { "aria-hidden": "true" },
           el("div.nish-hero__bar", {}, el("i"), el("i"), el("i"), el("span", {}, "squares.ts")),
           el("pre.nish-hero__code", {}, ...SOURCE.map(codeLine))
         ),
         el(
           "div.nish-hero__flow",
-          {},
+          { "aria-hidden": "true" },
           beams(),
           el(
             "div.nish-hero__core",
@@ -192,13 +201,18 @@
             ...TARGETS.map((name, index) => el("span.nish-hero__target", { style: `--i:${index}` }, name))
           )
         ),
-        el(
-          "div.nish-hero__window.nish-hero__terminal",
-          {},
-          el("div.nish-hero__bar", {}, el("i"), el("i"), el("i"), el("span", {}, "terminal")),
+        terminal(
+          el(
+            "div.nish-hero__bar",
+            { "aria-hidden": "true" },
+            el("i"),
+            el("i"),
+            el("i"),
+            el("span", {}, "terminal")
+          ),
           el(
             "pre.nish-hero__code",
-            {},
+            { "aria-hidden": "true" },
             el(
               "span.nish-hero__cmd",
               {},
@@ -212,6 +226,48 @@
     )
 
   /**
+   * The hero's terminal: a hidden input whose first use imports the shell
+   * (examples/break-web). When the hero's one run ends, a prompt waits under
+   * the output; the shell's own line takes its place.
+   */
+  const terminal = (bar, code) => {
+    const input = el("input.nish-hero__input", {
+      "aria-label": "Terminal",
+      autocapitalize: "off",
+      autocorrect: "off",
+      spellcheck: "false",
+      enterkeyhint: "go",
+    })
+    const ready = el("span.nish-hero__ready", {}, el("b", {}, "$ "), el("i"))
+    code.append(ready)
+    const term = el("div.nish-hero__window.nish-hero__terminal", {}, bar, code, input)
+    term.addEventListener("click", () => getSelection().isCollapsed && input.focus())
+    const lines = [] // entered while the shell loads
+    let shell = null
+    const first = (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        lines.push(input.value)
+        input.value = ""
+      } else if (event.type !== "input" && event.keyCode !== 229) {
+        return
+      }
+      const shellUrl = "/break/shell.mjs"
+      shell ??= import(shellUrl)
+        .then((m) => {
+          m.attach(term, input, lines, first)
+          ready.remove()
+        })
+        .catch(() => {
+          lines.length = 0
+          shell = null
+        })
+    }
+    input.addEventListener("input", first)
+    input.addEventListener("keydown", first)
+    return term
+  }
+
+  /**
    * The site is a single-page app: the landing page's Markdown is mounted,
    * hydrated and unmounted by the framework, which may replace the host at
    * any of those moments. So rather than build once on load, every change to
@@ -221,6 +277,13 @@
     for (const host of document.querySelectorAll("[data-nish-hero]:empty")) {
       host.classList.add("nish-hero")
       host.append(hero())
+    }
+    // theme.css holds the page under an unready host hidden, so the hero's
+    // arrival moves nothing a reader can see. Ready waits two frames: the
+    // frame that lays the hero out still hides the page it pushed down, and
+    // the page shows where it will stay.
+    for (const host of document.querySelectorAll("[data-nish-hero]:not(:empty):not([data-nish-ready])")) {
+      requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
     }
   }
 

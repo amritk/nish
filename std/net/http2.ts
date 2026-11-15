@@ -1603,13 +1603,23 @@ export class Http2Connection {
       return H2_NEED_MORE
     }
     let opened: boolean = false
+    // INITIAL_WINDOW_SIZE moves every stream's window, so the streams are
+    // walked once, after every entry has been checked: a walk per entry let
+    // one frame of 2,730 of them cost 2,730 walks (H2-5). The windows end at
+    // the frame's last value, as they would entry by entry, and since every
+    // window moves by the same amount, one passes 2^31 - 1 at some entry
+    // (§6.9.2, the entries taken in order, §6.5.3) exactly when it would at
+    // the frame's largest value.
+    let window: i64 = this.peerInitialWindow
+    let highest: i64 = this.peerInitialWindow
     const n: i32 = http2SettingCount(f)
     for (let k: i32 = 0; k < n; k++) {
       const id: i32 = http2SettingId(f, this.input, k)
       const value: i64 = http2SettingValue(f, this.input, k)
       const error: i32 = http2SettingError(id, value)
       if (error !== H2_NO_ERROR) {
-        return this.fail(error)
+        // An earlier entry that took a window past 2^31 - 1 was the first error.
+        return this.fail(this.windowPassesMax(highest) ? H2_FLOW_CONTROL_ERROR : error)
       }
       if (id === H2_SETTINGS_HEADER_TABLE_SIZE) {
         const size: i32 = toI32(Math.min(value, toI64(HPACK_DEFAULT_TABLE_SIZE)))
@@ -1617,24 +1627,30 @@ export class Http2Connection {
           this.encoder.setMaxTableSize(size)
         }
       } else if (id === H2_SETTINGS_INITIAL_WINDOW_SIZE) {
-        const delta: i64 = value - this.peerInitialWindow
-        this.peerInitialWindow = value
-        for (const s of this.streams) {
-          if (s.id !== 0) {
-            s.sendWindow = s.sendWindow + delta
-            if (s.sendWindow > toI64(H2_MAX_WINDOW)) {
-              return this.fail(H2_FLOW_CONTROL_ERROR)
-            }
-            if (delta > toI64(0) && s.blocked) {
-              s.blocked = false
-              opened = true
-            }
-          }
+        window = value
+        if (value > highest) {
+          highest = value
         }
       } else if (id === H2_SETTINGS_MAX_FRAME_SIZE) {
         this.peerMaxFrameSize = toI32(value)
       } else if (id === H2_SETTINGS_MAX_HEADER_LIST_SIZE) {
         this.peerMaxHeaderList = value
+      }
+    }
+    if (this.windowPassesMax(highest)) {
+      return this.fail(H2_FLOW_CONTROL_ERROR)
+    }
+    if (window !== this.peerInitialWindow) {
+      const delta: i64 = window - this.peerInitialWindow
+      this.peerInitialWindow = window
+      for (const s of this.streams) {
+        if (s.id !== 0) {
+          s.sendWindow = s.sendWindow + delta
+          if (delta > toI64(0) && s.blocked) {
+            s.blocked = false
+            opened = true
+          }
+        }
       }
     }
     this.wrote(http2WriteSettingsAck(this.output, this.outputEnd))
@@ -1643,6 +1659,23 @@ export class Http2Connection {
       return H2_WINDOW
     }
     return H2_NEED_MORE
+  }
+
+  /**
+   * Whether SETTINGS_INITIAL_WINDOW_SIZE at `initial` would take an open
+   * stream's send window past 2^31 - 1, the connection error of §6.9.2.
+   */
+  private windowPassesMax(initial: i64): boolean {
+    if (initial <= this.peerInitialWindow) {
+      return false
+    }
+    const delta: i64 = initial - this.peerInitialWindow
+    for (const s of this.streams) {
+      if (s.id !== 0 && s.sendWindow + delta > toI64(H2_MAX_WINDOW)) {
+        return true
+      }
+    }
+    return false
   }
 
   /** WINDOW_UPDATE (§6.9): a send window grows, and a write it held back may go on. */

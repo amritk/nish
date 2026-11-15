@@ -223,7 +223,7 @@ function CapabilityLock.readRow(this: CapabilityLock, name: string, row: i32): i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: row
-  calls: CapabilityLock.fail CapabilityLock.failed CapabilityLock.holds CapabilityLock.peek CapabilityLock.separator CapabilityLock.skipBlank CapabilityLock.string argumentCapabilities capabilityIndex nish_array_grow nish_panic_overflow nish_panic_slice nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: CapabilityLock.fail CapabilityLock.failed CapabilityLock.holds CapabilityLock.peek CapabilityLock.separator CapabilityLock.skipBlank CapabilityLock.string argumentCapabilities capabilityIndex nish_arena_release nish_array_grow nish_panic_overflow nish_panic_slice nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
   pointer this: size=72 writesThrough=true captured=false passedTo=CapabilityLock.peek#0 CapabilityLock.fail#0 CapabilityLock.skipBlank#0 CapabilityLock.peek#0 CapabilityLock.failed#0 CapabilityLock.skipBlank#0 CapabilityLock.peek#0 CapabilityLock.fail#0 CapabilityLock.string#0 CapabilityLock.fail#0 CapabilityLock.holds#0 CapabilityLock.fail#0 CapabilityLock.separator#0 CapabilityLock.failed#0
   stackSites=0 stackLocals=0
   callee -4:9 CapabilityLock.peek -> @CapabilityLock.peek
@@ -241,14 +241,15 @@ function CapabilityLock.readRow(this: CapabilityLock, name: string, row: i32): i
   local +16:13 entry: string | null (const)
   callee +16:21 CapabilityLock.string -> @CapabilityLock.string
   local +20:13 equals: i32 (const)
-  local +21:13 c: i32 (const)
-  callee +21:17 capabilityIndex -> @capabilityIndex
-  callee +24:27 argumentCapabilities -> @argumentCapabilities
-  callee +26:9 CapabilityLock.fail -> @CapabilityLock.fail
-  callee +29:70 CapabilityLock.holds -> @CapabilityLock.holds
-  callee +30:9 CapabilityLock.fail -> @CapabilityLock.fail
-  callee +40:14 CapabilityLock.separator -> @CapabilityLock.separator
-  callee +42:10 CapabilityLock.failed -> @CapabilityLock.failed
+  local +21:11 c: i32 (let)
+  local +24:15 _a: i64 (const)
+  callee +25:13 capabilityIndex -> @capabilityIndex
+  callee +29:27 argumentCapabilities -> @argumentCapabilities
+  callee +31:9 CapabilityLock.fail -> @CapabilityLock.fail
+  callee +34:70 CapabilityLock.holds -> @CapabilityLock.holds
+  callee +35:9 CapabilityLock.fail -> @CapabilityLock.fail
+  callee +45:14 CapabilityLock.separator -> @CapabilityLock.separator
+  callee +47:10 CapabilityLock.failed -> @CapabilityLock.failed
 function CapabilityLock.holds(this: CapabilityLock, row: i32, entry: string): boolean -> @CapabilityLock.holds [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -282,7 +283,8 @@ function lockHexDigit(code: i32): i32 -> @lockHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function readCapabilityLock(text: string): CapabilityLock -> @readCapabilityLock [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=72
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=72
+  sharedWrite: via CapabilityLock.read
   escaping: text
   calls: CapabilityLock.constructor CapabilityLock.read nish_alloc_struct
   stackSites=0 stackLocals=0

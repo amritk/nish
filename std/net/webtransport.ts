@@ -266,7 +266,13 @@ export class WebTransportConfig {
    * event either way, and one this side closed from its close.
    */
   idleTimeout: i32 = 60000
-  /** Datagrams one session may deliver in a second, 1 to 1,048,576; the rest are dropped and counted. */
+  /**
+   * Datagrams one session may deliver in a second, 1 to 1,048,576; the rest are dropped and counted
+   * in `datagramsDropped`. Dropping is the whole defence: no count of drops closes the session.
+   * Datagrams are unreliable by contract (RFC 9297), so a dropped one is a loss the application
+   * already handles; a drop costs O(1); a close would punish a browser that bursts; and a client
+   * past the cap gains nothing but the CPU its datagrams cost to drop.
+   */
   maxDatagramsPerSecond: i32 = 1024
 }
 

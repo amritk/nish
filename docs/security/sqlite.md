@@ -133,6 +133,16 @@ under `#if SQLITE_MAX_EXPR_DEPTH>0` (`sqlite3ExprCheckHeight` at
 `sqlite3.c:23070` is an empty macro otherwise), so the runtime limit is never
 read.
 
+`HAVE_USLEEP` is not defined, and need not be. In 3.54.1 the default busy
+handler (`sqliteDefaultBusyCallback`, `sqlite3.c:190106`) and `unixSleep`
+(`sqlite3.c:47805`) key on `HAVE_NANOSLEEP`, which is on unless a build defines
+it to `0`. The default build therefore backs off in 1 to 100 ms steps, and
+`PRAGMA busy_timeout` honours a timeout under a second. The whole-second
+handler returns `SQLITE_BUSY` at once for any such timeout. A SQLite bump or a
+changed default that brings it back fails "link/sqlite_busy_backoff"
+(`tests/link/sqlite_busy_backoff`): a second connection that waits 300 ms on an
+exclusive lock must give up after at least 250 ms.
+
 ## Bumping for a CVE
 
 Follow "Updating" in [runtime/sqlite/README.md](https://github.com/amritk/nish/blob/main/runtime/sqlite/README.md):
@@ -148,6 +158,9 @@ into `runtime/sqlite/`, so it does not yet require these files to be named
 here. Widening its surface is a `scripts/` change for a later pull request.
 
 ## Tests
+
+`tests/link/sqlite_busy_backoff` pins the lock-wait backoff above
+("link/sqlite_busy_backoff: exits with 0 and stdout matches expected.out").
 
 In `tests/run.js`, section `sqlite-link`:
 

@@ -17,36 +17,7 @@
 import { CheckContext } from "./context"
 import { unwrapParens, isAssignmentOperator } from "./emit-util"
 import { StringSet } from "./map"
-import {
-  FLAG_CONST,
-  FLAG_EXPORTED,
-  FLAG_USING,
-  N_ARROW,
-  N_BINARY,
-  N_CALL,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FUNCTION,
-  N_IDENT,
-  N_IF,
-  N_MEMBER,
-  N_METHOD,
-  N_NEW,
-  N_NULL,
-  N_PARAM,
-  N_PAREN,
-  N_THIS,
-  N_TYPE_ARRAY,
-  N_TYPE_FUNCTION,
-  N_TYPE_LITERAL,
-  N_TYPE_NULL,
-  N_TYPE_OPERATOR,
-  N_TYPE_PAREN,
-  N_TYPE_READONLY,
-  N_TYPE_REF,
-  N_TYPE_UNION,
-  Node,
-} from "./nodes"
+import { FLAG_CONST, FLAG_EXPORTED, FLAG_USING, Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, StructInfo } from "./program"
 import { DISPOSE_METHOD } from "./parallel"
 import { Local, sourceLocal } from "./symbols"
@@ -137,7 +108,7 @@ const handleOf = (program: CheckedProgram, table: TypeTable, type: i32): StructI
  * owned pointer starts, and its block closes it.
  */
 export const openedHandle = (program: CheckedProgram, table: TypeTable, init: Node): StructInfo | null =>
-  init.kind === N_NEW ? handleOf(program, table, program.nodeTypes[init.id]) : null
+  init.kind === NodeKind.New ? handleOf(program, table, program.nodeTypes[init.id]) : null
 
 /**
  * A type argument that is a handle class, written or inferred (`id(f)`): the
@@ -155,26 +126,26 @@ export const rejectHandleArgument = (ctx: CheckContext, type: i32, at: Node): bo
 /** Whether the annotation `type` is `CPtr` or `CPtr | null` as written, the one shape a handle's field takes (§4a D1). */
 export const isHandleFieldAnnotation = (type: Node): boolean => {
   let at = type
-  while (at.kind === N_TYPE_PAREN) {
+  while (at.kind === NodeKind.TypeParen) {
     at = at.children[0]
   }
-  if (at.kind === N_TYPE_REF) {
+  if (at.kind === NodeKind.TypeRef) {
     return at.text === "CPtr" && at.children[0].children.length === 0
   }
-  if (at.kind !== N_TYPE_UNION || at.children.length !== 2) {
+  if (at.kind !== NodeKind.TypeUnion || at.children.length !== 2) {
     return false
   }
   let pointers = 0
   let nulls = 0
   for (const member of at.children) {
     let inner = member
-    while (inner.kind === N_TYPE_PAREN) {
+    while (inner.kind === NodeKind.TypeParen) {
       inner = inner.children[0]
     }
-    if (inner.kind === N_TYPE_NULL) {
+    if (inner.kind === NodeKind.TypeNull) {
       nulls = nulls + 1
     } else if (
-      inner.kind === N_TYPE_REF &&
+      inner.kind === NodeKind.TypeRef &&
       inner.text === "CPtr" &&
       inner.children[0].children.length === 0
     ) {
@@ -207,16 +178,16 @@ class HandleClose {
  */
 const isThisField = (expr: Node): boolean => {
   const at = unwrapParens(expr)
-  return at.kind === N_MEMBER && unwrapParens(at.children[0]).kind === N_THIS
+  return at.kind === NodeKind.Member && unwrapParens(at.children[0]).kind === NodeKind.This
 }
 
 /** The `close(arg)` a statement is, when it is one call statement with a named callee and one argument; otherwise `null`. */
 const closeStatement = (stmt: Node): Node | null => {
-  if (stmt.kind !== N_EXPR_STMT) {
+  if (stmt.kind !== NodeKind.ExprStmt) {
     return null
   }
   const call = unwrapParens(stmt.children[0])
-  if (call.kind !== N_CALL || call.children[0].kind !== N_IDENT) {
+  if (call.kind !== NodeKind.Call || call.children[0].kind !== NodeKind.Ident) {
     return null
   }
   return call
@@ -225,7 +196,7 @@ const closeStatement = (stmt: Node): Node | null => {
 /** The `[Symbol.dispose]` member of a class declaration, or `null`. */
 const disposeMethod = (decl: Node): Node | null => {
   for (const member of decl.children[3].children) {
-    if (member.kind === N_METHOD && member.children[0].text === DISPOSE_METHOD) {
+    if (member.kind === NodeKind.Method && member.children[0].text === DISPOSE_METHOD) {
       return member
     }
   }
@@ -254,7 +225,7 @@ const disposeCall = (body: Node): Node | null => {
     return null
   }
   const decls = bind.children[0].children
-  if (decls.length !== 1 || decls[0].children[1].kind !== N_EMPTY) {
+  if (decls.length !== 1 || decls[0].children[1].kind !== NodeKind.Empty) {
     return null
   }
   if (!isThisField(decls[0].children[2])) {
@@ -262,7 +233,7 @@ const disposeCall = (body: Node): Node | null => {
   }
   const local = decls[0].children[0].text
   const test = stmts[1]
-  if (test.kind !== N_IF || test.children[2].kind !== N_EMPTY) {
+  if (test.kind !== NodeKind.If || test.children[2].kind !== NodeKind.Empty) {
     return null
   }
   // Only a binary operator is spelled `!==`.
@@ -272,7 +243,7 @@ const disposeCall = (body: Node): Node | null => {
   }
   const left = unwrapParens(cond.children[0])
   const right = unwrapParens(cond.children[1])
-  if (left.kind !== N_IDENT || left.text !== local || right.kind !== N_NULL) {
+  if (left.kind !== NodeKind.Ident || left.text !== local || right.kind !== NodeKind.Null) {
     return null
   }
   // A braceless `if` has the call itself as its one child, which `closeStatement` refuses.
@@ -285,7 +256,7 @@ const disposeCall = (body: Node): Node | null => {
     return null
   }
   const arg = unwrapParens(call.children[1].children[0])
-  return arg.kind === N_IDENT && arg.text === local ? call : null
+  return arg.kind === NodeKind.Ident && arg.text === local ? call : null
 }
 
 /** The module function called `name`, or `null`. */
@@ -375,15 +346,15 @@ const closedClass = (decl: Node): boolean =>
  * methods, and a class type on a `declare function`.
  */
 const borrowingParam = (parents: Node[]): boolean => {
-  if (parents.length < 3 || parents[parents.length - 1].kind !== N_PARAM) {
+  if (parents.length < 3 || parents[parents.length - 1].kind !== NodeKind.Param) {
     return false
   }
   const owner = parents[parents.length - 3]
   const generic = owner.children.length > 4 && owner.children[4].children.length > 0
-  if (owner.kind === N_FUNCTION) {
+  if (owner.kind === NodeKind.FunctionDecl) {
     return !generic && (owner.flags & FLAG_EXPORTED) === 0
   }
-  if (owner.kind === N_METHOD) {
+  if (owner.kind === NodeKind.Method) {
     // METHOD <- LIST of members <- CLASS: an interface's methods and an object
     // literal's are refused before this pass.
     return !generic && closedClass(parents[parents.length - 5])
@@ -391,16 +362,16 @@ const borrowingParam = (parents: Node[]): boolean => {
   return false
 }
 
-const isTypeNode = (kind: i32): boolean =>
-  kind === N_TYPE_REF ||
-  kind === N_TYPE_ARRAY ||
-  kind === N_TYPE_UNION ||
-  kind === N_TYPE_NULL ||
-  kind === N_TYPE_PAREN ||
-  kind === N_TYPE_READONLY ||
-  kind === N_TYPE_FUNCTION ||
-  kind === N_TYPE_LITERAL ||
-  kind === N_TYPE_OPERATOR
+const isTypeNode = (kind: NodeKind): boolean =>
+  kind === NodeKind.TypeRef ||
+  kind === NodeKind.TypeArray ||
+  kind === NodeKind.TypeUnion ||
+  kind === NodeKind.TypeNull ||
+  kind === NodeKind.TypeParen ||
+  kind === NodeKind.TypeReadonly ||
+  kind === NodeKind.TypeFunction ||
+  kind === NodeKind.TypeLiteral ||
+  kind === NodeKind.TypeOperator
 
 /**
  * Every annotation naming a handle class outside an H2 parameter. A `new`
@@ -408,7 +379,7 @@ const isTypeNode = (kind: i32): boolean =>
  * literal, and so is a field's.
  */
 const walkTypes = (program: CheckedProgram, node: Node, parents: Node[], out: HandleFinding[]): void => {
-  if (node.kind === N_TYPE_REF) {
+  if (node.kind === NodeKind.TypeRef) {
     const info = program.struct(node.text)
     if (info !== null && info.handle) {
       // `parents` ends at the PARAM the annotation is the type of, if it is
@@ -477,7 +448,7 @@ class HandleWalk {
 const climbParens = (walk: HandleWalk): i32 => {
   let up = 1
   let at = walk.parent(up)
-  while (at !== null && at.kind === N_PAREN) {
+  while (at !== null && at.kind === NodeKind.Paren) {
     up = up + 1
     at = walk.parent(up)
   }
@@ -499,7 +470,7 @@ const foreignCallOf = (walk: HandleWalk, up: i32): Node | null => {
   // is a `declare function`, since a function this program defines cannot
   // take a `CPtr` and a generic one cannot be instantiated at it.
   const call = walk.parent(up + 1)
-  if (call === null || call.kind !== N_CALL || walk.program.nodeCallees[call.id] === null) {
+  if (call === null || call.kind !== NodeKind.Call || walk.program.nodeCallees[call.id] === null) {
     return null
   }
   return call
@@ -538,7 +509,7 @@ const soundWrite = (walk: HandleWalk, assign: Node): boolean => {
  */
 const checkFieldRead = (walk: HandleWalk, member: Node, info: StructInfo): void => {
   const receiver = unwrapParens(member.children[0])
-  if (receiver.kind === N_THIS && !walk.ctor) {
+  if (receiver.kind === NodeKind.This && !walk.ctor) {
     const up = climbParens(walk)
     const call = foreignCallOf(walk, up)
     if (call !== null) {
@@ -578,9 +549,9 @@ const checkDerivedUse = (walk: HandleWalk, ident: Node): void => {
     return
   }
   const test = walk.parent(up)
-  if (test !== null && test.kind === N_BINARY && (test.text === "===" || test.text === "!==")) {
+  if (test !== null && test.kind === NodeKind.Binary && (test.text === "===" || test.text === "!==")) {
     // `null` is never the left operand: the checker gives it no type there.
-    if (unwrapParens(test.children[1]).kind === N_NULL) {
+    if (unwrapParens(test.children[1]).kind === NodeKind.Null) {
       return
     }
   }
@@ -595,7 +566,7 @@ const checkDerivedUse = (walk: HandleWalk, ident: Node): void => {
 
 /** Whether a node of handle type `type` stands where a handle may (§4d U1, U2). */
 const admittedValue = (walk: HandleWalk, node: Node, type: i32, depth: i32): boolean => {
-  if ((node.kind !== N_IDENT && node.kind !== N_THIS) || depth > 0) {
+  if ((node.kind !== NodeKind.Ident && node.kind !== NodeKind.This) || depth > 0) {
     return false
   }
   const up = climbParens(walk)
@@ -603,13 +574,13 @@ const admittedValue = (walk: HandleWalk, node: Node, type: i32, depth: i32): boo
   if (parent === null) {
     return false
   }
-  if (node.kind === N_THIS && walk.ctor) {
+  if (node.kind === NodeKind.This && walk.ctor) {
     // In its constructor the object is half built. Its one write,
     // `this.<field> = ...`, is taken by the member above it, so `this`
     // reaches here only as a value or a method's receiver.
     return false
   }
-  if (parent.kind === N_MEMBER) {
+  if (parent.kind === NodeKind.Member) {
     // A method call: the pointer is read through the member above it, a
     // handle class has no other field, and a method is not taken as a value.
     // `?.` is refused unless the chain ends in `??`, which the walk refuses as
@@ -620,7 +591,7 @@ const admittedValue = (walk: HandleWalk, node: Node, type: i32, depth: i32): boo
   // argument list. A `declare function` takes no class, so the callee is one
   // this program defines.
   const call = walk.parent(up + 1)
-  if (call === null || call.kind !== N_CALL) {
+  if (call === null || call.kind !== NodeKind.Call) {
     return false
   }
   const sig = walk.program.nodeCallees[call.id]
@@ -667,13 +638,13 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
     return
   }
   const program = walk.program
-  if (node.kind === N_MEMBER) {
+  if (node.kind === NodeKind.Member) {
     const owner = handleOf(program, walk.table, program.nodeTypes[unwrapParens(node.children[0]).id])
     if (owner !== null && node.text === owner.handleField) {
       const parent = walk.parent(1)
       if (
         parent !== null &&
-        parent.kind === N_BINARY &&
+        parent.kind === NodeKind.Binary &&
         isAssignmentOperator(parent.text) &&
         parent.children[0] === node
       ) {
@@ -689,11 +660,11 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
     }
   }
   // A binding's own name is walked before its initialiser binds it, and has no type.
-  if (node.kind === N_IDENT && isDerived(walk, sourceLocal(program.nodeLocals[node.id]))) {
+  if (node.kind === NodeKind.Ident && isDerived(walk, sourceLocal(program.nodeLocals[node.id]))) {
     checkDerivedUse(walk, node)
     return
   }
-  if (node.kind === N_NEW) {
+  if (node.kind === NodeKind.New) {
     const info = handleOf(program, walk.table, program.nodeTypes[node.id])
     if (info !== null) {
       checkHandleNew(walk, node, info, depth)
@@ -703,7 +674,7 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
       return
     }
   }
-  if (node.kind !== N_PAREN) {
+  if (node.kind !== NodeKind.Paren) {
     const type = program.nodeTypes[node.id]
     const info = handleOf(program, walk.table, type)
     if (info !== null && !admittedValue(walk, node, type, depth)) {
@@ -711,7 +682,7 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
       return
     }
   }
-  const inner = node.kind === N_ARROW || node.kind === N_FUNCTION
+  const inner = node.kind === NodeKind.Arrow || node.kind === NodeKind.FunctionDecl
   walk.parents.push(node)
   for (const child of node.children) {
     walkValues(walk, child, inner ? depth + 1 : depth)

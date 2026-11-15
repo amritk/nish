@@ -726,7 +726,11 @@ export class QuicStream {
   }
 
   /**
-   * How many more bytes the send buffer takes.
+   * How many more bytes the send buffer takes. The buffer is the stream's
+   * `maxStreamData` and is the memory bound of its send side: bytes stay in
+   * it until the peer acknowledges them, so one lost packet holds back
+   * everything written after it until its resend is acknowledged (quic.ts
+   * probes early meanwhile, so a peer whose address changes is still seen).
    *
    * @returns The buffer size less the bytes written and not yet acknowledged.
    */
@@ -1179,6 +1183,22 @@ export class QuicStreams {
     this.maxStreamsUniOwed = false
     this.streamsBlockedBidiOwed = false
     this.streamsBlockedUniOwed = false
+  }
+
+  /**
+   * Whether a stream's send buffer is full behind bytes the peer has not
+   * acknowledged, with nothing of it left to send: the application offered
+   * more than `room` took, and every byte the buffer holds is in flight. The
+   * stream then sends nothing new until an ACK frees room.
+   * @internal Read by quic.ts, for its early probe.
+   */
+  bufferBlocked(): boolean {
+    for (const stream of this.slots) {
+      if (stream.id >= 0 && stream.wantsWrite && stream.room() <= 0 && !stream.wantsToSend()) {
+        return true
+      }
+    }
+    return false
   }
 
   /**

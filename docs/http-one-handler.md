@@ -1,16 +1,11 @@
 # One handler across HTTP/1.1, 2 and 3 (WP39 G7)
 
-**Status: design note, written before code.** It fixes the API, the
-mapping onto the four carriers, Alt-Svc, h2c, the allocation argument and
-the tests and security records for two later stages: **g7-h2c**, which adds
-`std/net/http2-cleartext.ts`, and **g7-facade**, which adds
+**Status: g7-h2c built (#1461); g7-facade not yet built.** The note fixes
+the API, the mapping onto the four carriers, Alt-Svc, h2c, the allocation
+argument and the tests and security records for two stages: **g7-h2c**,
+which added `std/net/http2-cleartext.ts`, and **g7-facade**, which adds
 `std/net/http-server.ts`. Its parent is [WP39](wp39-http-server.md), and it
 answers [wp43 §5 "Why HTTP/2 and HTTP/3 are a follow-up"](wp43-http-app-layer.md#5-the-handler-over-http11).
-
-The plan named this file `docs/wp39-g7-one-handler.md`. `docs/check-links.mjs`
-treats every `docs/wp<N>-*.md` as a work package with its own roadmap page,
-and G7 is a stage of WP39, not a package, so the note sits beside
-[h3-latency.md](h3-latency.md) instead.
 
 ## 1. What G7 delivers, and what it touches
 

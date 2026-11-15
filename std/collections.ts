@@ -688,3 +688,54 @@ export class Set<T> {
  * of an earlier function records.
  */
 const storedKey = <K>(key: K): K => key
+
+/**
+ * Calls `f` with the value and the key of each entry of `m`, in insertion
+ * order: what `m.forEach(f)` compiles to when `f` takes two parameters. It is
+ * the walk a `for...of` over `m.keys()` makes, and reads the value from the
+ * entry the walk is on, so each entry costs no probe. An entry the callback
+ * adds is visited and one it deletes is not, as `Map.prototype.forEach` does.
+ * Placed after `storedKey` so that no earlier line moved.
+ *
+ * @param m the table walked; the callback may change it.
+ * @param f called once per live entry, with its value and then its key.
+ */
+export const forEachEntry = <K, V>(m: Map<K, V>, f: (value: V, key: K) => void): void => {
+  m.walkOpen()
+  for (let i: i32 = m.walkNext(0); i >= 0; i = m.walkNext(i + 1)) {
+    f(m.valueAt(i), m.keyAt(i))
+  }
+  m.walkClose()
+}
+
+/**
+ * Calls `f` with the value of each entry of `m`, in insertion order: what
+ * `m.forEach(f)` compiles to when `f` takes one parameter. The walk is
+ * `forEachEntry`'s.
+ *
+ * @param m the table walked; the callback may change it.
+ * @param f called once per live entry, with its value.
+ */
+export const forEachValue = <K, V>(m: Map<K, V>, f: (value: V) => void): void => {
+  m.walkOpen()
+  for (let i: i32 = m.walkNext(0); i >= 0; i = m.walkNext(i + 1)) {
+    f(m.valueAt(i))
+  }
+  m.walkClose()
+}
+
+/**
+ * Calls `f` with each element of `s`, in insertion order: what `s.forEach(f)`
+ * compiles to. The walk is a `for...of` over `s`, with its rule for elements
+ * the callback adds or deletes.
+ *
+ * @param s the set walked; the callback may change it.
+ * @param f called once per live element.
+ */
+export const forEachElement = <T>(s: Set<T>, f: (value: T) => void): void => {
+  s.walkOpen()
+  for (let i: i32 = s.walkNext(0); i >= 0; i = s.walkNext(i + 1)) {
+    f(s.keyAt(i))
+  }
+  s.walkClose()
+}

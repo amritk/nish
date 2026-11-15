@@ -1,0 +1,1 @@
+This `store()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins

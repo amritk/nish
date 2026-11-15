@@ -1,0 +1,14 @@
+over a=1
+over b=2
+over c=30
+cur a=1
+cur b=2
+cur c=30
+2 false
+again a=1
+again c=30
+again a=5
+order c=30
+order a=5
+clear 1
+0

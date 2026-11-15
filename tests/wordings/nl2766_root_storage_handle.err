@@ -1,0 +1,1 @@
+Root storage `log` cannot keep Log.out (File): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout

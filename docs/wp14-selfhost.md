@@ -49,9 +49,12 @@ The trap in every bootstrap is writing the compiler in more language than it
 implements. **Nish-0** is the fixed subset `src/` may use. It is written
 **without** generics, closures, nested functions or function values (a
 top-level `const` bound to an arrow is a declaration, not a value, and is how
-`src/` declares a function since WP22 stage C); `type` aliases, `enum`,
+`src/` declares a function since WP22 stage C); `type` aliases,
 `namespace`, `static` members, getters and setters; `try`/`catch`; and
-inheritance or downcasts. The current list, kept in step with this one, is in
+inheritance or downcasts. It admits numeric `enum` (since the release that
+compiled one, WP23 §3): members compared with `===` / `!==` and switched on,
+as `NodeKind`, the node kinds, are; bit flags stay `i32` module constants, by
+the language's own rule. The current list, kept in step with this one, is in
 `.claude/selfhost.md`; adding to it is rule 5 of §6.
 
 ### 2.1 One `Node` class, not a class hierarchy
@@ -59,8 +62,9 @@ inheritance or downcasts. The current list, kept in step with this one, is in
 Nish had single inheritance then (WP2b; WP25 has since removed it) and no
 downcast, and adding one would mean a
 runtime tag check, a `T | null` result and a checker rule for a cast that can
-fail. So `src/` uses **one `Node` class** with a `kind: i32` discriminant and
-the union of the fields any node needs (`src/nodes.ts`). Field access is
+fail. So `src/` uses **one `Node` class** with a `kind` discriminant and
+the union of the fields any node needs (`src/nodes.ts`; the discriminant is
+`NodeKind` since Nish-0 admitted enums). Field access is
 guarded by `kind`, exactly as `switch (node.kind)` reads. It costs memory and
 removes downcasting from the critical path. Types and symbols follow the same
 pattern: a type is an `i32` interned in a `TypeTable`.
@@ -170,7 +174,7 @@ S1 and S2 were new code — stage0 had no lexer or parser of its own — so they
 went first and the project was re-decided at a gate after them on three
 questions: did Nish-0 hold, how far off was the line count, and what did the
 oracle cost. Nish-0 held at every milestone with nothing added except, at S5,
-the parenthesised type (`(Local | null)[]`, `N_TYPE_PAREN`), which entered the
+the parenthesised type (`(Local | null)[]`, `NodeKind.TypeParen`), which entered the
 language with its golden, negative, rule and cookbook entry first. The ports
 came in near the size of the code they replaced rather than at twice it, and
 the oracles found real bugs on both sides cheaply: four in S1–S2, all the

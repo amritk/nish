@@ -37,6 +37,8 @@ on:
 
 permissions:
   contents: read
+  # gh attestation verify, for the seed scripts/fetch-seed.sh checks.
+  attestations: read
 
 # ci.yml says why this cache is set for every job, and why it is outside the checkout.
 #
@@ -66,7 +68,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld + the sanitizer runtimes
@@ -86,10 +88,13 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler

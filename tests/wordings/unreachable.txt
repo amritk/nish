@@ -16,32 +16,33 @@
 # compiler handed that number to a rule, so it may never be handed to another
 # one. The entry costs a string and matches nothing.
 NL2001  retired: the overload/override rule the inheritance work removed
-NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
-NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal WP18 G7 replaced; a template is imported and instantiated now (tests/link/generic_import)
-NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by WP18 G7 (tests/link/generic_import, tests/link/package_generic_import)
-NL2333  retired: `integer<Lo, Hi>` refused as reserved until ranged integers landed (WP31 W1); `integer` is the type now, and a malformed one is NL2378-NL2383
-NL2337  retired: `... is a function type, which may only annotate a parameter of a top-level function`; WP51 stage 1 made a function type outside a parameter a function reference type, so an array, field, local or return of one compiles (tests/cases/fnref_array)
-NL2357  retired: `get` refused as "not supported yet" until its `V | undefined` landed (WP32 S3); each place that refuses a maybe has its own code now, NL2361-NL2369
-NL2294  retired: `a constrained type parameter is not supported yet`, the refusal WP18 G6 replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
+NL2206  retired: `Generic classes are not supported`, the refusal generic classes replaced; `new` on a class that is not generic is NL2318 now
+NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal cross-module generics replaced; a template is imported and instantiated now (tests/link/generic_import)
+NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by cross-module generics (tests/link/generic_import, tests/link/package_generic_import)
+NL2333  retired: `integer<Lo, Hi>` refused as reserved until ranged integers landed; `integer` is the type now, and a malformed one is NL2378-NL2383
+NL2337  retired: `... is a function type, which may only annotate a parameter of a top-level function`; function reference types made a function type outside a parameter a function reference type, so an array, field, local or return of one compiles (tests/cases/fnref_array)
+NL2357  retired: `get` refused as "not supported yet" until its `V | undefined` landed; each place that refuses a maybe has its own code now, NL2361-NL2369
+NL2294  retired: `a constrained type parameter is not supported yet`, the refusal type-parameter constraints replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
 NL1061  retired: `Object spread is forbidden in`, the Phase 0 refusal object spread replaced when it became field copies; each form it still refuses has its own code now, NL2702-NL2710 and NL3055 (tests/cases/reject_object_spread*)
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
 NL2040  retired: inheritance, removed
-NL2042  retired: the long form of the WP15 §8 allocation warning; the live one is NL9001
+NL2533  retired: `... cannot take a union as a type argument`, the refusal union type arguments lifted; a union is a generic's, a `Result`'s and `nish/map`'s helpers' type argument now (tests/cases/union_generic_class, union_generic_call, union_result, union_map_helpers), and what stays refused keeps its own code: a `Set` element or `Map` key NL2353, a generic variant NL2522, an inferred union NL2172, a variant stored through a generic field NL2534
+NL2042  retired: the long form of the allocation performance warning; the live one is NL9001
 NL2047  retired: inheritance, removed
 NL2049  retired: inheritance, removed
 NL2050  retired: inheritance, removed
 NL2051  retired: inheritance, removed
 NL2085  retired: inheritance, removed
-NL2087  retired: the long form of the WP15 §8 string warning; the live one is NL9002
+NL2087  retired: the long form of the string performance warning; the live one is NL9002
 NL2094  retired: inheritance, removed
-NL2125  retired: `declare function` is a supported construct since WP27 S1, so "not supported yet" names nothing; its wordings case went with it and the rules that replaced it are pinned by tests/cases/reject_ffi_*
+NL2125  retired: `declare function` is a supported construct now, so "not supported yet" names nothing; its wordings case went with it and the rules that replaced it are pinned by tests/cases/reject_ffi_*
 NL2110  retired: inheritance, removed
 NL2111  retired: inheritance, removed
 NL2112  retired: inheritance, removed
-NL2346  retired: WP29 P1's strict rule that a parallel body may not allocate at all; a body's allocations are recycled per element since, and what is refused instead is NL2351 (the arena) and NL2352 (an allocation that escapes), pinned by tests/cases/reject_par_arena and reject_par_alloc_escapes
-NL2123  retired: the `case` label rule before WP23 admitted an enum member; the live one is NL2284
+NL2346  retired: the first parallel loops' strict rule that a parallel body may not allocate at all; a body's allocations are recycled per element since, and what is refused instead is NL2351 (the arena) and NL2352 (an allocation that escapes), pinned by tests/cases/reject_par_arena and reject_par_alloc_escapes
+NL2123  retired: the `case` label rule from before an enum member was a label; the live one is NL2284
 NL2132  retired: inheritance, removed
 NL2154  retired: `super(...)`, removed with inheritance
 NL2155  retired: `super(...)`, removed with inheritance
@@ -52,35 +53,35 @@ NL2159  retired: `super`, removed with inheritance
 NL2166  retired: a `case` clause had to end in `break`, `return`, `continue` or `process.exit`; a clause falls into the next as in TypeScript now (tests/cases/cf_switch_fallthrough)
 NL2217  retired: the checker's refusal of a labelled `break`; one compiles now (tests/cases/cf_label_loops)
 NL2218  retired: the checker's refusal of a labelled `continue`; one compiles now (tests/cases/cf_label_loops)
-NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
-NL2227  retired: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2320
-NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2321, itself retired for NL2538
-NL2305  retired: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2555
-NL2321  retired: the scalar-or-`CPtr` `declare function` return rule, before WP27 S3.2 let a copied `string` through; the live one is NL2538
-NL2322  retired: the `declare function` parameter rule that named scalars, `CPtr` and `string` only, before WP53 B1.1 let a `u8[]` buffer through; the live one is NL2555
-NL2324  retired: the `declare function` rule that refused a `CPtr | null` parameter, before WP27 S3.3 let the literal `null` through; a held nullable pointer is NL2539
-NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
-NL2288  retired: `Enums cannot be exported`, the refusal WP34 N1 replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2045 (tests/link/enum_import_not_exported)
-NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2045 (tests/link/alias_import_not_exported)
-NL2664  retired: a typed-array parameter of a host function refused until buffer windows landed (WP50 S3); a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
-NL2665  retired: a `string` parameter of a host function, refused until strings crossed (WP50 S4); it passes as its UTF-8 bytes' address and count, which the loader decodes
-NL8010  retired: WP33's float Math.min/max/round row; they lower to compare-and-select (llvm.minimum/maximum on wasm) and a copysign now, which answer NaN and -0 as JavaScript does, so no site diverges (tests/cases/port_num_libm pins the quiet)
-NL8011  retired: WP33's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
-NL2391  retired: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal WP29's task forms replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)
-NL2554  retired: the refusal of a call to a `declare function` that takes a `u8[]`, from WP53 B1.1 until B1.2 lowered the call; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
-NL2573  retired: the refusal of a `using` of a handle class, from WP53 H1.1 until H1.2 lowered its close; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
+NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before the refusal named the kind; the live ones are NL1054 and NL1055
+NL2227  retired: `Only relative import specifiers are supported`, from before a package name was one of the four legal forms; the live rule is NL2320
+NL2304  retired: the scalar-only `declare function` return rule, before a `CPtr` was let through; the live one is NL2321, itself retired for NL2538
+NL2305  retired: the scalar-only `declare function` parameter rule, before a `CPtr` was let through; the live one is NL2555
+NL2321  retired: the scalar-or-`CPtr` `declare function` return rule, before a copied `string` was let through; the live one is NL2538
+NL2322  retired: the `declare function` parameter rule that named scalars, `CPtr` and `string` only, before a `u8[]` buffer was let through; the live one is NL2555
+NL2324  retired: the `declare function` rule that refused a `CPtr | null` parameter, before the literal `null` was let through; a held nullable pointer is NL2539
+NL2287  retired before it ever fired: the number was reserved, and no message in either compiler produces the fragment
+NL2288  retired: `Enums cannot be exported`, the refusal exported types replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2045 (tests/link/enum_import_not_exported)
+NL2276  retired: `Type aliases cannot be exported`, the refusal exported types replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2045 (tests/link/alias_import_not_exported)
+NL2664  retired: a typed-array parameter of a host function refused until buffer windows landed; a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
+NL2665  retired: a `string` parameter of a host function, refused until strings crossed; it passes as its UTF-8 bytes' address and count, which the loader decodes
+NL8010  retired: the portability warning's float Math.min/max/round row; they lower to compare-and-select (llvm.minimum/maximum on wasm) and a copysign now, which answer NaN and -0 as JavaScript does, so no site diverges (tests/cases/port_num_libm pins the quiet)
+NL8011  retired: the portability warning's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
+NL2391  retired: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal arrow tasks replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)
+NL2554  retired: the refusal of a call to a `declare function` that takes a `u8[]`, until the call was lowered; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
+NL2573  retired: the refusal of a `using` of a handle class, until its close was lowered; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
 NL2426  retired: a `using a = arena()` block whose body calls `Arena.release` or `Arena.reset`, removed with them before 1.0; nothing a program can call moves the arena under the block's mark now
 NL7001  retired: the deprecation of `Arena.release` and `Arena.reset`, removed before 1.0; each is an unknown builtin (NL2244) now and `using a = arena()` is the scope (tests/run.js "arena_removed")
 NL7002  retired: the deprecation of an index unchecked only by --unchecked-indexing, removed before 1.0 with the flag; `uncheckedGet` and `uncheckedSet` from `nish:unsafe` are the unchecked forms
 NL9014  retired: the note that --unchecked-indexing reaches only the entry package, removed with the flag; the CLI refuses it with exit 2
 NL9015  retired: the note that --wrapping reaches only the entry package, removed with the flag; the CLI refuses it with exit 2 and `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap
-NL1004  retired: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that WP49 stage 4 replaced; `await` outside an `async` function is NL2641 now (tests/cases/reject_await)
-NL1015  retired: `async` functions are forbidden, the Phase 0 refusal WP49 stage 4 replaced; an async function is checked now, and its rules are NL1063 and NL2639-NL2655 (tests/cases/async_*, tests/cases/reject_async_*)
-NL2173  retired: `async functions are not supported`, stage0's refusal, shadowed by NL1015 until WP49 stage 4 allowed `async`
-NL2174  retired: `async methods are not supported`, stage0's refusal; a method is still refused, by NL1063
-NL2653  retired: `async` refused as "checked, but not yet compiled" until its native lowering landed (WP49 stage 4, part 2); a wasm build is still refused, by NL2652
-NL4016  retired: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
-NL2738  retired: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; WP51 stage 2 made a `Map` value a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
+NL1004  retired: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that async functions replaced; `await` outside an `async` function is NL2641 now (tests/cases/reject_await)
+NL1015  retired: `async` functions are forbidden, the Phase 0 refusal async functions replaced; an async function is checked now, and its rules are NL1063 and NL2639-NL2655 (tests/cases/async_*, tests/cases/reject_async_*)
+NL2173  retired: `async functions are not supported`, the first compiler's refusal, shadowed by NL1015 until `async` was allowed
+NL2174  retired: `async methods are not supported`, the first compiler's refusal; a method is still refused, by NL1063
+NL2653  retired: `async` refused as "checked, but not yet compiled" until its native lowering landed; a wasm build is still refused, by NL2652
+NL4016  retired: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (tests/emit-ts/async)
+NL2738  retired: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; a `Map` value became a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
 
 # --- Retired at R6: stage0 stated the rule, and stage0 is gone. ---------------
 # These were `tests/wordings/stage0_only.txt`: codes a program does provoke, but
@@ -92,7 +93,7 @@ NL2738  retired: `... cannot hold a function reference as its value: a `Map` val
 # the program that pins it. What is left is not the parser's: a rule that went
 # away. NL2302, the duplicate type parameter stage1 used to compile, left it
 # when the pass 1 sweep began to refuse one (#320).
-NL1055  retired: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
+NL1055  retired: Phase 0's refusal of a type parameter on a method; generic methods compile now, and reject_generic_method now pins type arguments at a method call
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------
 # `codeFor` walks the table longest fragment first, so a fragment that is a
@@ -107,8 +108,8 @@ NL2075  a class name is registered before any function signature, so NL2074 is t
 NL2109  the single-module `check()` path is not the driver's; the loader reports NL3006 instead
 NL2205  generators are Phase 0's (NL1044)
 NL2207  generic functions are Phase 0's (NL1054)
-NL2208  retired: `Generic methods are not supported`; generic methods compile since WP18 G8 (wp18 §15.8)
-NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
+NL2208  retired: `Generic methods are not supported`; generic methods compile now
+NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when a generic class became an ordinary struct
 NL3022  a member symbol carries its package's prefix, so only two same-named structs of one package share one; declaredStructs compares each with its own package's first and refuses the pair first, a declared class as NL3028 and an instantiation at its template as NL3013, and skips their members (#193)
 NL3023  NL3022 inside a package, preempted by NL3028 or NL3013 the same way (#193)
 

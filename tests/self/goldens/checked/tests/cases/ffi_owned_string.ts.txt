@@ -35,9 +35,9 @@ function churn(): i32 -> @churn
   local +0:9 t: string[] (const)
   local +1:12 i: i32 (let)
 function find(n: i32): string -> @find
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
-  calls: free nish_str_new strdup
+  calls: free nish_panic nish_str_new strdup
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
   callee +0:13 strdup -> @strdup
@@ -46,9 +46,9 @@ function find(n: i32): string -> @find
   callee +7:7 free -> @free
   callee +11:3 free -> @free
 function last(n: i32): string -> @last
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
-  calls: free nish_str_new strdup
+  calls: free nish_panic nish_str_new strdup
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
   callee +0:13 strdup -> @strdup
@@ -56,9 +56,9 @@ function last(n: i32): string -> @last
   local +5:12 i: i32 (let)
   callee +8:3 free -> @free
 function whiles(n: i32): string -> @whiles
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
-  calls: free nish_str_new strdup
+  calls: free nish_panic nish_str_new strdup
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
   callee +0:13 strdup -> @strdup
@@ -68,7 +68,7 @@ function whiles(n: i32): string -> @whiles
 function does(n: i32): string -> @does
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
-  calls: free nish_panic_overflow nish_str_new strdup
+  calls: free nish_panic nish_panic_overflow nish_str_new strdup
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
   callee +0:13 strdup -> @strdup
@@ -76,9 +76,9 @@ function does(n: i32): string -> @does
   local +5:7 i: i32 (let)
   callee +10:3 free -> @free
 function ofs(xs: i32[]): string -> @ofs
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
-  calls: free nish_str_new strdup
+  calls: free nish_panic nish_str_new strdup
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
@@ -87,9 +87,9 @@ function ofs(xs: i32[]): string -> @ofs
   local +5:14 x: i32 (const)
   callee +10:3 free -> @free
 function nested(n: i32): string -> @nested
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
-  calls: free nish_str_new strdup
+  calls: free nish_panic nish_str_new strdup
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
   callee +0:13 strdup -> @strdup
@@ -164,9 +164,9 @@ function owned(s: string): string -> @owned
   local +4:9 copy: string (const)
   callee +5:3 free -> @free
 function here(): string -> @here
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via realpath
-  calls: free nish_str_new realpath
+  calls: free nish_panic nish_str_new realpath
   stackSites=0 stackLocals=0
   local +0:9 p: CPtr | null (const)
   callee +0:13 realpath -> @realpath

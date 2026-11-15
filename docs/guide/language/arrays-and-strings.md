@@ -33,8 +33,8 @@ export const main = (): i32 => {
 
 Those — `length` (read-only), `push`, `pop`, `indexOf` and `join` (on a
 `string[]` only) — with `set` and `fill` on arrays of numbers, `sort`,
-`map`, `filter`, `some`, `every`, `findIndex` and `slice` (below), are every
-array method there is. There is no `find`, `reduce` or `forEach`, and no
+`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` (below),
+are every array method there is. There is no `find` or `reduce`, and no
 spread. Write the loop, or a function that takes
 [a function argument](functions.md#passing-a-function-to-a-function).
 
@@ -104,9 +104,9 @@ memory.
 
 ### `map`, `filter` and `slice`
 
-`map`, `filter`, `some`, `every` and `findIndex` take a callback, which gets
-the element, or the element and its index, as in TypeScript. `slice` copies a
-range into a new array.
+`map`, `filter`, `forEach`, `some`, `every` and `findIndex` take a callback,
+which gets the element, or the element and its index, as in TypeScript.
+`slice` copies a range into a new array.
 
 ```ts nish:ok
 export const main = (): i32 => {
@@ -169,6 +169,28 @@ export const main = (): i32 => {
 };
 ```
 
+`xs.forEach(f)` walks the array as that `for...of` loop does, with `f` written
+in as its body, except that it stops at the length the array had when the call
+began, as Node does, so an element `f` pushes is not visited. It answers
+nothing (`void`), and `f` follows the callback rule above, so it may call,
+print and `push` onto an array it can see, but not assign a local of the
+function around it. To add up, write the `for...of` loop of `sum` above: a
+`forEach` callback that assigns a total is refused (NL2586), and the message
+says to use `for...of`.
+
+```ts nish:ok
+export const main = (): i32 => {
+  const xs: i32[] = [3, 8, 1];
+  const seen: i32[] = [];
+  xs.forEach((x, i) => console.log(`${i}:${x}`));   // 0:3 1:8 2:1
+  xs.forEach((x) => {
+    seen.push(x * 10);
+  });
+  console.log(`${seen[2]}`);                         // 10
+  return 0;
+};
+```
+
 ### Bounds
 
 Every `xs[i]` is checked: an index outside `0 … xs.length - 1` — a negative
@@ -193,6 +215,49 @@ is why holding one of its elements across a `push` onto the same array is
 refused. An array of class instances, of an interface some class implements,
 or of a `T | null` holds a pointer to each element instead
 ([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
+
+### Lookup tables
+
+A top-level `const` declared `readonly u8[]` (or `u16`, `u32`, `i32`, `i64`
+or `f64`) and given an array literal of constants is a *constant table*. Its
+elements are worked out when the program compiles and kept as read-only
+data in the binary: nothing runs to build it, and nothing can write it
+([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
+
+```ts nish:ok
+const LIMIT: i32 = 100;
+const SCALE: readonly i32[] = [1, 10, LIMIT, LIMIT * 10];
+
+export const main = (): i32 => {
+  let total: i32 = 0;
+  for (let i = 0; i < SCALE.length; i++) {
+    total += SCALE[i];
+  }
+  console.log(`${SCALE.length} ${total}`);   // 4 1111
+  return 0;
+};
+```
+
+- **Each element is a constant**: a number, another module constant, or
+  arithmetic over them, and it must fit the element type; `256` in a
+  `readonly u8[]` is refused. A table has at least one element.
+- **It is spelled `readonly`.** Reading it — indexing, `length`, `slice`,
+  `indexOf`, `map`, a `for...of` — works as on any array; writing an element,
+  `push`, `sort`, or handing it where a writable `u8[]` is expected is
+  refused:
+
+```ts nish:err NL2792
+const XS: i32[] = [1, 2, 3];
+
+export const main = (): i32 => {
+  return XS[0];
+};
+```
+
+- **A `u8` index into a 256-entry `readonly u8[]` needs no bounds check**: a
+  `u8` cannot be out of range, so `TABLE[c]` is one load. That is the shape
+  of a byte classifier — one table entry per possible byte — which answers
+  in one read where a chain of `if`s compares the byte several times.
 
 ### Module storage
 

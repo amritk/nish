@@ -1,0 +1,1 @@
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name

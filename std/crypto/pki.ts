@@ -144,6 +144,11 @@ export const PKI_ERR_UNSUPPORTED_ALGORITHM: i32 = 14
 export const PKI_ERR_CHAIN_TOO_LONG: i32 = 15
 /** The chain asks for more work than one call does: signatures, names or subtrees. */
 export const PKI_ERR_BUDGET: i32 = 16
+/**
+ * A certificate on the path has a key the caller distrusts: the SHA-256 of
+ * its subjectPublicKeyInfo is one `pkiDistrustSpki` added to the store.
+ */
+export const PKI_ERR_DISTRUSTED: i32 = 17
 
 /** The most certificates a chain may hold, the leaf among them. */
 export const PKI_MAX_CHAIN_CERTS: i32 = 128
@@ -171,11 +176,14 @@ export class PkiTrustStore {
   roots: X509Certificate[]
   /** @internal The roots under each subject, keyed by the subject's DER in hex. */
   bySubject: Map<string, X509Certificate[]>
+  /** @internal The SHA-256 of each distrusted subjectPublicKeyInfo, in hex; empty unless `pkiDistrustSpki` filled it. */
+  distrusted: Map<string, boolean>
 
   /** An empty store; `pkiTrustStore` builds a filled one. */
   constructor() {
     this.roots = []
     this.bySubject = new Map<string, X509Certificate[]>()
+    this.distrusted = new Map<string, boolean>()
   }
 }
 
@@ -740,7 +748,70 @@ const pkiIpWithin = (ip: u8[], t: X509GeneralSubtree): boolean => {
   return true
 }
 
-/** Whether `issuer`'s iPAddress constraints allow `ip`; a subtree of the other family never holds it. */
+/** Whether the first 12 octets of `a` are `::ffff:`, the prefix of an IPv4-mapped IPv6 address. */
+const pkiIpMappedPrefix = (a: u8[]): boolean => {
+  if (toI32(a.length) < 12) {
+    return false
+  }
+  for (let k: i32 = 0; k < 12 && k < toI32(a.length); k++) {
+    if (toI32(a[k]) !== (k < 10 ? 0 : 0xff)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether `ip`'s four octets from `at` equal `t`'s from `from` under `t`'s mask. */
+const pkiIpV4Within = (ip: u8[], at: i32, t: X509GeneralSubtree, from: i32): boolean => {
+  for (let k: i32 = 0; k < 4; k++) {
+    const a: i32 = at + k
+    const b: i32 = from + k
+    if (a < 0 || a >= toI32(ip.length) || b < 0 || b >= toI32(t.ip.length) || b >= toI32(t.mask.length)) {
+      return false
+    }
+    if ((toI32(ip[a]) & toI32(t.mask[b])) !== (toI32(t.ip[b]) & toI32(t.mask[b]))) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Whether the excluded iPAddress subtree `t` holds `ip`: as `pkiIpWithin`,
+ * and across the families for an IPv4 address and its IPv4-mapped IPv6 form
+ * (`::ffff:a.b.c.d`), which name the same host. An IPv4 subtree holds the
+ * mapped form of every address it holds; an IPv6 subtree whose mask covers
+ * the whole `::ffff:0:0/96` prefix holds the IPv4 addresses it maps. A
+ * wider IPv6 subtree, such as `::/0`, holds no IPv4 address (PKI-33).
+ */
+const pkiIpExcludedBy = (ip: u8[], t: X509GeneralSubtree): boolean => {
+  if (pkiIpWithin(ip, t)) {
+    return true
+  }
+  const n: i32 = toI32(ip.length)
+  const tn: i32 = toI32(t.ip.length)
+  if (tn !== toI32(t.mask.length)) {
+    return false
+  }
+  if (n === 16 && tn === 4) {
+    return pkiIpMappedPrefix(ip) && pkiIpV4Within(ip, 12, t, 0)
+  }
+  if (n === 4 && tn === 16) {
+    for (let k: i32 = 0; k < 12 && k < toI32(t.mask.length); k++) {
+      if (toI32(t.mask[k]) !== 0xff) {
+        return false
+      }
+    }
+    return pkiIpMappedPrefix(t.ip) && pkiIpV4Within(ip, 0, t, 12)
+  }
+  return false
+}
+
+/**
+ * Whether `issuer`'s iPAddress constraints allow `ip`. A permitted subtree
+ * of the other family never holds it; an excluded one holds an address's
+ * IPv4-mapped twin as `pkiIpExcludedBy` says, so the exclusion fails closed.
+ */
 const pkiIpAllowed = (issuer: X509Certificate, ip: u8[]): boolean => {
   let listed: boolean = false
   let inside: boolean = false
@@ -756,7 +827,7 @@ const pkiIpAllowed = (issuer: X509Certificate, ip: u8[]): boolean => {
     return false
   }
   for (const e of issuer.ncExcluded) {
-    if (e.kind === X509_GN_IP && pkiIpWithin(ip, e)) {
+    if (e.kind === X509_GN_IP && pkiIpExcludedBy(ip, e)) {
       return false
     }
   }
@@ -882,7 +953,8 @@ const pkiCriticalitySound = (c: X509Certificate): boolean => !c.akiCritical && (
 
 /**
  * The checks of the issuer `cand` added above the path, a root of the store
- * when `root` holds and an intermediate otherwise: its validity, its critical
+ * when `root` holds and an intermediate otherwise: that the store does not
+ * distrust its key (`pkiDistrustSpki`), its validity, its critical
  * extensions and the criticality RFC 5280 fixes, among them a critical
  * basicConstraints (§4.2.1.9), that it is a CA, its extKeyUsage, its name constraints, its
  * signature over `child` — the only check that costs — and, once that
@@ -896,6 +968,9 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
   // No intermediate is added past PKI_MAX_PATH - 1, so a root always fits.
   if (!root && toI32(s.path.length) + 2 > PKI_MAX_PATH) {
     return PKI_ERR_CHAIN_TOO_LONG
+  }
+  if (pkiIsDistrusted(s.store, cand)) {
+    return PKI_ERR_DISTRUSTED
   }
   const time: i32 = pkiTimeCode(cand, s.nowMs)
   if (time !== PKI_OK) {
@@ -936,6 +1011,14 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
   }
   const signature: i32 = pkiCheckSignature(s, child, cand)
   return signature !== PKI_OK ? signature : pkiKeyIdsCode(cand, root)
+}
+
+/** Whether `cert`'s subjectPublicKeyInfo hashes to one `store` distrusts; no hash is taken while it distrusts none. */
+const pkiIsDistrusted = (store: PkiTrustStore, cert: X509Certificate): boolean => {
+  if (store.distrusted.size === 0) {
+    return false
+  }
+  return store.distrusted.has(pkiHex(sha256(cert.spki)))
 }
 
 /** Keeps `code` as the answer when its attempt, `score` long, got nearer a root than any before it. */
@@ -1158,6 +1241,28 @@ export const pkiTrustStore = (roots: X509Certificate[]): PkiTrustStore => {
 }
 
 /**
+ * Distrusts a key in `store`: from now on, `pkiVerifyServer` refuses with
+ * `PKI_ERR_DISTRUSTED` a path that holds any certificate, the leaf, an
+ * intermediate or a root, whose subjectPublicKeyInfo DER hashes to
+ * `spkiSha256` under SHA-256. A certificate's DER is `X509Certificate.spki`;
+ * `sha256` of `nish/crypto/sha256` hashes it. The key is refused whatever
+ * name or certificate carries it, so one entry covers a CA's cross-signs and
+ * reissues. A store distrusts nothing until this is called.
+ *
+ * @param store The store to add the hash to.
+ * @param spkiSha256 The SHA-256 of the subjectPublicKeyInfo DER, 32 bytes.
+ * @returns Whether the hash was added: false, and nothing added, unless it is
+ *   32 bytes long.
+ */
+export const pkiDistrustSpki = (store: PkiTrustStore, spkiSha256: u8[]): boolean => {
+  if (toI32(spkiSha256.length) !== 32) {
+    return false
+  }
+  store.distrusted.set(pkiHex(spkiSha256), true)
+  return true
+}
+
+/**
  * Verifies a TLS server's chain: `chain` holds each certificate's DER as the
  * server sent it, the leaf first; `hostname` is the name or address dialled,
  * ASCII (an internationalised name in its A-label form); `nowMs` is the
@@ -1172,7 +1277,8 @@ export const pkiTrustStore = (roots: X509Certificate[]): PkiTrustStore => {
  * `PKI_ERR_MALFORMED` and one with more than `PKI_MAX_NAMES` names or
  * `PKI_MAX_SUBTREES` subtrees is `PKI_ERR_BUDGET`; then the leaf's own checks,
  * in turn its validity, an unknown critical extension, being a CA, its key
- * usage, its extended key usage and the host name; then the path search,
+ * usage, its extended key usage and the host name; then whether its key is
+ * distrusted (`pkiDistrustSpki`); then the path search,
  * whose reason the module's header ranks, or `PKI_ERR_BUDGET` when it ran out
  * of signatures or name comparisons; and last, once a path is found, the
  * leaf's profile.
@@ -1224,6 +1330,9 @@ export const pkiVerifyServer = (
   const leafCode: i32 = pkiLeafCode(leaf, hostname, nowMs)
   if (leafCode !== PKI_OK) {
     return new PkiResult(leafCode, none)
+  }
+  if (pkiIsDistrusted(store, leaf)) {
+    return new PkiResult(PKI_ERR_DISTRUSTED, none)
   }
   const pool: X509Certificate[] = []
   for (let i: i32 = 1; i < toI32(certs.length); i++) {
@@ -1297,6 +1406,9 @@ export const pkiReason = (code: i32): string => {
   }
   if (code === PKI_ERR_BUDGET) {
     return "the chain asks for more work than one verification does"
+  }
+  if (code === PKI_ERR_DISTRUSTED) {
+    return "a certificate's key is distrusted"
   }
   return "unknown reason"
 }

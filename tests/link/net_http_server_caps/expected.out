@@ -1,0 +1,30 @@
+PASS  requests 8, h2c: two streams held on one connection, the third refused
+PASS  a second connection's stream is served
+PASS  four connections hold two each: the pool of eight is full
+PASS  a fifth connection's stream is refused
+PASS  the eight held are answered
+PASS  the first connection's two streams end
+PASS  requests 8, h3: two streams held on one connection, the third H3_REQUEST_REJECTED
+PASS  four connections hold two each
+PASS  a fifth connection's stream is H3_REQUEST_REJECTED
+PASS  the eight held are answered
+PASS  their streams end
+PASS  requests 1, h2c: 1 connections hold one each
+PASS  requests 1, h2c: a connection's second stream is refused
+PASS  requests 1, h2c: the next connection's stream is refused
+PASS  requests 1, h3: 1 connections hold one each
+PASS  requests 1, h3: the next connection's stream is H3_REQUEST_REJECTED
+PASS  requests 1, h3: the held streams end once answered
+PASS  requests 2, h2c: 2 connections hold one each
+PASS  requests 2, h2c: a connection's second stream is refused
+PASS  requests 2, h2c: the next connection's stream is refused
+PASS  requests 2, h3: 2 connections hold one each
+PASS  requests 2, h3: the next connection's stream is H3_REQUEST_REJECTED
+PASS  requests 2, h3: the held streams end once answered
+PASS  requests 3, h2c: 3 connections hold one each
+PASS  requests 3, h2c: a connection's second stream is refused
+PASS  requests 3, h2c: the next connection's stream is refused
+PASS  requests 3, h3: 3 connections hold one each
+PASS  requests 3, h3: the next connection's stream is H3_REQUEST_REJECTED
+PASS  requests 3, h3: the held streams end once answered
+http server caps: 29 passed, 0 failed, 0 skipped

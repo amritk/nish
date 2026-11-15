@@ -51,7 +51,7 @@ const SECTION_START = "// ---- What a bodiless instance states"
 // in a comment or another banner cannot end the section early.
 const SECTION_END = /^\/\/ ---- The fixpoint -+$/m
 const DISPATCH_START = "has a body only the emitter can write"
-const DISPATCH_END = "} else if (body.kind === N_BLOCK) {"
+const DISPATCH_END = "} else if (body.kind === NodeKind.Block) {"
 const STANCE_FACTS =
   /\.(writesThrough|writesShared|writesReach|writesDeep|captured|outlives|polluted|resizesArray)\s*=[^=]/
 const WRITERS = new Set(["applyParamStance", "applyStance"])

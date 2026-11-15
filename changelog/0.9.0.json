@@ -34,7 +34,7 @@
       "type": "feat",
       "scope": "checker",
       "breaking": false,
-      "title": "spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
+      "title": "spell an instantiated class as written, in diagnostics and -g",
       "body": "An instantiated class is now `Box<i32>` wherever a person reads it:\n- every diagnostic, including the member, method-argument, object-literal,\n  definite-assignment, `implements` and cross-package clash messages;\n- the `--emit-checked` dump;\n- the `-g` DWARF `name` of its composite type and of its methods\n  (`Box<i32>.get`).\n\nThe mangled spelling `Box$i32` is kept wherever a machine reads it: symbols,\n`%struct` names, DWARF `linkageName`, sidecars and every table key.\n\nThe display spelling lives in a side table on the `TypeTable`, set once where\nan instantiation is minted, so `typeName` answers it and `mangle` and `nameOf`\nnever change. The debug type cache is keyed on the mangled name, which stays\ninjective.\n\nA polymorphic-recursion chain through a class now reads\n`grow<i32>` asks for `grow<Box<i32>>`. No non-debug IR byte moved: every\nexisting `gen_*` golden is unchanged.",
       "metrics": [],
       "refs": [
@@ -86,7 +86,7 @@
       "type": "feat",
       "scope": "interop",
       "breaking": true,
-      "title": "export generic instantiations under valid, injective names (WP18 G8)",
+      "title": "export generic instantiations under valid, injective names",
       "body": "An exported generic's instantiations now appear in every sidecar under\nnames that compile and cannot collide.\n\nIn a C header an instantiation is `nish_gen_<collapse>`, for example\n`nish_gen_identity_i32` or `nish_gen_identity_arr_i32`. It is bound to\nits symbol with `NISH_SYMBOL`, and the comment says which instantiation\nit is. Because `nish_` is reserved for user functions and classes, a\nuser's `identity_i32` can no longer produce a second declaration of the\nsame C name. Any remaining clash, which only a `.`-joined method name\ncan still produce, is refused with NL4008, naming both symbols.\n\n`.d.ts`, the wasm loader and N-API export the same identifier. Before\nthis, an array, nullable or `Result` argument put a `.` into the\nmangled name, so those exports were not valid JavaScript identifiers.\n\nAn exported generic that nothing instantiates has no symbol at all. It\nis now refused with NL4007 when any sidecar is requested, rather than\nbeing missing from the output without a word. A plain `.ll` compile is\nunchanged.\n\nBREAKING CHANGE: an exported instantiation's C, `.d.ts`, wasm-loader\nand N-API names change from the plain collapse (`identity_i32`) to\n`nish_gen_identity_i32`, so call the new name. A program with an\nexported but uninstantiated generic, or with two symbols that collapse\nto one C name, is now refused when a sidecar is requested (NL4007,\nNL4008). Instantiate the generic or stop exporting it, and rename one\nof the clashing symbols.",
       "metrics": [],
       "refs": [
@@ -114,7 +114,7 @@
       "type": "feat",
       "scope": "checker",
       "breaking": false,
-      "title": "generic methods on classes (WP18 §14 q7)",
+      "title": "generic methods on classes",
       "body": "A method of a class, generic or not, may now declare type parameters of\nits own:\n`class Box<T> { pair<U>(u: U): Pair<T, U> }`. They are inferred from the\narguments, exactly as a generic function's are; type arguments are never\nwritten at the call.\n\nEach (receiver instantiation × method tuple) is monomorphised into one\n`define`, named `Box$i32.pair$str`, and displayed as\n`Box<i32>.pair<string>` in diagnostics and `-g`.\n\nThe generic-function rules all apply:\n- the termination check, over the receiver and the method tuple together;\n- constraints, checked by declaration identity;\n- the whole-program rule, one definition in the declaring module;\n- NL4007 for an exported but never-instantiated generic method when a\n  sidecar is requested.\n\nRefused, each with a stable code:\n- a method type parameter that shadows the class's own (NL2331);\n- an uninferable method type parameter;\n- a generic constructor;\n- polymorphic recursion through a method;\n- a `$` in a generic method's name. That name is the base of every\n  instantiation's symbol, so a `$` there would let two methods mint one\n  symbol. An instantiation that did so anyway would now be an internal\n  error rather than a wrong call.\n\n`self/` does not use the construct, and every existing `gen_*` golden is\nunchanged.",
       "metrics": [],
       "refs": [

@@ -36,25 +36,7 @@
 import { CheckContext } from "./context"
 import { isAssignmentOperator, unwrapParens } from "./emit-util"
 import { isCollectionStruct, isMapOwner } from "./generics"
-import {
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CONDITIONAL,
-  N_EXPR_STMT,
-  N_FALSE,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NULL,
-  N_NUMBER,
-  N_PAREN,
-  N_STRING,
-  N_THIS,
-  N_TRUE,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   FUSE_PROBE,
@@ -111,7 +93,7 @@ export const recordGuardFusion = (ctx: CheckContext, stmt: Node): void => {
     return
   }
   let condition = unwrapParens(stmt.children[0])
-  const absent = condition.kind === N_UNARY && condition.text === "!"
+  const absent = condition.kind === NodeKind.Unary && condition.text === "!"
   if (absent) {
     condition = unwrapParens(condition.children[0])
   }
@@ -152,7 +134,11 @@ export const recordGuardFusion = (ctx: CheckContext, stmt: Node): void => {
  * (`checkMapGet`), so it is recognised by its spelling and that callee.
  */
 const collectionOwnerOf = (program: CheckedProgram, call: Node, name: string): StructInfo | null => {
-  if (call.kind !== N_CALL || call.children[0].kind !== N_MEMBER || call.children[0].text !== name) {
+  if (
+    call.kind !== NodeKind.Call ||
+    call.children[0].kind !== NodeKind.Member ||
+    call.children[0].text !== name
+  ) {
     return null
   }
   const sig: FunctionSig | null = program.nodeCallees[call.id]
@@ -169,36 +155,36 @@ const collectionOwnerOf = (program: CheckedProgram, call: Node, name: string): S
 /** The call a branch starts with, when its first statement is one: `{ m.set(k, E); ... }` or `m.set(k, E);`. */
 const firstCallOf = (branch: Node): Node | null => {
   let first = branch
-  if (branch.kind === N_BLOCK) {
+  if (branch.kind === NodeKind.Block) {
     if (branch.children.length === 0) {
       return null
     }
     first = branch.children[0]
   }
-  if (first.kind !== N_EXPR_STMT) {
+  if (first.kind !== NodeKind.ExprStmt) {
     return null
   }
   const call = unwrapParens(first.children[0])
-  return call.kind === N_CALL && call.children[0].kind === N_MEMBER ? call : null
+  return call.kind === NodeKind.Call && call.children[0].kind === NodeKind.Member ? call : null
 }
 
 /** Whether `call` is on `receiver` with `key` as its first argument, both spelled the same. */
 const sameCallTarget = (program: CheckedProgram, call: Node, receiver: Node, key: Node): boolean =>
-  call.children[0].kind === N_MEMBER &&
+  call.children[0].kind === NodeKind.Member &&
   call.children[1].children.length > 0 &&
   samePlace(program, call.children[0].children[0], receiver) &&
   samePlace(program, call.children[1].children[0], key)
 
 /** A receiver both calls evaluate to the same table: a local or parameter, or a `this.<field>` path. */
 const isFusablePlace = (program: CheckedProgram, node: Node): boolean =>
-  node.kind === N_IDENT ? program.nodeLocals[node.id] !== null : isThisPath(node)
+  node.kind === NodeKind.Ident ? program.nodeLocals[node.id] !== null : isThisPath(node)
 
 /** `this.a.b`: a chain of field reads that starts at `this`. */
 const isThisPath = (node: Node): boolean => {
-  if (node.kind === N_THIS) {
+  if (node.kind === NodeKind.This) {
     return true
   }
-  return node.kind === N_MEMBER && isThisPath(node.children[0])
+  return node.kind === NodeKind.Member && isThisPath(node.children[0])
 }
 
 /** A key that means the same at both calls: a place, or a literal. */
@@ -206,22 +192,25 @@ const isFusableKey = (program: CheckedProgram, node: Node): boolean =>
   isKeyLiteral(node) || isFusablePlace(program, node)
 
 const isKeyLiteral = (node: Node): boolean =>
-  node.kind === N_NUMBER || node.kind === N_STRING || node.kind === N_TRUE || node.kind === N_FALSE
+  node.kind === NodeKind.Number ||
+  node.kind === NodeKind.String ||
+  node.kind === NodeKind.True ||
+  node.kind === NodeKind.False
 
 /** Whether `a` and `b` are spelled the same way and name the same place. */
 const samePlace = (program: CheckedProgram, a: Node, b: Node): boolean => {
   if (a.kind !== b.kind) {
     return false
   }
-  if (a.kind === N_IDENT) {
+  if (a.kind === NodeKind.Ident) {
     const local = program.nodeLocals[a.id]
     const other = program.nodeLocals[b.id]
     return a.text === b.text && local !== null && other !== null && local === other
   }
-  if (a.kind === N_THIS) {
+  if (a.kind === NodeKind.This) {
     return true
   }
-  if (a.kind === N_MEMBER) {
+  if (a.kind === NodeKind.Member) {
     return a.text === b.text && samePlace(program, a.children[0], b.children[0])
   }
   return isKeyLiteral(a) && a.text === b.text
@@ -237,31 +226,31 @@ const samePlace = (program: CheckedProgram, a: Node, b: Node): boolean => {
 const isInert = (ctx: CheckContext, node: Node, calls: Node[]): boolean => {
   const program = ctx.program
   switch (node.kind) {
-    case N_IDENT:
-    case N_NUMBER:
-    case N_STRING:
-    case N_TRUE:
-    case N_FALSE:
-    case N_NULL:
-    case N_THIS:
+    case NodeKind.Ident:
+    case NodeKind.Number:
+    case NodeKind.String:
+    case NodeKind.True:
+    case NodeKind.False:
+    case NodeKind.Null:
+    case NodeKind.This:
       return true
-    case N_PAREN:
+    case NodeKind.Paren:
       return isInert(ctx, node.children[0], calls)
-    case N_UNARY:
+    case NodeKind.Unary:
       return node.text !== "++" && node.text !== "--" && isInert(ctx, node.children[0], calls)
-    case N_BINARY:
+    case NodeKind.Binary:
       // A string `+` builds a new string, which is an allocation.
       if (isAssignmentOperator(node.text) || (node.text === "+" && program.nodeTypes[node.id] === T_STRING)) {
         return false
       }
       return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls)
-    case N_CONDITIONAL:
+    case NodeKind.Conditional:
       return (
         isInert(ctx, node.children[0], calls) &&
         isInert(ctx, node.children[1], calls) &&
         isInert(ctx, node.children[2], calls)
       )
-    case N_MEMBER:
+    case NodeKind.Member:
       // A field, `.length` or `.size` of a value, or an enum member; a
       // namespace's property (`Math.PI`, `process.argv`) is the builtins' to
       // lower, and is left out rather than looked into.
@@ -269,9 +258,9 @@ const isInert = (ctx: CheckContext, node: Node, calls: Node[]): boolean => {
         return isInert(ctx, node.children[0], calls)
       }
       return program.isEnumMember(ctx.table, node)
-    case N_INDEX:
+    case NodeKind.Index:
       return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls)
-    case N_CALL:
+    case NodeKind.Call:
       calls.push(node)
       return true
     default:

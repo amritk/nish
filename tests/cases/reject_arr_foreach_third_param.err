@@ -1,0 +1,1 @@
+The callback of `forEach` takes 3 parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead

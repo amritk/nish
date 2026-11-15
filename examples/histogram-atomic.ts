@@ -1,6 +1,6 @@
-// A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomics"). Each bin
-// is an `AtomicI32`. A task counts its own values into a local `i32[]` that no
-// other core touches, then adds each local count to its bin with one `add`, a
+// A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
+// bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task
+// counts its own values into a local `i32[]` that no other core touches, then adds each local count to its bin with one `add`, a
 // single indivisible read-modify-write: 256 atomic adds per task instead of one
 // per value, no lock, and no increment lost to a race.
 //
@@ -20,7 +20,7 @@
 // `--js-explicit-resource-management` before Node 24):
 //   node --js-explicit-resource-management --experimental-strip-types \
 //     --import ./runtime/nish.mjs -e 'import("./examples/histogram-atomic.ts").then((m) => m.main())'
-import { AtomicI32, Mutex, scope } from "nish/threads"
+import { AtomicI32Array, Mutex, scope } from "nish/threads"
 
 const BINS: i32 = 256
 const TASKS: i32 = 4
@@ -33,9 +33,9 @@ const ONE: i32 = 1
 class Shard {
   seed: i32
   n: i32
-  bins: AtomicI32[]
+  bins: AtomicI32Array
 
-  constructor(seed: i32, n: i32, bins: AtomicI32[]) {
+  constructor(seed: i32, n: i32, bins: AtomicI32Array) {
     this.seed = seed
     this.n = n
     this.bins = bins
@@ -63,8 +63,8 @@ const binShard = (s: Shard): i32 => {
       local[bin] += 1
     }
   }
-  for (let b = 0; b < local.length; b++) {
-    s.bins[b].add(local[b])
+  for (let b: i32 = 0; b < toI32(local.length); b++) {
+    s.bins.add(b, local[b])
   }
   return s.n
 }
@@ -77,7 +77,7 @@ const binPerValue = (s: Shard): i32 => {
     x = x ^ (x >>> 17)
     x = x ^ (x << 5)
     const bin: i32 = x >>> 24
-    s.bins[bin].add(ONE)
+    s.bins.add(bin, ONE)
   }
   return s.n
 }
@@ -159,10 +159,7 @@ const round = (mode: string, first: i32): i32[] => {
       out.push(g.value.bins[b])
     }
   } else {
-    const bins: AtomicI32[] = []
-    for (let b: i32 = 0; b < BINS; b++) {
-      bins.push(new AtomicI32(0))
-    }
+    const bins = new AtomicI32Array(BINS)
     const binned: i32[] = [0, 0, 0, 0]
     const perValue = mode === "--per-value"
     {
@@ -175,8 +172,8 @@ const round = (mode: string, first: i32): i32[] => {
         }
       }
     }
-    for (let b = 0; b < bins.length; b++) {
-      out.push(bins[b].load())
+    for (let b: i32 = 0; b < bins.length; b++) {
+      out.push(bins.load(b))
     }
   }
   return out

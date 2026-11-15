@@ -1,6 +1,6 @@
 # Nish benchmark suite
 
-Seven programs, each written four times with the same data layout and the same
+Nine programs, each written four times with the same data layout and the same
 expression order (so the floating-point results agree bit for bit): Nish
 (`.ts`), C (`.c`, `clang -O3`), Go (`.go`, `go build`) and Rust (`.rs`,
 `rustc -C opt-level=3 -C panic=abort -C codegen-units=1`). `bench/run.mjs`
@@ -52,6 +52,7 @@ Build products go to `build/bench/`.
 | `vec3` | a `Vec3` class with methods called in a tight loop, no allocation in the loop | `--number-mode f64` | 5e7 iterations | position and energy |
 | `result` | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency | | 2e8 calls | `15873` |
 | `math` | ten kernels, each its own row (`math/<kernel>`, the kernel named on the command line): `Math.atan2`, `tan` and `hypot` (Nish's from `std/math.ts`, a port of fdlibm; libm in C and Rust, Go's own `math` package in the Go column), `Math.sign` on `i32` and `f64`, `Math.imul`, and float `Math.round`, `min` and `max` with JavaScript's -0 and NaN, and `f32ToBits`; inputs walk a 4096-entry table seeded with NaN, ±0, ±Infinity and the round-half edges, and every result is folded through its f32 bits | `--number-mode f64` | 2e7 libm calls, 1.6e8 for the rest | one line per kernel |
+| `treesum` | two kernels, each its own row: `treesum/fn` walks the tree with a free function, `return t.value + sum(t.left) + sum(t.right)` (the self-recursive checked sum [wp9](../docs/wp9-optimisation.md#self-recursive-checked-sums-as-a-loop) measured), and `treesum/method` with a `TreeNode.sum()` method that tests each child for `null` before it calls; the twins use a heap node with two nullable children (`malloc`, `&TreeNode{…}`, `Box`) and the same recursion | | depth 20 (2^20 − 1 nodes), 60 passes | one line per kernel |
 
 Every size is chosen so the C version runs for at least a quarter of a second
 on the reference machine (a 2.1 GHz Xeon virtual machine): fib(35) and a
@@ -98,7 +99,7 @@ every core the machine has, the ratio and the peak memory of both.
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 | `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
 | `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
-| `par-histogram-atomic` | the same four streams into an `AtomicI32` per bin, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
+| `par-histogram-atomic` | the same four streams into one `AtomicI32Array` of sixteen bins, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
 
 ```bash
 node bench/run.mjs --only par            # all of them and their twins; `--only par-nbody` names one
@@ -128,7 +129,7 @@ its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,
 `std::sync::Mutex`, `sync.Mutex`), and `par-histogram-atomic` an atomic add per
-value in every language (`AtomicI32.add`, `AtomicI32::fetch_add` with
+value in every language (`AtomicI32Array.add`, `AtomicI32::fetch_add` with
 `SeqCst`, `atomic.Int32.Add`), so a lock is never timed against an atomic.
 
 **The same work is not the same checks or the same build**, and the table
@@ -189,21 +190,22 @@ because a squash merge does not keep the branch's own commits.
   as much (0.46 s), and in those runs it came out about level with Nish, so
   parking on a futex is not shown to be the cure. Those figures are from an
   earlier session, in which Nish's `par` run took about 274 ms; in the table's
-  latest runs it took 116 ms and Rust's 308 ms, with no change to either
+  latest runs it took 139 ms and Rust's 313 ms, with no change to either
   program, so par-histogram moves by 2x and more between sessions on this
   machine. Even the sign is not stable: the latest runs put Nish ahead of Go
-  on every median, outside the band in two of the three, where earlier runs
-  put it behind Go on every median.
-- `par-histogram-atomic`: 1.59x to 1.95x behind Rust on the minimum and 1.81x
-  to 1.96x on the median, past 1.10x in all three runs, and level with Go
-  (101 / 129 ms against Rust's 61.3 / 69.2 and Go's 93.3 / 106). Swapping the
-  lock for atomics takes Rust from 308 ms to 61 and Go from 194 to 93, but Nish
-  only from 116 to 101. Why is not measured yet. The differences in the
-  program are the checks above (an overflow check on `v * 75 + 74` and a
-  bounds check on `j.bins[bin]` per value, neither of which Rust makes), and
-  the bins: Nish's are an array of `AtomicI32` objects reached through the
-  task's class, where Rust's and Go's are sixteen counters inline in one array:
-  one more load per value in Nish, and a different layout in the cache.
+  on every minimum and behind it on every median (1.01x to 1.08x), where an
+  earlier set put it ahead of Go on every median.
+- `par-histogram-atomic`: level with Rust, 0.93x to 1.06x on the minimum and
+  1.00x to 1.04x on the median, within 1.10x in all three runs, and ahead of
+  Go (58.1 / 68.9 ms against Rust's 62.4 / 69.5 and Go's 92.0 / 104). The bins
+  are one `AtomicI32Array`, sixteen counters inline in one buffer as Rust's
+  and Go's are, on cache lines nothing else uses (docs/IR_COOKBOOK.md, "an
+  atomic array"). With them as sixteen `AtomicI32` objects reached through an
+  array, Nish ran 1.59x to 1.95x behind Rust: the objects shared lines with
+  each other and with the array's header, which every core reads per value.
+  Nish still makes the checks above (an overflow check on `v * 75 + 74` and a
+  bounds check per `add`) where Rust makes neither; under this much contention
+  the locked add, not the checks, sets the pace.
 - `par-nbody`: 1.11x to 1.17x behind Rayon, past 1.10x in all three runs,
   where on `main` at a1a5bf8a it was 0.96x to 1.06x. Part of that is
   [#731](https://github.com/amritk/nish/pull/731), which cuts a divided region
@@ -426,13 +428,13 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the twenty-one programs: the
-seven above, the four map layout prototypes, the three `Map` measurements and
+`bench/instructions.json` holds one count for each of the twenty-two programs: the
+first eight above (`treesum` is not counted), the four map layout prototypes, the three `Map` measurements and
 the seven AWFY ports. `npm test`
 fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all twenty-one and print them against the baseline
+node bench/run.mjs --instructions            # count all twenty-two and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
@@ -511,7 +513,7 @@ If one does not, it exits 2 and names the count it misread.
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
 version and the commit, and leaves the sizes and the tolerance alone. The
 file-level `commit` and `valgrind` describe every count, so only an update of
-all twenty-one restamps them. `--update --only Queens` stamps a `commit` and
+all twenty-two restamps them. `--update --only Queens` stamps a `commit` and
 `valgrind` on the Queens entry alone, and the next full update clears them. Those two
 are edited by hand. A pull request that runs `--update` shows the table it
 printed, the old count against the new one for every benchmark it moves, and
@@ -1263,7 +1265,7 @@ loopback TCP stack's work the Unix socket skips.
 `p256PublicKey` on a new private key, `p256SignSha256` on a 64-byte message,
 which is what a TLS 1.3 server's CertificateVerify costs, and
 `p256VerifySha256`. It is
-[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-baseline)'s baseline, and the
+[WP34 K5](../docs/wp34-network-stack.md#k5-p-256-the-baseline)'s baseline, and the
 measure a fixed-base table is judged by. It is not in this suite's tables, and
 it has no twins. `p256.mjs` builds it and drives it:
 
@@ -1328,9 +1330,9 @@ band. A missing compiler, libxcrypt or network leaves its row out with a note.
 `tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
 `tests/link/net_interop_server` run as `serve`, its own P-256 certificate,
 answering new connections on its h2 port. It is
-[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
+[WP34 K5](../docs/wp34-network-stack.md#k5-p-256-the-inversion--the-baseline)'s
 measure for the scalar inversion, where `bench/p256.mjs` times the signature on
-its own; [the result](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result)
+its own; [the result](../docs/wp34-network-stack.md#k5-p-256-the-inversion--the-result)
 reads both against the bar. It is not in this suite's tables. It needs `curl` with HTTP/2 and
 `taskset`.
 
@@ -1505,9 +1507,10 @@ at about 10 ms.
 
 `h3-latency.mjs` times `std/net`'s HTTP/3 server, run as
 `tests/link/net_interop_server serve`, against nginx, with h2load over HTTP/3.
-It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure, and
-[docs/h3-latency.md](../docs/h3-latency.md) records its figures and what
-they showed. It is not in this suite's tables. The tools are not
+It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure; what
+it found, a pacer that counted whole milliseconds, is QUIC-9 in
+[docs/security/quic.md](../docs/security/quic.md) and H3-8 in
+[docs/security/http3.md](../docs/security/http3.md). It is not in this suite's tables. The tools are not
 dependencies of nish: `h3-latency/build-tools.sh` builds them once, into
 `~/.cache/nish-h3-bench` by default, from pinned and checksummed tarballs:
 OpenSSL, ngtcp2, nghttp3, h2load (nghttp2) with HTTP/3, and nginx with
@@ -2437,20 +2440,53 @@ between them is the noise band. Rounds are interleaved, rotated and every
 other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
 input (default 32). It is run by hand and is not in `tests/run.js`.
 
-On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
+Against `main` at `e0a1661e`, before the load built a map with no merge key
+straight from its own pairs (the parser having checked them for repeats),
+stored scalars and keys from the source span, sized each container before
+filling it, and resolved, typed and decoded each scalar once (a plain number
+stored without the tokenizer's second check, and copied a scalar that is its
+own source span with no check per byte): `main`'s `main.ts` built twice and
+this branch's built twice (each pair `cmp` byte-identical; this branch's by
+the compiler of `main` at `4bd22892`, which it merges), the four binaries
+interleaved on both workloads, 31 rounds, the whole measurement done twice, on
+a 4-core cloud container, 1,107,038 bytes and 30 documents a run. Every run
+gave the same checksum. Milliseconds a document, the two builds' medians, and
+the band between them:
 
-| Workload | Median | Copy | Band | MB/s |
-| --- | ---: | ---: | ---: | ---: |
-| parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
-| load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
+| Workload | Run | Before | Band | After | Band | After / before |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| parse | 1 | 15.206 / 15.174 | 0.2% | 14.960 / 14.934 | 0.2% | 0.984 |
+| parse | 2 | 15.203 / 15.236 | 0.2% | 14.929 / 14.964 | 0.2% | 0.982 |
+| load | 1 | 28.388 / 28.413 | 0.1% | 21.945 / 21.985 | 0.2% | 0.773 |
+| load | 2 | 28.370 / 28.315 | 0.2% | 21.919 / 21.945 | 0.1% | 0.774 |
 
-Both rows time the whole binary, so **load** includes the parse. In wall
-clock, parse plus load is 1.94x the parse alone; the load step by itself is
-the 17.6 ms a document between them, 0.94x the parse, for 75,025 values from
-276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`, a document
-is 136M instructions to parse and 309M to parse and load, 2.27x; the load
-step alone is 173M, 1.27x the parse. The load step retires more instructions
-than the parse but takes less time than it.
+Both rows time the whole binary, so **load** includes the parse. Parse plus
+load went from 1.87x and 1.86x the parse alone to 1.47x in both runs. The
+parse read 1.6% and 1.8% faster, outside its band but with the newer compiler
+on one side; its instruction count, 0.2% lower with the verbatim mark paid, is
+the firmer figure. Under `valgrind --tool=cachegrind --cache-sim=no`, steady
+state a document:
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| parse | 135.82M | 135.50M |
+| parse + load | 298.85M | 231.44M |
+| load step alone | 163.03M | 95.94M |
+
+#1072 recorded 309M and 173M for the same input on its own head; `main` at
+`e0a1661e`, with the compiler and library changes since, measures the
+298.85M and 163.03M above, and that is the baseline here. The load step is
+41.2% cheaper, past the 40% (97.82M) that was the aim, and now 0.71x the
+parse in instructions. The last 6.3M of it came from copying scalar text
+into the document without a bounds check on each byte: the parser marks a
+flow scalar whose source span is its body (one line, and quoted, no escape or
+doubled quote), the loader copies such a span with no search for a line
+break, and both copies store each byte unchecked after one range test of the
+whole span. The mark costs the parse 0.44M of the 135.50M. What is left of the
+load step, as self costs a document: `build`'s own dispatch (about 23.6M over
+its inlined parts), copying and storing scalar text (about 18M), appending
+members (7.6M), making nodes (5.3M), recording source ranges (9.2M), reading
+node types (3.1M), merge keys (3.8M) and storing keys (4.5M).
 
 ```bash
 node bench/yaml-json/run.mjs
@@ -2591,8 +2627,9 @@ in is in parentheses.
   the result. Not part of this suite.
 - `wp48-refs/`: one AST-shaped tree in five layouts, pointer graphs against
   records in arrays addressed by `i32` (`node bench/wp48-refs/run.mjs`), the
-  measurements behind
-  [docs/wp48-compressed-references.md](../docs/wp48-compressed-references.md).
+  measurements behind the lean sibling-link layout
+  [docs/AI.md](../docs/AI.md#a-tree-links-first-child-and-next-sibling)
+  recommends; its README holds the figures. Not part of this suite.
 - `wp28-s2/`, `wp28-s4/`, `wp28-s5/`, `wp28-s6/`: the spikes of
   [docs/wp28-compatibility-mode.md](../docs/wp28-compatibility-mode.md) §7.1,
   each with a README that holds its protocol and result. Not part of this
@@ -2621,6 +2658,21 @@ in is in parentheses.
   not part of this suite either. It times both shapes against each other inside
   one process and prints the two figures, so `nish bench/substr.ts --link x &&
   ./x` is the whole protocol: no baseline compiler and no second build.
+- `const-table.ts`: what a constant table is worth (#1628), not part of this
+  suite either. One byte classifier over 4 MiB of text-like bytes, written as
+  a lookup in a 256-entry `readonly u8[]` (`tableA`, and `tableB`, its
+  byte-identical copy, whose distance from `tableA` is the run's noise band)
+  and as a chain of compares (`chain`), timed in alternating rounds inside one
+  process:
+
+  ```bash
+  build/nish bench/const-table.ts --link build/const-table --profile speed
+  taskset -c 2 build/const-table
+  ```
+
+  Measured on a four-core x86-64 virtual machine, clang 18, three runs: the
+  table took 144 ms a round and the chain 608 to 620 ms, 4.20x to 4.27x;
+  `tableB/tableA` was 0.97 to 1.00.
 - `hoist-field.ts`: what hoisting an array header out of a loop is worth
   (WP15 §2c candidate 2), not part of this suite either. Three scans do the same
   arithmetic over the same 8192 doubles and differ only in where the source

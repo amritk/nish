@@ -1,6 +1,6 @@
 /**
  * Where the relay's certificate comes from, and what the game server is told
- * about it: a port of cs's `services/relay/src/tls.rs`.
+ * about it: a port of the Rust relay's `services/relay/src/tls.rs`.
  *
  * Two arrangements, not variations of each other. A **self-signed** relay is
  * reachable only through `serverCertificateHashes`, which takes ECDSA P-256,

@@ -16,7 +16,7 @@ import { Scope } from "./symbols"
 import { T_ERROR, TypeTable } from "./types"
 import { BuildMode, hostVisible } from "./visibility"
 import { isGuardType } from "./parallel"
-import { N_ARROW, N_CLASS, N_CONSTRUCTOR, N_FIELD, N_IDENT, N_PARAM, N_THIS, N_VAR_DECL, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { StringSet } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 
@@ -64,7 +64,7 @@ export const methodReferenceMessage = (shown: string): string =>
 
 /** The names `node` and everything under it declare: parameters and variables. */
 const declaredNames = (node: Node, into: StringSet): void => {
-  if ((node.kind === N_PARAM || node.kind === N_VAR_DECL) && node.children.length > 0) {
+  if ((node.kind === NodeKind.Param || node.kind === NodeKind.VarDecl) && node.children.length > 0) {
     into.add(node.children[0].text)
   }
   for (const child of node.children) {
@@ -74,10 +74,10 @@ const declaredNames = (node: Node, into: StringSet): void => {
 
 /** The first name under `node`, not in `own`, that `scope` resolves, or `this`; "" for none. */
 const firstCapture = (node: Node, own: StringSet, scope: Scope): string => {
-  if (node.kind === N_THIS) {
+  if (node.kind === NodeKind.This) {
     return "this"
   }
-  if (node.kind === N_IDENT && !own.has(node.text) && scope.lookup(node.text) !== null) {
+  if (node.kind === NodeKind.Ident && !own.has(node.text) && scope.lookup(node.text) !== null) {
     return node.text
   }
   for (const child of node.children) {
@@ -96,7 +96,7 @@ const firstCapture = (node: Node, own: StringSet, scope: Scope): string => {
  */
 export const refuseValueArrow = (ctx: CheckContext, arrow: Node, scope: Scope): void => {
   const own = new StringSet()
-  if (arrow.kind === N_ARROW) {
+  if (arrow.kind === NodeKind.Arrow) {
     declaredNames(arrow, own)
   }
   const captured = firstCapture(arrow, own, scope)
@@ -168,7 +168,7 @@ export const nullableReference = (ctx: CheckContext, type: i32): boolean =>
  * narrows a local only, so a field or an element is read into a `const` first.
  */
 export const refuseNullableCall = (ctx: CheckContext, callee: Node, shown: string): i32 => {
-  const test = callee.kind === N_IDENT ? `${shown} !== null` : `const h = ${shown}; if (h !== null)`
+  const test = callee.kind === NodeKind.Ident ? `${shown} !== null` : `const h = ${shown}; if (h !== null)`
   return ctx.errorType(
     callee,
     `\`${shown}\` may be \`null\`: a nullable function reference is called only after a test such as \`${test}\` proves it holds a function`
@@ -287,7 +287,7 @@ const classesOf = (table: TypeTable, type: i32, into: i32[]): void => {
 
 /** The parameter list of a function, method, arrow or constructor declaration. */
 const paramList = (decl: Node): Node | null => {
-  if (decl.kind === N_CONSTRUCTOR) {
+  if (decl.kind === NodeKind.Constructor) {
     return decl.children[0]
   }
   return decl.children.length > 1 ? decl.children[1] : null
@@ -338,7 +338,9 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
       }
       if (holdsFnRef(table, sig.returnType)) {
         const at =
-          sig.decl.kind !== N_CONSTRUCTOR && sig.decl.children.length > 2 ? sig.decl.children[2] : sig.decl
+          sig.decl.kind !== NodeKind.Constructor && sig.decl.children.length > 2
+            ? sig.decl.children[2]
+            : sig.decl
         ctx.error(at, hostReferenceMessage(`The return type of \`${sig.sourceName}\``))
       }
       classesOf(table, sig.returnType, reached)
@@ -382,9 +384,9 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
 /** The declaration of field `name` in `info`'s class, or the class when none is written. */
 const fieldNode = (info: StructInfo, name: string): Node => {
   const decl = info.decl
-  if (decl.kind === N_CLASS && decl.children.length > 3) {
+  if (decl.kind === NodeKind.Class && decl.children.length > 3) {
     for (const member of decl.children[3].children) {
-      if (member.kind === N_FIELD && member.children[0].text === name) {
+      if (member.kind === NodeKind.Field && member.children[0].text === name) {
         return member
       }
     }

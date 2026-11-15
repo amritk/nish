@@ -126,7 +126,7 @@ Almost nothing, which is the argument.
 The self-hosted compiler was 25,911 lines over 57 modules at the time and
 declared no derived class at all. That is not an accident:
 [wp14-selfhost.md](wp14-selfhost.md) §2.1 chose **one `Node` class with a
-`kind: i32` discriminant** over a hierarchy, and Nish-0 — the subset `src/` is
+`kind` discriminant** (now typed `NodeKind`) over a hierarchy, and Nish-0 — the subset `src/` is
 written in — was defined as the language minus "inheritance and downcasts".
 The largest Nish program in existence had already declined the feature.
 
@@ -157,7 +157,9 @@ rewrite.
   an explicit `dyn`-style opt-in at the use site, built on interfaces — which
   is what `implements` now is — rather than on a class hierarchy. It needs a
   vtable and function pointers, and both are refused today for the reasons §2
-  gives, so it is a work package of its own and not a follow-up to this one.
+  gives, so it is a work package of its own and not a follow-up to this one:
+  [WP60](wp60-dyn-dispatch.md) designs it over interfaces, with a tag in
+  place of a vtable.
 - **Interface inheritance.** `interface A extends B` is still refused ("list
   every field"). A prefix rule between two interfaces would be the natural
   generalisation of §3 and costs nothing structurally; it is left out because

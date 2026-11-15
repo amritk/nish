@@ -349,8 +349,9 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
     )
 
     // WP27 S3.3: `readCString` from `nish:unsafe` copies the bytes behind a
-    // `CPtr` into the arena. It is an allowed `unchecked` site, so it compiles
-    // under --deny-panics, and --deny unsafe and --deny ffi each refuse it; the
+    // `CPtr` into the arena after a `NULL` test that panics with `ffi-null`
+    // (RT-16), so --deny-panics refuses it, as it does `readStruct`, and
+    // --deny unsafe and --deny ffi each refuse it too; the
     // literal `null` for a `CPtr | null` parameter is `i8* null` at the call.
     // The second program keeps copies through a constructor reached by `new`,
     // a `using` block's guard and `this` stored out of a constructor, then
@@ -381,20 +382,25 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
       .map((p) => `${p.line}:${p.kind}:${p.allowed}`)
       .join(",")
     check(
-      "ffi_owned_string: `readCString` is an allowed `unchecked` site and the copy's `oom`, and nothing else",
-      ownedKinds === "11:unchecked:true,11:oom:true",
+      "ffi_owned_string: `readCString` is an `ffi-null` site and the copy's allowed `oom`, and nothing else",
+      ownedKinds === "11:ffi-null:undefined,11:oom:true",
       ownedSites.report === null ? shown(ownedSites.r) : JSON.stringify(ownedSites.report)
     )
     check(
-      "ffi_owned_string: a literal `null` for a `CPtr | null` parameter is `i8* null`, and the copy is `@nish.ffi.str`",
+      "ffi_owned_string: a literal `null` for a `CPtr | null` parameter is `i8* null`, and the copy is `@nish.ffi.str` behind a `NULL` test",
       /call i8\* @realpath\(i8\* %\d+, i8\* null\)/.test(irOf(owned)) &&
+        /icmp eq i8\* %\d+, null\n\s+br i1 %\d+, label %ffi\.null\d*, label %ffi\.copy\d*/.test(
+          irOf(owned)
+        ) &&
         /call i8\* @nish\.ffi\.str\(i8\* %\d+\)/.test(irOf(owned)),
       irOf(owned)
     )
     const ownedDenyPanics = compileFfi(owned, ["--deny-panics"])
     check(
-      "ffi_owned_string: `readCString` compiles under --deny-panics",
-      ownedDenyPanics.status === 0,
+      "ffi_owned_string: --deny-panics refuses `readCString`'s `ffi-null` site",
+      ownedDenyPanics.status === 1 &&
+        ownedDenyPanics.stderr.includes("`ffi-null` may panic here") &&
+        ownedDenyPanics.stderr.includes("`readCString` panics on a NULL pointer"),
       shown(ownedDenyPanics)
     )
     const ownedUnsafe = compileFfi(owned, ["--deny", "unsafe"])

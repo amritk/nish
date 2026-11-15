@@ -34,6 +34,10 @@ PASS  SETTINGS_ENABLE_PUSH of 2: PROTOCOL_ERROR
 PASS  SETTINGS_MAX_FRAME_SIZE of 16,383: PROTOCOL_ERROR
 PASS  SETTINGS_ENABLE_CONNECT_PROTOCOL of 2: PROTOCOL_ERROR
 PASS  a SETTINGS_INITIAL_WINDOW_SIZE that takes an open stream's window past 2^31 - 1: FLOW_CONTROL_ERROR
+PASS  an entry that overflows a stream's window is the error even when a later entry in the same frame would bring it back
+PASS  several INITIAL_WINDOW_SIZE entries in one frame: the last one sets every open stream's window
+PASS  an overflowing window before an invalid entry: FLOW_CONTROL_ERROR, the first error
+PASS  an invalid entry before an overflowing window: PROTOCOL_ERROR, the first error
 PASS  an uppercase field name: the stream is reset with PROTOCOL_ERROR, unseen
 PASS  a connection-specific field
 PASS  a request without :path
@@ -62,4 +66,4 @@ PASS  a head with two date fields: H2_INVALID
 PASS  and nothing went out for it
 PASS  the stream still takes a head with one
 PASS  which goes out with that date alone
-http2 refusals: 64 passed, 0 failed, 0 skipped
+http2 refusals: 68 passed, 0 failed, 0 skipped

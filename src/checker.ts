@@ -10,6 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
+import { recordAccumulation } from "./accumulate"
 import {
   checkExportedLayouts,
   aliasType,
@@ -21,7 +22,7 @@ import {
 import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression, WANT_INFERRED } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
-import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
+import { enumMemberValue, foldConstant, isTableElement, parseIntegerLiteral } from "./constants"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 import {
   isBuiltinSpecifier,
@@ -57,62 +58,11 @@ import {
   FLAG_STATIC,
   FLAG_TYPE_ONLY,
   FLAG_VAR,
-  N_ARROW,
-  N_BINARY,
-  N_BLOCK,
-  N_BREAK,
-  N_CLASS,
-  N_CONSTRUCTOR,
-  N_CONDITIONAL,
-  N_CONTINUE,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FALSE,
-  N_FIELD,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_VAR,
-  N_IF,
-  N_EXPORT_ASSIGNMENT,
-  N_EXPORT_DECLARATION,
-  N_IMPORT,
-  N_IMPORT_EQUALS,
-  N_IMPORT_SPEC,
-  N_INDEX,
-  N_INTERFACE,
-  N_LABELED,
-  N_LIST,
-  N_MEMBER,
-  N_METHOD,
-  N_MODULE_CONST,
-  N_NAMESPACE_EXPORT,
-  N_ARRAY,
-  N_CALL,
-  N_NEW,
-  N_NUMBER,
-  N_OBJECT,
-  N_PARAM,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_SWITCH,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_THROW,
-  N_TRY,
-  N_ENUM,
-  N_TYPE_ALIAS,
-  N_TYPE_REF,
-  N_UNARY,
-  N_VAR_DECL,
-  N_WHILE,
-  N_WITH,
   Node,
+  NodeKind,
 } from "./nodes"
-import { StringSet } from "./map"
+import { StringMap, StringSet } from "./map"
+import { jsonIsUtf8 } from "./json-typed"
 import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
 import {
@@ -120,6 +70,10 @@ import {
   arrayMethodLocal,
   arrayMethodTemplate,
   arrayMethodTemplateCount,
+  collectionForEachLocal,
+  FOR_EACH_ELEMENT,
+  FOR_EACH_ENTRY,
+  FOR_EACH_VALUE,
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
@@ -146,9 +100,10 @@ import {
 import { BoundsWalk, Offset, analyzeBounds, offsetIndex } from "./bounds"
 import { isAssignmentOperator, isOptionalChain, unwrapParens } from "./emit-util"
 import { checkResultLocalsHandled } from "./result"
+import { isResultConstructorCall } from "./emit-result"
 import { checkHygiene } from "./hygiene"
 import { checkSecretFlow } from "./secret"
-import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
+import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   checkImplements,
@@ -210,12 +165,12 @@ export class Checker {
    */
   declareNames(): void {
     for (const stmt of this.program.file.children) {
-      if (stmt.kind === N_IMPORT) {
+      if (stmt.kind === NodeKind.Import) {
         // One diagnostic per import, as stage0 recovered per statement: a
         // refused import binds nothing, so the next one is still read.
         this.ctx.errored = false
         collectImports(this.ctx, stmt)
-      } else if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
+      } else if (stmt.kind === NodeKind.Class || stmt.kind === NodeKind.Interface) {
         // WP18 G5: a class or interface with type parameters is a template, not
         // a struct. It declares no layout, so it is registered beside the
         // function templates and the member loop below skips it: its members
@@ -224,7 +179,7 @@ export class Checker {
         // is refused here and nowhere else (NL2018), so an earlier
         // declaration's refusal must not silence it.
         this.ctx.errored = false
-        const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE
+        const kind = stmt.kind === NodeKind.Class ? STRUCT_CLASS : STRUCT_INTERFACE
         const what = kind === STRUCT_CLASS ? "class" : "interface"
         // Nothing is declared for a refused `integer`: the name is refused as a
         // type wherever it is written, whatever the module declares.
@@ -245,11 +200,11 @@ export class Checker {
             this.declared.push(info)
           }
         }
-      } else if (stmt.kind === N_TYPE_ALIAS) {
+      } else if (stmt.kind === NodeKind.TypeAlias) {
         // Names first, resolution last: an alias may name a class declared
         // further down the file, or another alias.
         this.declareAlias(stmt)
-      } else if (stmt.kind === N_ENUM) {
+      } else if (stmt.kind === NodeKind.Enum) {
         // An enum is complete the moment it is read — its members are
         // literals, not a right-hand side that can name something later — so
         // unlike an alias there is no second pass for it (WP23).
@@ -281,7 +236,7 @@ export class Checker {
       this.ctx.errored = false
       // An anonymous class is pass 1a's to refuse (NL2018, `declareStruct`),
       // and that is its one diagnostic: nothing in it is swept or collected.
-      if (stmt.kind === N_CLASS && stmt.children[0].kind === N_EMPTY) {
+      if (stmt.kind === NodeKind.Class && stmt.children[0].kind === NodeKind.Empty) {
         continue
       }
       // WP33 R1: the forms the parser reads for pass 1 to refuse, before the
@@ -291,14 +246,14 @@ export class Checker {
       // An interface is swept for its types, which a generic one resolves only
       // per instantiation (`tests/cases/reject_type_keyof_template`).
       if (
-        stmt.kind === N_CLASS ||
-        stmt.kind === N_INTERFACE ||
-        stmt.kind === N_MODULE_CONST ||
-        stmt.kind === N_FUNCTION
+        stmt.kind === NodeKind.Class ||
+        stmt.kind === NodeKind.Interface ||
+        stmt.kind === NodeKind.ModuleConst ||
+        stmt.kind === NodeKind.FunctionDecl
       ) {
         refuseUnsupportedForms(this.ctx, stmt)
       }
-      if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
+      if (stmt.kind === NodeKind.Class || stmt.kind === NodeKind.Interface) {
         const refused = this.ctx.errored
         const info = this.program.struct(stmt.children[0].text)
         if (info !== null && info.decl === stmt) {
@@ -326,11 +281,15 @@ export class Checker {
           }
           declareMethodTypeParameters(this.ctx, stmt)
         }
-      } else if (stmt.kind === N_MODULE_CONST) {
+      } else if (stmt.kind === NodeKind.ModuleConst) {
         this.collectConstants(stmt)
-      } else if (stmt.kind === N_FUNCTION) {
+      } else if (stmt.kind === NodeKind.FunctionDecl) {
         this.collectFunction(stmt)
-      } else if (stmt.kind !== N_IMPORT && stmt.kind !== N_TYPE_ALIAS && stmt.kind !== N_ENUM) {
+      } else if (
+        stmt.kind !== NodeKind.Import &&
+        stmt.kind !== NodeKind.TypeAlias &&
+        stmt.kind !== NodeKind.Enum
+      ) {
         refuseTopLevelForm(this.ctx, stmt)
       }
     }
@@ -490,8 +449,8 @@ export class Checker {
   }
 
   /**
-   * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
-   * and `xs.slice(...)` are `std/array.ts`'s templates: a module that calls a
+   * `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
+   * `xs.forEach(f)` and `xs.slice(...)` are `std/array.ts`'s templates: a module that calls a
    * method of one of those names is given an import of each template the call
    * may become, under `arrayMethodLocal`'s dotted name, and `checkArrayMethod`
    * checks the call as one to the template that fits. The scan is syntax, so a
@@ -518,7 +477,37 @@ export class Checker {
           )
         )
       }
+      if (name === "forEach" && !this.program.isCollections()) {
+        this.importCollectionForEach()
+      }
     }
+  }
+
+  /**
+   * The `nish/collections` templates a `.forEach(...)` call on a `Map` or a
+   * `Set` becomes (`checkCollectionForEach`), imported for the reason the
+   * array ones are: the call is scanned by name before any type is known. One
+   * that no call instantiates emits nothing and is left out of the dumps
+   * (`isUnusedArrayImport`), and so is `std/collections.ts` when nothing else
+   * loaded it.
+   */
+  importCollectionForEach(): void {
+    this.importCollectionTemplate(FOR_EACH_ENTRY)
+    this.importCollectionTemplate(FOR_EACH_VALUE)
+    this.importCollectionTemplate(FOR_EACH_ELEMENT)
+  }
+
+  /** Imports the `nish/collections` template `template` under its dotted local (`collectionForEachLocal`). */
+  importCollectionTemplate(template: string): void {
+    this.program.imports.push(
+      new ImportBinding(
+        COLLECTIONS_SPECIFIER,
+        template,
+        collectionForEachLocal(template),
+        this.program.file,
+        this.program.file
+      )
+    )
   }
 
   /**
@@ -645,6 +634,10 @@ export class Checker {
       this.ctx.table.nameOf(type),
       isExported(stmt)
     )
+    // Phase 0 has seen to it that a string enum's members are all string
+    // literals, so its first member says which kind this is.
+    const isString = members.children[0].children[1].kind === NodeKind.String
+    const strings = new StringMap()
     let next = toI64(0)
     for (const member of members.children) {
       const memberName = member.children[0].text
@@ -652,9 +645,32 @@ export class Checker {
         this.ctx.error(member.children[0], `Duplicate member \`${memberName}\` in enum \`${name}\``)
         return
       }
+      if (isString) {
+        // A string member is its ordinal, so two members of one string would
+        // be two values `tsc` reads as one: the string has to name one member.
+        const text = member.children[1].text
+        if (strings.has(text)) {
+          const first = info.memberNames[strings.get(text, 0)]
+          this.ctx.error(
+            member.children[1],
+            `Enum member \`${name}.${memberName}\` repeats the string of \`${name}.${first}\`: each member of a string enum has its own string, because the string is how JSON and \`String\` name the member`
+          )
+          return
+        }
+        if (!jsonIsUtf8(text)) {
+          this.ctx.error(
+            member.children[1],
+            `Enum member \`${name}.${memberName}\` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8`
+          )
+          return
+        }
+        strings.set(text, info.memberNames.length)
+        info.addStringMember(memberName, text)
+        continue
+      }
       let value = next
       const initializer = member.children[1]
-      if (initializer.kind !== N_EMPTY) {
+      if (initializer.kind !== NodeKind.Empty) {
         const literal = enumMemberValue(initializer)
         if (!literal.known) {
           this.ctx.error(initializer, `Enum member \`${name}.${memberName}\` must be an integer literal`)
@@ -672,6 +688,9 @@ export class Checker {
     if (this.nameTaken(name)) {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`)
       return
+    }
+    if (isString) {
+      this.ctx.table.markStringEnum(type, info.memberStrings, info.memberNames)
     }
     this.program.addEnum(info)
   }
@@ -830,7 +849,7 @@ export class Checker {
     if (kind === STRUCT_CLASS) {
       for (const member of stmt.children[3].children) {
         if (
-          member.kind === N_FIELD &&
+          member.kind === NodeKind.Field &&
           (member.flags & FLAG_STATIC) === 0 &&
           isHandleFieldAnnotation(member.children[1])
         ) {
@@ -936,18 +955,26 @@ export class Checker {
     const exported = isExported(stmt)
     for (const decl of stmt.children[0].children) {
       const name = decl.children[0].text
-      if (decl.children[2].kind !== N_EMPTY && this.collectStorage(decl, name, exported)) {
+      if (decl.children[2].kind !== NodeKind.Empty && this.collectStorage(decl, name, exported)) {
         continue
       }
-      if (decl.children[1].kind === N_EMPTY) {
+      if (decl.children[1].kind === NodeKind.Empty) {
         this.ctx.error(decl.children[0], `Module constant \`${name}\` needs a type annotation`)
         continue
       }
-      if (decl.children[2].kind === N_EMPTY) {
+      if (decl.children[2].kind === NodeKind.Empty) {
         this.ctx.error(decl.children[0], `Module constant \`${name}\` needs an initialiser`)
         continue
       }
       const type = resolveType(decl.children[1], this.ctx)
+      if (
+        type !== T_ERROR &&
+        this.ctx.table.isArray(type) &&
+        unwrapParens(decl.children[2]).kind === NodeKind.Array
+      ) {
+        this.collectTable(decl, name, exported, type)
+        continue
+      }
       if (
         type !== T_ERROR &&
         type !== T_I32 &&
@@ -959,7 +986,7 @@ export class Checker {
         const spelled = this.ctx.table.typeName(type)
         this.ctx.error(
           decl.children[1],
-          `Module constant \`${name}\` must be a number, boolean, or string, not ${spelled}; there is no top-level code to build anything else`
+          `Module constant \`${name}\` must be a number, boolean, string, or a \`readonly\` array of numbers written out as a literal, not ${spelled}; there is no top-level code to build anything else`
         )
         continue
       }
@@ -975,6 +1002,48 @@ export class Checker {
   }
 
   /**
+   * `const TAB: readonly u8[] = [0, 1, 2]` at the top level: a constant
+   * table (`docs/LANGUAGE.md`, "Constant tables"). Its elements are folded
+   * with the other constants, once every module has its signatures.
+   */
+  collectTable(decl: Node, name: string, exported: boolean, type: i32): void {
+    const table = this.ctx.table
+    const elem = table.refOf(type)
+    if (!isTableElement(elem)) {
+      this.ctx.error(
+        decl.children[1],
+        `Constant table \`${name}\` cannot hold ${table.typeName(elem)}: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value`
+      )
+      return
+    }
+    const readonly = `readonly ${table.typeName(elem)}[]`
+    if (!table.isReadonlyArray(type)) {
+      this.ctx.error(
+        decl.children[1],
+        `Constant table \`${name}\` must be declared \`${readonly}\`: its elements are constant data that nothing may write, and a \`${table.typeName(type)}\` could be written through`
+      )
+      return
+    }
+    if (unwrapParens(decl.children[2]).children.length === 0) {
+      this.ctx.error(
+        decl.children[2],
+        `Constant table \`${name}\` has no elements; a table holds at least one`
+      )
+      return
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
+      return
+    }
+    const info = new ConstInfo(name, type, decl, this.program.source)
+    info.exported = exported
+    info.scope = this.program
+    info.table = true
+    info.storageElem = elem
+    this.program.addConstant(info)
+  }
+
+  /**
    * WP50 S3: `const sim = new Array<Sim>(4)` at the top level is module
    * storage (`src/module-storage.ts`). Answers false when `decl` is not a
    * storage `new`, so it is collected as a constant. The element and the
@@ -983,7 +1052,7 @@ export class Checker {
    */
   collectStorage(decl: Node, name: string, exported: boolean): boolean {
     const init = storageNewNode(decl.children[2])
-    if (init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
+    if (init.kind !== NodeKind.New || init.children[0].kind !== NodeKind.Ident) {
       return false
     }
     const typed = typedArrayElement(init.children[0].text)
@@ -1006,7 +1075,7 @@ export class Checker {
       return true
     }
     const type = this.ctx.table.arrayOf(elem)
-    if (decl.children[1].kind !== N_EMPTY) {
+    if (decl.children[1].kind !== NodeKind.Empty) {
       const declared = resolveType(decl.children[1], this.ctx)
       if (declared !== T_ERROR && declared !== type) {
         this.ctx.error(
@@ -1076,12 +1145,12 @@ export class Checker {
       )
     }
     for (const stmt of main.children[3].children) {
-      if (stmt.kind !== N_VAR) {
+      if (stmt.kind !== NodeKind.Var) {
         continue
       }
       for (const decl of stmt.children[0].children) {
         const name = decl.children[0]
-        if (name.kind !== N_IDENT) {
+        if (name.kind !== NodeKind.Ident) {
           continue
         }
         this.program.scriptLocals.add(name.text)
@@ -1108,6 +1177,7 @@ export class Checker {
     this.ctx.pathLocals = []
     this.ctx.pathRoots = []
     this.ctx.pathKeys = []
+    this.ctx.pathNodes = []
     const scope = new Scope(null)
     let i = 0
     while (i < sig.paramNames.length) {
@@ -1237,7 +1307,7 @@ export class Checker {
    */
   markBoundImplements(): void {
     for (const stmt of this.program.file.children) {
-      if (stmt.kind === N_CLASS && stmt.children[0].kind !== N_EMPTY) {
+      if (stmt.kind === NodeKind.Class && stmt.children[0].kind !== NodeKind.Empty) {
         const template = this.program.structTemplate(stmt.children[0].text)
         if (template !== null && template.decl === stmt) {
           markTemplateImplements(this.program, stmt)
@@ -1735,8 +1805,8 @@ const declaredAlias = (target: CheckedProgram | null, name: string): AliasInfo |
  * or `""` — `this` and a signature with no parameter list of its own among them.
  */
 export const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: string): string => {
-  const at = sig.decl.kind === N_CONSTRUCTOR ? 0 : 1
-  if (sig.decl.children.length <= at || sig.decl.children[at].kind !== N_LIST) {
+  const at = sig.decl.kind === NodeKind.Constructor ? 0 : 1
+  if (sig.decl.children.length <= at || sig.decl.children[at].kind !== NodeKind.List) {
     return ""
   }
   for (const param of sig.decl.children[at].children) {
@@ -1750,7 +1820,7 @@ export const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: str
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
 // A lifted arrow (WP29) has no name to point at, so the arrow itself is the span.
 const nameOf = (sig: FunctionSig): Node =>
-  sig.decl.kind === N_CONSTRUCTOR || sig.decl.kind === N_ARROW ? sig.decl : sig.decl.children[0]
+  sig.decl.kind === NodeKind.Constructor || sig.decl.kind === NodeKind.Arrow ? sig.decl : sig.decl.children[0]
 
 // ---- WP15 §8: the `performance` diagnostic class --------------------------------
 //
@@ -1908,10 +1978,12 @@ export const checkSignatureBody = (
   // A concise arrow body (`=> n * 2`) is a block with one `return`, so it
   // always terminates and its expression is checked as that return's.
   let terminates = true
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     terminates = checkStatements(ctx, body.children, scope)
   } else if (inferReturn) {
     sig.returnType = checkExpression(ctx, body, scope, WANT_INFERRED)
+  } else if (sig.returnType === T_VOID) {
+    checkVoidConciseBody(ctx, body, scope, sig.decl.children[2].kind !== NodeKind.Empty)
   } else {
     checkReturnValue(ctx, body, scope)
   }
@@ -1937,6 +2009,9 @@ export const checkSignatureBody = (
     // not come off, and it has to be reported by the same source-order walk
     // as the rest of the class.
     const bounds = analyzeBounds(ctx, body)
+    // Issue #1582: a function whose recursive returns are `X + self(...)` is
+    // recorded to be emitted as one loop (`src/accumulate.ts`).
+    recordAccumulation(ctx, sig, body)
     // WP15 §8: the performance warnings, over the same body and the same
     // side tables. Only for a body that checked cleanly — advice about code
     // that does not compile is noise, and a poisoned body has incomplete
@@ -1987,12 +2062,12 @@ const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bound
 const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
   let receiver = access
   let index = access
-  if (access.kind === N_INDEX) {
+  if (access.kind === NodeKind.Index) {
     receiver = access.children[0]
     index = access.children[1]
   } else {
     const callee = unwrapPerfParens(access.children[0])
-    if (callee.kind !== N_MEMBER || access.children[1].children.length !== 1) {
+    if (callee.kind !== NodeKind.Member || access.children[1].children.length !== 1) {
       return
     }
     receiver = callee.children[0]
@@ -2076,7 +2151,7 @@ export const indexGuardAdvice = (
 
 /** `i + c` or `c + i`, in the order the source wrote the offset index. */
 const offsetSpelling = (index: Node, offset: Offset): string =>
-  unwrapPerfParens(unwrapPerfParens(index).children[0]).kind === N_IDENT
+  unwrapPerfParens(unwrapPerfParens(index).children[0]).kind === NodeKind.Ident
     ? `${offset.v.name} + ${offset.c}`
     : `${offset.c} + ${offset.v.name}`
 
@@ -2185,7 +2260,7 @@ const guardStatement = (body: Node, access: Node): Node | null => {
   let at = -1
   let i = 0
   while (i < path.length) {
-    if (path[i].kind === N_BLOCK && i + 1 < path.length) {
+    if (path[i].kind === NodeKind.Block && i + 1 < path.length) {
       at = i + 1
     }
     i = i + 1
@@ -2200,17 +2275,28 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     const node = path[i]
     const down = i + 1 < path.length ? path[i + 1] : node
     const first = node.children.length > 0 && node.children[0] === down
-    const logical = node.kind === N_BINARY && (node.text === "&&" || node.text === "||" || node.text === "??")
-    const branches = node.kind === N_IF || node.kind === N_CONDITIONAL || node.kind === N_SWITCH || logical
+    const logical =
+      node.kind === NodeKind.Binary && (node.text === "&&" || node.text === "||" || node.text === "??")
+    const branches =
+      node.kind === NodeKind.If ||
+      node.kind === NodeKind.Conditional ||
+      node.kind === NodeKind.Switch ||
+      logical
     // A `?.` chain on the left of `??` may stop at any `?.` link, so not even
     // the first operand of that `??` is sure to run.
     const chained =
-      node.kind === N_BINARY && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
+      node.kind === NodeKind.Binary && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
     const repeats =
-      node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR || node.kind === N_FOR_OF
+      node.kind === NodeKind.While ||
+      node.kind === NodeKind.Do ||
+      node.kind === NodeKind.For ||
+      node.kind === NodeKind.ForOf
     const crosses =
       down !== node &&
-      ((branches && (!first || chained)) || repeats || node.kind === N_ARROW || node.kind === N_LABELED)
+      ((branches && (!first || chained)) ||
+        repeats ||
+        node.kind === NodeKind.Arrow ||
+        node.kind === NodeKind.Labeled)
     if (crosses) {
       return null
     }
@@ -2219,7 +2305,8 @@ const guardStatement = (body: Node, access: Node): Node | null => {
   const stmt = path[at]
   // The test of an `if` or a `switch` runs before either branch, so only the
   // test can do anything the guard would run ahead of.
-  const head = (stmt.kind === N_IF || stmt.kind === N_SWITCH) && path[at + 1] === stmt.children[0]
+  const head =
+    (stmt.kind === NodeKind.If || stmt.kind === NodeKind.Switch) && path[at + 1] === stmt.children[0]
   return hasEffectOffPath(head ? stmt.children[0] : stmt, path) ? null : stmt
 }
 
@@ -2251,15 +2338,16 @@ const hasEffectOffPath = (node: Node, path: Node[]): boolean => {
     onPath = onPath || step === node
   }
   if (!onPath) {
-    const callee = node.kind === N_CALL ? unwrapPerfParens(node.children[0]) : node
-    const reads = node.kind === N_CALL && callee.kind === N_MEMBER && callee.text === "charCodeAt"
-    if ((node.kind === N_CALL && !reads) || node.kind === N_NEW) {
+    const callee = node.kind === NodeKind.Call ? unwrapPerfParens(node.children[0]) : node
+    const reads =
+      node.kind === NodeKind.Call && callee.kind === NodeKind.Member && callee.text === "charCodeAt"
+    if ((node.kind === NodeKind.Call && !reads) || node.kind === NodeKind.New) {
       return true
     }
-    if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
       return true
     }
-    if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       return true
     }
   }
@@ -2275,14 +2363,14 @@ const hasEffectOffPath = (node: Node, path: Node[]): boolean => {
 const isNameDeclaration = (node: Node): boolean => {
   const k = node.kind
   return (
-    k === N_VAR_DECL ||
-    k === N_PARAM ||
-    k === N_FUNCTION ||
-    k === N_CLASS ||
-    k === N_INTERFACE ||
-    k === N_ENUM ||
-    k === N_TYPE_ALIAS ||
-    k === N_IMPORT_SPEC
+    k === NodeKind.VarDecl ||
+    k === NodeKind.Param ||
+    k === NodeKind.FunctionDecl ||
+    k === NodeKind.Class ||
+    k === NodeKind.Interface ||
+    k === NodeKind.Enum ||
+    k === NodeKind.TypeAlias ||
+    k === NodeKind.ImportSpec
   )
 }
 
@@ -2297,7 +2385,7 @@ const isNameDeclaration = (node: Node): boolean => {
 const declaresName = (node: Node, name: string): boolean => {
   if (isNameDeclaration(node)) {
     for (const child of node.children) {
-      if (child.kind === N_IDENT && child.text === name) {
+      if (child.kind === NodeKind.Ident && child.text === name) {
         return true
       }
     }
@@ -2326,7 +2414,7 @@ const guardNamesDeclared = (node: Node): i32 => {
   let bits = 0
   if (isNameDeclaration(node)) {
     for (const child of node.children) {
-      if (child.kind === N_IDENT) {
+      if (child.kind === NodeKind.Ident) {
         bits = bits | guardNameBit(child.text)
       }
     }
@@ -2514,7 +2602,7 @@ const checkUnfoldedClamp = (walk: PerfWalk, call: Node): void => {
   }
   const ctx = walk.ctx
   const callee = unwrapPerfParens(call.children[0])
-  if (callee.kind !== N_MEMBER || callee.text !== "substring") {
+  if (callee.kind !== NodeKind.Member || callee.text !== "substring") {
     return
   }
   const count = call.children[1].children.length
@@ -2551,7 +2639,7 @@ const checkUnfoldedClamp = (walk: PerfWalk, call: Node): void => {
 /** The source name of the local a bare identifier binds, or `""` for anything else. */
 const perfLocalName = (ctx: CheckContext, expr: Node): string => {
   const e = unwrapPerfParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return ""
   }
   const local = ctx.program.nodeLocals[e.id]
@@ -2568,10 +2656,10 @@ const perfLocalName = (ctx: CheckContext, expr: Node): string => {
 const walkPerformance = (walk: PerfWalk, node: Node): void => {
   // WP29: an arrow argument is a function of its own, whose body was walked
   // when it was lifted; walking it again here would report its warnings twice.
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_FOR) {
+  if (node.kind === NodeKind.For) {
     walkPerformance(walk, node.children[0])
     walk.loops.push(node)
     walkPerformance(walk, node.children[1])
@@ -2580,7 +2668,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
     walk.loops.pop()
     return
   }
-  if (node.kind === N_FOR_OF) {
+  if (node.kind === NodeKind.ForOf) {
     walkPerformance(walk, node.children[1])
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
@@ -2591,31 +2679,31 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   // `while` and `do` differ only in which of the two children comes first, and
   // both are walked in source order — which is the order the warnings come out
   // in, and stage0 walks the same tree in the same direction.
-  if (node.kind === N_WHILE) {
+  if (node.kind === NodeKind.While) {
     walk.loops.push(node)
     walkPerformance(walk, node.children[0])
     walkLoopBody(walk, node.children[1], false)
     walk.loops.pop()
     return
   }
-  if (node.kind === N_DO) {
+  if (node.kind === NodeKind.Do) {
     // `do { ... } while (false)` runs its body once, so nothing in it is
     // replaced by a later pass.
     walk.loops.push(node)
-    walkLoopBody(walk, node.children[0], unwrapPerfParens(node.children[1]).kind === N_FALSE)
+    walkLoopBody(walk, node.children[0], unwrapPerfParens(node.children[1]).kind === NodeKind.False)
     walkPerformance(walk, node.children[1])
     walk.loops.pop()
     return
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const local = walk.ctx.program.nodeLocals[node.id]
     if (local !== null) {
       walk.declared.push(local)
       walk.declaredDepth.push(walk.loops.length)
-      walk.declaredAllocates.push(perfAllocatesVisibly(walk.ctx, node.children[2]))
+      walk.declaredAllocates.push(perfAllocatesVisibly(walk.ctx, node.children[2], walk.loops.length > 0))
     }
     checkLoopAllocation(walk, node)
-  } else if (node.kind === N_BINARY) {
+  } else if (node.kind === NodeKind.Binary) {
     if (node.text === "=") {
       checkStringAccumulation(walk, node)
       if (isArenaReassignment(walk, node)) {
@@ -2626,7 +2714,7 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
     }
     checkConstantOverflow(walk, node)
     checkShiftCount(walk, node)
-  } else if (node.kind === N_CALL) {
+  } else if (node.kind === NodeKind.Call) {
     checkWideningConversion(walk, node)
     checkUnfoldedClamp(walk, node)
     checkNotInlinable(walk, node)
@@ -2672,7 +2760,7 @@ const isQuadraticAccumulation = (walk: PerfWalk, expr: Node): boolean => {
     return false
   }
   const left = expr.children[0]
-  if (left.kind !== N_IDENT) {
+  if (left.kind !== NodeKind.Ident) {
     return false
   }
   const target = walk.ctx.program.nodeLocals[left.id]
@@ -2711,7 +2799,7 @@ const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
   }
   const local = walk.ctx.program.nodeLocals[decl.id]
   const name = decl.children[0]
-  if (local === null || name.kind !== N_IDENT) {
+  if (local === null || name.kind !== NodeKind.Ident) {
     return
   }
   if (!isDynamicArrayAllocation(walk.ctx, decl.children[2])) {
@@ -2723,7 +2811,7 @@ const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
   }
   walk.ctx.performance(
     name,
-    `\`${local.name}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
+    `\`${walk.ctx.program.localText(local)}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
       "past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, " +
       "or open the loop body with `using a = arena()`"
   )
@@ -2732,7 +2820,7 @@ const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
 /** Strip parentheses; every shape test here is about the expression inside them. */
 const unwrapPerfParens = (expr: Node): Node => {
   let inner = expr
-  while (inner.kind === N_PAREN) {
+  while (inner.kind === NodeKind.Paren) {
     inner = inner.children[0]
   }
   return inner
@@ -2746,16 +2834,16 @@ const unwrapPerfParens = (expr: Node): Node => {
  */
 const accumulates = (ctx: CheckContext, expr: Node, target: Local): boolean => {
   const e = unwrapPerfParens(expr)
-  if (e.kind === N_IDENT) {
+  if (e.kind === NodeKind.Ident) {
     const bound = ctx.program.nodeLocals[e.id]
     return bound !== null && bound === target
   }
-  if (e.kind === N_BINARY && e.text === "+") {
+  if (e.kind === NodeKind.Binary && e.text === "+") {
     return accumulates(ctx, e.children[0], target) || accumulates(ctx, e.children[1], target)
   }
-  if (e.kind === N_TEMPLATE) {
+  if (e.kind === NodeKind.Template) {
     for (const part of e.children) {
-      if (part.kind !== N_TEMPLATE_TEXT && accumulates(ctx, part, target)) {
+      if (part.kind !== NodeKind.TemplateText && accumulates(ctx, part, target)) {
         return true
       }
     }
@@ -2776,7 +2864,7 @@ const accumulates = (ctx: CheckContext, expr: Node, target: Local): boolean => {
  */
 const isDynamicArrayAllocation = (ctx: CheckContext, expr: Node): boolean => {
   const e = unwrapPerfParens(expr)
-  if (e.kind !== N_NEW || !ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
+  if (e.kind !== NodeKind.New || !ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
     return false
   }
   const args = e.children[2]
@@ -2786,7 +2874,7 @@ const isDynamicArrayAllocation = (ctx: CheckContext, expr: Node): boolean => {
     return false
   }
   const length = unwrapPerfParens(args.children[0])
-  return length.kind !== N_NUMBER || !isNonNegativeInteger(length.text)
+  return length.kind !== NodeKind.Number || !isNonNegativeInteger(length.text)
 }
 
 /** The literal is a non-negative integer as written: no sign, no dot, no exponent. */
@@ -2818,19 +2906,19 @@ const usedOnlyWithinIteration = (ctx: CheckContext, root: Node, local: Local, ow
   if (root === own) {
     return usedOnlyWithinIteration(ctx, own.children[2], local, own)
   }
-  if (root.kind === N_INDEX && isLocalRef(ctx, root.children[0], local)) {
+  if (root.kind === NodeKind.Index && isLocalRef(ctx, root.children[0], local)) {
     return usedOnlyWithinIteration(ctx, root.children[1], local, own)
   }
-  if (root.kind === N_MEMBER && root.text === "length" && isLocalRef(ctx, root.children[0], local)) {
+  if (root.kind === NodeKind.Member && root.text === "length" && isLocalRef(ctx, root.children[0], local)) {
     return true
   }
-  if (root.kind === N_FOR_OF && isLocalRef(ctx, root.children[1], local)) {
+  if (root.kind === NodeKind.ForOf && isLocalRef(ctx, root.children[1], local)) {
     return (
       usedOnlyWithinIteration(ctx, root.children[0], local, own) &&
       usedOnlyWithinIteration(ctx, root.children[2], local, own)
     )
   }
-  if (root.kind === N_IDENT) {
+  if (root.kind === NodeKind.Ident) {
     // A data-parallel arrow's capture is the local it was made from (WP29).
     const bound = sourceLocal(ctx.program.nodeLocals[root.id])
     return bound === null || bound !== local
@@ -2846,7 +2934,7 @@ const usedOnlyWithinIteration = (ctx: CheckContext, root: Node, local: Local, ow
 /** `expr` is a direct reference to `local` (through parentheses only). */
 const isLocalRef = (ctx: CheckContext, expr: Node, local: Local): boolean => {
   const e = unwrapPerfParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return false
   }
   const bound = ctx.program.nodeLocals[e.id]
@@ -2877,7 +2965,10 @@ const perfIsReadBuiltin = (name: string): boolean =>
 /**
  * `expr` allocates from the arena in a way the checker can see for itself: a
  * `new`, an object or array literal, a template with a hole, a string
- * concatenation, or a `readFileSync`.
+ * concatenation, a `readFileSync`, or, inside a loop, an `Ok(..)`/`Err(..)`
+ * whose `Result` is boxed. Outside a loop a boxed `Result` site that stays in
+ * the function gets its own stack slot, so it drops nothing in the arena; one
+ * that leaves goes where the local goes, which the rules below already ask.
  *
  * A call to a user function is deliberately not counted even though it may
  * allocate: whether it does is a whole-program fact the attribute fixpoint
@@ -2885,28 +2976,31 @@ const perfIsReadBuiltin = (name: string): boolean =>
  * un-actionable kind of warning. A string literal is not counted either — it
  * is constant data, not an allocation.
  */
-const perfAllocatesVisibly = (ctx: CheckContext, expr: Node): boolean => {
+const perfAllocatesVisibly = (ctx: CheckContext, expr: Node, inLoop: boolean): boolean => {
   const e = unwrapPerfParens(expr)
-  if (e.kind === N_NEW || e.kind === N_OBJECT || e.kind === N_ARRAY) {
+  if (e.kind === NodeKind.New || e.kind === NodeKind.Object || e.kind === NodeKind.Array) {
     return true
   }
   // A template *with a hole* builds a new string; one without is a literal and
-  // allocates nothing. The parser gives both `N_TEMPLATE`, where stage0's
+  // allocates nothing. The parser gives both `NodeKind.Template`, where stage0's
   // `ts.isTemplateExpression` already excludes the hole-less form, so the test
   // has to be made here or the two compilers disagree.
-  if (e.kind === N_TEMPLATE) {
+  if (e.kind === NodeKind.Template) {
     for (const part of e.children) {
-      if (part.kind !== N_TEMPLATE_TEXT) {
+      if (part.kind !== NodeKind.TemplateText) {
         return true
       }
     }
     return false
   }
-  if (e.kind === N_CALL) {
+  if (e.kind === NodeKind.Call) {
+    if (isResultConstructorCall(ctx.program, ctx.table, e)) {
+      return inLoop && !ctx.table.resultByValue(ctx.program.nodeTypes[e.id])
+    }
     const callee = unwrapPerfParens(e.children[0])
-    return callee.kind === N_IDENT && perfIsReadBuiltin(callee.text) && !ctx.sigs.has(callee.text)
+    return callee.kind === NodeKind.Ident && perfIsReadBuiltin(callee.text) && !ctx.sigs.has(callee.text)
   }
-  return e.kind === N_BINARY && e.text === "+" && ctx.program.nodeTypes[e.id] === T_STRING
+  return e.kind === NodeKind.Binary && e.text === "+" && ctx.program.nodeTypes[e.id] === T_STRING
 }
 
 /**
@@ -2927,7 +3021,7 @@ const perfIsPointerType = (ctx: CheckContext, type: i32): boolean =>
  * the value where it stands and cannot keep it.
  */
 const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean => {
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     for (const arg of node.children[1].children) {
       if (perfMayYieldLocal(ctx, arg, local)) {
         return true
@@ -2937,7 +3031,7 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
   }
   // A constructor keeps what it is handed as readily as a call does: `head =
   // new Node(i, head)` stores the old list in the new node.
-  if (node.kind === N_NEW) {
+  if (node.kind === NodeKind.New) {
     for (const arg of node.children[2].children) {
       if (perfMayYieldLocal(ctx, arg, local)) {
         return true
@@ -2945,7 +3039,7 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
     }
     return false
   }
-  if (node.kind === N_ARRAY) {
+  if (node.kind === NodeKind.Array) {
     for (const element of node.children) {
       if (perfMayYieldLocal(ctx, element, local)) {
         return true
@@ -2953,13 +3047,13 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
     }
     return false
   }
-  if (node.kind === N_RETURN || node.kind === N_PROPERTY) {
+  if (node.kind === NodeKind.Return || node.kind === NodeKind.Property) {
     return perfMayYieldLocal(ctx, node.children[0], local)
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     return perfMayYieldLocal(ctx, node.children[2], local)
   }
-  return node.kind === N_BINARY && node.text === "=" && perfMayYieldLocal(ctx, node.children[1], local)
+  return node.kind === NodeKind.Binary && node.text === "=" && perfMayYieldLocal(ctx, node.children[1], local)
 }
 
 /**
@@ -2969,7 +3063,7 @@ const perfCapturesLocal = (ctx: CheckContext, node: Node, local: Local): boolean
  */
 const perfMayYieldLocal = (ctx: CheckContext, expr: Node, local: Local): boolean => {
   const e = unwrapPerfParens(expr)
-  if (e.kind === N_CONDITIONAL) {
+  if (e.kind === NodeKind.Conditional) {
     return perfMayYieldLocal(ctx, e.children[1], local) || perfMayYieldLocal(ctx, e.children[2], local)
   }
   return isLocalRef(ctx, e, local)
@@ -2979,14 +3073,16 @@ const perfMayYieldLocal = (ctx: CheckContext, expr: Node, local: Local): boolean
  * A method called on `local` may keep its receiver, as `cur.attach(reg)` does
  * when `attach` pushes `this`, and this walk cannot see into the method. A
  * string's and an array's methods are the language's own and keep neither:
- * they copy what they return.
+ * they copy what they return, and so are a `Result`'s (`isOk`, `isErr`,
+ * `unwrapOr`, `expect`, `orReturn`): each hands back a flag or the payload,
+ * never the `Result` itself.
  */
 const perfReceiverMayBeKept = (ctx: CheckContext, callee: Node, local: Local): boolean => {
   const c = unwrapPerfParens(callee)
-  if (c.kind !== N_MEMBER || !isLocalRef(ctx, c.children[0], local)) {
+  if (c.kind !== NodeKind.Member || !isLocalRef(ctx, c.children[0], local)) {
     return false
   }
-  return local.type !== T_STRING && !ctx.table.isArray(local.type)
+  return local.type !== T_STRING && !ctx.table.isArray(local.type) && !ctx.table.isResult(local.type)
 }
 
 /**
@@ -3042,7 +3138,7 @@ const perfScanForCapture = (
  */
 const perfDroppingTarget = (walk: PerfWalk, expr: Node): Local | null => {
   const left = expr.children[0]
-  if (left.kind !== N_IDENT) {
+  if (left.kind !== NodeKind.Ident) {
     return null
   }
   const ctx = walk.ctx
@@ -3050,7 +3146,7 @@ const perfDroppingTarget = (walk: PerfWalk, expr: Node): Local | null => {
   if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
     return null
   }
-  return perfAllocatesVisibly(ctx, expr.children[1]) ? target : null
+  return perfAllocatesVisibly(ctx, expr.children[1], walk.loops.length > 0) ? target : null
 }
 
 /**
@@ -3084,13 +3180,13 @@ const walkLoopBody = (walk: PerfWalk, body: Node, once: boolean): void => {
   const assignments: Node[] = []
   let loops = !once
   const statements: Node[] = []
-  if (body.kind === N_BLOCK) {
+  if (body.kind === NodeKind.Block) {
     for (const statement of body.children) {
       if (
-        statement.kind === N_BREAK ||
-        statement.kind === N_RETURN ||
-        statement.kind === N_THROW ||
-        (statement.kind === N_CONTINUE && statement.text !== "")
+        statement.kind === NodeKind.Break ||
+        statement.kind === NodeKind.Return ||
+        statement.kind === NodeKind.Throw ||
+        (statement.kind === NodeKind.Continue && statement.text !== "")
       ) {
         loops = false
       }
@@ -3100,11 +3196,11 @@ const walkLoopBody = (walk: PerfWalk, body: Node, once: boolean): void => {
     statements.push(body)
   }
   for (const statement of statements) {
-    if (!loops || statement.kind !== N_EXPR_STMT) {
+    if (!loops || statement.kind !== NodeKind.ExprStmt) {
       continue
     }
     const expr = unwrapPerfParens(statement.children[0])
-    if (expr.kind === N_BINARY && expr.text === "=") {
+    if (expr.kind === NodeKind.Binary && expr.text === "=") {
       assignments.push(expr)
     }
   }
@@ -3236,18 +3332,18 @@ const perfMagnitude = (value: i64): i64 => (value < 0 ? -value : value)
  */
 const perfConstantInt = (expr: Node): PerfConst => {
   const e = unwrapPerfParens(expr)
-  if (e.kind === N_NUMBER) {
+  if (e.kind === NodeKind.Number) {
     if (!isNonNegativeInteger(e.text)) {
       return perfNoConst()
     }
     const value = parseIntegerLiteral(e.text)
     return value > FOLD_LIMIT ? perfNoConst() : new PerfConst(true, value)
   }
-  if (e.kind === N_UNARY && e.text === "-" && e.flags === FLAG_PREFIX) {
+  if (e.kind === NodeKind.Unary && e.text === "-" && e.flags === FLAG_PREFIX) {
     const operand = perfConstantInt(e.children[0])
     return operand.ok ? new PerfConst(true, -operand.value) : perfNoConst()
   }
-  if (e.kind !== N_BINARY) {
+  if (e.kind !== NodeKind.Binary) {
     return perfNoConst()
   }
   const left = perfConstantInt(e.children[0])
@@ -3330,7 +3426,7 @@ const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
  */
 const checkWideningConversion = (walk: PerfWalk, call: Node): void => {
   const callee = unwrapPerfParens(call.children[0])
-  if (callee.kind !== N_IDENT || (callee.text !== "toI64" && callee.text !== "toF64")) {
+  if (callee.kind !== NodeKind.Ident || (callee.text !== "toI64" && callee.text !== "toF64")) {
     return
   }
   const args = call.children[1]
@@ -3342,7 +3438,7 @@ const checkWideningConversion = (walk: PerfWalk, call: Node): void => {
     return
   }
   const arg = unwrapPerfParens(args.children[0])
-  if (arg.kind !== N_BINARY || arg.text !== "*") {
+  if (arg.kind !== NodeKind.Binary || arg.text !== "*") {
     return
   }
   if (ctx.program.nodeTypes[arg.id] !== T_I32) {
@@ -3405,7 +3501,11 @@ class CollectionNames {
 
 /** Whether a `.sort(...)` call is under `node` (`importSort`). */
 const hasSortCall = (node: Node): boolean => {
-  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER && node.children[0].text === "sort") {
+  if (
+    node.kind === NodeKind.Call &&
+    node.children[0].kind === NodeKind.Member &&
+    node.children[0].text === "sort"
+  ) {
     return true
   }
   for (const child of node.children) {
@@ -3423,11 +3523,12 @@ const mentionsArrayMethod = (text: string): boolean =>
   text.indexOf("some") >= 0 ||
   text.indexOf("every") >= 0 ||
   text.indexOf("findIndex") >= 0 ||
+  text.indexOf("forEach") >= 0 ||
   text.indexOf("slice") >= 0
 
 /** The names of the `.map(...)`-like calls under `node` that `std/array.ts` answers (`importArrayMethods`). */
 const scanArrayMethodCalls = (node: Node, names: StringSet): void => {
-  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
+  if (node.kind === NodeKind.Call && node.children[0].kind === NodeKind.Member) {
     const name = node.children[0].text
     if (arrayMethodTemplateCount(name) > 0) {
       names.add(name)
@@ -3454,30 +3555,30 @@ const scanMathCalls = (
   bits: Node[] | null,
   parses: Node[] | null
 ): void => {
-  if (rems !== null && node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
+  if (rems !== null && node.kind === NodeKind.Binary && (node.text === "%" || node.text === "%=")) {
     rems.push(node)
   }
   if (
     bits !== null &&
-    node.kind === N_CALL &&
-    node.children[0].kind === N_IDENT &&
+    node.kind === NodeKind.Call &&
+    node.children[0].kind === NodeKind.Ident &&
     (node.children[0].text === "f64ToBits" || node.children[0].text === "f32ToBits")
   ) {
     bits.push(node)
   }
   if (
     parses !== null &&
-    node.kind === N_CALL &&
-    node.children[0].kind === N_IDENT &&
+    node.kind === NodeKind.Call &&
+    node.children[0].kind === NodeKind.Ident &&
     (node.children[0].text === "Number" || node.children[0].text === "parseFloat")
   ) {
     parses.push(node)
   }
-  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
+  if (node.kind === NodeKind.Call && node.children[0].kind === NodeKind.Member) {
     const callee = node.children[0]
     const name = callee.text
     if (
-      callee.children[0].kind === N_IDENT &&
+      callee.children[0].kind === NodeKind.Ident &&
       callee.children[0].text === "Math" &&
       (name === "atan2" ||
         name === "tan" ||
@@ -3516,19 +3617,19 @@ const scanCollectionNames = (
   let setHidden = hideSet
   if (bound !== null) {
     for (const param of bound.children) {
-      if (param.kind === N_IDENT && param.text === "Map") {
+      if (param.kind === NodeKind.Ident && param.text === "Map") {
         mapHidden = true
-      } else if (param.kind === N_IDENT && param.text === "Set") {
+      } else if (param.kind === NodeKind.Ident && param.text === "Set") {
         setHidden = true
       }
     }
   }
   let name = ""
   let at: Node | null = null
-  if (node.kind === N_TYPE_REF) {
+  if (node.kind === NodeKind.TypeRef) {
     name = node.text
     at = node
-  } else if (node.kind === N_NEW && node.children[0].kind === N_IDENT) {
+  } else if (node.kind === NodeKind.New && node.children[0].kind === NodeKind.Ident) {
     name = node.children[0].text
     at = node.children[0]
   }
@@ -3536,7 +3637,7 @@ const scanCollectionNames = (
   if (at !== null && !hidden) {
     names.note(name, at)
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     noteAnnotatedNew(node, program, mapHidden, setHidden)
   }
   for (const child of node.children) {
@@ -3550,12 +3651,12 @@ const scanCollectionNames = (
  */
 const boundTypeParameters = (node: Node): Node | null => {
   let at = -1
-  if (node.kind === N_FUNCTION || node.kind === N_METHOD || node.kind === N_CLASS) {
+  if (node.kind === NodeKind.FunctionDecl || node.kind === NodeKind.Method || node.kind === NodeKind.Class) {
     at = 4
-  } else if (node.kind === N_INTERFACE) {
+  } else if (node.kind === NodeKind.Interface) {
     at = 2
   }
-  if (at < 0 || node.children.length <= at || node.children[at].kind !== N_LIST) {
+  if (at < 0 || node.children.length <= at || node.children[at].kind !== NodeKind.List) {
     return null
   }
   return node.children[at]
@@ -3565,7 +3666,11 @@ const boundTypeParameters = (node: Node): Node | null => {
 const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean, hideSet: boolean): void => {
   const annotation = decl.children[1]
   const init = decl.children[2]
-  if (annotation.kind !== N_TYPE_REF || init.kind !== N_NEW || init.children[0].kind !== N_IDENT) {
+  if (
+    annotation.kind !== NodeKind.TypeRef ||
+    init.kind !== NodeKind.New ||
+    init.children[0].kind !== NodeKind.Ident
+  ) {
     return
   }
   const name = init.children[0].text
@@ -3586,13 +3691,13 @@ const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean,
  * stage0 named it, by TypeScript's `SyntaxKind`.
  */
 export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
-  if (stmt.kind === N_EXPORT_DECLARATION) {
+  if (stmt.kind === NodeKind.ExportDeclaration) {
     ctx.errorFix(
       stmt,
       "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
       exportListFix(ctx, stmt)
     )
-  } else if (stmt.kind === N_EXPORT_ASSIGNMENT) {
+  } else if (stmt.kind === NodeKind.ExportAssignment) {
     ctx.errorFix(
       stmt,
       "`export default` / `export =` are not supported; use a named `export function`",
@@ -3622,7 +3727,7 @@ export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
 const exportDefaultFix = (ctx: CheckContext, stmt: Node): Edit[] => {
   const edits: Edit[] = []
   const value = stmt.children[0]
-  if (stmt.text !== "default" || value.kind !== N_IDENT) {
+  if (stmt.text !== "default" || value.kind !== NodeKind.Ident) {
     return edits
   }
   const decl = exportableDeclaration(ctx, value.text)
@@ -3649,7 +3754,7 @@ const exportListFix = (ctx: CheckContext, stmt: Node): Edit[] => {
   if (
     stmt.text.length > 0 ||
     (stmt.flags & (FLAG_TYPE_ONLY | FLAG_COMPUTED)) !== 0 ||
-    list.kind !== N_LIST ||
+    list.kind !== NodeKind.List ||
     list.children.length === 0
   ) {
     return none
@@ -3657,7 +3762,7 @@ const exportListFix = (ctx: CheckContext, stmt: Node): Edit[] => {
   const edits: Edit[] = []
   for (const spec of list.children) {
     const local = spec.children[0]
-    if (local.kind !== N_IDENT || spec.text !== local.text || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
+    if (local.kind !== NodeKind.Ident || spec.text !== local.text || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
       return none
     }
     const decl = exportableDeclaration(ctx, local.text)
@@ -3695,27 +3800,27 @@ const exportableDeclaration = (ctx: CheckContext, name: string): Node | null => 
 
 /**
  * The name a top-level declaration binds, or "" for one `exportableDeclaration`
- * does not move `export` onto. A `const` bound to an arrow is an N_FUNCTION,
+ * does not move `export` onto. A `const` bound to an arrow is a NodeKind.FunctionDecl,
  * and one that goes on to bind a second name has it as a sixth child (NL2274).
  */
 const declaredName = (stmt: Node): string => {
-  if (stmt.kind === N_FUNCTION && stmt.children.length > 5) {
+  if (stmt.kind === NodeKind.FunctionDecl && stmt.children.length > 5) {
     return ""
   }
   if (
-    stmt.kind === N_FUNCTION ||
-    stmt.kind === N_CLASS ||
-    stmt.kind === N_INTERFACE ||
-    stmt.kind === N_TYPE_ALIAS ||
-    stmt.kind === N_ENUM
+    stmt.kind === NodeKind.FunctionDecl ||
+    stmt.kind === NodeKind.Class ||
+    stmt.kind === NodeKind.Interface ||
+    stmt.kind === NodeKind.TypeAlias ||
+    stmt.kind === NodeKind.Enum
   ) {
-    return stmt.children[0].kind === N_IDENT ? stmt.children[0].text : ""
+    return stmt.children[0].kind === NodeKind.Ident ? stmt.children[0].text : ""
   }
-  if (stmt.kind !== N_MODULE_CONST || (stmt.flags & FLAG_CONST) === 0) {
+  if (stmt.kind !== NodeKind.ModuleConst || (stmt.flags & FLAG_CONST) === 0) {
     return ""
   }
   const decls = stmt.children[0].children
-  if (decls.length !== 1 || decls[0].children[0].kind !== N_IDENT) {
+  if (decls.length !== 1 || decls[0].children[0].kind !== NodeKind.Ident) {
     return ""
   }
   return decls[0].children[0].text
@@ -3765,45 +3870,45 @@ const isBlank = (byte: i32): boolean => byte === 32 || byte === 9 || byte === 13
  * finds where a statement stands, and the empty statement `;` NL2260 refuses
  * in a body.
  */
-export const syntaxKindName = (kind: i32): string => {
+export const syntaxKindName = (kind: NodeKind): string => {
   switch (kind) {
-    case N_EXPR_STMT:
+    case NodeKind.ExprStmt:
       return "ExpressionStatement"
-    case N_IF:
+    case NodeKind.If:
       return "IfStatement"
-    case N_WHILE:
+    case NodeKind.While:
       return "WhileStatement"
-    case N_DO:
+    case NodeKind.Do:
       return "DoStatement"
-    case N_FOR:
+    case NodeKind.For:
       return "ForStatement"
-    case N_FOR_OF:
+    case NodeKind.ForOf:
       return "ForOfStatement"
-    case N_SWITCH:
+    case NodeKind.Switch:
       return "SwitchStatement"
-    case N_RETURN:
+    case NodeKind.Return:
       return "ReturnStatement"
-    case N_THROW:
+    case NodeKind.Throw:
       return "ThrowStatement"
-    case N_BREAK:
+    case NodeKind.Break:
       return "BreakStatement"
-    case N_CONTINUE:
+    case NodeKind.Continue:
       return "ContinueStatement"
-    case N_TRY:
+    case NodeKind.Try:
       return "TryStatement"
-    case N_WITH:
+    case NodeKind.With:
       return "WithStatement"
-    case N_LABELED:
+    case NodeKind.Labeled:
       return "LabeledStatement"
-    case N_FUNCTION:
+    case NodeKind.FunctionDecl:
       return "FunctionDeclaration"
-    case N_IMPORT:
+    case NodeKind.Import:
       return "ImportDeclaration"
-    case N_IMPORT_EQUALS:
+    case NodeKind.ImportEquals:
       return "ImportEqualsDeclaration"
-    case N_NAMESPACE_EXPORT:
+    case NodeKind.NamespaceExport:
       return "NamespaceExportDeclaration"
-    case N_EMPTY:
+    case NodeKind.Empty:
       return "EmptyStatement"
     default:
       return "Statement"

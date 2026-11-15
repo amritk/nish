@@ -1,5 +1,5 @@
 seed 1175, 464424 cases agree
   corpus 15214, mutation 72821, limit 2241, name 46867, value 204523, tight 19920, browser 2838, grammar 100000
-  events 4129500: head 165717, body 53389, end 164667, upgrade 3217, closed 3580, error 310737
-  refusals: 400 279237, 413 166, 414 6457, 431 9758, 501 29, 505 15090, other 0
-  fingerprint 25a16373
+  events 4122505: head 163389, body 51440, end 162341, upgrade 3217, closed 3571, error 313040
+  refusals: 400 281546, 413 166, 414 6456, 431 9758, 501 29, 505 15085, other 0
+  fingerprint 3c74a1e2

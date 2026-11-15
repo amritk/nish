@@ -59,11 +59,13 @@ if [ -z "$version" ] && [ -z "$force" ] && [ -z "$expect" ] && have="$("$dir/bin
 fi
 
 # install.sh's closing advice is about a user's PATH and does not apply to a
-# seed in a build directory, so only its failure reaches the caller.
+# seed in a build directory, so only its failure reaches the caller -- and
+# NISH_NO_MODIFY_PATH keeps it from putting build/seed/bin on the PATH in the
+# developer's shell profile, which it does for a user's install.
 # Every download is verified there, against a pinned digest or the release's
 # SHA256SUMS, before it is unpacked or run; a seed that fails it is not
 # installed, and the old one stays (docs/security/supply-chain.md).
-if ! log="$(sh install.sh ${version:+"$version"} ${force:+"$force"} ${expect:+--expect-tarball "$expect"} --dir "$dir" 2>&1)"; then
+if ! log="$(NISH_NO_MODIFY_PATH=1 sh install.sh ${version:+"$version"} ${force:+"$force"} ${expect:+--expect-tarball "$expect"} --dir "$dir" 2>&1)"; then
   printf '%s\n' "$log" >&2
   exit 1
 fi

@@ -5,7 +5,7 @@ two candidates, and stage C5 needs one of them chosen. This spike writes the
 same three programs both ways, times them against each other and measures what
 each costs in bytes and in what the rest of the compiler may assume.
 
-**Recommendation for C5, for the owner to accept: lower `try`/`catch` to the
+**Recommendation for C5: lower `try`/`catch` to the
 `Result` desugaring.** The rule and the rows it rests on are under
 [Verdict](#verdict).
 

@@ -1,6 +1,6 @@
 # Security record: JSON — the tokenizer and the typed layer
 
-The record of WP34 N11's second stage: `nish/json-tokenizer`
+The record of `nish/json-tokenizer`
 (`std/json-tokenizer.ts`), the validating tokenizer a server runs over a body
 it took from a peer. It says what the tokenizer refuses and with which code,
 what it caps and where the cap is set, what it allocates, and the test that

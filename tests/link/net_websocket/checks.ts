@@ -48,6 +48,7 @@ import {
   websocketIsUtf8,
   websocketKeyIsValid,
   websocketOfferedProtocols,
+  websocketOriginAllowed,
   websocketRequestKey,
   websocketUpgradeRequest,
   websocketUpgradeResponse,
@@ -465,6 +466,27 @@ export const websocketChecks = (): i32 => {
   );
   t.eqStr("refused offer: an element that is not a token", offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Protocol: chat, a b\r\n\r\n"), "null");
   t.eqStr("refused offer: a quoted element", offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Protocol: \"chat\"\r\n\r\n"), "null");
+
+  // `websocketOriginAllowed`, the opt-in check against cross-site WebSocket
+  // hijacking (H1-10): exactly one `Origin`, equal to an allowed origin whole.
+  const site: string[] = ["https://example.com", "http://localhost:8080"];
+  t.eqBool("origin: an allowed origin is accepted", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: https://example.com\r\n\r\n"), site), true);
+  t.eqBool("origin: the second allowed origin, with its port, is accepted", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: http://localhost:8080\r\n\r\n"), site), true);
+  t.eqBool("origin: compared in any ASCII case, on either side", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\norigin: HTTPS://Example.COM\r\n\r\n"), ["https://EXAMPLE.com"]), true);
+  t.eqBool("refused origin: another site", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: https://evil.example\r\n\r\n"), site), false);
+  t.eqBool("refused origin: an allowed origin as a prefix", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: https://example.com.evil.example\r\n\r\n"), site), false);
+  t.eqBool("refused origin: an allowed origin's suffix", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: https://notexample.com\r\n\r\n"), site), false);
+  t.eqBool("refused origin: the other scheme", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: http://example.com\r\n\r\n"), site), false);
+  t.eqBool("refused origin: another port", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: http://localhost:8081\r\n\r\n"), site), false);
+  t.eqBool("refused origin: none sent", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\n\r\n"), site), false);
+  t.eqBool(
+    "refused origin: two Origin fields, the first allowed",
+    websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: https://example.com\r\nOrigin: https://evil.example\r\n\r\n"), site),
+    false
+  );
+  t.eqBool("refused origin: an opaque origin not listed", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: null\r\n\r\n"), site), false);
+  const noOrigins: string[] = [];
+  t.eqBool("refused origin: an empty allowed list", websocketOriginAllowed(headOf("GET / HTTP/1.1\r\nHost: a\r\nOrigin: https://example.com\r\n\r\n"), noOrigins), false);
 
   const offered: string[] = ["chat", "superchat"];
   t.eqStr("check: the §1.3 response, no protocol offered", checkOf(switching(""), noProtocols), `${WS_HS_OK} `);

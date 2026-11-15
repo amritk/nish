@@ -46,8 +46,8 @@ A win for the attacker is any of these:
 - a panic, an out-of-bounds read, or work or memory that grows with an input
   past what a legitimate key needs (denial of service).
 
-**Why no `Secret`.** CLAUDE.md requires secret material in `std/crypto` to be
-a `Secret` and wiped. This module has none: a public key, a signature and a
+**Why no `Secret`.** The project's rule is that secret material in `std/crypto`
+is a `Secret` and is wiped. This module has none: a public key, a signature and a
 message are all public, and so is everything computed from them, including the
 opened block `s^e mod n`. So it does not import `nish:secret` and does not
 wipe. For the same reason it is variable time and does not use

@@ -50,6 +50,7 @@ import {
   websocketIsUtf8,
   websocketKeyIsValid,
   websocketOfferedProtocols,
+  websocketOriginAllowed,
   websocketRequestKey,
   websocketUpgradeRequest,
   websocketUpgradeResponse,
@@ -131,6 +132,12 @@ The subprotocols the opening handshake `p` has just read offers, in the order of
 
 </scalar-card>
 
+<scalar-card title="websocket​Origin​Allowed" icon="phosphor/regular/function" href="#websocketoriginallowed">
+
+Whether the request's `Origin` is one of `allowed`: the check a server makes before `acceptWebSocket` so that a page on another site cannot open a WebSocket that rides the user's cookies (cross-site WebSocket hijacking, RFC 6455 §10.2).
+
+</scalar-card>
+
 <scalar-card title="websocket​Request​Key" icon="phosphor/regular/function" href="#websocketrequestkey">
 
 The client's key when the head `p` has just read is a valid opening handshake (§4.2.1): a GET in HTTP/1.1, asking to upgrade to `websocket` (alone, in any case), at version 13, with a valid key.
@@ -177,7 +184,8 @@ is a valid opening handshake (§4.2.1), `websocketOfferedProtocols(parser)`
 the subprotocols it offers, and `websocketUpgradeResponse(key, protocol)`
 writes the 101 that accepts it, with `Sec-WebSocket-Accept` from
 `websocketAcceptKey` (§4.2.2): the base64 of the SHA-1 of the key and a
-fixed GUID. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
+fixed GUID. `websocketOriginAllowed(parser, allowed)` is the opt-in check
+of `Origin` a server makes first, against a page on another site. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
 input for the decoder.
 
 </scalar-detail>
@@ -549,6 +557,48 @@ The server's parser, at the `HTTP1_HEAD` of the request.
 <scalar-field name="returns" type="string[] | null">
 
 The offered subprotocols in order, `[]` when none are offered, or null when one is not a token.
+
+</scalar-field>
+
+### websocketOriginAllowed
+
+Whether the request's `Origin` is one of `allowed`: the check a server makes
+before `acceptWebSocket` so that a page on another site cannot open a
+WebSocket that rides the user's cookies (cross-site WebSocket hijacking,
+RFC 6455 §10.2). A browser always sends `Origin` on the opening handshake
+and a page cannot change it; the handshake itself is not refused without
+one, because a client that is not a browser need not send it, so the check
+is the program's to opt into.
+
+An origin is compared whole, in any ASCII case, as the browser serializes
+it: `https://example.com`, or `https://example.com:8443` for a port that is
+not the scheme's default, with no path and no trailing slash. Answers false
+for a request with no `Origin` or with more than one, so a program that also
+serves clients that are not browsers lets those through itself. Allocates
+nothing.
+
+```ts
+function websocketOriginAllowed(
+  p: Http1Parser,
+  allowed: string[],
+): boolean
+```
+
+<scalar-field name="p" type="Http1Parser" required>
+
+the parser holding the request's head, as `Http1Connection.parser` does at `H1_REQUEST`
+
+</scalar-field>
+
+<scalar-field name="allowed" type="string[]" required>
+
+the origins to accept, each written as a browser sends it; "null" accepts an opaque origin, which any sandboxed page can send
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+true when exactly one `Origin` field is present and its value is one of `allowed`
 
 </scalar-field>
 

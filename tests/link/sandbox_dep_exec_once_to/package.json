@@ -1,0 +1,14 @@
+{
+  "name": "sandbox-dep-exec-once-to",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_runner": [
+          "process.spawn=find",
+          "fs.write=./out"
+        ]
+      }
+    }
+  }
+}

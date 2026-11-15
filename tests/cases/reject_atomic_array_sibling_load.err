@@ -1,0 +1,1 @@
+This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches

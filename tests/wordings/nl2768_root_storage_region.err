@@ -1,0 +1,1 @@
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own

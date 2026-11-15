@@ -1,0 +1,1 @@
+`cErrno` is a `nish:unsafe` function and is called only through an import of it

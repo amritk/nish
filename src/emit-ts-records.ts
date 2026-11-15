@@ -43,27 +43,16 @@
 // the composer, which this row tells by setting `walk.instanceChoice`.
 
 import { isSortInstance } from "./arrays"
-import { Operands, Walk } from "./emit-ts-edits"
+import { Operands, splice, Walk } from "./emit-ts-edits"
 import {
   FLAG_GATHERED,
   FLAG_OPTIONAL,
-  N_ARRAY,
-  N_BIGINT,
-  N_BINARY,
-  N_CALL,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_OBJECT,
-  N_PAREN,
-  N_SPREAD,
-  N_TYPE_NULL,
-  N_TYPE_PAREN,
-  N_TYPE_REF,
-  N_TYPE_UNION,
   Node,
+  NodeKind,
+  isPatternName,
+  patternNamesEnd,
+  patternNamesStart,
+  patternOf,
 } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
@@ -136,10 +125,10 @@ const slotCopy = (walk: Walk, slot: i32): i32 => {
 /** How `value`, put into an array slot of type `slot`, is copied in. */
 const copyKind = (walk: Walk, slot: i32, value: Node): i32 => {
   if (
-    value.kind === N_OBJECT ||
-    value.kind === N_SPREAD ||
-    value.kind === N_NUMBER ||
-    value.kind === N_BIGINT
+    value.kind === NodeKind.Object ||
+    value.kind === NodeKind.Spread ||
+    value.kind === NodeKind.Number ||
+    value.kind === NodeKind.Bigint
   ) {
     return COPY_NONE
   }
@@ -163,7 +152,7 @@ const copied = (walk: Walk, slot: i32, value: Node, written: string): string => 
 }
 
 /**
- * Whether the index at `node` (an N_INDEX, or the call of a `pop`) is written
+ * Whether the index at `node` (a NodeKind.Index, or the call of a `pop`) is written
  * checked. A generic body is written once for all its instances, and one
  * instance can prove an index another cannot, so there it is always checked.
  */
@@ -234,13 +223,13 @@ const writtenReceiver = (text: string, name: string): string =>
 
 /** Whether `node` reads as one operand where an operator's right side goes. */
 const atomic = (node: Node): boolean =>
-  node.kind === N_IDENT ||
-  node.kind === N_NUMBER ||
-  node.kind === N_BIGINT ||
-  node.kind === N_CALL ||
-  node.kind === N_INDEX ||
-  node.kind === N_MEMBER ||
-  node.kind === N_PAREN
+  node.kind === NodeKind.Ident ||
+  node.kind === NodeKind.Number ||
+  node.kind === NodeKind.Bigint ||
+  node.kind === NodeKind.Call ||
+  node.kind === NodeKind.Index ||
+  node.kind === NodeKind.Member ||
+  node.kind === NodeKind.Paren
 
 /** A parameter name for an update callback that `text` does not already spell. */
 const updateParam = (text: string): string => {
@@ -248,8 +237,16 @@ const updateParam = (text: string): string => {
     return "old"
   }
   let n = 1
-  while (text.indexOf(`old${n}`) >= 0) {
-    n = n + 1
+  let taken = true
+  while (taken) {
+    {
+      // Each candidate name is a temporary the pass drops.
+      using _a = arena()
+      taken = text.indexOf(`old${n}`) >= 0
+    }
+    if (taken) {
+      n = n + 1
+    }
   }
   return `old${n}`
 }
@@ -266,7 +263,7 @@ const compoundStore = (walk: Walk, node: Node, operands: Operands, args: string)
 /** The rewrite of an assignment `a[i] = v` or `a[i] OP= v`, or `null`. */
 const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const target = node.children[0]
-  if (target.kind !== N_INDEX) {
+  if (target.kind !== NodeKind.Index) {
     return null
   }
   const left = operands.at(0)
@@ -339,11 +336,11 @@ const arrayMethodRow = (walk: Walk, node: Node, method: string): string | null =
 /** The rewrite of a builtin array method call — `pop`, `push` of a record, `set` — or `null`. */
 const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
-  const arrayMethod = callee.kind === N_IDENT ? arrayMethodOfLocal(callee.text) : ""
+  const arrayMethod = callee.kind === NodeKind.Ident ? arrayMethodOfLocal(callee.text) : ""
   if (arrayMethod !== "") {
     return arrayMethodRow(walk, node, arrayMethod)
   }
-  if (callee.kind !== N_MEMBER || walk.program.nodeCallees[node.id] !== null) {
+  if (callee.kind !== NodeKind.Member || walk.program.nodeCallees[node.id] !== null) {
     return null
   }
   const args = node.children[1].children
@@ -431,18 +428,18 @@ const primitiveZero = (walk: Walk, type: i32): string => {
  * differ are written differently, which the composer reports.
  */
 const fillZero = (walk: Walk, type: Node): string => {
-  if (type.kind === N_TYPE_PAREN) {
+  if (type.kind === NodeKind.TypeParen) {
     return fillZero(walk, type.children[0])
   }
-  if (type.kind === N_TYPE_UNION) {
+  if (type.kind === NodeKind.TypeUnion) {
     for (const member of type.children) {
-      if (member.kind === N_TYPE_NULL) {
+      if (member.kind === NodeKind.TypeNull) {
         return "null"
       }
     }
     return ""
   }
-  if (type.kind !== N_TYPE_REF) {
+  if (type.kind !== NodeKind.TypeRef) {
     return ""
   }
   const name = type.text
@@ -548,7 +545,7 @@ const storageRow = (walk: Walk, node: Node, text: string): string => {
   if (typeArgs.length === 1) {
     return `(${text} as ${walk.spanOf(typeArgs[0])}[])`
   }
-  const element = callee.kind === N_IDENT ? typedArrayWidth(callee.text) : ""
+  const element = callee.kind === NodeKind.Ident ? typedArrayWidth(callee.text) : ""
   if (element === "") {
     return text
   }
@@ -564,7 +561,7 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
     return storageRow(walk, node, `${STORAGE_NAMESPACE}.s${walk.storageSlots[stored]}`)
   }
   const callee = node.children[0]
-  if (callee.kind !== N_IDENT || node.children[2].children.length !== 1) {
+  if (callee.kind !== NodeKind.Ident || node.children[2].children.length !== 1) {
     return null
   }
   const typeArgs = node.children[1].children
@@ -606,7 +603,7 @@ const processArgv = (walk: Walk, node: Node): string | null => {
   }
   const receiver = node.children[0]
   if (
-    receiver.kind !== N_IDENT ||
+    receiver.kind !== NodeKind.Ident ||
     receiver.text !== "process" ||
     walk.program.nodeLocals[receiver.id] !== null ||
     walk.program.nodeConstants[receiver.id] !== null
@@ -624,22 +621,145 @@ const processArgv = (walk: Walk, node: Node): string | null => {
 /** The records row's rewrite of `node`, or `null` to leave it to the next row. */
 export const recordsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   switch (node.kind) {
-    case N_INDEX:
+    case NodeKind.Index:
       if ((node.flags & FLAG_OPTIONAL) !== 0 || !checkedAt(walk, node)) {
         return null
       }
       return `${walk.helperName("idx")}(${operands.at(0)}, ${operands.at(1)})`
-    case N_BINARY:
+    case NodeKind.Binary:
       return storeRow(walk, node, operands)
-    case N_CALL:
+    case NodeKind.Call:
       return recordCallRow(walk, node, operands)
-    case N_ARRAY:
+    case NodeKind.Array:
       return literalRow(walk, node, operands)
-    case N_NEW:
+    case NodeKind.New:
       return newRow(walk, node, operands)
-    case N_MEMBER:
+    case NodeKind.Member:
       return processArgv(walk, node)
+    case NodeKind.VarDecl:
+      return checkedPattern(walk, node, operands)
+    case NodeKind.ForOf:
+      return checkedPatternHead(walk, node, operands)
     default:
       return null
   }
+}
+
+/**
+ * The indices of an array pattern's reads the bounds walk did not prove, in
+ * the pattern's order. The reads are the declarators `list.children[from,
+ * end)` that `Parser.lowerPattern` wrote for one pattern
+ * (`patternNamesStart`, `patternNamesEnd`). Empty where every read is proven.
+ */
+const uncheckedReads = (walk: Walk, list: Node, from: i32, end: i32): string[] => {
+  const indices: string[] = []
+  for (let i = from; i < end; i++) {
+    const read = list.children[i].children[2]
+    if (read.kind === NodeKind.Index && checkedAt(walk, read)) {
+      indices.push(read.children[1].text)
+    }
+  }
+  return indices
+}
+
+/**
+ * The `idx(t, 0), idx(t, 2)` the reads at `indices` need, for `t`, so the
+ * first one out of range panics as the native read of it does. Node would
+ * bind `undefined` past the end instead.
+ */
+const patternChecks = (walk: Walk, indices: string[], t: string): string => {
+  const parts: string[] = []
+  for (const index of indices) {
+    parts.push(`${walk.helperName("idx")}(${t}, ${index}), `)
+  }
+  return parts.join("")
+}
+
+/**
+ * `const [a, , c] = xs`, its value checked first: `((t) => (idx(t, 0), idx(t,
+ * 2), t))(xs)`. A receiver read directly is a field path, `xs` or `o.items`,
+ * which the walk does not visit (`writtenChildren`), so it is spliced from the
+ * source unless a row rewrites it: of the field paths an array pattern may
+ * read, only `process.argv` (`processArgv`) is, to `argv()`, as its
+ * hand-written read `process.argv[1]` is.
+ */
+const checkedPattern = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const pattern = patternOf(node)
+  const list = walk.list
+  if (pattern === null || pattern.text !== "[" || list === null || list.children[walk.listAt] !== node) {
+    return null
+  }
+  // An untyped body proves no read, so which ones need a check is not known.
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
+  const direct = isPatternName(node)
+  if (!direct && node.children[2].kind === NodeKind.Empty) {
+    return null
+  }
+  const from = patternNamesStart(list, walk.listAt)
+  const end = patternNamesEnd(list, walk.listAt)
+  const indices = uncheckedReads(walk, list, from, end)
+  // A direct name's read is `base[i]`, its receiver the path the source wrote.
+  const base = direct ? node.children[2].children[0] : node
+  const receiver: string | null = direct && base.kind === NodeKind.Member ? processArgv(walk, base) : null
+  if (indices.length === 0 && receiver === null) {
+    return null
+  }
+  if (direct) {
+    const text = walk.source.text
+    const read = receiver === null ? walk.spanOf(base) : receiver
+    let value = read
+    if (indices.length > 0) {
+      const t = walk.temporary()
+      value = `((${t}) => (${patternChecks(walk, indices, t)}${t}))(${read})`
+    }
+    return `${text.substring(node.start, base.start)}${value}${text.substring(base.end, node.end)}`
+  }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, indices, t)
+  operands.texts[2] = `((${t}) => (${checks}${t}))(${operands.at(2)})`
+  operands.changed[2] = true
+  return splice(walk, node, operands)
+}
+
+/**
+ * `for (const [a, b] of rows)`, each element checked as it is reached:
+ * `rows` walked through `(function* (r) { for (const t of r) yield (idx(t,
+ * 0), idx(t, 1), t) })(rows)`, which reads `rows` as the loop does.
+ */
+const checkedPatternHead = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const head = node.children[0]
+  if (head.kind !== NodeKind.Var || head.children[0].children.length === 0) {
+    return null
+  }
+  const pattern = patternOf(head.children[0].children[0])
+  const body = node.children[node.children.length - 1]
+  if (
+    pattern === null ||
+    pattern.text !== "[" ||
+    body.kind !== NodeKind.Block ||
+    body.children.length === 0
+  ) {
+    return null
+  }
+  const names = body.children[0]
+  if (names.kind !== NodeKind.Var || !isPatternName(names)) {
+    return null
+  }
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
+  const indices = uncheckedReads(walk, names.children[0], 0, names.children[0].children.length)
+  if (indices.length === 0) {
+    return null
+  }
+  const t = walk.temporary()
+  const checks = patternChecks(walk, indices, t)
+  const rows = walk.temporary()
+  operands.texts[1] = `(function* (${rows}) { for (const ${t} of ${rows}) yield (${checks}${t}) })(${operands.at(1)})`
+  operands.changed[1] = true
+  return splice(walk, node, operands)
 }

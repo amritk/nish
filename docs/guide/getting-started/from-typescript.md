@@ -62,13 +62,15 @@ export const main = (): i32 => {
 ```
 
 That program prints `total: 11`. It uses `const` and `let`, arrow functions,
-interfaces, classes with fields and methods, numeric enums, object and array
+interfaces, classes with fields and methods, enums, object and array
 literals, `for...of`, `switch`, the ternary operator and template literals.
 Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
 `switch` is on an integer or an enum (a clause without `break` falls through
 into the next, as in TypeScript; see
 [`switch`](../language/control-flow.md#switch)), and an enum value can only be
-compared with `===` and `!==`. The [language
+compared with `===` and `!==`. An enum may be numeric or string; a string
+enum's value is not a `string`, so `String(r)` gives its text
+([Enums](../language/types.md#enums)). The [language
 pages](../language/control-flow.md) give the details.
 
 `if`, `while`, `do...while`, `break`, `continue`, `===` and named `import` and
@@ -341,7 +343,7 @@ These come up often enough to know before you meet them:
 | --- | --- | --- |
 | `if (xs.length)` | `NL2188`: a condition must be a `boolean` | `if (xs.length !== 0)` |
 | `a == b` | `NL1047`: loose equality | `a === b` |
-| `xs.forEach(f)`, `.reduce` | `NL2249`: unknown method | a `for...of` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work ([Arrays and strings](../language/arrays-and-strings.md)) |
+| `xs.reduce(f)` | `NL2249`: unknown method | a `for...of` loop; `map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work ([Arrays and strings](../language/arrays-and-strings.md)) |
 | `xs.find(f)` | `NL2697`: `find` answers `T \| undefined` | `const i = xs.findIndex(f)`, then `xs[i]` when `i >= 0` |
 | `String(n)`, `n.toString()` | `NL2247`: unknown function, `NL2249`: unknown method | `` `${n}` `` |
 | `promise.then(f)`, `Promise.all`, a promise in a variable | `NL2650`, `NL2649`, `NL2654`: a promise is never a value | `await` each call where it is made, or `awaitAll` ([Async functions](../language/async.md)) |

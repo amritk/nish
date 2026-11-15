@@ -1,0 +1,1 @@
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module

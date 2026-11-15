@@ -149,6 +149,7 @@
  * the same under `--number-mode f64`, and it runs under the Node prelude, where
  * `tests/run.js` holds every method to the native answers.
  */
+import { uncheckedSet } from "nish:unsafe"
 import { JSON_WRITE_FULL, JSON_WRITE_OK, JSON_WRITER_MAX_DEPTH, JsonWriter } from "nish/json"
 import {
   JSON_TOK_ARRAY_BEGIN,
@@ -235,6 +236,9 @@ const JSON_VALUE_DIGIT_0: i32 = 48
 const JSON_VALUE_NO_WORD: i32 = 0
 const JSON_VALUE_TRUE_WORD: i32 = 1
 const JSON_VALUE_MINUS: i32 = 45
+/** A line feed and a carriage return, which `storeSpan` refuses. */
+const JSON_VALUE_LF: i32 = 10
+const JSON_VALUE_CR: i32 = 13
 
 /** A `JsonDocument`'s source ranges, made on first use; see `JsonDocument.ranges`. */
 class JsonValueRanges {
@@ -1463,6 +1467,18 @@ export class JsonDocument {
     if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
+    this.rangeAt(x, start, end)
+    return JSON_VALUE_OK
+  }
+
+  /**
+   * `setRange` for index `x`, a value of this document, with
+   * `0 <= start <= end` checked by the caller.
+   *
+   * @internal Read by std/yaml-json.ts, which holds the index of each value
+   *   it makes.
+   */
+  rangeAt(x: i32, start: i32, end: i32): void {
     this.ownRanges()
     const r: JsonValueRanges = this.rangeArrays()
     // Values between the last current one and `x` have no range yet.
@@ -1475,7 +1491,6 @@ export class JsonDocument {
     if (x >= this.rangeTop) {
       this.rangeTop = x + 1
     }
-    return JSON_VALUE_OK
   }
 
   /**
@@ -1497,6 +1512,18 @@ export class JsonDocument {
     if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
+    this.keyRangeAt(s, start, end)
+    return JSON_VALUE_OK
+  }
+
+  /**
+   * `setKeyRange` for slot `s`, a member's as `append` answers it, with
+   * `0 <= start <= end` checked by the caller.
+   *
+   * @internal Read by std/yaml-json.ts, which holds the slot of each member
+   *   it adds.
+   */
+  keyRangeAt(s: i32, start: i32, end: i32): void {
     this.ownRanges()
     const r: JsonValueRanges = this.rangeArrays()
     for (let t: i32 = this.slotRangeTop; t < s; t += 1) {
@@ -1508,7 +1535,6 @@ export class JsonDocument {
     if (s >= this.slotRangeTop) {
       this.slotRangeTop = s + 1
     }
-    return JSON_VALUE_OK
   }
 
   /** The slot of member `i` of the object at index `x`, or `-1` when `x` is not an object or has no member `i`. */
@@ -1724,11 +1750,12 @@ export class JsonDocument {
    * first. A container whose slots are full moves them to the end of the slot
    * arrays with twice the room, unless they are at the end already, where they
    * grow in place; the slots it leaves are not reused until `clear`.
+   * Answers the new member's slot.
    *
    * @internal Read by std/yaml-json.ts, which builds a document from YAML
    *   through it.
    */
-  append(c: i32, v: i32, keyAt: i32, keyLength: i32): void {
+  append(c: i32, v: i32, keyAt: i32, keyLength: i32): i32 {
     let start: i32 = jsonValueGet(this.first, c)
     const n: i32 = jsonValueGet(this.count, c)
     const capacity: i32 = jsonValueGet(this.room, c)
@@ -1749,6 +1776,120 @@ export class JsonDocument {
     jsonValuePut(this.slotKeyLength, start + n, keyLength)
     jsonValuePut(this.count, c, n + 1)
     jsonValuePut(this.parent, v, c)
+    return start + n
+  }
+
+  /**
+   * Gives the empty container at index `c`, made last, room for `n`
+   * members at the end of the slot arrays, so that `n` appends fill it
+   * without moving it. Nothing for a container that is not empty and last.
+   *
+   * @internal Read by std/yaml-json.ts, which knows each container's size
+   *   before it builds the members.
+   */
+  reserve(c: i32, n: i32): void {
+    if (n <= 0 || jsonValueGet(this.first, c) !== this.slotTop || jsonValueGet(this.room, c) !== 0) {
+      return
+    }
+    this.slotTop += n
+    this.slotValue = jsonValueRoomI32(this.slotValue, this.slotTop)
+    this.slotKeyAt = jsonValueRoomI32(this.slotKeyAt, this.slotTop)
+    this.slotKeyLength = jsonValueRoomI32(this.slotKeyLength, this.slotTop)
+    jsonValuePut(this.room, c, n)
+  }
+
+  /**
+   * Appends the bytes of `text[from, to)` to the end of `bytes`, unless a
+   * line break or the byte `stop` comes first: then nothing is kept.
+   *
+   * @param text - the text the bytes are copied from.
+   * @param from - the offset of the first byte.
+   * @param to - one past the offset of the last byte.
+   * @param stop - a byte that refuses the copy, or `-1` for none.
+   * @returns how many bytes were stored, or `-1` when the copy was refused.
+   *
+   * @internal Read by std/yaml-json.ts, which stores a scalar with nothing
+   *   to decode straight from its source.
+   */
+  storeSpan(text: string, from: i32, to: i32, stop: i32): i32 {
+    const at: i32 = this.byteTop
+    const n: i32 = to - from
+    if (from < 0 || n < 0 || to > toI32(text.length) || at < 0) {
+      return -1
+    }
+    const end: i32 = at + n
+    const buf: u8[] = jsonValueRoom(this.bytes, end)
+    this.bytes = buf
+    if (end > toI32(buf.length)) {
+      return -1
+    }
+    let k: i32 = at
+    for (let j: i32 = from; j < to; j += 1) {
+      const code: i32 = toI32(text.charCodeAt(j))
+      // Both breaks are below 14, so one compare passes almost every byte.
+      if (code === stop || (code <= JSON_VALUE_CR && (code === JSON_VALUE_LF || code === JSON_VALUE_CR))) {
+        return -1
+      }
+      // `k` runs `at` to `end` as `j` runs `from` to `to`: in `buf`.
+      uncheckedSet(buf, k, toU8(code))
+      k += 1
+    }
+    this.byteTop = end
+    return n
+  }
+
+  /**
+   * Appends the bytes of `text[from, to)` to the end of `bytes`, as
+   * `storeSpan` does with nothing to refuse: for a caller that knows the span
+   * holds no line break.
+   *
+   * @param text - the text the bytes are copied from.
+   * @param from - the offset of the first byte.
+   * @param to - one past the offset of the last byte.
+   * @returns how many bytes were stored, or `-1` when the span is not in `text`.
+   *
+   * @internal Read by std/yaml-json.ts, for a scalar the parser found to be
+   *   its own body.
+   */
+  copySpan(text: string, from: i32, to: i32): i32 {
+    const at: i32 = this.byteTop
+    const n: i32 = to - from
+    if (from < 0 || n < 0 || to > toI32(text.length) || at < 0) {
+      return -1
+    }
+    const buf: u8[] = jsonValueRoom(this.bytes, at + n)
+    this.bytes = buf
+    if (at + n > toI32(buf.length)) {
+      return -1
+    }
+    const end: i32 = at + n
+    let k: i32 = at
+    for (let j: i32 = from; j < to; j += 1) {
+      // `k` runs `at` to `end` as `j` runs `from` to `to`: in `buf`.
+      uncheckedSet(buf, k, toU8(text.charCodeAt(j)))
+      k += 1
+    }
+    this.byteTop = end
+    return n
+  }
+
+  /**
+   * A new string of the `n` bytes stored from `at`, as a handle.
+   *
+   * @internal Read by std/yaml-json.ts, after `storeSpan`.
+   */
+  newStoredString(at: i32, n: i32): JsonValue {
+    return this.handle(this.newNode(JSON_VALUE_STRING, at, n))
+  }
+
+  /**
+   * A new number of the `n` bytes stored from `at`, as a handle; the caller
+   * has checked they are one RFC 8259 number, which `newNumber` would check.
+   *
+   * @internal Read by std/yaml-json.ts, after `storeSpan`.
+   */
+  newStoredNumber(at: i32, n: i32): JsonValue {
+    return this.handle(this.newNode(JSON_VALUE_NUMBER, at, n))
   }
 
   /** A new value of `kind` holding `s`'s bytes, as a handle. */

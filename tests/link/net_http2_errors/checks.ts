@@ -16,7 +16,7 @@ import {
   H2_FRAME_PUSH_PROMISE,
   http2WriteHeader,
 } from "nish/net/http2-frame";
-import { H2_CLOSED, H2_ERROR, H2_INVALID, Http2Config } from "nish/net/http2";
+import { H2_CLOSED, H2_ERROR, H2_INVALID, Http2Config, Http2Stream } from "nish/net/http2";
 import { Suite } from "nish/testing";
 import { httpFieldBytes } from "nish/net/http-fields";
 import { toHex } from "../crypto_x509/hex";
@@ -236,6 +236,36 @@ export const errorChecks = (): i32 => {
     outcome(fg),
     "request 1 POST /; error 3 | GOAWAY 1 3"
   );
+  // One frame's INITIAL_WINDOW_SIZE entries move the streams once, after the
+  // frame is checked (H2-5), yet answer as if each entry applied in order.
+  const fh = fresh();
+  fh.wire.headers(toI32(1), postOf("/", toI32(9)), ZERO);
+  fh.wire.windowUpdate(toI32(1), toI32(2147483647 - 65535));
+  fh.wire.settings([toI32(4), toI32(4)], [toI64(65536), toI64(65535)]);
+  t.eqStr(
+    "an entry that overflows a stream's window is the error even when a later entry in the same frame would bring it back",
+    outcome(fh),
+    "request 1 POST /; error 3 | GOAWAY 1 3"
+  );
+  const fi = fresh();
+  fi.wire.headers(toI32(1), postOf("/", toI32(9)), ZERO);
+  fi.wire.settings([toI32(4), toI32(4), toI32(4), toI32(4)], [toI64(0), toI64(100), toI64(1000), toI64(70)]);
+  const fiOut = outcome(fi);
+  const fiStream: Http2Stream | null = fi.conn.find(toI32(1));
+  t.ok(
+    "several INITIAL_WINDOW_SIZE entries in one frame: the last one sets every open stream's window",
+    fiOut === "request 1 POST / | SETTINGS ack" && fiStream !== null && fiStream.sendWindow === toI64(70)
+  );
+  const fj = fresh();
+  fj.wire.headers(toI32(1), postOf("/", toI32(9)), ZERO);
+  fj.wire.windowUpdate(toI32(1), toI32(2147483647 - 65535));
+  fj.wire.hex(frameHex(toI32(12), toI32(4), ZERO, ZERO, "000400010000000200000002"));
+  t.eqStr("an overflowing window before an invalid entry: FLOW_CONTROL_ERROR, the first error", outcome(fj), "request 1 POST /; error 3 | GOAWAY 1 3");
+  const fk = fresh();
+  fk.wire.headers(toI32(1), postOf("/", toI32(9)), ZERO);
+  fk.wire.windowUpdate(toI32(1), toI32(2147483647 - 65535));
+  fk.wire.hex(frameHex(toI32(12), toI32(4), ZERO, ZERO, "000200000002000400010000"));
+  t.eqStr("an invalid entry before an overflowing window: PROTOCOL_ERROR, the first error", outcome(fk), "request 1 POST /; error 1 | GOAWAY 1 1");
 
   // --- stream errors: malformed requests (§8.1.1) -------------------------------------------------
   const sa = fresh();

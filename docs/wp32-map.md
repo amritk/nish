@@ -1,6 +1,6 @@
 # WP32: the global `Map` and `Set`
 
-**Status: shipped, with one item open.** The design note and layout
+**Status: shipped.** The design note and layout
 prototypes (S1, [#227](https://github.com/amritk/nish/pull/227)), the global
 `Map` and `Set` on `std/collections.ts` (S2,
 [#229](https://github.com/amritk/nish/pull/229)), `get` typed

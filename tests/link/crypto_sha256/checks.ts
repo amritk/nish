@@ -16,6 +16,17 @@ import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256";
 
 const HEX_DIGITS: string = "0123456789abcdef";
 
+/** Arena bytes `Sha256.digestInto` takes, the hasher fed and its array made before the count starts. */
+const digestIntoCost = (data: u8[]): i64 => {
+  const from: i32 = 0;
+  const h: Sha256 = new Sha256();
+  h.update(data, from, toI32(data.length));
+  const out: u8[] = new Array<u8>(SHA256_SIZE);
+  const before: i64 = Arena.used();
+  h.digestInto(out, from);
+  return Arena.used() - before;
+};
+
 /** `bytes` as lowercase hex, two digits a byte, the way the vectors print them. */
 const hexOf = (bytes: u8[]): string => {
   const parts: string[] = [];
@@ -329,6 +340,33 @@ export const sha256Checks = (): i32 => {
     "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
   );
   t.eqStr("and the original still digests the same", hexOf(transcript.digest()), afterAll);
+
+  // --- digestInto -----------------------------------------------------------
+  // The digest lands in the caller's window and nowhere else.
+  const into: Sha256 = new Sha256();
+  into.update(msg896, start, abc);
+  const window: u8[] = repeated(0x55, 34);
+  const at: i32 = 1;
+  const fill: i32 = 0x55;
+  into.digestInto(window, at);
+  t.eqStr(
+    "digestInto writes the digest of \"abc\" at its offset",
+    hexOf(prefix(window, 33)),
+    "55ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  );
+  t.eqI32("and leaves the byte after the window alone", toI32(window[33]), fill);
+  // The window may end exactly at the array's end: at = size - 32, with at > 0.
+  const edge: Sha256 = new Sha256();
+  edge.update(msg896, start, abc);
+  const tight: u8[] = repeated(0x55, 33);
+  edge.digestInto(tight, at);
+  t.eqStr(
+    "digestInto writes a window that ends at the array's last byte",
+    hexOf(tight),
+    "55ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  );
+  const noBytes: i64 = 0;
+  t.eqI64("digestInto allocates nothing", digestIntoCost(msg896), noBytes);
 
   // A digest is a fresh array each time, so writing into one cannot change another.
   const first: u8[] = sha256(empty);

@@ -1,5 +1,5 @@
 /**
- * Whether a client may reach the endpoint it named: a port of cs's
+ * Whether a client may reach the endpoint it named: a port of the Rust relay's
  * `services/relay/src/grant.rs`.
  *
  * A relay that forwards UDP to any host a client asks for is a reflector,

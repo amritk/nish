@@ -1,0 +1,12 @@
+plaintext: HTTP/1.1 200 OK|content-type: text/plain; charset=utf-8|Date: <date>|Content-Length: 13||Hello, World!
+json: HTTP/1.1 200 OK|content-type: application/json|Date: <date>|Content-Length: 27||{"message":"Hello, World!"}
+404: HTTP/1.1 404 Not Found|content-type: application/problem+json|Date: <date>|Content-Length: 55||{"type":"about:blank","title":"Not Found","status":404}
+wrong response: HTTP/1.1 500 Internal Server Error|content-type: application/problem+json|Date: <date>|Content-Length: 67||{"type":"about:blank","title":"Internal Server Error","status":500}
+after it: HTTP/1.1 200 OK|content-type: text/plain; charset=utf-8|Date: <date>|Content-Length: 13||Hello, World!
+head: HTTP/1.1 200 OK|content-type: text/plain; charset=utf-8|Date: <date>|Content-Length: 13||
+in flight: HTTP/1.1 503 Service Unavailable|content-type: application/problem+json|Date: <date>|Content-Length: 65||{"type":"about:blank","title":"Service Unavailable","status":503}
+held: HTTP/1.1 200 OK|content-type: text/plain; charset=utf-8|Date: <date>|Content-Length: 5||slept
+pipelined 1: HTTP/1.1 200 OK|content-type: application/json|Date: <date>|Content-Length: 27||{"message":"Hello, World!"}
+pipelined 2: HTTP/1.1 404 Not Found|content-type: application/problem+json|Date: <date>|Content-Length: 55||{"type":"about:blank","title":"Not Found","status":404}
+pipelined 3: HTTP/1.1 200 OK|content-type: text/plain; charset=utf-8|Date: <date>|Content-Length: 13||Hello, World!
+serve: 0, answered 11, busy 1, failed 1

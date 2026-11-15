@@ -1,0 +1,2 @@
+reject_destructure_using_object.ts:6:9
+syntax error: expected `;`, found `{`

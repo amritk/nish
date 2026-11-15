@@ -528,6 +528,10 @@ const pageMath = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
   )
+const UNION_GENERICS = "Let a discriminated union be a generic's type argument"
+const DESTRUCTURING = "Destructuring declarations over objects and arrays"
+const CONST_TABLES = "Add module-level constant arrays of numeric literals"
+const STRING_ENUMS = "Add string enums, decoded and encoded by typed JSON"
 const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
 const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -538,6 +542,11 @@ const asyncTrim = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_TRIM, why }))
   )
+const STATIC_ROUTES = "static routes from an exact-path table ahead of the trie walk"
+const staticRoutes = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: STATIC_ROUTES, why }))
+  )
 const PIPELINED_WRITE = "answers pipelined requests in one write"
 const pipelinedWrite = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -547,6 +556,12 @@ const DATE_SINGLETON = "Refuse a response that carries two Date fields"
 const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
+  )
+/** The changelog line of the stage that folds a JSON number's digits as `number()` scans them. */
+const NUMBER_ONE_PASS = "Parse a JSON number in one pass"
+const numberOnePass = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: NUMBER_ONE_PASS, why }))
   )
 const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
 const taggedUnions = (why, filesByProgram) =>
@@ -1146,6 +1161,16 @@ const pathMtu = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
+/** The changelog words of the stage that adds atomic arrays to nish/threads. */
+const ATOMIC_ARRAYS = "AtomicI32Array and AtomicI64Array, n atomics in one buffer"
+/** The changelog words of the stage that gives HmacSha256 and Sha256 digestInto (#1542). */
+const HMAC_DIGEST_INTO = "HmacSha256.digest allocates only the tag, and digestInto allocates nothing"
+/** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
+const VECTOR_ACCESS_TBAA = "vector loads and stores in range"
+const vectorAccessTbaa = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: VECTOR_ACCESS_TBAA, why }))
+  )
 
 /**
  * The words WP39 G6's changelog line starts with: the branch's runtime commit
@@ -1189,7 +1214,315 @@ const pgTls = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PG_TLS, why }))
   )
 
+/** The changelog words of the QUIC NAT-rebind fix (#1511). */
+const quicRebind = byFinding(
+  "QUIC transfer survives a NAT rebind while one hole fills the stream buffer"
+).bind(
+  null,
+  "QuicConnection gains a field and grows from 752 to 760 bytes, and QuicStreams gains `bufferBlocked`, so every module laying them out or calling them moves"
+)
+
+/**
+ * The release-note words of the security pass that closes HTTP/1 chunk
+ * extensions and Host, the HTTP/2 SETTINGS walk, the HTTP/3 reset budget,
+ * WebSocket Origin, YAML merge reuse and the PKI mapped-IPv4 and distrust
+ * paths. They land as one squashed pull request, so every declaration of it
+ * names its title; each entry's `why` says which fix moved the file.
+ */
+const SECURITY_PATHS = "HTTP, WebSocket, YAML and PKI attack paths"
+/** The changelog words of the stage that writes a typed object's keys as one copy (#1580). */
+const JSON_KEYS_QUOTED = "a typed object's keys as one pre-escaped copy"
+
+/** The changelog words of the stage that loads YAML text into a JsonDocument without repeated work (#1539). */
+const YAML_LOAD_CUTS = "YAML into a JsonDocument about a fifth faster"
+
+/**
+ * The generated comment lines that named a work package, as the seed writes
+ * them and as they read now: `[seed, candidate]`.
+ */
+const WP_COMMENT_LINES = [
+  [
+    "; WP49 stage 5: the loop over the executor in runtime-async.c (docs/wp49-async-server.md)",
+    "; the loop over the executor in runtime-async.c",
+  ],
+  [
+    "// Module storage for the TypeScript reading (WP50 §5.4), written by",
+    "// Module storage for the TypeScript reading, written by",
+  ],
+  ["/* `Result<T, E>` (WP16/WP17). A `Result`", "/* `Result<T, E>`. A `Result`"],
+  ["/* The arena is thread-local (WP20 T0), so", "/* The arena is thread-local, so"],
+  ["/* WP17: a `Result` as the object JS", "/* A `Result` as the object JS"],
+  ["/** A Result in one i64 (WP17): bit 0", "/** A Result in one i64: bit 0"],
+  [
+    " * Where module storage lives in `memory` (WP50 §5.2). `length`",
+    " * Where module storage lives in `memory`. `length`",
+  ],
+]
+
+/**
+ * `text` with each work-package comment line put back as the seed wrote it. A
+ * declaration's `undo`: it touches only those lines, so any other change differs.
+ */
+const withSeedWpComments = (text) =>
+  WP_COMMENT_LINES.reduce((acc, [seed, now]) => acc.split(now).join(seed), text)
+
+const LET_REASSIGN = "reassigned let no longer keeps its values in the arena"
+
+const RECURSION_LOOP = "Emit self-recursive checked sums as a loop"
+const RECURSION_LOOP_WHY =
+  "a function whose recursive returns are `X + self(...)` over a checked `i32` `+` is one loop whose header carries the previous sum and the last `X` as phis and tests their signs, handing a step that test rejects to one call of itself, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+
+const RECURSION_METHOD = "Emit self-recursive checked-sum methods as a loop"
+const RECURSION_METHOD_WHY =
+  "a method of a non-generic class whose recursive returns are `X + r.m(...)` on a receiver of its own class is the same loop, with the receiver as its first phi (`%this` from `%this.in`), so `this` and its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+const RECURSION_WIDTH = "Emit self-recursive checked i64 sums as a loop"
+const RECURSION_WIDTH_WHY =
+  "a self-recursive `X + self(...)` sum returning `i64` is the same loop at `i64`: its prev, last and sum phis, wrapping add and sign test are `i64`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow.i64`"
+
+const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena scope as a loop"
+const RECURSION_ARENA_WHY =
+  "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
+
 const DECLARED = [
+  {
+    changelog: "internal work-package references from diagnostics and generated files",
+    why: "generated comments in async .ll, interop headers, N-API sidecars and wasm loaders no longer name a work package",
+    undo: (text) => withSeedWpComments(text),
+  },
+  {
+    program: "tests/cases/res_let_reassign.ts",
+    file: "res_let_reassign.ll",
+    changelog: LET_REASSIGN,
+    why: "an `Ok`/`Err` assigned to a `let` of the frame follows the `let`, so the sites outside a loop are allocas and the functions keep their arena scope",
+  },
+  {
+    program: "tests/cases/perf_kept_memory_quiet.ts",
+    file: "perf_kept_memory_quiet.ll",
+    changelog: LET_REASSIGN,
+    why: "`pick` assigns an `Ok`/`Err` to a `let` of its frame outside a loop, so the Result is an alloca rather than an arena allocation",
+  },
+  {
+    program: "tests/cases/res_proof_consumers.ts",
+    file: "res_proof_consumers.ll",
+    changelog: LET_REASSIGN,
+    why: "`s = parse(-5)`, a by-value `Result` assigned to a `let` and read only through `.ok`, follows the `let` onto the stack with its first value",
+  },
+  // Self-recursive checked sums become a loop (src/accumulate.ts, src/emit-accumulate.ts).
+  {
+    program: "tests/cases/acc_effects.ts",
+    file: "acc_effects.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_fib.ts",
+    file: "acc_fib.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_overflow.ts",
+    file: "acc_overflow.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_shapes.ts",
+    file: "acc_shapes.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_soundness.ts",
+    file: "acc_soundness.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/acc_tree.ts",
+    file: "acc_tree.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/cf_fib.ts",
+    file: "cf_fib.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/cg_sec_recursion_willreturn.ts",
+    file: "cg_sec_recursion_willreturn.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/fn_arrow.ts",
+    file: "fn_arrow.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/fn_arrow_hoisting.ts",
+    file: "fn_arrow_hoisting.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/ovf_proven_callsite.ts",
+    file: "ovf_proven_callsite.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/ovf_proven_floor.ts",
+    file: "ovf_proven_floor.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/cases/ovf_return_unproven.ts",
+    file: "ovf_return_unproven.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-loop.ts",
+    file: "opt-recursion-loop.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "bench/fib.ts",
+    file: "fib.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "bench/treesum.ts",
+    file: "treesum.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  {
+    program: "tests/differential/corpus/recursion.ts",
+    file: "recursion.ll",
+    changelog: RECURSION_LOOP,
+    why: RECURSION_LOOP_WHY,
+  },
+  // Self-recursive checked-sum methods become a loop too (issue #1612).
+  {
+    program: "tests/cases/acc_method.ts",
+    file: "acc_method.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "tests/cases/acc_method_overflow.ts",
+    file: "acc_method_overflow.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "tests/cases/mem_callee_scope.ts",
+    file: "mem_callee_scope.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-method.ts",
+    file: "opt-recursion-method.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  {
+    program: "bench/awfy/main.ts",
+    file: "list.ll",
+    changelog: RECURSION_METHOD,
+    why: RECURSION_METHOD_WHY,
+  },
+  // An `i64` checked sum loops as an `i32` one does (issue #1612).
+  {
+    program: "tests/cases/acc_width_i64.ts",
+    file: "acc_width_i64.ll",
+    changelog: RECURSION_WIDTH,
+    why: RECURSION_WIDTH_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-i64.ts",
+    file: "opt-recursion-i64.ll",
+    changelog: RECURSION_WIDTH,
+    why: RECURSION_WIDTH_WHY,
+  },
+  // A sum whose frames allocate loops, releasing the arena per step (issue #1612).
+  {
+    program: "tests/cases/acc_arena.ts",
+    file: "acc_arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "tests/cases/acc_arena_overflow.ts",
+    file: "acc_arena_overflow.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  {
+    program: "docs/cookbook/opt-recursion-arena.ts",
+    file: "opt-recursion-arena.ll",
+    changelog: RECURSION_ARENA,
+    why: RECURSION_ARENA_WHY,
+  },
+  // A vector load or store carries the scope and TBAA tag a scalar element
+  // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
+  ...vectorAccessTbaa(
+    "a nish:simd vector load or store gains the !alias.scope, !noalias and !tbaa a scalar element access of its lane type carries, and src/bounds.ts drops its check where a guard proves every lane in range (`i <= n - 16`, a literal index into a known length); a scalar index under an `i < w.length - c` guard is proven too, so the modules with such an access move",
+    {
+      "tests/cases/simd_access.ts": ["simd_access.ll"],
+      "tests/cases/simd_access_alias.ts": ["simd_access_alias.ll"],
+      "tests/cases/simd_access_oob_guard.ts": ["simd_access_oob_guard.ll"],
+      "tests/cases/simd_access_oob_resized.ts": ["simd_access_oob_resized.ll"],
+      "tests/cases/simd_access_oob_unfloored.ts": ["simd_access_oob_unfloored.ll"],
+      "tests/cases/simd_access_oob_loop_pop.ts": ["simd_access_oob_loop_pop.ll"],
+      "tests/cases/simd_access_oob_alias_pop.ts": ["simd_access_oob_alias_pop.ll"],
+      "tests/cases/simd_access_oob_field_swap.ts": ["simd_access_oob_field_swap.ll"],
+      "tests/cases/simd_access_oob_strict.ts": ["simd_access_oob_strict.ll"],
+      "tests/cases/simd_access_oob_below.ts": ["simd_access_oob_below.ll"],
+      "tests/cases/simd_access_oob_huge_offset.ts": ["simd_access_oob_huge_offset.ll"],
+      "tests/cases/simd_access_oob_huge_literal.ts": ["simd_access_oob_huge_literal.ll"],
+      "tests/cases/simd_access_order.ts": ["simd_access_order.ll"],
+      "tests/cases/simd_access_proven.ts": ["simd_access_proven.ll"],
+      "tests/cases/simd_values.ts": ["simd_values.ll"],
+      "tests/cases/simd_zero_fill.ts": ["simd_zero_fill.ll"],
+      "tests/cases/simd_access_oob.ts": ["simd_access_oob.ll"],
+      "tests/cases/simd_access_oob_first.ts": ["simd_access_oob_first.ll"],
+      "tests/cases/simd_access_oob_negative.ts": ["simd_access_oob_negative.ll"],
+      "tests/cases/simd_chacha_quarter.ts": ["simd_chacha_quarter.ll"],
+      "tests/cases/simd_load_field_loop.ts": ["simd_load_field_loop.ll"],
+      "tests/cases/simd_store_field_reload.ts": ["simd_store_field_reload.ll"],
+      "tests/cases/simd_store_oob.ts": ["simd_store_oob.ll"],
+      "docs/cookbook/simd-load-store.ts": ["simd-load-store.ll"],
+      "bench/http1-parse/main.ts": ["old-copy.ll", "old.ll"],
+      "tests/link/net_http1_parse_diff/main.ts": ["old.ll"],
+      "tests/link/simd_parallel_capture/main.ts": ["main.ll"],
+      "examples/http-get-json.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["outbound.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["outbound.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["outbound.ll"],
+      "tests/link/net_outbound/main.ts": ["outbound.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream_release/main.ts": ["outbound.ll"],
+    }
+  ),
   // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
   // by one interleaved wNAF pass, so the module every importer writes moves.
   ...["p256.ll", "std_crypto_p256.ll"].map((file) => ({
@@ -1197,6 +1530,519 @@ const DECLARED = [
     changelog: "safegcd",
     why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
   })),
+  // #1542: HmacSha256 holds a 32-byte inner-digest buffer and gains
+  // digestInto, and Sha256 gains digestInto, so every module that imports
+  // either, and every module or header that lays HmacSha256 out, moves.
+  ...[
+    "postgres.ll",
+    "quic-packet.ll",
+    "record-client.ll",
+    "record-server.ll",
+    "schedule.ll",
+    "sha256.ll",
+    "std_crypto_hkdf.ll",
+    "std_crypto_hmac.ll",
+    "std_net_tls_client.ll",
+    "std_net_tls_record.ll",
+  ].map((file) => ({
+    file,
+    changelog: HMAC_DIGEST_INTO,
+    why: "std/crypto/sha256.ts and std/crypto/hmac.ts gain digestInto and a new panic string, and HmacSha256 gains its inner-digest buffer (a third array field), so each of these std modules, whose file name no corpus program's own module shares, has new functions, a wider HmacSha256 and renumbered strings",
+  })),
+  ...[
+    "tests/link/crypto_hmac/main.ts",
+    "tests/link/crypto_hmac_f64/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_negative/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_past_end/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_short/main.ts",
+    "tests/link/crypto_hmac_sha256_digest_into_twice/main.ts",
+    "tests/link/crypto_hmac_sha256_update_after_digest_into/main.ts",
+    "tests/link/crypto_sha256/main.ts",
+    "tests/link/crypto_sha256_digest_into_after_digest/main.ts",
+    "tests/link/crypto_sha256_digest_into_negative/main.ts",
+    "tests/link/crypto_sha256_digest_into_short/main.ts",
+    "tests/link/crypto_sha256_digest_into_window/main.ts",
+    "tests/link/crypto_sha256_f64/main.ts",
+    "tests/link/crypto_sha256_update_after_digest_into/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: HMAC_DIGEST_INTO,
+    why: "the program calls Sha256.digestInto or HmacSha256.digestInto, which the 0.39.0 seed's std/crypto does not have, so only the candidate compiles it",
+  })),
+  ...[
+    ["bench/http-app-carrier.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["bench/http1-request/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["bench/http1-server.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["bench/jwt-verify/main.ts", "hmac.ll jwt.ll main.ll"],
+    ["bench/pg-batch-clock.ts", "hmac.ll"],
+    ["bench/pg-decode/main.ts", "hmac.ll"],
+    ["bench/sha256-block/main.ts", "hmac.ll jwt.ll main.ll"],
+    ["bench/sha256/main.ts", "hmac.ll main.h"],
+    ["bench/techempower/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["examples/file-server.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["examples/http-app/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["examples/http-get-json.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["examples/prefork-server.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["examples/relay/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/crypto_held_derive/main.ts", "hkdf.ll hmac.ll main.ll record.ll"],
+    ["tests/link/crypto_hkdf/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_empty_label/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_context/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_context_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_label/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_long_length/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_negative_length/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret_short/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_secret_short_sha384/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_short_secret/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_expand_label_short_secret_sha384/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_held_into_hash/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_held_into_output/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_held_label/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_k1_bounds/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_k1_bounds_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_long_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_scratch/main.ts", "checks.ll hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_scratch_f64/main.ts", "checks.ll hkdf.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_scratch_hash/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_context/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_label/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_length/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_label_secret/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_long_f64/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_scratch_output/main.ts", "hkdf.ll hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hkdf_wycheproof/main.ts", "checks.ll hmac.ll main.h"],
+    ["tests/link/crypto_hkdf_wycheproof_f64/main.ts", "checks.ll hmac.ll main.h"],
+    ["tests/link/crypto_hmac_k1_verify/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_k1_verify_f64/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_scratch_key_window/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_scratch_sha384_key_window/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_scratch_sha384_tag_window/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_scratch_tag_window/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_sha256_digest_twice/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_sha256_long_f64/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_sha256_long_key_f64/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_sha256_update_after_digest/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_sha256_window/main.ts", "hmac.ll main.h main.ll"],
+    ["tests/link/crypto_hmac_sha384_digest_twice/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_sha384_long_f64/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_sha384_update_after_digest/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_sha384_window/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_sha512_digest_twice/main.ts", "hmac.ll main.h"],
+    ["tests/link/crypto_hmac_wycheproof/main.ts", "checks.ll main.h"],
+    ["tests/link/crypto_hmac_wycheproof_f64/main.ts", "checks.ll main.h"],
+    ["tests/link/crypto_jwt/main.ts", "checks.ll hmac.ll jwt.ll"],
+    ["tests/link/crypto_jwt_f64/main.ts", "checks.ll hmac.ll jwt.ll"],
+    ["tests/link/crypto_sha256_copy_after_digest/main.ts", "main.ll"],
+    ["tests/link/crypto_sha256_digest_twice/main.ts", "main.ll"],
+    ["tests/link/crypto_sha256_update_after_digest/main.ts", "main.ll"],
+    ["tests/link/crypto_sha256_window/main.ts", "main.ll"],
+    ["tests/link/crypto_sha256_window_wrap/main.ts", "main.ll"],
+    ["tests/link/crypto_sha2_lengths/main.ts", "checks.ll"],
+    ["tests/link/crypto_sha2_lengths_f64/main.ts", "checks.ll"],
+    ["tests/link/crypto_tls_held_hash/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/crypto_tls_held_length/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/crypto_x509/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_deadline/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_dns_slow/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_flat/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_https/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_https_flat/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_overlap/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_fetch_async_policy/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_descriptors/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_overlong/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_short/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_handler_unbegun/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http1_server_bad_config/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_head/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_head_timeout/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_linger/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_bad_message/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http1_server_feed_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_frame_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_head_reuse/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_implicit_end/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_send_body/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_send_body_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http1_server_write_window/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http2_bad_config_tls/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_http2_cleartext/main.ts",
+      "client.ll hkdf.ll hmac.ll net_tls_record_common_bytes.ll record.ll server.ll",
+    ],
+    ["tests/link/net_http2_cleartext_bad_slots/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http2_cleartext_bad_timeout/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http2_tls/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http2_tls_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_http3_bad_body_chunk/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_bad_config/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_bad_credit/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_bad_local_limit/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_bad_uni_limit/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_bad_write_chunk/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_ecn/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_ecn_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_errors/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_errors_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_frame/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_http3_frame_bad_window/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_http3_frame_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_http3_server_bad_config/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http3_write_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http_app/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http_date/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http_date_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http_fetch/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_http_fetch_f64/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_interop_server/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    [
+      "tests/link/net_interop_server_f64/main.ts",
+      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
+    ],
+    ["tests/link/net_loopback/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_loopback_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_outbound/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_outbound_f64/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_conn/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_conn_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_conn_parts/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_quic_conn_parts_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_quic_conn_replay/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_quic_conn_replay_f64/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_quic_datagram/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_datagram_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_ecn/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_ecn_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_frame/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_quic_frame_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_quic_lifecycle/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_lifecycle_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_lifecycle_replay/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_lifecycle_replay_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_listener/main.ts", "checks.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_listener_bad_window/main.ts", "hkdf.ll hmac.ll main.ll record.ll"],
+    ["tests/link/net_quic_listener_f64/main.ts", "checks.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_memory/main.ts", "hkdf.ll hmac.ll record.ll units.ll"],
+    ["tests/link/net_quic_memory_f64/main.ts", "hkdf.ll hmac.ll record.ll units.ll"],
+    ["tests/link/net_quic_packet/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_quic_packet_f64/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_quic_path/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_path_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_quic_prefork/main.ts",
+      "hkdf.ll hmac.ll net_tls_common_client.ll net_tls_common_server.ll record.ll",
+    ],
+    ["tests/link/net_quic_recovery/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_recovery_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_server_wipes/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_server_wipes_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_stream/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_stream_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_wipes/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_quic_wipes_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_quic_worker/main.ts",
+      "hkdf.ll hmac.ll net_tls_common_client.ll net_tls_common_server.ll record.ll",
+    ],
+    ["tests/link/net_relay/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_hello/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_idle/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_path/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_peers/main.ts", "hkdf.ll hmac.ll main.h"],
+    ["tests/link/net_relay_bad_per_peer/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_pool/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_rate/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_sessions/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_spare/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_bad_stats/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_encode_window/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_relay_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_forged/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_relay_frame_window/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_relay_grant_window/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_relay_json_window/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_relay_soak/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_burst/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_deadline/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_hangup/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_pg/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_pipelined_flat/main.ts", "hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_serve_queued_wait/main.ts",
+      "client.ll hkdf.ll hmac.ll net_tls_record_common_bytes.ll record.ll",
+    ],
+    ["tests/link/net_serve_server_field/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_server_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_shutdown/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_handshake/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_record/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_refusals/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_client_tcp/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ecdsa/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ecdsa_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ext_alpn/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ext_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ext_hrr/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ext_quic/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ext_refusals/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ext_sni/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_memory/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_memory_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    [
+      "tests/link/net_tls_p256/main.ts",
+      "hkdf.ll hmac.ll main.ll net_tls_common_client.ll record.ll server.ll",
+    ],
+    ["tests/link/net_tls_psk_wire/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_psk_wire_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_record_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    [
+      "tests/link/net_tls_record_refusals/main.ts",
+      "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll",
+    ],
+    ["tests/link/net_tls_record_rfc8448/main.ts", "hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_tls_record_size_limit/main.ts",
+      "bytes.ll checks.ll hkdf.ll hmac.ll net_tls_common_client.ll net_tls_record_common_client.ll record.ll server.ll",
+    ],
+    [
+      "tests/link/net_tls_record_size_limit_f64/main.ts",
+      "bytes.ll checks.ll hkdf.ll hmac.ll net_tls_common_client.ll net_tls_record_common_client.ll record.ll server.ll",
+    ],
+    [
+      "tests/link/net_tls_record_tcp/main.ts",
+      "bytes.ll held.ll hkdf.ll hmac.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll record.ll server.ll",
+    ],
+    [
+      "tests/link/net_tls_record_tcp_f64/main.ts",
+      "bytes.ll held.ll hkdf.ll hmac.ll net_tls_common_client.ll net_tls_record_common_client.ll net_tls_rfc8448_checks.ll record.ll server.ll",
+    ],
+    ["tests/link/net_tls_resume/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_resume_bench/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_resume_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_rfc8448/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_rfc8448_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_tls_ticket/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_tls_ticket_f64/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_tls_wipes/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_tls_wipes_f64/main.ts", "hkdf.ll hmac.ll net_tls_record_common_client.ll record.ll"],
+    ["tests/link/net_upstream/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_upstream_release/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport/main.ts", "hkdf.ll hmac.ll"],
+    ["tests/link/net_webtransport_bad_datagrams/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_datagrams_off/main.ts", "hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_webtransport_bad_idle/main.ts",
+      "hkdf.ll hmac.ll net_tls_common_client.ll net_tls_common_server.ll record.ll",
+    ],
+    ["tests/link/net_webtransport_bad_layer/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_pending/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_pending_high/main.ts", "hkdf.ll hmac.ll record.ll"],
+    [
+      "tests/link/net_webtransport_bad_rate/main.ts",
+      "hkdf.ll hmac.ll net_tls_common_client.ll net_tls_common_server.ll record.ll",
+    ],
+    ["tests/link/net_webtransport_bad_sessions/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_streams/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_bad_streams_high/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_close_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_datagram_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_f64/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_stream_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_webtransport_whole_window/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/region_sessions_soak/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/sha256_hw_agree/main.ts", "main.ll"],
+    ["tests/link/sha256_hw_vectors/main.ts", "hmac.ll main.h"],
+    ["tests/link/std_http1_end_head/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_http1_mss/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_http_compress/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_pbkdf2/main.ts", "hmac.ll main.h"],
+    ["tests/link/std_pbkdf2_f64/main.ts", "hmac.ll main.h"],
+    ["tests/link/std_postgres/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_bindend_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_element_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_end_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_int_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_param_bytes_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_param_int_array_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_param_null_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_param_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_param_text_array_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_start_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_array_window_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_async/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_cancel/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_caps_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_depth_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_double_release_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_flat/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_pipeline/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_release_closed_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_release_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_seat_statement_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_seat_ticket_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_async_size_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_batch/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_add_int_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_add_text_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_add_text_window_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_clock/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_clock_config_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_clock_started_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_clock_take_due_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_clock_turns_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_cap_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_empty_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_key_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_name_empty_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_name_nul_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_query_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_queue_size_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_requests_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_runs_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_config_select_nul_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_pending_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_row_pending_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_run_negative_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_run_range_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_scale/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_batch_unsorted/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_element_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_int_none_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_int_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_null_none_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_oid_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_start_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_array_text_element_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_int4_range_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_window_count_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_window_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_binary_window_start_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_caps/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_carrier/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_attach_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_batcher_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_connection_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_limits_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_next_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_request_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_carrier_send_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_config_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_decimal/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_int_array_range_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_nonce_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_nul_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_connect_dispose_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_connect_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_connect_range_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_connection_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_connection_range_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_inflight_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_next_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_queue_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_pool_size_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_receive_panic/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_replay/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_tls/main.ts", "client.ll hkdf.ll hmac.ll record.ll server.ll"],
+    ["tests/link/std_postgres_tls_connection_panic/main.ts", "hmac.ll main.h"],
+    ["tests/link/std_postgres_tls_pool_panic/main.ts", "hmac.ll main.h"],
+    ["tests/link/std_postgres_tls_roots_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_tls_unix_panic/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/std_postgres_unix_target/main.ts", "hmac.ll"],
+    ["tests/link/std_postgres_user_panic/main.ts", "hmac.ll"],
+    ["tests/link/tfb_async_db/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/tfb_async_entry/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/tfb_db/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+    ["tests/link/tfb_entry/main.ts", "client.ll hkdf.ll hmac.ll record.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: HMAC_DIGEST_INTO,
+      why: "std/crypto/sha256.ts and std/crypto/hmac.ts gain digestInto and a new panic string, and HmacSha256 gains its 32-byte inner-digest buffer (a third array field), so each of these modules or headers, which imports them or lays HmacSha256 out, has new functions or declarations, a wider HmacSha256 and renumbered strings or fields",
+    }))
+  ),
+  // WP39 G4: P256PointScratch gains `comb`, the recoded scalar m, so
+  // every module laying it out (a C header, or a test that makes its own
+  // scratch) has a wider struct and renumbered fields.
+  ...[
+    ["bench/jwt-verify/main.ts", "main.h"],
+    ["bench/p256.ts", "p256.h"],
+    ["bench/sha256-block/main.ts", "main.h"],
+    ["tests/link/crypto_jwt/main.ts", "main.h"],
+    ["tests/link/crypto_jwt_f64/main.ts", "main.h"],
+    ["tests/link/crypto_p256/main.ts", "scratch.ll"],
+    ["tests/link/crypto_p256_ecdh/main.ts", "main.h"],
+    ["tests/link/crypto_p256_f64/main.ts", "scratch.ll"],
+    ["tests/link/crypto_p256_sign_into_message_window/main.ts", "main.h main.ll"],
+    ["tests/link/crypto_p256_sign_into_signature_window/main.ts", "main.h main.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: "P-256's cached table for G",
+      why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
+    }))
+  ),
+  // The same widening reaches every TLS, HTTP and QUIC program that links
+  // the TLS stack: its tls.ll, tls-tcp.ll and http1-server.ll declare
+  // P256PointScratch and its constructor, a C header lays it out with
+  // `comb`, and p256SignSha256Into now writes its sign scratch.
+  ...[
+    ["examples/file-server.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_bad_linger_bytes/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_head_reuse/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http1_server_implicit_end/main.ts", "main.h tls.ll"],
+    [
+      "tests/link/net_http2_cleartext/main.ts",
+      "http1-server.ll main.h net_tls_record_tcp_harness.ll tls-tcp.ll tls.ll",
+    ],
+    ["tests/link/net_http2_cleartext_bad_slots/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_http2_cleartext_bad_timeout/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_prefork/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_quic_worker/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_serve_burst/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_serve_queued_wait/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/net_tls_p256/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_size_limit/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_size_limit_f64/main.ts", "main.h tls.ll"],
+    ["tests/link/net_tls_record_tcp/main.ts", "checks.ll harness.ll main.ll tls.ll"],
+    ["tests/link/net_tls_record_tcp_f64/main.ts", "harness.ll net_tls_record_tcp_checks.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_idle/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/net_webtransport_bad_rate/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/region_sessions_soak/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_async/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_depth_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_pipeline/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_statement_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_async_seat_ticket_panic/main.ts", "http1-server.ll tls.ll"],
+    ["tests/link/std_postgres_tls/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_roots_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/std_postgres_tls_unix_panic/main.ts", "http1-server.ll main.h tls-tcp.ll tls.ll"],
+    ["tests/link/tfb_async_db/main.ts", "http1-server.ll tls.ll"],
+  ].flatMap(([program, files]) =>
+    files.split(" ").map((file) => ({
+      program,
+      file,
+      changelog: "P-256's cached table for G",
+      why: "P256PointScratch gains `comb` (64 to 72 bytes), so every module of a TLS program that declares it or its constructor moves, a C header gains the field and renumbers what follows it, and p256SignSha256Into stores into its P256SignScratch, so that parameter is no longer readonly",
+    }))
+  ),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.
@@ -1228,6 +2074,40 @@ const DECLARED = [
       why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
     })
   ),
+  // WP39 G5: the goodput bench picks CUBIC, new in std/net/quic-recovery.
+  {
+    program: "bench/quic-goodput.ts",
+    file: "exit",
+    changelog: "CUBIC congestion control for QUIC",
+    why: "the program imports QUIC_RECOVERY_CUBIC from nish/net/quic-recovery, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+  },
+  // nish/raster, nish/synth and nish/host/game are new std modules, so the
+  // seed refuses the programs that import them.
+  ...[
+    ["tests/link/std_raster/main.ts", "nish/raster"],
+    ["tests/link/std_synth/main.ts", "nish/synth"],
+    ["tests/link/std_host_game/main.ts", "nish/host/game"],
+  ].map(([program, module]) => ({
+    program,
+    file: "exit",
+    changelog: module,
+    why: `the program imports ${module}, which the seed's standard library does not have, so only the candidate compiles it`,
+  })),
+  // forEach on an array, a Map or a Set is new, so the seed refuses the
+  // programs that call it.
+  ...[
+    "tests/cases/arr_foreach.ts",
+    "tests/cases/map_foreach.ts",
+    "tests/cases/set_foreach.ts",
+    "tests/cases/foreach_mutate.ts",
+    "tests/cases/foreach_nested.ts",
+    "docs/cookbook/map-foreach.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "ForEach on arrays, Map and Set",
+    why: "the program calls forEach on an array, a Map or a Set, which the seed refuses by name, so only the candidate compiles it",
+  })),
   // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
   // refused by reachability, after every module is checked.
   ...["tests/link/package_wasm_hostless/main.ts", "tests/link/wasm_hostless_own/main.ts"].map((program) => ({
@@ -1235,6 +2115,30 @@ const DECLARED = [
     file: "exit",
     changelog: "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
     why: "the program reaches getenv from a --target wasm32 build, which the 0.38.0 seed compiles and then fails to link, and the candidate refuses with NL2404 naming the chain, so only the reference compiles it",
+  })),
+  // H3-5: the bad-config tests set Http3Config.idleTimeout or headTimeout,
+  // new in std/net.
+  ...[
+    "tests/link/net_http3_server_bad_head_timeout/main.ts",
+    "tests/link/net_http3_server_bad_idle_timeout/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "(H3-5)",
+    why: "the program sets Http3Config.idleTimeout or headTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  })),
+  // H3-5: Http3Config gains idleTimeout and headTimeout, so the C header of
+  // every program that exports a type reaching it gains the two fields.
+  ...[
+    "tests/link/net_quic_prefork/main.ts",
+    "tests/link/net_quic_worker/main.ts",
+    "tests/link/net_webtransport_bad_idle/main.ts",
+    "tests/link/net_webtransport_bad_rate/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "(H3-5)",
+    why: "Http3Config gains the int32_t fields idleTimeout and headTimeout, which the seed's std/net does not have, so the program's header declares two more fields",
   })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
@@ -1246,7 +2150,7 @@ const DECLARED = [
   // SSSE3 or NEON kernel, the walk on the other arm.
   {
     file: "checksum.ll",
-    changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+    changelog: "Ship the SSSE3 and NEON Adler-32 kernels",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
   // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it
@@ -3735,6 +4639,52 @@ const DECLARED = [
     changelog: PIPELINED_WRITE,
     why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
   },
+  // WP49 stage 6, part 6: `serve` drives the HTTP/1 server itself. The new
+  // probes link the modules net_serve_burst does (json.ll too, on aarch64),
+  // and each differs from the seed's because the seed's `serve` goes through
+  // HttpHandler while this one drives Http1Server from its own ServeConns.
+  ...["tests/link/net_serve_slot_reuse/main.ts", "tests/link/net_serve_head_drain/main.ts"].flatMap(
+    (program) =>
+      [
+        "handler.ll",
+        "hkdf.ll",
+        "hmac.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "record.ll",
+        "router.ll",
+        "serve.ll",
+        "tls.ll",
+      ].map((file) => ({
+        program,
+        file,
+        changelog: "drives the HTTP/1 server directly instead of through HttpHandler",
+        why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns (json.ll only on aarch64)",
+      }))
+  ),
+  // Two probes new with this change: net_serve_raw pins serve's answered
+  // bytes and net_serve_idle_record an idle connection's record. Each links
+  // the same modules as the probes above, which differ from the seed's.
+  ...["tests/link/net_serve_raw/main.ts", "tests/link/net_serve_idle_record/main.ts"].flatMap((program) =>
+    [
+      "handler.ll",
+      "hkdf.ll",
+      "hmac.ll",
+      "json.ll",
+      "main.h",
+      "main.ll",
+      "record.ll",
+      "router.ll",
+      "serve.ll",
+      "tls.ll",
+    ].map((file) => ({
+      program,
+      file,
+      changelog: "Cut serve's answer path and hold a request record only from parse to copy",
+      why: "a probe new with this change: each module it links differs from the seed's, because the seed's serve goes through HttpHandler while this one drives Http1Server from its own ServeConns, and this change moves serve's answer path and holds each request record only from the head's parse to the task's copy (json.ll only on aarch64)",
+    }))
+  ),
   ...taggedUnions(
     "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
     {
@@ -3815,11 +4765,36 @@ const DECLARED = [
       "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
     }
   ),
+  ...numberOnePass(
+    "JsonTokenizer gains four fields (`numberMantissa`, `numberScale`, `numberDigits`, `numberNegative`) that number() fills as it scans, so a program reading the tokenizer's header lays it out 16 bytes wider, and a module that compiles nish/json-tokenizer whole shifts every field offset after them",
+    {
+      "bench/json-api/main.ts": ["json-tokenizer.ll", "main.h"],
+      "bench/json-tokenizer/main.ts": ["main.h"],
+      "bench/json-value/main.ts": ["main.h"],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.h"],
+      "docs/cookbook/json-value.ts": ["json-value.h"],
+      "tests/link/json_encode_keys/main.ts": ["json-tokenizer.ll", "main.h"],
+      "tests/link/std_json_conformance/main.ts": ["main.h"],
+      "tests/link/std_json_equal/main.ts": ["main.h"],
+      "tests/link/std_json_number/main.ts": ["main.h"],
+      "tests/link/std_json_pointer/main.ts": ["main.h"],
+      "tests/link/std_json_value/main.ts": ["main.h"],
+      "tests/link/std_json_value_ranges/main.ts": ["main.h"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json-tokenizer.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-tokenizer.ll"],
+    }
+  ),
   {
     program: "tests/cases/caps_process_spawn_piped_within.ts",
     file: "exit",
     changelog: SPAWN_PIPED_WITHIN,
     why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
+  },
+  {
+    program: "tests/link/sandbox_dep_exec_once/main.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: 'the fixture calls `spawnPipedWithin`, which the 0.38.0 seed refuses with "Unknown function" (#1387)',
   },
   {
     program: "tests/cases/io_spawn_piped_within.ts",
@@ -4204,6 +5179,80 @@ const DECLARED = [
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
     }
   ),
+  // WP49 stage 6: `Router` files a route with no parameter in an exact-path
+  // table, so the class gains the table's fields, `matchTree` and
+  // `staticCount`. A module that names Router's struct lays it out again (the
+  // negative programs' main.ll) and so does the header that declares it; the
+  // programs that call the new methods (the two equivalence tests and
+  // bench/router.ts) are refused by a release that has neither. router.ll
+  // itself is declared below, but for the range program, which is new here.
+  ...staticRoutes(
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
+    {
+      "bench/router.ts": ["exit"],
+      "tests/link/net_router/main.ts": ["exit"],
+      "tests/link/net_router_f64/main.ts": ["exit"],
+      "tests/link/net_router_negative_ambiguous/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_duplicate/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_limits/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_range/main.ts": ["main.h", "main.ll", "router.ll"],
+      "tests/link/net_router_negative_too_long/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_too_many_params/main.ts": ["main.h", "main.ll"],
+    }
+  ),
+  // The same Router struct, reached through HttpHandler and serve: the
+  // programs below hold a Router in a module other than the router, so that
+  // module moves with it.
+  ...staticRoutes(
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
+    {
+      "tests/link/net_serve_burst/main.ts": ["handler.ll", "main.ll", "router.ll", "serve.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll", "router.ll"],
+      "tests/link/std_postgres_async/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll", "postgres-carrier.ll", "router.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": [
+        "handler.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": [
+        "handler.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": [
+        "handler.ll",
+        "main.h",
+        "main.ll",
+        "postgres-carrier.ll",
+        "router.ll",
+      ],
+      "tests/link/tfb_async_db/main.ts": ["router.ll"],
+    }
+  ),
+  // #1416: Http1Connection keeps its last response head, and the head-reuse
+  // test reads the internal `headCopies` counter that counts its copies.
+  {
+    program: "tests/link/net_http1_server_head_reuse/main.ts",
+    file: "exit",
+    changelog: "repeated HTTP/1 response head once per Date tick",
+    why: "the program reads Http1Connection.headCopies, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
+  },
   // WP49 stage 6: `Router.match` walks the path once, recording where it
   // ends, and HttpRequest gains `headLength`, so every program reaching
   // std/net/router.ts lays it out again, and a module naming HttpRequest's
@@ -5487,6 +6536,613 @@ const DECLARED = [
     changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
+  // g7-facade: `nish/net/http-server` is new, so the 0.38.0 seed refuses every program that imports it.
+  ...[
+    "tests/link/net_http_server/main.ts",
+    "tests/link/net_http_server_bad_limit/main.ts",
+    "tests/link/net_http_server_bad_param/main.ts",
+    "tests/link/net_http_server_bad_watch/main.ts",
+    "tests/link/net_http_server_caps/main.ts",
+    "tests/link/net_http_server_carriers/main.ts",
+    "tests/link/net_http_server_end_short/main.ts",
+    "tests/link/net_http_server_end_unstarted/main.ts",
+    "tests/link/net_http_server_foreign/main.ts",
+    "tests/link/net_http_server_h1_fields/main.ts",
+    "tests/link/net_http_server_h1_head/main.ts",
+    "tests/link/net_http_server_h1_slots/main.ts",
+    "tests/link/net_http_server_h1_twice/main.ts",
+    "tests/link/net_http_server_h2_connect/main.ts",
+    "tests/link/net_http_server_h2_head/main.ts",
+    "tests/link/net_http_server_h2_refused/main.ts",
+    "tests/link/net_http_server_h2_slots/main.ts",
+    "tests/link/net_http_server_h2_twice/main.ts",
+    "tests/link/net_http_server_h2c/main.ts",
+    "tests/link/net_http_server_h3_head/main.ts",
+    "tests/link/net_http_server_h3_slots/main.ts",
+    "tests/link/net_http_server_h3_twice/main.ts",
+    "tests/link/net_http_server_h3_webtransport/main.ts",
+    "tests/link/net_http_server_lifecycle/main.ts",
+    "tests/link/net_http_server_matrix/main.ts",
+    "tests/link/net_http_server_start_fields/main.ts",
+    "tests/link/net_http_server_start_length/main.ts",
+    "tests/link/net_http_server_start_refused/main.ts",
+    "tests/link/net_http_server_start_status/main.ts",
+    "tests/link/net_http_server_start_twice/main.ts",
+    "tests/link/net_http_server_take_none/main.ts",
+    "tests/link/net_http_server_timeouts/main.ts",
+    "tests/link/net_http_server_unbegun/main.ts",
+    "tests/link/net_http_server_wait_tls/main.ts",
+    "tests/link/net_http_server_write_long/main.ts",
+    "tests/link/net_http_server_write_unstarted/main.ts",
+    "tests/link/net_http_server_write_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "handler for HTTP/1.1, 2 and 3 with Alt-Svc",
+    why: "`nish/net/http-server` is a new module, which the 0.38.0 seed does not have, so only the candidate compiles the program",
+  })),
+  {
+    program: "tests/link/caps_dep_spawn_exec_granted/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:sh` as a program named `exec:sh`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
+  {
+    program: "tests/link/sandbox_dep_exec_optin/main.ts",
+    file: "exit",
+    changelog: "A process.spawn grant that lets a program start helpers",
+    why: "the 0.38.0 seed reads `process.spawn=exec:env` as a program named `exec:env`, which it cannot find, so only the candidate compiles the program (WP40 §2a)",
+  },
+  // #1511: QuicConnection gains a field (752 to 760 bytes) and QuicStreams
+  // gains `bufferBlocked`, so every module laying either out moves.
+  ...quicRebind({
+    "tests/link/net_interop_server/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_interop_server_f64/main.ts": ["common.ll", "data.ll", "rebind.ll"],
+    "tests/link/net_quic_prefork/main.ts": [
+      "common.ll",
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+    ],
+    "tests/link/net_quic_recovery/main.ts": [
+      "net_quic_conn_common.ll",
+      "net_quic_stream_common.ll",
+      "pmtu.ll",
+    ],
+    "tests/link/net_quic_recovery_f64/main.ts": [
+      "net_quic_conn_common.ll",
+      "net_quic_stream_common.ll",
+      "pmtu.ll",
+    ],
+    "tests/link/net_quic_stream/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
+    "tests/link/net_quic_stream_f64/main.ts": ["pool.ll", "ragged.ll", "resend.ll"],
+    "tests/link/net_quic_worker/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_common.ll",
+      "net_quic_conn_replay_server.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+    ],
+    "tests/link/net_webtransport/main.ts": ["clock.ll"],
+    "tests/link/net_webtransport_bad_idle/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "net_webtransport_peer.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+      "webtransport.ll",
+    ],
+    "tests/link/net_webtransport_bad_rate/main.ts": [
+      "http3-server.ll",
+      "http3.ll",
+      "main.ll",
+      "net_http3_peer.ll",
+      "net_quic_conn_client.ll",
+      "net_quic_conn_replay_server.ll",
+      "net_webtransport_peer.ll",
+      "quic-listener.ll",
+      "quic-stream.ll",
+      "quic.ll",
+      "webtransport.ll",
+    ],
+    "tests/link/net_webtransport_f64/main.ts": ["clock.ll"],
+  }),
+  // WP55: module storage of `C | null` is root storage, which the seed
+  // refuses as NL2686.
+  ...["tests/cases/root_storage.ts", "tests/cases/root_storage_page.ts", "docs/cookbook/storage-root.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "root storage's object graph",
+      why: "the program declares module storage of a class or null, which the seed refuses with NL2686 and the candidate keeps as root storage, so only the candidate compiles it",
+    })
+  ),
+  // A guarded loader marks a failed release or keep a `trap` only when no
+  // panic recorded its own kind first (guardLoader, src/interop-wasm.ts).
+  ...[
+    ["tests/cases/host_import_string.ts", "host_import_string.mjs"],
+    ["tests/link/net_fetch_async_dns_slow/main.ts", "main.mjs"],
+    ["tests/link/storage_lend_import/main.ts", "main.mjs"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: "the panic kind a failed root keep recorded",
+    why: "the guarded loader's catch around the arena release keeps a panic kind already recorded instead of overwriting it with `trap`",
+  })),
+  // The security fixes of this release move the std modules they touch and
+  // every program that lays out or calls what they changed.
+  {
+    file: "url.ll",
+    changelog: SECURITY_PATHS,
+    why: "url.ts gains the authority checks the HTTP/1 Host test calls (`urlFind` and its neighbours), and nish/net/http1-codec now imports it, so every program reaching the codec writes url.ll and its IR moves",
+  },
+  {
+    file: "http1-codec.ll",
+    changelog: SECURITY_PATHS,
+    why: "http1-codec.ts parses a chunk extension's grammar whole (`http1ChunkExtValid`) and checks a request's Host against url.ts (`hostField`), so the module and its string table move",
+  },
+  {
+    file: "http1-client-codec.ll",
+    changelog: SECURITY_PATHS,
+    why: "the client codec refuses a malformed chunk extension with a new message, which renumbers its string table and every use of it",
+  },
+  {
+    file: "http1-server.ll",
+    changelog: SECURITY_PATHS,
+    why: "Http1Parser gains `hostField`, so the server's GEPs into the parser move by one",
+  },
+  {
+    file: "x509.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate gains `spki`, kept from the parse, so the certificate grows 8 bytes and the module moves",
+  },
+  {
+    file: "pki.ll",
+    changelog: SECURITY_PATHS,
+    why: 'PkiTrustStore gains a `distrusted` set checked on every path, and the name constraints exclude the IPv4-mapped form of an excluded IPv4 subtree ("exclude the IPv4-mapped form"), so the module moves',
+  },
+  {
+    file: "pki-roots.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate gains `spki`, so the roots module's struct and the constructor's dereferenceable size move",
+  },
+  {
+    file: "verify.ll",
+    changelog: SECURITY_PATHS,
+    why: "the TLS verifier passes a caller's distrusted keys to the trust store, and X509Certificate and PkiTrustStore grow, so the module moves",
+  },
+  {
+    file: "tls-tcp.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate and PkiTrustStore grow, so the TLS transport that lays them out moves",
+  },
+  {
+    file: "postgres-carrier.ll",
+    changelog: SECURITY_PATHS,
+    why: "X509Certificate and PkiTrustStore grow, so the Postgres carrier that lays them out moves",
+  },
+  {
+    file: "http2.ll",
+    changelog: SECURITY_PATHS,
+    why: "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice per frame, so the module moves",
+  },
+  {
+    file: "http2-cleartext.ll",
+    changelog: SECURITY_PATHS,
+    why: "http2-cleartext declares Http2Connection's methods, which gain `windowPassesMax`, so its declarations renumber",
+  },
+  {
+    file: "yaml.ll",
+    changelog: SECURITY_PATHS,
+    why: "parseYaml checks a shared merge sequence once (`mergeItemsChecked`), so the module moves",
+  },
+  ...byFinding(SECURITY_PATHS)(
+    "http1-codec now imports nish/net/url to check a request's Host (`hostField` on Http1Parser, `urlFind` and the authority checks in url.ts), so the parser grows a field, the header's url structs come first, and every module laying the parser out or calling the url helpers moves; a refused-by-the-reference row is a program naming the new export",
+    {
+      "examples/file-server.ts": ["file-server.ll"],
+      "tests/link/net_http1_server_bad_linger/main.ts": ["main.ll"],
+      "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["main.ll"],
+      "tests/link/net_http1_server_head_reuse/main.ts": ["main.ll"],
+      "tests/link/net_http1_server_implicit_end/main.ts": ["main.ll"],
+      "tests/link/net_serve_burst/main.ts": ["handler.ll", "serve.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["handler.ll", "main.ll"],
+      "tests/link/region_sessions_soak/main.ts": ["main.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_tls/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["handler.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["handler.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the YAML loader gains `mergeItemsChecked` and checks a shared merge sequence once, so the loader's struct and the modules laying it out move",
+    {
+      "bench/yaml-compare/main.ts": ["main.h", "main.ll"],
+      "bench/yaml-json/main.ts": ["main.h"],
+      "tests/link/std_yaml_bad_depth_high/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_yaml_bad_depth_low/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_yaml_json/main.ts": ["main.h"],
+    }
+  ),
+  ...byFinding(YAML_LOAD_CUTS)(
+    "the two programs that pin the YAML loader's answers are new in this stage and link the loader and JsonDocument it reshapes (`quickCount` and `quickPart` over `quickSizes`, `newStoredNumber`, the own-key path), so the reference and the candidate lay them out differently",
+    {
+      "tests/link/std_yaml_json_golden/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json-value.ll", "main.h", "main.ll", "yaml-json.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "X509Certificate gains `spki`, PkiTrustStore gains a `distrusted` set and HttpOptions gains `distrustSpkiSha256`, so every module laying them out moves and a program naming `PKI_ERR_DISTRUSTED` or `spki` compiles only under the candidate",
+    {
+      "tests/link/crypto_pki/main.ts": ["exit"],
+      "tests/link/crypto_pki_f64/main.ts": ["exit"],
+      "tests/link/crypto_x509/main.ts": ["extensions.ll", "main.ll"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["main.ll"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["main.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["exit"],
+      "tests/link/std_postgres_tls/main.ts": ["main.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["main.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["main.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the program calls `http1ChunkExtValid`, which only the candidate's nish/net/http1-codec exports",
+    { "tests/link/net_http1_parse_diff/main.ts": ["exit"] }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "Http2Connection's SETTINGS handling gains `windowPassesMax` and walks its streams at most twice, so the modules that declare or call its methods move",
+    {
+      "tests/link/net_http2/main.ts": ["checks.ll", "peer.ll"],
+      "tests/link/net_http2_bad_idle/main.ts": ["main.ll"],
+      "tests/link/net_http2_bad_timeout/main.ts": ["main.ll"],
+      "tests/link/net_http2_cleartext/main.ts": ["checks.ll", "harness.ll", "main.ll", "peer.ll"],
+      "tests/link/net_http2_cleartext_bad_slots/main.ts": ["main.ll"],
+      "tests/link/net_http2_cleartext_bad_timeout/main.ts": ["main.ll"],
+      "tests/link/net_http2_f64/main.ts": ["checks.ll", "peer.ll"],
+      "tests/link/net_http2_tls/main.ts": ["peer.ll"],
+      "tests/link/net_http2_tls_f64/main.ts": ["peer.ll"],
+      "tests/link/net_interop_server/main.ts": ["net_http2_peer.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["net_http2_peer.ll"],
+      "tests/link/net_loopback/main.ts": ["net_http2_peer.ll"],
+      "tests/link/net_loopback_f64/main.ts": ["net_http2_peer.ll"],
+    }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the program sets `Http3Config.resetBudget`, which only the candidate's nish/net/http3 has",
+    { "tests/link/net_http3_bad_reset_budget/main.ts": ["exit"] }
+  ),
+  ...byFinding(SECURITY_PATHS)(
+    "the program calls `websocketOriginAllowed`, which only the candidate's nish/net/websocket exports",
+    { "tests/link/net_websocket/main.ts": ["exit"], "tests/link/net_websocket_f64/main.ts": ["exit"] }
+  ),
+  // WP58 S1: a discriminated union is a generic's type argument, which the
+  // seed refuses as NL2533, as it refuses a class passed where a generic
+  // call bound `T` to an interface the class implements.
+  ...[
+    "tests/cases/union_generic_call.ts",
+    "tests/cases/union_result.ts",
+    "tests/cases/generic_interface_class_arg.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: UNION_GENERICS,
+    why: "the program binds a generic's type argument to a discriminated union, or a generic call's `T` to an interface a class argument implements, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/enum_string.ts",
+    "tests/cases/enum_string_union_tag.ts",
+    "docs/cookbook/decl-enum-string.ts",
+    "tests/link/json_enum_string/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: STRING_ENUMS,
+    why: "the program declares an enum whose members are strings, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/destructure_array.ts",
+    "tests/cases/destructure_empty.ts",
+    "tests/cases/destructure_for_of.ts",
+    "tests/cases/destructure_forms.ts",
+    "tests/cases/destructure_object.ts",
+    "tests/cases/destructure_out_of_range.ts",
+    "tests/cases/destructure_stack.ts",
+    "tests/cases/destructure_zero_cost.ts",
+    "docs/cookbook/decl-destructure.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: DESTRUCTURING,
+    why: "the program declares names with an object or array pattern, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    "tests/cases/const_array_numeric.ts",
+    "tests/cases/const_array_u8.ts",
+    "docs/cookbook/const-table.ts",
+    "bench/const-table.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: CONST_TABLES,
+    why: "the program declares a module-level `readonly` array of numbers written out as a literal, which the seed refuses and the candidate compiles, so only the candidate compiles it",
+  })),
+  ...[
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.h"],
+    ["tests/cases/arr_readonly_escape.ts", "arr_readonly_escape.napi.c"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.h"],
+    ["tests/cases/interop_generic_fn.ts", "interop_generic_fn.napi.c"],
+  ].map(([program, file]) => ({
+    program,
+    file,
+    changelog: CONST_TABLES,
+    why: "a function returning `readonly T[]` returns `const nish_array *`, since the array may be a constant table in read-only memory",
+  })),
+  ...[
+    "bench/par-histogram-atomic.ts",
+    "docs/cookbook/thread-atomic-array.ts",
+    "examples/histogram-atomic.ts",
+    "tests/link/atomic_array_negative_index/main.ts",
+    "tests/link/atomic_array_negative_length/main.ts",
+    "tests/link/atomic_array_out_of_range/main.ts",
+    "tests/link/par_atomic_array/main.ts",
+    "tests/link/thread_atomic_array/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: ATOMIC_ARRAYS,
+    why: "the program uses `AtomicI32Array` or `AtomicI64Array`, new in this release, which the last release's nish/threads does not export",
+  })),
+  ...[
+    "bench/par-alloc.ts",
+    "bench/par-compute.ts",
+    "bench/par-heavy-fold.ts",
+    "bench/par-heavy.ts",
+    "bench/par-heavy4.ts",
+    "bench/par-histogram.ts",
+    "bench/par-nbody.ts",
+    "bench/par-regions.ts",
+    "bench/par-scale.ts",
+    "bench/par-short.ts",
+    "bench/par-single.ts",
+    "docs/cookbook/par-alloc.ts",
+    "docs/cookbook/par-capture.ts",
+    "docs/cookbook/par-map.ts",
+    "docs/cookbook/thread-atomic.ts",
+    "docs/cookbook/thread-channel.ts",
+    "docs/cookbook/thread-cross.ts",
+    "docs/cookbook/thread-mutex.ts",
+    "docs/cookbook/thread-scope.ts",
+    "docs/cookbook/thread-task-arrow.ts",
+    "examples/histogram.ts",
+    "examples/tasks.ts",
+    "tests/link/arena_using_exit_paths/main.ts",
+    "tests/link/caps_parallel/main.ts",
+    "tests/link/cf_label_dispose_threads/main.ts",
+    "tests/link/enum_member_type_parallel/main.ts",
+    "tests/link/fnarg_capture_forward/main.ts",
+    "tests/link/mem_capture_parallel_forward/main.ts",
+    "tests/link/mem_using_arena_map/main.ts",
+    "tests/link/panics_parallel_length/main.ts",
+    "tests/link/par_alloc/main.ts",
+    "tests/link/par_atomic/main.ts",
+    "tests/link/par_capture/main.ts",
+    "tests/link/par_capture_large/main.ts",
+    "tests/link/par_dst_short/main.ts",
+    "tests/link/par_from/main.ts",
+    "tests/link/par_into_fresh_object/main.ts",
+    "tests/link/par_into_fresh_pipeline/main.ts",
+    "tests/link/par_into_fresh_reads/main.ts",
+    "tests/link/par_map/main.ts",
+    "tests/link/par_map_captured_strings/main.ts",
+    "tests/link/par_map_idle/main.ts",
+    "tests/link/par_map_join_mixed/main.ts",
+    "tests/link/par_map_join_small/main.ts",
+    "tests/link/par_map_large/main.ts",
+    "tests/link/par_map_new/main.ts",
+    "tests/link/par_map_read_capture/main.ts",
+    "tests/link/par_map_read_into/main.ts",
+    "tests/link/par_map_read_into_keys/main.ts",
+    "tests/link/par_map_reclaim/main.ts",
+    "tests/link/par_map_reclaim_escapes/main.ts",
+    "tests/link/par_map_reclaim_strings/main.ts",
+    "tests/link/par_map_release/main.ts",
+    "tests/link/par_map_string/main.ts",
+    "tests/link/par_map_table_reads/main.ts",
+    "tests/link/par_map_vector/main.ts",
+    "tests/link/par_panic_once/main.ts",
+    "tests/link/par_reduce/main.ts",
+    "tests/link/par_reduce_blocks/main.ts",
+    "tests/link/port_num_capture_wide/main.ts",
+    "tests/link/port_rec_capture_copy/main.ts",
+    "tests/link/port_rec_capture_quiet/main.ts",
+    "tests/link/port_str_capture_offset/main.ts",
+    "tests/link/port_str_capture_result/main.ts",
+    "tests/link/port_utf8_offset_parallel_body/main.ts",
+    "tests/link/port_utf8_offset_parallel_from/main.ts",
+    "tests/link/port_utf8_offset_parallel_reduce/main.ts",
+    "tests/link/port_utf8_offset_quiet/main.ts",
+    "tests/link/port_utf8_offset_walk_limits/main.ts",
+    "tests/link/simd_parallel_capture/main.ts",
+    "tests/link/std_random/main.ts",
+    "tests/link/storage_parallel_read/main.ts",
+    "tests/link/thread_adopt_lifetime/main.ts",
+    "tests/link/thread_atomic_tasks/main.ts",
+    "tests/link/thread_atomic_unreached/main.ts",
+    "tests/link/thread_bcrypt_batch/main.ts",
+    "tests/link/thread_bcrypt_batcher/main.ts",
+    "tests/link/thread_bcrypt_task/main.ts",
+    "tests/link/thread_channel_ctor_reads/main.ts",
+    "tests/link/thread_channel_exit_paths/main.ts",
+    "tests/link/thread_channel_kinds/main.ts",
+    "tests/link/thread_channel_parent_drain/main.ts",
+    "tests/link/thread_channel_pipeline/main.ts",
+    "tests/link/thread_channel_string/main.ts",
+    "tests/link/thread_channel_string_many/main.ts",
+    "tests/link/thread_channel_two_producers/main.ts",
+    "tests/link/thread_host_facts_task/main.ts",
+    "tests/link/thread_mutex_contended/main.ts",
+    "tests/link/thread_mutex_counter/main.ts",
+    "tests/link/thread_mutex_exit_paths/main.ts",
+    "tests/link/thread_mutex_helper/main.ts",
+    "tests/link/thread_mutex_histogram/main.ts",
+    "tests/link/thread_mutex_null_store/main.ts",
+    "tests/link/thread_mutex_nullable_string/main.ts",
+    "tests/link/thread_mutex_or_return/main.ts",
+    "tests/link/thread_mutex_scalar/main.ts",
+    "tests/link/thread_mutex_string/main.ts",
+    "tests/link/thread_mutex_using_mixed/main.ts",
+    "tests/link/thread_no_strict_hidden_task/main.ts",
+    "tests/link/thread_panic_once/main.ts",
+    "tests/link/thread_private_prefixed_names/main.ts",
+    "tests/link/thread_scope_basic/main.ts",
+    "tests/link/thread_scope_exit_paths/main.ts",
+    "tests/link/thread_scope_libc_named_tasks/main.ts",
+    "tests/link/thread_scope_many_arrays/main.ts",
+    "tests/link/thread_scope_nested_arena/main.ts",
+    "tests/link/thread_scope_reclaim/main.ts",
+    "tests/link/thread_scope_reclaim_escapes/main.ts",
+    "tests/link/thread_scope_region_fresh_object/main.ts",
+    "tests/link/thread_scope_region_kept_own/main.ts",
+    "tests/link/thread_scope_region_map_get_or_insert/main.ts",
+    "tests/link/thread_scope_region_map_set/main.ts",
+    "tests/link/thread_scope_region_own_handoff/main.ts",
+    "tests/link/thread_scope_region_own_tables/main.ts",
+    "tests/link/thread_scope_region_param_lookup/main.ts",
+    "tests/link/thread_scope_region_read_back/main.ts",
+    "tests/link/thread_scope_region_set_add/main.ts",
+    "tests/link/thread_scope_task_map_reads/main.ts",
+    "tests/link/thread_sibling_disjoint_atomics/main.ts",
+    "tests/link/thread_sibling_disjoint_mutex/main.ts",
+    "tests/link/thread_sibling_disjoint_mutex_types/main.ts",
+    "tests/link/thread_stack_computed_small/main.ts",
+    "tests/link/thread_stack_deep/main.ts",
+    "tests/link/thread_stack_minimum/main.ts",
+    "tests/link/thread_task_arrow/main.ts",
+    "tests/link/thread_task_own_writes/main.ts",
+    "tests/link/thread_task_private/main.ts",
+    "tests/link/thread_task_release/main.ts",
+    "tests/link/thread_task_string/main.ts",
+    "tests/link/thread_task_void/main.ts",
+    "tests/link/thread_task_wipe/main.ts",
+    "tests/link/thread_task_wipe_secret/main.ts",
+    "tests/link/union_narrowing_capture/main.ts",
+  ].flatMap((program) =>
+    ["threads.ll", `${program.split("/").pop().replace(/\.ts$/, "")}.h`].map((file) => ({
+      program,
+      file,
+      changelog: ATOMIC_ARRAYS,
+      why: "std/threads.ts declares the classes AtomicI32Array and AtomicI64Array, so the threads module and the interop header of every program importing nish/threads carry their struct types and methods; the program's own main module is unchanged",
+    }))
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "JsonWriter gains `keyQuoted`, the compiler's `jsonEncode` of a class calls it with each key quoted and escaped as a string constant, and `i32` and `i64` count their digits by compares rather than divides, so nish/json moves in every program linking it and a module encoding a class moves where it writes a key",
+    {
+      "bench/http-app-carrier.ts": ["json.ll"],
+      "bench/http1-request/main.ts": ["json.ll"],
+      "bench/http1-server.ts": ["json.ll"],
+      "bench/json-compare/main.ts": ["json.ll"],
+      "bench/json-value/main.ts": ["json.ll"],
+      "bench/json-writer/main.ts": ["json.ll", "main.ll"],
+      "bench/runtime-copies/main.ts": ["json.ll", "main.ll"],
+      "bench/techempower/main.ts": ["json.ll"],
+      "bench/yaml-json/main.ts": ["json.ll"],
+      "docs/cookbook/json-fields.ts": ["json.ll"],
+      "docs/cookbook/json-presence.ts": ["json.ll"],
+      "docs/cookbook/json-typed.ts": ["json.ll"],
+      "docs/cookbook/json-value.ts": ["json.ll"],
+      "docs/cookbook/json-writer.ts": ["json-writer.ll", "json.ll"],
+      "examples/api-cli/main.ts": ["json.ll", "main.ll"],
+      "examples/http-app/main.ts": ["json.ll"],
+      "examples/http-get-json.ts": ["json.ll"],
+      "examples/merge-patch.ts": ["json.ll"],
+      "tests/link/json_merge_patch/main.ts": ["json.ll"],
+      "tests/link/json_presence/main.ts": ["json.ll"],
+      "tests/link/net_handler/main.ts": ["json.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["json.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["json.ll"],
+      "tests/link/net_handler_short/main.ts": ["json.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["json.ll"],
+      "tests/link/net_http_app/main.ts": ["json.ll"],
+      "tests/link/net_serve/main.ts": ["json.ll"],
+      "tests/link/net_serve_burst/main.ts": ["json.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["json.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["json.ll"],
+      "tests/link/net_serve_pg/main.ts": ["json.ll"],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["json.ll"],
+      "tests/link/net_serve_queued_wait/main.ts": ["json.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["json.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["json.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["json.ll"],
+      "tests/link/net_upstream/main.ts": ["json.ll"],
+      "tests/link/net_upstream_release/main.ts": ["json.ll"],
+      "tests/link/std_json_conformance/main.ts": ["json.ll"],
+      "tests/link/std_json_equal/main.ts": ["json.ll"],
+      "tests/link/std_json_number/main.ts": ["json.ll"],
+      "tests/link/std_json_pointer/main.ts": ["json.ll"],
+      "tests/link/std_json_typed/main.ts": ["json.ll"],
+      "tests/link/std_json_value/main.ts": ["json.ll"],
+      "tests/link/std_json_value_ranges/main.ts": ["json.ll"],
+      "tests/link/std_json_writer/main.ts": ["bytes.ll", "json.ll", "main.ll"],
+      "tests/link/std_postgres_async/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["json.ll"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json_golden/main.ts": ["json.ll"],
+      "tests/link/std_yaml_json_own_keys/main.ts": ["json.ll"],
+      "tests/link/tfb_async_db/main.ts": ["json.ll"],
+      "tests/link/tfb_async_entry/main.ts": ["json.ll"],
+      "tests/link/tfb_db/main.ts": ["json.ll"],
+      "tests/link/tfb_entry/main.ts": ["json.ll"],
+    }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the API-page benchmark is new in this stage: its encoder and nish/json move as above, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks",
+    { "bench/json-api/main.ts": ["json-typed.ll", "json.ll", "main.ll"] }
+  ),
+  ...byFinding(JSON_KEYS_QUOTED)(
+    "the stage adds these tests: tests/link/json_encode_keys encodes a class whose keys need escaping, and its nish/json-typed declares `JsonWriter.keyQuoted`, which the reference's nish/json lacks; std_json_typed gains keys.ts, which encodes classes and so writes their keys through it",
+    {
+      "tests/link/json_encode_keys/main.ts": ["json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/std_json_typed/main.ts": ["keys.ll"],
+    }
+  ),
 ]
 
 /**
@@ -6363,7 +8019,13 @@ const judge = (pair, job, reference, candidate, limit) => {
     }
     const wantPlain = withoutOwnVersion(wantRooted, pair.reference.version)
     const gotPlain = withoutOwnVersion(gotRooted, pair.candidate.version)
-    const undone = DECLARED.find((entry) => entry.undo !== undefined && entry.undo(gotPlain) === wantPlain)
+    // An `undo` is tried on the files as written too: removing a root can
+    // rewrite a relative path on one side only (a `--host` import that climbs
+    // out of the temporary directory), which no undo can put back.
+    const undone = DECLARED.find(
+      (entry) =>
+        entry.undo !== undefined && (entry.undo(gotPlain) === wantPlain || entry.undo(gotText) === wantText)
+    )
     const where = excerpt(wantText, gotText, limit)
     differences.push({
       surface: name,

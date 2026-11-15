@@ -22,7 +22,7 @@ import { unwrapParens } from "./emit-util"
 import { checkExpression } from "./expressions"
 import { checkIndexArgument } from "./members"
 import { SIMD_SPECIFIER, isSimdOp, simdMaskWidth, simdSuffix, simdTypeLane } from "./nish-modules"
-import { N_NUMBER, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Scope } from "./symbols"
 import { T_BOOL, T_ERROR, T_F32, T_F64, T_I32, T_U16, T_U32, T_U64, T_U8, T_VOID, TypeTable } from "./types"
 
@@ -136,7 +136,7 @@ const checkLaneIndex = (ctx: CheckContext, arg: Node, scope: Scope, name: string
   }
   const count = ctx.table.laneCount(vector)
   const literal = unwrapParens(arg)
-  if (literal.kind !== N_NUMBER || literal.text.indexOf(".") >= 0) {
+  if (literal.kind !== NodeKind.Number || literal.text.indexOf(".") >= 0) {
     ctx.error(
       arg,
       `\`${name}\` takes a lane index that is an integer literal, from 0 to ${count - 1}: ${ctx.table.typeName(vector)} has ${count} lanes`
@@ -435,7 +435,7 @@ const checkLaneShiftCount = (ctx: CheckContext, arg: Node, scope: Scope, name: s
   }
   const bits = ctx.table.alignOf(ctx.table.refOf(vector)) * 8
   const literal = unwrapParens(arg)
-  if (literal.kind !== N_NUMBER || literal.text.indexOf(".") >= 0) {
+  if (literal.kind !== NodeKind.Number || literal.text.indexOf(".") >= 0) {
     ctx.error(
       arg,
       `\`${name}\` takes a count that is an integer literal below the lane width, from 0 to ${bits - 1}: a lane of ${ctx.table.typeName(vector)} is ${bits} bits`
@@ -484,7 +484,7 @@ const checkShuffle = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   for (let i = 2; i < args.length; i++) {
     const arg = args[i]
     const literal = unwrapParens(arg)
-    if (literal.kind !== N_NUMBER || literal.text.indexOf(".") >= 0) {
+    if (literal.kind !== NodeKind.Number || literal.text.indexOf(".") >= 0) {
       ctx.error(
         arg,
         `\`${name}\` takes lane indices that are integer literals, from 0 to ${count * 2 - 1}: the lanes of both ${shown} in order`

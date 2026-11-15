@@ -38,32 +38,19 @@ import {
   compoundIntegerOpcode,
   emitBitwiseCombine,
   emitIntBinary,
+  floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
 import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
+import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
-import { isChannelReader, isGuardedAccess } from "./parallel"
+import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_BINDING_PATTERN,
-  N_CALL,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_THIS,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { Node, NodeKind, bindsHiddenReceiver } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
 import {
   ConstInfo,
@@ -75,6 +62,7 @@ import {
 } from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
+import { irEscapeByte, StringBuilder } from "./strings"
 import { elementTbaa, headerTbaa, sliceTbaa } from "./tbaa"
 import {
   accessAlign,
@@ -86,6 +74,7 @@ import {
   T_I32,
   T_STRING,
   T_U32,
+  T_U8,
   TypeTable,
 } from "./types"
 
@@ -278,7 +267,7 @@ const NO_PATH = (): ArrayPath => new ArrayPath(null, "", -1)
  */
 const pathOf = (emitter: Emitter, expr: Node): ArrayPath => {
   const inner = unwrapParens(expr)
-  if (inner.kind === N_IDENT || inner.kind === N_THIS) {
+  if (inner.kind === NodeKind.Ident || inner.kind === NodeKind.This) {
     const local = emitter.program.nodeLocals[inner.id]
     if (local === null || (local.storage !== STORAGE_PARAM && local.mutable)) {
       return NO_PATH()
@@ -287,7 +276,7 @@ const pathOf = (emitter: Emitter, expr: Node): ArrayPath => {
     // needs.
     return new ArrayPath(local, "", local.type)
   }
-  if (inner.kind !== N_MEMBER) {
+  if (inner.kind !== NodeKind.Member) {
     return NO_PATH()
   }
   const below = pathOf(emitter, inner.children[0])
@@ -354,7 +343,7 @@ const emitArrayBase = (emitter: Emitter, expr: Node): ArrayBase => {
  */
 const inlineField = (emitter: Emitter, expr: Node): FieldInfo | null => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_MEMBER) {
+  if (e.kind !== NodeKind.Member) {
     return null
   }
   // Read the table rather than `typeOf`: `process.argv` is a member whose
@@ -492,17 +481,17 @@ export const emitInlineArrayAssignment = (emitter: Emitter, expr: Node, field: F
   const rhs = unwrapParens(expr.children[1])
   const values: string[] = []
   let source = ""
-  if (rhs.kind === N_ARRAY) {
+  if (rhs.kind === NodeKind.Array) {
     for (const element of rhs.children) {
       values.push(emitter.emitExpression(element))
     }
-  } else if (rhs.kind !== N_NEW) {
+  } else if (rhs.kind !== NodeKind.New) {
     source = emitter.emitExpression(rhs)
   }
   const header = inlineHeaderPointer(emitter, info, receiver, field)
   const data = n > 0 ? inlineDataPointer(emitter, info, receiver, field) : ""
   const ty = slotType(emitter, elem)
-  if (rhs.kind === N_ARRAY) {
+  if (rhs.kind === NodeKind.Array) {
     if (n > 0) {
       const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`)
       let i = 0
@@ -514,7 +503,7 @@ export const emitInlineArrayAssignment = (emitter: Emitter, expr: Node, field: F
     }
   } else if (n > 0) {
     const a = emitter.opts.optimizeAttributes ? "align 8 " : ""
-    if (rhs.kind === N_NEW) {
+    if (rhs.kind === NodeKind.New) {
       emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
       emitter.fn.emit(
         `call void @${MEMSET}(i8* ${a}${data}, i8 0, i64 ${n * size}, i1 false)${elementAccess(emitter)}`
@@ -591,7 +580,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
   const rhs = unwrapParens(expr.children[1])
   let len = ""
   let data = ""
-  if (rhs.kind === N_ARRAY) {
+  if (rhs.kind === NodeKind.Array) {
     const values: string[] = []
     for (const element of rhs.children) {
       values.push(emitter.emitExpression(element))
@@ -608,7 +597,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
         i = i + 1
       }
     }
-  } else if (rhs.kind === N_NEW) {
+  } else if (rhs.kind === NodeKind.New) {
     len = emitNewArrayLength(emitter, rhs.children[2].children[0], size)
     const bytes = size === 1 ? len : emitter.fn.emitValue(`mul i64 ${len}, ${size}`)
     data = emitData(emitter, rhs, elem, -1, bytes)
@@ -697,7 +686,7 @@ const callMayResize = (emitter: Emitter, node: Node): boolean => {
   }
   // A `new` holds its class's constructor, and a class with none stores
   // constants only; `new Array` holds nothing.
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     const callee = emitter.program.nodeCallees[node.id]
     if (callee !== null) {
       const facts = emitter.facts.get(callee.name)
@@ -734,26 +723,26 @@ const callMayResize = (emitter: Emitter, node: Node): boolean => {
  */
 const storedFields = (emitter: Emitter, node: Node, names: string[], records: i32[]): boolean => {
   let opaque = false
-  if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
+    if (target.kind === NodeKind.Member && names.indexOf(target.text) < 0) {
       names.push(target.text)
     }
-    if (target.kind === N_INDEX) {
+    if (target.kind === NodeKind.Index) {
       // A record rewritten in place, every field of it unnamed (#180).
       const stored = recordStoreType(emitter.program, emitter.table, target)
       if (stored !== NO_RECORD && records.indexOf(stored) < 0) {
         records.push(stored)
       }
     }
-  } else if (node.kind === N_UNARY) {
+  } else if (node.kind === NodeKind.Unary) {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_MEMBER && names.indexOf(target.text) < 0) {
+    if (target.kind === NodeKind.Member && names.indexOf(target.text) < 0) {
       names.push(target.text)
     }
-  } else if (node.kind === N_NEW) {
+  } else if (node.kind === NodeKind.New) {
     opaque = true // the constructor stores fields, and not only its own
-  } else if (node.kind === N_CALL) {
+  } else if (node.kind === NodeKind.Call) {
     const callee = emitter.program.nodeCallees[node.id]
     if (callee !== null) {
       const facts = emitter.facts.get(callee.name)
@@ -777,11 +766,11 @@ const storedFields = (emitter: Emitter, node: Node, names: string[], records: i3
  * the declaration: #1326 lifted an `a[0]` above the `awaitAll` that binds `a`.
  */
 const localsDeclaredIn = (emitter: Emitter, node: Node, out: Local[]): void => {
-  const local: Local | null = node.kind === N_VAR_DECL ? emitter.program.nodeLocals[node.id] : null
+  const local: Local | null = node.kind === NodeKind.VarDecl ? emitter.program.nodeLocals[node.id] : null
   if (local !== null) {
     out.push(local)
   }
-  if (node.kind === N_BINDING_PATTERN) {
+  if (node.kind === NodeKind.BindingPattern) {
     for (const name of node.children) {
       const bound = emitter.program.nodeLocals[name.id]
       if (bound !== null) {
@@ -821,7 +810,7 @@ const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean,
  * is the whole test: a local `store` closure has none.
  */
 const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
-  if (call.kind !== N_CALL || call.children[1].children.length < 2) {
+  if (call.kind !== NodeKind.Call || call.children[1].children.length < 2) {
     return false
   }
   const name = emitter.program.nodeBuiltins[call.id]
@@ -840,10 +829,10 @@ const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
 const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
   // WP29: an arrow argument's body is a function of its own, whose parameters
   // do not exist in this one, so nothing it reads can be hoisted here.
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_INDEX) {
+  if (node.kind === NodeKind.Index) {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
@@ -857,7 +846,7 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     // with no `data`, and the load took that empty value as its pointer.
     const args = node.children[1].children
     noteArrayUse(emitter, args[args.length - 2], true, true, out)
-  } else if (node.kind === N_MEMBER && node.text === "length") {
+  } else if (node.kind === NodeKind.Member && node.text === "length") {
     noteArrayUse(emitter, node.children[0], true, false, out)
   }
   for (const child of node.children) {
@@ -876,7 +865,7 @@ const pathHoldsRecord = (emitter: Emitter, expr: Node, records: i32[]): boolean 
     return false
   }
   let link = unwrapParens(expr)
-  while (link.kind === N_MEMBER) {
+  while (link.kind === NodeKind.Member) {
     const holder = pathOf(emitter, link.children[0]).type
     for (const stored of records) {
       if (recordReaches(stored, holder)) {
@@ -891,7 +880,7 @@ const pathHoldsRecord = (emitter: Emitter, expr: Node, records: i32[]): boolean 
 /** Whether any link of a path names a field the loop stores to. */
 const pathIsShadowed = (expr: Node, names: string[]): boolean => {
   let link = unwrapParens(expr)
-  while (link.kind === N_MEMBER) {
+  while (link.kind === NodeKind.Member) {
     if (names.indexOf(link.text) >= 0) {
       return true
     }
@@ -1078,7 +1067,7 @@ export const emitIndex = (emitter: Emitter, expr: Node): string => {
   const literal = unwrapParens(expr)
   // Fold the widening of a constant index. The `i32` truncation is the one the
   // checker already allows for; an i64 or unsigned literal is exact as written.
-  if (literal.kind === N_NUMBER && !isFloat(type)) {
+  if (literal.kind === NodeKind.Number && !isFloat(type)) {
     const value = parseIntegerLiteral(literal.text)
     return type === T_I32 ? `${toI32(value)}` : `${value}`
   }
@@ -1132,6 +1121,40 @@ const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: N
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
 }
 
+/**
+ * Address of element `idx` (an i64 value) of the array field `field` of the
+ * object at `receiver`, whose class is `info`, once `idx` is checked against
+ * the array's length as `a[i]`'s is: an atomic array's method reaches its
+ * element through this (`emitAtomicBody`). A plain field's header is `arr`,
+ * which the caller loaded; a boxed or inline one is read in place, as
+ * `inlineFieldBase` reads it.
+ */
+export const checkedFieldElement = (
+  emitter: Emitter,
+  info: StructInfo,
+  receiver: string,
+  field: FieldInfo,
+  arr: string,
+  idx: string
+): string => {
+  emitter.declareType(ARRAY_TYPE)
+  let base = new ArrayBase(arr, null)
+  if (field.boxed || field.inline()) {
+    base = new ArrayBase(
+      field.boxed
+        ? slicePointer(emitter, info, receiver, field)
+        : inlineHeaderPointer(emitter, info, receiver, field),
+      null
+    )
+    base.slice = field.boxed
+    base.owner = info
+    base.receiver = receiver
+    base.field = field
+  }
+  emitRangeCheck(emitter, idx, baseLength(emitter, base))
+  return elementPointer(emitter, base, emitter.table.refOf(field.type), idx)
+}
+
 /** A header's 24 bytes from the arena, its fields not yet stored. */
 const arenaHeader = (emitter: Emitter): string => {
   const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`)
@@ -1166,7 +1189,7 @@ const emitHeader = (emitter: Emitter, n: string, site: Node): string => {
  */
 export const literalLength = (expr: Node): i32 => {
   const e = unwrapParens(expr)
-  if (e.kind !== N_NUMBER) {
+  if (e.kind !== NodeKind.Number) {
     return -1
   }
   const n: f64 = numericLiteralValue(e.text)
@@ -1188,6 +1211,25 @@ const emitData = (emitter: Emitter, site: Node, elem: i32, count: i32, bytes: st
     return emitter.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`)
   }
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`)
+}
+
+/**
+ * An atomic array's elements (docs/IR_COOKBOOK.md, "an atomic array"): `bytes`
+ * from the arena, starting on a 64-byte boundary with at least one whole line
+ * of slack before and after them. Every task writes the elements and reads the
+ * header and the object beside them on each update; on one line, each write
+ * would evict the line every other thread is reading. The slack is never
+ * named, and the arena takes it back with the rest.
+ */
+const emitLineData = (emitter: Emitter, bytes: string): string => {
+  const fn = emitter.fn
+  const room = fn.emitValue(`add i64 ${bytes}, 192`)
+  const raw = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${room})`)
+  const at = fn.emitValue(`ptrtoint i8* ${raw} to i64`)
+  const back = fn.emitValue(`sub i64 0, ${at}`)
+  const gap = fn.emitValue(`and i64 ${back}, 63`)
+  const offset = fn.emitValue(`add i64 ${gap}, 64`)
+  return fn.emitValue(`getelementptr inbounds i8, i8* ${raw}, i64 ${offset}`)
 }
 
 const storeData = (emitter: Emitter, arr: string, data: string): void => {
@@ -1250,7 +1292,7 @@ export const newArrayLengthChecked = (
   table: TypeTable
 ): boolean => {
   const literal = unwrapParens(length)
-  if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
+  if (literal.kind === NodeKind.Number && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
     return false
   }
   if (table.isRanged(type)) {
@@ -1337,7 +1379,9 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   if (count < 0 && emitter.isStackSite(expr)) {
     process.exit(internalErrorFor("emitter: a stack array whose length is not a literal", emitter.opts.json))
   }
-  const data = emitData(emitter, expr, elem, count, bytes)
+  const data = isAtomicArrayConstructor(emitter.currentSig)
+    ? emitLineData(emitter, bytes)
+    : emitData(emitter, expr, elem, count, bytes)
   // `sortWith`'s scratch is copied over whole before it is read, and no
   // optimizer pass drops a fill the copy loop then overwrites.
   if (!isSortInstance(emitter.program.activeInstance)) {
@@ -1384,26 +1428,11 @@ export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolea
 }
 
 /**
- * `nish:simd`'s `loadU8x16(xs, i)` and `store(v, xs, i)` (WP38 S3): the
- * vector of elements `i` to `i + N - 1`, read or written in one access after
- * one bounds check for all of them — `i < len` and `i + N <= len`, the two
- * compares joined so a single branch reaches the panic, which reports `i`
- * against `len` as `xs[i]`'s does. Arguments are evaluated left to right.
- *
- * The access claims the lane's alignment, which is the element buffer's, and
- * never the vector's sixteen: an element can start anywhere. It carries no
- * TBAA tag, because it is a `<N x T>` covering elements tagged as `T`.
+ * The one check of a vector access of `count` elements from `idx`, which the
+ * bounds walk leaves out when it proved the access (`judgeVectorAccess` in
+ * `src/bounds.ts`). Code after it runs in the block where it passed.
  */
-export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): string => {
-  const args = expr.children[1].children
-  const value = store ? emitter.emitExpression(args[0]) : ""
-  const at = store ? 1 : 0
-  const vector = store ? emitter.typeOf(args[0]) : emitter.typeOf(expr)
-  const lane = emitter.table.refOf(vector)
-  const count = emitter.table.laneCount(vector)
-  emitter.declareType(ARRAY_TYPE)
-  const base = emitArrayBase(emitter, args[at])
-  const idx = emitIndex(emitter, args[at + 1])
+const emitVectorCheck = (emitter: Emitter, base: ArrayBase, idx: string, count: i32): void => {
   const fn = emitter.fn
   const len = baseLength(emitter, base)
   const end = fn.emitValue(`add i64 ${idx}, ${count}`)
@@ -1420,16 +1449,47 @@ export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): 
   fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${shown}, i64 ${len})`)
   fn.emit("unreachable")
   fn.placeBlock(okBlock)
+}
+
+/**
+ * `nish:simd`'s `loadU8x16(xs, i)` and `store(v, xs, i)` (WP38 S3): the
+ * vector of elements `i` to `i + N - 1`, read or written in one access after
+ * one bounds check for all of them — `i < len` and `i + N <= len`, the two
+ * compares joined so a single branch reaches the panic, which reports `i`
+ * against `len` as `xs[i]`'s does. Arguments are evaluated left to right.
+ *
+ * The access claims the lane's alignment, which is the element buffer's, and
+ * never the vector's sixteen: an element can start anywhere. It carries the
+ * metadata a scalar slot access of the lane type does (`valueSlotAccess`):
+ * once the check has passed, every byte it reaches is element data of `T`.
+ * TBAA compares tags and never sizes, so a `<N x T>` tagged `element T` is
+ * MayAlias with each `T` slot it covers and NoAlias with every header and
+ * class field.
+ */
+export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): string => {
+  const args = expr.children[1].children
+  const value = store ? emitter.emitExpression(args[0]) : ""
+  const at = store ? 1 : 0
+  const vector = store ? emitter.typeOf(args[0]) : emitter.typeOf(expr)
+  const lane = emitter.table.refOf(vector)
+  const count = emitter.table.laneCount(vector)
+  emitter.declareType(ARRAY_TYPE)
+  const base = emitArrayBase(emitter, args[at])
+  const idx = emitIndex(emitter, args[at + 1])
+  const fn = emitter.fn
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitVectorCheck(emitter, base, idx, count)
+  }
   const slot = elementPointer(emitter, base, lane, idx)
   const ty = emitter.llvm(vector)
   const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)
-  // Always stated: without it the access would claim the vector's sixteen.
-  const align = `, align ${emitter.table.alignOf(lane)}`
+  // The alignment is always stated: left out, the access would claim the vector's sixteen.
+  const attrs = `, align ${emitter.table.alignOf(lane)}${valueSlotAccess(emitter, lane)}`
   if (store) {
-    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${align}`)
+    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${attrs}`)
     return "void"
   }
-  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${align}`)
+  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${attrs}`)
 }
 
 /**
@@ -1850,7 +1910,7 @@ export const emitOffset = (emitter: Emitter, expr: Node): string => {
 
 /** `expr` is an integer literal, which `emitIndex` folds to its value. */
 const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
-  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
+  unwrapParens(expr).kind === NodeKind.Number && !isFloat(emitter.typeOf(expr))
 
 /**
  * JavaScript's relative index, which `fill` takes for each end: a negative
@@ -1979,7 +2039,7 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(elem))
   emitter.setSlot(local, slot)
   const debug = emitter.debug
-  if (debug !== null) {
+  if (debug !== null && !bindsHiddenReceiver(decl)) {
     debug.declareLocal(fn, local, slot, decl) // `-g`
   }
   const idxSlot = fn.emitAlloca("forof.idx", "i64", emitter.opts.optimizeAttributes ? 8 : 0)
@@ -2080,14 +2140,76 @@ const bytePointer = (emitter: Emitter, arr: string, at: string): string => {
  * symbol, `nish_storage_<module>_<name>` (`Compilation.nameStorage`), is the
  * program's alone. The header is `internal` unless another module imports it.
  */
-export const storageGlobals = (emitter: Emitter, info: ConstInfo): void => {
+export const storageGlobals = (emitter: Emitter, info: ConstInfo, traces: RootTraces): void => {
   const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
   const data = `[${info.intValue} x ${slot}]`
   emitter.declareType(ARRAY_TYPE)
-  emitter.declareGlobal(`@${info.storageSymbol}.data = global ${data} zeroinitializer, align 16`)
+  // WP55: a page reads no root storage, so its data stays internal and is
+  // reached through the root table instead (`src/emit-root.ts`).
+  const kept = info.root && emitter.opts.rootSymbols.length > 0
+  emitter.declareGlobal(
+    `@${info.storageSymbol}.data = ${kept ? "internal " : ""}global ${data} zeroinitializer, align 16`
+  )
+  if (kept) {
+    rootTable(emitter, traces, info, data)
+  }
   emitter.declareGlobal(
     `@${info.storageSymbol} = ${info.exported ? "" : "internal "}global ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
   )
+}
+
+/**
+ * The two globals of constant table `info` (`docs/LANGUAGE.md`, "Constant
+ * tables"): its folded elements and a header over them, both `constant`, so
+ * the table is read-only data the optimiser may read through, and no code
+ * runs to build it. A byte table is a `c"…"` string, as LLVM prints one. The
+ * data is `private`: nothing but the header names it. The header is
+ * `internal` unless another module imports it, the storage rule; its symbol
+ * is `nish_const_<module>_<name>` (`Compilation.nameStorage`).
+ */
+export const tableGlobals = (emitter: Emitter, info: ConstInfo): void => {
+  const slot = elementLLVMType(emitter.program, emitter.table, info.storageElem)
+  const data = `[${info.intValue} x ${slot}]`
+  emitter.declareType(ARRAY_TYPE)
+  emitter.declareGlobal(
+    `@${info.storageSymbol}.data = private unnamed_addr constant ${data} ${tableInitializer(info, slot)}, align 16`
+  )
+  emitter.declareGlobal(
+    `@${info.storageSymbol} = ${info.exported ? "" : "internal "}constant ${ARRAY_STRUCT} { i64 ${info.intValue}, i64 ${info.intValue}, i8* bitcast (${data}* @${info.storageSymbol}.data to i8*) }, align 8`
+  )
+}
+
+/** A constant table's elements as an LLVM array constant: `c"\\00\\01"` for bytes, `[i32 1, i32 2]` otherwise. */
+const tableInitializer = (info: ConstInfo, slot: string): string => {
+  const out = new StringBuilder()
+  if (info.storageElem === T_U8) {
+    out.add('c"')
+    for (const v of info.tableInts) {
+      irEscapeByte(out, toI32(v))
+    }
+    out.add('"')
+    return out.toText()
+  }
+  out.add("[")
+  let i = 0
+  const n = info.storageElem === T_F64 ? info.tableFloats.length : info.tableInts.length
+  while (i < n) {
+    if (i > 0) {
+      out.add(", ")
+    }
+    out.add(slot)
+    out.add(" ")
+    out.add(info.storageElem === T_F64 ? floatText(info.tableFloats[i], T_F64) : `${info.tableInts[i]}`)
+    i = i + 1
+  }
+  out.add("]")
+  return out.toText()
+}
+
+/** The table another module declares, as this module reaches it: by its header. */
+export const tableDeclaration = (emitter: Emitter, info: ConstInfo): void => {
+  emitter.declareType(ARRAY_TYPE)
+  emitter.declareGlobal(`@${info.storageSymbol} = external constant ${ARRAY_STRUCT}, align 8`)
 }
 
 /** The storage another module declares, as this module reaches it: by its header. */

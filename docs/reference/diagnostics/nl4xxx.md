@@ -2,7 +2,7 @@
 
 # NL4xxx\: the interop sidecars
 
-The 18 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 19 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL4001
 
@@ -151,7 +151,7 @@ export const tagOf = (m: Dot | Box): Kind => m.kind;
 The message of an error contains:
 
 ```text
-…--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
+…--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi
 ```
 
 ## NL4011
@@ -159,7 +159,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+…--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement
 ```
 
 ## NL4012
@@ -220,7 +220,7 @@ The message of an error contains:
 …--emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native
 ```
 
-**Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (WP49 stage 4, part 3; tests/emit-ts/async)
+**Retired**: `--emit-ts cannot yet write an async function`, the refusal until --emit-ts wrote async functions as Node's async/await (tests/emit-ts/async)
 
 ## NL4017
 
@@ -270,4 +270,28 @@ export async function main(): Promise<i32> {
 
 ```text
 --emit-ts cannot write readableWithin, writableWithin, taskId, cancel, cancelled or cancelAfter from nish:async: a Node promise is not a task the executor can cancel; keep the program native
+```
+
+## NL4019
+
+The message of an error contains:
+
+```text
+…which holds a string enum: a string enum has no C, N-API or wasm spelling…
+```
+
+[`nl4019_string_enum_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4019_string_enum_export.ts) (compiled with `--emit-header build/test/wordings/nl4019_string_enum_export.h`):
+
+```ts
+// NL4019 (with --emit-header): an exported function that returns a string enum.
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+export const fallback = (): Role => Role.Guest
+```
+
+```text
+`fallback` returns `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch`
 ```

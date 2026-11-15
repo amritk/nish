@@ -12,6 +12,8 @@ import {
   filterIndexed,
   findIndex,
   findIndexIndexed,
+  forEach,
+  forEachIndexed,
   map,
   mapIndexed,
   slice,
@@ -73,6 +75,18 @@ The index of the first element of `xs` for which `pred` answers `true`, given ea
 
 </scalar-card>
 
+<scalar-card title="for​Each" icon="phosphor/regular/function" href="#foreach">
+
+Calls `f` with each element of `xs`, in order: what `xs.forEach(f)` compiles to when `f` takes one parameter.
+
+</scalar-card>
+
+<scalar-card title="for​Each​Indexed" icon="phosphor/regular/function" href="#foreachindexed">
+
+Calls `f` with each element of `xs` and its index, in order: what `xs.forEach(f)` compiles to when `f` takes two parameters.
+
+</scalar-card>
+
 <scalar-card title="map" icon="phosphor/regular/function" href="#map">
 
 The elements of `xs`, each passed through `f`, in a new array of the same length: what `xs.map(f)` compiles to when `f` takes one parameter.
@@ -120,15 +134,16 @@ Whether `pred` answers `true` for at least one element of `xs`, given each eleme
 <scalar-detail title="A program does not need to import this module">
 
 A `.map(...)`,
-`.filter(...)`, `.some(...)`, `.every(...)`, `.findIndex(...)` or
-`.slice(...)` call on an array is what loads it (the checker's
+`.filter(...)`, `.some(...)`, `.every(...)`, `.findIndex(...)`,
+`.forEach(...)` or `.slice(...)` call on an array is what loads it (the checker's
 `importArrayMethods`), and the checker routes the call to the template here
 that matches it: `xs.map(f)` is `map(xs, f)` when `f` takes one parameter
 and `mapIndexed(xs, f)` when it takes two. `f` is a compile-time function
 parameter, so each callback is an instantiation of its own whose body calls
 it directly — there is no function pointer, and importing a template here
 by name and calling it gives the same code as the method. Under Node,
-`--emit-ts` leaves `map`, `filter`, `some`, `every` and `findIndex` as the
+`--emit-ts` leaves `map`, `filter`, `some`, `every`, `findIndex` and
+`forEach` as the
 platform's own `Array.prototype` methods, writes `slice` as the runtime's
 checked `sliceArray`, and copies an answer that holds records inline with
 `copyRecords`, so nothing here runs there.
@@ -329,6 +344,58 @@ called in order, with the element and its index, until it answers `true`.
 <scalar-field name="returns" type="number">
 
 the first such index, or `-1` when there is none.
+
+</scalar-field>
+
+### forEach
+
+Calls `f` with each element of `xs`, in order: what `xs.forEach(f)`
+compiles to when `f` takes one parameter. The walk stops at the length the
+array had when the call began, so an element the callback pushes is not
+visited, and at the current length, so one it pops is not either, as
+`Array.prototype.forEach` does.
+
+```ts
+function forEach<T>(
+  xs: readonly T[],
+  f: (x: T) => void,
+): void
+```
+
+<scalar-field name="xs" type="readonly T[]" required>
+
+the array read; the callback may change it.
+
+</scalar-field>
+
+<scalar-field name="f" type="(x: T) =&gt; void" required>
+
+called once per element, in order.
+
+</scalar-field>
+
+### forEachIndexed
+
+Calls `f` with each element of `xs` and its index, in order: what
+`xs.forEach(f)` compiles to when `f` takes two parameters. The walk stops
+where `forEach`'s does.
+
+```ts
+function forEachIndexed<T>(
+  xs: readonly T[],
+  f: (x: T, i: number) => void,
+): void
+```
+
+<scalar-field name="xs" type="readonly T[]" required>
+
+the array read; the callback may change it.
+
+</scalar-field>
+
+<scalar-field name="f" type="(x: T, i: number) =&gt; void" required>
+
+called once per element, in order, with the element and its index.
 
 </scalar-field>
 

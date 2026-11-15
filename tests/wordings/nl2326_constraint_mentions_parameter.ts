@@ -1,4 +1,4 @@
-// NL2326: a constraint that mentions a type parameter (WP18 G6). A constraint
+// NL2326: a constraint that mentions a type parameter. A constraint
 // is resolved once for the template, with nothing bound, so a bound that
 // depends on another parameter would mean something different at every
 // instantiation; that is where an F-bounded constraint starts, and it is out of

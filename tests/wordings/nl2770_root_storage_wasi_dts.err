@@ -1,0 +1,1 @@
+Root storage `player` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host

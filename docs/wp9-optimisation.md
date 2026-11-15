@@ -59,6 +59,8 @@ on the 0.16.0 run in BENCHMARKS.md (2026-10-05) fib is 1.68x Rust by default
 and at parity under `--wrapping` (564 ms by default, 338 under `--wrapping`,
 Rust 336), because every `+` in its
 recursion now carries an overflow check the bounds walk cannot prove away.
+[Self-recursive checked sums as a loop](#self-recursive-checked-sums-as-a-loop)
+brought it back: 0.99x and 1.06x of Rust on two interleaved runs.
 The other six are within 1.10x. On a shared VM the medians sit 15–20 % above the minima, and the
 ratios move by about that much between back-to-back runs. **A row near 1.10x
 needs several runs, or cachegrind, before it means anything.** Nish binaries
@@ -112,6 +114,106 @@ measurement made `nsw` the default in WP15 §3, with `--wrapping` to opt out.
 #426 then made unproven overflow a checked panic. The bounds walk still proves
 the sieve's counters and keeps `nsw` on them, which preserves the win the flag
 was measured for. The `opt_nsw` golden now pins that default.
+
+### Self-recursive checked sums as a loop
+
+A function whose recursive returns are `X + self(args)` over a checked `+`
+(fib, a tree sum) is emitted as one loop (`src/accumulate.ts` records it,
+`src/emit-accumulate.ts` writes it). LLVM's tail-recursion elimination does
+this only for a plain `add`; `llvm.sadd.with.overflow` and its branch defeat
+it, which is what made fib 1.68x Rust after #426. The loop's header carries
+the previous partial sum and the last `X` as phis and tests their signs: while
+every `X` and every partial sum is non-negative, the sum the recursion would
+build from the base outwards is monotone, so one checked add at the base is
+exact. A step whose sign test fails hands itself to one ordinary call of the
+function and adds the call's answer with checked adds, so where the recursion
+would overflow the program panics at the same add, with the same output. A
+recursion deep enough to exhaust the stack is the one difference: the loop
+completes it, or makes its cold call only every 2^31 or so steps. The proof is
+the header comment of `src/emit-accumulate.ts`.
+
+- **fib(40)**: 1.68x → 0.99x and 1.06x of Rust (Nish 329 / 348 ms minima
+  against Rust 333 / 329 on two interleaved `bench/run.mjs --runs 15` runs).
+  The two Nish minima are one binary and differ by 6 %, which is the band:
+  the loop is at parity with Rust, not ahead of it.
+- **Tree sum** (a depth-20 tree of class nodes, summed 60 times, `return
+  t.value + sum(t.left) + sum(t.right)`): median 318 ms → 191 ms, 15
+  interleaved runs; two copies of the new binary differ by 191 against
+  179 ms, so the band is about 6 %. The program is `bench/treesum.ts`'s `fn`
+  kernel.
+
+A method qualifies as well when it belongs to a non-generic, non-atomic class
+of its module and its self call is `r.m(args)` on a receiver of that class
+(issue #1612): Nish has no inheritance and no interface methods, so the call
+is statically bound, and the receiver is the loop's first parameter, a
+`%this` phi. `TreeNode.sum()`, the same walk as a method, is `bench/treesum.ts`'s
+`method` kernel. Main's compiler against this one, 15 runs of each after 2
+warm-ups, interleaved, two rounds:
+
+- **`method` kernel**: median 269.6 / 223.4 ms → 263.3 / 208.3 ms. The `fn`
+  kernel, which both compilers already looped, moved 319.1 / 275.3 →
+  319.0 / 258.8 ms in the same rounds: the same code differed by 0 % in
+  one round and 6 % in the other, and main's own `method` median moved
+  17 % between rounds. The method's 2 % and 7 % are the size of that
+  same-code spread, so this measures no gain: the walk is bound by its
+  loads, and the call it saves was cheap.
+- **fib(40)** does not move: 0.92x / 0.89x of Rust before, 0.92x / 0.92x
+  after (`bench/run.mjs --only fib --runs 15 --warmup 2`).
+- **AWFY `List`**, whose `Element.length` now loops: median 174.8 / 177.7 ms
+  → 175.6 / 170.4 ms (`List 10 1500`), no change outside the band.
+
+Every integer width whose `+` is checked qualifies (issue #1612): `i32` and
+`i64`, the signed types `emitIntBinary` checks. An `i64` sum is the same loop
+at `i64`; the proof only needs the width's MAX and MIN, since two addends in
+[0, MAX] sum to at most 2^w - 2, which is negative at that width exactly when
+it passes MAX. `u8`..`u64` stay recursion: their `+` wraps, a plain `add`
+LLVM's tail-recursion elimination already folds (`tests/cases/acc_width_unsigned`).
+fib and treesum are `i32` programs, and main's compiler and this one give them
+byte-identical IR, so the rounds below measure only the machine. 15 runs after
+2 warm-ups, interleaved, two rounds, minimum / median ms:
+
+- **fib(40)**: main 237/242 and 227/237, branch 233/240 and 229/238
+  (0.93x / 0.89x of Rust, then 0.92x / 0.91x). main's two runs differ by 2 %
+  at the median, the band. No change, as expected.
+- **treesum `fn`**: medians main 336 / 319, branch 304 / 258. main's own
+  spread is 5 %, and the second round's branch median sits 19 % below
+  main's, outside it. That is noise, not the change: main's compiler and
+  this one give treesum byte-identical IR, so the two binaries are the same
+  program.
+- **treesum `method`**: medians main 301 / 213, branch 218 / 275. main's own
+  median moved 41 % between rounds, and both branch rounds sit inside that
+  band. No change.
+
+A function with an automatic arena scope qualifies too (issue #1612), when
+every step passes only numbers and its own parameters, unchanged, and nothing
+it runs reads `Arena.mark` or `Arena.used`. The loop marks the arena once on
+entry and releases to that mark at the end of every step, so each pass frees
+what it built, as each frame of the recursion did on its return. A step that
+passes memory it built (`` f(`${n}`) ``, `f(s + "y")`) would have that
+memory freed under the next pass, and such a function keeps its recursion
+(`tests/cases/acc_arena_ineligible`). The proof is "Arena scope" in the
+header of `src/emit-accumulate.ts`. fib and treesum have no scope, and main's
+compiler and this one give them byte-identical IR. 15 runs after 2 warm-ups,
+interleaved, two rounds, minimum / median ms:
+
+- **fib(40)**: main 235/240 and 237/240, branch 238/250 and 228/237. No
+  change.
+- **treesum `fn`**: main 242/265 and 242/262, branch 233/248 and 241/254.
+  No change.
+- **treesum `method`**: main 199/211 and 201/212, branch 278/287 and
+  206/290. The binaries are the same program, so the branch's first round is
+  the machine's noise, not the change.
+- **A template per frame** (`digits(10000)`, which builds `` `${n}` `` and
+  adds its length, summed over 2000 calls; the `opt-recursion-arena` cookbook
+  entry's shape), 20 runs of each of two copies of each binary,
+  interleaved: main 226.0 / 221.4 ms median, branch 178.9 / 179.6 ms. The
+  copies of one binary differ by 2 %, and the loop is 20 % faster.
+
+`tests/cases/acc_*` pin the shapes, the four overflow cases, the order of
+effects, the soundness shapes (permuted arguments, a nested split, a panic
+other than overflow while one is pending) and the sums that stay recursion;
+`--no-elision` drops the records, so the soundness differential
+compares each such function with its plain recursive self.
 
 ### `dereferenceable(24)` on array parameters and returns
 

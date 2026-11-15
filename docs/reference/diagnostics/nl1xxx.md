@@ -2,7 +2,7 @@
 
 # NL1xxx\: forbidden syntax
 
-The 63 codes of band 1. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 66 codes of band 1. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL1001
 
@@ -36,7 +36,7 @@ The message of an error contains:
 … (no event loop or promises)
 ```
 
-**Retired**: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that WP49 stage 4 replaced; `await` outside an `async` function is NL2641 now (tests/cases/reject_await)
+**Retired**: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that async functions replaced; `await` outside an `async` function is NL2641 now (tests/cases/reject_await)
 
 ## NL1005
 
@@ -126,7 +126,7 @@ The message of an error contains:
 `async` functions are forbidden in …
 ```
 
-**Retired**: `async` functions are forbidden, the Phase 0 refusal WP49 stage 4 replaced; an async function is checked now, and its rules are NL1063 and NL2639-NL2655 (tests/cases/async_*, tests/cases/reject_async_*)
+**Retired**: `async` functions are forbidden, the Phase 0 refusal async functions replaced; an async function is checked now, and its rules are NL1063 and NL2639-NL2655 (tests/cases/async_*, tests/cases/reject_async_*)
 
 ## NL1016
 
@@ -417,7 +417,7 @@ The message of an error contains:
 Generic type parameters are forbidden in …
 ```
 
-**Retired**: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
+**Retired**: Phase 0's blanket `Generic type parameters are forbidden in ` before the refusal named the kind; the live ones are NL1054 and NL1055
 
 ## NL1046
 
@@ -513,7 +513,7 @@ The message of an error contains:
 Generic type parameters are forbidden on a method in …
 ```
 
-**Retired**: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
+**Retired**: Phase 0's refusal of a type parameter on a method; generic methods compile now, and reject_generic_method now pins type arguments at a method call
 
 ## NL1056
 
@@ -641,4 +641,77 @@ The message of an error contains:
 
 ```text
 Only a top-level function or an arrow may be `async`: a method, a field or a constructor cannot, because a task never keeps a `this`
+```
+
+## NL1064
+
+The message of an error contains:
+
+```text
+…` has no initializer: every member of an enum whose members are strings is given its own string literal
+```
+
+[`nl1064_string_enum_no_initializer.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl1064_string_enum_no_initializer.ts):
+
+```ts
+// A string enum has no numbering to fall back on, so a member without an
+// initializer is refused rather than given a number.
+enum Role {
+  Admin = "admin",
+  Guest,
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal
+```
+
+## NL1065
+
+The message of an error contains:
+
+```text
+An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared
+```
+
+[`nl1065_enum_template_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl1065_enum_template_value.ts):
+
+```ts
+// A member's value is a plain string literal, fixed when the enum is declared.
+enum Role {
+  Admin = `admin`,
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared
+```
+
+## NL1066
+
+The message of an error contains:
+
+```text
+A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared
+```
+
+[`nl1066_string_enum_computed.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl1066_string_enum_computed.ts):
+
+```ts
+// A string enum's values are a table fixed at declaration, so a computed value
+// is refused.
+enum Role {
+  Admin = "admin",
+  Guest = "gu" + "est",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared
 ```

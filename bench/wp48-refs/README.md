@@ -1,12 +1,14 @@
 # Compressed references: one tree, five layouts
 
-The measurements behind
-[docs/wp48-compressed-references.md](../../docs/wp48-compressed-references.md).
+The measurements behind the lean sibling-link layout that
+[docs/AI.md](../../docs/AI.md#a-tree-links-first-child-and-next-sibling)
+recommends for a tree, taken for WP48, which weighed 32-bit compressed
+references and declined to build them.
 Every program builds the same AST-shaped tree (a seeded xorshift picks each
 node's kind and its 2 to 6 children, depth at most 16), then walks it two ways a
 compiler pass does: a recursive visitor from the root, and a parent-pointer
 climb from every leaf to the root. All five print the same checksum, natively
-and under Node. The note's recommendation, accepted on 2026-11-11, is to
+and under Node. WP48's recommendation, accepted on 2026-11-11, was to
 build neither 32-bit design and to write ports in `sibling.ts`'s layout, with
 `columns.ts`'s for hot, closed tables.
 
@@ -18,8 +20,8 @@ build neither 32-bit design and to write ports in `sibling.ts`'s layout, with
 | `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 41 |
 | `columns.ts` | the same five fields, one presized `i32[]` column each | an `i32` index | 20 |
 
-`records.ts` is what a whole-program 32-bit reference mode (Design A in the
-note) would make of `sibling.ts`; `pool.ts` and `columns.ts` are what a
+`records.ts` is what a whole-program 32-bit reference mode (Design A in
+WP48) would make of `sibling.ts`; `pool.ts` and `columns.ts` are what a
 library `Pool` (Design B) can write today. The byte counts are peak RSS over
 the node count at 4,000,000 nodes, so they include the blocks a growing array
 leaves behind in the arena.

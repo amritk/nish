@@ -76,7 +76,7 @@ global too ([`nish:term`](#nishterm-terminal-input)).
 
 **[`nish:unsafe`](../nish-unsafe.md)** exports `uncheckedGet`,
 `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`,
-`readCString`, `readStruct`. They are **reached only through the import**
+`readCString`, `readStruct`, `cErrno`. They are **reached only through the import**
 ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 
 **[`nish:async`](../nish-async.md)** exports `spawn`, `awaitAll`,
@@ -494,8 +494,9 @@ never `readonly` ([wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs
 Two things the language otherwise never does are each a decision about one
 site: reading or writing an element without the bounds check, and letting a
 signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
-and two, `readCString` and `readStruct`, that read a C string or a C struct
-through a pointer nothing proves. A program reaches them only through an import, so every module that
+two, `readCString` and `readStruct`, that read a C string or a C struct
+through a pointer nothing proves, and an eighth, `cErrno`, that reads the
+errno a C call left. A program reaches them only through an import, so every module that
 gives up a check or defines a wrap says so at its top and every site that does
 is a call a reader can find.
 
@@ -508,8 +509,9 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
-| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](declarations.md#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
-| `readStruct(p: CPtr): T` | `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates | `ffi_struct_read`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `readCString(p: CPtr): string` | a NULL test that panics `ffi-null`, then a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](declarations.md#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates; may panic | `ffi_owned_string`, `panics_ffi_read_cstring_null`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
+| `readStruct(p: CPtr): T` | a NULL test that panics `ffi-null`, then `nish_alloc_struct` of the layout's size and one `llvm.memcpy` into it, `T` the `declare class` the context names ([`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)) | read; allocates; may panic | `ffi_struct_read`, `panics_ffi_read_struct_null`; `reject_unsafe_read_struct_context`, `_null`, `_type_args` |
+| `cErrno(): i32` | a `load i32` of `@nish_errno_slot`; naming it brackets every `declare function` call with a zero of errno and a save into the slot ([`cErrno`](declarations.md#cerrno-the-errno-a-c-call-left)) | read | `ffi_errno`, `ffi_errno_threads`; `reject_ffi_errno_arg`, `reject_ffi_errno_import`, `reject_ffi_errno_wasm`, `reject_ffi_errno_global` |
 
 - **The import is required.** The seven are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
@@ -562,10 +564,11 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](semantics-decisions.md#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
-  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
-  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
-  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
+  its pointer for `NULL`, an `ffi-null` site no proof removes
+  (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
+  refuses a call to either in its scope. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -627,9 +630,15 @@ check for the whole vector, `i < len` and `i + N <= len`.
 
 - *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
   the element's address bitcast to `<N x T>*` and one `load` aligned to the
-  lane.
-- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
-  `simd_access_oob_negative`; `reject_simd_lane_type`.
+  lane, with the `!alias.scope`, `!noalias` and `!tbaa` of a scalar element
+  access of the lane type. The check is left out where the bounds proof
+  (`src/bounds.ts`, `judgeVectorAccess`) already knows every lane is in range:
+  `i` non-negative under a guard such as `i <= n - N` or `i + N - 1 < n` on the
+  array's length, or a literal index into an array of known length. A guard one
+  lane short proves nothing, and the access keeps its check.
+- *Tests:* `simd_access`, `simd_access_proven`, `simd_access_alias`,
+  `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`,
+  `simd_access_oob_guard`; `reject_simd_lane_type`.
 
 **`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
 It is a statement.
@@ -3302,6 +3311,7 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `filter(pred)` | arrays | `T[]` |
 | `some(pred)`, `every(pred)` | arrays | `boolean` |
 | `findIndex(pred)` | arrays | `number` |
+| `forEach(f)` | arrays | `void` |
 | `slice(start?, end?)` | arrays | `T[]` |
 | `length` | strings | `number` |
 | `charCodeAt(i)` | strings | `number` |
@@ -3640,15 +3650,30 @@ and parameters (`arr_sort_capture`), under the rule in [Function parameters](dec
 
 ### Callback methods and `slice`
 
-`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
-and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
-a template of `std/array.ts`, which a call of one of those names loads, and the
-callback is a compile-time function parameter, so each callback gets an
-instantiation of its own whose loop calls it directly. `xs.map(f)` and
-`map(xs, f)` with `map` imported from `nish/array` are the same call and
-compile to one instance (`arr_map_template`). The template is picked by the
-callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
-`slice`, `sliceFrom` or `sliceAll` by the argument count.
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`,
+`xs.forEach(f)` and `xs.slice(...)` are lowered as `sort` is: the checker
+rewrites the call to a template of `std/array.ts`, which a call of one of those
+names loads, and the callback is a compile-time function parameter, so each
+callback gets an instantiation of its own whose loop calls it directly.
+`xs.map(f)` and `map(xs, f)` with `map` imported from `nish/array` are the same
+call and compile to one instance (`arr_map_template`). The template is picked by
+the callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`,
+and `slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+`xs.forEach(f)` answers `void`, so its answer cannot be bound
+(`reject_foreach_answer`), and its callback is written to answer nothing: a
+concise body such as `(x) => console.log(x)` or `(x) => ys.push(x)` is a
+statement, and what it computes is dropped. It compiles to a counted loop over
+the array with the callback inlined into its body, as `for...of` does, but the
+loop stops at the length the array had when the call began, as Node does,
+where `for...of` reads the length on every pass. With a callback that does not
+resize the array, `opt -O2` leaves the same instruction count for both: 18 on
+the `walk` function measured in
+[IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#map-and-set-iteration). An arrow argument
+never assigns a name of the function it is written in (NL2586), and a
+`forEach` callback is no exception, so a running total is a `for...of` loop,
+whose body may assign it; the refusal says so (`reject_foreach_capture_sum`):
+`for (const x of xs) { sum += x }`.
 
 The callback takes the element, or the element and its index, as TypeScript
 allows. JavaScript passes a third argument, the array itself; Nish refuses a
@@ -3664,7 +3689,10 @@ Each method walks the array from index 0 and calls the callback once per
 element, in order, up to the length the array had when the call began, as
 `Array.prototype` does; `some`, `every` and `findIndex` stop at the first
 element that decides. A callback that shrinks the array ends the walk at the
-new length, where JavaScript goes on and skips the missing indices. `map` and
+new length, where JavaScript goes on and skips the missing indices. So a
+`forEach` callback that pushes onto its receiver does not visit what it
+pushed, one that stores ahead of the walk is handed the stored value, and one
+that pops stops the walk early, as Node does (`arr_foreach`). `map` and
 `filter` answer a new array, so writing into it does not touch the receiver;
 an element that is an `interface` record is stored inline and copied, so
 `filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
@@ -3697,10 +3725,10 @@ message reads `expected f64`. Neither conversion works in the other mode. An arr
 proof at the call removes, and `--deny-panics` refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
-words, so the two agree on every input; `map`, `filter`, `some`, `every` and
-`findIndex` are the platform's own `Array.prototype` methods there, and an
-answer that holds records inline is copied with the runtime's `copyRecords`,
-as the native `push` copies.
+words, so the two agree on every input; `map`, `filter`, `some`, `every`,
+`findIndex` and `forEach` are the platform's own `Array.prototype` methods
+there, and an answer that holds records inline is copied with the runtime's
+`copyRecords`, as the native `push` copies.
 
 ## Bulk writes: `set` and `fill`
 
@@ -3797,7 +3825,7 @@ whole.
   length the bounds proof holds.
 - **A window into a buffer is `(buf, offset, length)` by convention**, not a
   view type: a second array layout would be one every array path in the emitter
-  has to handle ([wp34-hosting-cs.md](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md) §4 N2).
+  has to handle ([wp34-network-stack.md](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md) §4 N2).
 
 The TypeScript reading ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §2): `fill` is
 **class A** — a `u8[]` is a plain `Array` under Node, and `Array.prototype.fill`
@@ -3820,8 +3848,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
-  passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`,
+  `forEach`, `slice`, passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -4111,17 +4139,43 @@ export const main = (): i32 => {
 ```
 
 - **The members are JavaScript's, less what this version defers.** A `Map` has
-  `size`, `get`, `set`, `has`, `delete` and `clear`; a `Set` has `size`, `add`,
-  `has`, `delete` and `clear`. `set` and `add` answer the receiver, so they
-  chain, and `delete` answers whether the key was there
-  (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
-  `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
+  `size`, `get`, `set`, `has`, `delete`, `clear` and `forEach`; a `Set` has
+  `size`, `add`, `has`, `delete`, `clear` and `forEach`. `set` and `add`
+  answer the receiver, so they chain, and `delete` answers whether the key was
+  there (`tests/cases/map_key_str`, `set_str`). `size` is a read-only
+  `number`: `` `size` of `Map<string, i32>` is read-only ``
+  (`reject_map_size_assign`).
   `get` answers `V | undefined`, which has rules of its own, below.
   `keys()` and `values()` are iterators, and an iterator is only ever the
-  iterable of a `for...of`, below. There is no `entries` or
-  `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`,
-  `reject_map_iter_entries_call`). Everything else in the
+  iterable of a `for...of`, below. There is no `entries`, because a `[key, value]`
+  pair is a two-type tuple (`reject_map_entries`,
+  `reject_map_iter_entries_call`):
+  `m.forEach((value, key) => ...)` visits each key with its value.
+- **`forEach` is the `for...of` walk with the callback inlined.**
+  `m.forEach(f)` on a `Map` calls `f` with each value, and with its key too
+  when `f` is written with two parameters, value first, as JavaScript does;
+  `s.forEach(f)` on a `Set` calls `f` with each element. The checker rewrites
+  the call to a template of `std/collections.ts` (`forEachEntry`,
+  `forEachValue`, `forEachElement`), whose body is the same walk as
+  `for...of` over the table, below: the same insertion order, an entry set
+  during the walk visited and one deleted before the walk reaches it not, and
+  `clear` ending it (`map_foreach`, `set_foreach`). It allocates nothing and
+  looks no key up, where `for (const k of m.keys())` with `m.get(k) ?? 0`
+  calls `Map.probe` and takes the nullish branch once per key, and rewinds
+  the arena on every pass: under `opt -O2`, 92 instructions against 112 for
+  a `Map` and 78 against 89 for a `Set`
+  ([IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#map-and-set-iteration)). JavaScript passes
+  a `Map`'s callback the map as a third argument, and a `Set`'s callback the
+  element twice and the set third; Nish refuses a callback written with more
+  than two parameters on a `Map` (NL2771, `reject_map_foreach_third_param`)
+  or more than one on a `Set` (NL2772, `reject_set_foreach_second_param`),
+  since the receiver is the one the call already names. The callback follows the array callbacks' rules
+  above: a top-level function or an arrow written at the call
+  (`reject_map_foreach`), at least one parameter, an answer of `void`, no
+  assignment to a name of the function around it (NL2586), and `m.forEach`
+  named without a call is refused (`reject_map_foreach_uncalled`). An arrow
+  inside another arrow reads only its own parameters, so a nested walk goes
+  through a top-level function (`set_foreach`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
   `reject_map_internal_method`, `reject_set_set`).
@@ -4481,7 +4535,7 @@ export const main = (): i32 => {
     | anywhere else, a dropped result or an uncalled `m.keys` included | `` can only be the iterable of a `for...of` `` | `reject_map_iter_statement`, `reject_map_iter_uncalled`, `reject_map_values` (NL2358) |
 
     `for (const e of m)` over a `Map` itself would walk `entries()`, whose
-    `[key, value]` pairs need destructuring:
+    `[key, value]` pairs are two-type tuples:
     `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
     rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
     It reports once: the variable is an error that its body reads without a
@@ -4592,6 +4646,7 @@ export const main = (): i32 => {
   | `i32`, `u32`, `i64` | an integer written without a fraction or an exponent, in the type's range | `d.i32()`, `d.u32()`, `d.i64()` | `w.i32`, `w.u32`, `w.i64` |
   | `u64` | an integer written in digits alone, with no sign, fraction or exponent, up to 2^64 - 1 | `d.u64()`, through the tokenizer's `numberU64` | `jsonEncodeU64` |
   | a numeric `enum` `E` | the number of one of `E`'s members | `d.i32()`, then a `switch` over the members' values | `w.i32` |
+  | a [string `enum`](declarations.md#string-enums) `E` | the string of one of `E`'s members | `d.enumString()`, then the string's bytes against the members' strings | `w.string` of the member's string |
   | `f64` (and `number` under `--number-mode f64`) | any number; past the double range an infinity, which the writer writes as `null` | `d.f64()` | `w.f64` |
   | `boolean` | `true`, `false` | `d.boolean()` | `w.boolean` |
   | `string`, `string \| null` | a string, and `null` for the second | `d.string(cur)` | `w.string`, `jsonEncodeStringOrNull` |
@@ -4608,15 +4663,19 @@ export const main = (): i32 => {
   `json_reject_map_value_class`; `i32[][]`, `json_reject_nested_array`, and
   `Level[][]`, `json_reject_enum_nested_array`; a generic class of the
   program's own, `json_reject_generic_field`). The message goes on to name the
-  kinds added since: `` a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
+  kinds added since: `` a `u64` and an enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not ``.
   A JSON object's keys are strings, so a `Map` keyed by anything else is
   refused, an enum included (`json_reject_map_key`, `json_reject_map_key_enum`),
   and so is a map whose values typed JSON cannot write, at any depth
   (`json_reject_map_value`, `json_reject_map_value_nested`). A `Set` and an
   array of maps are refused as well (`json_reject_set_field`,
-  `json_reject_map_array`). An enum whose members are strings, or a mix of
-  strings and numbers, is not one the language declares at all
-  (NL1043, `json_reject_enum_string`, `json_reject_enum_mixed`), and a
+  `json_reject_map_array`). A `Map` keyed by a string enum is refused with
+  the rest (`json_reject_map_key_enum_string`): a map's keys are read and written as `string`s, and a string
+  enum is not one. An enum that mixes strings and numbers is not one the
+  language declares at all (NL1043, `json_reject_enum_mixed`), an enum is
+  never `| null`, numeric or string, so a `Role | null` field is refused where
+  it is written (NL2010, `json_reject_enum_nullable`) while a `Role[] | null`
+  is a field like any other, and a
   `const enum` is refused where it is declared (NL2285,
   `json_reject_const_enum`). A value that is not a declared class is
   `` `jsonEncode`'s value is `Point`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version ``
@@ -4636,7 +4695,7 @@ export const main = (): i32 => {
 
   | Outcome | Code | `errorAt` |
   | --- | --- | --- |
-  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for an enum | `JSON_DECODE_TYPE` (-20) | the value |
+  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object, an integer that is no member's value for a numeric enum, a string that is no member's value, or a value that is not a string, for a string enum | `JSON_DECODE_TYPE` (-20) | the value |
   | a number its field cannot hold: a fraction or an exponent for an integer, or out of range, a negative number (`-0` included) for a `u64` | `JSON_DECODE_RANGE` (-21) | the number |
   | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
@@ -4657,13 +4716,25 @@ export const main = (): i32 => {
   read. After an error every field of `out` holds a value of its type, some
   decoded and some as they were: an enum field or element never holds a
   number that is no member's, because such a number is not stored.
-- **An enum is its number.** A numeric enum is read with `d.i32()`, so a
+- **A numeric enum is its number.** It is read with `d.i32()`, so a
   number that is not an `i32` integer is that field's `JSON_DECODE_RANGE`, and
   an integer that is not the value of one of its members is
   `JSON_DECODE_TYPE`; a member's name, `"High"`, is a string and a type error
   too. Two members of one value are one number (`tests/link/std_json_typed`,
   "enum: two members of one value both read 1"). It is written as `w.i32` of
   its value, as `JSON.stringify` writes a TypeScript numeric enum.
+- **A string enum is its member's string.** It is read with
+  `d.enumString()`, which takes the value as a string without copying it,
+  and its bytes are matched against the members' strings the way a key is
+  sent to its field: by length, then by one byte, then with `keyIs`, so the
+  read allocates nothing, and an escaped string, `"\u0061dmin"`, is the
+  member its unescaped bytes spell. A string that is no member's, a prefix of
+  one included, and a value that is not a string are `JSON_DECODE_TYPE`, and
+  the field or element keeps the member it held. It is written as `w.string`
+  of the member's string, which is what `JSON.stringify` writes for a
+  TypeScript string enum (`tests/link/json_enum_string`;
+  [IR_COOKBOOK.md](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#typed-json)). A field, an array, a
+  `| null` array and a `Map<string, Role>`'s values are read and written so.
 - **A `u64` is exact to 2^64 - 1.** It is read through the tokenizer's
   `numberU64`, so `18446744073709551615` decodes and `18446744073709551616`,
   `-1`, `-0` and `1.5` are `JSON_DECODE_RANGE`. It is written as its digits,
@@ -4810,7 +4881,7 @@ export const main = (): i32 => {
   or the value of `jsonEncode` may be a [discriminated union](types.md#discriminated-unions)
   whose variants are all declared classes, and the union is written as the
   variant's object with its tag key first, the tag's value the name of its
-  enum member:
+  enum member, or for a [string enum](declarations.md#string-enums) the member's string:
 
   ```typescript
   enum Kind { Num, Neg }
@@ -4831,14 +4902,18 @@ export const main = (): i32 => {
   jsonEncode(w, e);                      // the same text back
   ```
 
-  A variant's `tag` option replaces its member's name on the wire, and
+  With `enum Kind { Num = "num", Neg = "neg" }` the same union writes
+  `"kind":"num"`, and `Neg`'s `tag` still writes `"negate"`
+  (`tests/link/json_enum_string`). A variant's `tag` option replaces its
+  member's name or string on the wire, and
   `rename` renames the tag key as it renames any field. Every variant writes
   its tag under one key and as a different string, or the union is refused
   where a call reaches it (NL2721, `json_reject_union_tag_key`; NL2720,
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
   NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
   type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
-  `tag: ""` is the same as no `tag`: the variant writes its member's name. A
+  `tag: ""` is the same as no `tag`: the variant writes its member's name,
+  or string. A
   `tag` on a class that has such a field but that no union holds is not
   refused and does nothing: the class compiles while no JSON call reaches it,
   and one that does refuses the field (below). A variant
@@ -4939,7 +5014,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
-| `unsafe` | the seven `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call") |
+| `unsafe` | the eight `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `readStruct`, `cErrno` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,
@@ -5142,6 +5217,25 @@ without one grants the capability whole, as before:
   `process.spawn=<program>` grant allows, null when none is named:
   `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
   The four-operand call in "The sandbox" below predates it.
+- `process.spawn=exec:<program>` grants the program as `process.spawn=<program>`
+  does, and lets it start others: under `--sandbox` a granted program is held
+  to its own start (no program it starts may exec again), and an `exec:` one
+  is not, so its subtree may run anything the allowlist's EXECUTE reaches, its
+  loaders included. The prefix is read before the program is resolved:
+  `process.spawn=exec:` with no program is NL3046
+  (`caps_dep_manifest_spawn_exec_refused`); the literal check treats
+  `exec:<program>` as `<program>` (`caps_dep_arg_spawn_exec_too_narrow`,
+  `caps_dep_spawn_exec_granted`); a program granted both ways is `exec:`; and
+  the lockfile records the prefix, so adding it is NL2593
+  (`caps_dep_lock_spawn_exec_widened`). The program is
+  listed with three leading slashes, the same file to the kernel. For
+  `tests/link/sandbox_dep_exec_optin`, granted `exec:env` and `true`, on an
+  x86_64 glibc machine (illustrative: the paths, the loader and the length
+  are the machine's; `tests/run.js` pins only the `///` entry for `env`):
+
+  ```llvm
+  @.sandbox.exec = private unnamed_addr constant [78 x i8] c"///usr/bin/env\00/usr/bin/true\00//usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"
+  ```
 
 #### The capability lockfile
 

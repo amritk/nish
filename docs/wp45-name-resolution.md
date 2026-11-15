@@ -19,7 +19,7 @@ for `wasm32`, so only the driver is native. A CNAME chain is cut at 8 queries
 (`docs/LANGUAGE.md:7025`), and `reject_net_unknown_export` pins that
 `dnsLookup` does not exist. The relay maps `localhost` by hand
 (`examples/relay/README.md:99`), and the account service's Postgres and Resend
-calls and the TLS client role (WP34 N13, `docs/wp34-hosting-cs.md:735`) all
+calls and the TLS client role (WP34 N13, `docs/wp34-network-stack.md:735`) all
 need a name. Issue [#479](https://github.com/amritk/nish/issues/479) asks for
 a short note that weighs three shapes and chooses one:
 
@@ -69,7 +69,7 @@ at the link instead. The `wasi` profile is `--target=wasm32-wasi`, WASI
 preview 1 (`scripts/build.sh:433`).
 
 **N9 holds.** State lives in pools sized at start-up, nothing allocates per
-packet, and `Arena.used()` is flat in a soak (`docs/wp34-hosting-cs.md:233-262`);
+packet, and `Arena.used()` is flat in a soak (`docs/wp34-network-stack.md:233-262`);
 `runtime-net.c` allocates nothing and writes only the caller's arrays
 (`runtime/runtime-net.c:22-23`).
 

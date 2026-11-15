@@ -3,8 +3,10 @@
  * and `nish_bytes_skip_json_plain`. Every path the file has for this machine --
  * scalar, base and, when the CPU has it, AVX2 for the first three classes; the
  * plain class has a scalar and a base path only -- answers every class boundary
- * at every block offset, every UTF-8 lead cut short at every byte by `to`, and
- * a seeded, fuzzed corpus exactly as a plain reference loop does, and the
+ * at every block offset, every UTF-8 lead cut short at every byte by `to`, every
+ * well-formed and malformed UTF-8 form at every block offset of text that is
+ * multi-byte UTF-8 around it (where the x86 paths check a block's UTF-8 whole),
+ * and seeded, fuzzed corpora exactly as a plain reference loop does, and the
  * resolver picks the path `NISH_SIMD` and the CPU say it should.
  *
  * The reference is written apart from the kernel: it decodes a sequence's code
@@ -170,6 +172,49 @@ static const struct {
     {4, {0xf4, 0x90, 0x80, 0x80}}, {4, {0xf1, 0x80, 0x80, 0xc0}}, {4, {0xf3, 0xbf, 0xbf, 0xbf}},
 };
 
+/* The forms the x86 paths' block check meets in text that is UTF-8 all the
+   way through, where no ASCII stop stands between one sequence and the next:
+   each class of sequence well formed and at its edges, and each way one breaks
+   -- overlong (C0, C1, E0 below A0, F0 below 90), a surrogate (ED above 9F),
+   past U+10FFFF (F4 above 8F, F5 and up), cut short by a byte that cannot
+   continue it (ASCII, `"`, a lead), a stray or extra continuation. */
+static const struct {
+  uint8_t len, bytes[5];
+} dense_forms[] = {
+    {1, {0x61}}, {2, {0xc2, 0x80}}, {2, {0xdf, 0xbf}}, {3, {0xe0, 0xa0, 0x80}}, {3, {0xed, 0x9f, 0xbf}},
+    {3, {0xee, 0x80, 0x80}}, {3, {0xef, 0xbf, 0xbf}}, {4, {0xf0, 0x90, 0x80, 0x80}}, {4, {0xf4, 0x8f, 0xbf, 0xbf}},
+    {4, {0xf3, 0xbf, 0xbf, 0xbf}},
+    {2, {0xc0, 0x80}}, {2, {0xc1, 0xbf}}, {3, {0xe0, 0x9f, 0xbf}}, {3, {0xe0, 0x80, 0x80}},
+    {4, {0xf0, 0x8f, 0xbf, 0xbf}}, {4, {0xf0, 0x80, 0x80, 0x80}},
+    {3, {0xed, 0xa0, 0x80}}, {3, {0xed, 0xbf, 0xbf}},
+    {4, {0xf4, 0x90, 0x80, 0x80}}, {4, {0xf5, 0x80, 0x80, 0x80}}, {4, {0xf7, 0xbf, 0xbf, 0xbf}}, {1, {0xff}},
+    {2, {0xc3, 0x61}}, {3, {0xe4, 0xb8, 0x61}}, {4, {0xf0, 0x9f, 0x98, 0x61}}, {2, {0xe4, 0x22}},
+    {3, {0xf0, 0x9f, 0x22}}, {3, {0xe4, 0xb8, 0xc3}}, {4, {0xf0, 0x9f, 0x98, 0xf0}}, {2, {0xc3, 0xe4}},
+    {1, {0x80}}, {1, {0xbf}}, {3, {0xc3, 0xa9, 0xa9}}, {5, {0xe2, 0x82, 0xac, 0x80, 0x80}},
+};
+
+/* Well-formed sequences to build dense text from, one of each length and of
+   each lead byte that narrows its second byte. */
+static const struct {
+  uint8_t len, bytes[4];
+} dense_fill[] = {
+    {2, {0xc3, 0xa9}}, {3, {0xe4, 0xb8, 0xad}}, {4, {0xf0, 0x9f, 0x98, 0x80}}, {3, {0xe2, 0x82, 0xac}},
+    {3, {0xe0, 0xa4, 0x85}}, {3, {0xed, 0x95, 0x9c}}, {4, {0xf4, 0x80, 0x80, 0x80}}, {2, {0xd0, 0xb6}},
+};
+
+/* Dense text from `j` to exactly `end`: whole sequences drawn from `rnd`,
+   the last chosen to fit, so no sequence is cut by `end`. */
+static int64_t dense(uint8_t *bytes, int64_t j, int64_t end) {
+  static const uint8_t fit[4][3] = {{0}, {0x61}, {0xc3, 0xa9}, {0xe4, 0xb8, 0xad}};
+  while (end - j >= 4) {
+    size_t f = (size_t)(rnd() % (sizeof dense_fill / sizeof dense_fill[0]));
+    memcpy(bytes + j, dense_fill[f].bytes, dense_fill[f].len);
+    j += dense_fill[f].len;
+  }
+  memcpy(bytes + j, fit[end - j], (size_t)(end - j));
+  return end;
+}
+
 /* The resolver, once per pin, as index-of-any.c checks `nish_any`'s: the first
    call, made through the plain kernel, sets both pointers. */
 static int resolves(const char *pin, nish_run_path want, nish_run_path want_plain, const char *want_name) {
@@ -286,6 +331,54 @@ int main(int argc, char **argv) {
         if (!check(NISH_RUN_TEXT, bytes, 0, len, seed)) return 1;
       }
     }
+  }
+
+  /* Each form of `dense_forms` planted at every offset of two AVX2 blocks and
+     a third's start in text that is multi-byte UTF-8 before and after it, so
+     a block's first stop is a high byte and the x86 paths check the block
+     whole: the planted form meets every block edge, `to` cuts it at every
+     byte, and the run is started at the text's start, at the form and just
+     before it. Each placement is drawn three times over different fill. */
+  for (size_t s = 0; s < sizeof dense_forms / sizeof dense_forms[0]; s++) {
+    for (int64_t at = 0; at < 72; at++) {
+      for (int draw = 0; draw < 3; draw++) {
+        int64_t next = dense(bytes, 0, at) + dense_forms[s].len;
+        memcpy(bytes + at, dense_forms[s].bytes, dense_forms[s].len);
+        int64_t len = dense(bytes, next, next + 70 + draw * 9);
+        if (draw == 1) bytes[len++] = '"';
+        for (int64_t to = at; to <= next + 1 && to <= len; to++) {
+          if (!check(NISH_RUN_TEXT, bytes, 0, to, seed)) return 1;
+        }
+        for (int64_t from = at > 2 ? at - 2 : 0; from <= at; from++) {
+          if (!check(NISH_RUN_TEXT, bytes, from, len, seed)) return 1;
+        }
+        if (!check(NISH_RUN_TEXT, bytes, 0, len, seed)) return 1;
+      }
+    }
+  }
+
+  /* Dense UTF-8 fuzzed: whole sequences with a form of `dense_forms` or a
+     random byte in place of one now and then, over random ranges. */
+  for (int trial = 0; trial < 60000; trial++) {
+    int64_t len = (int64_t)(rnd() % (RUN_MAX - 8));
+    uint64_t rate = 1 + rnd() % 48;
+    int64_t j = 0;
+    while (j < len) {
+      uint64_t r = rnd();
+      if (r % rate != 0) {
+        j = dense(bytes, j, j + 4 < len ? j + 4 : len);
+      } else if (r & 0x100) {
+        size_t s = (size_t)(r >> 16) % (sizeof dense_forms / sizeof dense_forms[0]);
+        memcpy(bytes + j, dense_forms[s].bytes, dense_forms[s].len);
+        j += dense_forms[s].len;
+      } else {
+        bytes[j++] = (uint8_t)(r >> 16);
+      }
+    }
+    len = j;
+    int64_t to = len == 0 ? 0 : (int64_t)(rnd() % (uint64_t)(len + 1));
+    int64_t from = (int64_t)(rnd() % (uint64_t)(to + 1));
+    if (!check(NISH_RUN_TEXT, bytes, from, to, seed) || !check(NISH_RUN_TEXT, bytes, 0, len, seed)) return 1;
   }
 
   /* The fuzzed half: random lengths and ranges over bytes drawn mostly from

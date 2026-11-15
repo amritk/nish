@@ -176,6 +176,55 @@ static inline int64_t nish_run_resume(int cls, const uint8_t *p, int64_t i, int6
 }
 #endif
 
+#if defined(NISH_SIMD_SSE2)
+/* The x86 paths check a text block's UTF-8 a block at a time rather than a
+   sequence at a time, once its first stop is a high byte. A block starts on a
+   sequence boundary, so with each byte `v` beside the three before it in the
+   block (`p1`, `p2`, `p3`, zero before the block's first byte), the block's
+   bytes are well formed exactly where none of these holds:
+
+   - a byte is a continuation (0x80 to 0xbf) where no lead of the three before
+     it reaches it, or is not one where one does: a sequence cut short, a
+     stray continuation or one too many (a lead at 0xc0 reaches one byte on,
+     at 0xe0 two, at 0xf0 three);
+   - the byte is a lead no sequence has: 0xc0 or 0xc1, which only spell an
+     overlong two-byte form, or 0xf5 and up, past U+10FFFF;
+   - it is the second byte of a sequence outside the range its lead narrows it
+     to, the same four `nish_run_utf8` narrows: below 0xa0 after 0xe0 or 0x90
+     after 0xf0 (an overlong form), above 0x9f after 0xed (a surrogate) or
+     0x8f after 0xf4 (past U+10FFFF).
+
+   Each holds at a byte no later than the first stop that follows the bad
+   sequence's lead, so a block whose first ASCII stop has nothing wrong at or
+   before it is well formed up to it. This is compare and shift work alone, in
+   the spirit of Keiser and Lemire's lookup validator ("Validating UTF-8 In
+   Less Than One Instruction Per Byte", 2021) but without its table lookups,
+   which SSE2 has no byte shuffle for, and written here rather than taken from
+   any implementation of it. */
+#define NISH_RUN_BAD(v, p1, p2, p3)                                                                   \
+  (((((p1) >= 0xc0) | ((p2) >= 0xe0) | ((p3) >= 0xf0)) != (((v) & 0xc0) == 0x80)) | (((v) & 0xfe) == 0xc0) | \
+   ((v) >= 0xf5) | (((p1) == 0xe0) & ((v) < 0xa0)) | (((p1) == 0xf0) & ((v) < 0x90)) |                  \
+   (((p1) == 0xed) & ((v) > 0x9f)) | (((p1) == 0xf4) & ((v) > 0x8f)))
+
+typedef uint8_t nish_u8x16 __attribute__((vector_size(16)));
+
+/* How many of the bytes before `e` start a sequence that `e` cuts off, in a
+   block whose UTF-8 is otherwise well formed: the block after starts at its
+   lead. */
+static inline int64_t nish_run_cut(const uint8_t *p, int64_t e) {
+  if (p[e - 1] >= 0xc0) return 1;
+  if (p[e - 2] >= 0xe0) return 2;
+  return p[e - 3] >= 0xf0 ? 3 : 0;
+}
+
+/* The bytes of a 16-byte block that break its UTF-8, as a movemask. */
+static inline unsigned nish_run_bad_sse2(__m128i x) {
+  nish_u8x16 v = (nish_u8x16)x, p1 = (nish_u8x16)_mm_slli_si128(x, 1), p2 = (nish_u8x16)_mm_slli_si128(x, 2),
+             p3 = (nish_u8x16)_mm_slli_si128(x, 3);
+  return (unsigned)_mm_movemask_epi8((__m128i)NISH_RUN_BAD(v, p1, p2, p3));
+}
+#endif
+
 /* Each vector path computes a mask of the block's stops -- the bytes outside
    the class, where for text every byte with its top bit set counts as a stop
    -- and either moves on a whole block or jumps to the first stop. */
@@ -209,19 +258,41 @@ static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to)
   return nish_plain_scalar(cls, p, i, to);
 }
 
-static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
+/* Sixteen bytes a block. With `yield` set, a block with no stop at all ends
+   the walk with `~i`, its start complemented, so the AVX2 path can take back
+   a run that has gone back to ASCII; a run's end is never negative. */
+__attribute__((noinline)) static int64_t nish_run_sse2(int cls, const uint8_t *p, int64_t from, int64_t to, int yield) {
   int64_t i = from;
   while (to - i >= 16) {
-    unsigned m = nish_run_stops_sse2(cls, _mm_loadu_si128((const __m128i *)(p + i)));
+    __m128i v = _mm_loadu_si128((const __m128i *)(p + i));
+    unsigned m = nish_run_stops_sse2(cls, v);
     if (m == 0) {
+      if (yield) return ~i;
       i += 16;
       continue;
     }
     int64_t at = i + __builtin_ctz(m);
+    /* A text block whose first stop is a high byte: its UTF-8 checked whole,
+       up to its first ASCII stop or, with none, to its end less a sequence
+       the end cuts off. Anything wrong goes to the step below, which finds
+       the exact byte. A high byte is never an ASCII stop, so those are the
+       stops less the bytes whose sign bit is set. */
+    if (cls == NISH_RUN_TEXT && p[at] >= 0x80) {
+      unsigned s = m & ~(unsigned)_mm_movemask_epi8(v), bad = nish_run_bad_sse2(v);
+      if (s != 0 && (bad & (s ^ (s - 1))) == 0) return i + __builtin_ctz(s);
+      if (s == 0 && bad == 0) {
+        i += 16 - nish_run_cut(p, i + 16);
+        continue;
+      }
+    }
     i = nish_run_resume(cls, p, at, to);
     if (i == at) return at;
   }
   return nish_run_scalar(cls, p, i, to);
+}
+
+static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
+  return nish_run_sse2(cls, p, from, to, 0);
 }
 
 __attribute__((target("avx2"))) static inline unsigned nish_run_stops_avx2(int cls, __m256i v) {
@@ -242,6 +313,19 @@ __attribute__((target("avx2"))) static inline unsigned nish_run_stops_avx2(int c
   return (unsigned)_mm256_movemask_epi8(_mm256_or_si256(stop, v));
 }
 
+__attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint8_t *p, int64_t from, int64_t to);
+
+/* Past UTF-8 the base path's block check takes the run, text that has one
+   multi-byte sequence tending to have more, until a block of it is ASCII
+   again and the AVX2 path takes it back. Out of line and reached by tail
+   calls both ways, so the ASCII loop saves no registers and the stack does
+   not grow with the number of sequences. */
+__attribute__((noinline, target("avx2"))) static int64_t nish_run_avx2_utf8(int cls, const uint8_t *p, int64_t from, int64_t to) {
+  int64_t i = nish_run_sse2(cls, p, from, to, 1);
+  if (i >= 0) return i;
+  __attribute__((musttail)) return nish_run_avx2(cls, p, ~i, to);
+}
+
 /* Thirty-two bytes a block, then the base path for what is left. */
 __attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint8_t *p, int64_t from, int64_t to) {
   int64_t i = from;
@@ -252,8 +336,8 @@ __attribute__((target("avx2"))) static int64_t nish_run_avx2(int cls, const uint
       continue;
     }
     int64_t at = i + __builtin_ctz(m);
-    i = nish_run_resume(cls, p, at, to);
-    if (i == at) return at;
+    if (cls != NISH_RUN_TEXT || p[at] < 0x80) return at;
+    __attribute__((musttail)) return nish_run_avx2_utf8(cls, p, at, to);
   }
   return nish_run_base(cls, p, i, to);
 }

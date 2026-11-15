@@ -6,16 +6,17 @@
 @.str.1 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c": tag \00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c", count \00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c", name \00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c", ratio \00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"churned \00" }, align 8
-@.str.6 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"kept\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"alias\00" }, align 8
-@.str.8 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"nullable\00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"fresh\00" }, align 8
-@.str.10 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"`readStruct` read a NULL pointer into a `Lconv`\00" }, align 8
-@.str.11 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"decimal point \00" }, align 8
-@.str.12 = private unnamed_addr constant { i64, [24 x i8] } { i64 23, [24 x i8] c", thousands separator \22\00" }, align 8
-@.str.13 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\22\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"`readCString` read a NULL pointer\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c", ratio \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"churned \00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"kept\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"alias\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"nullable\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"fresh\00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"`readStruct` read a NULL pointer into a `Lconv`\00" }, align 8
+@.str.12 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"decimal point \00" }, align 8
+@.str.13 = private unnamed_addr constant { i64, [24 x i8] } { i64 23, [24 x i8] c", thousands separator \22\00" }, align 8
+@.str.14 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\22\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare i8* @samplePtr()
@@ -197,14 +198,22 @@ entry:
   %11 = call i8* @nish_str_concat(i8* %10, i8* bitcast ({ i64, [8 x i8] }* @.str.3 to i8*))
   %12 = getelementptr inbounds %struct.Sample, %struct.Sample* %s, i32 0, i32 2
   %13 = load i8*, i8** %12, align 8
-  %14 = call i8* @nish.ffi.str(i8* %13)
-  %15 = call i8* @nish_str_concat(i8* %11, i8* %14)
-  %16 = call i8* @nish_str_concat(i8* %15, i8* bitcast ({ i64, [9 x i8] }* @.str.4 to i8*))
-  %17 = getelementptr inbounds %struct.Sample, %struct.Sample* %s, i32 0, i32 3
-  %18 = load double, double* %17, align 8
-  %19 = call i8* @nish_str_from_f64(double %18)
-  %20 = call i8* @nish_str_concat(i8* %16, i8* %19)
-  call void @nish_print(i8* %20)
+  %14 = icmp eq i8* %13, null
+  br i1 %14, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.4 to i8*))
+  unreachable
+
+ffi.copy:
+  %15 = call i8* @nish.ffi.str(i8* %13)
+  %16 = call i8* @nish_str_concat(i8* %11, i8* %15)
+  %17 = call i8* @nish_str_concat(i8* %16, i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*))
+  %18 = getelementptr inbounds %struct.Sample, %struct.Sample* %s, i32 0, i32 3
+  %19 = load double, double* %18, align 8
+  %20 = call i8* @nish_str_from_f64(double %19)
+  %21 = call i8* @nish_str_concat(i8* %17, i8* %20)
+  call void @nish_print(i8* %21)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 }
@@ -247,20 +256,20 @@ ffi.copy.1:
   store %struct.Sample* %8, %struct.Sample** %maybe.addr, align 8
   %9 = call i64 @churn()
   %10 = call i8* @nish_str_from_i64(i64 %9)
-  %11 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*), i8* %10)
+  %11 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.6 to i8*), i8* %10)
   call void @nish_print(i8* %11)
   call void @overwriteSample()
   %12 = load %struct.Sample*, %struct.Sample** %kept.addr, align 8
-  call void @show(i8* bitcast ({ i64, [5 x i8] }* @.str.6 to i8*), %struct.Sample* %12)
+  call void @show(i8* bitcast ({ i64, [5 x i8] }* @.str.7 to i8*), %struct.Sample* %12)
   %13 = load %struct.Sample*, %struct.Sample** %alias.addr, align 8
-  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.7 to i8*), %struct.Sample* %13)
+  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*), %struct.Sample* %13)
   %14 = load %struct.Sample*, %struct.Sample** %maybe.addr, align 8
   %15 = icmp ne %struct.Sample* %14, null
   br i1 %15, label %if.then, label %if.end
 
 if.then:
   %16 = load %struct.Sample*, %struct.Sample** %maybe.addr, align 8
-  call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.8 to i8*), %struct.Sample* %16)
+  call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.9 to i8*), %struct.Sample* %16)
   br label %if.end
 
 if.end:
@@ -276,13 +285,13 @@ ffi.copy.2:
   %19 = call i8* @nish_alloc_struct(i64 32)
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %19, i8* align 1 %17, i64 32, i1 false)
   %20 = bitcast i8* %19 to %struct.Sample*
-  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.9 to i8*), %struct.Sample* %20)
+  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.10 to i8*), %struct.Sample* %20)
   %21 = call i8* @localeconv()
   %22 = icmp eq i8* %21, null
   br i1 %22, label %ffi.null.3, label %ffi.copy.3
 
 ffi.null.3:
-  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.10 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.11 to i8*))
   unreachable
 
 ffi.copy.3:
@@ -293,16 +302,32 @@ ffi.copy.3:
   %25 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
   %26 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %25, i32 0, i32 0
   %27 = load i8*, i8** %26, align 8
-  %28 = call i8* @nish.ffi.str(i8* %27)
-  %29 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.11 to i8*), i8* %28)
-  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [24 x i8] }* @.str.12 to i8*))
-  %31 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
-  %32 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %31, i32 0, i32 1
-  %33 = load i8*, i8** %32, align 8
-  %34 = call i8* @nish.ffi.str(i8* %33)
-  %35 = call i8* @nish_str_concat(i8* %30, i8* %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.13 to i8*))
-  call void @nish_print(i8* %36)
+  %28 = icmp eq i8* %27, null
+  br i1 %28, label %ffi.null.4, label %ffi.copy.4
+
+ffi.null.4:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.4 to i8*))
+  unreachable
+
+ffi.copy.4:
+  %29 = call i8* @nish.ffi.str(i8* %27)
+  %30 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.12 to i8*), i8* %29)
+  %31 = call i8* @nish_str_concat(i8* %30, i8* bitcast ({ i64, [24 x i8] }* @.str.13 to i8*))
+  %32 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %33 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %32, i32 0, i32 1
+  %34 = load i8*, i8** %33, align 8
+  %35 = icmp eq i8* %34, null
+  br i1 %35, label %ffi.null.5, label %ffi.copy.5
+
+ffi.null.5:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.4 to i8*))
+  unreachable
+
+ffi.copy.5:
+  %36 = call i8* @nish.ffi.str(i8* %34)
+  %37 = call i8* @nish_str_concat(i8* %31, i8* %36)
+  %38 = call i8* @nish_str_concat(i8* %37, i8* bitcast ({ i64, [2 x i8] }* @.str.14 to i8*))
+  call void @nish_print(i8* %38)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

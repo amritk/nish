@@ -1,5 +1,5 @@
 // NL2328: a type argument that does not satisfy its parameter's constraint
-// (WP18 §8 message 1), here a class constraint. Nothing but `Counter` itself
+// here a class constraint. Nothing but `Counter` itself
 // satisfies `T extends Counter`, because a class can only `implements` an
 // interface, so the fix names the class.
 class Counter {

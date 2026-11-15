@@ -27,32 +27,7 @@ import { numericLiteralValue } from "./constants"
 import { isIdentifierBuiltinCall } from "./emit-builtins"
 import { dottedName, isPushCall, unwrapParens } from "./emit-util"
 import { isAsciiText } from "./strings"
-import {
-  FLAG_PREFIX,
-  N_ARRAY,
-  N_ARROW,
-  N_BINARY,
-  N_CALL,
-  N_CONDITIONAL,
-  N_DO,
-  N_FOR,
-  N_IDENT,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_NEW,
-  N_NUMBER,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_STRING,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_UNARY,
-  N_VAR_DECL,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { FLAG_PREFIX, Node, NodeKind } from "./nodes"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
 import { isMapEntry, parallelBodyOf, parallelRoleOf } from "./parallel"
 import { FunctionSig, PAR_FROM, PAR_MAP, PAR_MAP_NEW, PAR_NONE, PAR_REDUCE } from "./program"
@@ -293,7 +268,7 @@ class Relay {
   /** The callee as the caller spells it: `f`, `o.m`, or `new C`. */
   name(): string {
     const callee = this.trail.walk.textOf(this.call.children[0])
-    return this.call.kind === N_NEW ? `new ${callee}` : callee
+    return this.call.kind === NodeKind.New ? `new ${callee}` : callee
   }
 }
 
@@ -302,14 +277,14 @@ const isString = (walk: PortabilityWalk, node: Node): boolean => walk.program.no
 
 /** Which kind of UTF-8 number `node` answers, if it is a source at all. */
 const sourceKind = (walk: PortabilityWalk, node: Node): i32 => {
-  if (node.kind === N_MEMBER && node.text === "length" && isString(walk, node.children[0])) {
+  if (node.kind === NodeKind.Member && node.text === "length" && isString(walk, node.children[0])) {
     return OFFSET
   }
-  if (node.kind !== N_CALL) {
+  if (node.kind !== NodeKind.Call) {
     return NOT_A_SOURCE
   }
   const callee = unwrapParens(node.children[0])
-  if (callee.kind !== N_MEMBER || !isString(walk, callee.children[0])) {
+  if (callee.kind !== NodeKind.Member || !isString(walk, callee.children[0])) {
     return NOT_A_SOURCE
   }
   if (callee.text === "charCodeAt") {
@@ -328,7 +303,7 @@ const sourceKind = (walk: PortabilityWalk, node: Node): i32 => {
  * still is: the step is no fact, but the printed offset is.
  */
 const needleSpan = (walk: PortabilityWalk, source: Node): f64 => {
-  if (source.kind !== N_CALL || source.children[1].children.length === 0) {
+  if (source.kind !== NodeKind.Call || source.children[1].children.length === 0) {
     return 0
   }
   const method = unwrapParens(source.children[0]).text
@@ -341,7 +316,7 @@ const needleSpan = (walk: PortabilityWalk, source: Node): f64 => {
 
 /** The string a source counts in: the receiver of its `.length` or its call. */
 const sourceReceiver = (source: Node): Node =>
-  source.kind === N_MEMBER ? source.children[0] : unwrapParens(source.children[0]).children[0]
+  source.kind === NodeKind.Member ? source.children[0] : unwrapParens(source.children[0]).children[0]
 
 /**
  * Whether every string `expr` can be is ASCII, by induction over what the
@@ -358,14 +333,14 @@ const sourceReceiver = (source: Node): Node =>
  */
 const isProvablyAscii = (walk: PortabilityWalk, expr: Node, assumed: Local[]): boolean => {
   const e = unwrapParens(expr)
-  if (e.kind === N_STRING) {
+  if (e.kind === NodeKind.String) {
     return isAsciiText(e.text)
   }
-  if (e.kind === N_TEMPLATE) {
+  if (e.kind === NodeKind.Template) {
     for (const part of e.children) {
       const type = walk.program.nodeTypes[part.id]
       const ascii =
-        part.kind === N_TEMPLATE_TEXT
+        part.kind === NodeKind.TemplateText
           ? isAsciiText(part.text)
           : isNumeric(type) || type === T_BOOL || isProvablyAscii(walk, part, assumed)
       if (!ascii) {
@@ -374,13 +349,13 @@ const isProvablyAscii = (walk: PortabilityWalk, expr: Node, assumed: Local[]): b
     }
     return true
   }
-  if (e.kind === N_BINARY && e.text === "+") {
+  if (e.kind === NodeKind.Binary && e.text === "+") {
     return isProvablyAscii(walk, e.children[0], assumed) && isProvablyAscii(walk, e.children[1], assumed)
   }
-  if (e.kind === N_CONDITIONAL) {
+  if (e.kind === NodeKind.Conditional) {
     return isProvablyAscii(walk, e.children[1], assumed) && isProvablyAscii(walk, e.children[2], assumed)
   }
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return false
   }
   if (walk.program.nodeConstants[e.id] !== null) {
@@ -433,7 +408,7 @@ const hostWritesOf = (walk: PortabilityWalk, local: Local, writes: Node[]): bool
  */
 const parameterIndex = (walk: PortabilityWalk, expr: Node): i32 => {
   const e = unwrapParens(expr)
-  const local: Local | null = e.kind === N_IDENT ? walk.program.nodeLocals[e.id] : null
+  const local: Local | null = e.kind === NodeKind.Ident ? walk.program.nodeLocals[e.id] : null
   const writes: Node[] = []
   if (local === null || local.storage !== STORAGE_PARAM || local.captureOf !== null) {
     return -1
@@ -454,7 +429,7 @@ const parameterIndex = (walk: PortabilityWalk, expr: Node): i32 => {
 
 /**
  * Every value written to `local` under `node`, in source order: its
- * initialiser (`N_EMPTY` when it has none) and the right of each `=`. A
+ * initialiser (`NodeKind.Empty` when it has none) and the right of each `=`. A
  * string takes no compound assignment, so there is no other way to write one,
  * and a number's `+=` or `++` leaves an offset an offset. Answers whether the
  * declaration was among them, which a parameter's is not: its first value
@@ -462,12 +437,12 @@ const parameterIndex = (walk: PortabilityWalk, expr: Node): i32 => {
  */
 const writesOf = (walk: PortabilityWalk, node: Node, local: Local, writes: Node[]): boolean => {
   let declared = false
-  if (node.kind === N_VAR_DECL && names(walk, node, local)) {
+  if (node.kind === NodeKind.VarDecl && names(walk, node, local)) {
     writes.push(node.children[2])
     declared = true
-  } else if (node.kind === N_BINARY && node.text === "=") {
+  } else if (node.kind === NodeKind.Binary && node.text === "=") {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_IDENT && names(walk, target, local)) {
+    if (target.kind === NodeKind.Ident && names(walk, target, local)) {
       writes.push(node.children[1])
     }
   }
@@ -496,10 +471,10 @@ const asciiConstant = (walk: PortabilityWalk, ident: Node): string | null => {
  */
 const asciiValue = (walk: PortabilityWalk, expr: Node): string | null => {
   const e = unwrapParens(expr)
-  if (e.kind === N_STRING) {
+  if (e.kind === NodeKind.String) {
     return isAsciiText(e.text) ? e.text : null
   }
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return null
   }
   if (walk.program.nodeConstants[e.id] !== null) {
@@ -537,21 +512,24 @@ const followFrom = (trail: Trail, value: Node, from: Node, holder: Local | null)
     if (parent === null) {
       return
     }
-    if (parent.kind === N_ARROW) {
+    if (parent.kind === NodeKind.Arrow) {
       // A concise arrow body inside this one: the value is the arrow's answer.
       followOutOfArrow(trail, parent, value, holder)
       return
     }
-    if (parent.kind === N_PAREN || (parent.kind === N_CONDITIONAL && at !== parent.children[0])) {
+    if (
+      parent.kind === NodeKind.Paren ||
+      (parent.kind === NodeKind.Conditional && at !== parent.children[0])
+    ) {
       at = parent
-    } else if (parent.kind === N_LIST) {
+    } else if (parent.kind === NodeKind.List) {
       // An argument: its list's parent is the call it is handed to.
       const call = walk.parents.parentOf(parent)
-      if (call !== null && call.kind === N_NEW && call.children[2] === parent) {
+      if (call !== null && call.kind === NodeKind.New && call.children[2] === parent) {
         followIntoParameter(trail, call, at, value, holder)
         return
       }
-      if (call === null || call.kind !== N_CALL || call.children[1] !== parent) {
+      if (call === null || call.kind !== NodeKind.Call || call.children[1] !== parent) {
         return
       }
       if (!isConversion(walk, call)) {
@@ -559,7 +537,7 @@ const followFrom = (trail: Trail, value: Node, from: Node, holder: Local | null)
         return
       }
       at = call
-    } else if (parent.kind === N_BINARY) {
+    } else if (parent.kind === NodeKind.Binary) {
       if (!stepped && isNeedleStep(trail, parent)) {
         // One step inside the match is still an offset, and it is followed
         // on to wherever it goes; it is only the literal that is no fact.
@@ -571,7 +549,7 @@ const followFrom = (trail: Trail, value: Node, from: Node, holder: Local | null)
         return
       }
       at = parent
-    } else if (parent.kind === N_INDEX) {
+    } else if (parent.kind === NodeKind.Index) {
       // Only an array can be indexed, so the index picks an element.
       if (at === parent.children[1]) {
         trail.report(value, holder, "and it indexes an array")
@@ -593,13 +571,13 @@ const followFrom = (trail: Trail, value: Node, from: Node, holder: Local | null)
 const followIntoCall = (trail: Trail, call: Node, arg: Node, value: Node, holder: Local | null): void => {
   const walk = trail.walk
   const callee = unwrapParens(call.children[0])
-  const name = callee.kind === N_MEMBER ? dottedName(callee) : ""
+  const name = callee.kind === NodeKind.Member ? dottedName(callee) : ""
   const sig = walk.program.nodeCallees[call.id]
   if ((name === "console.log" || name === "console.error") && sig === null) {
     trail.report(value, holder, "and it is printed")
     return
   }
-  if (callee.kind === N_MEMBER && isPushCall(walk.program, walk.table, call)) {
+  if (callee.kind === NodeKind.Member && isPushCall(walk.program, walk.table, call)) {
     trail.report(value, holder, "and it is stored in an array")
     return
   }
@@ -652,7 +630,7 @@ const followIntoParameter = (
   const walk = trail.walk
   const program = walk.program
   const sig =
-    call.kind === N_NEW
+    call.kind === NodeKind.New
       ? constructorOf(program, walk.table, program.nodeTypes[call.id])
       : program.nodeCallees[call.id]
   if (sig === null || !isFollowable(walk, sig) || trail.depth >= MAX_DEPTH) {
@@ -660,7 +638,7 @@ const followIntoParameter = (
   }
   const names = sig.paramNames
   const index =
-    argumentIndex(call.kind === N_NEW ? call.children[2] : call.children[1], arg) +
+    argumentIndex(call.kind === NodeKind.New ? call.children[2] : call.children[1], arg) +
     (names.length > 0 && names[0] === "this" ? 1 : 0)
   const body = sig.body()
   if (index < 0 || index >= names.length || body === null) {
@@ -679,7 +657,7 @@ const followIntoParameter = (
 
 /** The parameter `name` of the function `walk` is over, as a read of it under `node` binds it, or `null` if nothing reads it. */
 const parameterLocal = (walk: PortabilityWalk, node: Node, name: string): Local | null => {
-  if (node.kind === N_IDENT && node.text === name) {
+  if (node.kind === NodeKind.Ident && node.text === name) {
     const local = walk.program.nodeLocals[node.id]
     if (
       local !== null &&
@@ -760,10 +738,10 @@ const followIntoCallers = (trail: Trail, value: Node, holder: Local | null): voi
 
 /** The calls under `node` that run the function `walk` is over, directly or as a data-parallel body; an arrow under `node` is a function of its own. */
 const callsOf = (walk: PortabilityWalk, node: Node, calls: Node[]): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  const callee: FunctionSig | null = node.kind === N_CALL ? walk.program.nodeCallees[node.id] : null
+  const callee: FunctionSig | null = node.kind === NodeKind.Call ? walk.program.nodeCallees[node.id] : null
   if (callee !== null && (callee === walk.sig || runsAsBody(callee, walk.sig))) {
     calls.push(node)
   }
@@ -904,14 +882,14 @@ const loopOf = (walk: PortabilityWalk, comparison: Node): Node | null => {
       return null
     }
     const climbs =
-      parent.kind === N_PAREN ||
-      (parent.kind === N_UNARY && parent.text === "!") ||
-      (parent.kind === N_BINARY && (parent.text === "&&" || parent.text === "||"))
+      parent.kind === NodeKind.Paren ||
+      (parent.kind === NodeKind.Unary && parent.text === "!") ||
+      (parent.kind === NodeKind.Binary && (parent.text === "&&" || parent.text === "||"))
     if (!climbs) {
       const isCondition =
-        (parent.kind === N_WHILE && parent.children[0] === at) ||
-        (parent.kind === N_DO && parent.children[1] === at) ||
-        (parent.kind === N_FOR && parent.children[1] === at)
+        (parent.kind === NodeKind.While && parent.children[0] === at) ||
+        (parent.kind === NodeKind.Do && parent.children[1] === at) ||
+        (parent.kind === NodeKind.For && parent.children[1] === at)
       return isCondition ? parent : null
     }
     at = parent
@@ -931,7 +909,7 @@ const loopOf = (walk: PortabilityWalk, comparison: Node): Node | null => {
  */
 const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | null): boolean => {
   let e = unwrapParens(expr)
-  while (e.kind === N_BINARY && (e.text === "+" || e.text === "-")) {
+  while (e.kind === NodeKind.Binary && (e.text === "+" || e.text === "-")) {
     if (isNumberLiteral(walk, e.children[1])) {
       e = unwrapParens(e.children[0])
     } else if (e.text === "+" && isNumberLiteral(walk, e.children[0])) {
@@ -940,7 +918,7 @@ const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | n
       break
     }
   }
-  const local: Local | null = e.kind === N_IDENT ? sourceLocal(walk.program.nodeLocals[e.id]) : null
+  const local: Local | null = e.kind === NodeKind.Ident ? sourceLocal(walk.program.nodeLocals[e.id]) : null
   if (local === null) {
     return false
   }
@@ -951,7 +929,7 @@ const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | n
     let parent = walk.parents.parentOf(at)
     while (
       parent !== null &&
-      (parent.kind === N_PAREN || (parent.kind === N_BINARY && isArithmetic(parent.text)))
+      (parent.kind === NodeKind.Paren || (parent.kind === NodeKind.Binary && isArithmetic(parent.text)))
     ) {
       at = parent
       parent = walk.parents.parentOf(at)
@@ -959,11 +937,11 @@ const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | n
     if (parent === null) {
       continue
     }
-    const call: Node | null = parent.kind === N_LIST ? walk.parents.parentOf(parent) : null
-    if (call !== null && call.kind === N_CALL && call.children[1] === parent) {
+    const call: Node | null = parent.kind === NodeKind.List ? walk.parents.parentOf(parent) : null
+    if (call !== null && call.kind === NodeKind.Call && call.children[1] === parent) {
       const callee = unwrapParens(call.children[0])
       if (
-        callee.kind === N_MEMBER &&
+        callee.kind === NodeKind.Member &&
         isString(walk, callee.children[0]) &&
         isSameString(walk, callee.children[0], bound)
       ) {
@@ -985,7 +963,7 @@ const isSameString = (walk: PortabilityWalk, receiver: Node, bound: Node | null)
   }
   const a = unwrapParens(receiver)
   const b = unwrapParens(bound)
-  if (a.kind === N_IDENT && b.kind === N_IDENT) {
+  if (a.kind === NodeKind.Ident && b.kind === NodeKind.Ident) {
     const local = sourceLocal(walk.program.nodeLocals[a.id])
     const other = sourceLocal(walk.program.nodeLocals[b.id])
     if (local !== null && other !== null) {
@@ -998,9 +976,9 @@ const isSameString = (walk: PortabilityWalk, receiver: Node, bound: Node | null)
 /** `value` is stored at `target`: a field or an element is outside, a local is followed. */
 const storeInto = (trail: Trail, target: Node, value: Node, holder: Local | null): void => {
   const place = unwrapParens(target)
-  if (place.kind === N_MEMBER) {
+  if (place.kind === NodeKind.Member) {
     trail.report(value, holder, "and it is stored in a field")
-  } else if (place.kind === N_IDENT) {
+  } else if (place.kind === NodeKind.Ident) {
     followLocal(trail, trail.walk.program.nodeLocals[place.id])
   } else {
     trail.report(value, holder, "and it is stored in an array")
@@ -1009,20 +987,20 @@ const storeInto = (trail: Trail, target: Node, value: Node, holder: Local | null
 
 /** The value has reached a node that is not an expression it flows through. */
 const followIntoPlace = (trail: Trail, parent: Node, at: Node, value: Node, holder: Local | null): void => {
-  if (parent.kind === N_TEMPLATE) {
+  if (parent.kind === NodeKind.Template) {
     trail.report(value, holder, "and it is printed into a template")
-  } else if (parent.kind === N_RETURN) {
+  } else if (parent.kind === NodeKind.Return) {
     const arrow = enclosingArrow(trail.walk, parent)
     if (arrow !== null) {
       followOutOfArrow(trail, arrow, value, holder)
     } else {
       followOutOfFunction(trail, value, holder)
     }
-  } else if (parent.kind === N_ARRAY) {
+  } else if (parent.kind === NodeKind.Array) {
     trail.report(value, holder, "and it is stored in an array")
-  } else if (parent.kind === N_PROPERTY) {
+  } else if (parent.kind === NodeKind.Property) {
     trail.report(value, holder, "and it is stored in a field")
-  } else if (parent.kind === N_VAR_DECL && at === parent.children[2]) {
+  } else if (parent.kind === NodeKind.VarDecl && at === parent.children[2]) {
     followLocal(trail, trail.walk.program.nodeLocals[parent.id])
   }
 }
@@ -1035,7 +1013,7 @@ const followIntoPlace = (trail: Trail, parent: Node, at: Node, value: Node, hold
 const enclosingArrow = (walk: PortabilityWalk, node: Node): Node | null => {
   let at = walk.parents.parentOf(node)
   while (at !== null && at !== walk.body) {
-    if (at.kind === N_ARROW) {
+    if (at.kind === NodeKind.Arrow) {
       return at
     }
     at = walk.parents.parentOf(at)
@@ -1054,7 +1032,7 @@ const followOutOfArrow = (trail: Trail, arrow: Node, value: Node, holder: Local 
   const walk = trail.walk
   const list = walk.parents.parentOf(arrow)
   const call: Node | null = list === null ? null : walk.parents.parentOf(list)
-  if (call === null || call.kind !== N_CALL) {
+  if (call === null || call.kind !== NodeKind.Call) {
     return
   }
   const sig = walk.program.nodeCallees[call.id]
@@ -1099,9 +1077,14 @@ const names = (walk: PortabilityWalk, node: Node, local: Local): boolean => {
 
 /** The identifiers under `node` that read `local`, in source order; the target of a plain `=` is not one. */
 const readsOf = (walk: PortabilityWalk, node: Node, local: Local, reads: Node[]): void => {
-  if (node.kind === N_IDENT && names(walk, node, local)) {
+  if (node.kind === NodeKind.Ident && names(walk, node, local)) {
     const parent = walk.parents.parentOf(node)
-    if (parent === null || parent.kind !== N_BINARY || parent.text !== "=" || parent.children[0] !== node) {
+    if (
+      parent === null ||
+      parent.kind !== NodeKind.Binary ||
+      parent.text !== "=" ||
+      parent.children[0] !== node
+    ) {
       reads.push(node)
     }
     return
@@ -1124,10 +1107,11 @@ const holdsOffset = (walk: PortabilityWalk, expr: Node, throughLocals: boolean):
   if (sourceKind(walk, e) === OFFSET) {
     return true
   }
-  if (e.kind === N_BINARY && isArithmetic(e.text)) {
+  if (e.kind === NodeKind.Binary && isArithmetic(e.text)) {
     return holdsOffset(walk, e.children[0], throughLocals) || holdsOffset(walk, e.children[1], throughLocals)
   }
-  const local: Local | null = e.kind === N_IDENT && throughLocals ? walk.program.nodeLocals[e.id] : null
+  const local: Local | null =
+    e.kind === NodeKind.Ident && throughLocals ? walk.program.nodeLocals[e.id] : null
   if (local === null) {
     return false
   }
@@ -1168,13 +1152,13 @@ const meetsLiteral = (kind: i32, value: f64): boolean => {
 /** A number literal, a signed one, or a module constant of a number type. */
 const isNumberLiteral = (walk: PortabilityWalk, expr: Node): boolean => {
   const e = unwrapParens(expr)
-  if (e.kind === N_NUMBER) {
+  if (e.kind === NodeKind.Number) {
     return true
   }
-  if (e.kind === N_UNARY && e.flags === FLAG_PREFIX && (e.text === "-" || e.text === "+")) {
+  if (e.kind === NodeKind.Unary && e.flags === FLAG_PREFIX && (e.text === "-" || e.text === "+")) {
     return isNumberLiteral(walk, e.children[0])
   }
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return false
   }
   const constant = walk.program.nodeConstants[e.id]
@@ -1184,10 +1168,10 @@ const isNumberLiteral = (walk: PortabilityWalk, expr: Node): boolean => {
 /** The value of an expression `isNumberLiteral` accepted. */
 const numberValue = (walk: PortabilityWalk, expr: Node): f64 => {
   const e = unwrapParens(expr)
-  if (e.kind === N_NUMBER) {
+  if (e.kind === NodeKind.Number) {
     return numericLiteralValue(e.text)
   }
-  if (e.kind === N_UNARY) {
+  if (e.kind === NodeKind.Unary) {
     const operand = numberValue(walk, e.children[0])
     return e.text === "-" ? -operand : operand
   }
@@ -1208,11 +1192,11 @@ const isEntryMain = (walk: PortabilityWalk): boolean => {
 
 /** `s.slice(...)` with a bound TypeScript would clamp or count from the end, where this panics. */
 const sliceFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
-  if (node.kind !== N_CALL) {
+  if (node.kind !== NodeKind.Call) {
     return
   }
   const callee = unwrapParens(node.children[0])
-  if (callee.kind !== N_MEMBER || callee.text !== "slice" || !isString(walk, callee.children[0])) {
+  if (callee.kind !== NodeKind.Member || callee.text !== "slice" || !isString(walk, callee.children[0])) {
     return
   }
   // The first bound TypeScript would treat differently, found before any
@@ -1244,7 +1228,7 @@ const sliceFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding
   const receiver = walk.textOf(callee.children[0])
   const literal = unwrapParens(found)
   const spelled =
-    literal.kind === N_UNARY && literal.text === "-"
+    literal.kind === NodeKind.Unary && literal.text === "-"
       ? `${receiver}.length - ${walk.textOf(literal.children[0])}`
       : `${receiver}.length + ${text}`
   out.push(
