@@ -1,0 +1,1 @@
+main.ts:3:23: error: Package `pkg_loose` asks for the compatibility dialect, which the root package's `compat` does not allow: a program is compiled in its root package's dialect, so `pkg_loose` cannot be part of this one until the root's `package.json` allows it in `nish.compat` (or the build passes `--compat`)

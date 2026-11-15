@@ -115,7 +115,7 @@ const advertisedFlags = (): string[] => [
   "--deny-retention",
   "--emit-arena",
   "--explain-memory",
-  "--compat",
+  "--compat[=<feature>,...]",
   "--target",
   "--cpu",
   "--profile",

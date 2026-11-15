@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 19 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 20 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -529,4 +529,12 @@ export const labels = (rows: i32): i32 => {
 
 ```text
 `relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line 6, where this analysis does not prove it dead when the function returns (a local assigned more than once, or an array of its own). Give each value its own `const`, open a block with `using a = arena()` around the work, or keep what must outlive the call in a region
+```
+
+## NL9020
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…beside the compatibility dialect: a bare `number` is the 32-bit integer
 ```

@@ -1,0 +1,7 @@
+{
+  "name": "compat-manifest-unknown-feature",
+  "private": true,
+  "nish": {
+    "compat": ["asnyc"]
+  }
+}
