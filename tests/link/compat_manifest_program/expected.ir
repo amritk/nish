@@ -1,0 +1,3 @@
+!nish.compat = !{
+= !{!"f64"}
+double @pkg_loose.half(double noundef %n)

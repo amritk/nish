@@ -1287,6 +1287,27 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // WP28 C0: `nish.compat` and the `!nish.compat` metadata are new, so the
+  // 0.39.0 seed refuses the key, reads no dependency's `nish` field, and
+  // writes no dialect into the IR of a `--compat` build.
+  {
+    program: "tests/cases/perf_compat_number_i32.ts",
+    file: "perf_compat_number_i32.ll",
+    changelog: "nish.compat and the dialect in the IR",
+    why: "the case is compiled with --compat, so the candidate names the dialect in a `!nish.compat` named metadata node, which the 0.39.0 seed does not write, and the module's metadata after it is renumbered",
+  },
+  {
+    program: "tests/link/compat_manifest_program/main.ts",
+    file: "exit",
+    changelog: "nish.compat and the dialect in the IR",
+    why: "the root package.json writes nish.compat, which the 0.39.0 seed refuses as no key of the nish field, so only the candidate compiles it",
+  },
+  {
+    program: "tests/link/compat_ceiling_dialect/main.ts",
+    file: "exit",
+    changelog: "nish.compat and the dialect in the IR",
+    why: "a dependency's package.json asks for the compatibility dialect and the strict root does not allow it, which the candidate refuses with NL3057; the 0.39.0 seed reads no dependency's nish field, so only the reference compiles it",
+  },
   {
     changelog: "internal work-package references from diagnostics and generated files",
     why: "generated comments in async .ll, interop headers, N-API sidecars and wasm loaders no longer name a work package",
