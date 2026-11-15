@@ -384,7 +384,9 @@ worker, before any worker starts: worker `k` takes its own with
 `preforkListener(process.argv)` and accepts from it, and gets the same one
 back after a restart. `listenHost`, `listenBacklog` and `listenFlags` (`0`, or
 `2` for `TCP_NODELAY`) shape them; port `0` picks a free port for the whole
-group.
+group, and with `listenUdp` one that no UDP or TCP socket holds, so two
+groups on port `0` never share a port and never receive each other's
+datagrams.
 
 Add `pin = true` and worker `k` also pins itself to CPU `k`
 (`setCpuAffinity`), and on Linux the listeners steer each connection to the

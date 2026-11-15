@@ -21,7 +21,8 @@
 //      the restarted worker 1, and worker 0's client finishes a request;
 //   6. (row 6) a Retry from worker 1 brings the retried Initial back to it;
 //   7. (row 8) three light workers, worker 1 killed: byte 0 = 1 reaches the
-//      new worker 1, never worker 2;
+//      new worker 1, never worker 2; then, with thousands of reuseport
+//      sockets held, a group on port 0 never binds one of their ports;
 //   8. (row 12) `NISH_WORKERS=256` panics in the supervisor before any bind
 //      or fork; 255 starts, and byte 0 = 254 reaches worker 254;
 //   9. (row 14) `NISH_WORKERS=1` runs one worker whose count is 1.
@@ -68,6 +69,9 @@ const ascii = (text: string): u8[] => {
   }
   return out;
 };
+
+/** How many reuseport UDP sockets the port-0 row holds, on as many ports. */
+const HELD: i32 = 4000;
 
 /** Wait `ms` milliseconds. */
 const pause = (ms: i32): void => {
@@ -456,6 +460,35 @@ const lightGroups = (t: Suite, board: Board): void => {
   }
   t.ok("three workers, worker 1 killed: byte 0 = 1 reaches the new worker 1, not worker 2", reached);
   t.ok("SIGTERM stops the light group", stop(sup));
+
+  // A port-0 group never joins another reuseport group: on Linux a port-0
+  // bind with SO_REUSEPORT can be handed a port such a socket of the same user
+  // holds, and two tests' groups then steered each other's datagrams. With
+  // HELD of Linux's 28,232 ephemeral ports held so, binding that way fails
+  // this row 39 runs in 40.
+  const held: i32[] = [];
+  const isHeld: boolean[] = [];
+  for (let k: i32 = 0; k < 65536; k++) {
+    isHeld.push(false);
+  }
+  for (let k: i32 = 0; k < HELD; k++) {
+    const fd: i32 = udpBind("127.0.0.1", 0, 1);
+    if (fd < 0) {
+      break;
+    }
+    held.push(fd);
+    isHeld[netLocalPort(fd)] = true;
+  }
+  let apart = toI32(held.length) >= HELD / 2;
+  for (let k: i32 = 0; k < 24 && apart; k++) {
+    sup = group(board, "light", 2, "build/net-quic-prefork-apart.err");
+    const free: boolean = board.listen(2, 10000) === 2 && board.agreed && !isHeld[board.port];
+    apart = stop(sup) && free;
+  }
+  for (const fd of held) {
+    netClose(fd);
+  }
+  t.ok("24 groups on port 0 each bind a port no other reuseport socket holds", apart);
 
   const err = "build/net-quic-prefork-256.err";
   board.reset(256);

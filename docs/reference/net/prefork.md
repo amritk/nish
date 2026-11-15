@@ -215,10 +215,12 @@ socket with `preforkUdpListener(args)` and the group's size N with
 `preforkUdpCount(args)` (`--nish-prefork-udp=<fd>,<N>`, before the listener
 flag), and sets `QuicServerConfig.workerIndex` to k and `.workerCount` to N
 so every ID it issues starts with k. A connection then stays with its
-worker when the client's address or port changes. More than 255 workers
-panics; where the kernel refuses the steering (off Linux, or under a
-seccomp profile that refuses it) the supervisor says so on stderr and runs
-one worker.
+worker when the client's address or port changes. Port 0 is a port no UDP
+or TCP socket holds when the group binds, never another reuseport group's,
+which a port-0 bind with `SO_REUSEPORT` can be given on Linux. More than
+255 workers panics; where the kernel refuses the steering (off Linux, or
+under a seccomp profile that refuses it) the supervisor says so on stderr
+and runs one worker.
 
 </scalar-detail>
 

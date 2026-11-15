@@ -1179,6 +1179,9 @@ const vectorAccessTbaa = (why, filesByProgram) =>
  */
 const QUIC_STEER = "Steer QUIC"
 
+/** The changelog words of the fix that keeps a port-0 prefork UDP group off another group's port. */
+const PREFORK_FREE_PORT = "A prefork UDP group on port 0 never joins another reuseport group's port"
+
 /**
  * WP39 G6's moves: `PreforkConfig` gains `listenUdp` (its struct in every
  * program that links `nish/net/prefork`, and the supervisor's IR), and every
@@ -6539,6 +6542,29 @@ const DECLARED = [
     "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
     "tests/link/tfb_entry/main.ts": ["prefork.ll"],
   }),
+  // A prefork group asked for port 0 probes a free port with a plain bind first.
+  ...[
+    "examples/prefork-server.ts",
+    "bench/http-app-carrier.ts",
+    "bench/http1-server.ts",
+    "bench/techempower/main.ts",
+    "tests/link/net_prefork/main.ts",
+    "tests/link/net_prefork_bad_config/main.ts",
+    "tests/link/net_prefork_bad_listen/main.ts",
+    "tests/link/net_prefork_channels/main.ts",
+    "tests/link/net_prefork_no_restart/main.ts",
+    "tests/link/net_prefork_pin/main.ts",
+    "tests/link/net_prefork_pin_too_many/main.ts",
+    "tests/link/net_prefork_zero_backoff/main.ts",
+    "tests/link/net_quic_prefork/main.ts",
+    "tests/link/net_quic_worker/main.ts",
+    "tests/link/tfb_entry/main.ts",
+  ].map((program) => ({
+    program,
+    file: "prefork.ll",
+    changelog: PREFORK_FREE_PORT,
+    why: "`preforkBindUdp` takes port 0 from `preforkFreePort`, a plain UDP bind whose TCP side is free, so the supervisor's IR moves",
+  })),
   {
     program: "tests/link/net_http2_cleartext/main.ts",
     file: "exit",
