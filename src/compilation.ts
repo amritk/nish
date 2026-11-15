@@ -1810,6 +1810,7 @@ export class Compilation {
   readCompat(source: SourceFile | null, nish: NishManifest | null): void {
     if (source !== null && nish !== null) {
       const asked = manifestCompat(source.text, nish.compatAt)
+      const known = compatKnownText()
       let i = 0
       while (i < asked.list.entries.length && i < asked.list.offsets.length && i < asked.list.ends.length) {
         const name = asked.list.entries[i]
@@ -1818,7 +1819,7 @@ export class Compilation {
             source,
             asked.list.offsets[i],
             asked.list.ends[i],
-            `\`${name}\` is no feature of the compatibility dialect: \`${PACKAGE_CONDITION}.compat\` is \`true\` or an array of feature names, and ${compatKnownText()}`
+            `\`${name}\` is no feature of the compatibility dialect: \`${PACKAGE_CONDITION}.compat\` is \`true\` or an array of feature names, and ${known}`
           )
         }
         i = i + 1
