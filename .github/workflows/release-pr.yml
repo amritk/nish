@@ -39,6 +39,7 @@ permissions:
   contents: write
   pull-requests: write
   actions: write # dispatch release.yml at the tag this job pushes
+  attestations: read # gh attestation verify, for the seed the break-web rebuild fetches
 
 concurrency:
   group: release-pr
@@ -154,6 +155,46 @@ jobs:
               /export const VERSION: string = "[^"]*"/,
               `export const VERSION: string = "${v}"`));
           ' "$next"
+
+      # The docs site's break game is committed with the compiler's --help and
+      # --version written into it: docs/site/break/shell.mjs and manifest.json,
+      # and examples/break-web/help.ts, which game.wasm is compiled from.
+      # tests/run.js's break-web section fails when they are not what the
+      # compiler says, so the bump above has to rebuild them in the same pull
+      # request. v0.40.0 is what happens otherwise: tagged with the game still
+      # saying 0.39.0, its release stopped at the tag's own CI and published
+      # nothing. The compiler is built from the bumped src/ by the last
+      # release's seed, as ci.yml builds it; --ignore-scripts because this job
+      # holds a token that pushes.
+      - name: Install LLVM 18 + lld
+        if: steps.path.outputs.mode == 'pr'
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18
+
+      - name: Link the LLVM 18 tools by their plain names
+        if: steps.path.outputs.mode == 'pr'
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Rebuild the break game at the new version
+        if: steps.path.outputs.mode == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
+        run: |
+          npm ci --ignore-scripts
+          bash scripts/fetch-seed.sh
+          npm run build
+          build/nish --version
+          node examples/break-web/build.mjs
+          node examples/break-web/build.mjs --check
 
       - name: Open or refresh the Release pull request
         if: steps.path.outputs.mode == 'pr'
