@@ -316,7 +316,11 @@ Some constructs JavaScript spells differently are rewritten too:
 - **An `enum`** becomes a `const` object of its members' values and a type of
   the same name: `enum Shape { Circle, Square = 4 }` is written as
   `const Shape = { Circle: 0, Square: 4 } as const;` and
-  `type Shape = (typeof Shape)[keyof typeof Shape];`.
+  `type Shape = (typeof Shape)[keyof typeof Shape];`. A string enum's
+  members keep their strings: `enum Role { Admin = "admin", Guest = "guest" }`
+  is written as `const Role = { Admin: "admin", Guest: "guest" } as const;`
+  with the same `type Role`, and `String(r)` stays as it is, since
+  JavaScript's `String` of a string is that string.
 - **`Arena.used()`** and `Arena.mark()` become `nish/runtime`'s `arenaUsed`
   and `arenaMark`, and a `Result` annotation
   imports `Result` from it.

@@ -164,8 +164,8 @@ parameter type, a `switch` discriminant and a `Map` key
 (`tests/link/enum_export_uses`), and an exported alias resolves, in the module
 that wrote it, to the class, array or `T | null` it names
 (`tests/link/alias_export_*`). One pre-pass binds every module's enums and
-aliases before any signature. String enums, `const enum` and default exports
-stay refused.
+aliases before any signature. `const enum` and default exports stay refused;
+string enums have since landed ([String enums](LANGUAGE.md#string-enums)).
 
 ### N2. Byte plumbing (S–M, builtins lane)
 

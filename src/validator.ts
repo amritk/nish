@@ -640,18 +640,49 @@ const visitDeclaration = (ctx: CheckContext, decl: Node, inTypePosition: boolean
 }
 
 /**
- * An enum member's value has to be a numeric literal, because an enum lowers
- * to a plain integer and a module has no code that could compute one. What the
- * *checker* adds on top is what needs the type model: the literal must be an
- * integer and it must fit in `i32` (WP23).
+ * An enum member's value has to be a literal, because a module has no code
+ * that could compute one. Either every member is a string literal (a string
+ * enum) or none is (a numeric enum): both lower to an `i32`, but a string
+ * enum's `i32` is the member's ordinal and its string sits in a table, so a
+ * member numbered by position beside members spelled by string would give one
+ * enum two meanings for its integer. What the *checker* adds on top is what
+ * needs the type model: a numeric literal must be an integer that fits in
+ * `i32`, and a string enum's values must be distinct and UTF-8 (WP23).
  */
 const rejectComputedEnumMembers = (ctx: CheckContext, node: Node): void => {
+  const enumName = node.children[0].text
+  let strings = false
+  for (const member of node.children[1].children) {
+    if (member.children[1].kind === NodeKind.String) {
+      strings = true
+    }
+  }
   for (const member of node.children[1].children) {
     const initializer = member.children[1]
-    if (initializer.kind !== NodeKind.Empty && !isNumericLiteralShape(initializer)) {
+    if (strings && initializer.kind === NodeKind.Empty) {
+      ctx.error(
+        member.children[0],
+        `String enum member \`${enumName}.${member.children[0].text}\` has no initializer: every member of an enum whose members are strings is given its own string literal`
+      )
+    } else if (initializer.kind === NodeKind.Template) {
       ctx.error(
         initializer,
-        "Enum members must be numeric literals in " + LANGUAGE + " (enums lower to plain integers)"
+        "An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared"
+      )
+    } else if (strings && initializer.kind !== NodeKind.String && !isNumericLiteralShape(initializer)) {
+      ctx.error(
+        initializer,
+        "A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared"
+      )
+    } else if (
+      initializer.kind !== NodeKind.Empty &&
+      (strings ? initializer.kind !== NodeKind.String : !isNumericLiteralShape(initializer))
+    ) {
+      ctx.error(
+        initializer,
+        "Enum members must be numeric literals in " +
+          LANGUAGE +
+          ", or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings)"
       )
     }
   }

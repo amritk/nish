@@ -47,6 +47,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0

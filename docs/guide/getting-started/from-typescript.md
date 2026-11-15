@@ -62,13 +62,15 @@ export const main = (): i32 => {
 ```
 
 That program prints `total: 11`. It uses `const` and `let`, arrow functions,
-interfaces, classes with fields and methods, numeric enums, object and array
+interfaces, classes with fields and methods, enums, object and array
 literals, `for...of`, `switch`, the ternary operator and template literals.
 Some come with limits: `for...of` walks an array (or a `Map` or `Set`), a
 `switch` is on an integer or an enum (a clause without `break` falls through
 into the next, as in TypeScript; see
 [`switch`](../language/control-flow.md#switch)), and an enum value can only be
-compared with `===` and `!==`. The [language
+compared with `===` and `!==`. An enum may be numeric or string; a string
+enum's value is not a `string`, so `String(r)` gives its text
+([Enums](../language/types.md#enums)). The [language
 pages](../language/control-flow.md) give the details.
 
 `if`, `while`, `do...while`, `break`, `continue`, `===` and named `import` and
