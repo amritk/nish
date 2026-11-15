@@ -561,11 +561,13 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
       out.hostAt = valueAt
       out.hostEnd = fields.valueEnd[f]
     } else if (key === "compat") {
-      const isTrue = manifest.substring(valueAt, fields.valueEnd[f]) === "true"
-      if (
-        !isTrue &&
-        (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET)
-      ) {
+      let shaped = false
+      if (valueAt >= 0 && valueAt < manifest.length) {
+        shaped =
+          manifest.charCodeAt(valueAt) === OPEN_BRACKET ||
+          manifest.substring(valueAt, fields.valueEnd[f]) === "true"
+      }
+      if (!shaped) {
         return manifestNishProblem("`compat` is neither `true` nor an array", valueAt, fields.valueEnd[f])
       }
       out.compatAt = valueAt
