@@ -2,14 +2,32 @@
 
 # NL9xxx\: performance warnings
 
-The 18 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 19 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
 The message of a warning `--no-warn-performance` turns off contains:
 
 ```text
-…allocates a dynamically sized array on every iteration of this loop
+…allocates a dynamically sized array on every iteration of this loop…
+```
+
+[`nl9001_pattern_loop_allocation.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9001_pattern_loop_allocation.ts):
+
+```ts
+// NL9001: a pattern over an array allocated on every iteration names the pattern as written.
+export const main = (): number => {
+  let total = 0;
+  for (let i = 1; i < 4; i++) {
+    const [a, b] = new Array<i32>(i + 1);
+    total += a + b;
+  }
+  return total;
+};
+```
+
+```text
+`[a, b]` allocates a dynamically sized array on every iteration of this loop and nothing keeps it past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, or open the loop body with `using a = arena()`
 ```
 
 ## NL9002
@@ -437,5 +455,78 @@ this call through `op` can reach 9 functions, more than eight, so it branches on
 The message of a warning `--no-warn-performance` turns off contains:
 
 ```text
-…beside the compatibility dialect: a bare `number` is the 32-bit integer
+…and nothing bounds how many passes it runs…
+```
+
+[`nl9018_unbounded_pass.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9018_unbounded_pass.ts):
+
+```ts
+// NL9018: a loop that nothing bounds keeps what each pass allocates, because
+// each pass stores into a structure older than the loop.
+class Last {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+}
+
+class Tally {
+  last: Last;
+  total: i32;
+  open: boolean;
+  constructor() {
+    this.last = new Last(0);
+    this.total = 0;
+    this.open = true;
+  }
+}
+
+export const drain = (tally: Tally, budget: i32): void => {
+  let k = 0;
+  while (tally.open) {
+    const line = `line ${k}`;
+    tally.total = tally.total + line.length;
+    tally.last = new Last(k);
+    k = k + 1;
+    tally.open = k < budget;
+  }
+};
+```
+
+```text
+this loop keeps what each pass allocates until the memory of `drain`'s caller is released, because the allocation on line 26 is stored into memory, where this analysis stops following it, and nothing bounds how many passes it runs, so the string built on line 24 piles up for as long as it runs. Move the per-pass work that builds it into a block inside the loop body that opens with `using a = arena()`, which the compiler refuses if anything allocated there could outlive the block
+```
+
+## NL9019
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…keeps an allocation on every call and runs on every pass of a loop that releases nothing…
+```
+
+[`nl9019_kept_memory.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9019_kept_memory.ts):
+
+```ts
+// NL9019: a function a loop runs on every pass keeps an allocation each call
+// (a `let` given a second string), and the loop's passes release nothing.
+const relabel = (n: i32): i32 => {
+  let s = "none";
+  if (n > 2) {
+    s = `b${n}`;
+  }
+  return s.length;
+};
+
+export const labels = (rows: i32): i32 => {
+  const out: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    out.push(`${relabel(i)}`);
+  }
+  return out.length;
+};
+```
+
+```text
+`relabel` keeps an allocation on every call and runs on every pass of a loop that releases nothing, so the memory it keeps grows with every pass: the first allocation it holds is on line 6, where this analysis does not prove it dead when the function returns (a local assigned more than once, or an array of its own). Give each value its own `const`, open a block with `using a = arena()` around the work, or keep what must outlive the call in a region
 ```

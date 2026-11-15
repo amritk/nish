@@ -65,7 +65,10 @@ src/               the compiler, in Nish — see .claude/selfhost.md
   cli-style.ts      `--help`: its text and the agent's section (colour: std/cli.ts)
                     `nish break` is undocumented on purpose: keep it out of
                     docs/guide, llms.txt and docs/AI.md (compile.ts, `main`;
-                    the director is break.ts, its scenes break-*.ts)
+                    the director is break.ts, its scenes break-*.ts; the
+                    same game runs on the docs site: the hero terminal in
+                    docs/site/site.js lazily imports docs/site/break/,
+                    built and committed by examples/break-web/build.mjs)
   run-cache.ts      `nish run`'s cache: entry location, key, hash
   compilation.ts    one program: load, check, emit, sidecars
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts
@@ -150,4 +153,4 @@ runs, and CI's `test` shards as the full-suite gate — and the checklist is
 | How do I test it? | [`testing.md`](./testing.md) |
 | I am copying or porting code from somewhere else | [`licensing.md`](./licensing.md) — the notice it keeps and the licences allowed |
 | What is the plan? | `docs/MASTER_PLAN.md`, `docs/wp14-selfhost.md` |
-| What is built, what is next, or "pick up WP*N*"? | `docs/roadmap/index.md`, then the package's page `docs/roadmap/wpN-*.md`; the steps are the index's "Picking up a work package" |
+| What is built, what is next, or "pick up WP*N*"? | `docs/roadmap/index.md`, then the package's page `docs/roadmap/wpN-*.md`; the steps are `AGENTS.md`'s "Picking up a work package" |

@@ -42,6 +42,8 @@ Every row of the LANGUAGE.md table breaks one of four guarantees from
   `instanceof`, `typeof`, `==`/`!=` (which coerce across types), `Proxy`,
   `Reflect`, `globalThis`, `namespace`, `__proto__`, `.prototype`, the
   shape-mutating `Object.*` calls, and string-keyed element access.
+  Dispatch over an interface's classes by a compile-time tag, with no
+  prototype or property lookup, is proposed in [WP60](wp60-dyn-dispatch.md).
 - **No runtime**: no interpreter, GC, event loop, unwinder or regex engine in
   the C runtime. This rules out `eval`, `Function`, generators, `async`/`await`,
   `try`/`catch`, `debugger`, regex and `bigint` literals, `Symbol` and dynamic
@@ -91,10 +93,11 @@ an error. [`.claude/linting.md`](../.claude/linting.md) has the full rule set.
 The reasoning that rule set rests on:
 
 - **Rules that mirror the language**, so the compiler's source and the
-  examples read like Nish: `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
+  examples read like Nish: `noVar`, `noExplicitAny`, `noNamespace`,
   `noVoid`, `noParameterAssign` (parameters are immutable in Nish),
   `useExplicitLengthCheck` (there is no truthiness) and
-  `useConsistentArrayType` (`T[]`). `useOptionalChain` and
+  `useConsistentArrayType` (`T[]`). `noEnum` holds for the JavaScript tooling
+  only, since Nish has numeric enums. `useOptionalChain` and
   `useExponentiationOperator` are turned *off* because they push code towards
   `?.` and `**`, which Nish rejects.
 - **House style** (kebab-case file names, `type` over `interface`, a function

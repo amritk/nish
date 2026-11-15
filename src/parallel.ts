@@ -63,49 +63,7 @@ import {
   isTemplateExpression,
   unwrapParens,
 } from "./emit-util"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_BLOCK,
-  N_CALL,
-  N_CONDITIONAL,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_CLASS,
-  N_CONSTRUCTOR,
-  N_FIELD,
-  FLAG_COMPUTED,
-  FLAG_CONST,
-  N_INDEX,
-  N_MEMBER,
-  N_PAREN,
-  N_PARAM,
-  N_PROPERTY,
-  N_VAR_DECL,
-  FLAG_USING,
-  N_DO,
-  N_FALSE,
-  N_FOR,
-  N_FOR_OF,
-  N_FUNCTION,
-  N_IDENT,
-  N_LIST,
-  N_METHOD,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_RETURN,
-  N_STRING,
-  N_THIS,
-  N_TEMPLATE,
-  N_TRUE,
-  N_UNARY,
-  N_BINARY,
-  N_VAR,
-  N_WHILE,
-  Node,
-} from "./nodes"
+import { FLAG_COMPUTED, FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   FieldInfo,
@@ -163,14 +121,14 @@ export const DISPOSE_METHOD: string = "[Symbol.dispose]"
  * declares one for Node's `for...of` (WP29 P3), and nothing else may.
  */
 export const isIteratorMethod = (decl: Node): boolean => {
-  if (decl.kind !== N_METHOD || (decl.flags & FLAG_COMPUTED) === 0) {
+  if (decl.kind !== NodeKind.Method || (decl.flags & FLAG_COMPUTED) === 0) {
     return false
   }
   const name = decl.children[0]
   return (
-    name.kind === N_MEMBER &&
+    name.kind === NodeKind.Member &&
     name.text === "iterator" &&
-    name.children[0].kind === N_IDENT &&
+    name.children[0].kind === NodeKind.Ident &&
     name.children[0].text === "Symbol"
   )
 }
@@ -189,7 +147,7 @@ export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threa
  * part of the test: a root-package file that happens to sit at `std/threads.ts`
  * is an ordinary module, and its templates run as they are written.
  */
-const isThreadsModule = (program: CheckedProgram): boolean =>
+export const isThreadsModule = (program: CheckedProgram): boolean =>
   program.packageName === CLI && program.source.path === threadsModuleName()
 
 /**
@@ -331,7 +289,7 @@ export const parallelBodyOf = (sig: FunctionSig): FunctionSig | null => {
 export const taskStoreOf = (task: FunctionSig): FunctionSig | null => {
   const instance = task.instance
   const body = task.body()
-  if (instance === null || body === null || body.kind !== N_CALL) {
+  if (instance === null || body === null || body.kind !== NodeKind.Call) {
     return null
   }
   return instance.nodeCallees[body.id]
@@ -409,7 +367,11 @@ export const recordParallelCall = (program: CheckedProgram, node: Node, sig: Fun
   // `dst` is read now, while the tables of the body that holds the call are
   // the ones installed: an instantiation of a generic caller has its own.
   let dst: Local | null = null
-  if (parallelRoleOf(sig) === PAR_MAP && node.kind === N_CALL && node.children[1].children.length > 1) {
+  if (
+    parallelRoleOf(sig) === PAR_MAP &&
+    node.kind === NodeKind.Call &&
+    node.children[1].children.length > 1
+  ) {
     dst = namedLocal(program, node.children[1].children[1])
   }
   calls.push(new ParallelCall(node, sig, dst))
@@ -587,7 +549,7 @@ export const allocationWarning = (
 
 /** Whether a `return` sits anywhere under `node`. */
 const holdsReturn = (node: Node): boolean => {
-  if (node.kind === N_RETURN) {
+  if (node.kind === NodeKind.Return) {
     return true
   }
   for (const child of node.children) {
@@ -604,11 +566,15 @@ const holdsReturn = (node: Node): boolean => {
  */
 const inlinable = (body: Node): boolean => {
   const result = body.children[3]
-  if (result.kind !== N_BLOCK) {
+  if (result.kind !== NodeKind.Block) {
     return true
   }
   const last = result.children.length - 1
-  if (last < 0 || result.children[last].kind !== N_RETURN || result.children[last].children.length === 0) {
+  if (
+    last < 0 ||
+    result.children[last].kind !== NodeKind.Return ||
+    result.children[last].children.length === 0
+  ) {
     return false
   }
   for (let k = 0; k < last; k++) {
@@ -625,7 +591,7 @@ const inlinable = (body: Node): boolean => {
  * `values`, then the statements of a block body ahead of its `return`.
  */
 const arrowBindings = (program: CheckedProgram, body: Node, values: string[]): string => {
-  if (body.kind !== N_ARROW) {
+  if (body.kind !== NodeKind.Arrow) {
     return ""
   }
   const parts: string[] = []
@@ -637,7 +603,7 @@ const arrowBindings = (program: CheckedProgram, body: Node, values: string[]): s
     }
   }
   const result = body.children[3]
-  if (result.kind === N_BLOCK) {
+  if (result.kind === NodeKind.Block) {
     parts.push(leadingStatements(program, result.children, 0))
   }
   return parts.join("")
@@ -663,14 +629,14 @@ const leadingStatements = (program: CheckedProgram, statements: Node[], k: i32):
  * be written in place (`inlinable`) or takes another number of arguments.
  */
 const inlinedAnswer = (program: CheckedProgram, body: Node, values: string[]): string => {
-  if (body.kind !== N_ARROW) {
+  if (body.kind !== NodeKind.Arrow) {
     return `${oneLine(program, body)}(${values.join(", ")})`
   }
   if (body.children[1].children.length !== values.length || !inlinable(body)) {
     return ""
   }
   const result = body.children[3]
-  if (result.kind !== N_BLOCK) {
+  if (result.kind !== NodeKind.Block) {
     return oneLine(program, result)
   }
   const last = result.children[result.children.length - 1]
@@ -679,7 +645,7 @@ const inlinedAnswer = (program: CheckedProgram, body: Node, values: string[]): s
 
 /** The name an arrow `body` gives its parameter `k`, or `fallback` for a named function or a missing parameter. */
 const arrowParam = (body: Node, k: i32, fallback: string): string => {
-  if (body.kind !== N_ARROW || body.children[1].children.length <= k) {
+  if (body.kind !== NodeKind.Arrow || body.children[1].children.length <= k) {
     return fallback
   }
   return body.children[1].children[k].children[0].text
@@ -691,9 +657,9 @@ const callDeclaredName = (program: CheckedProgram, call: Node, fallback: string)
   const decl = parents.parentOf(call)
   if (
     decl !== null &&
-    decl.kind === N_VAR_DECL &&
+    decl.kind === NodeKind.VarDecl &&
     decl.children[2] === call &&
-    decl.children[0].kind === N_IDENT
+    decl.children[0].kind === NodeKind.Ident
   ) {
     return decl.children[0].text
   }
@@ -715,7 +681,7 @@ const serialRemedy = (
   call: Node,
   result: i32
 ): string => {
-  if (call.kind !== N_CALL) {
+  if (call.kind !== NodeKind.Call) {
     return ""
   }
   const text = program.source.text
@@ -1050,19 +1016,19 @@ const combiningOperator = (fn: FunctionSig): string => {
     return ""
   }
   let body = fn.decl.children[3]
-  if (body.kind === N_BLOCK) {
-    if (body.children.length !== 1 || body.children[0].kind !== N_RETURN) {
+  if (body.kind === NodeKind.Block) {
+    if (body.children.length !== 1 || body.children[0].kind !== NodeKind.Return) {
       return ""
     }
     body = body.children[0].children[0]
   }
   body = unwrapParens(body)
-  if (body.kind !== N_BINARY) {
+  if (body.kind !== NodeKind.Binary) {
     return ""
   }
   const left = unwrapParens(body.children[0])
   const right = unwrapParens(body.children[1])
-  if (left.kind !== N_IDENT || right.kind !== N_IDENT) {
+  if (left.kind !== NodeKind.Ident || right.kind !== NodeKind.Ident) {
     return ""
   }
   const a = fn.paramNames[0]
@@ -1103,16 +1069,16 @@ const identityOf = (op: string): string => {
 const isLiteral = (node: Node, want: string): boolean => {
   const e = unwrapParens(node)
   if (want === "true") {
-    return e.kind === N_TRUE
+    return e.kind === NodeKind.True
   }
   if (want === "false") {
-    return e.kind === N_FALSE
+    return e.kind === NodeKind.False
   }
-  if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
+  if (e.kind === NodeKind.Unary && (e.text === "-" || e.text === "+")) {
     const operand = unwrapParens(e.children[0])
-    return operand.kind === N_NUMBER && want === "0" && numericLiteralValue(operand.text) === 0
+    return operand.kind === NodeKind.Number && want === "0" && numericLiteralValue(operand.text) === 0
   }
-  return e.kind === N_NUMBER && numericLiteralValue(e.text) === Number(want)
+  return e.kind === NodeKind.Number && numericLiteralValue(e.text) === Number(want)
 }
 
 /**
@@ -1342,15 +1308,15 @@ export const arrowCallee = (
 ): FunctionSig | null => {
   let at = arrow
   let parent = parents.parentOf(at)
-  while (parent !== null && parent.kind === N_PAREN) {
+  while (parent !== null && parent.kind === NodeKind.Paren) {
     at = parent
     parent = parents.parentOf(at)
   }
-  if (parent === null || parent.kind !== N_LIST) {
+  if (parent === null || parent.kind !== NodeKind.List) {
     return null
   }
   const call = parents.parentOf(parent)
-  if (call === null || (call.kind !== N_CALL && call.kind !== N_NEW)) {
+  if (call === null || (call.kind !== NodeKind.Call && call.kind !== NodeKind.New)) {
     return null
   }
   return program.nodeCallees[call.id]
@@ -1413,12 +1379,19 @@ export const callLetCaptureMessage = (name: string): string =>
   "function, whose value is the one the arrow is handed; bind the value to a `const` before the call, " +
   `\`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
 
-/** The refusal for an assignment to a name an arrow given to an ordinary function's parameter captures. */
-export const callCaptureWriteMessage = (name: string): string =>
+/**
+ * The refusal for an assignment to a name an arrow given to an ordinary
+ * function's parameter captures; a `forEach` callback is pointed at the
+ * `for...of` loop it stands for.
+ */
+export const callCaptureWriteMessage = (name: string, forEach: boolean): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: an arrow argument is handed ` +
   "what it captures as an argument when the call is made, so an assignment would change only its own copy; " +
   "make the arrow answer the value and assign it after the call, or write through an object the function " +
-  "holds (`box.n = v`, `list.push(v)`)"
+  "holds (`box.n = v`, `list.push(v)`)" +
+  (forEach
+    ? `; a \`forEach\` is a \`for...of\` loop, whose body may assign \`${name}\`, so write that loop instead`
+    : "")
 
 /** The refusal for a function parameter of the function around an arrow, which the arrow calls or names. */
 export const functionParamCaptureMessage = (name: string): string =>
@@ -1442,10 +1415,10 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
   const write = parents.parentOf(target)
   let op = ""
   let value = ""
-  if (write !== null && write.kind === N_UNARY && write.text === "++") {
+  if (write !== null && write.kind === NodeKind.Unary && write.text === "++") {
     op = "+"
     value = "1"
-  } else if (write !== null && write.kind === N_BINARY && write.children[0] === target) {
+  } else if (write !== null && write.kind === NodeKind.Binary && write.children[0] === target) {
     const rhs = write.children[1]
     if (write.text === "+=" || write.text === "*=") {
       op = write.text.slice(0, 1)
@@ -1453,9 +1426,9 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
     } else if (write.text === "=") {
       value = oneLine(program, rhs)
       if (
-        rhs.kind === N_BINARY &&
+        rhs.kind === NodeKind.Binary &&
         (rhs.text === "+" || rhs.text === "*") &&
-        rhs.children[0].kind === N_IDENT &&
+        rhs.children[0].kind === NodeKind.Ident &&
         rhs.children[0].text === name
       ) {
         op = rhs.text
@@ -1464,7 +1437,7 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
     }
   }
   let arrow = write
-  while (arrow !== null && arrow.kind !== N_ARROW) {
+  while (arrow !== null && arrow.kind !== NodeKind.Arrow) {
     arrow = parents.parentOf(arrow)
   }
   let list: Node | null = null
@@ -1478,8 +1451,8 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
   if (
     arrow === null ||
     call === null ||
-    call.kind !== N_CALL ||
-    call.children[0].kind !== N_IDENT ||
+    call.kind !== NodeKind.Call ||
+    call.children[0].kind !== NodeKind.Ident ||
     value === ""
   ) {
     return "answer the value from the body instead, and fold the answers with `parallelReduce` after the call"
@@ -1493,7 +1466,7 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
   }
   head = `(${head})`
   const returns = arrow.children[2]
-  if (returns.kind !== N_EMPTY) {
+  if (returns.kind !== NodeKind.Empty) {
     head = `${head}: ${oneLine(program, returns)}`
   }
   const from = callee === "parallelFrom" ? "parallelFrom" : "parallelMap"
@@ -1508,7 +1481,7 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
       return lead
     }
     let result = arrow.children[3]
-    if (result.kind === N_BLOCK) {
+    if (result.kind === NodeKind.Block) {
       result = result.children[result.children.length - 1].children[0]
     }
     const folded = freshName(text, `${name}Total`, 0)
@@ -1680,11 +1653,11 @@ const dstHostDecl = (program: CheckedProgram, node: Node): Node | null => {
   return best
 }
 
-/** Every `N_VAR_DECL` and `N_PARAM` under `node` that binds `name`. */
+/** Every `NodeKind.VarDecl` and `NodeKind.Param` under `node` that binds `name`. */
 const dstBindings = (node: Node, name: string, out: Node[]): void => {
   if (
-    (node.kind === N_VAR_DECL || node.kind === N_PARAM) &&
-    node.children[0].kind === N_IDENT &&
+    (node.kind === NodeKind.VarDecl || node.kind === NodeKind.Param) &&
+    node.children[0].kind === NodeKind.Ident &&
     node.children[0].text === name
   ) {
     out.push(node)
@@ -1715,11 +1688,11 @@ const dstHandedOn = (
   loop: Node | null,
   nested: boolean
 ): boolean => {
-  if (node.kind === N_IDENT && node.text === name && node !== skip && parent !== null) {
+  if (node.kind === NodeKind.Ident && node.text === name && node !== skip && parent !== null) {
     const base =
-      ((parent.kind === N_INDEX || parent.kind === N_MEMBER) && parent.children[0] === node) ||
-      (parent.kind === N_FOR_OF && parent.children[1] === node) ||
-      ((parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node)
+      ((parent.kind === NodeKind.Index || parent.kind === NodeKind.Member) && parent.children[0] === node) ||
+      (parent.kind === NodeKind.ForOf && parent.children[1] === node) ||
+      ((parent.kind === NodeKind.VarDecl || parent.kind === NodeKind.Param) && parent.children[0] === node)
     if (!base && (nested || node.start < before || (loop !== null && dstSpans(loop, node)))) {
       return true
     }
@@ -1727,10 +1700,10 @@ const dstHandedOn = (
   const inner =
     nested ||
     (parent !== null &&
-      (node.kind === N_FUNCTION ||
-        node.kind === N_METHOD ||
-        node.kind === N_CONSTRUCTOR ||
-        node.kind === N_CLASS))
+      (node.kind === NodeKind.FunctionDecl ||
+        node.kind === NodeKind.Method ||
+        node.kind === NodeKind.Constructor ||
+        node.kind === NodeKind.Class))
   for (const child of node.children) {
     if (dstHandedOn(child, node, name, skip, before, loop, inner)) {
       return true
@@ -1745,7 +1718,10 @@ const dstLoopAround = (node: Node, call: Node, decl: Node): Node | null => {
     return null
   }
   if (
-    (node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO) &&
+    (node.kind === NodeKind.For ||
+      node.kind === NodeKind.ForOf ||
+      node.kind === NodeKind.While ||
+      node.kind === NodeKind.Do) &&
     !dstSpans(node, decl)
   ) {
     return node
@@ -1772,8 +1748,8 @@ const dstUnsharedAt = (program: CheckedProgram, call: Node, dst: Local): boolean
   const body = dstHostDecl(program, call)
   // No test reaches these: every statement is in a function (field
   // initialisers are literals), and `recordParallelCall` records a `dst` only
-  // for an `N_CALL` with one.
-  if (body === null || call.kind !== N_CALL || call.children[1].children.length < 2) {
+  // for a `NodeKind.Call` with one.
+  if (body === null || call.kind !== NodeKind.Call || call.children[1].children.length < 2) {
     return false
   }
   const bindings: Node[] = []
@@ -1925,7 +1901,7 @@ const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a 
  * not looked for.
  */
 const tripsOf = (node: Node): i32 => {
-  if (node.kind !== N_FOR || node.children.length < 3 || node.children[0].kind !== N_VAR) {
+  if (node.kind !== NodeKind.For || node.children.length < 3 || node.children[0].kind !== NodeKind.Var) {
     return DEFAULT_TRIPS
   }
   const decls = node.children[0].children[0]
@@ -1935,13 +1911,13 @@ const tripsOf = (node: Node): i32 => {
   const name = decls.children[0].children[0].text
   const first = unwrapParens(decls.children[0].children[2])
   const cond = unwrapParens(node.children[1])
-  if (first.kind !== N_NUMBER || cond.kind !== N_BINARY || cond.children.length < 2) {
+  if (first.kind !== NodeKind.Number || cond.kind !== NodeKind.Binary || cond.children.length < 2) {
     return DEFAULT_TRIPS
   }
   const iv = unwrapParens(cond.children[0])
   const bound = unwrapParens(cond.children[1])
   const step = stepOf(unwrapParens(node.children[2]), name)
-  if (iv.kind !== N_IDENT || iv.text !== name || bound.kind !== N_NUMBER || step <= 0) {
+  if (iv.kind !== NodeKind.Ident || iv.text !== name || bound.kind !== NodeKind.Number || step <= 0) {
     return DEFAULT_TRIPS
   }
   if (cond.text !== "<" && cond.text !== "<=") {
@@ -1959,16 +1935,16 @@ const tripsOf = (node: Node): i32 => {
 /** The estimate for `node` and everything under it. */
 const costOf = (node: Node): i32 => {
   // A nested arrow is lifted into a function of its own and runs only when called.
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return 0
   }
   let own = 1
-  if (node.kind === N_CALL) {
+  if (node.kind === NodeKind.Call) {
     own = CALL_COST
   } else if (
-    node.kind === N_NEW ||
-    node.kind === N_OBJECT ||
-    node.kind === N_ARRAY ||
+    node.kind === NodeKind.New ||
+    node.kind === NodeKind.Object ||
+    node.kind === NodeKind.Array ||
     isTemplateExpression(node)
   ) {
     own = ALLOC_COST
@@ -1977,7 +1953,12 @@ const costOf = (node: Node): i32 => {
   for (const child of node.children) {
     inner = summed(inner, costOf(child))
   }
-  if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
+  if (
+    node.kind === NodeKind.For ||
+    node.kind === NodeKind.While ||
+    node.kind === NodeKind.Do ||
+    node.kind === NodeKind.ForOf
+  ) {
     inner = scaled(inner, tripsOf(node))
   }
   return summed(own, inner)
@@ -2039,9 +2020,9 @@ const shownSource = (program: CheckedProgram, node: Node, fallback: string): str
 const boundNameOf = (node: Node, parents: Node[], n: i32, fallback: string): string => {
   const decl: Node | null = n > 0 ? parents[n - 1] : null
   return decl !== null &&
-    decl.kind === N_VAR_DECL &&
+    decl.kind === NodeKind.VarDecl &&
     decl.children[2] === node &&
-    decl.children[0].kind === N_IDENT
+    decl.children[0].kind === NodeKind.Ident
     ? decl.children[0].text
     : fallback
 }
@@ -2124,25 +2105,34 @@ const slotLiteral = (slot: CopiedSlot): string => {
  */
 const storedInto = (program: CheckedProgram, slot: CopiedSlot, target: string, from: Node | null): string => {
   const rest = slot.text.slice(target.length)
-  if (from !== null && rest.length === 0 && (from.kind === N_STRING || from.kind === N_NUMBER)) {
+  if (
+    from !== null &&
+    rest.length === 0 &&
+    (from.kind === NodeKind.String || from.kind === NodeKind.Number)
+  ) {
     return shownSource(program, from, slotLiteral(slot))
   }
-  if (from !== null && (from.kind === N_IDENT || from.kind === N_MEMBER)) {
+  if (from !== null && (from.kind === NodeKind.Ident || from.kind === NodeKind.Member)) {
     const named = shownSource(program, from, "")
     if (named.length > 0) {
       return `${named}${rest}`
     }
   }
-  if (from !== null && from.kind === N_ARRAY && from.children.length > 0 && rest.slice(0, 3) === "[0]") {
+  if (
+    from !== null &&
+    from.kind === NodeKind.Array &&
+    from.children.length > 0 &&
+    rest.slice(0, 3) === "[0]"
+  ) {
     const first = unwrapParens(from.children[0])
     const after = rest.slice(3)
     if (
       after.length === 0 &&
-      (first.kind === N_STRING || first.kind === N_NUMBER || first.kind === N_IDENT)
+      (first.kind === NodeKind.String || first.kind === NodeKind.Number || first.kind === NodeKind.Ident)
     ) {
       return shownSource(program, first, slotLiteral(slot))
     }
-    if (first.kind === N_IDENT || first.kind === N_MEMBER) {
+    if (first.kind === NodeKind.Ident || first.kind === NodeKind.Member) {
       const named = shownSource(program, first, "")
       if (named.length > 0) {
         return `${named}${after}`
@@ -2203,12 +2193,12 @@ const usingEdits = (program: CheckedProgram, node: Node, parents: Node[], n: i32
   const decl = parents[n - 1]
   const stmt = parents[n - 3]
   const fits =
-    decl.kind === N_VAR_DECL &&
+    decl.kind === NodeKind.VarDecl &&
     decl.children[2] === node &&
     parents[n - 2].children.length === 1 &&
-    stmt.kind === N_VAR &&
+    stmt.kind === NodeKind.Var &&
     (stmt.flags & FLAG_CONST) !== 0 &&
-    parents[n - 4].kind === N_BLOCK
+    parents[n - 4].kind === NodeKind.Block
   if (fits && program.source.text.slice(stmt.start, stmt.start + 6) === "const ") {
     edits.push(new Edit(stmt.start, stmt.start + 5, "using"))
   }
@@ -2274,12 +2264,16 @@ const spawnsBefore = (node: Node, receiver: string, at: i32): i32 => {
     if (child.start >= at) {
       continue
     }
-    if (child.kind === N_CALL && child.children.length === 2 && child.children[1].children.length === 2) {
+    if (
+      child.kind === NodeKind.Call &&
+      child.children.length === 2 &&
+      child.children[1].children.length === 2
+    ) {
       const callee = child.children[0]
       if (
-        callee.kind === N_MEMBER &&
+        callee.kind === NodeKind.Member &&
         callee.text === "spawn" &&
-        callee.children[0].kind === N_IDENT &&
+        callee.children[0].kind === NodeKind.Ident &&
         callee.children[0].text === receiver
       ) {
         count = count + 1
@@ -2365,8 +2359,8 @@ export const destinationEdits = (
   if (
     fn.returnType === T_VOID ||
     DESTINATION_ELEMENTS.indexOf(`|${element}|`) < 0 ||
-    callee.kind !== N_MEMBER ||
-    callee.children[0].kind !== N_IDENT ||
+    callee.kind !== NodeKind.Member ||
+    callee.children[0].kind !== NodeKind.Ident ||
     args.length !== 2
   ) {
     return edits
@@ -2374,7 +2368,7 @@ export const destinationEdits = (
   if (stmt === null) {
     return edits
   }
-  if (stmt.kind !== N_EXPR_STMT) {
+  if (stmt.kind !== NodeKind.ExprStmt) {
     return edits
   }
   const receiver = callee.children[0].text
@@ -2382,15 +2376,21 @@ export const destinationEdits = (
   let up = parents.parentOf(stmt)
   while (up !== null) {
     const kind = up.kind
-    if (kind === N_FOR || kind === N_WHILE || kind === N_DO || kind === N_FOR_OF || kind === N_ARROW) {
+    if (
+      kind === NodeKind.For ||
+      kind === NodeKind.While ||
+      kind === NodeKind.Do ||
+      kind === NodeKind.ForOf ||
+      kind === NodeKind.Arrow
+    ) {
       return edits
     }
-    if (kind === N_BLOCK) {
+    if (kind === NodeKind.Block) {
       const at = up.children.indexOf(child)
       for (let i = at - 1; i >= 0; i--) {
         const prior = up.children[i]
         if (
-          prior.kind === N_VAR &&
+          prior.kind === NodeKind.Var &&
           (prior.flags & FLAG_USING) !== 0 &&
           prior.children[0].children.length === 1
         ) {
@@ -2407,7 +2407,7 @@ export const destinationEdits = (
         }
       }
     }
-    if (kind === N_FUNCTION || kind === N_METHOD) {
+    if (kind === NodeKind.FunctionDecl || kind === NodeKind.Method) {
       return edits
     }
     child = up
@@ -2449,17 +2449,17 @@ const childHolding = (node: Node, inner: Node): Node | null => {
   return null
 }
 
-/** Every `N_IDENT` under `node` spelled `name`, into `out`; false when one is declared there, or written in an object literal or a nested arrow. */
+/** Every `NodeKind.Ident` under `node` spelled `name`, into `out`; false when one is declared there, or written in an object literal or a nested arrow. */
 const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
   for (const child of node.children) {
     const kind = child.kind
-    if (kind === N_OBJECT || kind === N_ARROW) {
+    if (kind === NodeKind.Object || kind === NodeKind.Arrow) {
       return false
     }
-    if ((kind === N_VAR_DECL || kind === N_PARAM) && child.children[0].text === name) {
+    if ((kind === NodeKind.VarDecl || kind === NodeKind.Param) && child.children[0].text === name) {
       return false
     }
-    if (kind === N_IDENT && child.text === name) {
+    if (kind === NodeKind.Ident && child.text === name) {
       out.push(child)
     } else if (!identsNamed(child, name, out)) {
       return false
@@ -2469,10 +2469,10 @@ const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
 }
 
 /** Whether `node` assigns `name`, `name = v`, `name += v` or `name++`: the fix's `const` could not take the write. */
-/** Whether an `N_IDENT` spelled `name` is anywhere under `node`. */
+/** Whether a `NodeKind.Ident` spelled `name` is anywhere under `node`. */
 const mentionsName = (node: Node, name: string): boolean => {
   for (const child of node.children) {
-    if ((child.kind === N_IDENT && child.text === name) || mentionsName(child, name)) {
+    if ((child.kind === NodeKind.Ident && child.text === name) || mentionsName(child, name)) {
       return true
     }
   }
@@ -2486,7 +2486,7 @@ const arrowsNamingBefore = (node: Node, name: string, at: i32): i32 => {
     if (child.start >= at) {
       continue
     }
-    if (child.kind === N_ARROW && mentionsName(child, name)) {
+    if (child.kind === NodeKind.Arrow && mentionsName(child, name)) {
       count = count + 1
     } else {
       count = count + arrowsNamingBefore(child, name, at)
@@ -2497,15 +2497,15 @@ const arrowsNamingBefore = (node: Node, name: string, at: i32): i32 => {
 
 /** Whether `node` holds an assignment, `++` or `--` of the plain name `name`. */
 export const assignsName = (node: Node, name: string): boolean => {
-  if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_IDENT && target.text === name) {
+    if (target.kind === NodeKind.Ident && target.text === name) {
       return true
     }
   }
-  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+  if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
     const target = unwrapParens(node.children[0])
-    if (target.kind === N_IDENT && target.text === name) {
+    if (target.kind === NodeKind.Ident && target.text === name) {
       return true
     }
   }
@@ -2544,24 +2544,28 @@ export const letCaptureEdits = (text: string, host: Node, arrow: Node, name: str
     at = next
   }
   const n = path.length
-  if (n < 5 || path[n - 2].kind !== N_LIST || path[n - 3].kind !== N_CALL) {
+  if (n < 5 || path[n - 2].kind !== NodeKind.List || path[n - 3].kind !== NodeKind.Call) {
     return edits
   }
   const call = path[n - 3]
   const holder = path[n - 4]
   let top = n - 4
   if (
-    holder.kind === N_VAR_DECL &&
+    holder.kind === NodeKind.VarDecl &&
     holder.children[2] === call &&
     n >= 7 &&
     path[n - 5].children.length === 1
   ) {
     top = n - 6
-  } else if (holder.kind !== N_EXPR_STMT) {
+  } else if (holder.kind !== NodeKind.ExprStmt) {
     return edits
   }
   const stmt = path[top]
-  if (top < 1 || path[top - 1].kind !== N_BLOCK || (stmt.kind !== N_EXPR_STMT && stmt.kind !== N_VAR)) {
+  if (
+    top < 1 ||
+    path[top - 1].kind !== NodeKind.Block ||
+    (stmt.kind !== NodeKind.ExprStmt && stmt.kind !== NodeKind.Var)
+  ) {
     return edits
   }
   const uses: Node[] = []
@@ -2615,7 +2619,7 @@ const commentLineAbove = (text: string, at: i32): i32 => {
 /** Every template literal's span under `node`, as `start, end` pairs relative to `base`, into `out`. */
 const templateSpans = (node: Node, base: i32, out: i32[]): void => {
   for (const child of node.children) {
-    if (child.kind === N_TEMPLATE) {
+    if (child.kind === NodeKind.Template) {
       out.push(child.start - base)
       out.push(child.end - base)
     } else {
@@ -2684,15 +2688,15 @@ const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node,
   const lifted = program.nodeCallees[arrow.id]
   if (
     depth < 2 ||
-    parents[depth - 1].kind !== N_LIST ||
-    parents[depth - 2].kind !== N_CALL ||
+    parents[depth - 1].kind !== NodeKind.List ||
+    parents[depth - 2].kind !== NodeKind.Call ||
     lifted === null
   ) {
     return edits
   }
   const typeParams = sig.decl.children.length > 4 ? sig.decl.children[4].children.length : 0
   if (
-    arrow.children[2].kind === N_EMPTY ||
+    arrow.children[2].kind === NodeKind.Empty ||
     capturesOf(lifted).length > 0 ||
     typeParams > 0 ||
     sig.instance !== null
@@ -2700,7 +2704,7 @@ const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node,
     return edits
   }
   for (const param of arrow.children[1].children) {
-    if (param.kind !== N_PARAM || param.children[1].kind === N_EMPTY) {
+    if (param.kind !== NodeKind.Param || param.children[1].kind === NodeKind.Empty) {
       return edits
     }
   }
@@ -2802,10 +2806,14 @@ export const voidTaskResultMessage = (
  * otherwise a `void` task that keeps its answer through a lock.
  */
 const voidTaskRemedy = (program: CheckedProgram, element: string, node: Node): string => {
-  const callee = node.kind === N_CALL ? unwrapParens(node.children[0]) : node
+  const callee = node.kind === NodeKind.Call ? unwrapParens(node.children[0]) : node
   const none: Node[] = []
-  const args = node.kind === N_CALL ? node.children[1].children : none
-  if (DESTINATION_ELEMENTS.indexOf(`|${element}|`) < 0 || callee.kind !== N_MEMBER || args.length !== 2) {
+  const args = node.kind === NodeKind.Call ? node.children[1].children : none
+  if (
+    DESTINATION_ELEMENTS.indexOf(`|${element}|`) < 0 ||
+    callee.kind !== NodeKind.Member ||
+    args.length !== 2
+  ) {
     return (
       "and since a destination holds only a number or a `boolean`, keep the answer in a `Mutex` the task is " +
       "handed and answer `void`, `using g = m.lock(); g.value.last = last` in the task's body"
@@ -2859,7 +2867,7 @@ export const scopeSymbol = (programs: CheckedProgram[]): string => {
  * a call of a free function answering a `ThreadScope`.
  */
 const isScopeCall = (program: CheckedProgram, call: Node, scopeType: i32): boolean => {
-  if (call.kind !== N_CALL || program.nodeTypes[call.id] !== scopeType) {
+  if (call.kind !== NodeKind.Call || program.nodeTypes[call.id] !== scopeType) {
     return false
   }
   const callee = program.nodeCallees[call.id]
@@ -2885,10 +2893,14 @@ const constantStack = (program: CheckedProgram, call: Node): f64 => {
     return MIN_STACK
   }
   const arg = unwrapParens(args[0])
-  if (arg.kind === N_NUMBER) {
+  if (arg.kind === NodeKind.Number) {
     return numericLiteralValue(arg.text)
   }
-  if (arg.kind === N_UNARY && arg.text === "-" && unwrapParens(arg.children[0]).kind === N_NUMBER) {
+  if (
+    arg.kind === NodeKind.Unary &&
+    arg.text === "-" &&
+    unwrapParens(arg.children[0]).kind === NodeKind.Number
+  ) {
     return -numericLiteralValue(unwrapParens(arg.children[0]).text)
   }
   return MIN_STACK
@@ -2907,12 +2919,12 @@ const isSpawnReceiver = (node: Node, parents: Node[], n: i32): boolean => {
   const call = parents[n - 2]
   const stmt = parents[n - 3]
   return (
-    member.kind === N_MEMBER &&
+    member.kind === NodeKind.Member &&
     member.text === "spawn" &&
     member.children[0] === node &&
-    call.kind === N_CALL &&
+    call.kind === NodeKind.Call &&
     call.children[0] === member &&
-    stmt.kind === N_EXPR_STMT
+    stmt.kind === NodeKind.ExprStmt
   )
 }
 
@@ -2924,9 +2936,9 @@ const isUsingInitialiser = (node: Node, parents: Node[], n: i32): boolean => {
   const decl = parents[n - 1]
   const stmt = parents[n - 3]
   return (
-    decl.kind === N_VAR_DECL &&
+    decl.kind === NodeKind.VarDecl &&
     decl.children[2] === node &&
-    stmt.kind === N_VAR &&
+    stmt.kind === NodeKind.Var &&
     (stmt.flags & FLAG_USING) !== 0
   )
 }
@@ -2943,9 +2955,9 @@ const walkScopes = (
 ): void => {
   const n = parents.length
   const parent: Node | null = n > 0 ? parents[n - 1] : null
-  if (node.kind === N_VAR && (node.flags & FLAG_USING) !== 0) {
+  if (node.kind === NodeKind.Var && (node.flags & FLAG_USING) !== 0) {
     // A `case` clause's declarations are refused as every declaration there is.
-    if (parent === null || parent.kind !== N_BLOCK) {
+    if (parent === null || parent.kind !== NodeKind.Block) {
       out.push(new ScopeFinding(node, usingPlaceMessage()))
     }
     for (const decl of node.children[0].children) {
@@ -2965,11 +2977,13 @@ const walkScopes = (
     }
   }
   const declaresName =
-    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node
+    parent !== null &&
+    (parent.kind === NodeKind.VarDecl || parent.kind === NodeKind.Param) &&
+    parent.children[0] === node
   // A parenthesised call or name is judged as what it wraps, where it stands.
   let at = node
   let depth = n
-  while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+  while (depth > 0 && parents[depth - 1].kind === NodeKind.Paren) {
     at = parents[depth - 1]
     depth = depth - 1
   }
@@ -2977,12 +2991,12 @@ const walkScopes = (
     out.push(new ScopeFinding(node, arenaNotUsingMessage()))
   }
   const named: Local | null =
-    node.kind === N_IDENT && !declaresName ? sourceLocal(program.nodeLocals[node.id]) : null
+    node.kind === NodeKind.Ident && !declaresName ? sourceLocal(program.nodeLocals[node.id]) : null
   if (named !== null && arenas.indexOf(named) >= 0) {
     out.push(new ScopeFinding(node, arenaBindingMessage(named.name)))
   }
-  if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
-    if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
+  if (!declaresName && node.kind !== NodeKind.Paren && program.nodeTypes[node.id] === scopeType) {
+    if (node.kind === NodeKind.Call && isScopeCall(program, node, scopeType)) {
       const stack = constantStack(program, node)
       if (stack < MIN_STACK) {
         out.push(new ScopeFinding(node, stackBelowMinimumMessage(stack)))
@@ -2996,7 +3010,7 @@ const walkScopes = (
           )
         )
       }
-    } else if (!(node.kind === N_IDENT && isSpawnReceiver(at, parents, depth))) {
+    } else if (!(node.kind === NodeKind.Ident && isSpawnReceiver(at, parents, depth))) {
       out.push(new ScopeFinding(node, scopeEscapesMessage()))
     }
   }
@@ -3164,17 +3178,18 @@ class VariableUses {
 const isFreshArray = (init: Node): boolean => {
   const e = unwrapParens(init)
   return (
-    e.kind === N_ARRAY ||
-    (e.kind === N_NEW && e.children[0].kind === N_IDENT && e.children[0].text === "Array")
+    e.kind === NodeKind.Array ||
+    (e.kind === NodeKind.New && e.children[0].kind === NodeKind.Ident && e.children[0].text === "Array")
   )
 }
 
 /** Whether `init` is a fresh array or object literal, whose own slots nothing else reaches. */
-const isFreshLiteral = (init: Node): boolean => isFreshArray(init) || unwrapParens(init).kind === N_OBJECT
+const isFreshLiteral = (init: Node): boolean =>
+  isFreshArray(init) || unwrapParens(init).kind === NodeKind.Object
 
 /** The `spawn` instance `node` calls, when it is a call of one; `null` otherwise. */
 const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null => {
-  if (node.kind !== N_CALL || node.children[0].kind !== N_MEMBER) {
+  if (node.kind !== NodeKind.Call || node.children[0].kind !== NodeKind.Member) {
     return null
   }
   const callee = program.nodeCallees[node.id]
@@ -3185,7 +3200,7 @@ const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null =>
 const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
   const e = unwrapParens(node)
   // A data-parallel arrow's capture is the local it was made from (WP29).
-  return e.kind === N_IDENT ? sourceLocal(program.nodeLocals[e.id]) : null
+  return e.kind === NodeKind.Ident ? sourceLocal(program.nodeLocals[e.id]) : null
 }
 
 /**
@@ -3199,18 +3214,18 @@ const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
  */
 const handOnRoot = (program: CheckedProgram, arg: Node, uses: VariableUses): void => {
   const top = unwrapParens(arg)
-  if (top.kind === N_CONDITIONAL) {
+  if (top.kind === NodeKind.Conditional) {
     handOnRoot(program, top.children[1], uses)
     handOnRoot(program, top.children[2], uses)
     return
   }
-  if (top.kind === N_BINARY && top.text === "??") {
+  if (top.kind === NodeKind.Binary && top.text === "??") {
     handOnRoot(program, top.children[0], uses)
     handOnRoot(program, top.children[1], uses)
     return
   }
   let e = top
-  while (e.kind === N_INDEX || e.kind === N_MEMBER) {
+  while (e.kind === NodeKind.Index || e.kind === NodeKind.Member) {
     e = unwrapParens(e.children[0])
   }
   const local: Local | null = e !== top ? namedLocal(program, e) : null
@@ -3237,7 +3252,7 @@ const handOnCaptures = (program: CheckedProgram, arrow: Node, uses: VariableUses
  * of a `for...of`, or as a `spawn`'s destination, which is recorded as such.
  */
 const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, uses: VariableUses): void => {
-  if (node.kind === N_VAR) {
+  if (node.kind === NodeKind.Var) {
     const constant = (node.flags & FLAG_CONST) !== 0
     for (const decl of node.children[0].children) {
       const local = program.nodeLocals[decl.id]
@@ -3245,19 +3260,19 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
         const at = uses.add(local)
         uses.freshArray[at] = constant && isFreshArray(decl.children[2])
         uses.freshLiteral[at] = constant && isFreshLiteral(decl.children[2])
-        uses.freshNew[at] = constant && unwrapParens(decl.children[2]).kind === N_NEW
+        uses.freshNew[at] = constant && unwrapParens(decl.children[2]).kind === NodeKind.New
       }
     }
   }
-  if (node.kind === N_IDENT && parent !== null) {
+  if (node.kind === NodeKind.Ident && parent !== null) {
     const local = sourceLocal(program.nodeLocals[node.id])
     if (local !== null) {
       const at = uses.add(local)
       const base =
-        ((parent.kind === N_INDEX || parent.kind === N_MEMBER) &&
+        ((parent.kind === NodeKind.Index || parent.kind === NodeKind.Member) &&
           unwrapParens(parent.children[0]) === node) ||
-        (parent.kind === N_FOR_OF && unwrapParens(parent.children[1]) === node)
-      const declared = parent.kind === N_VAR_DECL && parent.children[0] === node
+        (parent.kind === NodeKind.ForOf && unwrapParens(parent.children[1]) === node)
+      const declared = parent.kind === NodeKind.VarDecl && parent.children[0] === node
       if (!base && !declared) {
         uses.handedOn[at] = true
       }
@@ -3272,7 +3287,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
       const local: Local | null = k === 2 ? namedLocal(program, arg) : null
       if (local !== null) {
         uses.destination[uses.add(local)] = true
-      } else if (arg.kind === N_ARROW) {
+      } else if (arg.kind === NodeKind.Arrow) {
         // An arrow task reads what it captures when the scope joins, as a task
         // reads its argument, so each one is handed on however the arrow uses it.
         handOnCaptures(program, arg, uses)
@@ -3285,7 +3300,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
     collectUses(program, node.children[0], node, uses)
     return
   }
-  if (node.kind === N_PAREN && parent !== null) {
+  if (node.kind === NodeKind.Paren && parent !== null) {
     // A parenthesised name is used as its parentheses are.
     for (const child of node.children) {
       collectUses(program, child, parent, uses)
@@ -3355,7 +3370,7 @@ const spawnDestination = (program: CheckedProgram, node: Node): Local | null => 
 
 /** Whether `node` or anything under it (outside an arrow) is a `spawn` on `state`'s scope. */
 const holdsSpawnOn = (program: CheckedProgram, node: Node, state: RegionState): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return false
   }
   if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
@@ -3371,7 +3386,7 @@ const holdsSpawnOn = (program: CheckedProgram, node: Node, state: RegionState): 
 
 /** The argument type of every `spawn` on `state`'s scope under `node`, for R7. */
 const collectTaskArgs = (program: CheckedProgram, node: Node, state: RegionState): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   const callee = spawnCallee(program, node)
@@ -3394,7 +3409,7 @@ const collectTaskArgs = (program: CheckedProgram, node: Node, state: RegionState
 
 /** Every destination of a `spawn` on `state`'s scope under `node`: what a loop's later passes will have stored into. */
 const collectDestinations = (program: CheckedProgram, node: Node, state: RegionState): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
@@ -3419,13 +3434,16 @@ const regionWriteMessage = (state: RegionState, what: string): string =>
 /** Whether `target` is memory rather than a local: an element or a field. */
 const isMemoryTarget = (target: Node): boolean => {
   const t = unwrapParens(target)
-  return t.kind === N_INDEX || t.kind === N_MEMBER
+  return t.kind === NodeKind.Index || t.kind === NodeKind.Member
 }
 
 /** Whether `target`, an assignment's left side, is one of a private local's own slots: `p[i]` or `p.f`. */
 const isPrivateSlot = (program: CheckedProgram, target: Node, uses: VariableUses): boolean => {
   const t = unwrapParens(target)
-  return (t.kind === N_INDEX || t.kind === N_MEMBER) && uses.isPrivate(namedLocal(program, t.children[0]))
+  return (
+    (t.kind === NodeKind.Index || t.kind === NodeKind.Member) &&
+    uses.isPrivate(namedLocal(program, t.children[0]))
+  )
 }
 
 /**
@@ -3439,7 +3457,7 @@ const sharedWriteBuiltin = (program: CheckedProgram, call: Node, uses: VariableU
   for (let i = 0; i < args.length; i++) {
     if (isWrittenArgument(letters, i) && !uses.isPrivate(namedLocal(program, args[i]))) {
       const callee = call.children[0]
-      return callee.kind === N_IDENT ? builtinNameOf(program, call) : dottedName(callee)
+      return callee.kind === NodeKind.Ident ? builtinNameOf(program, call) : dottedName(callee)
     }
   }
   return ""
@@ -3465,7 +3483,7 @@ const regionCallMessage = (
   if (writer.length > 0) {
     return regionWriteMessage(state, `\`${writer}\``)
   }
-  if (callee.kind === N_MEMBER) {
+  if (callee.kind === NodeKind.Member) {
     const receiver = unwrapParens(callee.children[0])
     // `r.orReturn()` returns early through its own path, which leaves the
     // block without the join a `return` or the block's end makes: the task
@@ -3474,7 +3492,11 @@ const regionCallMessage = (
     if (resultMethodName(program, table, node) === "orReturn") {
       return `\`orReturn\` returns without joining \`${state.name}\`, before the scope joins${REGION_TAIL}`
     }
-    if (receiver.kind === N_IDENT && receiver.text === "Arena" && program.nodeLocals[receiver.id] === null) {
+    if (
+      receiver.kind === NodeKind.Ident &&
+      receiver.text === "Arena" &&
+      program.nodeLocals[receiver.id] === null
+    ) {
       return regionWriteMessage(state, `\`Arena.${callee.text}\``)
     }
     if (state.isDestination(namedLocal(program, receiver))) {
@@ -3524,7 +3546,7 @@ const writesThroughMessage = (
   sig: FunctionSig,
   state: RegionState
 ): string => {
-  const constructing = node.kind === N_NEW
+  const constructing = node.kind === NodeKind.New
   const own = facts.get(sig.name)
   if (own === null) {
     return regionWriteMessage(state, lockCallName(node, sig))
@@ -3553,7 +3575,7 @@ const writesThroughMessage = (
  * `m.values()` is a call of its own, which the region judges as one.
  */
 const walkOpenOf = (program: CheckedProgram, loop: Node): FunctionSig | null => {
-  if (unwrapParens(loop.children[1]).kind === N_CALL) {
+  if (unwrapParens(loop.children[1]).kind === NodeKind.Call) {
     return null
   }
   const read = program.nodeCallees[loop.id]
@@ -3582,7 +3604,7 @@ const walkRegion = (
   state: RegionState,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     // A lifted function of its own, which runs only when called — but an arrow
     // given to a data-parallel form runs here, and reads what it captures.
     if (state.live()) {
@@ -3590,10 +3612,15 @@ const walkRegion = (
     }
     return
   }
-  if (node.kind === N_RETURN) {
+  if (node.kind === NodeKind.Return) {
     return // every scope joins before a `return` computes its value
   }
-  if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
+  if (
+    node.kind === NodeKind.For ||
+    node.kind === NodeKind.While ||
+    node.kind === NodeKind.Do ||
+    node.kind === NodeKind.ForOf
+  ) {
     // A later pass sees what every spawn inside the loop stored on the passes before.
     collectDestinations(program, node, state)
   }
@@ -3609,7 +3636,7 @@ const walkRegion = (
   // WP29 P3, R7: a lock anywhere from the statement that holds the first
   // `spawn` — before that spawn too, as on a loop's next pass — to the end of
   // the block, directly or through a call.
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     const locked = regionLockMessageFor(program, table, facts, node, state)
     if (locked.length > 0) {
       out.push(new ScopeFinding(node, locked))
@@ -3624,39 +3651,39 @@ const walkRegion = (
     return
   }
   let message = ""
-  if (node.kind === N_BINARY && isAssignmentOperator(node.text) && isMemoryTarget(node.children[0])) {
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text) && isMemoryTarget(node.children[0])) {
     if (!isPrivateSlot(program, node.children[0], uses)) {
       message = regionWriteMessage(state, "This assignment")
     }
   } else if (
-    node.kind === N_UNARY &&
+    node.kind === NodeKind.Unary &&
     (node.text === "++" || node.text === "--") &&
     isMemoryTarget(node.children[0]) &&
     !isPrivateSlot(program, node.children[0], uses)
   ) {
     message = regionWriteMessage(state, `This \`${node.text}\``)
-  } else if (node.kind === N_INDEX && state.isDestination(namedLocal(program, node.children[0]))) {
+  } else if (node.kind === NodeKind.Index && state.isDestination(namedLocal(program, node.children[0]))) {
     message = regionReadMessage(state, unwrapParens(node.children[0]).text)
-  } else if (node.kind === N_FOR_OF && state.isDestination(namedLocal(program, node.children[1]))) {
+  } else if (node.kind === NodeKind.ForOf && state.isDestination(namedLocal(program, node.children[1]))) {
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
-  } else if (node.kind === N_FOR_OF && walkOpenOf(program, node) !== null) {
+  } else if (node.kind === NodeKind.ForOf && walkOpenOf(program, node) !== null) {
     // A walk of a `Map` or `Set` itself is a call of its `walkOpen`, which
     // counts the walk into the table, as `s.keys()` in the same place is.
     const open = walkOpenOf(program, node)
     message = open === null ? "" : writesThroughMessage(program, table, facts, node, open, state)
-  } else if (node.kind === N_CALL) {
+  } else if (node.kind === NodeKind.Call) {
     message = regionCallMessage(program, table, facts, node, state, uses)
-  } else if (node.kind === N_NEW) {
+  } else if (node.kind === NodeKind.New) {
     // #564: a constructor is a call.
     const sig = program.nodeCallees[node.id]
     message = sig === null ? "" : writesThroughMessage(program, table, facts, node, sig, state)
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
-    if (node.kind === N_CALL) {
+    if (node.kind === NodeKind.Call) {
       // A refused data-parallel call still reads, there, what its arrow captures.
       for (const arg of node.children[1].children) {
-        if (arg.kind === N_ARROW) {
+        if (arg.kind === NodeKind.Arrow) {
           regionCaptureReads(program, arg, state, out)
         }
       }
@@ -3696,7 +3723,7 @@ const checkDestinations = (
   uses: VariableUses,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   if (spawnCallee(program, node) !== null) {
@@ -3724,14 +3751,14 @@ const findRegions = (
   scopeType: i32,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_BLOCK) {
+  if (node.kind === NodeKind.Block) {
     let i = 0
     while (i < node.children.length) {
       const stmt = node.children[i]
-      if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+      if (stmt.kind === NodeKind.Var && (stmt.flags & FLAG_USING) !== 0) {
         const locals: Local[] = []
         for (const decl of stmt.children[0].children) {
           const local = program.nodeLocals[decl.id]
@@ -3873,7 +3900,7 @@ const collectSiblingSpawns = (
   locals: Local[],
   out: SiblingSpawn[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   const callee = spawnCallee(program, node)
@@ -4130,7 +4157,9 @@ const isChannelType = (program: CheckedProgram, table: TypeTable, type: i32): bo
 
 /** Whether `sig` is the method `name` of a `Channel<T>` from `nish/threads`. */
 const isChannelMethod = (sig: FunctionSig, name: string): boolean =>
-  isThreadsClass(sig.owner, CHANNEL) && sig.decl.kind === N_METHOD && sig.decl.children[0].text === name
+  isThreadsClass(sig.owner, CHANNEL) &&
+  sig.decl.kind === NodeKind.Method &&
+  sig.decl.children[0].text === name
 
 /** Whether `sig` is `Channel<T>.send`, whose body the emitter writes. */
 export const isChannelSend = (sig: FunctionSig): boolean => isChannelMethod(sig, "send")
@@ -4140,41 +4169,91 @@ export const isChannelReader = (sig: FunctionSig): boolean => isChannelMethod(si
 
 /** Whether `sig` is `Mutex<T>.lock` from `nish/threads`, whose body the emitter writes. */
 export const isLockMethod = (sig: FunctionSig): boolean =>
-  isThreadsClass(sig.owner, MUTEX) && sig.decl.kind === N_METHOD && sig.decl.children[0].text === "lock"
+  isThreadsClass(sig.owner, MUTEX) &&
+  sig.decl.kind === NodeKind.Method &&
+  sig.decl.children[0].text === "lock"
 
-// ---- Atomics: `AtomicI32` and `AtomicI64` ------------------------------------------------
+// ---- Atomics: `AtomicI32`, `AtomicI64` and their arrays ----------------------------------
 //
-// An atomic is a class of one scalar whose methods the emitter writes as one
-// sequentially consistent instruction each (`emitAtomicBody`). It reaches a
-// task as a `Mutex` does, by its argument or a capture, and R7 holds of it as
-// of a lock; an atomic method's write is not a shared one, so a task and a
-// data-parallel body may make it beside the guarded store and the send.
+// An atomic is a class of one scalar, or of one array of them, whose methods
+// the emitter writes as one sequentially consistent instruction each
+// (`emitAtomicBody`), on the word or on the element the index names. It
+// reaches a task as a `Mutex` does, by its argument or a capture, and R7 holds
+// of it as of a lock; an atomic method's write is not a shared one, so a task
+// and a data-parallel body may make it beside the guarded store and the send.
 
-/** The two classes `nish/threads` declares for atomics. */
+/** The four classes `nish/threads` declares for atomics. */
 const ATOMIC_I32: string = "AtomicI32"
 const ATOMIC_I64: string = "AtomicI64"
+const ATOMIC_I32_ARRAY: string = "AtomicI32Array"
+const ATOMIC_I64_ARRAY: string = "AtomicI64Array"
 
 /**
- * Mark `info` as an atomic when it is `AtomicI32` or `AtomicI64` and `program`
- * is `nish/threads` itself, as the class is collected. The package is part of
- * the test, as `isThreadsModule`'s is: a root-package `std/threads.ts` that
- * declares an `AtomicI32` declares an ordinary class, whose bodies run as they
- * are written.
+ * Mark `info` as an atomic when it is `AtomicI32`, `AtomicI64` or an array of
+ * either and `program` is `nish/threads` itself, as the class is collected.
+ * The package is part of the test, as `isThreadsModule`'s is: a root-package
+ * `std/threads.ts` that declares an `AtomicI32` declares an ordinary class,
+ * whose bodies run as they are written.
  */
 export const markAtomicClass = (program: CheckedProgram, info: StructInfo): void => {
   if (
     info.kind === STRUCT_CLASS &&
-    (info.name === ATOMIC_I32 || info.name === ATOMIC_I64) &&
+    (info.name === ATOMIC_I32 ||
+      info.name === ATOMIC_I64 ||
+      info.name === ATOMIC_I32_ARRAY ||
+      info.name === ATOMIC_I64_ARRAY) &&
     isThreadsModule(program)
   ) {
     info.atomic = true
   }
 }
 
-/** Whether `info` is `nish/threads`'s `AtomicI32` or `AtomicI64`. */
+/** Whether `sig` is a method of an `AtomicI32Array` or an `AtomicI64Array`, whose index is checked. */
+export const isAtomicArrayMethod = (sig: FunctionSig): boolean => {
+  const owner = sig.owner
+  return isAtomicMethod(sig) && owner !== null && owner.field("values") !== null
+}
+
+/**
+ * Whether `sig` is the constructor of an `AtomicI32Array` or an
+ * `AtomicI64Array`, whose `new Array` the emitter places on its own cache
+ * lines (`emitNewArray`).
+ */
+export const isAtomicArrayConstructor = (sig: FunctionSig | null): boolean => {
+  if (sig === null) {
+    return false
+  }
+  const owner = sig.owner
+  return (
+    isAtomicClass(owner) && sig.role === ROLE_CONSTRUCTOR && owner !== null && owner.field("values") !== null
+  )
+}
+
+/** Whether `info` is one of `nish/threads`'s atomics. */
 const isAtomicClass = (info: StructInfo | null): boolean => info !== null && info.atomic
 
-/** Whether `type` is an `AtomicI32` or an `AtomicI64`. */
+/**
+ * Whether `name` is a field of the atomic `type` a program may read: one
+ * declared `readonly`, an array's `length`, which no method writes.
+ */
+const isAtomicReadonlyField = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  name: string
+): boolean => {
+  const info = classLayoutOf(program, table, type)
+  if (info !== null) {
+    for (const field of info.fields) {
+      if (field.name === name) {
+        return field.readonly
+      }
+    }
+  }
+  return false
+}
+
+/** Whether `type` is one of the atomics. */
 const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isAtomicClass(classLayoutOf(program, table, type))
 
@@ -4189,11 +4268,11 @@ const isThreadsObjectType = (program: CheckedProgram, table: TypeTable, type: i3
 
 /** Whether `sig` is a method of an atomic, whose body the emitter writes. */
 export const isAtomicMethod = (sig: FunctionSig): boolean =>
-  isAtomicClass(sig.owner) && sig.decl.kind === N_METHOD
+  isAtomicClass(sig.owner) && sig.decl.kind === NodeKind.Method
 
 /** Whether `node` is a call of a `Mutex`'s `lock()`. */
 export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
-  if (node.kind !== N_CALL) {
+  if (node.kind !== NodeKind.Call) {
     return false
   }
   const callee = program.nodeCallees[node.id]
@@ -4211,12 +4290,16 @@ export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
  */
 export const isGuardedAccess = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const e = unwrapParens(node)
-  if (e.kind !== N_MEMBER && e.kind !== N_INDEX) {
+  if (e.kind !== NodeKind.Member && e.kind !== NodeKind.Index) {
     return false
   }
   const base = unwrapParens(e.children[0])
-  if (e.kind === N_MEMBER && e.text === "value" && isGuardType(program, table, program.nodeTypes[base.id])) {
-    return base.kind !== N_THIS
+  if (
+    e.kind === NodeKind.Member &&
+    e.text === "value" &&
+    isGuardType(program, table, program.nodeTypes[base.id])
+  ) {
+    return base.kind !== NodeKind.This
   }
   return isGuardedAccess(program, table, base)
 }
@@ -4245,7 +4328,8 @@ const atomicMemberMessage = (name: string): string =>
 
 const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
   `\`${table.typeName(type)}\` is a class of \`nish/threads\`, and its objects are made only as the module ` +
-  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
+  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, " +
+  "`new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
   "An object literal would be a plain record under Node, with none of the methods the class is used through"
 
 const lockNotUsingMessage = (name: string, mutex: string): string =>
@@ -4277,7 +4361,7 @@ const guardSlot = (program: CheckedProgram, table: TypeTable, guard: i32, name: 
  */
 const guardUseIn = (program: CheckedProgram, table: TypeTable, call: Node, arg: Node): string => {
   const callee = program.nodeCallees[call.id]
-  if ((call.kind !== N_CALL && call.kind !== N_NEW) || callee === null) {
+  if ((call.kind !== NodeKind.Call && call.kind !== NodeKind.New) || callee === null) {
     return ""
   }
   // A constructor reached by `new` is a call too, its arguments the third
@@ -4290,7 +4374,7 @@ const guardUseIn = (program: CheckedProgram, table: TypeTable, call: Node, arg: 
     return ""
   }
   const body = callee.body()
-  const args = call.kind === N_NEW ? call.children[2].children : call.children[1].children
+  const args = call.kind === NodeKind.New ? call.children[2].children : call.children[1].children
   let index = callee.paramNames.length > 0 && callee.paramNames[0] === "this" ? 1 : 0
   let found = false
   for (const a of args) {
@@ -4315,14 +4399,14 @@ const guardUseUnder = (
   node: Node,
   param: string
 ): string => {
-  if (node.kind === N_MEMBER || node.kind === N_INDEX) {
+  if (node.kind === NodeKind.Member || node.kind === NodeKind.Index) {
     let root = node
-    while ((root.kind === N_MEMBER || root.kind === N_INDEX) && root.children.length > 0) {
+    while ((root.kind === NodeKind.Member || root.kind === NodeKind.Index) && root.children.length > 0) {
       root = unwrapParens(root.children[0])
     }
     const head = `${param}.value`
     const text = shownSource(program, node, "")
-    if (root.kind === N_IDENT && root.text === param && text.startsWith(head)) {
+    if (root.kind === NodeKind.Ident && root.text === param && text.startsWith(head)) {
       const slot = copiedSlot(program, table, `g${text.substring(param.length)}`, types[node.id])
       if (slot.text.length > 0) {
         return slot.text
@@ -4449,7 +4533,7 @@ const taskMutexMessage = (table: TypeTable, type: i32, path: string, spawn: stri
 const spawnWithArgument = (program: CheckedProgram, spawn: Node, arg: string): string => {
   const callee = unwrapParens(spawn.children[0])
   const args = spawn.children[1].children
-  if (callee.kind !== N_MEMBER || args.length < 2) {
+  if (callee.kind !== NodeKind.Member || args.length < 2) {
     return `s.spawn(${arg})`
   }
   const shown: string[] = [oneLine(program, args[0]), arg]
@@ -4533,17 +4617,17 @@ const scopeTasks = (
 const isFreshValue = (program: CheckedProgram, table: TypeTable, init: Node): boolean => {
   const e = unwrapParens(init)
   const type = program.nodeTypes[e.id]
-  if ((type >= 0 && isScalarArgument(table, type)) || e.kind === N_STRING) {
+  if ((type >= 0 && isScalarArgument(table, type)) || e.kind === NodeKind.String) {
     return true
   }
   let parts: Node[] = []
-  if (e.kind === N_NEW) {
+  if (e.kind === NodeKind.New) {
     parts = e.children[2].children
-  } else if (e.kind === N_ARRAY) {
+  } else if (e.kind === NodeKind.Array) {
     parts = e.children
-  } else if (e.kind === N_OBJECT) {
+  } else if (e.kind === NodeKind.Object) {
     for (const property of e.children) {
-      if (property.kind !== N_PROPERTY) {
+      if (property.kind !== NodeKind.Property) {
         return false // a spread copies what another object holds
       }
       parts.push(property.children[0])
@@ -4736,8 +4820,8 @@ export const taskMutexMessageFor = (
   const arg = taskArgTypeOf(sig)
   if (arg >= 0) {
     const none: Node[] = []
-    const args = node.kind === N_CALL ? node.children[1].children : none
-    const root = args.length > 1 && args[1].kind === N_IDENT ? args[1].text : "arg"
+    const args = node.kind === NodeKind.Call ? node.children[1].children : none
+    const root = args.length > 1 && args[1].kind === NodeKind.Ident ? args[1].text : "arg"
     const path = taskMutexPath(table, program, arg, root)
     if (path.length > 0) {
       return taskMutexMessage(table, arg, path, spawnWithArgument(program, node, path))
@@ -4783,7 +4867,7 @@ const taskMutexPath = (table: TypeTable, program: CheckedProgram, type: i32, roo
  */
 const storeTargetType = (program: CheckedProgram, table: TypeTable, target: Node): i32 => {
   const e = unwrapParens(target)
-  if (e.kind !== N_MEMBER) {
+  if (e.kind !== NodeKind.Member) {
     return program.nodeTypes[e.id]
   }
   const info = classLayoutOf(program, table, program.nodeTypes[unwrapParens(e.children[0]).id])
@@ -4797,10 +4881,10 @@ const isStoreTarget = (at: Node, parents: Node[], depth: i32): boolean => {
     return false
   }
   const parent = parents[depth - 1]
-  if (parent.kind === N_BINARY && isAssignmentOperator(parent.text)) {
+  if (parent.kind === NodeKind.Binary && isAssignmentOperator(parent.text)) {
     return parent.children[0] === at
   }
-  return parent.kind === N_UNARY && (parent.text === "++" || parent.text === "--")
+  return parent.kind === NodeKind.Unary && (parent.text === "++" || parent.text === "--")
 }
 
 /** R1–R4 at `node` and under it, with `parents` outermost first: every refusal is pushed onto `out`. */
@@ -4814,53 +4898,65 @@ const walkMutexes = (
   // A parenthesised expression is judged as what it wraps, where it stands.
   let at = node
   let depth = parents.length
-  while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+  while (depth > 0 && parents[depth - 1].kind === NodeKind.Paren) {
     at = parents[depth - 1]
     depth = depth - 1
   }
   const parent: Node | null = depth > 0 ? parents[depth - 1] : null
   const type = program.nodeTypes[node.id]
   const declaresName =
-    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === at
-  const called = parent !== null && parent.kind === N_CALL && parent.children[0] === at
-  if (node.kind === N_PAREN || declaresName) {
+    parent !== null &&
+    (parent.kind === NodeKind.VarDecl || parent.kind === NodeKind.Param) &&
+    parent.children[0] === at
+  const called = parent !== null && parent.kind === NodeKind.Call && parent.children[0] === at
+  if (node.kind === NodeKind.Paren || declaresName) {
     // judged as what it wraps, or a declaration rather than a use
-  } else if (node.kind === N_NEW && isMutexType(program, table, type)) {
+  } else if (node.kind === NodeKind.New && isMutexType(program, table, type)) {
     const args = node.children[2].children
     if (args.length > 0 && !isFreshValue(program, table, args[0])) {
       out.push(new ScopeFinding(args[0], mutexFreshMessage()))
     }
-  } else if (node.kind === N_MEMBER && isMutexType(program, table, program.nodeTypes[node.children[0].id])) {
+  } else if (
+    node.kind === NodeKind.Member &&
+    isMutexType(program, table, program.nodeTypes[node.children[0].id])
+  ) {
     if (!(node.text === "lock" && called)) {
       out.push(new ScopeFinding(node, mutexMemberMessage(node.text)))
       return
     }
-  } else if (node.kind === N_OBJECT && isThreadsObjectType(program, table, type)) {
+  } else if (node.kind === NodeKind.Object && isThreadsObjectType(program, table, type)) {
     out.push(new ScopeFinding(node, threadsLiteralMessage(table, type)))
     return
-  } else if (node.kind === N_MEMBER && isAtomicType(program, table, program.nodeTypes[node.children[0].id])) {
-    if (!called) {
+  } else if (
+    node.kind === NodeKind.Member &&
+    isAtomicType(program, table, program.nodeTypes[node.children[0].id])
+  ) {
+    if (
+      !called &&
+      !isAtomicReadonlyField(program, table, program.nodeTypes[node.children[0].id], node.text)
+    ) {
       out.push(new ScopeFinding(node, atomicMemberMessage(node.text)))
       return
     }
   } else if (isLockCall(program, node)) {
     if (!isUsingInitialiser(at, parents, depth)) {
       const callee = unwrapParens(node.children[0])
-      const mutex = callee.kind === N_MEMBER ? shownSource(program, callee.children[0], "m") : "m"
+      const mutex = callee.kind === NodeKind.Member ? shownSource(program, callee.children[0], "m") : "m"
       const message = lockNotUsingMessage(boundNameOf(at, parents, depth, "g"), mutex)
       out.push(fixedFinding(node, message, usingEdits(program, at, parents, depth)))
     }
   } else if (isGuardType(program, table, type)) {
-    const named = node.kind === N_IDENT ? node.text : "g"
+    const named = node.kind === NodeKind.Ident ? node.text : "g"
     const asValue =
-      node.kind === N_IDENT &&
+      node.kind === NodeKind.Ident &&
       parent !== null &&
-      parent.kind === N_MEMBER &&
+      parent.kind === NodeKind.Member &&
       parent.text === "value" &&
       parent.children[0] === at
     if (!asValue) {
       const call: Node | null = depth > 1 ? parents[depth - 2] : null
-      const passed = node.kind === N_IDENT && parent !== null && parent.kind === N_LIST && call !== null
+      const passed =
+        node.kind === NodeKind.Ident && parent !== null && parent.kind === NodeKind.List && call !== null
       const why = passed && call !== null ? guardArgumentWhy(program, table, call, at, node.text) : ""
       const guard = table.typeName(type)
       if (!passed) {
@@ -4882,14 +4978,16 @@ const walkMutexes = (
     // With no parent the chain is an arrow's whole expression body, which is
     // its answer: judged as `return g.value` is, by the type it would carry out.
     const base =
-      parent !== null && (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
+      parent !== null &&
+      (parent.kind === NodeKind.Member || parent.kind === NodeKind.Index) &&
+      parent.children[0] === at
     const above: Node | null = depth > 1 ? parents[depth - 2] : null
     if (
       parent !== null &&
       base &&
-      parent.kind === N_MEMBER &&
+      parent.kind === NodeKind.Member &&
       above !== null &&
-      above.kind === N_CALL &&
+      above.kind === NodeKind.Call &&
       above.children[0] === parent &&
       type !== T_STRING
     ) {
@@ -4905,15 +5003,15 @@ const walkMutexes = (
       // an access through it: judged where it ends
     } else if (parent !== null && isStoreTarget(at, parents, depth)) {
       // A store's target has no type of its own in the tables; what is stored is the value's.
-      const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
-      if (parent.kind === N_BINARY && unwrapParens(parent.children[1]).kind === N_NULL) {
+      const stored = parent.kind === NodeKind.Binary ? program.nodeTypes[parent.children[1].id] : type
+      if (parent.kind === NodeKind.Binary && unwrapParens(parent.children[1]).kind === NodeKind.Null) {
         const slot = storeTargetType(program, table, at)
         if (slot < 0 || table.stripNull(slot) !== T_STRING) {
           out.push(new ScopeFinding(parent, GUARD_NULL_STORE_MESSAGE))
         }
       } else if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
         const target = shownSource(program, at, "g.value.x")
-        const from: Node | null = parent.kind === N_BINARY ? unwrapParens(parent.children[1]) : null
+        const from: Node | null = parent.kind === NodeKind.Binary ? unwrapParens(parent.children[1]) : null
         const slot = copiedSlot(program, table, target, stored)
         const store = slot.text.length > 0 ? `${slot.text} = ${storedInto(program, slot, target, from)}` : ""
         out.push(new ScopeFinding(parent, guardStoreMessage(table, stored, store)))
@@ -4925,7 +5023,7 @@ const walkMutexes = (
         slot.text.length > 0
           ? `const ${bound.length > 0 ? bound : freshName(program.source.text, lastWordOf(slot.text), 0)} = ${slot.text}`
           : ""
-      const field = node.kind === N_MEMBER ? node.text : "field"
+      const field = node.kind === NodeKind.Member ? node.text : "field"
       out.push(new ScopeFinding(node, guardDerivedMessage(table, type, read, field)))
       return
     }
@@ -4958,18 +5056,18 @@ const guardArgumentWhy = (
   arg: Node,
   name: string
 ): string => {
-  if (call.kind === N_NEW) {
+  if (call.kind === NodeKind.New) {
     return "a constructor"
   }
-  if (call.kind !== N_CALL) {
+  if (call.kind !== NodeKind.Call) {
     return "something that is not a call"
   }
   const callee = program.nodeCallees[call.id]
   const target = unwrapParens(call.children[0])
-  if (target.kind === N_MEMBER) {
+  if (target.kind === NodeKind.Member) {
     return `\`${target.text}\`, a method`
   }
-  if (callee === null || target.kind !== N_IDENT) {
+  if (callee === null || target.kind !== NodeKind.Ident) {
     return "a function that is not named at the call"
   }
   if (callee.owner !== null || callee.role !== ROLE_FUNCTION) {
@@ -4983,7 +5081,7 @@ const guardArgumentWhy = (
   let named = 0
   for (let i = 0; i < args.length; i++) {
     const e = unwrapParens(args[i])
-    if (e.kind === N_IDENT && e.text === name) {
+    if (e.kind === NodeKind.Ident && e.text === name) {
       named = named + 1
     }
     if (args[i] === arg) {
@@ -5008,7 +5106,7 @@ const guardArgumentWhy = (
  * name, or a `new` by the class it makes, whose constructor is the callee.
  */
 const lockCallName = (node: Node, callee: FunctionSig): string =>
-  node.kind === N_NEW ? `\`new ${node.children[0].text}\`` : `\`${callee.sourceName}\``
+  node.kind === NodeKind.New ? `\`new ${node.children[0].text}\`` : `\`${callee.sourceName}\``
 
 /** What R5 refuses at `node`, a call or a `new`, while a lock is held, in words, or "". */
 const heldWhat = (
@@ -5018,7 +5116,7 @@ const heldWhat = (
   scopeType: i32,
   scopeName: string
 ): string => {
-  if (node.kind !== N_CALL && node.kind !== N_NEW) {
+  if (node.kind !== NodeKind.Call && node.kind !== NodeKind.New) {
     return ""
   }
   if (isLockCall(program, node)) {
@@ -5068,7 +5166,7 @@ const walkHeld = (
   held: HeldContext,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return // a lifted function of its own; a call that runs it is judged where it is
   }
   // WP29 P3, C7: a receive waits, as surely as a second lock does.
@@ -5100,11 +5198,11 @@ const findGuardBlocks = (
   held: HeldContext,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_BLOCK) {
+  if (node.kind === NodeKind.Block) {
     let i = 0
     while (i < node.children.length) {
       const stmt = node.children[i]
-      if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+      if (stmt.kind === NodeKind.Var && (stmt.flags & FLAG_USING) !== 0) {
         const decls = stmt.children[0].children
         let d = 0
         while (d < decls.length) {
@@ -5276,7 +5374,7 @@ const scopeNameOf = (site: ScopeSite): string => {
 const thisStatement = (node: Node, parents: Node[]): Node => {
   let at = node
   let k = parents.length - 1
-  while (k >= 0 && parents[k].kind !== N_BLOCK && parents[k].kind !== N_EXPR_STMT) {
+  while (k >= 0 && parents[k].kind !== NodeKind.Block && parents[k].kind !== NodeKind.ExprStmt) {
     at = parents[k]
     k = k - 1
   }
@@ -5389,7 +5487,9 @@ const hoistedArrow = (
   if (written.length > 0 && written.length <= 120) {
     return `\`${head} ${written}\``
   }
-  return body.kind === N_BLOCK ? `\`${head} {\` and the arrow's body` : `\`${head}\` and the arrow's body`
+  return body.kind === NodeKind.Block
+    ? `\`${head} {\` and the arrow's body`
+    : `\`${head}\` and the arrow's body`
 }
 
 /**
@@ -5401,7 +5501,7 @@ const oneLineBody = (text: string, body: Node): string => {
   if (written.indexOf("\n") < 0) {
     return written
   }
-  if (body.kind !== N_BLOCK) {
+  if (body.kind !== NodeKind.Block) {
     return ""
   }
   const out = new StringBuilder()
@@ -5424,7 +5524,7 @@ const channelSendersMessage = (what: string, remedy: string): string =>
 const ownChannelRemedy = (program: CheckedProgram, table: TypeTable, node: Node): string => {
   const element = channelElement(program, table, program.nodeTypes[node.id])
   const shown = element >= 0 ? table.typeName(element) : "i32"
-  const name = freshName(program.source.text, node.kind === N_IDENT ? node.text : "ch", 0)
+  const name = freshName(program.source.text, node.kind === NodeKind.Ident ? node.text : "ch", 0)
   return `declare the channel in the function that opens the scope, \`const ${name} = new Channel<${shown}>()\`, and hand the task that one`
 }
 
@@ -5476,16 +5576,16 @@ const channelRef = (program: CheckedProgram, sig: FunctionSig, expr: Node, field
   const e = unwrapParens(expr)
   const none: Local | null = null
   let index = -1
-  if (e.kind === N_THIS) {
+  if (e.kind === NodeKind.This) {
     index = sig.paramNames.length > 0 && sig.paramNames[0] === "this" ? 0 : -1
-  } else if (e.kind === N_IDENT) {
+  } else if (e.kind === NodeKind.Ident) {
     const local = program.nodeLocals[e.id]
     if (local !== null && local.storage === STORAGE_PARAM) {
       index = sig.paramNames.indexOf(local.name)
     } else if (local !== null && field.length === 0) {
       return new ChannelRef(REF_LOCAL, "", local)
     }
-  } else if (e.kind === N_MEMBER && field.length === 0) {
+  } else if (e.kind === NodeKind.Member && field.length === 0) {
     return channelRef(program, sig, e.children[0], e.text)
   }
   if (index < 0) {
@@ -5607,12 +5707,12 @@ export class ChannelSummaries {
 
 /** The expression a call hands `callee`'s parameter `k`: an argument, the receiver for `this`, or `null`. */
 const operandFor = (node: Node, callee: FunctionSig, k: i32): Node | null => {
-  const args = node.kind === N_NEW ? node.children[2].children : node.children[1].children
+  const args = node.kind === NodeKind.New ? node.children[2].children : node.children[1].children
   let at = k
   if (callee.paramNames.length > 0 && callee.paramNames[0] === "this") {
     if (k === 0) {
       const target = node.children[0]
-      return node.kind === N_CALL && target.kind === N_MEMBER ? target.children[0] : null
+      return node.kind === NodeKind.Call && target.kind === NodeKind.Member ? target.children[0] : null
     }
     at = k - 1
   }
@@ -5687,16 +5787,16 @@ const collectChannelOps = (
   summaries: ChannelSummaries,
   ops: ChannelOps
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return // a lifted function of its own, with a summary of its own
   }
-  if (node.kind === N_FOR_OF) {
+  if (node.kind === NodeKind.ForOf) {
     const read = program.nodeCallees[node.id]
     if (read !== null && isChannelReader(read)) {
       ops.add(node, channelRef(program, sig, node.children[1], ""), false)
     }
   }
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     const callee = program.nodeCallees[node.id]
     if (callee !== null && isChannelSend(callee)) {
       ops.add(node, channelRef(program, sig, node.children[0].children[0], ""), true)
@@ -5776,7 +5876,7 @@ const isTaskArgument = (program: CheckedProgram, at: Node, parents: Node[], dept
   const list = parents[depth - 1]
   const call = parents[depth - 2]
   return (
-    call.kind === N_CALL &&
+    call.kind === NodeKind.Call &&
     call.children[1] === list &&
     list.children.length > 1 &&
     list.children[1] === at &&
@@ -5806,7 +5906,7 @@ const walkChannelUses = (
 ): void => {
   // An arrow is lifted into a function of its own, which none of the rules
   // below follow into: a channel is refused there outright (`arrowChannel`).
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     const used = arrowChannel(program, table, node)
     if (used !== null) {
       const message = channelArrowMessage(program, table, sig, node, parents, program.nodeTypes[used.id])
@@ -5819,15 +5919,17 @@ const walkChannelUses = (
   }
   let at = node
   let depth = parents.length
-  while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+  while (depth > 0 && parents[depth - 1].kind === NodeKind.Paren) {
     at = parents[depth - 1]
     depth = depth - 1
   }
   const parent: Node | null = depth > 0 ? parents[depth - 1] : null
   const type = program.nodeTypes[node.id]
   const declaresName =
-    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === at
-  if (node.kind !== N_PAREN && !declaresName && isChannelType(program, table, type)) {
+    parent !== null &&
+    (parent.kind === NodeKind.VarDecl || parent.kind === NodeKind.Param) &&
+    parent.children[0] === at
+  if (node.kind !== NodeKind.Paren && !declaresName && isChannelType(program, table, type)) {
     // With no parent the channel is an arrow's whole expression body, which is
     // its answer: refused as `return ch` is.
     const message =
@@ -5850,8 +5952,8 @@ const walkChannelUses = (
 const arrowChannel = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
   for (const child of node.children) {
     const local: Local | null =
-      child.kind === N_VAR_DECL || child.kind === N_PARAM ? program.nodeLocals[child.id] : null
-    let type = child.kind === N_PAREN ? -1 : program.nodeTypes[child.id]
+      child.kind === NodeKind.VarDecl || child.kind === NodeKind.Param ? program.nodeLocals[child.id] : null
+    let type = child.kind === NodeKind.Paren ? -1 : program.nodeTypes[child.id]
     if (local !== null) {
       type = local.type
     }
@@ -5897,13 +5999,13 @@ const channelUseFinding = (
 ): string => {
   const parent = parents[depth - 1]
   const type = program.nodeTypes[node.id]
-  if (node.kind === N_NEW) {
+  if (node.kind === NodeKind.New) {
     const element = channelElement(program, table, type)
     if (element >= 0 && !isScalarArgument(table, element) && element !== T_STRING) {
       return channelElementMessage(table, element, boundNameOf(at, parents, depth, "ch"))
     }
     const declared =
-      parent.kind === N_VAR_DECL &&
+      parent.kind === NodeKind.VarDecl &&
       parent.children[2] === at &&
       depth > 2 &&
       isConstDeclaration(parents[depth - 3])
@@ -5923,26 +6025,36 @@ const channelUseFinding = (
   // one it declares itself is used as in any other function.
   const constructing = sig.role === ROLE_CONSTRUCTOR && !isChannelLocal(program, node, locals)
   // An assignment standing as a statement answers nothing; its two sides are judged on their own.
-  if (node.kind === N_BINARY && isAssignmentOperator(node.text) && parent.kind === N_EXPR_STMT) {
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text) && parent.kind === NodeKind.ExprStmt) {
     return ""
   }
   // `this.ch = ch` in a constructor, either side: how a class comes to hold a channel.
-  if (constructing && parent.kind === N_BINARY && parent.text === "=" && isFieldFromParam(program, parent)) {
+  if (
+    constructing &&
+    parent.kind === NodeKind.Binary &&
+    parent.text === "=" &&
+    isFieldFromParam(program, parent)
+  ) {
     return ""
   }
-  if (!constructing && parent.kind === N_MEMBER && parent.children[0] === at) {
+  if (!constructing && parent.kind === NodeKind.Member && parent.children[0] === at) {
     const above: Node | null = depth > 1 ? parents[depth - 2] : null
-    if (parent.text === "send" && above !== null && above.kind === N_CALL && above.children[0] === parent) {
+    if (
+      parent.text === "send" &&
+      above !== null &&
+      above.kind === NodeKind.Call &&
+      above.children[0] === parent
+    ) {
       return ""
     }
     return channelUseMessage(`\`${parent.text}\` is not a member of a \`Channel\` a program may name`)
   }
-  if (!constructing && parent.kind === N_FOR_OF && parent.children[1] === at) {
+  if (!constructing && parent.kind === NodeKind.ForOf && parent.children[1] === at) {
     return ""
   }
-  if (!constructing && parent.kind === N_LIST && depth > 1) {
+  if (!constructing && parent.kind === NodeKind.List && depth > 1) {
     const call = parents[depth - 2]
-    if (call.kind === N_CALL && call.children[1] === parent && spawnCallee(program, call) !== null) {
+    if (call.kind === NodeKind.Call && call.children[1] === parent && spawnCallee(program, call) !== null) {
       return isChannelLocal(program, node, locals)
         ? ""
         : channelSendersMessage(
@@ -5950,7 +6062,7 @@ const channelUseFinding = (
             ownChannelRemedy(program, table, node)
           )
     }
-    if (call.kind === N_CALL && call.children[1] === parent) {
+    if (call.kind === NodeKind.Call && call.children[1] === parent) {
       return takesChannelParameter(program, table, call, at)
         ? ""
         : channelUseMessage(
@@ -5958,7 +6070,7 @@ const channelUseFinding = (
           )
     }
     if (
-      call.kind === N_NEW &&
+      call.kind === NodeKind.New &&
       call.children[2] === parent &&
       isTaskArgument(program, call, parents, depth - 2)
     ) {
@@ -6003,16 +6115,16 @@ const takesChannelParameter = (program: CheckedProgram, table: TypeTable, call: 
 
 /** Whether `stmt`, the statement around a declarator, is a plain `const`. */
 const isConstDeclaration = (stmt: Node): boolean =>
-  stmt.kind === N_VAR && (stmt.flags & FLAG_CONST) !== 0 && (stmt.flags & FLAG_USING) === 0
+  stmt.kind === NodeKind.Var && (stmt.flags & FLAG_CONST) !== 0 && (stmt.flags & FLAG_USING) === 0
 
 /** Whether `assign` is `this.f = p`, a field of the object being made set from a parameter. */
 const isFieldFromParam = (program: CheckedProgram, assign: Node): boolean => {
   const target = unwrapParens(assign.children[0])
   const value = unwrapParens(assign.children[1])
   if (
-    target.kind !== N_MEMBER ||
-    unwrapParens(target.children[0]).kind !== N_THIS ||
-    value.kind !== N_IDENT
+    target.kind !== NodeKind.Member ||
+    unwrapParens(target.children[0]).kind !== NodeKind.This ||
+    value.kind !== NodeKind.Ident
   ) {
     return false
   }
@@ -6023,7 +6135,7 @@ const isFieldFromParam = (program: CheckedProgram, assign: Node): boolean => {
 /** Whether `init` is `new Channel<T>()`. */
 const isNewChannel = (program: CheckedProgram, table: TypeTable, init: Node): boolean => {
   const e = unwrapParens(init)
-  return e.kind === N_NEW && isChannelType(program, table, program.nodeTypes[e.id])
+  return e.kind === NodeKind.New && isChannelType(program, table, program.nodeTypes[e.id])
 }
 
 /** Every local of `node`'s body bound by `const ch = new Channel<T>()`, with its declarator. */
@@ -6034,11 +6146,11 @@ const collectChannelLocals = (
   locals: Local[],
   decls: Node[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   // A `let` is C2's to refuse, once; its channel is still the function's own.
-  if (node.kind === N_VAR) {
+  if (node.kind === NodeKind.Var) {
     for (const decl of node.children[0].children) {
       const local = program.nodeLocals[decl.id]
       if (local !== null && isNewChannel(program, table, decl.children[2])) {
@@ -6054,13 +6166,13 @@ const collectChannelLocals = (
 
 /** Whether `decl` is a declarator of the `using` `stmt` that opens a scope: `using s = scope(), t = scope()` has two. */
 const opensScope = (program: CheckedProgram, stmt: Node, decl: Node, scopeType: i32): boolean =>
-  stmt.kind === N_VAR &&
+  stmt.kind === NodeKind.Var &&
   (stmt.flags & FLAG_USING) !== 0 &&
   isScopeCall(program, unwrapParens(decl.children[2]), scopeType)
 
 /** The name of the first scope the `using` `stmt` opens, or "" when it opens none. */
 const firstScopeName = (program: CheckedProgram, stmt: Node, scopeType: i32): string => {
-  if (stmt.kind === N_VAR) {
+  if (stmt.kind === NodeKind.Var) {
     for (const decl of stmt.children[0].children) {
       if (opensScope(program, stmt, decl, scopeType)) {
         return decl.children[0].text
@@ -6079,7 +6191,7 @@ const addScopeSites = (
   index: i32,
   out: ScopeSite[]
 ): void => {
-  if (stmt.kind !== N_VAR) {
+  if (stmt.kind !== NodeKind.Var) {
     return
   }
   for (const decl of stmt.children[0].children) {
@@ -6116,7 +6228,7 @@ const candidateScopes = (program: CheckedProgram, block: Node, index: i32, scope
   while (j < block.children.length) {
     const stmt = block.children[j]
     addScopeSites(program, stmt, scopeType, block, j, out)
-    if (stmt.kind === N_BLOCK) {
+    if (stmt.kind === NodeKind.Block) {
       for (const inner of stmt.children) {
         addScopeSites(program, inner, scopeType, stmt, j, out)
       }
@@ -6138,18 +6250,18 @@ class StatementSite {
 }
 
 const statementSiteOf = (node: Node, decl: Node): StatementSite => {
-  if (node.kind === N_BLOCK) {
+  if (node.kind === NodeKind.Block) {
     let i = 0
     while (i < node.children.length) {
       const stmt = node.children[i]
-      if (stmt.kind === N_VAR && stmt.children[0].children.indexOf(decl) >= 0) {
+      if (stmt.kind === NodeKind.Var && stmt.children[0].children.indexOf(decl) >= 0) {
         return new StatementSite(node, i)
       }
       i = i + 1
     }
   }
   for (const child of node.children) {
-    if (child.kind !== N_ARROW) {
+    if (child.kind !== NodeKind.Arrow) {
       const found = statementSiteOf(child, decl)
       if (found.block !== null) {
         return found
@@ -6165,7 +6277,7 @@ const isWithin = (outer: Node, inner: Node): boolean => inner.start >= outer.sta
 
 /** Every `spawn` call under `node`, in source order. */
 const collectSpawns = (program: CheckedProgram, node: Node, out: Node[]): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   if (spawnCallee(program, node) !== null) {
@@ -6194,7 +6306,7 @@ const pathsInTaskArgument = (program: CheckedProgram, spawn: Node, local: Local)
     out.push("")
     return out
   }
-  const ctor: FunctionSig | null = arg.kind === N_NEW ? program.nodeCallees[arg.id] : null
+  const ctor: FunctionSig | null = arg.kind === NodeKind.New ? program.nodeCallees[arg.id] : null
   if (ctor === null) {
     return out
   }
@@ -6218,13 +6330,13 @@ const holdsChannelLocal = (program: CheckedProgram, node: Node, local: Local): b
 
 /** Every field a constructor's body sets from its parameter `param`, `this.f = param`, onto `out`. */
 const fieldsAssignedIn = (node: Node, param: string, out: string[]): void => {
-  if (node.kind === N_BINARY && node.text === "=") {
+  if (node.kind === NodeKind.Binary && node.text === "=") {
     const target = unwrapParens(node.children[0])
     const value = unwrapParens(node.children[1])
     if (
-      target.kind === N_MEMBER &&
-      unwrapParens(target.children[0]).kind === N_THIS &&
-      value.kind === N_IDENT &&
+      target.kind === NodeKind.Member &&
+      unwrapParens(target.children[0]).kind === NodeKind.This &&
+      value.kind === NodeKind.Ident &&
       value.text === param
     ) {
       out.push(target.text)
@@ -6246,7 +6358,11 @@ const inLoopWithin = (outer: Node, node: Node, at: Node): boolean => {
   if (!isWithin(at, node)) {
     return false
   }
-  const loop = at.kind === N_FOR || at.kind === N_WHILE || at.kind === N_DO || at.kind === N_FOR_OF
+  const loop =
+    at.kind === NodeKind.For ||
+    at.kind === NodeKind.While ||
+    at.kind === NodeKind.Do ||
+    at.kind === NodeKind.ForOf
   if (loop && at !== outer) {
     return true
   }
@@ -6384,10 +6500,12 @@ const checkFieldTypes = (
   out: ScopeFinding[]
 ): void => {
   for (const decl of node.children) {
-    const info: StructInfo | null = decl.kind === N_CLASS ? program.struct(decl.children[0].text) : null
+    const info: StructInfo | null =
+      decl.kind === NodeKind.Class ? program.struct(decl.children[0].text) : null
     if (info !== null) {
       for (const member of decl.children[3].children) {
-        const field: FieldInfo | null = member.kind === N_FIELD ? info.field(member.children[0].text) : null
+        const field: FieldInfo | null =
+          member.kind === NodeKind.Field ? info.field(member.children[0].text) : null
         if (field !== null && wrapsChannel(program, table, field.type)) {
           out.push(new ScopeFinding(member, wrappedChannelMessage(table, field.type)))
         }
@@ -6403,10 +6521,10 @@ const checkLocalTypes = (
   node: Node,
   out: ScopeFinding[]
 ): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return false
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     const local = program.nodeLocals[node.id]
     if (local !== null && wrapsChannel(program, table, local.type)) {
       out.push(new ScopeFinding(node, wrappedChannelMessage(table, local.type)))
@@ -6437,10 +6555,10 @@ const findThisEscapes = (
   parents: Node[],
   out: ScopeFinding[]
 ): boolean => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return false
   }
-  if (node.kind === N_THIS && !isOwnFieldUse(program, table, parents)) {
+  if (node.kind === NodeKind.This && !isOwnFieldUse(program, table, parents)) {
     out.push(
       new ScopeFinding(
         node,
@@ -6465,7 +6583,7 @@ const findThisEscapes = (
 /** How many of `parents` are above the node at `depth`, once the parentheses around it are counted as it. */
 const outsideParens = (parents: Node[], depth: i32): i32 => {
   let d = depth
-  while (d > 0 && parents[d - 1].kind === N_PAREN) {
+  while (d > 0 && parents[d - 1].kind === NodeKind.Paren) {
     d = d - 1
   }
   return d
@@ -6488,7 +6606,7 @@ const outsideParens = (parents: Node[], depth: i32): i32 => {
  */
 const isOwnFieldUse = (program: CheckedProgram, table: TypeTable, parents: Node[]): boolean => {
   const fieldDepth = outsideParens(parents, parents.length) - 1
-  if (fieldDepth < 0 || parents[fieldDepth].kind !== N_MEMBER) {
+  if (fieldDepth < 0 || parents[fieldDepth].kind !== NodeKind.Member) {
     return false
   }
   const field = parents[fieldDepth]
@@ -6498,7 +6616,7 @@ const isOwnFieldUse = (program: CheckedProgram, table: TypeTable, parents: Node[
     return true
   }
   const user: Node | null = usedAt > 0 ? parents[usedAt - 1] : null
-  if (user !== null && user.kind === N_CALL && user.children[0] === fieldAt) {
+  if (user !== null && user.kind === NodeKind.Call && user.children[0] === fieldAt) {
     return false // `this.m()`: the method is handed `this`
   }
   const type = program.nodeTypes[field.id]
@@ -6507,7 +6625,7 @@ const isOwnFieldUse = (program: CheckedProgram, table: TypeTable, parents: Node[
   }
   if (
     user === null ||
-    (user.kind !== N_MEMBER && user.kind !== N_INDEX) ||
+    (user.kind !== NodeKind.Member && user.kind !== NodeKind.Index) ||
     user.children[0] !== fieldAt ||
     type < 0 ||
     isChannelType(program, table, table.stripNull(type)) ||
@@ -6638,10 +6756,10 @@ const findScopeReceives = (
   scopeType: i32,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === N_BLOCK) {
+  if (node.kind === NodeKind.Block) {
     let i = 0
     while (i < node.children.length) {
       const name = firstScopeName(program, node.children[i], scopeType)
@@ -6668,7 +6786,7 @@ const walkScopeReceives = (
   name: string,
   out: ScopeFinding[]
 ): void => {
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   const what = receiveWhat(program, summaries, node)
@@ -6686,12 +6804,12 @@ const walkScopeReceives = (
 
 /** The receive `node` is, in words — a loop over a channel, or a call that receives — or "". */
 const receiveWhat = (program: CheckedProgram, summaries: ChannelSummaries, node: Node): string => {
-  if (node.kind === N_FOR_OF) {
+  if (node.kind === NodeKind.ForOf) {
     const read = program.nodeCallees[node.id]
     return read !== null && isChannelReader(read) ? "A loop over a channel" : ""
   }
   // A `new` is a call of its class's constructor.
-  if (node.kind !== N_CALL && node.kind !== N_NEW) {
+  if (node.kind !== NodeKind.Call && node.kind !== NodeKind.New) {
     return ""
   }
   const callee = program.nodeCallees[node.id]

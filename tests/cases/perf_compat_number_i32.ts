@@ -1,4 +1,4 @@
-// WP28 C0, NL9018: `--number-mode i32` beside the compatibility dialect is
+// WP28 C0, NL9020: `--number-mode i32` beside the compatibility dialect is
 // allowed and priced. The dialect's own number is the double a JavaScript
 // engine computes with; asking for the 32-bit integer back keeps the strict
 // dialect's arithmetic, overflow check and all, and the note says what that

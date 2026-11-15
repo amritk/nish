@@ -13,10 +13,10 @@
 
 ## Next
 
-Nothing scheduled: every stage is built. cs builds its client on it, in the cs repository.
+Nothing scheduled: every stage is built.
 
 ## Not planned
 
-Generated DOM bindings, threads and `SharedArrayBuffer`, closures, `async` on wasm.
+Generated DOM bindings, threads and `SharedArrayBuffer`, closures. `async` on wasm is [WP54](wp54-async-wasm.md)'s, proposed.
 
 [All work packages](index.md)

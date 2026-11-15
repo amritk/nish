@@ -133,12 +133,49 @@ Only `fs.read` and `fs.write` take a scope, only in `--allow`, and only with
 `--sandbox`, the one thing that enforces it; each of the others is refused
 with exit status 2. A directory with a comma in its name cannot be named.
 
+## Granting a dependency its capabilities
+
+A package you install under `node_modules` may read files, write them,
+start programs, reach the network, call C or use `nish:unsafe` only when
+your own `package.json` says it may. Those six, `fs.read`, `fs.write`,
+`process.spawn`, `net`, `ffi` and `unsafe`, are the **gated**
+capabilities. Without a grant, the build stops in the dependency's source,
+naming the package, the capability and the chain of calls that reaches it:
+
+```text
+node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+```
+
+Grant each one by the package's name, under `nish.capabilities.dependencies`
+in the `package.json` nearest above your entry file. A package that reads
+files, runs tools, writes files and opens pull requests needs all of this:
+
+```json
+{
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "@amritk/vector": ["fs.read", "fs.write", "process.spawn", "net", "unsafe"]
+      }
+    }
+  }
+}
+```
+
+Only your own `package.json` grants. A dependency's `package.json` cannot
+grant itself anything, and neither can `--allow` on the command line. Every
+other capability, such as `clock` or `env`, needs no grant. The
+[`package.json` reference](../../reference/config/package-json.md) lists
+every field Nish reads, with each error a mistake in it gets, and
+[`nish-capabilities.lock.json`](../../reference/config/capabilities-lock.md)
+records what each dependency reaches, so an upgrade that reaches something
+new stops the build.
+
 ## Narrowing what a dependency is granted
 
-A dependency under `node_modules` needs your `package.json` to grant it
-`fs.read`, `fs.write`, `net`, `process.spawn`, `ffi` or `unsafe` (see
-[A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities)).
-The grant can name what it is for, after an `=`: a directory for `fs.read`
+The specification's rules are in
+[A dependency's capabilities](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-dependencys-capabilities).
+A grant can name what it is for, after an `=`: a directory for `fs.read`
 and `fs.write`, a program for `process.spawn`, an IP address (or a Unix
 socket's absolute path, such as `net=/run/app.sock`) for `net`.
 
@@ -190,8 +227,51 @@ under a grant of a `#!/bin/sh` script, unless the grant names `sh` as well.
 To make that check, a spawn under `--sandbox` opens the program first and
 runs the file it opened through `/proc/self/fd`, so `/proc` must be mounted,
 and a script started that way sees a `/proc/self/fd/N` path as its `$0`. A
-program the grant names may still be an interpreter (`sh`, `python3`) that
-runs whatever it is told: grant one only to a dependency you have read.
+program the grant names may still be an interpreter: `python3` runs any code
+it is handed inside its own process, and a shell runs its builtins. Grant
+one only to a dependency you have read.
+
+A program started under such a grant cannot start another. The kernel holds
+it, and everything it forks, to its own start, so `find -exec`, `xargs`,
+`env <program>`, `timeout` and `make` fail where they would run a second
+program, a granted one included. A granted shell script still starts and
+runs its shell's builtins (`echo`, `test`, `read`); any other command in it
+fails, and a script that opens with `#!/usr/bin/env sh` does not start at
+all, because `env` starting `sh` is already the second program: name the
+interpreter's own path on the `#!` line. This needs Linux 5.5; on an older
+kernel, or inside a container that forbids the calls it takes, every spawn
+under such a grant fails and says so on stderr, in `--sandbox=best-effort`
+too. Docker's default seccomp profile is one that forbids them: there the
+line ends `(EPERM)`. The same holds for a granted program that is itself a Nish program
+built with `--sandbox` and such a grant: its own spawns fail.
+
+To let one program start others, write `exec:` before it in the grant:
+
+```json
+{
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_build": ["process.spawn=exec:make", "process.spawn=cc"]
+      }
+    }
+  }
+}
+```
+
+Under `--sandbox`, `make` and everything it starts may run any program on
+the list, and also the loader and the `#!` interpreters the list lets the
+kernel run, which start any binary the program can read. So `exec:` is close
+to granting `process.spawn` whole for that program: grant it only to a
+dependency that may run anything. `cc` above is still held to its own
+start, and so is every program granted without `exec:`, which cannot borrow
+`make`'s reach by starting it. A program written both ways counts as
+`exec:`, and "the same program" means the same file: another name for
+`make`, a symlink or a hard link, granted plainly, is `make` and starts as
+`make` does. `process.spawn=exec:` with no program after it stops the build,
+as a program that is not on your `PATH` does. The other way to let a
+dependency's programs start others is to grant it `process.spawn` whole,
+which lifts the list of programs with it.
 
 Addresses are checked at build time only. The kernel cannot see which
 address a socket call is given, so a `net=<host>` grant does not stop a
@@ -200,7 +280,8 @@ you have read.
 
 `nish-capabilities.lock.json` records the arguments too
 (`"pkg_conf": ["fs.read=data"]`). Widening a grant past them — a new
-directory, program or address, or the whole capability — stops the build
+directory, program or address, `exec:` before a program, or the whole
+capability — stops the build
 until you review it and run `--update-capability-lock` again.
 
 If the directory is gone when the program runs, `--sandbox` refuses to run,

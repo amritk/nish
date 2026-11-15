@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/amritk/nish/main/schemas/capabilities-lock.schema.json",
+  "title": "nish-capabilities.lock.json",
+  "description": "The capability lockfile records every capability each dependency reaches, so that a dependency upgrade that reaches something new stops the build instead of passing in silence. It works like `package-lock.json`: the compiler writes it, you commit it, and a change to it is a change a reviewer sees.\n\n`--update-capability-lock` writes the file beside the root `package.json`, the one nearest above the entry, or beside the entry when there is none. While the file exists, every build is held to it. A dependency that reaches a capability its row does not record is refused, in the dependency's own source, with the chain of calls that reaches it ([NL2577](../diagnostics/nl2xxx.md#nl2577)):\n\n```text\nnode_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress\n```\n\nReview the chain, and then run the build once more with `--update-capability-lock` to record it.\n\n- **Only growth is an error.** A row that records more than the dependency reaches, or a row for a package the program no longer loads, is accepted. A dependency with no row is held to an empty one.\n- **The comparison runs after the policies.** A build that [the root package's capability policy or its dependency grants](package-json.md) refuse is refused by them, and `--update-capability-lock` on it writes nothing. The flag skips the comparison and rewrites the file, even a malformed one.\n- **The lockfile changes no byte of the compiled program.** `nish run` takes the flag, and checks the program against the file before it looks in its cache, so a cached build is held to it too.\n\nThe file is written byte-stable: packages sorted, capabilities in the fixed order of the capability report, two-space indentation, one trailing newline. The same program writes the same file, so it diffs as cleanly as the change that moved it. Neither the standard library nor the root package has a row.\n\nIt is read strictly. Text that is not JSON, a `version` other than `1`, a key other than `version` and `packages`, a missing key, a name that is no capability, and a key or capability written twice are [NL3043](../diagnostics/nl3xxx.md#nl3043), reported where the lockfile writes the mistake.\n\nThis page is generated from [`schemas/capabilities-lock.schema.json`](https://github.com/amritk/nish/blob/main/schemas/capabilities-lock.schema.json).",
+  "type": "object",
+  "x-mjst": { "markdown": { "file": "capabilities-lock.md" } },
+  "required": ["version", "packages"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The version of the file's format. `1` is the only one this compiler reads and writes.",
+      "examples": [1]
+    },
+    "packages": {
+      "type": "object",
+      "description": "One row per dependency the program loads, keyed by the package's name: the name you import it by, `@scope/name` for a scoped package. A row lists every capability the dependency reaches, gated or not, and `[]` records that it reaches nothing.\n\nAn entry is a capability's name when the dependency reaches it whole. When the root `package.json` grants the capability narrowed by an argument, the row records the argument instead, as `cap=arg`, one entry per argument, in the form the grant writes it: `fs.read=data`, `process.spawn=git`, `process.spawn=exec:make`, `net=127.0.0.1`. Widening a grant past what the row records is growth, like a new capability ([NL2593](../diagnostics/nl2xxx.md#nl2593)). That is a new directory, program or address, `exec:` before a program, or the capability whole. A row that records the capability whole accepts any argument.",
+      "examples": [
+        {
+          "@acme/fastmath": ["unsafe"],
+          "pkg_http": ["clock", "net"],
+          "pkg_git": ["fs.read=vendor/repos", "process.spawn=git"]
+        }
+      ],
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^(clock|entropy|env|exit|ffi|fs\\.read|fs\\.write|net|process\\.spawn|signal|tty|unsafe)$|^(fs\\.read|fs\\.write|net|process\\.spawn)=.+$"
+        }
+      }
+    }
+  }
+}

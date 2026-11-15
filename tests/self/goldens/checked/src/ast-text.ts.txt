@@ -12,11 +12,9 @@ import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_CONSTRUCT from "./nodes" -> const FLAG_CONSTRUCT
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
 import FLAG_DEFER from "./nodes" -> const FLAG_DEFER
-import FLAG_FOR_IN from "./nodes" -> const FLAG_FOR_IN
-import FLAG_USING from "./nodes" -> const FLAG_USING
-import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
+import FLAG_FOR_IN from "./nodes" -> const FLAG_FOR_IN
 import FLAG_GENERATOR from "./nodes" -> const FLAG_GENERATOR
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_POSTFIX from "./nodes" -> const FLAG_POSTFIX
@@ -26,9 +24,8 @@ import FLAG_REST from "./nodes" -> const FLAG_REST
 import FLAG_SATISFIES from "./nodes" -> const FLAG_SATISFIES
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_TYPE_ONLY from "./nodes" -> const FLAG_TYPE_ONLY
-import N_STRING from "./nodes" -> const N_STRING
-import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
-import N_UNARY from "./nodes" -> const N_UNARY
+import FLAG_USING from "./nodes" -> const FLAG_USING
+import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import Node from "./nodes" -> struct Node
 import nodeName from "./nodes" -> function @nodeName
 function indent(depth: i32): string -> @indent

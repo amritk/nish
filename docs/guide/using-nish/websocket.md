@@ -51,6 +51,42 @@ export const main = (): i32 => 0;
 A request `acceptWebSocket` refuses (`H1_INVALID`) is yours to answer, with a
 400, or a 426 for a version other than 13.
 
+### Checking `Origin`
+
+A browser sends the user's cookies with a WebSocket handshake to your site
+even when a page on another site opens it, and nothing in the handshake stops
+that page reading what comes back (cross-site WebSocket hijacking). What the
+page cannot change is the `Origin` the browser sends. A server whose
+WebSocket trusts the user's cookies checks it before accepting:
+`websocketOriginAllowed(conn.parser, allowed)` answers true when the request
+carries exactly one `Origin` and it is one of `allowed`, compared whole in any
+ASCII case. Write each origin as a browser sends it: scheme, host and a port
+that is not the scheme's default, with no path or trailing slash
+(`https://example.com`, `http://localhost:8080`). Refuse the rest with a 403.
+
+```ts nish:ok
+import { Http1Connection } from "nish/net/http1-server";
+import { websocketOriginAllowed } from "nish/net/websocket";
+
+/** Accepts a WebSocket only from a page on `https://example.com`; answers 403 to any other origin. */
+export const acceptFromSite = (conn: Http1Connection): boolean => {
+  const allowed: string[] = ["https://example.com"];
+  if (!websocketOriginAllowed(conn.parser, allowed)) {
+    const none: u8[][] = [];
+    conn.respond(403, none, none, 0);
+    return false;
+  }
+  return conn.acceptWebSocket("") === 0;
+};
+
+export const main = (): i32 => 0;
+```
+
+`acceptWebSocket` does not read `Origin` itself: a client that is not a
+browser need not send one, and such a request answers false here, so a server
+that also serves those clients decides for them on something else, such as a
+token in the request.
+
 ## Opening a WebSocket as a client
 
 The client's side is six steps over a connection you opened:

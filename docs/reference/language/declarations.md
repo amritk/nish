@@ -285,11 +285,13 @@ having no top-level code and therefore no initialisation order.
   (`` Module constant `answer` needs a type annotation ``,
   `tests/cases/reject_const_no_annotation`), and so is an initialiser.
 - **The type must be `i32`, `i64`, `f64`, `number`, `boolean`, or `string`.**
-  An array, class, or interface constant would need an allocation, and there is
-  no code to run it (`` must be a number, boolean, or string ``,
-  `tests/cases/reject_const_array`). The exception is a `new Array<T>(n)` or
-  typed-array `new` of a compile-time length, which is
-  [module storage](#module-storage) and has rules of its own.
+  A class or interface constant would need an allocation, and there is
+  no code to run it (`` must be a number, boolean, string, or a `readonly`
+  array of numbers ``, `tests/cases/reject_ffi_handle_module_binding`). There
+  are two exceptions with rules of their own: a `readonly` array of numbers
+  written out as a literal, which is a [constant table](#constant-tables), and
+  a `new Array<T>(n)` or typed-array `new` of a compile-time length, which is
+  [module storage](#module-storage).
 - **The initialiser is an ordinary Nish expression restricted to literals
   and other constants**: the operators of [Operators](expressions.md#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
@@ -338,6 +340,48 @@ having no top-level code and therefore no initialisation order.
 - **A string constant is a value**, so it is a receiver like any other string:
   `NAME.length` is the folded literal's byte length
   (`tests/cases/const_string_member`).
+
+## Constant tables
+
+```ts
+const CLASS: readonly u8[] = [0, 0, 1, 1, 2, 3]
+const STEPS: readonly i32[] = [-1, 0, 1, LIMIT]
+```
+
+**A top-level `const` of type `readonly T[]` whose initialiser is an array
+literal is a constant table**: its elements are folded at compile time and laid
+out as one read-only data global, with a constant array header over it, so no
+code runs to build it and nothing can write it (`tests/cases/const_array_u8`,
+`const_array_numeric`). A use of the name is the header's address — the same
+`readonly T[]` value any other read-only array is — so `CLASS[c]`,
+`CLASS.length`, `for (const v of CLASS)` and passing it to a `readonly T[]`
+parameter all work, and `CLASS[c]` with `c: u8` into a 256-entry table is one
+load the bounds prover has already discharged.
+
+- **The element type is `u8`, `u16`, `u32`, `i32`, `i64` or `f64`** — the
+  numbers whose bytes are their value. Anything else is
+  `` Constant table `XS` cannot hold string ``
+  (`tests/cases/reject_const_array_element_type`).
+- **The annotation must be `readonly T[]`** (or `ReadonlyArray<T>`): the data
+  is constant, and a plain `T[]` could be written through. `const XS: i32[] =
+  [1, 2, 3]` is `` must be declared `readonly i32[]` ``
+  (`tests/cases/reject_const_array`).
+- **Each element is a constant expression** under the rule above — literals,
+  other module constants and arithmetic over them
+  (`tests/cases/reject_const_array_nonconst`) — and must fit the element type:
+  `256` in a `readonly u8[]` is `` Element 2 of constant table `XS` does not fit
+  in u8 `` (`tests/cases/reject_const_array_element`). An empty literal is
+  refused (`` has no elements ``, `reject_const_array_empty`).
+- **Writing is refused like any write to a `readonly` array**: an element
+  store, `push`, `pop` or any other mutating method
+  (`tests/cases/reject_const_array_write`, `reject_const_array_push`), and
+  handing the table to a mutable `T[]` — a parameter or a local
+  (`reject_const_array_mutable`, `reject_const_array_alias`).
+- **The symbols are `@nish_const_<module>_<name>.data`** (`private unnamed_addr
+  constant`) **and `@nish_const_<module>_<name>`** (the header, `internal
+  constant`), `<module>` the module's index. An exported table follows module
+  storage's rule: the header in its own module is not `internal`, and an
+  importer declares it `external constant`.
 
 ## Module storage
 
@@ -391,7 +435,8 @@ export const step = (): void => {
 - **The element is pointer-free, and zero is one of its values**: a number, a
   `boolean`, an enum or a ranged integer whose zero is a member, a
   `HostHandle`, or an interface no class implements whose fields are all of
-  these. A string, an array, a class, a `Map` or a `| null` is
+  these. A string, an array, a class, a `Map` or a `| null` (but `C | null`
+  for a class `C`, which is [root storage](#root-storage-an-object-graph-kept-between-calls)) is
   `` Module storage `X` cannot hold T: its bytes are zero-filled where a page can read them, … ``
   (NL2686, `reject_storage_string_element`, `_array_element`,
   `_class_element`, `_map_element`, `_nullable_element`,
@@ -473,6 +518,101 @@ export const step = (): void => {
   `f32[]` is still a plain JavaScript array there: only module storage is a
   view.
 
+### Root storage: an object graph kept between calls
+
+**Module storage whose element is `C | null` for a class `C` is root
+storage**: each slot holds one object, and everything that object reaches —
+its fields, their arrays and strings, the objects they hold — outlives the
+call that built it (`tests/cases/root_storage`,
+`docs/wp55-persistent-root.md`). It is how a wasm module keeps a game, a
+document or any class instance across `init`, `step` and `draw`.
+
+```ts
+class World {
+  balls: Ball[]
+  tick: i32 = 0
+  constructor() {
+    this.balls = []
+  }
+}
+
+const world = new Array<World | null>(1)
+
+export const init = (): void => {
+  world[0] = new World()
+}
+
+export const step = (): void => {
+  const w = world[0]
+  if (w !== null) {
+    w.tick = w.tick + 1
+  }
+}
+```
+
+On a page module each root is a record of its data, its length and the
+descriptor of its class, gathered into one table the keep walks
+(`tests/cases/root_storage_page`, whose root is `head`, a list of `Node`):
+
+```llvm
+%nish.root = type { i8*, i32, i8* }
+@nish_storage_0_head.root = constant %nish.root { i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*), i32 1, i8* bitcast (%nish.trace* @nish.trace.0 to i8*) }
+@nish.roots = internal constant [1 x %nish.root*] [%nish.root* @nish_storage_0_head.root]
+
+define void @nish_root_keep(i64 %mark) {
+  call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+```
+
+- **Natively it is module storage and nothing more.** A native program never
+  hands its arena back between calls, so the graph simply stays.
+- **On a page module the loader keeps the graph and releases the rest.**
+  Where the loader of a program without root storage releases each export
+  call's arena, this one calls `nish_root_keep`. The runtime traces what the
+  roots reach from descriptors the compiler writes (`%nish.trace`, one per
+  class, string and array type the roots reach;
+  `tests/cases/root_storage_page`), slides it down over the garbage, rewrites
+  every pointer to it, and frees what is left. It does so only once the kept
+  region passes twice the live bytes and 64 KiB, so a call that changes a
+  little copies nothing, and memory stays bounded however long the page runs
+  (`node tests/run.js persist`: 100,000 steps with memory flat).
+- **What a root reaches is traceable.** A number, a `boolean`, an enum, a
+  string, an array, a class or a discriminated union of classes. Anything
+  else — a `Map`, a `Set`, an interface a class implements, a `Region`, a
+  `Secret`, a `CPtr`, a handle class or a C struct layout — is
+  `` Root storage `X` cannot keep C.f (T): the runtime moves what a root reaches between calls, … ``
+  (NL2766, `tests/wordings/nl2766_root_storage_map`).
+- **It is not exported**: the objects move, so a page has no layout to read.
+  `export const world = new Array<World | null>(1)` is
+  `` Root storage `X` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead ``
+  (NL2767, `tests/wordings/nl2767_root_storage_export`), and `layout` leaves
+  root storage out.
+- **No threads, no regions.** Each allocates from an arena of its own, which
+  a root could be left pointing into, so root storage in a program that
+  loads `nish/threads` or `nish:region` is
+  `` Root storage `X` cannot be kept in a program that loads `nish/threads` or `nish:region`: … ``
+  (NL2768, `tests/wordings/nl2768_root_storage_threads`).
+- **No native shim.** A build that writes `--emit-napi`, `--emit-napi-async`
+  or `--emit-header` gets a shim that releases the arena after a call that
+  passes a string or an array, which would free what a root reaches, so root
+  storage there is
+  `` Root storage `X` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): … ``
+  (NL2769, `tests/wordings/nl2769_root_storage_napi`). A plain native
+  program keeps it.
+- **No WASI loader.** A `--profile wasi` build with `--emit-dts` writes a
+  loader that releases the arena after every call, and only a page module
+  emits the `nish_root_keep` a loader calls instead, so root storage there is
+  `` Root storage `X` cannot be kept in a WASI build that writes a loader (`--emit-dts`): … ``
+  (NL2770, `tests/wordings/nl2770_root_storage_wasi_dts`).
+- **A freestanding module without a loader** (`--target wasm32` and no
+  `--emit-dts`) still emits `nish_root_keep(mark)`; the host that calls its
+  exports writes its own loader, and must call `nish_root_keep(mark)` where it
+  would call `nish_arena_release(mark)`, or what a root reaches is freed.
+- **Every function may store through a root**, so a program with root
+  storage does not prove a parameter-only allocation stays in its caller's
+  scope from the signature alone; the compiler's other proofs are unchanged.
+
 ## Type aliases
 
 ```ts
@@ -495,7 +635,10 @@ program twice, with one golden between them.
   declared class or interface, or another alias
   (`tests/cases/type_alias_ir`). Everything is refused exactly where it would
   be in an annotation, so `type Bad = any` is `` `any` is forbidden `` and not
-  a rule of its own.
+  a rule of its own, and an object type, `type Point = { x: i32; y: i32 }`,
+  is the syntax error an inline object type is anywhere else
+  (`tests/cases/reject_type_object_literal_alias`): declare
+  `interface Point` instead.
 - **Order does not matter.** An alias may name a class, an interface or an
   alias declared further down the file, because resolution is by need rather
   than in source order — the rule module constants follow. A cycle is
@@ -576,18 +719,28 @@ enum Level {
   Mid,   // 1
   High,  // 2
 }
+
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
 ```
 
-A numeric `enum` declares a **distinct type whose representation is `i32`**.
-Distinct is the point, and it is stricter than TypeScript, where a numeric enum
-member is assignable to `number`: the rule this language is built on is that
+An `enum` is of one of two kinds. A **numeric** enum's members are integers;
+a **string** enum's members are each given a string literal, and its rules
+past the ones below are in [String enums](#string-enums). Either kind
+declares a **distinct type whose representation is `i32`**: a numeric
+member's integer, or a string member's ordinal. Distinct is the point, and it
+is stricter than TypeScript, where a numeric enum member is assignable to
+`number` and a string one to `string`: the rule this language is built on is that
 two values are compatible only when their types are identical
 ([Types](types.md)), and an enum that were silently `i32` would be the one type
 compatible with something it is not spelled as. So `Kind` and `i32` are two
-types, in both directions, and the only values of `Kind` are the members it
-declares.
+types, in both directions, as `Role` and `string` are, and the only values of
+`Kind` are the members it declares.
 
-Nothing is emitted for one. A member is folded to its integer the way a module
+Nothing is emitted for a numeric enum (a string enum adds its one table of
+strings, [String enums](#string-enums)). A member is folded to its integer the way a module
 constant is folded to its value, so `Kind.While` lowers to the literal `2`, a
 `Kind` parameter is an `i32` parameter, and there is no symbol, no table and no
 `%struct` anywhere. `tests/cases/enum_ir` and `tests/cases/enum_expanded` are
@@ -596,9 +749,11 @@ and their `.ll` goldens are byte-identical files.
 
 - **A member's value is a numeric literal, or the one before it plus one.**
   Auto-numbering is TypeScript's: the first member without an initialiser is
-  `0`. A member that is not a numeric literal is Phase 0's
-  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
-  (`tests/cases/reject_enum_string`, `reject_enum_computed`); a numeric literal
+  `0`. An enum any of whose members is given a string literal is a
+  [string enum](#string-enums) instead. A member that is neither — a computed
+  value in a numeric enum, or a numeric member beside a string one — is
+  `` Enum members must be numeric literals in Nish, or every member a string literal (an enum lowers to a plain integer, and one numbering cannot mix with strings) ``
+  (NL1043, `tests/cases/reject_enum_computed`, `reject_enum_string_mixed`); a numeric literal
   that is not an integer is `` Enum member `Kind.Half` must be an integer literal ``
   (`reject_enum_float`), and one outside the width is
   `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`).
@@ -714,7 +869,8 @@ and their `.ll` goldens are byte-identical files.
     `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
     One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
   - **Two members of one value are one type**, as `tsc` reads them, spelled
-    by the member declared first: with `List = 1` beside `Array`, a
+    by the member declared first (a string enum has no two such members,
+    [String enums](#string-enums)): with `List = 1` beside `Array`, a
     `Kind.List` slot is reported as `` `Kind.Array` ``
     (`reject_enum_member_type_same_value`), and `Kind.List` enters a
     `Kind.Array[]` (`tests/cases/enum_member_type_slots`).
@@ -745,8 +901,9 @@ and their `.ll` goldens are byte-identical files.
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
     it reads an enum as any of its members, which a member type cannot hold.
     The one exception is a union's tag: a member that tags a variant of a
-    union is written as its name, the union's [typed JSON](builtins.md#typed-json-nishjson-typed)
-    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
+    union is written as its name, or a string enum's member as its string,
+    the union's [typed JSON](builtins.md#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`, `tests/link/json_enum_string`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
@@ -801,12 +958,154 @@ and their `.ll` goldens are byte-identical files.
   is written first).
 - **An enum does not cross to C or JavaScript.** `--emit-header`, `--emit-dts`
   and `--emit-napi` have no spelling for one, so a function whose signature
-  mentions an enum is skipped with the note those generators write for every
-  type they cannot carry (`weight(k: Kind): number: not declared; no C spelling
-  for one of its types.`). An enum is a type inside one module, as it is across
-  a module boundary: give a host an `i32` and keep the enum behind it.
+  mentions a numeric enum is skipped with the note those generators write for
+  every type they cannot carry (`weight(k: Kind): number: not declared; no C
+  spelling for one of its types.`), and one whose signature holds a string
+  enum is refused (NL4019, [String enums](#string-enums)). An enum is a type
+  inside one module, as it is across a module boundary: give a host an `i32`
+  or a `string` and keep the enum behind it.
 - **Enums are top-level only.** `enum K { A = 1 }` inside a function body is
   `Unsupported statement in Phase 1: EnumDeclaration` *(CLI only)*.
+
+### String enums
+
+An enum whose members are each given a string literal is a **string enum**.
+It is the spelling Nish takes for a closed set of strings: a union of string
+literals, `"admin" | "guest"`, is refused (NL1053, and a lone string literal
+type is NL2668), because a value has one fixed layout and a string enum's is
+an `i32`.
+
+```ts
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+  Nobody = "",
+}
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 3;
+    case Role.Guest:
+      return 1;
+    default:
+      return 0;
+  }
+};
+
+const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
+```
+
+- **A value is its member's ordinal.** A string enum is a distinct type, as a
+  numeric one is, stored as an `i32`: the member's position in declaration
+  order, `0`, `1`, `2`, and never the bytes of its string. Every rule of
+  [Enums](#enums) above holds for it as it does for a numeric enum: `===` and
+  `!==` between two of its values are the only operators, and they compare
+  ordinals; a `switch` over one lowers to LLVM's `switch` on the ordinal; a
+  member is also a type (`kind: Role.Admin`), and so tags a variant of a
+  [discriminated union](types.md#discriminated-unions)
+  (`tests/cases/enum_string_union_tag`); a value is a `Map` or `Set` key, an
+  element, a field and a `Result` arm; it crosses a thread, a channel and a
+  task as the `i32` it is; and it is exported and imported as a numeric enum
+  is (`tests/cases/enum_string`, `tests/link/enum_string_export`). It is never
+  `| null` (NL2010), as no enum is.
+- **Its strings are one table per module.** Each module that names the enum's
+  strings holds them as `@.enumstr.<Name>`, an array of the module's string
+  constants indexed by ordinal; an importer gets its own copy of the table, so
+  nothing is looked up across a module boundary
+  (`tests/link/enum_string_export`). Nothing else is emitted: `Role.Guest`
+  folds to `1` as `Kind.While` folds to `2`.
+
+  ```llvm
+  @.enumstr.Role = private unnamed_addr constant [3 x i8*] [i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*)], align 8
+
+  define internal noundef i32 @rank(i32 noundef %r) #0 {
+  entry:
+    switch i32 %r, label %sw.default [
+      i32 0, label %sw.case
+      i32 1, label %sw.case.1
+    ]
+  ```
+- **`String(r)` is the member's string.** It loads the table's entry at the
+  ordinal, so it allocates nothing and its answer is the module's constant:
+
+  ```llvm
+  %19 = sext i32 %18 to i64
+  %20 = getelementptr inbounds [3 x i8*], [3 x i8*]* @.enumstr.Role, i64 0, i64 %19
+  %21 = load i8*, i8** %20, align 8
+  call void @nish_print(i8* %21)
+  ```
+
+  `String` takes a string enum's value and nothing else; on any other
+  argument it is `` Unknown function `String` `` (NL2247,
+  `reject_string_call_non_enum`).
+- **A member's value is a string literal, written once.** Every member of a
+  string enum has an initializer:
+  `` String enum member `Role.Guest` has no initializer: every member of an enum whose members are strings is given its own string literal ``
+  (NL1064, `tests/cases/reject_enum_string_missing`). A numeric member beside
+  a string one is NL1043 (`reject_enum_string_mixed`, and in typed JSON
+  `json_reject_enum_mixed`), and a template literal is
+  `` An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared ``
+  (NL1065, `reject_enum_string_template`); a computed value, `"gu" + "est"`,
+  is
+  `` A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared ``
+  (NL1066, `reject_enum_string_computed`). The value is valid UTF-8, since it
+  is written to and matched against JSON: a lone surrogate, `"\uD800"`, is
+  `` Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8 ``
+  (NL2787, `reject_enum_string_utf8`). The empty string is a value like any
+  other (`tests/cases/enum_string`).
+- **Two members do not share a string.**
+  `` Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member ``
+  (NL2786, `tests/cases/reject_enum_string_same_value`). A numeric enum
+  allows two members of one value, which are one type; a string enum does
+  not, because its string is how the member is named outside the program: a
+  decoded `"admin"` must name one member, and `String` must answer one
+  string per member. `tsc` would also read two members of one string as one
+  value, where Nish's ordinals would make them two.
+- **A `Role` is not a `string`, in either direction.** A string is never
+  compared with one:
+  `` Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin` ``
+  (NL2788, `tests/cases/reject_enum_string_compare_literal`). A `Role` where
+  a string is wanted, `const s: string = r` or `${r}` in a template, is
+  `` A `Role` is not a string: write `String(r)` for the member's string ``
+  (NL2789, `reject_enum_string_to_string`, `reject_enum_string_template_use`),
+  and a string where a `Role` is wanted, `const r: Role = "admin"`, is
+  `` `"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin` ``
+  (NL2790, `reject_enum_string_from_string`). Arithmetic is refused as on any
+  enum, `r + 1` being
+  `` Operator `+` requires two operands of the same numeric type or two strings, got Role and i32 ``
+  (NL2231, `reject_enum_string_arith`), and `const enum` is NL2285 as above.
+- **Typed JSON reads and writes its string.** A string-enum field, array,
+  `| null` array or `Map` value is the member's string on the wire, and a
+  union tagged by a string enum's member writes that string as its tag
+  ([Typed JSON](builtins.md#typed-json-nishjson-typed)).
+- **Under `--emit-ts` it is a `const` object.** `enum Role { Admin = "admin" }`
+  is written as
+
+  ```ts
+  export const Role = { Admin: "admin", Guest: "guest" } as const;
+  export type Role = (typeof Role)[keyof typeof Role];
+  ```
+
+  so each member is the string `tsc` gives it, `String(r)` is the identity
+  and prints what the native program reads from its table, and a member type
+  is `typeof Role.Admin` (`tests/emit-ts/control/string-enums`). `tsc` would
+  accept `r === "admin"`, `const s: string = r` and `const r: Role = "admin"`
+  on that output; Nish refuses all three, so it is the stricter of the two,
+  and every program it accepts is one `tsc` accepts too.
+- **A string enum does not cross to C, N-API or wasm yet.** An exported
+  function whose parameter or result is a string enum, or an array, `| null`
+  or `Result` that holds one, is refused under `--emit-header`, `--emit-dts`,
+  `--emit-napi` and `--emit-napi-async`:
+  `` `rank`'s parameter `r` is `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch` ``
+  (NL4019, `tests/cases/reject_enum_string_export`,
+  `reject_enum_string_export_napi`). It is an ordinal natively and a string in
+  TypeScript, and a sidecar cannot yet say which a host passes.
+- **Open questions.** A `Role.parse(s)` that answers the member a string
+  names is not built: today a program tests `s === String(Role.Admin)` for
+  each member, or decodes the string with typed JSON; the C, N-API and wasm spelling of a string enum is open
+  (NL4019); and a union of string literals stays refused, string enums being
+  the spelling Nish takes instead.
 
 ## `export` and `import`
 
@@ -1258,7 +1557,9 @@ and their `.ll` goldens are byte-identical files.
   second namespace: the whole-program attribute analysis is keyed by symbol
   name, so two functions sharing one would be emitted with each other's
   attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag.
+  does not depend on the flag. A proposal to qualify a private function's
+  symbol by its module when it would clash is
+  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); the rule above holds until it ships.
 
 ## `main`
 
@@ -1517,7 +1818,12 @@ export const main = (): i32 => {
   (NL4008, `tests/cases/reject_interop_generic_clash`). They also refuse a
   signature or an exported struct field that holds a
   [discriminated union](types.md#discriminated-unions), which has no C spelling yet
-  (NL4009, `tests/cases/reject_union_export_param`).
+  (NL4009, `tests/cases/reject_union_export_param`), and a signature that
+  holds a [string enum](#string-enums), alone or in an array, a `| null` or
+  a `Result`:
+  `` `rank`'s parameter `r` is `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch` ``
+  (NL4019, `tests/cases/reject_enum_string_export`,
+  `reject_enum_string_export_napi`).
 - **A template may be exported and instantiated from another module, and each
   instantiation is defined exactly once**, in the module that declares the
   template. Everywhere else it is a `declare` carrying that definition's
@@ -2120,7 +2426,7 @@ export const main = (): void => {
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
-  (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
+  (`` Module constant `alias` must be a number, boolean, string, or a `readonly` array of numbers written out as a literal, not (i32) => i32; there is no top-level code to build anything else ``).
   An arrow argument may capture a `const` reference local like any other
   value (`fnref_capture`).
 - **What a reference does.** It is called — `h(3)`, `this.op(4)`, or
@@ -2290,7 +2596,11 @@ async function run(): Promise<void> {
   for two to eight calls at once and is awaited into one name per call,
   `const [a, b] = await awaitAll(f(x), g(y))`; one call, or an `awaitAll` not
   so destructured, is NL2647 (`reject_async_await_all_one`,
-  `reject_async_await_all_bare`).
+  `reject_async_await_all_bare`). So is a pattern over it that is not one
+  plain name per call, each with the reason: an object pattern (the answers
+  are read by position), a hole (it would drop an answer; name it `_b`), or
+  a default, rest or nested slot (`reject_async_await_all_object`,
+  `reject_async_await_all_hole`, `reject_async_await_all_default`).
 - **An `async` arrow is passed only where it is awaited.** The parameter's
   function type answers `Promise<T>`, and the callee awaits each call to it.
   An `async` arrow where the type answers a plain `T` is NL2639
@@ -2445,7 +2755,7 @@ them, then the expired timers, earliest deadline first, ties in the order
 they were made (`async_sleep`, `tests/link/async_timer_order`,
 `tests/link/async_readable`). A wait holds a duplicate of its descriptor, so
 closing the descriptor while a task waits on it does not end the wait, and
-the number's reuse cannot answer it ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md),
+the number's reuse cannot answer it ([`docs/security/async.md`](../../security/async.md),
 ASYNC-4).
 
 ```ts
@@ -2483,7 +2793,7 @@ export async function main(): Promise<i32> {
 - **`readable` and `writable` have no deadline of their own.** A descriptor
   that never becomes ready parks its task until it does, or until the task
   is cancelled; `readableWithin` and `writableWithin`, below, take one
-  ([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-6).
+  ([`docs/security/async.md`](../../security/async.md), ASYNC-6).
 
 ### Bounding a wait and cancelling a task
 
@@ -2505,7 +2815,7 @@ without parking, so the task runs on to its end, its `using` bindings
 dispose and its region is freed. A task that does not await is not reached
 until it does. A handle names its task and no later one: a handle kept past
 its task's end, once the executor reuses the task's slot, cancels nothing
-([`docs/security/async.md`](https://github.com/amritk/nish/blob/main/docs/security/async.md), ASYNC-18).
+([`docs/security/async.md`](../../security/async.md), ASYNC-18).
 
 ```ts
 import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"
@@ -3815,7 +4125,7 @@ answer the same natively and under Node:
   object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
   `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
   Node, without the methods, and is refused with
-  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
   (NL2515, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
   `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
   `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
@@ -3913,15 +4223,111 @@ author's obligation, as it is for a `Mutex`'s critical sections; the checker
 does not try to prove it.
 
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
-round into 256 bins, four rounds, on four tasks. On a four-core machine, over
-seven interleaved rounds whose seeds move every round, the medians are: each
-task counting into a local tally and adding it with one `add` per bin, 24 ms
-(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
-thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
-value, 677 ms (28× slower), because every increment contends for a cache line
-another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+round into one `AtomicI32Array` of 256 bins, four rounds, on four tasks. On a
+four-core machine, over seven interleaved rounds whose seeds move every round,
+the medians are: each task counting into a local tally and adding it with one
+`add` per bin, 29 ms (a byte-identical copy of it, the noise band, 23 ms; the
+two copies' runs 22–49 ms); one thread binning into plain counters, 80 ms
+(2.8× slower); one atomic `add` per value, 554 ms (19× slower), because every
+increment contends for a cache line another core is writing; and one `Mutex`
+taken per value, 2,155 ms. An atomic
 is far cheaper than a lock and still far dearer than a counter no other core
 touches: update it once per batch, not once per value.
+
+## Atomic arrays: `AtomicI32Array` and `AtomicI64Array`
+
+An atomic array is `length` atomic counters in one contiguous buffer. It is
+`AtomicI32` (or `AtomicI64`) with the element's index first: every method of
+the one has a twin on the other, with the same meaning, the same ordering and
+the same rules, R1, R7 and R8 above, and the same one shared write a task or a
+parallel body may make. Where an `AtomicI32[]` is one object per counter, each
+its own allocation, so sixteen counters land on several cache lines that the
+cores writing them pass back and forth, an `AtomicI32Array(16)` is sixteen
+adjacent `i32`s in 64 contiguous bytes, which is the layout Rust's
+`[AtomicI32; 16]` and Go's `[16]atomic.Int32` have. The buffer starts on a
+64-byte boundary at least one line into its own allocation, which ends past the
+line the last element is on, so no other object shares a line with the
+elements, the lines the counters' writers fight over.
+
+```typescript
+import { AtomicI32Array, AtomicI64Array, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32Array;
+  constructor(xs: i32[], bins: AtomicI32Array) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    s.bins.add(x & 3, 1);            // one indivisible add on element x & 3
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins = new AtomicI32Array(4);   // four counters in one buffer, each 0
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const bytes = new AtomicI64Array(2);
+  const one: i64 = 1;
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => {
+    bytes.add(x & 1, one);             // the one shared write a body may make
+    return x;
+  });
+  console.log(`${bins.load(0)} ${bins.load(1)} ${bins.length} ${bytes.load(1)}`); // 2 2 4 2
+  return 0;
+};
+```
+
+- **The methods.** `load(i)` and `store(i, v)`; `add(i, n)`, `sub(i, n)`,
+  `min(i, v)`, `max(i, v)` and `exchange(i, v)`, each answering the value
+  element `i` held before it; and `compareExchange(i, expected, desired)`.
+  `length` is a `readonly` field, fixed by `new AtomicI32Array(n)`, which
+  makes `n` elements, each `0`; a negative `n` stops the program as
+  `new Array` of one does. `AtomicI64Array` is the same over `i64`, its index
+  still an `i32`.
+- **An index is checked as an array index is**: one out of range stops the
+  program with `index out of range: 16 >= 16` and exit status 1, and never
+  touches memory outside the buffer (`tests/link/atomic_array_out_of_range`).
+  The check is an ordinary one, which the prover may discharge.
+- **Natively each method is the bounds check and then one instruction** on a
+  `getelementptr` into the buffer: a `load atomic` or `store atomic ...
+  seq_cst`, an `atomicrmw add`, `sub`, `min`, `max` or `xchg ... seq_cst`, or a
+  `cmpxchg ... seq_cst seq_cst`, aligned to the element (`align 4`,
+  `align 8`); no element is an object of its own, so there is no per-element
+  pointer to load (`tests/link/thread_atomic_array`, whose `threads.ll` is the
+  lowering; docs/IR_COOKBOOK.md, "an atomic array").
+- **Under Node each method is the plain operation** on an element of an
+  ordinary array, exact for the reason an `AtomicI32`'s is, with the same
+  ±2^53 limit on an `AtomicI64Array`'s elements.
+- **The rules are `AtomicI32`'s.** Its buffer, `values`, is a field no program
+  may name (R1, NL2514, `reject_atomic_array_member_read`,
+  `reject_atomic_array_member_store`), and a method named without a call is
+  refused as any class's is (`reject_atomic_array_member_unbound`); `length`
+  is assigned only by the constructor
+  (`reject_atomic_array_length_store`); an object literal of either class is
+  refused by NL2515 (`reject_atomic_array_literal`); the parent does not
+  touch one a scope's tasks reach before the scope joins (R7, NL2513,
+  `reject_atomic_array_region_direct`); the tasks of sibling scopes share none
+  (NL2516, `reject_atomic_array_sibling_load`); and a parallel body may update
+  one and write nothing else shared
+  (`reject_atomic_array_par_shared_write`, `tests/link/par_atomic_array`).
+
+Choose an atomic array over an `AtomicI32[]` when the counters are many or hot
+— a histogram's bins, a counter per route or per worker — and an `AtomicI32`
+for one counter, or for counters that live in different objects. A counter no
+other core writes is still cheaper than either: count into a task's own tally
+and add it once per batch, as the example under "Atomics" does.
 
 ## Channels: `Channel<T>`
 
@@ -4524,6 +4930,17 @@ interface Pair { first: number; second: number; }
 const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 ```
 
+- **A record type is always a declared name.** There is no inline object
+  type: `(p: { x: i32 }) => p.x` is
+  `` syntax error: expected a type name, found `{` `` (NL0001), and so is the
+  same type after `type Point =`, in a field, a return type or a type
+  argument (`tests/cases/reject_type_object_literal_param`,
+  `reject_type_object_literal_alias`, `_field`, `_return`, `_type_arg`).
+  A record type is identified by its declaration, not by its fields: two
+  interfaces that declare the same fields are two types, and a value of one
+  is refused where the other is wanted, the only widening being a class to an
+  interface it `implements` ([Types](types.md)). So a record's fields are declared
+  once, in an `interface` or a `class`, and every annotation names it.
 - An interface is a struct type with the same layout rules as a class, with
   fields only: a method, or an accessor signature `get x(): i32`, is
   `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
@@ -4902,28 +5319,39 @@ function owned(s: string): string {
 ```llvm
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %copy.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %copy.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
 ```
 
 - **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
   for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
   pointer that is dangling, already freed, or to a buffer with no NUL is
   undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
-  So the call is an `unchecked` [panic site](semantics-decisions.md#panic-sites) that is allowed
-  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
-  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
-  which is `ffi`.
-- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  It is an `unsafe` call to `--deny unsafe`, and the `CPtr` it reads came from
+  a `declare function`, which is `ffi`.
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](semantics-decisions.md#panic-sites) kind, as
+  [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)'s does:
+  `` `readCString` read a NULL pointer ``, exit 1
+  (`tests/cases/panics_ffi_read_cstring_null`). The parameter is `CPtr`, so
   an unnarrowed pointer is
   `` `readCString` expects an argument of type CPtr, got CPtr | null ``
-  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
-  compiler trusts is the declaration: a `declare function` whose result is
-  declared `CPtr` gets no check after the call, so a C function that may
-  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
-  through. Declare such a result `CPtr | null`.
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
+  `declare function` declared to answer `CPtr` may still answer `NULL`, so
+  the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
+  above. No proof removes the test, so `--deny-panics` refuses a call in its
+  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
   constructor and released with its owner, and refused inside a `using a =
@@ -4935,6 +5363,73 @@ if.end:
   a `nish_str_new`, which every runtime has, so `readCString` adds nothing to
   the link; whether the program links there is the `declare function`'s
   question, answered by the libc the target has.
+
+### `cErrno`: the errno a C call left
+
+**`cErrno(): i32`, from
+[`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping), answers the
+errno the most recent `declare function` call on this thread left, and 0
+before any.** In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+per-thread runtime slot immediately after it returns, before any result is
+marshalled; `cErrno()` reads the slot (`tests/cases/ffi_errno`,
+[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#cerrno-errno-after-a-foreign-call),
+[design](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md#10-s5-as-built-cerrno)):
+
+```ts
+import { cErrno } from "nish:unsafe";
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64;
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10);
+  return cErrno() === 0 ? n : -1;
+};
+```
+
+```llvm
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+```
+
+- **Saved before anything else runs.** The copy of a `string` result, an arena
+  allocation or a `console.log` may call into libc and move errno, so the save
+  is the first instruction after the call, ahead of the `NULL` check of a
+  `string` result. A C function that sets errno and answers a string is read
+  correctly after the copy.
+- **Zeroed before, so a success reads 0.** `strtol` reports an out-of-range
+  number only through errno; with the zeroing, `cErrno()` after an in-range
+  call is 0 unless the callee set it. No setter is exposed.
+- **Per thread.** errno is per thread in every libc, and the slot is
+  `_Thread_local` under `--threads` (`thread_local(initialexec)` in the IR), so
+  a thread reads what its own last call left (`ffi_errno_threads`).
+- **Program-wide, and free when unnamed.** One `cErrno` anywhere makes every
+  `declare function` call in every module of the program pay the zero and the
+  save, and none of them is then a tail call. A program that never names it
+  emits none of it.
+- **Not covered:** a host-module import (`--host`) is not a C call; the close a
+  `using` handle runs at scope exit is the compiler's call, not the program's,
+  and is not captured.
+- **Not a global.** errno is a macro over a thread-local accessor in every
+  libc, so there is no `errno` symbol to declare, and `declare let errno: i32`
+  is the parser's
+  `` a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT` ``
+  (`reject_ffi_errno_global`).
+- **Refused:** an argument (`` `cErrno` expects exactly 0 arguments, got 1 ``,
+  `reject_ffi_errno_arg`), a call without the import (NL2456,
+  `reject_ffi_errno_import`), and a freestanding wasm32 build, which has no
+  operating system:
+  `` `cErrno` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_ffi_errno_wasm`). `--profile wasi` links wasi-libc and keeps it.
+- **It is `nish:unsafe` and an `unsafe` call** to `--deny unsafe`, like every
+  export of the module; it reads a defined value and is no panic site.
 
 ### A `u8[]` parameter: a buffer and its count
 

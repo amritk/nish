@@ -25,6 +25,16 @@
  * nothing per request. A `Router` is therefore not reentrant: one match at a
  * time, which is what a connection loop does.
  *
+ * **A route with no parameter and no `*` is answered without the tree.** `add`
+ * also files such a route under a hash of its method and path, in one more
+ * flat array, and `match` looks there first, for a target no longer than the
+ * longest such route: one pass over the path, at most `ROUTER_PROBES` slots,
+ * and a byte comparison for a slot whose method and length agree. The
+ * tree stays the definition: a literal is tried first at every segment, so
+ * the route the exact table holds for a method and a path is the one the tree
+ * would have reached, and anything the table does not hold falls through to
+ * the tree unchanged. `matchTree` is the tree alone, for a test of exactly that.
+ *
  * **The rules** (`docs/wp43-http-app-layer.md` §2):
  *
  * - The path is the target up to its first `?` (the query is left alone) and
@@ -42,9 +52,20 @@
  * - A path that matches only routes of other methods answers
  *   `ROUTER_METHOD_NOT_ALLOWED`, so a server can tell 405 from 404.
  *
+ * **What is unchecked.** `routerSameBytes` reads with `nish:unsafe`'s
+ * `uncheckedGet`, after one check that both ranges are inside their arrays;
+ * a range that is not compares unequal, as a byte that differs does. It is
+ * the one byte compare a lookup makes: a method of more than seven bytes
+ * against each known one (a shorter one is one packed word, `routerMethodKey`),
+ * a path against a static route's, a segment against a label.
+ * `routerMethodKey` reads its at most seven bytes the same way, after the same
+ * one range check; a range outside the array packs to 0, which no method is.
+ * Every other read is checked.
+ *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
+import { uncheckedGet, wrappingAdd } from "nish:unsafe"
 
 /** `add`: the pattern is empty, does not start with `/`, or misuses `:`, `*`, `%`, `?` or a byte outside `!` to `~`. */
 export const ROUTER_BAD_PATTERN: i32 = -1
@@ -73,6 +94,12 @@ export const ROUTER_NO_ROOM: i32 = -11
 const ROUTER_MAX_METHOD: i32 = 32
 /** No node or route: an `i32` spelled once, so that `--number-mode f64` does not read a bare `-1` as a double. */
 const ROUTER_NONE: i32 = -1
+/**
+ * The most slots a lookup in the exact-path table reads, and so the furthest
+ * from its home slot `add` will file a route. A static route with no free slot
+ * that near is left to the tree, which answers it as it always did.
+ */
+const ROUTER_PROBES: i32 = 8
 /** A pattern segment's kind, in `Router.add`'s scratch. */
 const ROUTER_LITERAL: i32 = 0
 const ROUTER_PARAM: i32 = 1
@@ -122,6 +149,18 @@ export class Router {
   private endpointNext: i32[]
   private routeParams: i32[]
   /**
+   * The exact-path table: per slot a static route, or -1. Its length is a
+   * power of two, at least four slots for each static route, and a route sits
+   * within `ROUTER_PROBES` slots of the one its hash names.
+   */
+  private staticSlots: i32[]
+  /** Per route: the hash of its method and path, and its path `staticPaths[routePathStart .. routePathEnd)`; zeros unless it is static. */
+  private routeHash: u32[]
+  private routePathStart: i32[]
+  private routePathEnd: i32[]
+  /** Every static route's path, back to back. */
+  private staticPaths: u8[]
+  /**
    * The methods the table knows, `methodBytes[methodStart[m] .. methodEnd[m])`, compared exactly (RFC 9110 §9.1).
    * @internal Read by std/net/handler.ts, which matches a path against each known method to build a 405's `Allow` value.
    */
@@ -136,6 +175,12 @@ export class Router {
    * @internal Read by std/net/handler.ts beside `methodStart`, for the same matches.
    */
   methodEnd: i32[]
+  /**
+   * Per method: its bytes and length packed by `routerMethodKey`, or 0 for one
+   * too long to pack. Private and written only by `add`, beside the public
+   * arrays it is made from, so a lookup compares one word for a method.
+   */
+  private methodKey: u64[]
   /** `match`'s scratch, sized by the constructor: each segment's span, then the pairs found so far. */
   private segStart: i32[]
   private segEnd: i32[]
@@ -154,6 +199,11 @@ export class Router {
   maxParams: i32 = 0
   private maxRoutes: i32 = 0
   private maxMethods: i32 = 0
+  /** How many routes have no parameter and no `*`, and how many of them `staticSlots` holds. */
+  private statics: i32 = 0
+  private staticHeld: i32 = 0
+  /** The longest static route's path, in bytes: a longer target is not hashed at all. */
+  private staticLongest: i32 = 0
   /** The most segments any route has: a path is split no further than one past it. */
   private deepest: i32 = 0
   /** During a match: how many segments the path has, the method's index, and the pairs in `found`. */
@@ -167,7 +217,7 @@ export class Router {
   private foundCount: i32 = 0
   /** During a match: whether a route of another method ended at the path's end. */
   private otherMethod: boolean = false
-  /** The nodes the last `match` visited: never more than `nodeCount()`, which the tests pin. */
+  /** The nodes the last `match` visited: never more than `nodeCount()`, which the tests pin, and none when the exact-path table answered. */
   private visited: i32 = 0
 
   /**
@@ -196,9 +246,15 @@ export class Router {
     this.routeMethod = []
     this.endpointNext = []
     this.routeParams = []
+    this.staticSlots = [-1, -1, -1, -1, -1, -1, -1, -1]
+    this.routeHash = []
+    this.routePathStart = []
+    this.routePathEnd = []
+    this.staticPaths = []
     this.methodBytes = []
     this.methodStart = []
     this.methodEnd = []
+    this.methodKey = []
     this.segStart = new Array<i32>(limits.maxSegments + 1)
     this.segEnd = new Array<i32>(limits.maxSegments + 1)
     this.found = new Array<i32>(2 * limits.maxParams)
@@ -227,14 +283,24 @@ export class Router {
    */
   paramCount(route: i32): i32 {
     if (route < 0 || route >= this.routes()) {
-      panic(`Router.paramCount: route ${route} is not in a table of ${this.routes()}`)
+      routerNoRoute(route, this.routes())
     }
     return this.routeParams[route]
   }
 
   /**
-   * How many nodes the last `match` visited.
-   * @returns the visit count, never more than `nodeCount()`, which the tests use to pin a lookup's cost
+   * How many routes the exact-path table holds: the routes `match` answers
+   * without the tree. Every route with no parameter and no `*` is one, but for
+   * a route whose slots were all taken, which the tree answers instead.
+   * @returns the count, never more than the routes that have no parameter and no `*`
+   */
+  staticCount(): i32 {
+    return this.staticHeld
+  }
+
+  /**
+   * How many nodes of the tree the last `match` visited.
+   * @returns the visit count, never more than `nodeCount()`, and 0 when the exact-path table answered, which the tests use to pin a lookup's cost
    */
   lastVisited(): i32 {
     return this.visited
@@ -305,6 +371,7 @@ export class Router {
         this.methodBytes.push(toU8(toI32(method.charCodeAt(k))))
       }
       this.methodEnd.push(toI32(this.methodBytes.length))
+      this.methodKey.push(routerMethodKey(this.methodBytes, this.methodStart[methodId], methodLength))
     }
     node = 0
     for (let k: i32 = 0; k < count; k++) {
@@ -319,7 +386,62 @@ export class Router {
     if (count > this.deepest) {
       this.deepest = count
     }
+    this.routePathStart.push(toI32(this.staticPaths.length))
+    let hash: u32 = routerHashOf(methodId)
+    if (params === 0) {
+      for (let k: i32 = 0; k < length; k++) {
+        const c: i32 = toI32(pattern.charCodeAt(k))
+        this.staticPaths.push(toU8(c))
+        hash = routerHashWith(hash, c)
+      }
+    }
+    this.routePathEnd.push(toI32(this.staticPaths.length))
+    this.routeHash.push(hash)
+    if (params === 0) {
+      this.statics += 1
+      if (length > this.staticLongest) {
+        this.staticLongest = length
+      }
+      if (4 * this.statics > toI32(this.staticSlots.length)) {
+        this.growStatic()
+      } else {
+        this.fileStatic(route)
+      }
+    }
     return route
+  }
+
+  /** Doubles the exact-path table and files every static route again, in the order they were added. */
+  private growStatic(): void {
+    const slots: i32 = 2 * toI32(this.staticSlots.length)
+    this.staticSlots = new Array<i32>(slots)
+    for (let k: i32 = 0; k < slots; k++) {
+      this.staticSlots[k] = ROUTER_NONE
+    }
+    this.staticHeld = 0
+    for (let r: i32 = 0; r < this.routes(); r++) {
+      if (this.routeParams[r] === 0) {
+        this.fileStatic(r)
+      }
+    }
+  }
+
+  /**
+   * Files the static route `route` in the first free slot of the
+   * `ROUTER_PROBES` from its hash's, or nowhere when all are taken: the tree
+   * holds every route, so one the table lacks is still answered.
+   */
+  private fileStatic(route: i32): void {
+    const mask: i32 = toI32(this.staticSlots.length) - 1
+    let slot: i32 = routerSlot(this.routeHash[route], mask)
+    for (let probe: i32 = 0; probe < ROUTER_PROBES; probe++) {
+      if (this.staticSlots[slot] < 0) {
+        this.staticSlots[slot] = route
+        this.staticHeld += 1
+        return
+      }
+      slot = (slot + 1) & mask
+    }
   }
 
   /**
@@ -445,11 +567,57 @@ export class Router {
    * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
    */
   match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
+    if (!this.enter(method, mStart, mEnd, target, tStart, tEnd)) {
+      return ROUTER_NOT_FOUND
+    }
+    // A static route's path is never longer than the longest one: a target
+    // past that, query and all, is the tree's without a byte of it read here.
+    if (tEnd - tStart <= this.staticLongest) {
+      const route: i32 = this.staticRoute(target, tStart, tEnd)
+      if (route !== ROUTER_NONE) {
+        return route
+      }
+      // The pass that hashed the path split it too, so the tree reads no byte again.
+      return this.answer(target, params)
+    }
+    return this.descend(target, tStart, tEnd, params)
+  }
+
+  /**
+   * What `match` answers, found by the tree alone: the exact-path table is not
+   * read. The two agree on every method and target, in the route or code they
+   * answer, in `params` and in where the path ends; this one is the definition
+   * and exists so that a test can hold `match` to it.
+   * @param method the buffer holding the request's method
+   * @param mStart where the method starts in `method`
+   * @param mEnd where the method ends in `method`
+   * @param target the buffer holding the request target, which may be the same buffer as `method`
+   * @param tStart where the target starts in `target`
+   * @param tEnd where the target ends in `target`, the query included
+   * @param params the caller's scratch for the parameter pairs, two slots for each pair
+   * @returns the matched route's index, or `ROUTER_NOT_FOUND`, `ROUTER_METHOD_NOT_ALLOWED` or `ROUTER_TOO_MANY_PARAMS`
+   */
+  matchTree(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
+    if (!this.enter(method, mStart, mEnd, target, tStart, tEnd)) {
+      return ROUTER_NOT_FOUND
+    }
+    return this.descend(target, tStart, tEnd, params)
+  }
+
+  /**
+   * The start of every lookup: the range checks, and `wanted` set to the
+   * method's index, or -1 for one the table has never seen. False for a target
+   * that is not `/`-rooted, which is `ROUTER_NOT_FOUND` with `pathEnd` set.
+   */
+  private enter(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32): boolean {
     if (mStart < 0 || mEnd < mStart || mEnd > toI32(method.length)) {
-      panic(`Router.match: the method range ${mStart} to ${mEnd} is outside its ${method.length} bytes`)
+      routerOutside("method", mStart, mEnd, toI32(method.length))
     }
     if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
-      panic(`Router.match: the target range ${tStart} to ${tEnd} is outside its ${target.length} bytes`)
+      routerOutside("target", tStart, tEnd, toI32(target.length))
+      // Not reached: the helper panics. The return is what tells the prover
+      // that `tStart .. tEnd` is inside `target` from here on.
+      return false
     }
     this.visited = 0
     if (tStart === tEnd || toI32(target[tStart]) !== 47) {
@@ -458,6 +626,43 @@ export class Router {
         end += 1
       }
       this.pathEnd = end
+      return false
+    }
+    const methodLength: i32 = mEnd - mStart
+    const key: u64 = routerMethodKey(method, mStart, methodLength)
+    if (key !== toU64(0)) {
+      for (let m: i32 = 0; m < toI32(this.methodKey.length); m++) {
+        if (this.methodKey[m] === key) {
+          this.wanted = m
+          return true
+        }
+      }
+      this.wanted = -1
+      return true
+    }
+    // A method too long for a key is compared byte by byte with each known one.
+    for (let m: i32 = 0; m < toI32(this.methodStart.length); m++) {
+      const at: i32 = this.methodStart[m]
+      // Checked, the compare's ranges included: `methodBytes`, `methodStart`
+      // and `methodEnd` are public, so nothing here can rely on `add` being
+      // the only writer.
+      if (
+        this.methodEnd[m] - at === methodLength &&
+        routerSameBytes(this.methodBytes, at, method, mStart, methodLength)
+      ) {
+        this.wanted = m
+        return true
+      }
+    }
+    this.wanted = -1
+    return true
+  }
+
+  /** The tree's answer for a target `enter` took and no scan has split: the split, then `answer`. */
+  private descend(target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
+    // `enter` took this range, so this is never true; it is here because a
+    // proof does not cross a call, and the reads below need this one.
+    if (tStart < 0 || tEnd > toI32(target.length)) {
       return ROUTER_NOT_FOUND
     }
     // One pass over the path: where it ends, and each segment's span up to one
@@ -485,20 +690,13 @@ export class Router {
       this.segStart[segments] = start
       this.segEnd[segments] = end
     }
-    segments += 1
-    this.segments = segments
+    this.segments = segments + 1
     this.pathEnd = end
-    this.wanted = -1
-    const methodLength: i32 = mEnd - mStart
-    for (let m: i32 = 0; m < toI32(this.methodStart.length) && this.wanted < 0; m++) {
-      const at: i32 = this.methodStart[m]
-      if (
-        this.methodEnd[m] - at === methodLength &&
-        routerSameBytes(this.methodBytes, at, method, mStart, methodLength)
-      ) {
-        this.wanted = m
-      }
-    }
+    return this.answer(target, params)
+  }
+
+  /** The tree's answer for a path already split into `segStart`/`segEnd`: the walk and the pairs. */
+  private answer(target: u8[], params: i32[]): i32 {
     this.foundCount = 0
     this.otherMethod = false
     const route: i32 = this.walk(target, toI32(0), toI32(0))
@@ -516,13 +714,85 @@ export class Router {
   }
 
   /**
+   * The static route of the wanted method whose path is `target` from `tStart`
+   * to its first `?` or `tEnd`, or -1 when the exact-path table holds none. On
+   * a route `pathEnd` is set; it has no pairs, so `params` is not needed.
+   * Either way the path is left split, as `descend` splits it, for `answer`;
+   * a range outside `target`, which `enter` never lets through, is
+   * `ROUTER_NOT_FOUND` before any split.
+   *
+   * `match` calls this only for a target no longer than the longest static
+   * route. One pass hashes and splits the path; then at most `ROUTER_PROBES` slots are
+   * read, and a slot's path is compared only when its method and length
+   * agree. The hash picks the slot and decides nothing else: a route is
+   * answered for its method and its bytes. The cost is bounded by the longest static route's length,
+   * whatever the target and however many routes the table holds.
+   */
+  private staticRoute(target: u8[], tStart: i32, tEnd: i32): i32 {
+    // Never true, as in `descend`: the guard is the proof the loop's reads
+    // need. It answers as `descend`'s does, so no split is left for `answer`.
+    if (tStart < 0 || tEnd > toI32(target.length)) {
+      return ROUTER_NOT_FOUND
+    }
+    // The first byte is the `/` `enter` found; each later one is hashed, and
+    // a `/` among them also closes a segment, as in `descend`.
+    let hash: u32 = routerHashWith(routerHashOf(this.wanted), 47)
+    const keep: i32 = this.deepest + 1
+    let segments: i32 = 0
+    let start: i32 = tStart + 1
+    let end: i32 = start
+    while (end < tEnd) {
+      const c: i32 = toI32(target[end])
+      if (c === 63) {
+        break
+      }
+      if (c === 47) {
+        if (segments < keep) {
+          this.segStart[segments] = start
+          this.segEnd[segments] = end
+        }
+        segments += 1
+        start = end + 1
+      }
+      hash = routerHashWith(hash, c)
+      end += 1
+    }
+    if (segments < keep) {
+      this.segStart[segments] = start
+      this.segEnd[segments] = end
+    }
+    this.segments = segments + 1
+    this.pathEnd = end
+    const length: i32 = end - tStart
+    const mask: i32 = toI32(this.staticSlots.length) - 1
+    let slot: i32 = routerSlot(hash, mask)
+    for (let probe: i32 = 0; probe < ROUTER_PROBES; probe++) {
+      const route: i32 = this.staticSlots[slot]
+      if (route < 0) {
+        return ROUTER_NONE
+      }
+      const at: i32 = this.routePathStart[route]
+      if (
+        this.routeMethod[route] === this.wanted &&
+        this.routePathEnd[route] - at === length &&
+        routerSameBytes(this.staticPaths, at, target, tStart, length)
+      ) {
+        return route
+      }
+      slot = (slot + 1) & mask
+    }
+    return ROUTER_NONE
+  }
+
+  /**
    * The route below `node`, which has consumed `depth` segments, for the
    * wanted method, or -1. Literal, then parameter, then `*`: the first branch
    * that reaches a route wins, and a branch that does not is left with the
    * pairs it pushed popped.
    */
   private walk(target: u8[], node: i32, depth: i32): i32 {
-    this.visited += 1
+    // Never more than the nodes, so the count needs no overflow check.
+    this.visited = wrappingAdd(this.visited, toI32(1))
     if (depth === this.segments) {
       return this.endpointFor(node)
     }
@@ -554,7 +824,7 @@ export class Router {
     }
     const wild: i32 = this.wildChild[node]
     if (wild >= 0) {
-      this.visited += 1
+      this.visited = wrappingAdd(this.visited, toI32(1))
       const route: i32 = this.endpointFor(wild)
       if (route >= 0) {
         const top: i32 = this.foundCount
@@ -629,6 +899,71 @@ export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32
     at += 1
   }
   return length
+}
+
+/**
+ * Where the hash the exact-path table files a static route under begins: at
+ * the method's index, so that two methods of one path do not share a slot.
+ */
+const routerHashOf = (method: i32): u32 => toU32(method + 1)
+
+/**
+ * `bytes[at .. at + length)` packed into one word, its first byte lowest and
+ * its length in the top byte, so two methods of up to 7 bytes have the same
+ * key exactly when they have the same bytes. 0, which no packed method is,
+ * for a length outside 1 to 7 or a range outside `bytes`.
+ */
+const routerMethodKey = (bytes: u8[], at: i32, length: i32): u64 => {
+  if (length < 1 || length > 7 || at < 0 || length > toI32(bytes.length) - at) {
+    return toU64(0)
+  }
+  // The test above puts `[at, at + length)` inside `bytes`, a range the
+  // prover cannot follow through `stop`, so each read skips its check and
+  // the cursor its overflow test: `stop` is at most `bytes.length`, an i32.
+  let key: u64 = toU64(length) << toU64(56)
+  let shift: u64 = toU64(0)
+  const stop: i32 = wrappingAdd(at, length)
+  for (let i: i32 = at; i < stop; i = wrappingAdd(i, toI32(1))) {
+    key = key | (toU64(uncheckedGet(bytes, i)) << shift)
+    shift = shift + toU64(8)
+  }
+  return key
+}
+
+/**
+ * `hash` with the path byte `byte` taken in, as FNV-1a takes one: an exclusive
+ * or and a product with its 32-bit prime. `u32` arithmetic wraps.
+ */
+const routerHashWith = (hash: u32, byte: i32): u32 => {
+  const prime: u32 = 16777619
+  return (hash ^ toU32(byte)) * prime
+}
+
+/**
+ * The slot of a table of `mask + 1`, a power of two, that `hash` names: its
+ * product with 2^32 over the golden ratio, the high bits folded into the low
+ * ones the mask keeps.
+ */
+const routerSlot = (hash: u32, mask: i32): i32 => {
+  const spread: u32 = 2654435769
+  const mixed: u32 = hash * spread
+  return toI32((mixed ^ (mixed >>> 15)) & toU32(mask))
+}
+
+/**
+ * Panics for a `what` range `start` to `end` outside its `length` bytes. Apart
+ * from `enter`, so that a lookup holds no string of its own.
+ */
+const routerOutside = (what: string, start: i32, end: i32, length: i32): void => {
+  panic(`Router.match: the ${what} range ${start} to ${end} is outside its ${length} bytes`)
+}
+
+/**
+ * Panics for a `route` that is not one of the table's `routes`. Apart from
+ * `paramCount`, which a server calls per request, for the reason `routerOutside` is.
+ */
+const routerNoRoute = (route: i32, routes: i32): void => {
+  panic(`Router.paramCount: route ${route} is not in a table of ${routes}`)
 }
 
 /** Panics, naming `RouterLimits.<field>`, unless `value` is in `low .. high`. */
@@ -713,21 +1048,33 @@ const routerLabelIsText = (bytes: u8[], at: i32, text: string, from: i32, length
   return true
 }
 
-/** Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same bytes; a range outside its array does not. */
+/**
+ * Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same
+ * bytes; a negative length, or a range outside its array, does not. The
+ * ranges are checked once, here, and the bytes are then read without a check
+ * per byte.
+ */
 const routerSameBytes = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
-  // Two cursors, so no index is a sum that must be checked for overflow. `stop`
-  // is one sum, but every caller passes a label's or a method's offset and
-  // length inside an array whose length is an i32, so it cannot overflow; a
-  // range past either end fails the per-byte checks and answers false.
-  const stop: i32 = at + length
+  if (at < 0 || from < 0 || length > toI32(a.length) - at || length > toI32(b.length) - from) {
+    return false
+  }
+  // Two cursors, each stepped without an overflow check: `at` and `from` are
+  // not negative and `length` is at most what is left of each array after
+  // them, so neither passes its array's length, an i32. A negative `length`
+  // puts `stop` below `at` (no overflow, `at` being at least 0), so the loop
+  // never runs and the closing test answers false: a separate `length < 0`
+  // test up front measured 5 to 47 Ir more per match.
+  const stop: i32 = wrappingAdd(at, length)
   let j: i32 = from
-  for (let i: i32 = at; i < stop; i++) {
-    if (i < 0 || i >= toI32(a.length) || j < 0 || j >= toI32(b.length) || a[i] !== b[j]) {
+  let i: i32 = at
+  while (i < stop) {
+    if (uncheckedGet(a, i) !== uncheckedGet(b, j)) {
       return false
     }
-    j++
+    i = wrappingAdd(i, toI32(1))
+    j = wrappingAdd(j, toI32(1))
   }
-  return true
+  return i === stop
 }
 
 /** The value of the hex digit `c`, in either case, or -1. */

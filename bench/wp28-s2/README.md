@@ -54,7 +54,7 @@ container; nothing in them depends on the machine.
 **Against §10's "does `async` belong in compat at all, or only as
 `--async-model threads`":** the figures argue against reading this as the negative S2 that would drop
 [C3](../../docs/wp28-compatibility-mode.md#73-the-stages) for C4 alone; the
-decision is the note's owner's. The
+decision is the note's. The
 threads model pays only where more than one promise is live, and the census
 finds that rare: 94.7% of the 4487 `await`s are on a direct call, and 3.0% are
 on the `Promise.all` family. For the 94.7%, spawn-and-join is, as §6.5 says,

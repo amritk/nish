@@ -678,7 +678,7 @@ export class DebugInfo {
    * overrides `sig.sourceName` for it, and is empty everywhere else.
    *
    * `sig.decl` is the position because the parser normalises both spellings of
-   * a declaration into one `N_FUNCTION` that starts where the declaration does
+   * a declaration into one `NodeKind.FunctionDecl` that starts where the declaration does
    * — at `export`, or at `const` (docs/wp22-arrow-functions.md §8). stage0 has
    * to record that node separately (`FunctionSig.declSite`), because its arrow
    * form keeps the `ArrowFunction`, whose own start is the parameter list.

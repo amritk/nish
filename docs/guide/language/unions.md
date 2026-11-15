@@ -89,12 +89,77 @@ of the program, exported or not: a header lays out every class, a private one
 too.
 
 `Map<string, Shape>` holds its values as they are, as an array does, and its
-`get` answers `Shape | undefined`. Otherwise a union is not a type argument,
-so `Box<Shape>`, `Set<Shape>`, a `Map` keyed by a union and
-`Result<Shape, string>` are refused, and so is a call to a generic function
-that would bind its type parameter to a union:
+`get` answers `Shape | undefined`. A union is also a type argument: a generic
+class over it, `Box<Shape>` or `Stack<Shape>`, holds the union in each `T`
+slot, a generic function called with one binds its type parameter to the
+union, and a `Result` can carry one on either side. A variant converts here
+too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast:
 
-```ts nish:err NL2533
+```ts nish:ok
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32;
+  constructor(r: i32) {
+    this.r = r;
+  }
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32;
+  constructor(side: i32) {
+    this.side = side;
+  }
+}
+
+type Shape = Circle | Square;
+
+class Box<T> {
+  value: T;
+  constructor(value: T) {
+    this.value = value;
+  }
+}
+
+const area = (s: Shape): i32 => {
+  switch (s.kind) {
+    case Kind.Circle:
+      return 3 * s.r * s.r;
+    case Kind.Square:
+      return s.side * s.side;
+  }
+};
+
+const largest = <T>(xs: T[], measure: (x: T) => i32): T => {
+  let best = xs[0];
+  for (const x of xs) {
+    if (measure(x) > measure(best)) {
+      best = x;
+    }
+  }
+  return best;
+};
+
+export const main = (): void => {
+  const b = new Box<Shape>(new Circle(2));
+  const shapes: Shape[] = [new Square(3), b.value, new Square(4)];
+  console.log(area(largest(shapes, area)));
+};
+```
+
+A store of a bare variant into a generic instance's union field,
+`b.value = new Square(1)`, is refused as into any union field
+([Declare what you store](#declare-what-you-store)). A union does not meet a
+constraint such as `<T extends HasKind>`, and an instance over a union is not
+a class typed JSON writes. And a union is still not a `Set` element or a `Map`
+key:
+
+```ts nish:err NL2353
 enum Kind {
   Circle,
   Square,
@@ -110,16 +175,9 @@ class Square {
 
 type Shape = Circle | Square;
 
-class Box<T> {
-  value: T;
-  constructor(value: T) {
-    this.value = value;
-  }
-}
-
-export const main = (): i32 => {
-  const b = new Box<Shape>(new Circle());
-  return 0;
+export const main = (): void => {
+  const seen = new Set<Shape>();
+  console.log(seen.size);
 };
 ```
 
@@ -460,5 +518,40 @@ it.
 
 A union of classes reads and writes as JSON through `nish/json-typed`: the tag
 goes on the wire as the name of its enum member, and `jsonDecodeUnion` picks
-the variant by it. See
+the variant by it. When the tags come from a string enum, the tag on the wire
+is the member's string instead:
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+enum Kind {
+  Circle = "circle",
+  Square = "square",
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 3;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 4;
+}
+
+type Shape = Circle | Square;
+
+export const main = (): i32 => {
+  const shapes: Shape[] = [new Circle(), new Square()];
+  for (const s of shapes) {
+    const w = new JsonWriter(new Array<u8>(256), 0);
+    jsonEncode(w, s);
+    console.log(w.text()); // {"kind":"circle","r":3}, then {"kind":"square","side":4}
+  }
+  return 0;
+};
+```
+
+The tag enum can be either kind; nothing else about the union changes. See
 [Tagged unions](../using-nish/standard-library.md#tagged-unions).

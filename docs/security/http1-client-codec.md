@@ -17,7 +17,9 @@ buffer, more than 2^30 bytes fed and not read).
 
 Every cap is a number the program passes to the constructor, or a constant of
 the module. The writer counts and checks the whole head before it writes a
-byte, so a caller's string cannot end a line or frame the body. One finding is
+byte, so a caller's string cannot end a line or frame the body. HC-2 (Medium), a
+chunk extension skipped rather than parsed, is fixed by parsing its RFC 9112
+§7.1.1 grammar whole. One finding is
 open: HC-1 (Low), the memory each response's fields leave in the arena in the
 default strings mode; a parser switched to spans mode (`fieldsAsSpans`) and
 reused with `reset` allocates nothing per response.
@@ -54,6 +56,7 @@ strings cannot end a line.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`, `http1ClientStartHead`, `Http1ResponseParser.reason` and `errorText`) | Each response's field names and values, and its reason phrase, are kept as strings, and the arrays that hold them are made again for each response, so they stay in the arena until the program resets it. Measured at 59,392 bytes over 1,000 kept-alive responses of 83 bytes with three fields. It is bounded for each response by `maxStatusLine + maxHeaderBytes`, the reason phrase being kept too (and by `HTTP1_MAX_INFORMATIONAL` interim heads for each request), and the number of responses is the number the program reads: a server that sends responses nobody asked for is read only by a program that keeps calling `next()` past the response it awaited. | **Open, narrowed.** Spans mode closes it for a program that opts in: `fieldsAsSpans()` makes the parser copy each field and the reason phrase into a `head` buffer it reuses and record them as spans, `names`, `values` and `reason` stay empty, and `fields`, `fieldName`, `fieldValue`, `reasonText` and `header` make a string only when asked. `reset()` readies the parser for a new connection with its buffers kept. `nish/net/upstream` uses it (UPSTREAM-8). `tests/link/net_http1_client` pins both modes: "strings mode: 1,000 kept-alive responses move the arena, as HC-1 records" and "spans mode: 1,000 kept-alive responses leave Arena.mark() and Arena.used() flat"; every corpus case is also read in spans mode on a parser reset after a tunnel, a refusal, a 1xx and half a body, and must give the same transcript, its reason phrases and `header()` answers included. The `head` and `spans` buffers are filled in both modes, strings mode keeping its strings besides, and keep their high-water size for the parser's lifetime, `reset()` included: each grows by doubling to fit the largest head the parser has read, from a floor of 256 bytes, so the head buffer is under twice `maxStatusLine + maxHeaderBytes` bytes or 256 bytes, whichever is larger, and the spans at most `4 * maxHeaders` entries, held as long as the parser is. A strings-mode parser therefore holds both its strings and these buffers. "strings mode: reset() leaves no field of the response it cut behind" pins `reset()` in strings mode, and "strings mode: reason is what reasonText() answers" that the two modes' reason phrases agree. The default strings mode is kept so that `fetch.ts` and `websocket.ts` compile unchanged; it stays open there, accepted for now, and a per-connection arena closes it, as for H1-3 and TLS-3. |
+| HC-2 | Medium | `std/net/http1-client-codec.ts` (`http1ClientChunkSize`; the fix reads `http1ChunkExtValid` from `std/net/http1-codec.ts`, written against `main` at `187336a`) | A chunk-size line's extension was checked only for control bytes: anything after the `;` up to the CRLF was skipped. A proxy on the path that follows RFC 9112 §7.1.1's grammar reads a quoted-string in an extension to its closing quote, across the line's end, where this parser stopped at the CRLF, so the two framed the body differently and a server could slip a response past the proxy inside a chunk extension (H1-8 in [`http1-codec.md`](http1-codec.md) is the server's side). | **Fixed.** `http1ClientChunkSize` parses the whole extension with `http1ChunkExtValid` and refuses one that does not match the grammar with `HTTP1_E_CHUNK` ("a malformed chunk extension"). Tests: `a chunk extension with no name`, `a chunk extension name with a space in it`, `a chunk extension with an empty value`, `a chunk extension value that is not a token`, `an unclosed quoted chunk extension` and `a quoted chunk extension whose closing quote is escaped` (each printed as `refused with 9 (a malformed chunk extension): …`) in `tests/link/net_http1_client` and `_f64` fail on the base, which read each as a chunk; `accepted: a chunk extension name=value`, `accepted: a quoted chunk extension with BWS, a semicolon and an escaped quote` and `accepted: two chunk extensions, the first with no value` pass on both. |
 
 ## Fuzzing
 
@@ -112,7 +115,8 @@ a smuggled field fails where it is ignored), a coding other than one
 an HTTP/1.0 response (`HTTP1_E_CODING`), a bare LF anywhere a line ends
 (`HTTP1_E_BARE_LF`), an obs-fold, whitespace before the colon, a control
 byte in a value (`HTTP1_E_FIELD`), a chunk size with no digits, a `0x`, BWS
-with no extension, a control byte in an extension, chunk data longer than
+with no extension, a control byte in an extension, an extension that breaks
+its grammar (HC-2), chunk data longer than
 its size or followed by anything but CRLF (`HTTP1_E_CHUNK`, but a bare LF
 there is `HTTP1_E_BARE_LF`, even after data that ends in CR), and a 101 to a
 request that did not ask to switch (`HTTP1_E_SWITCH`; the target never

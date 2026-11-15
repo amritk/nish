@@ -1,0 +1,16 @@
+PASS  a new input has no events
+PASS  and no key down
+PASS  a press is the step's one event
+PASS  and q is down
+PASS  as is Q: a letter is one key in either case
+PASS  but space is not
+PASS  an empty step has no events
+PASS  and q is still held
+PASS  a release lets q go
+PASS  a release of a key not down is dropped
+PASS  and shows nothing down
+PASS  pointed at another key state, the input reads it
+PASS  and the events it was pointed at
+PASS  which are not a copy: a change to them shows
+PASS  nor is the key state
+std_input: 15 passed, 0 failed, 0 skipped

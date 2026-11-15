@@ -60,17 +60,7 @@
 
 import { Operands, Walk } from "./emit-ts-edits"
 import { isOptionalChain } from "./emit-util"
-import {
-  N_BINARY,
-  N_CALL,
-  N_EMPTY,
-  N_IDENT,
-  N_MEMBER,
-  N_STRING,
-  N_TEMPLATE_TEXT,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { StringBuilder } from "./strings"
 import { T_STRING } from "./types"
 
@@ -124,7 +114,7 @@ const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string |
   if (walk.program.nodeCallees[node.id] !== null) {
     return null
   }
-  if (callee.kind === N_IDENT) {
+  if (callee.kind === NodeKind.Ident) {
     if (
       callee.text !== "Number" ||
       walk.program.nodeBuiltins[node.id].length > 0 ||
@@ -135,11 +125,11 @@ const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string |
     }
     return stringHelperCall(walk, "number", operands.at(1))
   }
-  if (callee.kind !== N_MEMBER) {
+  if (callee.kind !== NodeKind.Member) {
     return null
   }
   const receiver = callee.children[0]
-  if (receiver.kind === N_IDENT && receiver.text === "String") {
+  if (receiver.kind === NodeKind.Ident && receiver.text === "String") {
     const helper = stringStaticHelper(callee.text)
     return helper.length === 0 ? null : stringHelperCall(walk, helper, operands.at(1))
   }
@@ -232,12 +222,16 @@ const unbracedEscapes = (text: string): string | null => {
  * is left too.
  */
 const widenedBinding = (walk: Walk, node: Node, operands: Operands): string | null => {
-  if (node.children.length !== 3 || node.children[0].kind !== N_IDENT || node.children[1].kind !== N_EMPTY) {
+  if (
+    node.children.length !== 3 ||
+    node.children[0].kind !== NodeKind.Ident ||
+    node.children[1].kind !== NodeKind.Empty
+  ) {
     return null
   }
   const name = node.children[0]
   const init = node.children[2]
-  if (init.kind !== N_STRING) {
+  if (init.kind !== NodeKind.String) {
     return null
   }
   const text = walk.source.text
@@ -258,7 +252,7 @@ const literalComparison = (walk: Walk, node: Node, operands: Operands): string |
   }
   const left = node.children[0]
   const right = node.children[1]
-  if (left.kind !== N_STRING || right.kind !== N_STRING) {
+  if (left.kind !== NodeKind.String || right.kind !== NodeKind.String) {
     return null
   }
   const text = walk.source.text
@@ -267,19 +261,19 @@ const literalComparison = (walk: Walk, node: Node, operands: Operands): string |
 
 /** The strings row's rewrite of `node`, or `null` to leave it to the next row. */
 export const stringsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
-  if (node.kind === N_STRING || node.kind === N_TEMPLATE_TEXT) {
+  if (node.kind === NodeKind.String || node.kind === NodeKind.TemplateText) {
     return unbracedEscapes(walk.spanOf(node))
   }
-  if (node.kind === N_MEMBER) {
+  if (node.kind === NodeKind.Member) {
     return stringLengthRewrite(walk, node, operands)
   }
-  if (node.kind === N_VAR_DECL) {
+  if (node.kind === NodeKind.VarDecl) {
     return widenedBinding(walk, node, operands)
   }
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     return literalComparison(walk, node, operands)
   }
-  if (node.kind === N_CALL && node.children.length === 2) {
+  if (node.kind === NodeKind.Call && node.children.length === 2) {
     return stringCallRewrite(walk, node, operands)
   }
   return null

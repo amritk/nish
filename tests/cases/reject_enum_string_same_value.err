@@ -1,0 +1,1 @@
+Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member

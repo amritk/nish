@@ -94,6 +94,9 @@
  *  - a GOAWAY whose push ID rose, a MAX_PUSH_ID that fell, a CANCEL_PUSH past
  *    the push IDs allowed (H3_ID_ERROR, §5.2, §7.2.7, §7.2.3);
  *  - a control frame past `H3_CONTROL_FRAME_MAX` (H3_EXCESSIVE_LOAD);
+ *  - a request reset past what `resetBudget` allows — by the client, or by
+ *    this side for a stream error or a 431 the client caused, net of the
+ *    requests this side answered (H3_EXCESSIVE_LOAD, §10.5);
  *  - and QPACK's three.
  *
  *  A stream error resets one request, both ways, and the connection lives: a
@@ -312,10 +315,21 @@ const H3_FLAG_WAITING: i32 = 16
 const H3_FLAG_WT: i32 = 256
 /** A request stream past this side's GOAWAY, refused unless its first bytes make it a WebTransport stream. */
 const H3_FLAG_LATE: i32 = 512
+/** A request already charged to the reset budget: a client's RESET_STREAM and STOP_SENDING on one stream cost one. */
+const H3_FLAG_CHARGED: i32 = 1024
 
 /** The connection's states. */
 const H3_STATE_OPEN: i32 = 0
 const H3_STATE_FAILED: i32 = 1
+
+/** The clock's modes. OFF: no `next` has found `h3` chosen yet, so nothing is timed. */
+const H3_CLOCK_OFF: i32 = -1
+/** IDLE: no request in hand; timed by `idleTimeout`. */
+const H3_CLOCK_IDLE: i32 = 0
+/** HEAD: a request short of its head; timed by `headTimeout` and `idleTimeout`. */
+const H3_CLOCK_HEAD: i32 = 1
+/** BUSY: every request in hand past its head; not timed. */
+const H3_CLOCK_BUSY: i32 = 2
 
 /** What `requestFrame` answers when it read a frame header and the stream has more to read. */
 const H3_CONTINUE: i32 = -1
@@ -365,10 +379,34 @@ export class Http3Config {
    */
   webtransportSessions: i32 = 0
   /**
+   * The milliseconds a connection may go without progress while no request
+   * is in hand before `clock` closes it (H3-5), 1 to 2^31 - 1. Progress is
+   * the connection starting, a request's head arriving whole, and the last
+   * request in hand finishing. With no request open the close is H3_NO_ERROR;
+   * with one still short of its head it is H3_EXCESSIVE_LOAD.
+   */
+  idleTimeout: i32 = 60000
+  /**
+   * The milliseconds a request's head may take to arrive whole, from its
+   * first byte or the last head before it, before `clock` closes the
+   * connection with H3_EXCESSIVE_LOAD (H3-5), 1 to 2^31 - 1. A body that
+   * trickles after its head is the program's to time, as a long response is.
+   */
+  headTimeout: i32 = 30000
+  /**
    * Whether `:protocol` is accepted (RFC 9220's extended CONNECT), and
    * SETTINGS_ENABLE_CONNECT_PROTOCOL sent. WebTransport turns it on.
    */
   extendedConnect: boolean = false
+  /**
+   * How many requests may be reset before the connection is closed with
+   * H3_EXCESSIVE_LOAD, net of those this side answered: each request the
+   * client resets or stops, and each this side resets for a stream error or
+   * answers with a 431, costs one; each response this side ends with a FIN
+   * earns one back, up to this. Rapid reset (CVE-2023-44487) and MadeYouReset
+   * (CVE-2025-8671) over HTTP/3.
+   */
+  resetBudget: i32 = 100
 }
 
 /** Panics unless `value` lies in `[low, high]`: a cap out of range is the program's mistake. */
@@ -539,6 +577,9 @@ export class Http3Connection {
   lastStreamId: i64 = 0
   /** H3_STREAM's session ID. */
   session: i64 = -1
+  /** When `clock` last saw progress, and when it first saw a head waiting since; -1 for not yet. */
+  private clockSince: i64 = -1
+  private headSince: i64 = -1
   /**
    * The QUIC stream slot of the last event's stream: still right when the read that made the event freed it.
    * @internal Read by `webtransport.ts` to find its own per-slot state; not for callers.
@@ -575,9 +616,18 @@ export class Http3Connection {
    * with `content-length`, a stream that ends before its HEADERS, a trailer section too large.
    */
   streamErrors: i32 = 0
+  /** What is left of `config.resetBudget`. */
+  private resetCredit: i32 = 0
   private againHead: i32 = 0
   private againCount: i32 = 0
   private waitCount: i32 = 0
+  /**
+   * The heads delivered, wrapping, and the count and `H3_CLOCK_*` mode `clock` last saw. The mode is
+   * OFF (-1) from construction and `restart` until `next` finds `h3` chosen and sets it to IDLE.
+   */
+  private heads: i32 = 0
+  private clockHeads: i32 = 0
+  private clockMode: i32 = -1
   /** How many times `restart` ran: a layer above that keeps state per connection compares it to know when to forget its own. */
   generation: i32 = 0
   /** Whether the client's SETTINGS have arrived. */
@@ -620,6 +670,9 @@ export class Http3Connection {
     http3CheckCap("the QUIC unidirectional stream limit", toI32(quic.streams.maxUni), 3, 1024)
     http3CheckCap("the QUIC local stream limit", toI32(quic.streams.localStreams), 3, 1024)
     http3CheckCap("webtransportSessions", config.webtransportSessions, 0, H3_MAX_SESSIONS)
+    http3CheckCap("resetBudget", config.resetBudget, 0, 2147483647)
+    http3CheckCap("idleTimeout", config.idleTimeout, 1, 2147483647)
+    http3CheckCap("headTimeout", config.headTimeout, 1, 2147483647)
     // RFC 9297 §2.1.1: QUIC datagrams carry HTTP datagrams, which only WebTransport uses here.
     const datagrams: boolean = quic.datagramsIn.capacity() > 0
     if (config.webtransportSessions > 0 && !datagrams) {
@@ -737,10 +790,15 @@ export class Http3Connection {
     this.errorCode = 0
     this.lastStreamId = 0
     this.session = -1
+    this.clockSince = -1
+    this.headSince = -1
     this.slot = -1
     this.againHead = 0
     this.againCount = 0
     this.waitCount = 0
+    this.heads = 0
+    this.clockHeads = 0
+    this.clockMode = H3_CLOCK_OFF
     this.generation = this.generation < 2147483647 ? this.generation + 1 : H3_ONE
     this.dataStart = 0
     this.dataLength = 0
@@ -750,6 +808,7 @@ export class Http3Connection {
     this.rejected = 0
     this.tooLarge = 0
     this.streamErrors = 0
+    this.resetCredit = this.config.resetBudget
     this.settingsSeen = false
     this.resetByPeer = false
   }
@@ -780,6 +839,75 @@ export class Http3Connection {
   isDone(): boolean {
     const streams = this.quic.streams
     return this.goawayId >= 0 && this.live === 0 && streams.peerBidiClosed >= streams.peerBidiOpened
+  }
+
+  /**
+   * Runs the connection's clock (H3-5): closes the QUIC connection once it
+   * has gone `idleTimeout` without progress while no request is in hand, or a
+   * request's head has waited `headTimeout`, and otherwise answers when to
+   * look again. `Http3Server` calls it on every flush of the slot; a program
+   * driving a connection itself calls it after each `next` and when the
+   * time it answered comes. It allocates nothing. The clock starts on the
+   * first `next` after the handshake chose `h3`, whether or not the client's
+   * MAX_STREAMS has let this side's own streams open yet: a connection the
+   * program runs another protocol on, and never asks for an event, is left
+   * to QUIC's own idle timeout.
+   *
+   * @param now The current millisecond on the caller's monotonic clock.
+   * @returns The millisecond the clock next needs a look, or -1 when it needs none: no `next` has
+   *   found `h3` chosen yet, every request in hand is past its head, or the connection is closed (by this call too).
+   */
+  clock(now: i64): i64 {
+    if (this.clockMode === H3_CLOCK_OFF || this.quic.closed()) {
+      return -1
+    }
+    let mode: i32 = H3_CLOCK_BUSY
+    if (this.live === 0) {
+      mode = H3_CLOCK_IDLE
+    } else if (this.awaitsHead()) {
+      mode = H3_CLOCK_HEAD
+    }
+    const finished: boolean = this.clockMode === H3_CLOCK_BUSY && mode !== H3_CLOCK_BUSY
+    if (this.clockSince < 0 || this.heads !== this.clockHeads || finished) {
+      this.clockSince = now
+      this.clockHeads = this.heads
+      this.headSince = -1
+    }
+    if (mode !== H3_CLOCK_HEAD) {
+      this.headSince = -1
+    } else if (this.headSince < 0) {
+      this.headSince = now
+    }
+    this.clockMode = mode
+    if (mode === H3_CLOCK_BUSY) {
+      return -1
+    }
+    let due: i64 = this.clockSince + toI64(this.config.idleTimeout)
+    if (mode === H3_CLOCK_HEAD) {
+      due = http3Min(due, this.headSince + toI64(this.config.headTimeout))
+    }
+    if (now < due) {
+      return due
+    }
+    this.quic.close(mode === H3_CLOCK_HEAD ? H3_EXCESSIVE_LOAD : H3_NO_ERROR)
+    return -1
+  }
+
+  /** Whether a request stream the client opened, counted in `live`, has not yet given its head. */
+  private awaitsHead(): boolean {
+    const skip: i32 = H3_FLAG_DELIVERED | H3_FLAG_WT
+    for (let k: i32 = 0; k < toI32(this.slotId.length); k++) {
+      const flags: i32 = this.flags[k]
+      if (
+        this.phase[k] === H3_PHASE_HEADERS &&
+        (flags & H3_FLAG_COUNTED) !== 0 &&
+        (flags & skip) === 0 &&
+        http3IsRequest(this.slotId[k])
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   /** Writes `buf[0 .. n)` to this side's new stream `id` whole, as its first bytes; answers whether it took them. */
@@ -954,6 +1082,12 @@ export class Http3Connection {
       if (this.quic.alpn !== H3_ALPN) {
         this.quic.fail(H3_NO_APPLICATION_PROTOCOL, toI64(0))
         return this.fail(H3_NO_APPLICATION_PROTOCOL)
+      }
+      // The clock runs from here, not from start() finishing: a client
+      // whose MAX_STREAMS keeps this side's unidirectional streams unopened
+      // is still served its requests, so it is still timed.
+      if (this.clockMode === H3_CLOCK_OFF) {
+        this.clockMode = H3_CLOCK_IDLE
       }
       this.start()
     }
@@ -1643,6 +1777,10 @@ export class Http3Connection {
         // The client stopped the response (QUIC answered with RESET_STREAM, §3.5 of RFC 9000).
         const told: boolean = (this.flags[k] & H3_FLAG_DELIVERED) !== 0
         this.mark(k, H3_FLAG_SEND_DONE)
+        const charged: i32 = this.chargeReset(k)
+        if (charged !== H3_NEED_MORE) {
+          return charged
+        }
         if (told) {
           if (phase !== H3_PHASE_DONE) {
             this.phase[k] = H3_PHASE_DISCARD
@@ -1863,6 +2001,7 @@ export class Http3Connection {
     this.contentLength[k] = this.fields.contentLength
     this.phase[k] = H3_PHASE_BODY
     this.flags[k] = this.flags[k] | H3_FLAG_DELIVERED
+    this.heads = this.heads < 2147483647 ? this.heads + 1 : H3_ZERO
     this.stream = id
     return H3_REQUEST
   }
@@ -1922,6 +2061,10 @@ export class Http3Connection {
     if (n === QUIC_STREAM_ERR_RESET) {
       // §4.1.1: a response to a request that will not finish is abandoned too.
       this.abandon(k, id, resetCode === H3_REQUEST_CANCELLED ? H3_REQUEST_CANCELLED : H3_REQUEST_INCOMPLETE)
+      const charged: i32 = this.chargeReset(k)
+      if (charged !== H3_NEED_MORE) {
+        return charged
+      }
       return delivered ? this.resetEvent(id, resetCode, true) : this.dropped(id)
     }
     if (n !== QUIC_STREAM_END) {
@@ -1931,13 +2074,15 @@ export class Http3Connection {
       // §4.1.1: the stream ended before a whole request.
       this.abandon(k, id, H3_REQUEST_INCOMPLETE)
       this.streamErrors = h3Count(this.streamErrors)
-      return this.dropped(id)
+      const charged: i32 = this.chargeReset(k)
+      return charged !== H3_NEED_MORE ? charged : this.dropped(id)
     }
     if (this.contentLength[k] >= 0 && this.dataTotal[k] !== this.contentLength[k]) {
       // §4.1.2: the body is shorter than its content-length.
       this.abandon(k, id, H3_MESSAGE_ERROR)
       this.streamErrors = h3Count(this.streamErrors)
-      return this.resetEvent(id, H3_MESSAGE_ERROR, false)
+      const charged: i32 = this.chargeReset(k)
+      return charged !== H3_NEED_MORE ? charged : this.resetEvent(id, H3_MESSAGE_ERROR, false)
     }
     this.stream = id
     return H3_END
@@ -1957,10 +2102,37 @@ export class Http3Connection {
     this.abandon(k, id, code)
     this.quic.streamStopSending(id, code)
     this.phase[k] = H3_PHASE_DISCARD
+    const charged: i32 = this.chargeReset(k)
+    if (charged !== H3_NEED_MORE) {
+      return charged
+    }
     if ((this.flags[k] & H3_FLAG_DELIVERED) !== 0) {
       return this.resetEvent(id, code, false)
     }
     return this.dropped(id)
+  }
+
+  /**
+   * Charges request `k` to the reset budget, once whatever reset it: a client
+   * that cannot reset many requests itself provokes this side into it
+   * (MadeYouReset, CVE-2025-8671). Answers H3_NEED_MORE, or once the budget
+   * is spent the connection error H3_EXCESSIVE_LOAD (§10.5).
+   */
+  private chargeReset(k: i32): i32 {
+    if ((this.flags[k] & H3_FLAG_CHARGED) !== 0) {
+      return H3_NEED_MORE
+    }
+    this.flags[k] = this.flags[k] | H3_FLAG_CHARGED
+    this.resetCredit = this.resetCredit - 1
+    return this.resetCredit < 0 ? this.fail(H3_EXCESSIVE_LOAD) : H3_NEED_MORE
+  }
+
+  /** This side ended request `k`'s response with a FIN: its send side is done, and a request the program answered earns the reset budget one back. */
+  private answered(k: i32): void {
+    this.mark(k, H3_FLAG_SEND_DONE)
+    if ((this.flags[k] & H3_FLAG_DELIVERED) !== 0 && this.resetCredit < this.config.resetBudget) {
+      this.resetCredit = this.resetCredit + 1
+    }
   }
 
   /** H3_DROPPED for request stream `id` with WebTransport on, which waits on such a stream; H3_NEED_MORE without. */
@@ -2000,7 +2172,8 @@ export class Http3Connection {
     }
     this.quic.streamStopSending(id, H3_NO_ERROR)
     this.phase[k] = H3_PHASE_DISCARD
-    return this.dropped(id)
+    const charged: i32 = this.chargeReset(k)
+    return charged !== H3_NEED_MORE ? charged : this.dropped(id)
   }
 
   /**
@@ -2191,7 +2364,7 @@ export class Http3Connection {
     this.quic.streamWrite(id, out, H3_ZERO, toI32(length), fin)
     this.flags[k] = this.flags[k] | H3_FLAG_HEADERS_SENT
     if (fin) {
-      this.mark(k, H3_FLAG_SEND_DONE)
+      this.answered(k)
     }
     return 0
   }
@@ -2299,7 +2472,7 @@ export class Http3Connection {
     if (len === 0) {
       if (endStream && this.dataLeft[k] === 0) {
         this.quic.streamWrite(id, this.zeros, H3_ZERO, H3_ZERO, true)
-        this.mark(k, H3_FLAG_SEND_DONE)
+        this.answered(k)
       }
       return 0
     }
@@ -2336,7 +2509,7 @@ export class Http3Connection {
         break
       }
       if (fin) {
-        this.mark(k, H3_FLAG_SEND_DONE)
+        this.answered(k)
       }
     }
     return total > 0 ? total : H3_AGAIN
@@ -2388,7 +2561,7 @@ export class Http3Connection {
     this.quic.streamWrite(id, this.scratch, H3_ZERO, hp, false)
     this.quic.streamWrite(id, buf, off, len, fin)
     if (fin) {
-      this.mark(k, H3_FLAG_SEND_DONE)
+      this.answered(k)
     }
     return 0
   }

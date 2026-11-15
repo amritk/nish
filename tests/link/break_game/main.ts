@@ -20,8 +20,12 @@ import {
   KeyState,
   TermEvent
 } from "../../../std/term"
-import { TermInput } from "../../../std/term-io"
-import { GLYPH_H, dim, gfxRgb } from "../../../src/break-gfx"
+import { StepInput } from "../../../std/input"
+import {
+  RASTER_GLYPH_H,
+  rasterDim,
+  rasterRgb,
+} from "../../../std/raster"
 import {
   BRICK_EXPLOSIVE,
   BRICK_MYSTERY,
@@ -129,27 +133,27 @@ const keyEvent = (key: i32, code: i32, action: i32): TermEvent => {
 }
 
 /** A step with no input. */
-const idle = (game: BreakGame, input: TermInput): i32 => {
+const idle = (game: BreakGame, input: StepInput): i32 => {
   input.events = []
   return stepBreakGame(game, input)
 }
 
 /** A step with one key pressed, as a fresh press: it never reaches the held keys, so a second tap is not a repeat. */
-const tap = (game: BreakGame, input: TermInput, key: i32, code: i32): i32 => {
+const tap = (game: BreakGame, input: StepInput, key: i32, code: i32): i32 => {
   input.events = [keyEvent(key, code, ACTION_PRESS)]
   return stepBreakGame(game, input)
 }
 
-const idleFor = (game: BreakGame, input: TermInput, steps: i32): void => {
+const idleFor = (game: BreakGame, input: StepInput, steps: i32): void => {
   for (let i: i32 = 0; i < steps; i++) {
     idle(game, input)
   }
 }
 
-const newInput = (): TermInput => new TermInput(new KeyState())
+const newInput = (): StepInput => new StepInput(new KeyState())
 
 /** A game on `level` past its intro, the ball still on the paddle. */
-const playing = (level: i32, input: TermInput): BreakGame => {
+const playing = (level: i32, input: StepInput): BreakGame => {
   const game = newBreakGame(level, toI64(7))
   tap(game, input, KEY_CHAR, 122)
   return game
@@ -202,7 +206,7 @@ const emptyWall = (game: BreakGame): void => {
 const asked = (game: BreakGame, id: i32): boolean => game.sounds.indexOf(id) >= 0
 
 /** Steps `game` up to `steps` times, stopping at the first step that asks for `id`; answers whether one did. */
-const heard = (game: BreakGame, input: TermInput, id: i32, steps: i32): boolean => {
+const heard = (game: BreakGame, input: StepInput, id: i32, steps: i32): boolean => {
   for (let i: i32 = 0; i < steps; i++) {
     idle(game, input)
     if (asked(game, id)) {
@@ -889,28 +893,28 @@ const textRows = (fb: Framebuffer, colours: i32[]): i32 => {
 /** At 80 x 45 a glyph's 7 pixels outgrow the layout: every screen's lines stand apart. */
 const testCompact = (t: Suite): void => {
   const input = newInput()
-  const white: i32 = gfxRgb(240, 242, 255)
-  const gold: i32 = gfxRgb(255, 214, 90)
-  const red: i32 = gfxRgb(255, 90, 90)
-  const soft: i32 = dim(white, 0.8)
+  const white: i32 = rasterRgb(240, 242, 255)
+  const gold: i32 = rasterRgb(255, 214, 90)
+  const red: i32 = rasterRgb(255, 90, 90)
+  const soft: i32 = rasterDim(white, 0.8)
   const fb = new Framebuffer(80, 45)
 
   const intro = newBreakGame(1, toI64(7))
   idleFor(intro, input, INTRO_STEPS - 2)
   drawBreakGame(intro, fb, 0.5)
-  t.eqI32("the compact intro is two lines apart", textRows(fb, [white, gold]), 200 + GLYPH_H)
+  t.eqI32("the compact intro is two lines apart", textRows(fb, [white, gold]), 200 + RASTER_GLYPH_H)
 
   const paused = playing(1, input)
   tap(paused, input, KEY_CHAR, 112)
   drawBreakGame(paused, fb, 0.5)
-  t.eqI32("the compact pause is three lines apart", textRows(fb, [white, soft]), 300 + GLYPH_H)
+  t.eqI32("the compact pause is three lines apart", textRows(fb, [white, soft]), 300 + RASTER_GLYPH_H)
 
   const clear = playing(1, input)
   emptyWall(clear)
   idleFor(clear, input, 60)
   t.eqI32("the tally is up", clear.phase, PHASE_CLEAR)
   drawBreakGame(clear, fb, 0.5)
-  t.eqI32("the compact tally is two lines apart", textRows(fb, [gold]), 200 + GLYPH_H)
+  t.eqI32("the compact tally is two lines apart", textRows(fb, [gold]), 200 + RASTER_GLYPH_H)
 
   const over = playing(1, input)
   over.phase = PHASE_OVER
@@ -920,7 +924,7 @@ const testCompact = (t: Suite): void => {
     idle(over, input)
   }
   drawBreakGame(over, fb, 0.5)
-  t.eqI32("the compact last screen is three lines apart", textRows(fb, [red, white, soft]), 300 + GLYPH_H)
+  t.eqI32("the compact last screen is three lines apart", textRows(fb, [red, white, soft]), 300 + RASTER_GLYPH_H)
 }
 
 // ---- Soak -------------------------------------------------------------------------

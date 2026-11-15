@@ -28,7 +28,7 @@ import { emitFieldAssignment } from "./emit-classes"
 import { emitCoalesce, emitUndefinedTest, isUndefinedTest } from "./emit-map"
 import { emitConcat, emitStrictEquality } from "./emit-strings"
 import { unwrapParens } from "./emit-util"
-import { N_INDEX, N_MEMBER, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { ConstInfo } from "./program"
 import { f32Hex, f64Hex } from "./strings"
 import { Local } from "./symbols"
@@ -74,7 +74,7 @@ export const constantText = (emitter: Emitter, info: ConstInfo): string => {
 // ---- Integer arithmetic -----------------------------------------------------------
 
 /** The `nish_panic_overflow` argument for each checked operator, in runtime/runtime.c's order. */
-const OVERFLOW_ADD: i32 = 0
+export const OVERFLOW_ADD: i32 = 0
 const OVERFLOW_SUB: i32 = 1
 const OVERFLOW_MUL: i32 = 2
 const OVERFLOW_NEG: i32 = 3
@@ -111,6 +111,30 @@ const emitSignedArith = (
   if (emitter.program.nodeProvenNoOverflow[node.id]) {
     return fn.emitValue(`${opcode} nsw ${ty} ${lhs}, ${rhs}`)
   }
+  return emitCheckedArith(emitter, opcode, ty, lhs, rhs, panicCode)
+}
+
+/**
+ * `lhs <opcode> rhs` over the signed `ty` through its overflow intrinsic,
+ * panicking with `panicCode` when it overflows, whatever is proven about it.
+ *
+ * @param emitter the emitter whose current function gets the code
+ * @param opcode `add`, `sub` or `mul`
+ * @param ty the LLVM integer type
+ * @param lhs the left operand
+ * @param rhs the right operand
+ * @param panicCode the `OVERFLOW_*` code the panic reports
+ * @returns the result's value
+ */
+export const emitCheckedArith = (
+  emitter: Emitter,
+  opcode: string,
+  ty: string,
+  lhs: string,
+  rhs: string,
+  panicCode: i32
+): string => {
+  const fn = emitter.fn
   const pair = fn.emitValue(
     `call { ${ty}, i1 } ${emitter.useRuntime(`llvm.s${opcode}.with.overflow.${ty}`)}(${ty} ${lhs}, ${ty} ${rhs})`
   )
@@ -358,16 +382,16 @@ const constantCount = (expr: Node): ConstantCount => {
   let inner = expr
   let negative = false
   for (;;) {
-    if (inner.kind === N_PAREN) {
+    if (inner.kind === NodeKind.Paren) {
       inner = inner.children[0]
-    } else if (inner.kind === N_UNARY && inner.text === "-") {
+    } else if (inner.kind === NodeKind.Unary && inner.text === "-") {
       negative = !negative
       inner = inner.children[0]
     } else {
       break
     }
   }
-  if (inner.kind !== N_NUMBER) {
+  if (inner.kind !== NodeKind.Number) {
     return new ConstantCount(false, toI64(0))
   }
   const value = parseIntegerLiteral(inner.text)
@@ -495,7 +519,7 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
   if (op === "-") {
     const type = emitter.typeOf(operand)
     const literal = unwrapParens(operand)
-    if (isInteger(type) && literal.kind === N_NUMBER) {
+    if (isInteger(type) && literal.kind === NodeKind.Number) {
       return negatedLiteral(literal.text, type)
     }
     const value = emitter.emitExpression(operand)
@@ -550,10 +574,10 @@ export const targetLocal = (emitter: Emitter, target: Node): Local => {
 /** `x = e`, `x op= e` and their field and element forms, keyed by the target. */
 export const emitAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0]
-  if (target.kind === N_MEMBER) {
+  if (target.kind === NodeKind.Member) {
     return emitFieldAssignment(emitter, expr)
   }
-  if (target.kind === N_INDEX) {
+  if (target.kind === NodeKind.Index) {
     return emitElementAssignment(emitter, expr)
   }
   const op = expr.text

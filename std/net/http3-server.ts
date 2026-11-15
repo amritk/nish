@@ -86,9 +86,21 @@
  * bucket from a bitmap. A deadline past the wheel's horizon is filed at the
  * horizon and filed again when it comes round. So no call scans the slots.
  *
+ *  The HTTP/3 side's clock (`Http3Connection.clock`, H3-5) runs on every
+ *  flush and files its deadline with the rest: a slot that goes
+ *  `idleTimeout` without progress while no request is in hand is closed with
+ *  H3_NO_ERROR, and one whose request head has waited `headTimeout` (a
+ *  client trickling its HEADERS, the slowloris of HTTP/3) with
+ *  H3_EXCESSIVE_LOAD, as the program writes no timer of its own. A client
+ *  that only acknowledges or sends PING keeps its QUIC connection alive but
+ *  not its slot. The clock times a slot from the first `next` that finds the
+ *  handshake chose `h3`, whether or not the client has let this side's
+ *  streams open; a slot the program runs another protocol on, such as
+ *  `hq-interop`, is left to QUIC's idle timeout.
+ *
  * **Caps, fixed at start-up**: the slots, and inside each the QUIC
  * configuration's streams and buffers and the `Http3Config`'s field section,
- * body chunk and DATA frame.
+ * body chunk, DATA frame and two timeouts.
  *
  *  A slot's connections and address are built on the first Initial accepted into
  *  it and kept, so a pool sized for its peak costs at start-up only its per-slot
@@ -616,12 +628,20 @@ export class Http3Server {
    * @param config The HTTP/3 configuration, kept by reference; its `bodyChunk` and `maxFieldSectionSize`
    *   size the shared buffer pools.
    * @param fd The bound UDP socket, kept; the server does not close it.
-   * @param size How many slots, 1 to 65536; any other panics.
+   * @param size How many slots, 1 to 65536; any other panics, as does an `idleTimeout` or `headTimeout`
+   *   under 1.
    * @param listenerEntropy `QUIC_LISTENER_ENTROPY_SIZE` random bytes, copied and then zeroed in this array.
    */
   constructor(quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[]) {
     if (size < 1 || size > 65536) {
       panic(`Http3Server: ${size} slots, outside 1 to 65536`)
+    }
+    // Checked here as well as by each slot's connection, which is built only on its first Initial.
+    if (config.idleTimeout < 1) {
+      panic(`Http3Server: idleTimeout of ${config.idleTimeout}, outside 1 to 2147483647`)
+    }
+    if (config.headTimeout < 1) {
+      panic(`Http3Server: headTimeout of ${config.headTimeout}, outside 1 to 2147483647`)
     }
     this.quicConfig = quicConfig
     this.config = config
@@ -1139,9 +1159,12 @@ export class Http3Server {
   private flushSlot(slot: i32, now: i64): void {
     const quic: QuicConnection = this.quics[slot]
     quic.recovery.micros = this.micros
-    if (this.conns[slot].isDone() && !quic.closed()) {
+    const conn: Http3Connection = this.conns[slot]
+    if (conn.isDone() && !quic.closed()) {
       quic.close(H3_NO_ERROR)
     }
+    // An idle client, or one trickling a request's head, loses the slot here (H3-5).
+    const clocked: i64 = conn.clock(now)
     // A PATH_RESPONSE owed on a path the connection did not move to goes
     // there, alone (RFC 9000 §9.1); asking for it runs the connection's
     // timers first, so a validation that ran out has moved it back before
@@ -1198,6 +1221,9 @@ export class Http3Server {
     const paced: i64 = quicListenerFlightTime(quic, now)
     if (paced > now && (due < 0 || paced < due)) {
       due = paced
+    }
+    if (clocked >= 0 && (due < 0 || clocked < due)) {
+      due = clocked
     }
     this.wheel.file(slot, due, now)
   }

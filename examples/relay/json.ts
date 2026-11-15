@@ -1,6 +1,6 @@
 /**
  * The grant's JSON, read by hand: WP34's N11 phase-one case
- * (`docs/wp34-hosting-cs.md`), an object of strings and integers and nothing
+ * (`docs/wp34-network-stack.md`), an object of strings and integers and nothing
  * else, read from a byte window into tables made once.
  *
  * What it takes is RFC 8259 narrowed to what `JSON.stringify` writes for a

@@ -1,0 +1,1 @@
+is granted `process.spawn=exec:sh`, past the arguments `nish-capabilities.lock.json` records for its `process.spawn`

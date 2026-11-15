@@ -60,6 +60,45 @@ On macOS the roots come from `/etc/ssl/cert.pem`. A root added only to the
 Keychain, or a trust setting changed there, is not seen; export it to a PEM
 file and name that file in `SSL_CERT_FILE`.
 
+## Distrusting a key
+
+Revocation is not checked (see below), so a CA that is still in the system's
+bundle stays trusted until the bundle drops it. To stop trusting one
+sooner, or a key you know is compromised, name its key:
+`pkiDistrustSpki(store, hash)` adds the SHA-256 of a certificate's
+subjectPublicKeyInfo, 32 bytes, and from then on `pkiVerifyServer` refuses,
+with `PKI_ERR_DISTRUSTED`, any chain whose path holds a certificate with that
+key: the server's own, an intermediate or a root. The key is matched, not the
+name, so every certificate issued for it is refused, cross-signs and reissues
+too. It is the hash HTTP public key pinning used; for a PEM certificate,
+`openssl x509 -in cert.pem -pubkey -noout | openssl pkey -pubin -outform der
+| openssl dgst -sha256` prints it in hex. A store distrusts nothing
+until you call it, and a hash that is not 32 bytes is not added: the call
+answers `false`.
+
+```ts nish:ok
+import { PKI_ERR_DISTRUSTED, PkiTrustStore, pkiDistrustSpki, pkiTrustStore } from "nish/crypto/pki";
+import { sha256 } from "nish/crypto/sha256";
+import { X509Certificate } from "nish/crypto/x509";
+
+// Trust `roots`, but no chain through the key of `retired`.
+const storeWithout = (roots: X509Certificate[], retired: X509Certificate): PkiTrustStore => {
+  const store: PkiTrustStore = pkiTrustStore(roots);
+  pkiDistrustSpki(store, sha256(retired.spki));
+  return store;
+};
+
+export const main = (): i32 => {
+  const store: PkiTrustStore = storeWithout([], new X509Certificate());
+  return PKI_ERR_DISTRUSTED === 17 && store.roots.length === 0 ? 0 : 1;
+};
+```
+
+`X509Certificate.spki` is the subjectPublicKeyInfo's DER, whole. A TLS
+client distrusts a key with `tlsClientDistrustSpki(trust, hash)`
+([TLS client](tls-client.md)), and `fetch` with its `distrustSpkiSha256`
+option ([HTTP client](http-client.md)).
+
 ## Reason codes
 
 Each refusal has a code of its own, and `pkiReason(code)` gives its sentence.
@@ -85,6 +124,7 @@ nearest a root.
 | `PKI_ERR_UNSUPPORTED_ALGORITHM` | a signature or key algorithm is not supported, SHA-1 among them |
 | `PKI_ERR_CHAIN_TOO_LONG` | the chain or a path is longer than its bound |
 | `PKI_ERR_BUDGET` | checking would take more work than its bound allows |
+| `PKI_ERR_DISTRUSTED` | a certificate on the path has a key the store distrusts (`pkiDistrustSpki`) |
 
 The bounds are constants: `PKI_MAX_CHAIN_CERTS` (128) certificates and
 `PKI_MAX_CHAIN_BYTES` (1 MiB) in a chain, `PKI_MAX_PATH` (8) certificates in a
@@ -107,7 +147,8 @@ certificate's signature verifies under another's key.
 ## What is not checked
 
 - **Revocation.** Neither CRLs nor OCSP are read, so a certificate revoked
-  before it expires is still accepted.
+  before it expires is still accepted, unless you
+  [distrust its key](#distrusting-a-key) yourself.
 - **Whether name constraints are critical.** A name constraints extension
   binds whether it is marked critical or not. Every other extension marked
   against the profile refuses the chain: a critical authority key

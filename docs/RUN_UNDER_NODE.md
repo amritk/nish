@@ -4,24 +4,17 @@ An Nish program is TypeScript, so a reasonable question is whether Node
 can just run it. The answer is *yes, in f64 mode, within an overlap this page
 states exactly* — and **no in i32 mode, ever**.
 
-There are two different mechanisms in this repository and it matters which one
-you are using:
+This page is about the **prelude**, `runtime/nish.mjs`: it supplies the
+globals Nish has and Node does not, and **rewrites nothing**. A prelude can
+only replace *globals*, never operators and never the object model, so it
+covers f64 mode minus the list below.
 
-| | What it does | Fidelity |
-| --- | --- | --- |
-| **The prelude** (`runtime/nish.mjs`) | Supplies the globals Nish has and Node does not. **Rewrites nothing.** | f64 mode, minus the list below |
-| **The rewriter** ([wp13-differential.md](https://github.com/amritk/nish/blob/main/docs/wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](https://github.com/amritk/nish/blob/main/docs/wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](https://github.com/amritk/nish/blob/main/tests/differential/known-failures.txt) |
-
-The rewriter was the testing oracle: it was exact because it could see the type
-of every expression and turn `a + b` into `(a + b) | 0`. Its successor
-is `--emit-ts <dir>` ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §4), which writes the
-same translation out as TypeScript a person can keep. The prelude is the thing
-you would actually hand to someone, and it is weaker because a prelude can only
-replace *globals* — never operators, never the object model.
-
-To import the builtins from TypeScript rather than install them as globals —
-`nish/runtime`, with `nish/runtime/node` or `nish/runtime/browser` as the
-host — see the guide's [Back to TypeScript](guide/using-nish/to-typescript.md).
+To run a program under Node exactly, in either mode, have the compiler
+translate it: `--emit-ts <dir>` sees the type of every expression, turns
+`a + b` into `(a + b) | 0` where the type needs it, and writes TypeScript a
+person can keep, importing its builtins from `nish/runtime`, with
+`nish/runtime/node` or `nish/runtime/browser` as the host. The guide's
+[Back to TypeScript](guide/using-nish/to-typescript.md) covers it.
 
 ## Using it
 
@@ -40,8 +33,7 @@ with what `main` returns (0 for a `main` that returns `void`).
 An `async` `main` answers a promise, so the one-liner awaits it, and then waits
 for every task `spawn` started (`settleTasks`, from `nish:async` as the hook
 answers it), as the native driver drains its queue before the process exits;
-for a plain `main` both are no-ops. It is the form
-`tests/differential/unmodified.js` runs. The import path is resolved from the
+for a plain `main` both are no-ops. The import path is resolved from the
 current directory, so keep the `./`.
 
 An async program runs on Node's own async/await, so its tasks resume in
@@ -49,7 +41,8 @@ Node's order, not the native one: an `await` always yields to the microtask
 queue, and `spawn(f(x))` runs `f` only to its first `await`, where the native
 build runs it until it first waits on the outside world. A program whose output
 depends on that interleaving (`tests/cases/async_spawn`) prints the same lines
-in another order; see `docs/LANGUAGE.md`, "Where it is not Node".
+in another order; see the guide's
+[Where it differs from Node](guide/language/async.md#where-it-differs-from-node).
 
 The program must be an ES module to Node, which an Nish program always
 is — the language has `import`/`export` and no CommonJS at all. This package is
@@ -62,9 +55,9 @@ ever runs; put the program under a directory whose `package.json` says
 
 ## What the prelude supplies
 
-Everything delegates to `runtime/shim.mjs`, the module the differential harness
-already uses, so the two cannot drift: a semantic fixed there is fixed here in
-the same commit. The shim is itself a layer over two modules:
+Everything delegates to `runtime/shim.mjs`, the module the compiler's own
+differential tests run against, so the two cannot drift: a semantic fixed
+there is fixed here in the same commit. The shim is itself a layer over two modules:
 `runtime/core.mjs`, the host-agnostic builtins, which name no `node:` module,
 `process` or `Buffer`, and `runtime/node.mjs`, which installs Node as the
 core's host — its output, exit, arguments, files, environment, children and
@@ -91,7 +84,6 @@ clocks. The command lines above stay as they are.
   `String.fromCharCode` makes them, with the native `slice out of range` panic
   for a range outside the array. ASCII agrees with a native run; a byte above
   127 is the divergence `fromCharCode` already has
-  ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.2)
 - `statMtimeSync` — `fs.statSync(path, { throwIfNoEntry: false })?.mtimeMs`,
   or NaN, which is the native arithmetic exactly, so the digits agree
 - `crypto.getRandomValues` — Node's own takes only a typed array, so the
@@ -101,7 +93,7 @@ clocks. The command lines above stay as they are.
   ([The host](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals))
 - `signalFd`, `readSignal` — installed only to **throw**: Node tells its event
   loop about a signal, and a blocking read never lets the loop run, so there is
-  no synchronous answer to give ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.5)
+  no synchronous answer to give
 - `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`,
   `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`,
   `udpBind`, `udpSendTo`,
@@ -183,8 +175,8 @@ no prelude can reach it. They are language decisions
 
 - **i32 mode entirely.** `number` is a 32-bit integer whose signed overflow
   panics; `/` truncates and panics on a zero divisor; `>>>` keeps the signed
-  reading. Every arithmetic operator would have to change, which is what the
-  rewriter is for.
+  reading. Every arithmetic operator would have to change, which is what
+  `--emit-ts` does.
 - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and so is
   every offset `charCodeAt`, `substring` and `indexOf` take or return. ASCII
   agrees; `"héllo".length` is `5` under Node and `6` natively. To count
@@ -205,8 +197,7 @@ no prelude can reach it. They are language decisions
   and `slice out of range: [2, 10) of length 6` natively, and `slice(-2, 6)` is
   `ef` against a panic. Unlike `a[i]`, JavaScript defines both as correct, so a
   program ported from TypeScript can depend on them. `substring` keeps
-  JavaScript's clamping exactly; `slice` is the checked, faster one
-  ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4).
+  JavaScript's clamping exactly; `slice` is the checked, faster one.
 - **A record put into an array is copied natively** and shared here
   ([Arrays of records are contiguous](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-of-records-are-contiguous)).
   After `ps.push(p); p.x = 9`, `ps[0].x` is still the old value natively and
@@ -231,11 +222,11 @@ no prelude can reach it. They are language decisions
   ([LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#typed-array-names-have-no-push-or-pop)).
 - **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
   in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
-  an exit-1 panic natively ([wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md)
-  §6). Only a program that leaves a range can tell the difference.
-- **`orReturn()` does not propagate.** It throws a marker that the rewriter's
-  `try`/`catch` turns into an early `return`; unmodified there is no `catch`, so
-  it escapes as an uncaught exception. Every other part of `Result` works —
+  an exit-1 panic natively ([Type rules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#type-rules)).
+  Only a program that leaves a range can tell the difference.
+- **`orReturn()` does not propagate.** It throws a marker, and under the
+  prelude nothing catches it, so it escapes as an uncaught exception.
+  `--emit-ts` writes it as an early `return` instead. Every other part of `Result` works —
   `Ok`, `Err`, `isOk`, `isErr`, `.value`, `.error`, `unwrapOr`, `expect`.
 - **`Number(s)` keeps JavaScript's parsing.** `Number` is a constructor carrying
   statics (`Number.isNaN` among them) that both Node and the prelude itself
@@ -256,7 +247,8 @@ no prelude can reach it. They are language decisions
   found`), and `runtime/node.mjs`, the host the shim installs, imports
   `node:fs`, `node:child_process` and `node:os`, which a browser does not have.
   `runtime/core.mjs` imports none of them: another host is an adapter that
-  installs itself in its place ([wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §4.3).
+  installs itself in its place
+  ([Bun and other hosts](guide/using-nish/to-typescript.md#bun-and-other-hosts)).
 - **A scope's tasks run at the spawn under Node**, one after another, and each
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes
@@ -302,33 +294,11 @@ no prelude can reach it. They are language decisions
   not depend on that order — a count, an integer sum.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm).
 
-## What is tested
+## How close it gets
 
-`tests/differential/unmodified.js` compiles every f64-mode program with an entry
-point, runs the binary, runs the same source under Node with the prelude, and
-compares stdout and exit status. Four programs are listed as divergent — each
-one written to probe a decision in the list above — and any *other* difference
-fails the run. It is wired into the WP13 block of `tests/run.js`:
-
-```bash
-node tests/differential/unmodified.js --verbose
-```
-
-Eleven `nish/threads` programs are held to the same claim by name,
-`tests/link/par_map`, `tests/link/par_reduce`, the four
-`tests/link/thread_scope_*`, and the five lock programs
-`tests/link/thread_mutex_counter`, `thread_mutex_exit_paths`,
-`thread_mutex_histogram`, `thread_mutex_scalar` and `thread_mutex_using_mixed`:
-each prints under Node, run
-with `--js-explicit-resource-management`, what its native binary prints
-(`node tests/run.js threads-under-node`). The fifth lock program,
-`tests/link/thread_mutex_or_return`, is native only, because it releases its
-lock through `orReturn`, which does not propagate under Node (above).
-
-Today: **7 of 11 agree, 4 known divergences, 0 unexpected.**
-
-That ratio reads worse than it is. The f64 corpus is adversarial by
-construction — `f64_libm`, `f64_minmax_nan`, `f64_round_negzero` and
-`f64_i32_mixed` exist precisely to pin the places where this language and
-JavaScript part company. An ordinary program does not look like them:
-`examples/nbody.ts` prints byte-identical output either way.
+The compiler's own tests run every f64-mode program in its corpus both ways
+and compare stdout and exit status, and the only programs that differ are the
+ones written to probe a decision in the list above (`f64_libm`,
+`f64_minmax_nan`, `f64_round_negzero` and `f64_i32_mixed`). An ordinary
+program does not look like them: `examples/nbody.ts` prints byte-identical
+output either way.

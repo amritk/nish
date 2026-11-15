@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 757 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 786 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -532,7 +532,7 @@ The message of an error contains:
 ` allocates a dynamically sized array on every iteration of this loop and nothing keeps it …
 ```
 
-**Retired**: the long form of the WP15 §8 allocation warning; the live one is NL9001
+**Retired**: the long form of the allocation performance warning; the live one is NL9001
 
 ## NL2043
 
@@ -1143,7 +1143,7 @@ The message of an error contains:
 ` is rebuilt from its own value on every iteration of this loop, so every pass copies all …
 ```
 
-**Retired**: the long form of the WP15 §8 string warning; the live one is NL9002
+**Retired**: the long form of the string performance warning; the live one is NL9002
 
 ## NL2088
 
@@ -1680,7 +1680,7 @@ The message of an error contains:
 `case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)
 ```
 
-**Retired**: the `case` label rule before WP23 admitted an enum member; the live one is NL2284
+**Retired**: the `case` label rule from before an enum member was a label; the live one is NL2284
 
 ## NL2124
 
@@ -1698,7 +1698,7 @@ The message of an error contains:
 `declare function` is not supported yet
 ```
 
-**Retired**: `declare function` is a supported construct since WP27 S1, so "not supported yet" names nothing; its wordings case went with it and the rules that replaced it are pinned by tests/cases/reject_ffi_*
+**Retired**: `declare function` is a supported construct now, so "not supported yet" names nothing; its wordings case went with it and the rules that replaced it are pinned by tests/cases/reject_ffi_*
 
 ## NL2126
 
@@ -2429,7 +2429,7 @@ The message of an error contains:
 …async functions are not supported
 ```
 
-**Retired**: `async functions are not supported`, stage0's refusal, shadowed by NL1015 until WP49 stage 4 allowed `async`
+**Retired**: `async functions are not supported`, the first compiler's refusal, shadowed by NL1015 until `async` was allowed
 
 ## NL2174
 
@@ -2439,7 +2439,7 @@ The message of an error contains:
 …async methods are not supported
 ```
 
-**Retired**: `async methods are not supported`, stage0's refusal; a method is still refused, by NL1063
+**Retired**: `async methods are not supported`, the first compiler's refusal; a method is still refused, by NL1063
 
 ## NL2175
 
@@ -2696,7 +2696,7 @@ Destructured constants are not supported
 [`nl2191_destructured_constant.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2191_destructured_constant.ts):
 
 ```ts
-// NL2191: A module constant binds one name, because the name is the symbol the emitter writes.
+// NL2191: A module constant is a compile-time value folded into each use, so a pattern has no receiver to read.
 const { x } = { x: 1 };
 ```
 
@@ -2732,22 +2732,24 @@ Destructured parameters are not supported
 The message of an error contains:
 
 ```text
-Destructuring is not supported
+A pattern may destructure an `await` only of …
 ```
 
 [`nl2193_destructuring_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2193_destructuring_local.ts):
 
 ```ts
-// NL2193: The local half of the same rule, which has a message of its own.
-export const main = (): i32 => {
-  const xs: i32[] = [1, 2];
-  const [a, b] = xs;
-  return a;
+// NL2193: a pattern over an `await` other than `awaitAll(...)`'s, whose names
+// are the calls' answers, is refused.
+const pair = async (): Promise<i32[]> => [1, 2];
+
+export const main = async (): Promise<i32> => {
+  const [a, b] = await pair();
+  return a + b;
 };
 ```
 
 ```text
-Destructuring is not supported
+A pattern may destructure an `await` only of `awaitAll(...)`, whose names are the calls' answers: await into a name, then destructure the name
 ```
 
 ## NL2194
@@ -2966,7 +2968,7 @@ The message of an error contains:
 Generic classes are not supported
 ```
 
-**Retired**: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
+**Retired**: `Generic classes are not supported`, the refusal generic classes replaced; `new` on a class that is not generic is NL2318 now
 
 ## NL2207
 
@@ -2986,7 +2988,7 @@ The message of an error contains:
 Generic methods are not supported
 ```
 
-**Retired**: `Generic methods are not supported`; generic methods compile since WP18 G8 (wp18 §15.8)
+**Retired**: `Generic methods are not supported`; generic methods compile now
 
 ## NL2209
 
@@ -3278,7 +3280,7 @@ Only functions can be exported for now, plus classes and interfaces (found `expo
 // NL2226: the catch-all for an exported statement that is neither a function,
 // class, interface nor constant. It names the statement's own kind, so the
 // message says which one was written. `export import A = require(...)` is what
-// reaches it now that WP23 gave the exported enum a rule of its own (NL2288).
+// reaches it now that the exported enum has a rule of its own (NL2288).
 export import A = require("./wordings_lib");
 ```
 
@@ -3294,7 +3296,7 @@ The message of an error contains:
 Only relative import specifiers are supported (`./x` or `../x`), got `
 ```
 
-**Retired**: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2320
+**Retired**: `Only relative import specifiers are supported`, from before a package name was one of the four legal forms; the live rule is NL2320
 
 ## NL2228
 
@@ -4103,7 +4105,7 @@ The message of an error contains:
 Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)
 ```
 
-**Retired**: `Type aliases cannot be exported`, the refusal WP34 N1 replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2045 (tests/link/alias_import_not_exported)
+**Retired**: `Type aliases cannot be exported`, the refusal exported types replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2045 (tests/link/alias_import_not_exported)
 
 ## NL2277
 
@@ -4208,7 +4210,7 @@ The message of an error contains:
 An enum member name must be an identifier
 ```
 
-**Retired** before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
+**Retired** before it ever fired: the number was reserved, and no message in either compiler produces the fragment
 
 ## NL2288
 
@@ -4218,7 +4220,7 @@ The message of an error contains:
 Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)
 ```
 
-**Retired**: `Enums cannot be exported`, the refusal WP34 N1 replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2045 (tests/link/enum_import_not_exported)
+**Retired**: `Enums cannot be exported`, the refusal exported types replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2045 (tests/link/enum_import_not_exported)
 
 ## NL2289
 
@@ -4274,7 +4276,7 @@ The message of an error contains:
 … are not supported yet
 ```
 
-**Retired**: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
+**Retired**: the checker's `Generic classes are not supported yet`, deleted when a generic class became an ordinary struct
 
 ## NL2294
 
@@ -4284,7 +4286,7 @@ The message of an error contains:
 … extends ...`) is not supported yet: an unconstrained …
 ```
 
-**Retired**: `a constrained type parameter is not supported yet`, the refusal WP18 G6 replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
+**Retired**: `a constrained type parameter is not supported yet`, the refusal type-parameter constraints replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
 
 ## NL2295
 
@@ -4320,7 +4322,7 @@ The message of an error contains:
 ` is a generic function, and a generic function cannot …
 ```
 
-**Retired**: `a generic function cannot yet be instantiated from another module`, the refusal WP18 G7 replaced; a template is imported and instantiated now (tests/link/generic_import)
+**Retired**: `a generic function cannot yet be instantiated from another module`, the refusal cross-module generics replaced; a template is imported and instantiated now (tests/link/generic_import)
 
 ## NL2299
 
@@ -4415,7 +4417,7 @@ The message of an error contains:
 …, and a declared C function returns a scalar only
 ```
 
-**Retired**: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2321, itself retired for NL2538
+**Retired**: the scalar-only `declare function` return rule, before a `CPtr` was let through; the live one is NL2321, itself retired for NL2538
 
 ## NL2305
 
@@ -4425,7 +4427,7 @@ The message of an error contains:
 …, and a declared C function takes scalars only
 ```
 
-**Retired**: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2555
+**Retired**: the scalar-only `declare function` parameter rule, before a `CPtr` was let through; the live one is NL2555
 
 ## NL2306
 
@@ -4533,7 +4535,7 @@ The message of an error contains:
 ` is a generic …
 ```
 
-**Retired**: the same refusal one level up for a generic class or interface, also replaced by WP18 G7 (tests/link/generic_import, tests/link/package_generic_import)
+**Retired**: the same refusal one level up for a generic class or interface, also replaced by cross-module generics (tests/link/generic_import, tests/link/package_generic_import)
 
 ## NL2317
 
@@ -4555,7 +4557,7 @@ The message of an error contains:
 
 ```ts
 // NL2318: `new` on a class that is not generic. A generic class takes its type
-// arguments here (WP18 G5), so the refusal is about this class rather than about
+// arguments here, so the refusal is about this class rather than about
 // generics, and Phase 0 cannot see it because it is a use rather than a declaration.
 class Point {
   x: i32 = 0;
@@ -4582,7 +4584,7 @@ The message of an error contains:
 [`nl2319_generic_expanding_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2319_generic_expanding_field.ts):
 
 ```ts
-// NL2319: the struct half of the termination rule (WP18 §4). A field whose
+// NL2319: the struct half of the termination rule. A field whose
 // type puts the class's own type argument under a constructor asks for a
 // strictly larger instantiation, so the chain has no end, and the sentence
 // names the two shapes that do terminate rather than a depth — the fix is to
@@ -4626,7 +4628,7 @@ The message of an error contains:
 …, and a declared C function returns a scalar or `CPtr` only
 ```
 
-**Retired**: the scalar-or-`CPtr` `declare function` return rule, before WP27 S3.2 let a copied `string` through; the live one is NL2538
+**Retired**: the scalar-or-`CPtr` `declare function` return rule, before a copied `string` was let through; the live one is NL2538
 
 ## NL2322
 
@@ -4636,7 +4638,7 @@ The message of an error contains:
 …, and a declared C function takes scalars and `CPtr` only
 ```
 
-**Retired**: the `declare function` parameter rule that named scalars, `CPtr` and `string` only, before WP53 B1.1 let a `u8[]` buffer through; the live one is NL2555
+**Retired**: the `declare function` parameter rule that named scalars, `CPtr` and `string` only, before a `u8[]` buffer was let through; the live one is NL2555
 
 ## NL2323
 
@@ -4654,7 +4656,7 @@ The message of an error contains:
 ` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one
 ```
 
-**Retired**: the `declare function` rule that refused a `CPtr | null` parameter, before WP27 S3.3 let the literal `null` through; a held nullable pointer is NL2539
+**Retired**: the `declare function` rule that refused a `CPtr | null` parameter, before the literal `null` was let through; a held nullable pointer is NL2539
 
 ## NL2325
 
@@ -4669,7 +4671,7 @@ The message of an error contains:
 ```ts
 // NL2325: a type-argument list on an imported name that is not a template.
 //
-// WP18 G7 made a generic class importable, and this is the rule that draws the
+// A generic class is importable, and this is the rule that draws the
 // line around it. The refusal is made when the import binds rather than where
 // the annotation is written, because pass 1 resolves a module's signatures as
 // soon as it is parsed — before any import is bound — so at the point this
@@ -4696,7 +4698,7 @@ The message of an error contains:
 [`nl2326_constraint_mentions_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2326_constraint_mentions_parameter.ts):
 
 ```ts
-// NL2326: a constraint that mentions a type parameter (WP18 G6). A constraint
+// NL2326: a constraint that mentions a type parameter. A constraint
 // is resolved once for the template, with nothing bound, so a bound that
 // depends on another parameter would mean something different at every
 // instantiation; that is where an F-bounded constraint starts, and it is out of
@@ -4725,7 +4727,7 @@ The message of an error contains:
 [`nl2327_constraint_not_struct.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2327_constraint_not_struct.ts):
 
 ```ts
-// NL2327: a constraint that is not a class or interface (WP18 G6). The members
+// NL2327: a constraint that is not a class or interface. The members
 // a constrained parameter has are its constraint's, and `string` lends none a
 // template could read through a `T`.
 export const echo = <T extends string>(s: T): T => s;
@@ -4749,7 +4751,7 @@ The message of an error contains:
 
 ```ts
 // NL2328: a type argument that does not satisfy its parameter's constraint
-// (WP18 §8 message 1), here a class constraint. Nothing but `Counter` itself
+// here a class constraint. Nothing but `Counter` itself
 // satisfies `T extends Counter`, because a class can only `implements` an
 // interface, so the fix names the class.
 class Counter {
@@ -4780,7 +4782,7 @@ The message of an error contains:
 [`nl2329_unconstrained_member.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2329_unconstrained_member.ts):
 
 ```ts
-// NL2329: a member of an unconstrained type parameter (WP18 §8 message 8), in
+// NL2329: a member of an unconstrained type parameter, in
 // the write form. `T` is `Cell` at the one instantiation, and the language
 // still says `T` has no members until a constraint names them.
 class Cell {
@@ -4812,8 +4814,8 @@ The message of an error contains:
 [`nl2330_member_not_in_constraint.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2330_member_not_in_constraint.ts):
 
 ```ts
-// NL2330: a method the concrete type has and the constraint does not (WP18
-// G6). `Shape` is an interface, and an interface has fields only, so no method
+// NL2330: a method the concrete type has and the constraint does not.
+// `Shape` is an interface, and an interface has fields only, so no method
 // can be called through a `T extends Shape`.
 interface Shape {
   area: i32;
@@ -4848,8 +4850,8 @@ The message of an error contains:
 [`nl2331_method_shadows_class_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2331_method_shadows_class_parameter.ts):
 
 ```ts
-// NL2331: a method type parameter with the name of one of its class's (WP18
-// G8). Both are in scope in the method's body, so every `T` there — in an
+// NL2331: a method type parameter with the name of one of its class's.
+// Both are in scope in the method's body, so every `T` there — in an
 // annotation, a constraint or a diagnostic — would have two meanings.
 class Box<T> {
   value: T;
@@ -4882,7 +4884,7 @@ The message of an error contains:
 
 ```ts
 // NL2332: a class, interface or function named `integer`, the name ranged
-// integers (`integer<Lo, Hi>`, WP31) are reserved to take.
+// integers (`integer<Lo, Hi>`) are reserved to take.
 class integer {
   value: i32 = 0;
 }
@@ -4902,7 +4904,7 @@ The message of an error contains:
 `integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet
 ```
 
-**Retired**: `integer&lt;Lo, Hi>` refused as reserved until ranged integers landed (WP31 W1); `integer` is the type now, and a malformed one is NL2378-NL2383
+**Retired**: `integer&lt;Lo, Hi>` refused as reserved until ranged integers landed; `integer` is the type now, and a malformed one is NL2378-NL2383
 
 ## NL2334
 
@@ -4993,7 +4995,7 @@ The message of an error contains:
 ` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in …
 ```
 
-**Retired**: `... is a function type, which may only annotate a parameter of a top-level function`; WP51 stage 1 made a function type outside a parameter a function reference type, so an array, field, local or return of one compiles (tests/cases/fnref_array)
+**Retired**: `... is a function type, which may only annotate a parameter of a top-level function`; function reference types made a function type outside a parameter a function reference type, so an array, field, local or return of one compiles (tests/cases/fnref_array)
 
 ## NL2338
 
@@ -5293,7 +5295,7 @@ The message of an error contains:
 ` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)
 ```
 
-**Retired**: WP29 P1's strict rule that a parallel body may not allocate at all; a body's allocations are recycled per element since, and what is refused instead is NL2351 (the arena) and NL2352 (an allocation that escapes), pinned by tests/cases/reject_par_arena and reject_par_alloc_escapes
+**Retired**: the first parallel loops' strict rule that a parallel body may not allocate at all; a body's allocations are recycled per element since, and what is refused instead is NL2351 (the arena) and NL2352 (an allocation that escapes), pinned by tests/cases/reject_par_arena and reject_par_alloc_escapes
 
 ## NL2347
 
@@ -5581,22 +5583,22 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function
+…`: a `Map` or `Set` in this version has no `entries`, because a `[key, value]` pair is a two-type tuple; `forEach((value, key) => ...)` visits each key with its value
 ```
 
-[`nl2356_map_foreach.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_foreach.ts):
+[`nl2356_map_entries.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2356_map_entries.ts):
 
 ```ts
-// NL2356: `forEach` on the global `Map`; a method cannot take a function.
+// NL2356: `entries` on the global `Map`; a `[key, value]` pair is a two-type tuple.
 export const main = (): i32 => {
   const m = new Map<string, i32>();
-  m.forEach(0);
+  m.entries();
   return 0;
 };
 ```
 
 ```text
-`forEach` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function
+`entries` is not available on `Map<string, i32>`: a `Map` or `Set` in this version has no `entries`, because a `[key, value]` pair is a two-type tuple; `forEach((value, key) => ...)` visits each key with its value
 ```
 
 ## NL2357
@@ -5607,7 +5609,7 @@ The message of an error contains:
 ` is not supported yet: its result is `V | undefined`, and this version cannot narrow one
 ```
 
-**Retired**: `get` refused as "not supported yet" until its `V | undefined` landed (WP32 S3); each place that refuses a maybe has its own code now, NL2361-NL2369
+**Retired**: `get` refused as "not supported yet" until its `V | undefined` landed; each place that refuses a maybe has its own code now, NL2361-NL2369
 
 ## NL2358
 
@@ -5637,7 +5639,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear
+…`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach
 ```
 
 [`nl2359_map_internal_member.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2359_map_internal_member.ts):
@@ -5651,7 +5653,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-Unknown member `live` on `Set<i32>`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear
+Unknown member `live` on `Set<i32>`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach
 ```
 
 ## NL2360
@@ -6008,7 +6010,7 @@ export const main = (): i32 => keysOf(new Set<i32>()).length;
 The message of an error contains:
 
 ```text
-…`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of …
+…`, whose `[key, value]` pairs are two-type tuples, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of …
 ```
 
 [`nl2375_map_iter_entries.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2375_map_iter_entries.ts):
@@ -6024,7 +6026,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`for...of` over `Map<string, i32>` needs `entries()`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of m.keys())`
+`for...of` over `Map<string, i32>` needs `entries()`, whose `[key, value]` pairs are two-type tuples, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of m.keys())`
 ```
 
 ## NL2376
@@ -6054,7 +6056,7 @@ The message of an error contains:
 [`nl2378_integer_bounds.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2378_integer_bounds.ts):
 
 ```ts
-// NL2378: `integer<Lo, Hi>` written with other than two bounds (WP31).
+// NL2378: `integer<Lo, Hi>` written with other than two bounds.
 const widen = (x: integer<i32>): i32 => x
 
 export const main = (): i32 => widen(0)
@@ -6362,7 +6364,7 @@ The message of an error contains:
 The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)
 ```
 
-**Retired**: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal WP29's task forms replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)
+**Retired**: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal arrow tasks replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)
 
 ## NL2392
 
@@ -8647,7 +8649,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not; so are a union of classes, alone, with `| null` or in an array, and a variant's tag
+`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and an enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not; so are a union of classes, alone, with `| null` or in an array, and a variant's tag
 ```
 
 ## NL2486
@@ -9528,7 +9530,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
+…` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
 ```
 
 [`nl2515_atomic_literal.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2515_atomic_literal.ts):
@@ -9545,7 +9547,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
+`AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new AtomicI32Array(n)`, `new AtomicI64Array(n)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through
 ```
 
 ## NL2516
@@ -10216,46 +10218,10 @@ const weight = (s: Shape): i32 => {
 The message of an error contains:
 
 ```text
-…` cannot take a union as a type argument: in this version a union is the type of a local, …
+` cannot take a union as a type argument: in this version a union is the type of a local, …
 ```
 
-[`nl2533_union_type_argument.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2533_union_type_argument.ts):
-
-```ts
-// NL2533: a union given as a generic class's type argument.
-enum Kind {
-  Circle,
-  Square,
-  Tri,
-}
-
-class Circle {
-  readonly kind: Kind.Circle = Kind.Circle;
-  r: i32 = 1;
-}
-
-class Square {
-  readonly kind: Kind.Square = Kind.Square;
-  side: i32 = 2;
-}
-
-type Shape = Circle | Square;
-
-const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
-
-class Box<T> {
-  value: T;
-  constructor(value: T) {
-    this.value = value;
-  }
-}
-
-const open = (b: Box<Shape>): Kind => b.value.kind;
-```
-
-```text
-`Box<Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value, an array element or a `Map`'s value, and not of a generic's, a `Set`'s or a `Result`'s type argument
-```
+**Retired**: `... cannot take a union as a type argument`, the refusal union type arguments lifted; a union is a generic's, a `Result`'s and `nish/map`'s helpers' type argument now (tests/cases/union_generic_class, union_generic_call, union_result, union_map_helpers), and what stays refused keeps its own code: a `Set` element or `Map` key NL2353, a generic variant NL2522, an inferred union NL2172, a variant stored through a generic field NL2534
 
 ## NL2534
 
@@ -10896,7 +10862,7 @@ The message of an error contains:
 `, and a call to a declared C function that takes a `u8[]` is not lowered yet: the declaration is checked, and the call waits for the release that passes the bytes and checks the count
 ```
 
-**Retired**: the refusal of a call to a `declare function` that takes a `u8[]`, from WP53 B1.1 until B1.2 lowered the call; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
+**Retired**: the refusal of a call to a `declare function` that takes a `u8[]`, until the call was lowered; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
 
 ## NL2555
 
@@ -11233,7 +11199,7 @@ The message of an error contains:
 ` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself
 ```
 
-**Retired**: the refusal of a `using` of a handle class, from WP53 H1.1 until H1.2 lowered its close; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
+**Retired**: the refusal of a `using` of a handle class, until its close was lowered; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
 
 ## NL2574
 
@@ -12259,7 +12225,7 @@ The message of an error contains:
 ` is checked, but not yet compiled: the lowering of `async` is not in this release
 ```
 
-**Retired**: `async` refused as "checked, but not yet compiled" until its native lowering landed (WP49 stage 4, part 2); a wasm build is still refused, by NL2652
+**Retired**: `async` refused as "checked, but not yet compiled" until its native lowering landed; a wasm build is still refused, by NL2652
 
 ## NL2654
 
@@ -12466,17 +12432,17 @@ The message of an error contains:
 …, a buffer the page would lend wasm: pass it through module storage
 ```
 
-**Retired**: a typed-array parameter of a host function refused until buffer windows landed (WP50 S3); a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
+**Retired**: a typed-array parameter of a host function refused until buffer windows landed; a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
 
 ## NL2665
 
 The message of an error contains:
 
 ```text
-` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
+` is a `string`: strings did not cross yet, so write the text into module storage and pass its length
 ```
 
-**Retired**: a `string` parameter of a host function, refused until strings crossed (WP50 S4); it passes as its UTF-8 bytes' address and count, which the loader decodes
+**Retired**: a `string` parameter of a host function, refused until strings crossed; it passes as its UTF-8 bytes' address and count, which the loader decodes
 
 ## NL2666
 
@@ -13304,7 +13270,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…: use it, delete it, or rename it `_…
+…: use it, delete it, or rename it `…
 ```
 
 [`nl2712_unread_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2712_unread_local.ts):
@@ -14049,7 +14015,7 @@ The message of an error contains:
 … cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
 ```
 
-**Retired**: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; WP51 stage 2 made a `Map` value a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
+**Retired**: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; a `Map` value became a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
 
 ## NL2739
 
@@ -14428,4 +14394,950 @@ The message of an error contains:
 
 ```text
 `readStruct(p)` copies into a `declare class` layout, and …
+```
+
+## NL2766
+
+The message of an error contains:
+
+```text
+…: the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_handle.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_handle.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a handle class owns a
+// C resource the runtime cannot move.
+declare function fopen(path: string, mode: string): CPtr | null
+
+class File {
+  readonly file: CPtr | null
+  constructor(path: string) {
+    this.file = fopen(path, "r")
+  }
+}
+
+class Log {
+  out: File
+
+  constructor() {
+    this.out = new File("/dev/null")
+  }
+}
+
+const log = new Array<Log | null>(1)
+
+export const open = (): boolean => log[0] !== null
+```
+
+```text
+Root storage `log` cannot keep Log.out (File): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_interface.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_interface.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: an interface a class
+// implements is a pointer to an object of any of its classes, with no tag.
+interface Shape {
+  side: i32
+}
+
+class Square implements Shape {
+  side: i32 = 2
+}
+
+class Scene {
+  shapes: Shape[]
+
+  constructor() {
+    this.shapes = [new Square()]
+  }
+}
+
+const scene = new Array<Scene | null>(1)
+
+export const total = (): i32 => {
+  const s = scene[0]
+  return s === null ? 0 : s.shapes.length
+}
+```
+
+```text
+Root storage `scene` cannot keep Scene.shapes[] (Shape): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_layout.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_layout.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a C struct layout is
+// C's to own.
+declare class Point {
+  x: i32
+  y: i32
+}
+
+class Path {
+  end: Point
+
+  constructor() {
+    this.end = new Point()
+  }
+}
+
+const path = new Array<Path | null>(1)
+
+export const has = (): boolean => path[0] !== null
+```
+
+```text
+Root storage `path` cannot keep Path.end (Point): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_map.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a `Map` it cannot.
+class Cache {
+  names: Map<string, i32>
+
+  constructor() {
+    this.names = new Map<string, i32>()
+  }
+}
+
+const cache = new Array<Cache | null>(1)
+
+export const size = (): i32 => {
+  const c = cache[0]
+  return c === null ? 0 : c.names.size
+}
+```
+
+```text
+Root storage `cache` cannot keep Cache.names (Map<string, i32>): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+[`nl2766_root_storage_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2766_root_storage_set.ts):
+
+```ts
+// Root storage keeps only what the runtime can trace: a `Set` it cannot.
+class Seen {
+  ids: Set<i32>
+
+  constructor() {
+    this.ids = new Set<i32>()
+  }
+}
+
+const seen = new Array<Seen | null>(1)
+
+export const count = (): i32 => {
+  const s = seen[0]
+  return s === null ? 0 : s.ids.size
+}
+```
+
+```text
+Root storage `seen` cannot keep Seen.ids (Set<i32>): the runtime moves what a root reaches between calls, so everything it reaches is a number, a `boolean`, an enum, a string, an array, a class or a discriminated union of classes — never a `Map`, a `Set`, an interface a class implements, a `Region`, a `Secret`, a `CPtr`, a handle class or a C struct layout
+```
+
+## NL2767
+
+The message of an error contains:
+
+```text
+…` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
+```
+
+[`nl2767_root_storage_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2767_root_storage_export.ts):
+
+```ts
+// Root storage moves its objects between calls, so a page cannot read it.
+class World {
+  tick: i32 = 0
+}
+
+export const world = new Array<World | null>(1)
+
+export const tick = (): i32 => {
+  const w = world[0]
+  return w === null ? -1 : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be exported: the runtime moves the objects its elements point to between calls, so a page has no layout it could read; export a function that reads it instead
+```
+
+## NL2768
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+[`nl2768_root_storage_region.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_region.ts):
+
+```ts
+// A region allocates from an arena of its own, which a root could outlive.
+import { enter, free, region } from "nish:region"
+
+class World {
+  tick: i32 = 0
+}
+
+const world = new Array<World | null>(1)
+
+const build = (): i32[] => [1, 2, 3]
+const count = (xs: i32[]): i32 => xs.length
+
+export const tick = (): i32 => {
+  const r = region(build)
+  const n = enter(r, count)
+  free(r)
+  const w = world[0]
+  return w === null ? n : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+[`nl2768_root_storage_threads.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2768_root_storage_threads.ts):
+
+```ts
+// A thread allocates from an arena of its own, which a root could outlive.
+import { AtomicI32 } from "nish/threads"
+
+class World {
+  tick: i32 = 0
+}
+
+const world = new Array<World | null>(1)
+
+export const tick = (): i32 => {
+  const count = new AtomicI32(0)
+  count.add(1)
+  const w = world[0]
+  return w === null ? count.load() : w.tick
+}
+```
+
+```text
+Root storage `world` cannot be kept in a program that loads `nish/threads` or `nish:region`: a thread and a region allocate from arenas of their own, and a root could be left pointing into one that is freed; keep that work in a program of its own
+```
+
+## NL2769
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_header.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_header.ts) (compiled with `--emit-header build/test/wordings/nl2769_root_storage_header.h`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_napi.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_napi.ts) (compiled with `--emit-napi build/test/wordings/nl2769_root_storage_napi.c`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+[`nl2769_root_storage_napi_async.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2769_root_storage_napi_async.ts) (compiled with `--threads --emit-napi-async build/test/wordings/nl2769_root_storage_napi_async.c`):
+
+```ts
+// A native shim releases the arena after a call that passes a string, which
+// would free the name a root keeps.
+class Player {
+  name: string = ""
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (name: string): i32 => {
+  const p = new Player()
+  p.name = name
+  player[0] = p
+  return name.length
+}
+
+export const nameLength = (): i32 => {
+  const p = player[0]
+  return p === null ? 0 : p.name.length
+}
+```
+
+```text
+Root storage `player` cannot be kept in a build that writes a native shim (`--emit-napi`, `--emit-napi-async` or `--emit-header`): the shim releases the arena after a call that passes a string or an array, which would free what the root reaches; keep root storage in a native program or a page module
+```
+
+## NL2770
+
+The message of an error contains:
+
+```text
+…` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
+```
+
+[`nl2770_root_storage_wasi_dts.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2770_root_storage_wasi_dts.ts) (compiled with `--profile wasi --emit-dts build/test/wordings/nl2770_root_storage_wasi_dts.d.ts`):
+
+```ts
+// A WASI build's loader releases the arena after every call, and only a page
+// module emits the keep a loader would call instead.
+class Player {
+  score: i32 = 0
+}
+
+const player = new Array<Player | null>(1)
+
+export const join = (score: i32): i32 => {
+  const p = new Player()
+  p.score = score
+  player[0] = p
+  return score
+}
+```
+
+```text
+Root storage `player` cannot be kept in a WASI build that writes a loader (`--emit-dts`): its loader releases the arena after every call, which would free what the root reaches; build the page module freestanding (`--target wasm32`) or as an `--emit-dts` compile for the host
+```
+
+## NL2771
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead
+```
+
+[`nl2771_map_foreach_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2771_map_foreach_arity.ts):
+
+```ts
+// NL2771: A `Map`'s `forEach` callback takes the value, or the value and its key;
+// JavaScript's third parameter, the map, is refused.
+export const main = (): i32 => {
+  const m = new Map<string, i32>()
+  m.set("a", 1)
+  m.forEach((v, k, all) => console.log(`${k}${v}${all.size}`))
+  return 0
+}
+```
+
+```text
+The callback of `forEach` on a `Map` takes 3 parameters, and Nish passes at most two, the value and its key: JavaScript's third, the map itself, is the receiver the call already names, so read that instead
+```
+
+## NL2772
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names
+```
+
+[`nl2772_set_foreach_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2772_set_foreach_arity.ts):
+
+```ts
+// NL2772: A `Set`'s `forEach` callback takes the element alone; JavaScript passes it
+// twice, and the set third, and Nish refuses the second parameter.
+export const main = (): i32 => {
+  const s = new Set<i32>()
+  s.add(1)
+  s.forEach((v, again) => console.log(v + again))
+  return 0
+}
+```
+
+```text
+The callback of `forEach` on a `Set` takes 2 parameters, and Nish passes one, the element: JavaScript passes it again as the second, and the set itself as the third, which is the receiver the call already names
+```
+
+## NL2773
+
+The message of an error contains:
+
+```text
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
+```
+
+[`nl2773_destructure_assignment.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_assignment.ts):
+
+```ts
+// NL2773: a pattern on the left of `=` is not a declaration.
+export const main = (): void => {
+  let a = 1
+  let b = 2
+  ;[a, b] = [b, a]
+  console.log(a + b)
+}
+```
+
+```text
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
+```
+
+[`nl2773_destructure_assignment_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_assignment_object.ts):
+
+```ts
+// NL2773: an object pattern on the left of `=` is not a declaration either.
+class Point {
+  x: number
+  constructor(x: number) {
+    this.x = x
+  }
+}
+export const main = (): void => {
+  const p = new Point(1)
+  let x = 0
+  ;({ x } = p)
+  console.log(x)
+}
+```
+
+```text
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
+```
+
+[`nl2773_destructure_assignment_renamed.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2773_destructure_assignment_renamed.ts):
+
+```ts
+// NL2773: an object pattern on the left of `=`, renamed.
+class Point {
+  x: number
+  constructor(x: number) {
+    this.x = x
+  }
+}
+export const main = (): void => {
+  const p = new Point(1)
+  let px = 0
+  ;({ x: px } = p)
+  console.log(px)
+}
+```
+
+```text
+Destructuring assignment is not supported; destructure in a `const` or `let` declaration, or assign each name
+```
+
+## NL2774
+
+The message of an error contains:
+
+```text
+A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take
+```
+
+[`nl2774_destructure_default.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2774_destructure_default.ts):
+
+```ts
+// NL2774: a missing name has no default to take.
+class Point {
+  x: number
+  y: number
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+  }
+}
+export const main = (): void => {
+  const { x = 0 } = new Point(1, 2)
+  console.log(x)
+}
+```
+
+```text
+A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take
+```
+
+## NL2775
+
+The message of an error contains:
+
+```text
+A rest element in a destructuring pattern is not supported; read each element you need by name
+```
+
+[`nl2775_destructure_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2775_destructure_rest.ts):
+
+```ts
+// NL2775: a rest element would copy the array's tail.
+export const main = (): void => {
+  const [a, ...rest] = [1, 2, 3]
+  console.log(a + rest.length)
+}
+```
+
+```text
+A rest element in a destructuring pattern is not supported; read each element you need by name
+```
+
+## NL2776
+
+The message of an error contains:
+
+```text
+A nested destructuring pattern is not supported; bind the inner value to a name and destructure that
+```
+
+[`nl2776_destructure_nested.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2776_destructure_nested.ts):
+
+```ts
+// NL2776: a pattern inside a pattern.
+export const main = (): void => {
+  const [[a]] = [[1]]
+  console.log(a)
+}
+```
+
+```text
+A nested destructuring pattern is not supported; bind the inner value to a name and destructure that
+```
+
+## NL2777
+
+The message of an error contains:
+
+```text
+A destructuring key must be a field's name, not a computed or quoted key
+```
+
+[`nl2777_destructure_key.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2777_destructure_key.ts):
+
+```ts
+// NL2777: a key that is not a field's name.
+class Point {
+  x: number
+  y: number
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+  }
+}
+export const main = (): void => {
+  const { "x": a } = new Point(1, 2)
+  console.log(a)
+}
+```
+
+```text
+A destructuring key must be a field's name, not a computed or quoted key
+```
+
+## NL2778
+
+The message of an error contains:
+
+```text
+Cannot destructure field `…
+```
+
+[`nl2778_destructure_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2778_destructure_field.ts):
+
+```ts
+// NL2778: a field the receiver does not have.
+class Point {
+  x: number
+  y: number
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+  }
+}
+export const main = (): void => {
+  const { z } = new Point(1, 2)
+  console.log(z)
+}
+```
+
+```text
+Cannot destructure field `z`: Point has no such field
+```
+
+## NL2779
+
+The message of an error contains:
+
+```text
+…, which may be absent; narrow it first, as in `if (p !== null)`
+```
+
+[`nl2779_destructure_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2779_destructure_nullable.ts):
+
+```ts
+// NL2779: a value that may be absent.
+class Point {
+  x: number
+  y: number
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+  }
+}
+const pick = (p: Point | null): number => {
+  const { x } = p
+  return x
+}
+export const main = (): void => {
+  console.log(pick(null))
+}
+```
+
+```text
+Cannot destructure Point | null, which may be absent; narrow it first, as in `if (p !== null)`
+```
+
+## NL2780
+
+The message of an error contains:
+
+```text
+A `Map` cannot be destructured; read each value with `get`
+```
+
+[`nl2780_destructure_map.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2780_destructure_map.ts):
+
+```ts
+// NL2780: a Map has no fields to read.
+export const main = (): void => {
+  const m = new Map<string, number>()
+  const { size } = m
+  console.log(size)
+}
+```
+
+```text
+A `Map` cannot be destructured; read each value with `get`
+```
+
+## NL2781
+
+The message of an error contains:
+
+```text
+A `string` cannot be destructured; read each character by its index
+```
+
+[`nl2781_destructure_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2781_destructure_string.ts):
+
+```ts
+// NL2781: a string's characters are read by index.
+export const main = (): void => {
+  const [c] = "ab"
+  console.log(c)
+}
+```
+
+```text
+A `string` cannot be destructured; read each character by its index
+```
+
+## NL2782
+
+The message of an error contains:
+
+```text
+An object pattern reads a class or interface value, got …
+```
+
+[`nl2782_destructure_object_of_number.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2782_destructure_object_of_number.ts):
+
+```ts
+// NL2782: an object pattern reads a class or interface value.
+export const main = (): void => {
+  const n = 3
+  const { x } = n
+  console.log(x)
+}
+```
+
+```text
+An object pattern reads a class or interface value, got i32
+```
+
+## NL2783
+
+The message of an error contains:
+
+```text
+An array pattern reads an array, got …
+```
+
+[`nl2783_destructure_array_of_object.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2783_destructure_array_of_object.ts):
+
+```ts
+// NL2783: an array pattern reads an array.
+class Point {
+  x: number
+  y: number
+  constructor(x: number, y: number) {
+    this.x = x
+    this.y = y
+  }
+}
+export const main = (): void => {
+  const [a] = new Point(1, 2)
+  console.log(a)
+}
+```
+
+```text
+An array pattern reads an array, got Point
+```
+
+## NL2784
+
+The message of an error contains:
+
+```text
+A destructuring declaration must be initialized
+```
+
+[`nl2784_destructure_uninitialized.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2784_destructure_uninitialized.ts):
+
+```ts
+// NL2784: a pattern has nothing to read without a value.
+export const main = (): void => {
+  let { x }
+  console.log(x)
+}
+```
+
+```text
+A destructuring declaration must be initialized
+```
+
+## NL2785
+
+The message of an error contains:
+
+```text
+A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body
+```
+
+[`nl2785_destructure_for_of_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2785_destructure_for_of_set.ts):
+
+```ts
+// NL2785: a destructuring head walks an array only.
+export const main = (): void => {
+  const s = new Set<string>()
+  for (const [c] of s) {
+    console.log(c)
+  }
+}
+```
+
+```text
+A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body
+```
+
+## NL2786
+
+The message of an error contains:
+
+```text
+…`: each member of a string enum has its own string, because the string is how JSON and `String` name the member
+```
+
+[`nl2786_string_enum_same_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2786_string_enum_same_value.ts):
+
+```ts
+// Two members with one string would decode to the same member, so the second
+// is refused: the string is how JSON and `String` name a member.
+enum Role {
+  Admin = "admin",
+  Root = "admin",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+Enum member `Role.Root` repeats the string of `Role.Admin`: each member of a string enum has its own string, because the string is how JSON and `String` name the member
+```
+
+## NL2787
+
+The message of an error contains:
+
+```text
+…` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8
+```
+
+[`nl2787_string_enum_utf8.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2787_string_enum_utf8.ts):
+
+```ts
+// A string enum's values are matched against JSON, so each is valid UTF-8.
+enum Role {
+  Bad = "\uD800",
+}
+
+export const test = (): i32 => 0;
+```
+
+```text
+Enum member `Role.Bad` is not valid UTF-8: a string enum's values are written to and matched against JSON, which is UTF-8
+```
+
+## NL2788
+
+The message of an error contains:
+
+```text
+…`: an enum value is not its string, so compare it with a member, such as `…
+```
+
+[`nl2788_string_enum_compare_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2788_string_enum_compare_string.ts):
+
+```ts
+// A string enum is not a `string`: compare it with a member, not with text.
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const isAdmin = (r: Role): boolean => r === "admin";
+
+export const test = (): i32 => (isAdmin(Role.Admin) ? 1 : 0);
+```
+
+```text
+Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin`
+```
+
+## NL2789
+
+The message of an error contains:
+
+```text
+…` is not a string: write `String(…
+```
+
+[`nl2789_string_enum_to_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2789_string_enum_to_string.ts):
+
+```ts
+// A string enum does not convert to `string` on its own: `String(r)` does it.
+enum Role {
+  Admin = "admin",
+}
+
+export const test = (): i32 => {
+  const r: Role = Role.Admin;
+  const s: string = r;
+  return s.length;
+};
+```
+
+```text
+A `Role` is not a string: write `String(r)` for the member's string
+```
+
+## NL2790
+
+The message of an error contains:
+
+```text
+…` is not one: write the member itself, such as `…
+```
+
+[`nl2790_string_enum_from_string.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2790_string_enum_from_string.ts):
+
+```ts
+// A string does not become a member: write the member.
+enum Role {
+  Admin = "admin",
+}
+
+export const test = (): i32 => {
+  const r: Role = "admin";
+  return r === Role.Admin ? 1 : 0;
+};
+```
+
+```text
+`"admin"` is a string, and a `Role` is not one: write the member itself, such as `Role.Admin`
+```
+
+## NL2791
+
+The message of an error contains:
+
+```text
+…: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value
+```
+
+## NL2792
+
+The message of an error contains:
+
+```text
+`: its elements are constant data that nothing may write, and a `
+```
+
+## NL2793
+
+The message of an error contains:
+
+```text
+` has no elements; a table holds at least one
+```
+
+## NL2794
+
+The message of an error contains:
+
+```text
+… of constant table `
 ```

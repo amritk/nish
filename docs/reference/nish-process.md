@@ -446,7 +446,10 @@ The program and its arguments.
 
 The child's pid, or a negative errno: `-22` EINVAL for an empty
   vector or an argument holding a NUL, `posix_spawnp`'s own error
-  otherwise, so a program that is not there is `-2` ENOENT.
+  otherwise, so a program that is not there is `-2` ENOENT. Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 

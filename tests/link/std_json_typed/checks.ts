@@ -31,6 +31,7 @@ import {
 import { splitLines } from "nish/text";
 import { Suite } from "nish/testing";
 import { jtBenchWide, jtBenchXy, jtKindsChecks, jtKindsRoundTripFile } from "./kinds.ts";
+import { jtKeysChecks } from "./keys.ts";
 import { jtOptionsChecks, jtOptionsRoundTripFile } from "./options.ts";
 import { Chain, Lists, Match, Player, Scalars, Team } from "./models.ts";
 import { jtBytes, jtDecode, jtEncode } from "./support.ts";
@@ -348,6 +349,7 @@ export const jtChecks = (): i32 => {
   jtNestedPaths(t);
   jtKindsChecks(t);
   jtOptionsChecks(t);
+  jtKeysChecks(t);
   return t.done();
 };
 

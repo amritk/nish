@@ -1,1 +1,1 @@
-must be a number, boolean, or string
+must be declared `readonly i32[]`

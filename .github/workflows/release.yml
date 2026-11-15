@@ -62,7 +62,7 @@ on:
 # `contents: write` is what `gh release create` needs, and only the `release`
 # job needs it. Every other job narrows to `contents: read` at the job level,
 # which takes the write token away from the jobs that do not publish -- and
-# `binaries` is the one worth taking it from, being `npm ci` and `brew install`
+# `binaries` is the one worth taking it from, being `apt-get` and `brew install`
 # on as many machines as there are targets.
 #
 # `release` also asks for `id-token: write` and `attestations: write`, and only
@@ -73,18 +73,18 @@ on:
 # job rather than here so that no other job can mint an OIDC token or write an
 # attestation; `npm` asks for `id-token: write` on its own, for the registry's
 # provenance. `binaries` asks for `attestations: read`, so that the seed it
-# fetches has its own attestation checked once the seed is a release that
-# carries one.
+# fetches has its own attestation checked, and NISH_REQUIRE_ATTESTATION=1
+# refuses one that cannot be.
 #
-# What this does NOT do is keep third-party install code away from the write
-# token, because `release` still runs `npm ci` under it. What it no longer has
-# to do is build the compiler first: `npm pack` stopped shipping `dist/` in
-# 0.6.0, so the tarball is the launcher and the whitelisted data files, and
-# nothing in it is `tsc` output. Narrowing the other jobs shrinks the surface
-# from every runner in the matrix to one; it does not remove it. Removing it
-# would mean packing in a job with `contents: read` and passing the tarball
-# here as an artifact, which is a change worth making on its own terms rather
-# than as a footnote.
+# No job here runs `npm ci`, so no third-party install code runs next to any
+# of these tokens. `release` used to, under `contents: write` and
+# `id-token: write`, though nothing it does reads node_modules: `npm pack`
+# stopped shipping `dist/` in 0.6.0, so the tarball is the launcher and the
+# whitelisted data files, and every script the job runs imports only `node:`
+# modules and bin/packaging.js. The install was dropped rather than narrowed
+# (SC-30 in docs/security/supply-chain.md). Nor does any job restore an npm
+# or apt cache another run saved: a release build fetches what it installs
+# and verifies it itself.
 permissions:
   contents: write
 
@@ -98,6 +98,12 @@ concurrency:
 jobs:
   ci:
     name: ci
+    # What ci.yml asks for at its top: a called workflow gets no more than
+    # this job grants, and without a block of its own it would inherit
+    # `contents: write` and nothing else.
+    permissions:
+      contents: read
+      attestations: read
     uses: ./.github/workflows/ci.yml
 
   # The matrix, as this release's own answer rather than a list. Separate from
@@ -116,7 +122,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
 
       # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
       # before the version is: dispatched at `main`, every step below would
@@ -187,14 +193,16 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
-          cache: npm
+          node-version: 26.13.1
 
+      # `cache: "false"`: the release trusts no apt index or .deb another run
+      # saved, and verifies a fresh index itself.
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
         uses: ./.github/actions/apt-install
         with:
           packages: clang-18 lld-18 llvm-18
+          cache: "false"
 
       - name: Link the LLVM 18 tools by their plain names
         if: runner.os == 'Linux'
@@ -237,6 +245,7 @@ jobs:
       - name: Fetch the seed (the previous release)
         env:
           GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: |
           previous="$(gh api "repos/$GITHUB_REPOSITORY/releases" |
             jq -r --arg self "$GITHUB_REF_NAME" '[.[] | select((.draft or .prerelease) | not) | select(.tag_name != $self)][0].tag_name // empty')"
@@ -480,19 +489,17 @@ jobs:
     outputs:
       sums: ${{ steps.sums.outputs.sums }}
     steps:
-      # This job holds `contents: write` and runs `npm ci`, so the token is not
-      # left in .git/config for a dependency's install script to read. Nothing
-      # here pushes with git: the release is created through GH_TOKEN, in the
-      # one step that is given it.
+      # This job holds `contents: write`, so the token is not left in
+      # .git/config for anything the job runs to read. Nothing here pushes with
+      # git: the release is created through GH_TOKEN, in the one step that is
+      # given it.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
+          node-version: 26.13.1
 
       # The same guard `targets` carries. Repeated rather than inherited
       # because this job stamps GITHUB_REF_NAME into what it publishes, and a
@@ -510,14 +517,12 @@ jobs:
             exit 1
           fi
 
-      # No LLVM here any more, and no build either: this job packs and publishes,
-      # and the compilers were built and smoke-tested on their own hardware by the
-      # `binaries` job above. `npm run build` used to be needed because `npm pack`
-      # shipped `dist/`; since 0.6.0 the tarball is the launcher in `bin/` plus the
-      # whitelisted data files, none of it `tsc` output, so there is nothing to
-      # build before packing.
-      - name: Install dependencies
-        run: npm ci
+      # No LLVM here, no build and no `npm ci`: this job packs and publishes,
+      # and the compilers were built and smoke-tested on their own hardware by
+      # the `binaries` job above. Since 0.6.0 the tarball is the launcher in
+      # `bin/` plus the whitelisted data files, none of it `tsc` output, and
+      # nothing this job runs reads node_modules, so no dependency's install
+      # script runs beside `contents: write` and `id-token: write`.
 
       # Every binary the matrix produced, back into one directory. The release
       # job `needs: binaries`, so reaching this step at all means every row
@@ -720,22 +725,31 @@ jobs:
   interop:
     name: interop
     needs: [release]
+    # `attestations: read` because interop.yml asks for it, to check the
+    # attestation of the seed it fetches; a called workflow gets no more than
+    # this job grants.
     permissions:
       contents: read
+      attestations: read
     uses: ./.github/workflows/interop.yml
     with:
       seed: ${{ github.ref_name }}
 
   # The registry half of the release: the N+1 packages `release` just attached,
   # published by npm's trusted publishing. Each package trusts this workflow
-  # file in this repository (`npm trust github <pkg> --repo amritk/nish --file
-  # release.yml --allow-publish`), and the job proves it is that workflow with a
-  # short-lived OIDC token, so there is no NPM_TOKEN secret to leak or rotate.
+  # file in this repository (`npm trust github <pkg> --repo amritk/nish
+  # --file release.yml --environment npm --allow-publish`), and the job proves
+  # it is that workflow with a short-lived OIDC token, so there is no
+  # NPM_TOKEN secret to leak or rotate.
+  # The trust is bound to the `npm` environment too (`--environment npm`), so
+  # an OIDC token minted by any other job of this file, `release`'s attestation
+  # token included, cannot publish, and the environment's protection rules
+  # gate the one that can.
   #
   # A job of its own rather than a step of `release`, for three reasons:
   #
-  # - It is the only job that holds `id-token: write`, and it runs no `npm ci`,
-  #   so no third-party install code ever runs next to the token that publishes.
+  # - It is the only job in the `npm` environment, and it runs no `npm ci`, so
+  #   no third-party install code ever runs next to the token that publishes.
   # - It publishes the bytes the GitHub release carries, downloaded back from
   #   it, rather than a second pack: what is on npm is what is on the release.
   # - A publish that fails half way is retried with "Re-run failed jobs", which
@@ -745,28 +759,30 @@ jobs:
     name: publish to npm
     needs: [targets, release]
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       # No `registry-url`: that writes an .npmrc naming NODE_AUTH_TOKEN, and
       # trusted publishing needs no token at all. npm exchanges the job's OIDC
-      # token for a publish credential itself, which needs npm 11.5.1 or later;
-      # Node 22 ships npm 10.
+      # token for a publish credential itself, which needs npm 11.5.1 or later.
+      # Node 26.13.1 ships npm 11.20.0, so the npm that publishes is the one in
+      # the pinned Node release, not a second download from the registry made
+      # under id-token: write.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
 
       - name: npm new enough for trusted publishing
         run: |
-          # An exact version, not a range: this step runs with id-token: write,
-          # so whatever npm the registry serves here can mint a publish
-          # credential. A range would hand that to the newest 11.x on release
-          # day, unreviewed.
-          npm install -g npm@11.21.0
-          npm --version
+          v="$(npm --version)"
+          echo "npm $v"
+          node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); if (a * 1e6 + b * 1e3 + c < 11005001) { console.error(`::error::npm ${process.argv[1]} predates trusted publishing (11.5.1)`); process.exit(1) }' "$v"
 
       - name: Download the packages the release attached
         env:
@@ -841,7 +857,7 @@ jobs:
             name="$(tar -xzOf "$tgz" package/package.json | jq -r .name)"
             if ! npm view "$name" versions --json > build/npm/versions.json 2> build/npm/view.err; then
               if grep -q E404 build/npm/view.err; then
-                echo "::error::$name has never been published, so it cannot trust this workflow yet. Publish $(basename "$tgz") by hand with 'npm publish <tarball> --access public', run 'npm trust github $name --repo $GITHUB_REPOSITORY --file release.yml --allow-publish', then re-run this job."
+                echo "::error::$name has never been published, so it cannot trust this workflow yet. Publish $(basename "$tgz") by hand with 'npm publish <tarball> --access public', run 'npm trust github $name --repo $GITHUB_REPOSITORY --file release.yml --environment npm --allow-publish', then re-run this job."
               else
                 cat build/npm/view.err
                 echo "::error::could not ask the registry about $name"

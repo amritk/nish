@@ -34,3 +34,99 @@ export const p256SeamShared = (k: u8[], pub: u8[]): u8[] | null => {
   }
   return x
 }
+
+/**
+ * How many of `p256BaseTable`'s entries equal the point rebuilt from G by
+ * this module's own complete doubling and addition: comb `c`'s teeth are
+ * 2^(TEETH SPACING c + SPACING j) G, and entry `u` is the top tooth plus or
+ * minus each lower one as bit `j` of `u` says. Both sides are encoded, so the
+ * comparison is of affine points, byte for byte.
+ */
+export const p256SeamTableRebuilt = (): i32 => {
+  const table: u32[] = p256BaseTable()
+  const s = new P256PointScratch()
+  const teeth: P256ProjectivePoint[] = []
+  for (let j: i32 = 0; j < P256_COMB_TEETH; j++) {
+    const tooth = new P256ProjectivePoint()
+    p256PointCopy(tooth, p256Generator())
+    for (let d: i32 = 0; d < P256_COMB_SPACING * j; d++) {
+      p256PointDouble(tooth, tooth, s)
+    }
+    teeth.push(tooth)
+  }
+  const term = new P256ProjectivePoint()
+  const point = new P256ProjectivePoint()
+  const entry = new P256ProjectivePoint()
+  const zero: u32[] = p256Limbs()
+  let matched: i32 = 0
+  for (let c: i32 = 0; c < P256_COMBS; c++) {
+    if (c > 0) {
+      for (let j: i32 = 0; j < P256_COMB_TEETH; j++) {
+        for (let d: i32 = 0; d < P256_COMB_TEETH * P256_COMB_SPACING; d++) {
+          p256PointDouble(teeth[j], teeth[j], s)
+        }
+      }
+    }
+    for (let u: i32 = 0; u < P256_COMB_ENTRIES; u++) {
+      p256PointCopy(point, teeth[P256_COMB_TEETH - 1])
+      for (let j: i32 = 0; j < P256_COMB_TEETH - 1; j++) {
+        p256PointCopy(term, teeth[j])
+        if (((u >> j) & 1) === 0) {
+          p256FiatSub(term.y, zero, term.y)
+        }
+        p256PointAdd(point, point, term, s)
+      }
+      const at: i32 = (c * P256_COMB_ENTRIES + u) * P256_BASE_ENTRY
+      for (let i: i32 = 0; i < 8; i++) {
+        entry.x[i] = table[at + i]
+        entry.y[i] = table[at + 8 + i]
+      }
+      p256FiatSetOne(entry.z)
+      const want: u8[] = p256EncodePoint(point)
+      const got: u8[] = p256EncodePoint(entry)
+      let same: boolean = toI32(want.length) === toI32(got.length)
+      for (let i: i32 = 0; same && i < toI32(want.length); i++) {
+        same = want[i] === got[i]
+      }
+      if (same) {
+        matched = matched + 1
+      }
+    }
+  }
+  return matched
+}
+
+/** The number of entries in `p256BaseTable`. */
+export const p256SeamTableEntries = (): i32 => P256_COMBS * P256_COMB_ENTRIES
+
+/** The recoded scalar m the comb reads for `k`, as 32 big-endian bytes. */
+export const p256SeamRecode = (k: u8[]): u8[] => {
+  const m: u32[] = p256Limbs()
+  p256BaseRecode(m, k, new P256PointScratch())
+  const out: u8[] = new Array<u8>(32)
+  p256LimbsToBytes(out, 0, m)
+  return out
+}
+
+/**
+ * The scalar k whose recoding is `m mod n`, 32 big-endian bytes either way:
+ * k = 2m - (2^BITS - 1) mod n, the recoding run backwards, so a test can pick
+ * the comb digits it wants read.
+ */
+export const p256SeamUnrecode = (m: u8[]): u8[] => {
+  const s = new P256PointScratch()
+  const a: u32[] = p256Limbs()
+  p256LimbsFromBytes(a, m, 0)
+  p256SetOrder(s.t1)
+  p256FiatSelectznz(a, p256SubBorrow(s.t0, a, s.t1), s.t0, a)
+  p256BaseOffset(s.t2)
+  p256SubBorrow(s.t0, s.t1, s.t2)
+  p256FiatScalarAdd(a, a, a)
+  p256FiatScalarAdd(a, a, s.t0)
+  const out: u8[] = new Array<u8>(32)
+  p256LimbsToBytes(out, 0, a)
+  return out
+}
+
+/** The comb's shape: teeth, spacing, combs, entries per comb. */
+export const p256SeamShape = (): i32[] => [P256_COMB_TEETH, P256_COMB_SPACING, P256_COMBS, P256_COMB_ENTRIES]

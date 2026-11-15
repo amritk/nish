@@ -16,7 +16,7 @@
 
 ## Next
 
-R6, compatibility mode, which waits on [WP28](wp28-compatibility-mode.md)'s decision: ask the owner before starting. Spec: [§9](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md#9-staging).
+R6, compatibility mode, which waits on [WP28](wp28-compatibility-mode.md)'s open question: whether to accept compatibility mode. Spec: [§9](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md#9-staging).
 
 ## Not planned
 

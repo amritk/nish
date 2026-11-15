@@ -1,5 +1,5 @@
 /**
- * The WebTransport relay: cs's `services/relay` (Rust, over `wtransport`
+ * The WebTransport relay: a game's `services/relay` (Rust, over `wtransport`
  * 0.7) written in Nish on `std/net`. Its whole job is to get game traffic off
  * TCP: a browser sends unreliable WebTransport datagrams over QUIC, and the
  * relay forwards each payload verbatim over real UDP to the game server
@@ -8,7 +8,7 @@
  * tested, and what is still open.
  *
  *     nish examples/relay/main.ts --link build/relay
- *     build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/relay.json
+ *     build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/relay/relay.json
  *
  * The command line and the environment are main.rs's: `--port`
  * (`CS_RELAY_PORT`, 4433), `--bind` (`CS_RELAY_BIND`; dual-stack `::` with a
@@ -212,6 +212,8 @@ export const main = (): i32 => {
     if (next === null) {
       if (fresh.error.length > 0) {
         // Expected during a renewal: two files written by somebody else, not at the same instant.
+        // The line goes back with this block, so a relay that renews for months does not keep them all.
+        using a = arena()
         writeError(`[relay] ${fresh.error}; keeping the one already loaded\n`)
       }
     } else {

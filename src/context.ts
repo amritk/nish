@@ -10,7 +10,7 @@
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { Lexer } from "./lexer"
 import { StringMap, StringSet } from "./map"
-import { Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import {
   CheckedProgram,
   DeferredConstraint,
@@ -243,12 +243,13 @@ export class CheckContext {
    * A property path an enum test reads — `h.k`, `this.k`, `xs[0].kind` — and
    * the variable each stands for, so a test narrows what the path holds as it
    * would a local's (`pathVariable` in `src/expressions.ts`): `pathLocals[i]`
-   * is the path `pathKeys[i]` written from the variable `pathRoots[i]`, and
-   * `thisRoot` stands for `this`.
+   * is the path `pathKeys[i]` written from the variable `pathRoots[i]` and
+   * first read as `pathNodes[i]`, and `thisRoot` stands for `this`.
    */
   pathLocals: Local[]
   pathRoots: Local[]
   pathKeys: string[]
+  pathNodes: Node[]
   thisRoot: Local
   /** How many variables have been given a `$n` index key (`Local.pathIndex`). */
   pathIndexCount: i32
@@ -411,6 +412,7 @@ export class CheckContext {
     this.pathLocals = []
     this.pathRoots = []
     this.pathKeys = []
+    this.pathNodes = []
     this.thisRoot = new Local("this", T_ERROR, false, STORAGE_PARAM)
     this.pathIndexCount = 0
     this.arrowFns = []
@@ -657,6 +659,21 @@ export class CheckContext {
 
   /** The source text a node covers, for a message that quotes what was written. */
   textOf(node: Node): string {
+    // A destructuring pattern's read (`Parser.lowerPattern`) spans its key
+    // or slot, and its receiver is written elsewhere: `{ inner: q } = p` is
+    // quoted as the `p.inner` it reads. A written member or element starts
+    // where its receiver does (`Parser.parseMemberName`, `parseElement`), so
+    // no other node takes this branch.
+    if (
+      (node.kind === NodeKind.Member || node.kind === NodeKind.Index) &&
+      node.children.length > 0 &&
+      node.children[0].start > node.start
+    ) {
+      const receiver = this.textOf(node.children[0])
+      return node.kind === NodeKind.Member
+        ? `${receiver}.${node.text}`
+        : `${receiver}[${node.children[1].text}]`
+    }
     return this.source.text.substring(node.start, node.end)
   }
 

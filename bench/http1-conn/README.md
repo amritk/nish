@@ -58,12 +58,14 @@ L3, so in the `-dram` shapes a connection's lines come from DRAM; cachegrind's
 LL (512 MiB, 32-way) misses about 9 to 11 times per request there, against 0
 in `idle`.
 
-With the idle shape (or `--rss N`) it also reports the peak RSS one idle
-connection costs: each binary's `rss` mode builds the idle pool, serves one
-request on every connection so each parks, and prints its `VmHWM` from
-`/proc/self/status`; the table gives, over `--rss` runs (default 5), the
-median and min–max of the peak at `--connections` less the peak at 0,
-divided by `--connections`. `getrusage`'s `ru_maxrss` cannot stand in for
+With the idle shape (or `--rss N`, or `--shape rss` for the memory alone) it
+also reports the peak RSS one idle connection costs: each binary's `rss` mode
+builds the idle pool with `idleInput` on, as it is by default, its `rss-kept`
+mode with it off, serves every connection one request, or `--passes` (default 4)
+in turn so each has kept its response head, so each parks, and prints its
+`VmHWM` from `/proc/self/status`; the table gives a row for each of the four,
+over `--rss` runs (default 5), the median and min–max of the peak at
+`--connections` less the peak at 0, divided by `--connections`. `getrusage`'s `ru_maxrss` cannot stand in for
 it, because it keeps the peak of the image `exec` replaced too, and under
 `taskset` from Node that is larger than the bench at 0 connections.
 
@@ -392,3 +394,52 @@ server (`bench/http1-e2e/run.sh`'s `S` arm, built with this tree's
 `build/nish`) ran one short loadgen round on the full seed (500,000
 articles): `USERS=2000 RAMP=10 MEASURE=30 SKIP=5`, 60,006 requests, 0
 errors, 30,435 ns on-CPU per request (10,063 user).
+
+## Measured: what an idle connection holds (2026-11-13)
+
+`Http1Connection`'s constructor no longer builds an `HttpDate` the server
+drops (it takes the server's), its spans wait for the first field line and
+its input and head buffers start as one shared empty array, and the response
+head a connection keeps to write again is sized to that head, rounded up to 64
+bytes, rather than `H1_HEAD_KEEP`'s fixed 1 KiB. `Http1Config.idleInput` is
+now on by default.
+
+Peak RSS per idle connection, `node bench/http1-conn/run.mjs --shape rss
+--rss 5 --base 7d921842`, 50,000 connections on the machine above, bytes,
+median (min–max) of 5 runs; `old′` is a second copy of the base, the noise
+floor (±1 byte):
+
+| | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| idleInput, 1 request | 1,170 (1,170–1,171) | 1,170 | 1,031 (1,031–1,031) |
+| idleInput, 4 requests | 2,385 (2,384–2,385) | 2,384 | 1,215 (1,215–1,216) |
+| idleInput off, 1 request | 3,044 (3,043–3,044) | 3,043 | 2,900 (2,900–2,900) |
+| idleInput off, 4 requests | 4,258 (4,257–4,258) | 4,258 | 3,084 (3,084–3,085) |
+
+On the default config an idle keep-alive connection therefore goes from
+4,258 bytes (idleInput off on the base) to 1,215 (on, now the default), 3.5x
+less. In the arena, `tests/link/net_http1_server/startup.ts` reads 3,384
+bytes for a connection that has served four GETs and parked on the base,
+2,232 with the trims and idleInput off, and 904 with it on; that last figure
+is `HTTP1_SERVER_IDLE_BYTES`'s measurement.
+
+### Turning idleInput on by default
+
+It costs two pool operations a request. `bench/http.mjs` against the
+plaintext, json and post-json servers, keep-alive c=256, server on CPU 0 and
+`wrk -t3` on CPUs 1–3, 7 rounds of 5 s, median req/s (min–max); `new2` is a
+second copy of `new`, the noise floor:
+
+| | old | new (off) | new2 (off) | idleInput on |
+| --- | ---: | ---: | ---: | ---: |
+| plaintext | 162,653 (149,534–213,197) | 176,685 (117,521–205,449) | 207,053 (139,091–234,636) | 171,743 (154,703–190,883) |
+| json | 172,834 (157,495–220,407) | 171,621 (144,561–216,108) | 168,834 (141,726–225,154) | 172,632 (122,124–224,076) |
+| post-json | 116,150 (80,470–128,495) | 114,729 (78,332–119,979) | 101,582 (87,407–124,326) | 111,768 (71,823–117,227) |
+
+The four builds run interleaved, `bench/http.mjs` alternating their order
+each round, so drift on the machine falls on all of them alike. Two copies
+of one binary differ by up to 17% (plaintext) and 12% (post-json),
+and every idleInput-on median sits between them or within 3% of the nearer,
+so the throughput change is inside the noise band. User CPU per request
+moved no more: 0.75 µs against 0.76 for plaintext, 0.80 against 0.85–0.94
+for json, 3.80 against 3.71–3.80 for post-json.

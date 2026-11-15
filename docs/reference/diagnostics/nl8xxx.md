@@ -231,7 +231,7 @@ The message of a warning `--warn-portability` turns on contains:
 …follows the native NaN and signed-zero rules here, not JavaScript's
 ```
 
-**Retired**: WP33's float Math.min/max/round row; they lower to compare-and-select (llvm.minimum/maximum on wasm) and a copysign now, which answer NaN and -0 as JavaScript does, so no site diverges (tests/cases/port_num_libm pins the quiet)
+**Retired**: the portability warning's float Math.min/max/round row; they lower to compare-and-select (llvm.minimum/maximum on wasm) and a copysign now, which answer NaN and -0 as JavaScript does, so no site diverges (tests/cases/port_num_libm pins the quiet)
 
 ## NL8011
 
@@ -241,7 +241,7 @@ The message of a warning `--warn-portability` turns on contains:
 …prints a negative zero as 0 here, and Node's console prints -0
 ```
 
-**Retired**: WP33's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
+**Retired**: the portability warning's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
 
 ## NL8012
 

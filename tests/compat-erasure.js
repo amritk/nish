@@ -12,7 +12,7 @@
  *
  *  - **the dialect alone**: the flags its `.args` names, against the same with
  *    `--compat --number-mode <the case's own>` after them. Naming the 32-bit
- *    integer beside the dialect is priced by one performance note (NL9018),
+ *    integer beside the dialect is priced by one performance note (NL9020),
  *    which is taken out with the mark, and out of the count a report of
  *    several warnings closes with;
  *  - **the dialect's number**: `--number-mode f64` against a bare `--compat`,
@@ -74,7 +74,7 @@ const MARK = /^!nish\.compat = !\{(!\d+)\}$/
 /** The line `--emit-checked` opens with under the dialect. */
 const CHECKED_LINE = /^compat number=\S+ features=\[[^\]]*\]$/
 
-/** The words of NL9018, the note on `--number-mode i32` beside the dialect. */
+/** The words of NL9020, the note on `--number-mode i32` beside the dialect. */
 const PRICED_NOTE = "`--number-mode i32` beside the compatibility dialect: "
 
 /** The line a report of performance warnings closes with. */

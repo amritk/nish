@@ -1,26 +1,54 @@
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
-define internal noundef i32 @fib(i32 noundef %n) #0 {
+define internal noundef i32 @fib(i32 noundef %n.in) #0 {
 entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %6, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %5, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
   %0 = icmp slt i32 %n, 2
-  br i1 %0, label %if.then, label %if.end
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
 
 if.then:
-  ret i32 %n
-
-if.end:
-  %1 = sub nsw i32 %n, 1
-  %2 = call i32 @fib(i32 %1)
-  %3 = sub nsw i32 %n, 2
-  %4 = call i32 @fib(i32 %3)
-  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %4)
-  %6 = extractvalue { i32, i1 } %5, 0
-  %7 = extractvalue { i32, i1 } %5, 1
-  br i1 %7, label %ovf.fail, label %ovf.ok
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %n)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  ret i32 %6
+  ret i32 %2
+
+if.end:
+  %4 = sub nsw i32 %n, 1
+  %5 = call i32 @fib(i32 %4)
+  %6 = sub nsw i32 %n, 2
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %7 = call i32 @fib(i32 %n)
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %9)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %12
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

@@ -36,6 +36,7 @@
 import { Emitter, LoopTarget } from "./emit"
 import { openedHandle } from "./handles"
 import { isScalarArgument } from "./escape"
+import { checkedFieldElement } from "./emit-arrays"
 import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
 import { IRFunction, IRParam, paramValue } from "./ir"
@@ -735,9 +736,13 @@ export const emitLockBody = (emitter: Emitter, sig: FunctionSig): void => {
 }
 
 /**
- * The body of an `AtomicI32` or `AtomicI64` method (docs/IR_COOKBOOK.md,
- * "Atomics"): one sequentially consistent instruction on the `value` field,
- * at the field's natural alignment. The source body beside it is Node's.
+ * The body of an atomic's method (docs/IR_COOKBOOK.md, "Atomics"): one
+ * sequentially consistent instruction at the word's natural alignment. The
+ * word is `AtomicI32`'s or `AtomicI64`'s `value` field, or, for an
+ * `AtomicI32Array` or `AtomicI64Array`, the element of its `values` the first
+ * parameter names, once that index is checked as `a[i]`'s is: the elements
+ * are one buffer, so the instruction is on a GEP into it. The source body
+ * beside it is Node's.
  */
 export const emitAtomicBody = (emitter: Emitter, sig: FunctionSig): void => {
   const owner = sig.owner
@@ -745,12 +750,26 @@ export const emitAtomicBody = (emitter: Emitter, sig: FunctionSig): void => {
     process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not a method`, emitter.opts.json))
   }
   const fn = emitter.fn
-  const field = lockWord(emitter, owner, "value")
-  const ty = emitter.llvm(field.type)
+  const values = owner.field("values")
+  // The parameter the operation's operand is: `paramNames[0]` is `this`, and
+  // an array's index comes before the operand.
+  let operand = 1
+  let ty = ""
+  let word = ""
+  if (values !== null) {
+    operand = 2
+    ty = emitter.llvm(emitter.table.refOf(values.type))
+    const arr = values.boxed || values.inline() ? "" : loadField(emitter, owner, "%this", values)
+    const idx = fn.emitValue(`sext i32 ${paramValue(sig.paramNames[1])} to i64`)
+    word = checkedFieldElement(emitter, owner, "%this", values, arr, idx)
+  } else {
+    const field = lockWord(emitter, owner, "value")
+    ty = emitter.llvm(field.type)
+    word = structFieldPointer(emitter, owner, "%this", field)
+  }
   const align = ty === "i64" ? ", align 8" : ", align 4"
-  const word = structFieldPointer(emitter, owner, "%this", field)
   const op = sig.decl.children[0].text
-  const first = sig.paramNames.length > 1 ? paramValue(sig.paramNames[1]) : ""
+  const first = sig.paramNames.length > operand ? paramValue(sig.paramNames[operand]) : ""
   if (op === "load") {
     fn.emit(`ret ${ty} ${fn.emitValue(`load atomic ${ty}, ${ty}* ${word} seq_cst${align}`)}`)
   } else if (op === "store") {
@@ -758,7 +777,7 @@ export const emitAtomicBody = (emitter: Emitter, sig: FunctionSig): void => {
     fn.emit("ret void")
   } else if (op === "compareExchange") {
     const pair = fn.emitValue(
-      `cmpxchg ${ty}* ${word}, ${ty} ${first}, ${ty} ${paramValue(sig.paramNames[2])} seq_cst seq_cst${align}`
+      `cmpxchg ${ty}* ${word}, ${ty} ${first}, ${ty} ${paramValue(sig.paramNames[operand + 1])} seq_cst seq_cst${align}`
     )
     fn.emit(`ret ${ty} ${fn.emitValue(`extractvalue { ${ty}, i1 } ${pair}, 0`)}`)
   } else {

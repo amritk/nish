@@ -57,6 +57,11 @@ crosses to C, then the exact rules.
   function reference is the tag `0` ([Function references](declarations.md#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](declarations.md#enums)).
+- **A record's type has a name.** Its fields are declared once, in an
+  `interface` or a `class`; an inline object type, `{ x: i32 }`, is refused
+  wherever a type is written, and `type` only renames a type that already
+  exists ([Interfaces and object literals](declarations.md#interfaces-and-object-literals),
+  [Type aliases](declarations.md#type-aliases)).
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](result-and-error-handling.md)).
@@ -91,8 +96,9 @@ type `--emit-header` writes; a dash means the type cannot cross to C.
   the operations ([Unsigned integers](#unsigned-integers)). `i64` and `u64`
   cross to JavaScript as a `bigint`.
 - A `boolean` is `zeroext` at the ABI boundary.
-- `K.A` is the member's integer, so nothing is emitted for an `enum`
-  declaration.
+- `K.A` is the member's integer (its ordinal, for a string enum), so nothing
+  is emitted for a numeric `enum` declaration; a string enum adds one private
+  table of its members' strings ([String enums](declarations.md#string-enums)).
 
 Every other type is a pointer, 8 bytes and 8-aligned, to:
 
@@ -156,7 +162,7 @@ interned, and two types are the same type exactly when they are the same
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
-  a `type` alias or a numeric `enum` declared or imported in the module
+  a `type` alias or an `enum` (numeric or string) declared or imported in the module
   ([Type aliases](declarations.md#type-aliases), [Enums](declarations.md#enums)), one of that enum's
   members as a type, `Kind.If` ([Enums](declarations.md#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
@@ -648,7 +654,9 @@ pointer to whichever variant it holds, and its first field says which. A
 variant is a class or an interface whose first field is its **tag**: a field
 of an [enum member type](declarations.md#enums), conventionally
 `readonly kind: Kind.Circle = Kind.Circle` (`tests/cases/union_types`,
-`tests/link/union_export` across modules).
+`tests/link/union_export` across modules). The enum may be numeric or a
+[string enum](declarations.md#string-enums), whose member is the tag in memory as its
+ordinal (`tests/cases/enum_string_union_tag`).
 
 ```ts
 enum Kind {
@@ -667,7 +675,10 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
-Typed JSON reads and writes a union of classes by its tag ([Typed JSON](builtins.md#typed-json-nishjson-typed)).
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](builtins.md#typed-json-nishjson-typed)),
+whose value on the wire is the tag member's name, or a string enum member's
+string, unless the variant's `tag` option names another
+(`tests/link/json_enum_string`).
 
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
@@ -720,13 +731,25 @@ field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
 spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
 and a `Map`'s value is any of those: `Map<string, Shape>`,
 `Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
+A union is also a type argument: a generic class's (`Box<Shape>`,
+`Box<Box<Shape>>`, `Stack<Shape>`, `union_generic_class`), a generic
+function's or method's type parameter bound to one by its arguments
+(`union_generic_call`), either side of a `Result`, `Result<Shape, E>` and
+`Result<T, Shape>` (`union_result`), and `nish/map`'s `getOrInsert` and
+`reserve` on a `Map<K, Shape>` (`union_map_helpers`). The instance is
+monomorphised as for any other type argument, so `Box<Shape>` is laid out as
+a class with a `Shape` field would be, and a `T` slot holds the union's one
+pointer.
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
 converts to the union wherever the union is expected: an argument, a
 `return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
 arm or a `??` default whose other side is the union
-(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+(`tests/cases/union_forms`), and the same places where a generic's `T` is
+the union: a constructor's or a generic call's argument, `Ok(new Circle())`
+in a function that returns `Result<Shape, E>` (`union_generic_class`,
+`union_generic_call`, `union_result`). Equality on two unions compares the pointers, as
 on any object.
 
 **Reading.** The tag is the one member a union has until a test of the tag
@@ -980,22 +1003,26 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
-  function or method whose type parameter would bind to a union, and
-  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
-  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_result_ok`,
-  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
-  its value as it is, the way an array stores an element of a union, and
-  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
-  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
-  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
-  and is NL2533 as any generic call is. A union is not a
-  `Map` or `Set` key, which is the key rule's refusal
-  (`reject_union_map_key`, `reject_union_set`).
+- **A union is a type argument, but not a key.** `Box<Shape>`, a generic
+  function or method whose type parameter binds to a union, `Result<Shape, E>`
+  / `Result<T, Shape>` and `nish/map`'s helpers on a `Map<K, Shape>` are
+  accepted (above), as in `tsc`. Three things stay refused, each under its own
+  rule: a union is not a `Map` or `Set` key, which is the key rule's refusal
+  (NL2353, `reject_union_map_key`, `reject_union_set`); a generic class is
+  not a variant (NL2522, `reject_union_generic_variant`); and a store of a
+  bare variant into a generic instance's union field, `b.value = new
+  Square()` on a `Box<Shape>`, is NL2534 as into any union field
+  (`reject_union_generic_field_store`). A union does not meet a constraint
+  (`<T extends HasKind>`, NL2328, `reject_union_generic_constraint`), and an instance
+  over a union is not key material for `nish:secret`
+  (NL2428, `reject_union_generic_secret`), nor a class typed JSON writes
+  (NL2486, `reject_union_generic_json`), nor something a C header or N-API bridge
+  spells (`reject_union_generic_export`, `reject_union_result_export`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
   or array literal of two variants is the existing same-type refusal
-  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`; so is
+  one a generic call would bind `T` to, `first([new Square(), new Circle()])`,
+  `reject_union_generic_inferred`), an arrow
   returning one needs its annotation (`reject_union_arrow_result`), and a
   local initialised from the tag without an annotation, `const k = s.kind`
   or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
@@ -1114,9 +1141,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try` is refused by Nish on its own, destructuring is too but for
-`const [a, b] = await awaitAll(…)`, which declares fresh `const`s rather than
-storing to a variable, and an arrow may read a local it captures but never
+`try` is refused by Nish on its own, a destructuring pattern only ever
+declares fresh names rather than storing to a variable (a destructuring
+assignment is NL2773, [Destructuring declarations](statements.md#destructuring-declarations)),
+and an arrow may read a local it captures but never
 assign it (NL2586, [Function parameters](declarations.md#function-parameters)), so no loop
 that compiles stores through any of them. A loop that holds a
 labelled statement or a labelled `break` or `continue` anywhere in its body,
@@ -1126,11 +1154,16 @@ gives up on: it keeps the checker's widened state.
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
 union is refused, and so is a union-holding field of any class or interface
-the compilation declares, exported or not, under any sidecar flag
-(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
-lays out every class and interface of the program, a private one too
-(`reject_union_private_field`). The message is
+the compilation declares, exported or not, under a flag that lays the classes
+out as C structs (`--emit-header`, `--emit-napi`, `--emit-napi-async`): a
+header lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). A build with `--emit-dts` alone describes no
+class, so there a union field of a class only the module reads — root
+storage's graph among them — is accepted; a union in an exported function's
+parameter or result is still refused under every sidecar flag. The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions
-cross Nish modules freely (`tests/link/union_export`).
+cross Nish modules freely (`tests/link/union_export`). A string enum in an
+exported function's signature is refused under the same flags for a reason
+of its own (NL4019, [String enums](declarations.md#string-enums)).

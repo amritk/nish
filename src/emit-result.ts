@@ -43,7 +43,7 @@ import { Emitter } from "./emit"
 import { emitPanicTail } from "./emit-builtins"
 import { internalErrorFor } from "./ice"
 import { ResultLayout, resultLayout } from "./result"
-import { N_CALL, N_MEMBER, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram } from "./program"
 import {
@@ -291,7 +291,7 @@ const packObject = (emitter: Emitter, type: i32, object: string): string => {
  */
 export const emitPackedResult = (emitter: Emitter, expr: Node, type: i32, isPrivate: boolean): string => {
   declareResultTypes(emitter, type)
-  if (expr.kind === N_CALL && isResultConstructorCall(emitter.program, emitter.table, expr)) {
+  if (expr.kind === NodeKind.Call && isResultConstructorCall(emitter.program, emitter.table, expr)) {
     const args = expr.children[1]
     const hasPayload = args.children.length > 0
     const payload = hasPayload ? emitter.emitExpression(args.children[0]) : ""
@@ -654,7 +654,7 @@ export const emitResultMethod = (emitter: Emitter, expr: Node, receiver: i32): s
 /** The `Result` method a call invokes, or "" for anything else. */
 export const resultMethodName = (program: CheckedProgram, table: TypeTable, call: Node): string => {
   const access = call.children[0]
-  if (access.kind !== N_MEMBER) {
+  if (access.kind !== NodeKind.Member) {
     return ""
   }
   if (!table.isResult(program.nodeTypes[access.children[0].id])) {

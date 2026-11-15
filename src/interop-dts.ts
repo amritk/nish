@@ -81,7 +81,7 @@ const docComment = (table: TypeTable, fn: ExternalFunction): string =>
 export const generateDts = (compilation: Compilation, fns: ExternalFunction[], dtsFile: string): string => {
   const table = compilation.table
   const vectored = structsHoldingVectors(compilation)
-  const bridge = wasmBridged(table, fns, vectored)
+  const bridge = wasmBridged(table, fns, vectored, compilation.rootSymbols().length > 0)
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-dts", "// "))
   lines.push("// Typings for the wasm build (scripts/build.sh --profile wasm), implemented by")

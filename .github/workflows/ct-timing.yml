@@ -45,6 +45,8 @@ on:
 
 permissions:
   contents: read
+  # gh attestation verify, for the seed scripts/fetch-seed.sh checks.
+  attestations: read
 
 # ci.yml says why this cache is set for every job, and why it is outside the checkout.
 env:
@@ -70,7 +72,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # ci.yml's install, less valgrind, which nothing here runs.
@@ -95,12 +97,15 @@ jobs:
           uname -m
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The compiler the way ci.yml's `test` job builds it: the last release's
       # binary for this platform, then src/ built by it into build/nish, which
       # tests/ct-timing.js uses when no --nish is given.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: |
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version

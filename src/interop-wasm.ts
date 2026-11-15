@@ -16,7 +16,10 @@
 //      an argument the callee writes through (`fill(xs)`): copy the arena
 //      bytes back into the caller's typed array, so the wasm and N-API builds
 //      agree (N-API borrows the buffer, so writes land directly);
-//   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
+//   5. `nish_arena_release(mark)`, in a `finally`, so a trap leaks nothing;
+//      a program with root storage calls `nish_root_keep(mark)` there
+//      instead, which keeps what a root reaches and releases the rest
+//      (WP55 §4).
 // `memory.buffer` is re-read after every module call because `memory.grow`
 // detaches the previous ArrayBuffer. A string result is decoded out of the
 // arena (`stringOut`) before step 5; a string argument is refused, and the
@@ -445,7 +448,12 @@ const returnsText = (bridged: ExternalFunction[]): boolean => {
   return false
 }
 
-export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored: StringSet): WasmBridge => {
+export const wasmBridged = (
+  table: TypeTable,
+  fns: ExternalFunction[],
+  vectored: StringSet,
+  keepsRoots: boolean
+): WasmBridge => {
   const bridged: ExternalFunction[] = []
   for (const fn of fns) {
     if (wasmSkipReason(table, fn.sig, vectored).length === 0) {
@@ -455,7 +463,9 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored:
   // Every function in the module, bridged or not, is linked into it, and one
   // whose prologue checks a range (every external one that takes a range)
   // calls the panic's two runtime symbols.
-  let needsRuntime = false
+  // WP55: root storage's keep is the runtime's (`nish_root_keep`), and it runs
+  // after every call.
+  let needsRuntime = keepsRoots
   for (const fn of fns) {
     if (takesRange(table, fn.sig)) {
       needsRuntime = true
@@ -754,7 +764,7 @@ const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[], guard:
   if (!wasmHasPackedResult(table, bridged)) {
     return lines
   }
-  lines.push("  /** A Result in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */")
+  lines.push("  /** A Result in one i64: bit 0 is the tag, bits 32..63 the payload. */")
   lines.push("  const resultOut = (word, readValue, readError) => {")
   lines.push("    const payload = BigInt.asUintN(32, word >> 32n);")
   lines.push("    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };")
@@ -955,11 +965,14 @@ const panicLoader = (hosts: boolean): string[] => {
  * `guarded`, inside `exportsOf`: every export runs in it. A dead module is
  * refused with a `NishPanic` and a busy one with a `NishReentry`, both before
  * the module is touched; with the runtime linked, everything the call
- * allocated in the arena is given back after the result has been read; and
+ * allocated in the arena is given back after the result has been read
+ * (`keepsRoots`: all but what root storage reaches, WP55 §4); and
  * anything but a refused argument that escapes the call (a panic, a trap, or
- * an exception out of a host function) leaves the module dead.
+ * an exception out of a host function) leaves the module dead. A release or
+ * keep that fails after the export returned also kills the module, keeps the
+ * panic kind it recorded, and throws in place of the export's result.
  */
-const guardLoader = (needsRuntime: boolean): string[] => {
+const guardLoader = (needsRuntime: boolean, keepsRoots: boolean): string[] => {
   const lines: string[] = []
   lines.push(
     "  /** One call: refused on a dead or busy module; anything but a bad argument escaping it kills it. */"
@@ -994,11 +1007,25 @@ const guardLoader = (needsRuntime: boolean): string[] => {
   if (needsRuntime) {
     lines.push("      if (state.dead === null) {")
     lines.push("        try {")
-    lines.push("          raw.nish_arena_release(mark);")
+    // WP55 §4: with root storage, what the roots reach outlives the call.
+    lines.push(keepsRoots ? "          raw.nish_root_keep(mark);" : "          raw.nish_arena_release(mark);")
     lines.push("        } catch (e) {")
-    lines.push(
-      '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
-    )
+    if (keepsRoots) {
+      // A panic inside the keep (its scratch outgrowing memory is "memory")
+      // has recorded its own kind through the panic import; only a bare trap
+      // has not. A release cannot panic, so its loader keeps the plain form.
+      lines.push("          if (state.dead === null) {")
+      lines.push(
+        '            state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      )
+      lines.push("          }")
+    } else {
+      lines.push(
+        '          state.dead = new NishPanic(e instanceof Error ? e.message : String(e), "trap", -1);'
+      )
+    }
+    // Thrown from `finally`, this replaces the call's result: the module is
+    // dead, and the caller hears it from this call rather than the next.
     lines.push("          throw e;")
     lines.push("        }")
     lines.push("      }")
@@ -1023,7 +1050,8 @@ export const generateWasmLoader = (
   dtsFile: string
 ): string => {
   const table = compilation.table
-  const bridge = wasmBridged(table, fns, structsHoldingVectors(compilation))
+  const keepsRoots = compilation.rootSymbols().length > 0
+  const bridge = wasmBridged(table, fns, structsHoldingVectors(compilation), keepsRoots)
   const layouts = storageLayouts(compilation)
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-dts", "// "))
@@ -1090,7 +1118,7 @@ export const generateWasmLoader = (
   lines.push("  const raw = instance.exports;")
   if (guard) {
     lines.push("  state.memory = raw.memory;")
-    pushAll(lines, guardLoader(bridge.needsRuntime))
+    pushAll(lines, guardLoader(bridge.needsRuntime, keepsRoots))
   }
   if (bridge.needsRuntime) {
     lines.push("  const memory = raw.memory;")
@@ -1575,7 +1603,9 @@ export const storageLayouts = (compilation: Compilation): StorageLayout[] => {
     const program = unit.checker.program
     index = index + 1
     for (const info of program.constantList) {
-      if (!info.storage || info.origin !== program.source || info.storageElem < 0) {
+      // Root storage (WP55) has no layout a page could read: the runtime
+      // moves what its slots point to.
+      if (!info.storage || info.root || info.origin !== program.source || info.storageElem < 0) {
         continue
       }
       const key = keys.has(info.name) ? info.storageSymbol : info.name
@@ -1643,7 +1673,7 @@ export const heapViewsNew = (): string[] => [
 export const layoutTypes = (layouts: StorageLayout[]): string[] => {
   const lines: string[] = []
   lines.push("/**")
-  lines.push(" * Where module storage lives in `memory` (WP50 §5.2). `length`, `stride` and")
+  lines.push(" * Where module storage lives in `memory`. `length`, `stride` and")
   lines.push(" * each field's byte offset are literal types, so a page that hard-codes one")
   lines.push(" * fails `tsc` once the layout changes. `at` is the byte address of the data,")
   lines.push(" * read from the instance at load; it never moves.")

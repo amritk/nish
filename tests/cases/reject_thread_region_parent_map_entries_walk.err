@@ -1,2 +1,2 @@
-reject_thread_region_parent_map_entries_walk.ts:28:16
-Destructuring is not supported
+reject_thread_region_parent_map_entries_walk.ts:28:26
+`for...of` over `Map<string, i32>` needs `entries()`, whose `[key, value]` pairs are two-type tuples

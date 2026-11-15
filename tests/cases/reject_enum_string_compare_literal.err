@@ -1,0 +1,1 @@
+Cannot compare a `Role` with a string using `===`: an enum value is not its string, so compare it with a member, such as `Role.Admin`

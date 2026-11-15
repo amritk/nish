@@ -2,13 +2,15 @@
 
 # nish/net/quic-recovery
 
-QUIC loss detection and congestion control (RFC 9002): the packets each packet number space has in flight, the round-trip estimate, loss by packet and by time threshold, the probe timeout with its backoff, NewReno, and a pacer. Sans-IO: it never sees a byte of a packet, only packet numbers, sizes and the caller's clock.
+QUIC loss detection and congestion control (RFC 9002): the packets each packet number space has in flight, the round-trip estimate, loss by packet and by time threshold, the probe timeout with its backoff, NewReno or CUBIC, and a pacer. Sans-IO: it never sees a byte of a packet, only packet numbers, sizes and the caller's clock.
 
 ```ts
 import {
   QUIC_RECOVERY_APPLICATION,
   QUIC_RECOVERY_APPLICATION_CAPACITY,
+  QUIC_RECOVERY_CUBIC,
   QUIC_RECOVERY_DATAGRAM_SIZE,
+  QUIC_RECOVERY_DEFAULT,
   QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY,
   QUIC_RECOVERY_ECN_CAPABLE,
   QUIC_RECOVERY_ECN_FAILED,
@@ -24,6 +26,7 @@ import {
   QUIC_RECOVERY_INITIAL_WINDOW,
   QUIC_RECOVERY_MAX_BACKOFF,
   QUIC_RECOVERY_MINIMUM_WINDOW,
+  QUIC_RECOVERY_NEWRENO,
   QUIC_RECOVERY_PACKET_THRESHOLD,
   QUIC_RECOVERY_PERSISTENT_THRESHOLD,
   QUIC_RECOVERY_TIMEOUT_LOSS,
@@ -31,6 +34,7 @@ import {
   QUIC_RECOVERY_TIMEOUT_PTO,
   QuicRecovery,
   QuicSentPackets,
+  quicRecoveryCbrt,
 } from "nish/net/quic-recovery";
 ```
 
@@ -49,6 +53,12 @@ if (now >= recovery.deadline(blocked)) { recovery.onTimeout(now, blocked); }
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="quic​Recovery​Cbrt" icon="phosphor/regular/function" href="#quicrecoverycbrt">
+
+The integer cube root of `x`, the largest r with r³ <= x, for 0 <= x <= `QUIC_RECOVERY_CUBIC_SPAN`³, found by bisection over 0 .. the span: 16 steps, the same answer on every machine, no floating point.
+
+</scalar-card>
 
 <scalar-card title="Quic​Recovery" icon="phosphor/regular/cube" href="#quicrecovery">
 
@@ -117,6 +127,22 @@ window.
 
 </scalar-detail>
 
+<scalar-detail title="Congestion control">
+
+`controller` picks it, once, before the first
+packet: `QUIC_RECOVERY_NEWRENO` (Appendix B, the default) or
+`QUIC_RECOVERY_CUBIC` (RFC 9438). Both share slow start, recovery
+periods, persistent congestion's collapse to the minimum window and the
+rule above for a window not in use. CUBIC keeps 0.7 of the window at a
+congestion event rather than half, then grows along W(t) = W_max + C ×
+(t − K)³ with C 0.4, concave up to the window it lost at and convex past
+it, never below what Reno would have reached (its Reno-friendly region),
+and with fast convergence. Its arithmetic is integers in bytes and
+milliseconds, and K's cube root is found by bisection, so two machines
+given the same events reach the same window to the byte.
+
+</scalar-detail>
+
 <scalar-detail title="ECN">
 
 **ECN** (§7.1, B.7; RFC 9000 §13.4.2 and its Appendix A.4). A caller that
@@ -152,10 +178,34 @@ connection.
 
 </scalar-detail>
 
-Written from RFC 9002 §5 to §7 and its Appendices A and B, in this
+Written from RFC 9002 §5 to §7 and its Appendices A and B, and RFC 9438, in this
 module's own structure; nothing here is ported from another
 implementation. Private names carry the `quicRecovery` prefix
 (`docs/wp26-stdlib.md` §3e).
+
+## Functions
+
+### quicRecoveryCbrt
+
+The integer cube root of `x`, the largest r with r³ <= x, for 0 <= x <=
+`QUIC_RECOVERY_CUBIC_SPAN`³, found by bisection over 0 .. the span: 16
+steps, the same answer on every machine, no floating point.
+
+```ts
+function quicRecoveryCbrt(x: i64): i64
+```
+
+<scalar-field name="x" type="i64" required>
+
+The cube, 0 to 40000³.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i64">
+
+Its root, 0 to 40000.
+
+</scalar-field>
 
 ## Classes
 
@@ -176,6 +226,15 @@ class QuicRecovery
 | `new QuicRecovery()` | Makes the state a new connection has, as `reset` leaves it: every space empty, the RTT estimate and the window at their initial values. |
 | `congestionEvents: i32` | How many congestion events reduced the window, and how many of them were persistent congestion. |
 | `congestionWindow: i64` | congestion_window (B.2), in bytes. |
+| `controller: i32` | The congestion controller, `QUIC_RECOVERY_NEWRENO` or `QUIC_RECOVERY_CUBIC`, which the caller sets once, before the first packet; `reset` keeps it. |
+| `cubicCarry: i64` | What the window's last step toward the curve truncated: the numerator of a fraction of the window then, so steps smaller than a byte add up instead of being lost (RFC 9438's cwnd_cnt). |
+| `cubicEpoch: i64` | When CUBIC's congestion avoidance stage began (t = 0 of its curve), in milliseconds, or -1 outside one. |
+| `cubicEst: i64` | CUBIC's W_est (§4.3) in bytes: the window Reno's AIMD with β 0.7 would have reached since `cubicEpoch`. |
+| `cubicEstCarry: i64` | What `cubicEst`'s last step truncated: the numerator of a fraction of 17 × the window then. |
+| `cubicIdle: i64` | When the window last stopped being used (§5.8) during a congestion avoidance stage, or -1: the curve's epoch moves on by the time it was idle, so it resumes where it stood. |
+| `cubicK: i64` | CUBIC's K in milliseconds: how long after `cubicEpoch` the curve reaches `cubicMax`. |
+| `cubicMax: i64` | CUBIC's W_max (RFC 9438 §4.2) in bytes: the window its curve plateaus at, 0 before the first congestion event. |
+| `cubicPrior: i64` | CUBIC's cwnd_prior (§4.6): the window just before the last reduction, in bytes. |
 | `datagramSize: i64` | max_datagram_size (B.1): the largest datagram the connection sends on this path, 1200 until path MTU discovery validates more. The initial and minimum windows and congestion avoidance's step are counted in it. `resetPath`, which the constructor runs, sets it to `QUIC_RECOVERY_DATAGRAM_SIZE`; a field's initializer must be a literal. |
 | `ecnCongestionEvents: i32` | How many congestion events a rise in the ECN-CE count caused (§7.1). |
 | `ecnState: i32` | ECN's state, `QUIC_RECOVERY_ECN_TESTING` until a marked packet's counts validate or fail. |
@@ -320,6 +379,14 @@ The Application Data space's index.
 
 </scalar-card>
 
+<scalar-card title="1" icon="phosphor/regular/hash">
+
+`QUIC_RECOVERY_CUBIC: i32`
+
+The congestion controller of RFC 9438: CUBIC, with its Reno-friendly region and fast convergence.
+
+</scalar-card>
+
 <scalar-card title="1,200" icon="phosphor/regular/hash">
 
 `QUIC_RECOVERY_DATAGRAM_SIZE: i64`
@@ -327,6 +394,19 @@ The Application Data space's index.
 max_datagram_size (B.1) on a path nothing has been learnt of: the 1200
 bytes every datagram is at most until path MTU discovery validates more
 (`QuicRecovery.datagramSize`).
+
+</scalar-card>
+
+<scalar-card title="1" icon="phosphor/regular/hash">
+
+`QUIC_RECOVERY_DEFAULT: i32`
+
+The controller a server runs unless it has a reason to pick: CUBIC. It
+beat NewReno outside the spread across loss draws on transfers of 32 and
+128 bandwidth-delay products and finished level on one
+(`bench/quic-goodput.ts`; the figures are in docs/security/quic.md).
+It holds the same value as `QUIC_RECOVERY_CUBIC`, written out rather than
+aliased so the default reads as a choice of its own.
 
 </scalar-card>
 
@@ -432,6 +512,14 @@ kInitialWindow (§7.2) at 1200 bytes: min(10 × 1200, max(14720, 2 × 1200)), so
 `QUIC_RECOVERY_MINIMUM_WINDOW: i64`
 
 kMinimumWindow (§7.2) at 1200 bytes: two datagrams, 2400 bytes.
+
+</scalar-card>
+
+<scalar-card title="0" icon="phosphor/regular/hash">
+
+`QUIC_RECOVERY_NEWRENO: i32`
+
+The congestion controller of RFC 9002 §7 and Appendix B: NewReno.
 
 </scalar-card>
 

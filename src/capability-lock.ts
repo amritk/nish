@@ -376,7 +376,12 @@ export class CapabilityLock {
         return 0
       }
       const equals = entry.indexOf("=")
-      const c = capabilityIndex(equals >= 0 ? entry.slice(0, equals) : entry)
+      let c = -1
+      {
+        // The name is a temporary the pass drops once it has its index.
+        using _a = arena()
+        c = capabilityIndex(equals >= 0 ? entry.slice(0, equals) : entry)
+      }
       if (
         c < 0 ||
         (equals >= 0 && ((argumentCapabilities() & (1 << c)) === 0 || equals + 1 >= entry.length))

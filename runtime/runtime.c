@@ -368,6 +368,11 @@ uint64_t nish_arena_mark(void) {
 }
 uint64_t nish_arena_used(void) { return nish_arena.off; }
 
+/* ---- cErrno (WP27 S5, docs/wp27-ffi.md §10): compiled code zeroes errno through this
+ * pointer before a foreign call and copies it into the per-thread slot after. */
+NISH_TLS int32_t nish_errno_slot;
+int *nish_errno_ptr(void) { return &errno; }
+
 void nish_arena_release(uint64_t mark) {
   nish_chunk *c = nish_arena.chunks;
   if (!mark) { nish_reset_arena(); return; }

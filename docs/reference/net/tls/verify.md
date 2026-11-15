@@ -12,6 +12,7 @@ import {
   TlsClientTrust,
   tlsClientAuthenticate,
   tlsClientChain,
+  tlsClientDistrustSpki,
   tlsClientSystemTrust,
   tlsClientTrust,
   tlsClientVerdict,
@@ -40,6 +41,12 @@ Authenticates `client`'s server, while its interest says `TLS_RECORD_AUTH`: `tls
 <scalar-card title="tls​Client​Chain" icon="phosphor/regular/function" href="#tlsclientchain">
 
 The chain step: 0 when `chain` (DER, leaf first) leads to a root in `trust` and names `serverName` at `nowMs`, else the alert — `certificate_expired`, `unknown_ca` or `bad_certificate`.
+
+</scalar-card>
+
+<scalar-card title="tls​Client​Distrust​Spki" icon="phosphor/regular/function" href="#tlsclientdistrustspki">
+
+Distrusts a key in `trust`: every connection made with it from now on refuses, with `bad_certificate`, a server whose path holds a certificate (leaf, intermediate or root) whose subjectPublicKeyInfo DER hashes to `spkiSha256` under SHA-256 (`pkiDistrustSpki`).
 
 </scalar-card>
 
@@ -101,7 +108,8 @@ signatures, validity at the instant given, basicConstraints, keyUsage,
 serverAuth, name constraints — and that the leaf's subjectAltName names
 the host dialled. Its refusal becomes the alert: `certificate_expired` for
 a certificate outside its validity, `unknown_ca` when no path reaches a
-root of the store, and `bad_certificate` for every other reason. There is
+root of the store, and `bad_certificate` for every other reason, a key
+distrusted with `tlsClientDistrustSpki` among them. There is
 no switch that skips the step and none is to be added: a client that is to
 talk to a server it cannot authenticate is given a store holding its
 issuing root, never a way around the check (`docs/security/tls.md`, "The
@@ -199,6 +207,41 @@ The roots the chain must lead to.
 
 0 when the chain is accepted, else `TLS_ALERT_CERTIFICATE_EXPIRED` (also for a certificate not
   yet valid), `TLS_ALERT_UNKNOWN_CA`, or `TLS_ALERT_BAD_CERTIFICATE` for every other refusal.
+
+</scalar-field>
+
+### tlsClientDistrustSpki
+
+Distrusts a key in `trust`: every connection made with it from now on
+refuses, with `bad_certificate`, a server whose path holds a certificate
+(leaf, intermediate or root) whose subjectPublicKeyInfo DER hashes to
+`spkiSha256` under SHA-256 (`pkiDistrustSpki`). It is how a program stops
+trusting a CA its roots still hold, or a key known to be compromised,
+before the system bundle drops it. A trust distrusts nothing until this is
+called.
+
+```ts
+function tlsClientDistrustSpki(
+  trust: TlsClientTrust,
+  spkiSha256: u8[],
+): boolean
+```
+
+<scalar-field name="trust" type="TlsClientTrust" required>
+
+The trust to change; every connection that shares it sees the change.
+
+</scalar-field>
+
+<scalar-field name="spkiSha256" type="u8[]" required>
+
+The SHA-256 of the subjectPublicKeyInfo DER, 32 bytes.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+Whether the hash was added: false, and nothing added, unless it is 32 bytes long.
 
 </scalar-field>
 

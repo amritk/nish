@@ -271,6 +271,12 @@ const YAML_CLIP: i32 = 0
 const YAML_STRIP: i32 = 1
 const YAML_KEEP: i32 = 2
 
+/**
+ * A flow scalar's `extras` when its body is its source span, byte for byte.
+ * @internal Copied by std/yaml-json.ts with no search for a line break.
+ */
+export const YAML_VERBATIM: i32 = 1
+
 // ---- Options -------------------------------------------------------------------
 
 /** How `parseYamlWith` reads a stream. Make one with `new YamlOptions()` and set what differs. */
@@ -319,7 +325,8 @@ export class YamlStream {
   counts: i32[]
   /**
    * Per node: a block scalar's content indent, whether it was written, and its
-   * chomping, as `(indent + 1) * 8 + explicit * 4 + chomp`.
+   * chomping, as `(indent + 1) * 8 + explicit * 4 + chomp`; a flow scalar's
+   * `YAML_VERBATIM` when its source span is its body.
    * @internal Used by `yamlDecode` and `YamlParser`.
    */
   extras: i32[]
@@ -328,8 +335,12 @@ export class YamlStream {
    * @internal Used by `YamlParser`.
    */
   props: i32[]
-  /** Every collection's children, one collection after another. */
-  private kids: i32[]
+  /**
+   * Every collection's children, one collection after another.
+   * @internal Used by `YamlParser`, and read by std/yaml-json.ts, which walks
+   *   each collection's children in turn.
+   */
+  kids: i32[]
   /**
    * Per property slot: the anchor's name (after `&`), the tag as written, and the anchor table entry.
    * @internal Used by `YamlParser`.
@@ -414,9 +425,22 @@ export class YamlStream {
    */
   mergeStep: i32 = 0
   /**
+   * How many sequence items the parser's merge checks have read, so a test
+   * can see that a shared merge sequence is read once, not once per use.
+   * @internal Used by `YamlParser`.
+   */
+  mergeItemsChecked: i32 = 0
+  /**
    * Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is.
    */
   merge: boolean = true
+  /**
+   * @internal Set by `YamlParser`, and read by std/yaml-json.ts. Whether the
+   * parser reported every map that repeats a key, as `YamlOptions.uniqueKeys`
+   * said; `false` for a stream built by hand, so a reader that relies on it
+   * checks for itself.
+   */
+  uniqueKeys: boolean = false
 
   /**
    * An empty stream over `text`, for the parser to fill; get a parsed one from
@@ -1530,8 +1554,12 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
 
 /** Internal: scalar `n`'s core-schema type, from its text and its tag. */
 const yamlResolve = (stream: YamlStream, n: i32): i32 => {
-  const tag: string = stream.tag(n)
   const plain: boolean = stream.style(n) === YAML_PLAIN
+  // A node with no properties has no tag, which spares reading its text.
+  if (n < 0 || n >= stream.top || yamlAt(stream.props, n) < 0) {
+    return plain ? yamlPlainType(stream.source, stream.start(n), stream.end(n)) : YAML_STRING
+  }
+  const tag: string = stream.tag(n)
   if (tag === "") {
     return plain ? yamlPlainType(stream.source, stream.start(n), stream.end(n)) : YAML_STRING
   }
@@ -1567,26 +1595,12 @@ const yamlPlainType = (text: string, from: i32, to: i32): i32 => {
   if (!letter && !yamlIsDigit(c) && c !== YAML_DOT && c !== YAML_DASH && c !== YAML_PLUS && c !== 126) {
     return YAML_STRING
   }
-  if (
-    yamlIsWord(text, from, to, "~") ||
-    yamlIsWord(text, from, to, "null") ||
-    yamlIsWord(text, from, to, "Null") ||
-    yamlIsWord(text, from, to, "NULL")
-  ) {
+  // Each word is told by its first byte, so a text is compared with its own three at most.
+  if (c === 126 && to - from === 1) {
     return YAML_NULL
   }
-  if (
-    yamlIsWord(text, from, to, "true") ||
-    yamlIsWord(text, from, to, "True") ||
-    yamlIsWord(text, from, to, "TRUE") ||
-    yamlIsWord(text, from, to, "false") ||
-    yamlIsWord(text, from, to, "False") ||
-    yamlIsWord(text, from, to, "FALSE")
-  ) {
-    return YAML_BOOL
-  }
   if (letter) {
-    return YAML_STRING
+    return yamlWordType(text, from, to, c)
   }
   if (yamlIntBase(text, from, to) > 0) {
     return YAML_INT
@@ -1595,6 +1609,33 @@ const yamlPlainType = (text: string, from: i32, to: i32): i32 => {
     return YAML_FLOAT
   }
   return YAML_STRING
+}
+
+/**
+ * The type of the plain scalar `text[from, to)`, whose first byte `c` is one
+ * of `nNtTfF`: `YAML_NULL` for a `null`, `YAML_BOOL` for a `true` or `false`,
+ * in the core schema's three spellings each, and `YAML_STRING` otherwise.
+ */
+const yamlWordType = (text: string, from: i32, to: i32, c: i32): i32 => {
+  if (c === 110 || c === 78) {
+    const isNull: boolean =
+      yamlIsWord(text, from, to, "null") ||
+      yamlIsWord(text, from, to, "Null") ||
+      yamlIsWord(text, from, to, "NULL")
+    return isNull ? YAML_NULL : YAML_STRING
+  }
+  if (c === 116 || c === 84) {
+    const isTrue: boolean =
+      yamlIsWord(text, from, to, "true") ||
+      yamlIsWord(text, from, to, "True") ||
+      yamlIsWord(text, from, to, "TRUE")
+    return isTrue ? YAML_BOOL : YAML_STRING
+  }
+  const isFalse: boolean =
+    yamlIsWord(text, from, to, "false") ||
+    yamlIsWord(text, from, to, "False") ||
+    yamlIsWord(text, from, to, "FALSE")
+  return isFalse ? YAML_BOOL : YAML_STRING
 }
 
 /** The base of the core-schema integer `text[from, to)`, signed, decimal, `0x` or `0o`; `0` for none. */
@@ -1811,6 +1852,11 @@ class YamlParser {
   private scratch: i32[]
   /** Hash sets for the duplicate check of maps past YAML_PAIRWISE_KEYS pairs, reused as maps nest and end. */
   private keySets: YamlKeySet[]
+  /**
+   * Per sequence node an alias merge has named: `0` not yet checked, `1`
+   * every item merges a map, `2` one does not, so a shared sequence is read once.
+   */
+  private mergeVerdicts: u8[]
   private pos: i32 = 0
   private len: i32 = 0
   private depth: i32 = 0
@@ -1857,10 +1903,12 @@ class YamlParser {
     this.handlePrefixes = []
     this.scratch = []
     this.keySets = []
+    this.mergeVerdicts = []
     this.len = toI32(text.length)
     this.maxDepth = options.maxDepth
     this.uniqueKeys = options.uniqueKeys
     this.stream.merge = options.merge
+    this.stream.uniqueKeys = options.uniqueKeys
     this.keepComments = options.keepComments
     this.firstOnly = options.firstDocumentOnly
   }
@@ -2489,6 +2537,8 @@ class YamlParser {
     let indentReported: boolean = parentIndent < 0
     let closed: boolean = false
     let contentEnd: i32 = this.len
+    // No break, escape or doubled quote met: the span is the body.
+    let verbatim: boolean = true
     while (i < this.len) {
       const at: i32 = toI32(indexOfAny(this.text, single ? YAML_SINGLE_STOPS : YAML_DOUBLE_STOPS, i))
       if (at < 0) {
@@ -2499,6 +2549,7 @@ class YamlParser {
       const c: i32 = this.at(i)
       if (c === YAML_SQUOTE) {
         if (this.at(i + 1) === YAML_SQUOTE) {
+          verbatim = false
           i += 2
           continue
         }
@@ -2514,6 +2565,7 @@ class YamlParser {
         break
       }
       if (c === YAML_BACKSLASH) {
+        verbatim = false
         const e: i32 = this.at(i + 1)
         if (e < 0) {
           i = this.len
@@ -2530,6 +2582,7 @@ class YamlParser {
         continue
       }
       // A line break.
+      verbatim = false
       const after: i32 = yamlAfterBreak(this.text, i)
       if (this.isDocMarker(after)) {
         contentEnd = i
@@ -2552,6 +2605,9 @@ class YamlParser {
     )
     yamlPut(this.stream.firsts, node, start + 1)
     yamlPut(this.stream.counts, node, contentEnd)
+    if (verbatim && closed) {
+      yamlPut(this.stream.extras, node, YAML_VERBATIM)
+    }
     this.pos = i
     return node
   }
@@ -2720,6 +2776,8 @@ class YamlParser {
   private scanPlainScalar(parentIndent: i32): i32 {
     const start: i32 = this.pos
     let valueEnd: i32 = this.plainLineEnd(start)
+    // The first line's end: a scalar that stops there has no break in its span.
+    const firstEnd: i32 = valueEnd
     let colonReported: boolean = false
     const firstColon: i32 = this.plainColonAt(start, valueEnd)
     if (firstColon >= 0) {
@@ -2770,6 +2828,9 @@ class YamlParser {
     const node: i32 = this.stream.newNode(YAML_SCALAR, YAML_PLAIN, start, valueEnd)
     yamlPut(this.stream.firsts, node, start)
     yamlPut(this.stream.counts, node, valueEnd)
+    if (valueEnd === firstEnd) {
+      yamlPut(this.stream.extras, node, YAML_VERBATIM)
+    }
     return node
   }
 
@@ -3199,7 +3260,9 @@ class YamlParser {
     let valueEnd: i32 = this.trimEnd(start, i)
     if (!yamlIsBreak(this.at(i))) {
       this.pos = i
-      return this.plainNode(start, valueEnd)
+      const one: i32 = this.plainNode(start, valueEnd)
+      yamlPut(this.stream.extras, one, YAML_VERBATIM)
+      return one
     }
     let scan: i32 = yamlAfterBreak(this.text, i)
     while (true) {
@@ -3542,7 +3605,8 @@ class YamlParser {
    * Reports the value of merge key `key` unless it is a map, an alias
    * to one or a sequence of those; an empty value is reported on the key, a
    * sequence on each item that is not, and an alias to a sequence on the alias.
-   * An alias with no target is already reported.
+   * An alias with no target is already reported. An aliased sequence's
+   * verdict is kept, so a sequence many merges name is read once (YJ-5).
    */
   private checkMerge(key: i32, value: i32): void {
     const stream: YamlStream = this.stream
@@ -3553,15 +3617,18 @@ class YamlParser {
     const onAlias: boolean = stream.kind(value) === YAML_ALIAS
     const seq: i32 = onAlias ? stream.target(value) : value
     if (seq >= 0 && stream.kind(seq) === YAML_SEQ) {
+      if (onAlias) {
+        if (!this.aliasedSeqMerges(seq)) {
+          this.badMerge(stream.start(value), stream.end(value))
+        }
+        return
+      }
       const count: i32 = stream.count(seq)
       let i: i32 = 0
       while (i < count) {
         const item: i32 = stream.child(seq, i)
+        stream.mergeItemsChecked += 1
         if (!this.mergesMap(item)) {
-          if (onAlias) {
-            this.badMerge(stream.start(value), stream.end(value))
-            return
-          }
           this.badMerge(stream.start(item), stream.end(item))
         }
         i += 1
@@ -3569,6 +3636,34 @@ class YamlParser {
     } else if (!this.mergesMap(value)) {
       this.badMerge(stream.start(value), stream.end(value))
     }
+  }
+
+  /**
+   * Whether every item of sequence `seq`, which an alias merge names, merges
+   * a map: read up to its first item that does not the first time, then
+   * answered from the verdict kept for it.
+   */
+  private aliasedSeqMerges(seq: i32): boolean {
+    const stream: YamlStream = this.stream
+    this.mergeVerdicts = yamlRoomU8(this.mergeVerdicts, seq + 1)
+    const verdicts: u8[] = this.mergeVerdicts
+    if (seq < 0 || seq >= toI32(verdicts.length)) {
+      return false
+    }
+    const kept: i32 = toI32(verdicts[seq])
+    if (kept !== 0) {
+      return kept === 1
+    }
+    const count: i32 = stream.count(seq)
+    let good: boolean = true
+    let i: i32 = 0
+    while (good && i < count) {
+      stream.mergeItemsChecked += 1
+      good = this.mergesMap(stream.child(seq, i))
+      i += 1
+    }
+    verdicts[seq] = good ? toU8(1) : toU8(2)
+    return good
   }
 
   /** Whether `n` is a map, an alias to one or an alias with no target, which merges nothing and is reported as such. */

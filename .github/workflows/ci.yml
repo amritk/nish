@@ -74,6 +74,8 @@ on:
 
 permissions:
   contents: read
+  # gh attestation verify, for the seed scripts/fetch-seed.sh checks.
+  attestations: read
 
 # Node's on-disk V8 compile cache, for every job in this file.
 #
@@ -240,7 +242,7 @@ jobs:
         with:
           # Exact: tests/differential/emit-ts-known.txt quotes Node's own
           # messages as evidence, and is regenerated under this version.
-          node-version: 22.23.4
+          node-version: 26.13.1
           cache: npm
 
       # The crypto bench's Go twins (bench/crypto/*/go) build with
@@ -325,7 +327,7 @@ jobs:
           npm --version
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Typecheck
         run: npm run check
@@ -336,9 +338,22 @@ jobs:
       # makes is stage1's, and stage1 is `src/` built by this binary -- the
       # rolling freeze (WP19 G3) asked on the platform the suite runs on.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: |
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version
+
+      # The seed's link of src/compile.ts is a minute on one core, the same in
+      # every shard, and the same binary as the last run whose src/, std/, seed
+      # and toolchain were these: tests/self/compiler-cache.js keys it on all
+      # of them, and the Test step below copies it rather than linking again.
+      # Shard 1 alone saves a miss, since the eight build the same bytes.
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+        with:
+          save: ${{ matrix.shard == 1 }}
 
       # A server `nish run --watch` swaps closes its SO_REUSEPORT listener
       # while the new one is up, and Linux resets the connections still queued
@@ -759,7 +774,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The toolchain is installed on rows that have a seed to build with,
@@ -799,7 +814,7 @@ jobs:
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The tarball is .github/seed-targets.json's, resolved against the
       # release by `seeds`. This row exists *because* that asset is on the
@@ -825,6 +840,8 @@ jobs:
       - name: Download the seed
         id: download
         env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
@@ -929,7 +946,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The candidate is built by the reference through `--link`
@@ -954,7 +971,7 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The same verified download `bootstrap` makes, and the same rule about
       # the matrix reaching bash through `env:` rather than spliced into the
@@ -962,6 +979,8 @@ jobs:
       - name: Download the seed
         id: download
         env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
@@ -1049,7 +1068,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The toolchain links the candidate, and the sanitizer runtimes are for
@@ -1070,13 +1089,15 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # nish-cmp's verified download, with its refusal of a seed that is not
       # this row's.
       - name: Download the seed
         id: download
         env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
@@ -1148,7 +1169,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
@@ -1167,16 +1188,22 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The same seed, and the same compiler `npm test` builds in the `test`
-      # job; see there. This job has no suite to borrow it from, so it links
-      # its own.
+      # job; see there. It comes through the same cache, so on a hit this job
+      # reuses the binary the `test` job's shard 1 saved.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler with the seed
-        run: build/seed/bin/nish src/compile.ts --link build/nish
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: ${{ matrix.shard == 1 }}
 
       # The runner answers 1 when any check failed, so the step's own exit status
       # is the gate. Its last line is the summary, which is what a reader wants
@@ -1237,7 +1264,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
@@ -1256,12 +1283,22 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs,
       # and the section's GC check compiles examples/hello.ts with it.
       - name: Fetch the seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
+
+      # Each `node tests/run.js` below needs that stage1; this step links it, or
+      # restores the one an earlier run linked from the same inputs, and the
+      # seven runs copy it from build/cache rather than each spending 40 s on
+      # the link (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
 
       # `set -o pipefail` so that a failed check in the section fails the step
       # before the grep is asked anything; the grep is then the guard against a
@@ -1327,14 +1364,6 @@ jobs:
           node tests/run.js "chacha20 kernel" | tee "$RUNNER_TEMP/chacha20-kernel.log"
           grep -E '^PASS  chacha20 kernel: chacha20_hw_agree with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has' "$RUNNER_TEMP/chacha20-kernel.log"
 
-      # The figures, not a gate: S10's AArch64 verdict (`NISH_CHACHA20_ARM_ON`
-      # in runtime/runtime-chacha20.c) is read from this table, built with the
-      # stage1 the sections above linked into build/nish-test.
-      - name: ChaCha20-Poly1305 throughput on AArch64
-        run: |
-          node bench/chacha20.mjs --check --compiler build/nish-test
-          node bench/chacha20.mjs --runs 9 --compiler build/nish-test
-
       # WP38's CRC-32 on AArch64: the compiler's branch to the ARMv8 CRC32
       # kernel, run end to end against the Nish walk.
       - name: The lowered CRC-32 programs, natively on AArch64
@@ -1381,7 +1410,11 @@ jobs:
       # and NEON) held to the scalar reference and RFC 8439's vector, then
       # ChaCha20-Poly1305 seal and open timed on each against the Nish AEAD
       # with a copy column for the noise band, and the verdict against both
-      # routes' bars (docs/wp38-simd.md §3.1).
+      # routes' bars (docs/wp38-simd.md §3.1). S10's AArch64 verdict
+      # (`NISH_CHACHA20_ARM_ON` in runtime/runtime-chacha20.c) is read from
+      # this table. It is run once: an earlier step ran the same two commands
+      # with one run fewer, which cost the job a minute and a half for a
+      # second copy of the same table.
       - name: ChaCha20 throughput on AArch64
         run: |
           node bench/chacha20.mjs --check --compiler build/nish-test
@@ -1422,7 +1455,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The `test` job's macOS install step, word for word.
@@ -1442,12 +1475,22 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs.
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
+
+      # Both `node tests/run.js` runs below copy this stage1 from build/cache
+      # rather than linking it each (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
+        with:
+          save: ${{ matrix.shard == 1 }}
 
       # Linux routes all of 127.0.0.0/8 to lo; Darwin's lo0 carries 127.0.0.1
       # alone, and net_relay's loopback.ts opens sessions from 127.0.0.2 and
@@ -1529,7 +1572,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       # The `test` job's macOS install step, word for word.
@@ -1549,12 +1592,20 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # tests/run.js links its stage1 with the seed before any section runs.
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
+
+      # One stage1 for the run under each pin below, copied from build/cache
+      # rather than linked once per pin (tests/self/compiler-cache.js).
+      - name: The compiler under test
+        uses: ./.github/actions/compiler-cache
 
       # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
       # than getauxval: the agreement driver must name the ARMv8 path, and the
@@ -1604,7 +1655,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld + the sanitizer runtimes
@@ -1624,10 +1675,13 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       # build/nish: a target must be compiled with this checkout's std, which
@@ -1704,7 +1758,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install LLVM 18 + lld
@@ -1724,10 +1778,13 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Fetch the seed
         timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler
@@ -1780,11 +1837,11 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 26.13.1
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # package-lock.json agrees with package.json, read from the two files
       # alone: `npm ls --package-lock-only` never asks the registry, where

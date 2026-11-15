@@ -1,0 +1,5 @@
+# Runs of acc_effects that panic: one per line, the argv the program gets.
+# tests/run.js compares each, stdout, stderr and exit status, against the
+# program built with --no-elision, where the sum is the recursion.
+# noisy(3, 1000000000)
+1

@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-arg-spawn-exec-too-narrow",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_tool": [
+          "process.spawn=exec:true"
+        ]
+      }
+    }
+  }
+}

@@ -10,7 +10,7 @@ The 4 codes of band 0. [Diagnostics](../diagnostics.md) says what a code promise
 
 ## NL0001
 
-`SYNTAX` in `src/codes.ts`. Every syntax error shares one code: stage0 takes that text from the `typescript` package.
+`SYNTAX` in `src/codes.ts`. Every syntax error shares one code, whatever its text says.
 
 ## NL0002
 

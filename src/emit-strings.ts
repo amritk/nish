@@ -22,14 +22,25 @@ import {
 import { unwrapBoundsParens } from "./bounds"
 import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
-import { emitPanicTail, panicTailCallees } from "./emit-builtins"
+import { emitFfiNullTest, emitPanicTail, panicTailCallees } from "./emit-builtins"
 import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
-import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
-import { FunctionSig } from "./program"
+import { Node, NodeKind } from "./nodes"
+import { CheckedProgram, FunctionSig } from "./program"
 import { irEscape } from "./strings"
-import { isFloat, isForeignBuffer, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
+import {
+  isFloat,
+  isForeignBuffer,
+  isUnsigned,
+  T_BOOL,
+  T_F32,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  TypeTable,
+} from "./types"
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -49,6 +60,65 @@ export const addStringConstant = (module: IRModule, index: i32, text: string): s
 }
 
 // ---- Conversion to string -----------------------------------------------------------
+
+/**
+ * `String(r)` on a string enum, as the checker bound it: the global `String`,
+ * no function of the program's, and one argument whose type is a string enum.
+ */
+export const isEnumStringCall = (program: CheckedProgram, table: TypeTable, call: Node): boolean => {
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Ident || callee.text !== "String" || program.nodeCallees[call.id] !== null) {
+    return false
+  }
+  const args = call.children[1].children
+  return args.length === 1 && table.enumStrings(program.nodeTypes[args[0].id]) !== null
+}
+
+/**
+ * `String(r)`: a load from the enum's private table of its member strings,
+ * indexed by the ordinal `r` is. The table is added to the module the first
+ * time one of its strings is asked for:
+ *
+ * ```llvm
+ * @.enumstr.Role = private unnamed_addr constant [2 x i8*] [i8* <"admin">, i8* <"guest">], align 8
+ * %0 = sext i32 %r to i64
+ * %1 = getelementptr inbounds [2 x i8*], [2 x i8*]* @.enumstr.Role, i64 0, i64 %0
+ * %2 = load i8*, i8** %1, align 8
+ * ```
+ *
+ * The ordinal is in range by construction: an enum value is only ever one of
+ * its members, so the load needs no check.
+ */
+export const emitEnumString = (emitter: Emitter, call: Node): string => {
+  const arg = call.children[1].children[0]
+  const type = emitter.program.nodeTypes[arg.id]
+  return emitEnumStringOf(emitter, type, emitter.emitExpression(arg))
+}
+
+/** The string of the member of the string enum `type` whose ordinal is `ordinal`: the load `String(r)` is, which typed JSON's encoder shares. */
+export const emitEnumStringOf = (emitter: Emitter, enumType: i32, ordinal: string): string => {
+  const type = emitter.table.enumBase(enumType)
+  const found = emitter.table.enumStrings(type)
+  const texts: string[] = found === null ? [] : found
+  const symbol = emitter.table.nameOf(type)
+  const array = `[${texts.length} x i8*]`
+  const global = `@.enumstr.${symbol}`
+  if (!emitter.enumTables.has(symbol)) {
+    emitter.enumTables.add(symbol)
+    const entries: string[] = []
+    for (const text of texts) {
+      entries.push(`i8* ${emitter.stringConstant(text)}`)
+    }
+    emitter.declareGlobal(
+      `${global} = private unnamed_addr constant ${array} [${entries.join(", ")}], align 8`
+    )
+  }
+  const wide = emitter.fn.emitValue(`sext i32 ${ordinal} to i64`)
+  const slot = emitter.fn.emitValue(
+    `getelementptr inbounds ${array}, ${array}* ${global}, i64 0, i64 ${wide}`
+  )
+  return emitter.fn.emitValue(`load i8*, i8** ${slot}, align 8`)
+}
 
 /**
  * The runtime symbol that converts `type` to a string, or the empty string
@@ -118,7 +188,7 @@ export const emitTemplate = (emitter: Emitter, expr: Node): string => {
   let first = true
   for (const part of parts) {
     const value =
-      part.kind === N_TEMPLATE_TEXT ? emitter.stringConstant(part.text) : emitToString(emitter, part)
+      part.kind === NodeKind.TemplateText ? emitter.stringConstant(part.text) : emitToString(emitter, part)
     acc = first ? value : emitConcat(emitter, acc, value)
     first = false
   }
@@ -497,7 +567,10 @@ export const stringConstructCallees = (name: string, proven: boolean): string[] 
  */
 export const foreignStringIsNulFree = (arg: Node): boolean => {
   const inner = unwrapBoundsParens(arg)
-  return inner.kind === N_NULL || (inner.kind === N_STRING && inner.text.indexOf(String.fromCharCode(0)) < 0)
+  return (
+    inner.kind === NodeKind.Null ||
+    (inner.kind === NodeKind.String && inner.text.indexOf(String.fromCharCode(0)) < 0)
+  )
 }
 
 /** The runtime symbols a checked string argument to C calls, for the attribute pass. */
@@ -527,7 +600,7 @@ export const emitForeignString = (
   index: i32
 ): string => {
   const fn = emitter.fn
-  if (unwrapBoundsParens(arg).kind === N_NULL) {
+  if (unwrapBoundsParens(arg).kind === NodeKind.Null) {
     return "null"
   }
   if (foreignStringIsNulFree(arg)) {
@@ -722,8 +795,9 @@ const foreignCopy = (newStr: string): string => {
 /**
  * The NUL-terminated bytes at `value`, an `i8*` that is not null, copied into
  * the arena by the module's `@nish.ffi.str`: a `declare function`'s `string`
- * result once it is known not to be `NULL`, and `readCString`'s argument
- * (WP27 S3.3), which a `CPtr` type keeps from being null.
+ * result, and `readCString`'s argument (WP27 S3.3), each once its caller's
+ * `NULL` test (`emitFfiNullTest`, or `string | null`'s branch) has passed.
+ * The copy makes no test of its own, so neither path tests twice.
  */
 export const emitCStringCopy = (emitter: Emitter, value: string): string => {
   const copy = emitter.useRuntime("nish_str_new")
@@ -741,19 +815,16 @@ export const emitCStringCopy = (emitter: Emitter, value: string): string => {
  * see says the C function never answers it.
  */
 export const emitForeignStringResult = (emitter: Emitter, callee: FunctionSig, value: string): string => {
-  const fn = emitter.fn
-  const nullable = emitter.table.isNullable(callee.returnType)
-  const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
-  const nullBlock = fn.newBlock(nullable ? "ffi.none" : "ffi.null")
-  const someBlock = fn.newBlock("ffi.copy")
-  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${someBlock.label}`)
-  if (!nullable) {
-    fn.placeBlock(nullBlock)
+  if (!emitter.table.isNullable(callee.returnType)) {
     const message = `\`${callee.sourceName}\` returned NULL for a \`string\` result; declare it \`string | null\``
-    emitPanicTail(emitter, emitter.stringConstant(message))
-    fn.placeBlock(someBlock)
+    emitFfiNullTest(emitter, value, message)
     return emitCStringCopy(emitter, value)
   }
+  const fn = emitter.fn
+  const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
+  const nullBlock = fn.newBlock("ffi.none")
+  const someBlock = fn.newBlock("ffi.copy")
+  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${someBlock.label}`)
   const join = fn.newBlock("ffi.join")
   fn.placeBlock(someBlock)
   const copied = emitCStringCopy(emitter, value)

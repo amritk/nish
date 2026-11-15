@@ -20,39 +20,7 @@ import { CheckContext } from "./context"
 import { referenceTypeOf } from "./fnrefs"
 import { isMapOwner } from "./generics"
 import { StringMap } from "./map"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_AS,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CASE,
-  N_CLASS,
-  N_CONDITIONAL,
-  N_DEFAULT,
-  N_EMPTY,
-  N_EXPR_STMT,
-  N_FIELD,
-  N_FOR_OF,
-  N_IDENT,
-  N_INDEX,
-  N_LIST,
-  N_MEMBER,
-  N_MODULE_CONST,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_PARAM,
-  N_PAREN,
-  N_PROPERTY,
-  N_RETURN,
-  N_SPREAD,
-  N_SWITCH,
-  N_VAR,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { ParentTable } from "./parents"
 import { basename } from "./paths"
 import {
@@ -168,7 +136,7 @@ class RefPass {
    */
   refType(node: Node): i32 {
     // An assignment used as a value, `k(r = plus1)`, is the value it stores.
-    const typed = node.kind === N_BINARY && isRefAssignment(node.text) ? node.children[1] : node
+    const typed = node.kind === NodeKind.Binary && isRefAssignment(node.text) ? node.children[1] : node
     const type = this.stripType(this.typeOf(typed))
     return this.table.isFnRef(type) ? type : -1
   }
@@ -335,16 +303,16 @@ class RefPass {
     }
     const type = this.refType(node)
     switch (node.kind) {
-      case N_PAREN:
-      case N_AS:
+      case NodeKind.Paren:
+      case NodeKind.As:
         this.flow(node.children[0], target)
         return
-      case N_CONDITIONAL:
+      case NodeKind.Conditional:
         this.scan(node.children[0])
         this.flow(node.children[1], target)
         this.flow(node.children[2], target)
         return
-      case N_BINARY:
+      case NodeKind.Binary:
         if (node.text === "??" || node.text === "||" || node.text === "&&") {
           this.flow(node.children[0], target)
           this.flow(node.children[1], target)
@@ -368,9 +336,9 @@ class RefPass {
           return
         }
         break
-      case N_NULL:
+      case NodeKind.Null:
         return
-      case N_IDENT: {
+      case NodeKind.Ident: {
         const named = this.fnRefs[node.id]
         if (named !== null) {
           this.storeOne(target, named, node)
@@ -383,16 +351,16 @@ class RefPass {
         }
         break
       }
-      case N_MEMBER:
+      case NodeKind.Member:
         this.scan(node.children[0])
         this.storeFrom(target, this.fieldPlace(node.text, type), node)
         return
-      case N_INDEX:
+      case NodeKind.Index:
         this.scan(node.children[0])
         this.scan(node.children[1])
         this.storeFrom(target, this.elementPlace(type), node)
         return
-      case N_CALL: {
+      case NodeKind.Call: {
         const site = this.scanCall(node)
         if (!site) {
           const callee = this.callees[node.id]
@@ -427,7 +395,7 @@ class RefPass {
    */
   arrayMethod(call: Node, takes: boolean): i32 {
     const callee = call.children[0]
-    if (callee.kind !== N_MEMBER || this.callees[call.id] !== null) {
+    if (callee.kind !== NodeKind.Member || this.callees[call.id] !== null) {
       return -1
     }
     const receiver = this.typeOf(callee.children[0])
@@ -465,7 +433,7 @@ class RefPass {
   mapGet(call: Node): boolean {
     const access = call.children[0]
     const callee = this.callees[call.id]
-    if (access.kind !== N_MEMBER || access.text !== "get" || callee === null) {
+    if (access.kind !== NodeKind.Member || access.text !== "get" || callee === null) {
       return false
     }
     const owner = callee.owner
@@ -552,16 +520,16 @@ class RefPass {
   /** The place an assignment's left side names, or -1. */
   target(node: Node, type: i32): i32 {
     switch (node.kind) {
-      case N_PAREN:
+      case NodeKind.Paren:
         return this.target(node.children[0], type)
-      case N_IDENT: {
+      case NodeKind.Ident: {
         const local = this.locals[node.id]
         return local === null ? -1 : this.localPlace(local, type)
       }
-      case N_MEMBER:
+      case NodeKind.Member:
         this.scan(node.children[0])
         return this.fieldPlace(node.text, type)
-      case N_INDEX:
+      case NodeKind.Index:
         this.scan(node.children[0])
         this.scan(node.children[1])
         return this.elementPlace(type)
@@ -574,20 +542,20 @@ class RefPass {
   /** Walk a statement or an expression whose value goes nowhere the pass follows. */
   scan(node: Node): void {
     switch (node.kind) {
-      case N_ARROW:
+      case NodeKind.Arrow:
         // A lifted arrow is a function of its own, walked as one.
         return
-      case N_VAR_DECL: {
+      case NodeKind.VarDecl: {
         const init = node.children[2]
         const local = this.locals[node.id]
-        if (init.kind !== N_EMPTY && local !== null && this.isRef(init)) {
+        if (init.kind !== NodeKind.Empty && local !== null && this.isRef(init)) {
           this.flow(init, this.localPlace(local, this.refType(init)))
         } else {
           this.scan(init)
         }
         return
       }
-      case N_BINARY: {
+      case NodeKind.Binary: {
         const op = node.text
         if (isRefAssignment(op) && this.isRef(node.children[1])) {
           const place = this.target(node.children[0], this.refType(node.children[1]))
@@ -596,14 +564,14 @@ class RefPass {
         }
         break
       }
-      case N_CALL:
+      case NodeKind.Call:
         this.scanCall(node)
         return
-      case N_NEW:
+      case NodeKind.New:
         this.scan(node.children[0])
         this.scanArgs(this.callees[node.id], node.children[2], -1)
         return
-      case N_RETURN: {
+      case NodeKind.Return: {
         const sig = this.sig
         const value = node.children.length > 0 ? node.children[0] : node
         if (sig !== null && value !== node && this.isRef(value)) {
@@ -612,9 +580,9 @@ class RefPass {
         }
         break
       }
-      case N_ARRAY:
+      case NodeKind.Array:
         for (const element of node.children) {
-          if (element.kind === N_SPREAD) {
+          if (element.kind === NodeKind.Spread) {
             this.scan(element)
           } else if (this.isRef(element)) {
             this.flow(element, this.elementPlace(this.refType(element)))
@@ -623,15 +591,15 @@ class RefPass {
           }
         }
         return
-      case N_PROPERTY:
+      case NodeKind.Property:
         if (node.children.length > 0 && this.isRef(node.children[0])) {
           this.flow(node.children[0], this.fieldPlace(node.text, this.refType(node.children[0])))
           return
         }
         break
-      case N_FOR_OF: {
+      case NodeKind.ForOf: {
         const head = node.children[0]
-        if (head.kind === N_VAR && head.children.length > 0 && head.children[0].children.length > 0) {
+        if (head.kind === NodeKind.Var && head.children.length > 0 && head.children[0].children.length > 0) {
           const decl = head.children[0].children[0]
           const local = this.locals[decl.id]
           const type = local === null ? -1 : this.stripType(local.type)
@@ -677,11 +645,11 @@ class RefPass {
   /** A module's own code: its constants' initialisers and its classes' field initialisers. */
   walkModule(file: Node): void {
     for (const decl of file.children) {
-      if (decl.kind === N_MODULE_CONST) {
+      if (decl.kind === NodeKind.ModuleConst) {
         this.scan(decl)
-      } else if (decl.kind === N_CLASS) {
+      } else if (decl.kind === NodeKind.Class) {
         for (const member of decl.children[3].children) {
-          if (member.kind === N_FIELD && member.children[2].kind !== N_EMPTY) {
+          if (member.kind === NodeKind.Field && member.children[2].kind !== NodeKind.Empty) {
             const init = member.children[2]
             if (this.isRef(init)) {
               this.flow(init, this.fieldPlace(member.children[0].text, this.refType(init)))
@@ -699,7 +667,7 @@ class RefPass {
     if (body === null) {
       return
     }
-    if (body.kind === N_BLOCK) {
+    if (body.kind === NodeKind.Block) {
       this.scan(body)
     } else if (this.isRef(body)) {
       this.flow(body, this.returnPlace(sig, this.refType(body)))
@@ -776,9 +744,17 @@ const storeText = (pass: RefPass, modules: RefModule[], s: i32): string => {
   let node = pass.storeNode[s]
   const value = node
   let up = module.parents.parentOf(node)
-  while (up !== null && up.kind !== N_BLOCK && up.kind !== N_EXPR_STMT && up.kind !== N_ARROW) {
+  while (
+    up !== null &&
+    up.kind !== NodeKind.Block &&
+    up.kind !== NodeKind.ExprStmt &&
+    up.kind !== NodeKind.Arrow
+  ) {
     const above = module.parents.parentOf(up)
-    if (above === null || (up.kind === N_LIST && above.kind !== N_CALL && above.kind !== N_NEW)) {
+    if (
+      above === null ||
+      (up.kind === NodeKind.List && above.kind !== NodeKind.Call && above.kind !== NodeKind.New)
+    ) {
       break
     }
     node = up
@@ -854,7 +830,7 @@ class Builder {
     this.module = module
   }
 
-  node(kind: i32, text: string, children: Node[]): Node {
+  node(kind: NodeKind, text: string, children: Node[]): Node {
     const made = new Node(kind, 0, 0)
     made.id = this.module.nodeCount
     this.module.nodeCount = this.module.nodeCount + 1
@@ -865,12 +841,12 @@ class Builder {
 
   empty(): Node {
     const none: Node[] = []
-    return this.node(N_EMPTY, "", none)
+    return this.node(NodeKind.Empty, "", none)
   }
 
   ident(name: string): Node {
     const none: Node[] = []
-    return this.node(N_IDENT, name, none)
+    return this.node(NodeKind.Ident, name, none)
   }
 
   /** `return $mk($a0, ...)`, or the call and a bare `return` when the result is `void`. */
@@ -881,14 +857,14 @@ class Builder {
       args.push(this.ident(`$a${i}`))
       i = i + 1
     }
-    const call = this.node(N_CALL, "", [this.ident(`$m${k}`), this.node(N_LIST, "", args)])
+    const call = this.node(NodeKind.Call, "", [this.ident(`$m${k}`), this.node(NodeKind.List, "", args)])
     if (returnType === T_VOID) {
-      return this.node(N_BLOCK, "", [
-        this.node(N_EXPR_STMT, "", [call]),
-        this.node(N_RETURN, "", [this.empty()]),
+      return this.node(NodeKind.Block, "", [
+        this.node(NodeKind.ExprStmt, "", [call]),
+        this.node(NodeKind.Return, "", [this.empty()]),
       ])
     }
-    return this.node(N_BLOCK, "", [this.node(N_RETURN, "", [call])])
+    return this.node(NodeKind.Block, "", [this.node(NodeKind.Return, "", [call])])
   }
 }
 
@@ -910,10 +886,10 @@ const makeDispatcher = (
   const build = new Builder(module)
   const params = table.fnRefParamsOf(type)
   const returnType = table.fnRefResultOf(type)
-  const paramNodes: Node[] = [build.node(N_PARAM, "", [build.ident("$t"), build.empty()])]
+  const paramNodes: Node[] = [build.node(NodeKind.Param, "", [build.ident("$t"), build.empty()])]
   let i = 0
   while (i < params.length) {
-    paramNodes.push(build.node(N_PARAM, "", [build.ident(`$a${i}`), build.empty()]))
+    paramNodes.push(build.node(NodeKind.Param, "", [build.ident(`$a${i}`), build.empty()]))
     i = i + 1
   }
   const statements: Node[] = []
@@ -927,23 +903,25 @@ const makeDispatcher = (
     for (const member of members) {
       const arm = build.arm(k, params.length, returnType)
       if (k === members.length - 1) {
-        clauses.push(build.node(N_DEFAULT, "", [arm]))
+        clauses.push(build.node(NodeKind.Default, "", [arm]))
       } else {
         const none: Node[] = []
-        const label = build.node(N_NUMBER, `${member.refTag}`, none)
-        clauses.push(build.node(N_CASE, "", [label, arm]))
+        const label = build.node(NodeKind.Number, `${member.refTag}`, none)
+        clauses.push(build.node(NodeKind.Case, "", [label, arm]))
       }
       k = k + 1
     }
-    statements.push(build.node(N_SWITCH, "", [build.ident("$t"), build.node(N_LIST, "", clauses)]))
+    statements.push(
+      build.node(NodeKind.Switch, "", [build.ident("$t"), build.node(NodeKind.List, "", clauses)])
+    )
   }
   const typeParams: Node[] = []
-  const arrow = build.node(N_ARROW, "", [
+  const arrow = build.node(NodeKind.Arrow, "", [
     build.empty(),
-    build.node(N_LIST, "", paramNodes),
+    build.node(NodeKind.List, "", paramNodes),
     build.empty(),
-    build.node(N_BLOCK, "", statements),
-    build.node(N_LIST, "", typeParams),
+    build.node(NodeKind.Block, "", statements),
+    build.node(NodeKind.List, "", typeParams),
   ])
   const ctx = module.ctx
   const fn = new FunctionSig(name, name, arrow)

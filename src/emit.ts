@@ -30,6 +30,7 @@
 //     parameters at `emitFunction`, the `!dbg` location around every statement
 //     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
+import { RootTraces } from "./emit-root"
 import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
 import { emitRegionBody } from "./emit-region"
@@ -73,6 +74,8 @@ import {
   emitJsonPutF64Kernel,
   storageDeclaration,
   storageGlobals,
+  tableDeclaration,
+  tableGlobals,
 } from "./emit-arrays"
 import {
   checksArgumentRange,
@@ -164,13 +167,23 @@ import {
   emitForeignBuffers,
   emitForeignString,
   emitForeignStringResult,
+  emitEnumString,
   emitIndexOfAnyKernel,
   emitRegexScanKernel,
   emitTemplate,
+  isEnumStringCall,
 } from "./emit-strings"
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
+import {
+  RecursionLoop,
+  emitsAsLoop,
+  closeAccumulation,
+  emitAccumulateTail,
+  incomingName,
+  openAccumulation,
+} from "./emit-accumulate"
 import {
   AES_HW,
   AES_SEAM_NONE,
@@ -195,45 +208,7 @@ import {
   SHA256_KERNEL,
 } from "./kernels"
 import { StringMap, StringSet } from "./map"
-import {
-  N_ARRAY,
-  N_BINARY,
-  N_BLOCK,
-  N_BREAK,
-  N_CALL,
-  N_CONDITIONAL,
-  N_CONSTRUCTOR,
-  N_CONTINUE,
-  N_DO,
-  N_EMPTY,
-  N_EXPR_STMT,
-  FLAG_USING,
-  N_FALSE,
-  N_FOR,
-  N_FOR_OF,
-  N_IDENT,
-  N_IF,
-  N_INDEX,
-  N_LABELED,
-  N_MEMBER,
-  N_NEW,
-  N_NULL,
-  N_NUMBER,
-  N_OBJECT,
-  N_PAREN,
-  N_RETURN,
-  N_STRING,
-  N_SWITCH,
-  N_TEMPLATE,
-  N_THIS,
-  N_THROW,
-  N_TRUE,
-  N_UNARY,
-  N_VAR,
-  N_WHILE,
-  Node,
-  nodeName,
-} from "./nodes"
+import { FLAG_USING, Node, NodeKind, bindsHiddenReceiver, nodeName } from "./nodes"
 import { compatMetadata } from "./compat"
 import { Options } from "./options"
 import { TbaaCache } from "./tbaa"
@@ -254,6 +229,8 @@ import {
   ARENA_GLOBAL_TLS,
   ARENA_TYPE,
   ARGV_GLOBAL,
+  ERRNO_SLOT_GLOBAL,
+  ERRNO_SLOT_GLOBAL_TLS,
   ARRAY_TYPE,
   inlineAllocator,
   inlineAllocatorAttrs,
@@ -323,6 +300,8 @@ export class Emitter {
   current: FunctionFacts
   /** Its signature, which is how the prologue finds the class `this` belongs to. */
   currentSig: FunctionSig | null
+  /** Issue #1582: the loop a self-recursive checked sum is emitted as (`src/emit-accumulate.ts`), or null. */
+  accumulator: RecursionLoop | null
   /**
    * WP6: node id of the call this function's `return` lowers as a tail call,
    * or `-1` for none. See `planTailCall`.
@@ -383,9 +362,13 @@ export class Emitter {
   paramObjectValues: string[]
   /** Runtime symbols this module referenced; drives which declarations are emitted. */
   usedRuntime: StringSet
+  /** Runtime symbols this module defines itself (root storage's arena resets, WP55): never declared. */
+  definesRuntime: StringSet
   /** Interned string literals: text -> index into `stringRefs`. */
   strings: StringMap
   stringRefs: string[]
+  /** The string enums whose `@.enumstr.<symbol>` table `String(r)` has added to this module. */
+  enumTables: StringSet
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
   /** WP50 S3: the module's panic sites on wasm32 (`PanicSiteTable`); null elsewhere. */
@@ -449,6 +432,7 @@ export class Emitter {
     this.asyncLanes = []
     this.asyncPolls = []
     this.tailCallId = -1
+    this.accumulator = null
     this.uncopied = -1
     this.loops = []
     this.labelNames = []
@@ -469,8 +453,10 @@ export class Emitter {
     this.paramObjectNames = []
     this.paramObjectValues = []
     this.usedRuntime = new StringSet()
+    this.definesRuntime = new StringSet()
     this.readsArenaGlobal = false
     this.strings = new StringMap()
+    this.enumTables = new StringSet()
     this.stringRefs = []
     this.debug = null
     this.panicSites = isWasmBuild(opts) && opts.panicSites ? new PanicSiteTable() : null
@@ -505,9 +491,13 @@ export class Emitter {
       this.module.addTypeDecl(decl)
     }
     // WP50 S3: module storage is static, so it is defined here and not built.
+    const traces = new RootTraces()
     for (const info of this.program.constantList) {
       if (info.storage && info.origin === this.program.source) {
-        storageGlobals(this, info)
+        storageGlobals(this, info, traces)
+      }
+      if (info.table && info.origin === this.program.source) {
+        tableGlobals(this, info)
       }
     }
     for (const sig of this.program.functions) {
@@ -604,6 +594,7 @@ export class Emitter {
     // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
     const isPrivate = privateAbi(this.opts, sig.visibleOutside())
+    const looped = emitsAsLoop(this, sig, facts)
     let i = 0
     while (i < sig.paramNames.length) {
       // WP29: a compile-time function parameter is a position in the call and
@@ -618,7 +609,7 @@ export class Emitter {
       if (optimize) {
         attrs = paramAttributes(this.table, name, type, facts, isPrivate)
       }
-      params.push(new IRParam(name, this.llvmAbi(type, isPrivate), attrs))
+      params.push(new IRParam(looped ? incomingName(name) : name, this.llvmAbi(type, isPrivate), attrs))
       i = i + 1
     }
     // WP29: the captures of the arrows an instance was given, which it passes
@@ -676,6 +667,7 @@ export class Emitter {
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
+    this.accumulator = null
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     const debug = this.debug
     if (debug !== null) {
@@ -714,9 +706,12 @@ export class Emitter {
     if (sig.role === ROLE_CONSTRUCTOR) {
       emitConstructorPrologue(this, sig)
     }
-    const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
+    const body = sig.decl.kind === NodeKind.Constructor ? sig.decl.children[1] : sig.decl.children[3]
     // A concise arrow body is the one `return` it means; `nish:secret`'s
     // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
+    if (looped) {
+      openAccumulation(this, sig) // issue #1582
+    }
     if (sig.dispatcher && this.opts.profile === "debug" && sig.refMembers.length > 0) {
       emitTagCheck(this, sig) // WP51 §6
     }
@@ -734,12 +729,18 @@ export class Emitter {
       emitChannelSendBody(this, sig) // WP29 P3
     } else if (isAtomicMethod(sig)) {
       emitAtomicBody(this, sig)
-    } else if (body.kind === N_BLOCK) {
+    } else if (body.kind === NodeKind.Block) {
       this.emitBlock(body)
+    } else if (sig.returnType === T_VOID) {
+      this.emitExpression(body) // `checkVoidConciseBody`: a statement, its answer dropped
     } else {
       this.emitReturnValue(body)
     }
 
+    const acc = this.accumulator
+    if (acc !== null) {
+      closeAccumulation(this, acc)
+    }
     // Void functions may fall off the end; give them an explicit terminator.
     if (!this.fn.currentBlock().terminated()) {
       this.emitScopeExit()
@@ -799,10 +800,10 @@ export class Emitter {
       return false
     }
     let inner = value
-    while (inner.kind === N_PAREN) {
+    while (inner.kind === NodeKind.Paren) {
       inner = inner.children[0]
     }
-    if (inner.kind !== N_CALL) {
+    if (inner.kind !== NodeKind.Call) {
       return false
     }
     const callee = this.program.nodeCallees[inner.id]
@@ -814,6 +815,10 @@ export class Emitter {
     // with a string argument (`strchr`) is refused by `marksTailCall` already;
     // this keeps the copy out of a released scope for the rest by construction.
     if (callee.foreign() && this.table.stripNull(callee.returnType) === T_STRING) {
+      return false
+    }
+    // WP27 S5: errno is saved after the call, so neither is it the last thing.
+    if (callee.foreign() && this.program.capturesErrno) {
       return false
     }
     const argTypes: i32[] = []
@@ -1131,6 +1136,34 @@ export class Emitter {
   }
 
   /**
+   * WP27 S5 (`docs/wp27-ffi.md` §10): `errno = 0` ahead of a foreign call, and
+   * the address of this thread's errno, which `saveErrno` reads after it. The
+   * compiler never names `__errno_location` or `__error`: the runtime takes
+   * `&errno` in C, so each libc keeps its own definition.
+   */
+  zeroErrno(): string {
+    const errno = this.fn.emitValue(`call i32* ${this.useRuntime("nish_errno_ptr")}()`)
+    this.fn.emit(`store i32 0, i32* ${errno}${this.opts.optimizeAttributes ? ", align 4" : ""}`)
+    return errno
+  }
+
+  /** Copies errno into `@nish_errno_slot` right after the call; "" means no capture. */
+  saveErrno(errno: string): void {
+    if (errno === "") {
+      return
+    }
+    const align = this.opts.optimizeAttributes ? ", align 4" : ""
+    const value = this.fn.emitValue(`load i32, i32* ${errno}${align}`)
+    this.fn.emit(`store i32 ${value}, i32* ${this.errnoSlot()}${align}`)
+  }
+
+  /** `@nish_errno_slot`, declared per thread under `--threads` (`ERRNO_SLOT_GLOBAL_TLS`). */
+  errnoSlot(): string {
+    this.declareGlobal(this.opts.threads ? ERRNO_SLOT_GLOBAL_TLS : ERRNO_SLOT_GLOBAL)
+    return "@nish_errno_slot"
+  }
+
+  /**
    * A host module's export (WP50 S2, `docs/wp50-wasm-host.md` §4): the same
    * empty-attribute declaration, imported from the page's `host` namespace by
    * its own name, so `wasm-ld` leaves it an import and needs no
@@ -1301,7 +1334,7 @@ export class Emitter {
     }
     for (const rt of this.runtime.functions) {
       // Intrinsics are not part of the C ABI prelude: declared only when used.
-      if (!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) {
+      if ((!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) || this.definesRuntime.has(rt.name)) {
         continue
       }
       const group = this.opts.optimizeAttributes ? ` ${this.module.attrGroupFor(rt.attrs)}` : ""
@@ -1410,10 +1443,10 @@ export class Emitter {
 
   emitStatementKind(stmt: Node): void {
     switch (stmt.kind) {
-      case N_RETURN:
+      case NodeKind.Return:
         this.emitReturn(stmt)
         return
-      case N_VAR:
+      case NodeKind.Var:
         // WP53 Q12(a): each declarator of a `using` opens before the next
         // initialiser runs, so one that leaves the function closes the ones
         // before it.
@@ -1424,40 +1457,40 @@ export class Emitter {
           }
         }
         return
-      case N_EXPR_STMT:
+      case NodeKind.ExprStmt:
         this.emitExpression(stmt.children[0])
         return
-      case N_BLOCK:
+      case NodeKind.Block:
         this.emitBlock(stmt)
         return
-      case N_IF:
+      case NodeKind.If:
         emitIf(this, stmt)
         return
-      case N_WHILE:
+      case NodeKind.While:
         emitWhile(this, stmt)
         return
-      case N_DO:
+      case NodeKind.Do:
         emitDo(this, stmt)
         return
-      case N_FOR:
+      case NodeKind.For:
         emitFor(this, stmt)
         return
-      case N_FOR_OF:
+      case NodeKind.ForOf:
         emitForOf(this, stmt)
         return
-      case N_SWITCH:
+      case NodeKind.Switch:
         emitSwitch(this, stmt)
         return
-      case N_BREAK:
+      case NodeKind.Break:
         emitBreak(this, stmt)
         return
-      case N_CONTINUE:
+      case NodeKind.Continue:
         emitContinue(this, stmt)
         return
-      case N_LABELED:
+      case NodeKind.Labeled:
         emitLabeled(this, stmt)
         return
-      case N_THROW:
+      case NodeKind.Throw:
         emitThrow(this, stmt)
         return
       default:
@@ -1473,7 +1506,7 @@ export class Emitter {
     // value, in `emitScopeExit`, because the value may read what it allocated.
     emitScopeJoins(this, 0, false)
     const value = stmt.children[0]
-    if (value.kind === N_EMPTY) {
+    if (value.kind === NodeKind.Empty) {
       this.emitScopeExit()
       this.fn.emit("ret void")
       return
@@ -1490,6 +1523,11 @@ export class Emitter {
     const sig = this.currentSig
     if (sig === null) {
       process.exit(internalErrorFor("emitter: `return` outside a function", this.opts.json))
+    }
+    const acc = this.accumulator
+    if (acc !== null) {
+      emitAccumulateTail(this, acc, value)
+      return
     }
     // WP17: a small `Result` leaves in a register. It is built before the
     // scope release, because the object it may be read out of is arena memory
@@ -1553,8 +1591,9 @@ export class Emitter {
       this.setSlot(local, slot)
       const init = this.emitExpression(decl.children[2])
       this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`)
+      // A pattern's hidden receiver is not shown to a debugger; its names are.
       const debug = this.debug
-      if (debug !== null) {
+      if (debug !== null && !bindsHiddenReceiver(decl)) {
         debug.declareLocal(this.fn, local, slot, decl) // `-g`: llvm.dbg.declare on the slot
       }
     }
@@ -1638,47 +1677,47 @@ export class Emitter {
 
   emitRawExpression(expr: Node): string {
     switch (expr.kind) {
-      case N_PAREN:
+      case NodeKind.Paren:
         return this.emitExpression(expr.children[0])
-      case N_NUMBER:
+      case NodeKind.Number:
         // A `HostHandle` literal is the `0` that names nothing, an `i32`.
         return numericConstant(
           expr.text,
           this.table.isHostHandle(this.typeOf(expr)) ? T_I32 : this.typeOf(expr)
         )
-      case N_TRUE:
+      case NodeKind.True:
         return "true"
-      case N_FALSE:
+      case NodeKind.False:
         return "false"
-      case N_NULL:
+      case NodeKind.Null:
         // `null` of a `T | null` type: the pointer constant, or tag 0 of a
         // function reference, which names no function (WP51 stage 2).
         return this.table.isFnRef(this.table.stripNull(this.typeOf(expr))) ? "0" : "null"
-      case N_STRING:
+      case NodeKind.String:
         return this.stringConstant(expr.text)
-      case N_TEMPLATE:
+      case NodeKind.Template:
         return emitTemplate(this, expr)
-      case N_IDENT:
+      case NodeKind.Ident:
         return this.emitIdentifier(expr)
-      case N_THIS:
+      case NodeKind.This:
         return "%this"
-      case N_UNARY:
+      case NodeKind.Unary:
         return emitUnary(this, expr)
-      case N_BINARY:
+      case NodeKind.Binary:
         return this.emitBinaryExpression(expr)
-      case N_CONDITIONAL:
+      case NodeKind.Conditional:
         return emitConditional(this, expr)
-      case N_CALL:
+      case NodeKind.Call:
         return this.emitCall(expr)
-      case N_NEW:
+      case NodeKind.New:
         return emitNew(this, expr)
-      case N_MEMBER:
+      case NodeKind.Member:
         return this.guardedRead(expr, this.emitMember(expr))
-      case N_INDEX:
+      case NodeKind.Index:
         return this.guardedRead(expr, emitElementAccess(this, expr))
-      case N_ARRAY:
+      case NodeKind.Array:
         return emitArrayLiteral(this, expr)
-      case N_OBJECT:
+      case NodeKind.Object:
         return emitObjectLiteral(this, expr)
       default:
         process.exit(
@@ -1698,6 +1737,13 @@ export class Emitter {
       // WP50 S3: module storage is its static header, declared where imported.
       if (constant.origin !== this.program.source) {
         storageDeclaration(this, constant)
+      }
+      return `@${constant.storageSymbol}`
+    }
+    if (constant !== null && constant.table) {
+      // A constant table is its constant header, declared where imported.
+      if (constant.origin !== this.program.source) {
+        tableDeclaration(this, constant)
       }
       return `@${constant.storageSymbol}`
     }
@@ -1812,13 +1858,13 @@ export class Emitter {
     const asyncMode = this.asyncMode
     this.asyncMode = ASYNC_AWAIT
     const callee = expr.children[0]
-    if (callee.kind === N_MEMBER && !receiverIsValue(this.program, callee.children[0])) {
+    if (callee.kind === NodeKind.Member && !receiverIsValue(this.program, callee.children[0])) {
       // `Math.atan2`, `Math.tan` and `Math.hypot` are calls into `std/math.ts`
       // (`importMath`), so they take the ordinary route below.
       if (callee.children[0].text !== "Math" || this.program.nodeCallees[expr.id] === null) {
         return emitBuiltinCall(this, expr, dottedName(callee))
       }
-    } else if (callee.kind === N_MEMBER) {
+    } else if (callee.kind === NodeKind.Member) {
       const receiver = this.typeOf(callee.children[0])
       if (this.table.isResult(receiver)) {
         return emitResultMethod(this, expr, receiver) // WP16
@@ -1830,6 +1876,9 @@ export class Emitter {
     }
     if (isResultConstructorCall(this.program, this.table, expr)) {
       return emitResultConstructor(this, expr, callee.text) // WP16: `Ok(v)` / `Err(e)`
+    }
+    if (isEnumStringCall(this.program, this.table, expr)) {
+      return emitEnumString(this, expr)
     }
     // Under a `nish:` import the identifier is the local name, so the checker
     // recorded which builtin it is. A dotted one (`process.exit`) then goes to
@@ -2031,9 +2080,13 @@ export class Emitter {
     if (sig.foreign()) {
       emitForeignBuffers(this, expr, sig, operands, operandValues)
     }
+    // WP27 S5: in a program naming `cErrno`, errno is 0 going into C and
+    // saved coming out, before the result is marshalled.
+    const errno = sig.foreign() && !hostFunction(sig) && this.program.capturesErrno ? this.zeroErrno() : ""
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)
+      this.saveErrno(errno)
       if (kernelJoin !== null) {
         this.fn.emit(`br label %${kernelJoin.label}`)
         this.fn.placeBlock(kernelJoin)
@@ -2046,6 +2099,7 @@ export class Emitter {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
     let answer = this.fn.emitValue(call)
+    this.saveErrno(errno)
     if (sumKernel.length > 0) {
       answer = this.joinSumArms(sumKernel, answer)
     }

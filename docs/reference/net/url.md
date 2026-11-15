@@ -25,6 +25,7 @@ import {
   percentDecodePathSegment,
   urlDecode,
   urlDefaultPort,
+  urlIsHostPort,
   urlOrigin,
   urlParse,
   urlQueryFind,
@@ -84,6 +85,12 @@ The offset in `src` of the byte `percentDecode` with the same arguments fails at
 <scalar-card title="url​Default​Port" icon="phosphor/regular/function" href="#urldefaultport">
 
 The port a scheme uses when a URL names none.
+
+</scalar-card>
+
+<scalar-card title="url​Is​Host​Port" icon="phosphor/regular/function" href="#urlishostport">
+
+Whether `bytes[a, b)` is `uri-host [ ":" port ]` (RFC 3986 §3.2.2, §3.2.3) by the rules `urlParse` holds a URL's host and port to: a bracketed IPv6 address, a dotted-decimal IPv4 address, or a reg-name of unreserved bytes that does not read as a number, then an optional `:` and a port of digits up to 65535.
 
 </scalar-card>
 
@@ -491,6 +498,48 @@ The scheme, lower-cased and without its `:`, as `Url.scheme` holds it.
 <scalar-field name="returns" type="i32">
 
 80 for `http` and `ws`, 443 for `https` and `wss`, and -1 for any other scheme.
+
+</scalar-field>
+
+### urlIsHostPort
+
+Whether `bytes[a, b)` is `uri-host [ ":" port ]` (RFC 3986 §3.2.2, §3.2.3)
+by the rules `urlParse` holds a URL's host and port to: a bracketed IPv6
+address, a dotted-decimal IPv4 address, or a reg-name of unreserved bytes
+that does not read as a number, then an optional `:` and a port of digits
+up to 65535. An empty host and an empty port are allowed, as in a URL; a
+percent-encoded or sub-delims byte in a reg-name is not. It is the rule an
+HTTP server holds a `Host` field to (RFC 9112 §3.2). Allocates nothing.
+
+```ts
+function urlIsHostPort(
+  bytes: u8[],
+  a: i32,
+  b: i32,
+): boolean
+```
+
+<scalar-field name="bytes" type="u8[]" required>
+
+The bytes that hold the value.
+
+</scalar-field>
+
+<scalar-field name="a" type="i32" required>
+
+The index of the value's first byte.
+
+</scalar-field>
+
+<scalar-field name="b" type="i32" required>
+
+The index past the value's last byte.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+True when the bytes are a host and an optional port; false otherwise, and for a window outside `bytes`.
 
 </scalar-field>
 

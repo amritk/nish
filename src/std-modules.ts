@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "array, base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/bcrypt-batch, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/jwt, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, host/ring, host/text, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/fetch, net/handler, net/hpack, net/http-compress, net/http-fields, net/http1-client-codec, net/http1-codec, net/http1-server, net/http2, net/http2-cleartext, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/outbound, net/postgres, net/postgres-async, net/postgres-carrier, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/serve, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/upstream, net/url, net/websocket, net/webtransport, pair, random, regex, region, secret, sort, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
+  "array, base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/bcrypt-batch, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/jwt, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, host/game, host/ring, host/text, input, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/fetch, net/handler, net/hpack, net/http-compress, net/http-fields, net/http-server, net/http1-client-codec, net/http1-codec, net/http1-server, net/http2, net/http2-cleartext, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/outbound, net/postgres, net/postgres-async, net/postgres-carrier, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/serve, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/upstream, net/url, net/websocket, net/webtransport, pair, random, raster, regex, region, release, secret, sort, sqlite, sync/ring, sync/shm, synth, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -251,7 +251,7 @@ export const isSortModule = (packageName: string, name: string): boolean =>
 
 /**
  * `nish/array`: the loops `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`,
- * `xs.every(f)`, `xs.findIndex(f)` and `xs.slice(a, b)` compile to. Like
+ * `xs.every(f)`, `xs.findIndex(f)`, `xs.forEach(f)` and `xs.slice(a, b)` compile to. Like
  * `nish/sort` a call of one of those methods is what loads it (the checker's
  * `importArrayMethods`), and the call is checked as one to its template,
  * instantiated per callback; a program may import the templates by name too.
@@ -265,6 +265,7 @@ const isArrayMethod = (name: string): boolean =>
   name === "some" ||
   name === "every" ||
   name === "findIndex" ||
+  name === "forEach" ||
   name === "slice"
 
 /**
@@ -302,6 +303,9 @@ export const arrayMethodTemplate = (name: string, k: i32): string => {
   if (name === "some") {
     return "someIndexed"
   }
+  if (name === "forEach") {
+    return "forEachIndexed"
+  }
   return name === "every" ? "everyIndexed" : "findIndexIndexed"
 }
 
@@ -323,8 +327,35 @@ export const isArrayMethodLocal = (local: string): boolean => local.startsWith(A
  * written as (`sort` for `SORT_LOCAL`, `map` for `Array.prototype.mapIndexed`),
  * or `""` when `local` is no such name.
  */
-export const rewrittenArrayMethod = (local: string): string =>
-  local === SORT_LOCAL ? "sort" : arrayMethodOfLocal(local)
+export const rewrittenArrayMethod = (local: string): string => {
+  if (local === SORT_LOCAL) {
+    return "sort"
+  }
+  return isCollectionForEachLocal(local) ? "forEach" : arrayMethodOfLocal(local)
+}
+
+/**
+ * The `nish/collections` templates a `.forEach(...)` call may become:
+ * `forEachEntry` for a `Map` callback of a value and a key, `forEachValue` for
+ * one of a value alone, and `forEachElement` for a `Set`.
+ */
+export const FOR_EACH_ENTRY: string = "forEachEntry"
+export const FOR_EACH_VALUE: string = "forEachValue"
+export const FOR_EACH_ELEMENT: string = "forEachElement"
+
+/**
+ * The local name a `nish/collections` `forEach` template is imported under
+ * (`importArrayMethods`): dotted, like `arrayMethodLocal`'s, so no declaration
+ * can take it.
+ */
+export const collectionForEachLocal = (template: string): string =>
+  template === FOR_EACH_ELEMENT ? `Set.prototype.${template}` : `Map.prototype.${template}`
+
+/** Whether an import under `local` is one the checker gave a module for a `Map` or `Set` `forEach` call. */
+export const isCollectionForEachLocal = (local: string): boolean =>
+  local === "Map.prototype.forEachEntry" ||
+  local === "Map.prototype.forEachValue" ||
+  local === "Set.prototype.forEachElement"
 
 /** The suffix of a template for a callback of two parameters (`mapIndexed`). */
 const INDEXED_SUFFIX: string = "Indexed"

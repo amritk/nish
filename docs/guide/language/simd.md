@@ -50,6 +50,12 @@ its lanes would fall outside the array the program stops with the
 `N` is the lane count: `loadI32x4(xs, 2)` on a five-element array stops with
 `index out of range: 5 >= 5`.
 
+A loop guard that already keeps every lane in range removes the check, as it
+does for `xs[i]`: under `while (i <= n - 4)`, with `n` the array's length and
+`i` counting up from 0, `loadI32x4(xs, i)` compiles to the load alone. A
+guard one lane short, `i <= n - 3`, proves nothing, so that load keeps its
+check.
+
 ```ts nish:ok
 import { loadU8x16, store } from "nish:simd";
 

@@ -25,33 +25,7 @@ import {
 } from "./emit-util"
 import { isScalarArgument } from "./escape"
 import { StringSet } from "./map"
-import {
-  N_ARRAY,
-  N_ARROW,
-  N_AS,
-  N_BINARY,
-  N_BLOCK,
-  N_CALL,
-  N_CONDITIONAL,
-  N_EMPTY,
-  N_FOR_OF,
-  N_IDENT,
-  N_INDEX,
-  N_MEMBER,
-  N_NEW,
-  N_NULL,
-  N_OBJECT,
-  N_PARAM,
-  N_PROPERTY,
-  N_RETURN,
-  N_SPREAD,
-  N_STRING,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { capturesOf, isThreadsLayout } from "./parallel"
 import { CheckedProgram, FunctionSig, ParallelCall } from "./program"
 import { FreshResults } from "./secret"
@@ -497,15 +471,15 @@ const heapTypesIn = (programs: CheckedProgram[], table: TypeTable, type: i32, ou
   return false
 }
 
-/** The `N_RETURN` values of an arrow's block, not those of arrows nested in it. */
+/** The `NodeKind.Return` values of an arrow's block, not those of arrows nested in it. */
 const collectArrowReturns = (node: Node, out: Node[]): void => {
-  if (node.kind === N_RETURN) {
-    if (node.children[0].kind !== N_EMPTY) {
+  if (node.kind === NodeKind.Return) {
+    if (node.children[0].kind !== NodeKind.Empty) {
       out.push(node.children[0])
     }
     return
   }
-  if (node.kind === N_ARROW) {
+  if (node.kind === NodeKind.Arrow) {
     return
   }
   for (const child of node.children) {
@@ -679,19 +653,25 @@ class RegionWalk {
       return ORIGIN_SCALAR
     }
     const kind = e.kind
-    if (kind === N_NULL || kind === N_STRING || kind === N_TEMPLATE_TEXT) {
+    if (kind === NodeKind.Null || kind === NodeKind.String || kind === NodeKind.TemplateText) {
       return ORIGIN_SCALAR
     }
-    if (kind === N_IDENT) {
+    if (kind === NodeKind.Ident) {
       return this.identOrigin(e)
     }
-    if (kind === N_MEMBER || kind === N_INDEX || kind === N_AS || kind === N_SPREAD || kind === N_UNARY) {
+    if (
+      kind === NodeKind.Member ||
+      kind === NodeKind.Index ||
+      kind === NodeKind.As ||
+      kind === NodeKind.Spread ||
+      kind === NodeKind.Unary
+    ) {
       return this.origin(e.children[0])
     }
-    if (kind === N_NEW || kind === N_ARRAY || kind === N_OBJECT) {
+    if (kind === NodeKind.New || kind === NodeKind.Array || kind === NodeKind.Object) {
       return ORIGIN_REGION
     }
-    if (kind === N_TEMPLATE) {
+    if (kind === NodeKind.Template) {
       // A new string; a substitution that is one already may come back as it is.
       let out = ORIGIN_REGION
       for (const part of e.children) {
@@ -699,10 +679,10 @@ class RegionWalk {
       }
       return out
     }
-    if (kind === N_CONDITIONAL) {
+    if (kind === NodeKind.Conditional) {
       return this.join(this.origin(e.children[1]), this.origin(e.children[2]))
     }
-    if (kind === N_BINARY) {
+    if (kind === NodeKind.Binary) {
       if (isAssignmentOperator(e.text)) {
         return this.origin(e.children[1])
       }
@@ -712,7 +692,7 @@ class RegionWalk {
       const either = e.text === "+" ? joinOrigin(left, right) : this.join(left, right)
       return e.text === "+" ? joinOrigin(ORIGIN_REGION, either) : either
     }
-    if (kind === N_CALL) {
+    if (kind === NodeKind.Call) {
       return this.callOrigin(e)
     }
     return ORIGIN_UNKNOWN
@@ -749,7 +729,7 @@ class RegionWalk {
   /** The receiver of a method call and then its arguments: the values a callee is handed, in its parameters' order. */
   handedTo(call: Node, callee: FunctionSig | null): Node[] {
     const out: Node[] = []
-    if (call.kind === N_NEW) {
+    if (call.kind === NodeKind.New) {
       for (const arg of call.children[2].children) {
         out.push(arg)
       }
@@ -783,7 +763,7 @@ class RegionWalk {
     const answer = this.task && callee !== null && capturesOf(callee).length === 0 ? callee.returnType : -1
     for (const arg of this.handedTo(call, callee)) {
       const a = unwrapParens(arg)
-      if (answer >= 0 && a.kind !== N_ARROW && !this.reaches(a, answer)) {
+      if (answer >= 0 && a.kind !== NodeKind.Arrow && !this.reaches(a, answer)) {
         continue
       }
       // What a callback answers may be what the call answers (`map`, `pick(() => a.node)`).
@@ -799,7 +779,7 @@ class RegionWalk {
 
   arrowResult(arrow: Node): i32 {
     const body = arrow.children[3]
-    if (body.kind !== N_BLOCK) {
+    if (body.kind !== NodeKind.Block) {
       return this.origin(body)
     }
     const values: Node[] = []
@@ -893,7 +873,7 @@ class RegionWalk {
    * origin. A string cannot be written through, so handing one aliases nothing.
    */
   joinHanded(out: i32, a: Node): i32 {
-    if (a.kind === N_ARROW) {
+    if (a.kind === NodeKind.Arrow) {
       return this.join(out, this.arrowResult(a))
     }
     const o = this.origin(a)
@@ -929,13 +909,13 @@ class RegionWalk {
 
   visit(node: Node): void {
     const kind = node.kind
-    if (kind === N_ARROW) {
+    if (kind === NodeKind.Arrow) {
       // An arrow a user function is handed is a function of its own, judged by its facts.
       return
     }
-    if (kind === N_VAR_DECL) {
+    if (kind === NodeKind.VarDecl) {
       const init = node.children[2]
-      if (init.kind !== N_EMPTY) {
+      if (init.kind !== NodeKind.Empty) {
         this.visit(init)
         const origin = this.origin(init)
         const local = this.program.nodeLocals[node.id]
@@ -950,20 +930,20 @@ class RegionWalk {
       }
       return
     }
-    if (kind === N_FOR_OF) {
+    if (kind === NodeKind.ForOf) {
       this.bind(
         this.program.nodeLocals[node.children[0].children[0].children[0].id],
         this.origin(node.children[1])
       )
-    } else if (kind === N_BINARY && isAssignmentOperator(node.text)) {
+    } else if (kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       this.visitAssignment(node)
       return
-    } else if (kind === N_CALL) {
+    } else if (kind === NodeKind.Call) {
       this.visitCall(node)
       return
-    } else if (kind === N_NEW) {
+    } else if (kind === NodeKind.New) {
       this.visitNew(node)
-    } else if (kind === N_ARRAY || kind === N_OBJECT) {
+    } else if (kind === NodeKind.Array || kind === NodeKind.Object) {
       this.visitLiteral(node)
     }
     for (const child of node.children) {
@@ -983,11 +963,11 @@ class RegionWalk {
     }
     // `s += t` stores a new string, or `t` itself.
     const stored = node.text === "=" ? this.origin(value) : joinOrigin(ORIGIN_REGION, this.origin(value))
-    if (target.kind === N_IDENT) {
+    if (target.kind === NodeKind.Ident) {
       this.bind(this.program.nodeLocals[target.id], stored)
       return
     }
-    if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+    if (target.kind === NodeKind.Member || target.kind === NodeKind.Index) {
       this.noteAlias(value, stored)
       this.store(this.origin(target.children[0]), stored, node, storesText(this.program, value, target))
     }
@@ -995,7 +975,7 @@ class RegionWalk {
 
   visitLiteral(node: Node): void {
     for (const child of node.children) {
-      const value = child.kind === N_PROPERTY ? child.children[child.children.length - 1] : child
+      const value = child.kind === NodeKind.Property ? child.children[child.children.length - 1] : child
       const o = this.origin(value)
       this.noteAlias(value, o)
       if (o !== ORIGIN_NONE && mayBeReleased(o)) {
@@ -1067,9 +1047,9 @@ class RegionWalk {
     }
     for (const arg of node.children[1].children) {
       const a = unwrapParens(arg)
-      if (a.kind === N_ARROW) {
+      if (a.kind === NodeKind.Arrow) {
         for (const param of a.children[1].children) {
-          if (param.kind === N_PARAM && param.children[0].kind === N_IDENT) {
+          if (param.kind === NodeKind.Param && param.children[0].kind === NodeKind.Ident) {
             this.bindArrowParam(param.children[0].text, around)
           }
         }
@@ -1144,7 +1124,7 @@ class RegionWalk {
     for (const arg of handed) {
       const a = unwrapParens(arg)
       // An arrow argument has no pointer facts; what it answers may be stored by the callee.
-      const o = a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a)
+      const o = a.kind === NodeKind.Arrow ? this.arrowResult(a) : this.origin(a)
       origins.push(o)
       anyOuter = anyOuter || mayBeReleased(o)
     }
@@ -1202,7 +1182,7 @@ class RegionWalk {
   /** True when `call` is a method call whose receiver, the first of `origins`, may be the region's. */
   receiverMayBeRegion(call: Node, callee: FunctionSig, origins: i32[]): boolean {
     return (
-      call.kind !== N_NEW &&
+      call.kind !== NodeKind.New &&
       callee.owner !== null &&
       methodReceiver(call) !== null &&
       origins.length > 0 &&
@@ -1285,7 +1265,7 @@ const regionProgramOf = (programs: CheckedProgram[], sig: FunctionSig): CheckedP
 
 /** The user callees of `body`'s calls and `new`s, once each. */
 const collectCallees = (program: CheckedProgram, node: Node, out: FunctionSig[]): void => {
-  if (node.kind === N_CALL || node.kind === N_NEW) {
+  if (node.kind === NodeKind.Call || node.kind === NodeKind.New) {
     const callee = program.nodeCallees[node.id]
     if (callee !== null && out.indexOf(callee) < 0) {
       out.push(callee)
@@ -1678,17 +1658,17 @@ export class ChildSites {
 
   /** Notes every variable `node` binds, under `program`'s tables, as `plain` or `spoiled`. */
   scan(program: CheckedProgram, node: Node): void {
-    if (node.kind === N_VAR_DECL) {
+    if (node.kind === NodeKind.VarDecl) {
       const local = program.nodeLocals[node.id]
       const init = node.children[2]
-      if (local !== null && init.kind !== N_EMPTY && this.makesPlain(program, init)) {
+      if (local !== null && init.kind !== NodeKind.Empty && this.makesPlain(program, init)) {
         this.plain.push(local)
       } else if (local !== null) {
         this.spoiled.push(local)
       }
-    } else if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    } else if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       const target = unwrapParens(node.children[0])
-      const local: Local | null = target.kind === N_IDENT ? program.nodeLocals[target.id] : null
+      const local: Local | null = target.kind === NodeKind.Ident ? program.nodeLocals[target.id] : null
       if (local !== null) {
         this.spoiled.push(local)
       }
@@ -1701,7 +1681,7 @@ export class ChildSites {
   /** Whether `value` is a call of `region` or `regionWith`. */
   makesPlain(program: CheckedProgram, value: Node): boolean {
     const v = unwrapParens(value)
-    const callee: FunctionSig | null = v.kind === N_CALL ? program.nodeCallees[v.id] : null
+    const callee: FunctionSig | null = v.kind === NodeKind.Call ? program.nodeCallees[v.id] : null
     const role = callee === null ? REGION_NONE : regionRoleOf(callee)
     return role === REGION_MAKE || role === REGION_MAKE_WITH
   }
@@ -1720,7 +1700,7 @@ export class ChildSites {
     if (this.makesPlain(program, arg)) {
       return true
     }
-    const local: Local | null = arg.kind === N_IDENT ? program.nodeLocals[arg.id] : null
+    const local: Local | null = arg.kind === NodeKind.Ident ? program.nodeLocals[arg.id] : null
     return local !== null && this.plain.indexOf(local) >= 0 && this.spoiled.indexOf(local) < 0
   }
 

@@ -53,7 +53,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -153,7 +153,7 @@ everywhere, a template literal instead of `String(n)`.
 
 - A module is one `.ts` file. At the top level it may hold **only**
   declarations: `const` arrows (functions), `class`, `interface`, module
-  `const`s, `type` aliases, numeric `enum`s, and `import`s. There is no
+  `const`s, `type` aliases, `enum`s (numeric or string), and `import`s. There is no
   top-level code, so there is no initialisation order to think about. The
   one exception is an entry module with no `main`: its top-level statements
   run as `main` (`docs/LANGUAGE.md` → "Top-level code"). Declare every
@@ -177,7 +177,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.reduce(f)`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, forEach, slice) `` | a `for` loop; `map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
 | `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `x.toFixed(2)`, `s.split(sep, limit)` | `` Unknown method `toFixed` on f64 `` | `toFixed(x, 2)` and `splitLimit(s, sep, limit)` from `nish/text` |
@@ -200,7 +200,8 @@ rejects. This table is the highest-value part of the page.
 | `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
-| `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
+| `[a, b] = [b, a]`, `const { x = 0 } = p`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring assignment is not supported` / `A default in a destructuring pattern is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
+| `const { a, b } = config` at module level | `Destructured constants are not supported` | one module `const` per name (a module constant is a compile-time value folded into each use, with nothing at run time for a pattern to read), or destructure inside a function |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
@@ -218,7 +219,7 @@ rejects. This table is the highest-value part of the page.
 | `total += xs[i]` in a loop, with `i` from somewhere the compiler cannot bound | it compiles, with an `NL9007` performance warning: `` `i` is not proven to be in range for `xs` here, so this access keeps its bounds check `` | a guard before the statement, `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`, which proves both ends in either number mode; `nish --fix` inserts it where it changes nothing the program does |
 | `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
 | `JSON.parse`, `RegExp`, `/re/` literals, `Promise` | unknown / forbidden | none of these are built in: `regexCompile(pattern, flags)` from `nish/regex` for a pattern, `jsonDecode` from `nish/json-typed` for JSON; restructure around `Promise` |
-| `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
+| `for (const [k, v] of m)`, `m.entries()`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, `forEach`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
 | `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
 
@@ -293,6 +294,7 @@ compatible only when their types are identical.
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | aliases of `i32[]`, `f32[]`, `f64[]`, `i64[]` | not distinct types; fixed length, so no `push` or `pop` (NL2415): declare `f64[]` to grow one |
 | `class C`, `interface I` | a struct, fields in declaration order | no header, no vtable |
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
+| `enum K { A = "a" }` | a string enum: a distinct type, its member's ordinal as `i32` | never interchangeable with `string`; `String(k)` reads the member's string |
 | `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
 | `T \| null` | `T` a class, interface, array, string or function reference | a scalar can never be nullable |
 | `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read until a test of it narrows |
@@ -303,8 +305,9 @@ compatible only when their types are identical.
 the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
 numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
-The last two exports, `readCString` and `readStruct`, copy a C string or a
-C struct out of a `CPtr` ([Calling C](#calling-c)). Calling one without the import is NL2456. No flag turns the checks off for a
+Two more, `readCString` and `readStruct`, copy a C string or a C struct
+out of a `CPtr`, and the eighth, `cErrno()`, reads the errno the last C call
+left ([Calling C](#calling-c)). Calling one without the import is NL2456. No flag turns the checks off for a
 whole program: `--unchecked-indexing` and `--wrapping` were removed before 1.0
 and are refused with exit 2.
 
@@ -917,8 +920,9 @@ export const main = (): i32 => {
   read `this` (bind `const self = this`), or read a function-typed parameter
   of its function. An arrow inside another arrow, or given to a method, a
   constructor, `expose` or `exposeWith`, captures nothing; the callbacks of
-  the array methods `sort`, `map`, `filter`, `some`, `every` and `findIndex`
-  are the exception, and capture as an arrow argument does.
+  the array methods `sort`, `map`, `filter`, `some`, `every`, `findIndex` and
+  `forEach`, and of `Map` and `Set` `forEach`, are the exception, and capture
+  as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -1096,8 +1100,8 @@ export const main = (): i32 => {
   NL9012: each element pays for building it and for the release. Storing an
   allocation into another object (NL2352) and touching `Arena` (NL2351) are
   refused, because either would make that release unsound.
-- **A map's result is a number, a `boolean`, an enum, a `string` or an array
-  of numbers, booleans or enums**: a string or a scalar array is copied out of
+- **A map's result is a number, a `boolean`, an enum (of either kind), a
+  `string` or an array of numbers, booleans or enums**: a string or a scalar array is copied out of
   the worker's arena at the join. An array of strings, a nested array, a class,
   a `Map` or a `Set` is refused (NL2348): answer a string or a number per
   element and build the structure after the call. **A reduce's `T` stays a number, a
@@ -1173,7 +1177,7 @@ export const main = (): i32 => {
   above the scope and `s.spawn(entry, arg, answer, 0)`. Either follows the
   data-parallel rules: it writes nothing anybody else can see but what it
   writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
-  a `boolean`, an enum, a `string` or an array of numbers, booleans or enums
+  a `boolean`, an enum of either kind, a `string` or an array of numbers, booleans or enums
   (copied out of its arena at the join), and leaves `Arena` alone. A task cannot open a scope
   of its own or call `parallelMapInto`.
 - **Any argument will do** — an array, an object — because nothing writes
@@ -1240,7 +1244,7 @@ export const main = (): i32 => {
 ```
 
 - **Only `g.value`, and only as the base of a field or element access.** Read
-  a number, a `boolean`, an enum or a `string` through it, or store one into a
+  a number, a `boolean`, an enum of either kind or a `string` through it, or store one into a
   field or an element that already exists (a string is copied each way) (for a `Mutex<i32>`, `g.value = g.value + 1`).
   Don't bind, store, return or walk `g` itself (NL2466), nor bind, store, return
   or walk `g.value` or an array it holds (NL2467); store only a scalar or a
@@ -1337,6 +1341,12 @@ export const main = (): i32 => {
 - **Add once per batch**: count into a local array, then one `add` per bin.
   One `add` per value makes the cores wait on each other.
 - **`AtomicI64` takes `i64` values**, exact under Node within ±2^53.
+- **Many counters — a histogram, a count per route — go in one atomic
+  array**: `new AtomicI32Array(16)` (or `AtomicI64Array`) is 16 counters in
+  one buffer, each `0`; every method takes the index first,
+  `bins.add(b, 1)`, `bins.load(b)`, and checks it as an array index. Prefer it
+  to an `AtomicI32[]`, whose counters are separate objects on separate cache
+  lines. Same rules as above.
 
 ```ts nish:err NL2513
 import { AtomicI32, scope } from "nish/threads";
@@ -1405,7 +1415,7 @@ export const main = (): i32 => {
 };
 ```
 
-- **It carries a number, a `boolean`, an enum or a `string`** (copied in by
+- **It carries a number, a `boolean`, an enum of either kind or a `string`** (copied in by
   `send`, out by the receive), never an array or an object.
 - **Declare it as a `const` right before its scope** — in the block that holds
   `using s = scope()`, or in the block around the scope's block — and hand it
@@ -1467,7 +1477,9 @@ export const main = (): i32 => {
 
 - **Crosses, by copy:** a number, a `boolean`, an enum, a `string`, an array
   of numbers, booleans or enums — a task's answer, a `parallelMap` element, a
-  `Channel<string>` value, a string stored through a guard. Each thread moves
+  `Channel<string>` value, a string stored through a guard. A string enum
+  crosses as its `i32` ordinal, like a numeric one: its strings sit in a
+  constant table every thread reads. Each thread moves
   the `parallelMap` elements it answers into blocks of its own, and the caller
   takes the blocks whole at the join; a task's answer under 64 KB is copied in
   by the joining thread. On one thread every element still pays the move, so
@@ -1617,7 +1629,8 @@ export const main = (): i32 => {
   freed.** `readCString(p: CPtr): string` copies the NUL-terminated bytes at
   `p` into a new string; a dangling or unterminated `p` is undefined
   behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
-  `CPtr | null` with `!== null` first.
+  `CPtr | null` with `!== null` first. A `NULL` `p` panics (`ffi-null`) before
+  the copy, so `--deny-panics` refuses the call.
 - **A struct C owns is copied out with `readStruct` from `nish:unsafe`.**
   `const lc: Lconv = readStruct(p)` copies the bytes at `p` into a new
   instance of the `declare class` the context names; write the annotation,
@@ -1625,6 +1638,11 @@ export const main = (): i32 => {
   is NL2764. A `NULL` `p` panics (`ffi-null`) before the copy, so
   `--deny-panics` refuses the call; a dangling `p`, or a class that does not
   match C's fields, is undefined behaviour.
+- **errno is read with `cErrno()` from `nish:unsafe`.** It answers the errno
+  the most recent `declare function` call on this thread left; naming it makes
+  every C call in the program zero errno before and save it after, so read it
+  straight after the call you are checking. It is refused on wasm32 without
+  `--profile wasi`.
 - **A `CPtr | null` parameter takes the literal `null` or a narrowed pointer.**
   `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
   is NL2539, so C is never handed a `NULL` by accident.
@@ -1995,6 +2013,43 @@ export const main = (): i32 => {
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
   no bitwise, so **bit flags stay `i32` module constants**.
+- A **string enum** gives every member a string literal (`Admin = "admin"`),
+  and is just as distinct: it is stored as its member's `i32` ordinal, `===`,
+  `!==` and `switch` compare ordinals, and `String(r)` is the only way to its
+  string (one load from a constant table, no allocation). `Role` and `string`
+  never convert either way — `r === "admin"` is NL2788,
+  `const s: string = r` and `` `${r}` `` NL2789, `const r: Role = "admin"`
+  NL2790 — because a string compare or a hidden conversion is exactly the cost
+  the ordinal exists to avoid: compare members, or write `String(r)` once.
+  Mixing string and numeric members is NL1043, a member without a value
+  NL1064, a template or computed value NL1065/NL1066, two members of one string
+  NL2786, a value that is not valid UTF-8 NL2787. A `Role | null` is NL2010, as for every enum. There is no
+  `Role.parse` yet: test `s === String(Role.Admin)` per member, or decode it
+  with typed JSON.
+
+```ts nish:ok
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const parse = (s: string): Role => (s === String(Role.Admin) ? Role.Admin : Role.Guest);
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 2;
+    default:
+      return 1;
+  }
+};
+
+export const main = (): i32 => {
+  const r = parse("admin");
+  console.log(`${String(r)} ${rank(r)}`);
+  return r === Role.Admin ? 0 : 1;
+};
+```
 - **A member is also a type.** `Kind.While` as an annotation is a slot that
   holds exactly that member — the shape of a tag field that says which case
   its object is. Only the member's own constant (or a value already of that
@@ -2107,10 +2162,14 @@ export const main = (): i32 => {
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`), and a `Map`'s value is any of those (`Map<string, Shape>`,
-  `Map<string, Shape[]>`, `Map<string, Shape | null>`). An alias may name another union, which is flattened. A
+  `Map<string, Shape[]>`, `Map<string, Shape | null>`), and a type argument:
+  `Box<Shape>`, `Stack<Shape>`, a generic call binding `T` to a union,
+  `Result<Shape, E>` / `Result<T, Shape>`, and `nish/map`'s `getOrInsert` /
+  `reserve` on a `Map<K, Shape>`. An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
   expected — argument, `return`, `push`, an annotated array literal, a
-  ternary arm or `??` default whose other side is the union. A class that
+  ternary arm or `??` default whose other side is the union, and a generic's
+  `T` bound to it (`new Box<Shape>(new Circle())`, `Ok(new Square())`). A class that
   implements an interface variant converts to that interface first. A union
   crosses modules but not a sidecar (NL4009).
 - **Test the tag to read a variant.** Before a test, the tag is the only
@@ -2178,12 +2237,13 @@ export const main = (): i32 => {
   falls back to every member the body stored
   anywhere or the whole type, which accepts a few comparisons `tsc` refuses
   (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
-- **Refused by design:** union type arguments (`Box<Shape>`,
-  `Result<Shape, E>`, a generic call binding `T` to a union: NL2533; a
-  built-in `Map`'s value is the one that may be a union, though `nish/map`'s
-  generic `getOrInsert`/`reserve` on such a map is NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
-  is not `Shape[]`), and inferred unions (an unannotated ternary or array of
-  two variants).
+- **Refused by design:** unions as `Map`/`Set` keys (NL2353), a generic
+  class as a variant (NL2522), covariant arrays (`Circle[]` is not
+  `Shape[]`), inferred unions (an unannotated ternary or array of two
+  variants, or one a generic call would infer: NL2172), a union meeting a
+  constraint `<T extends I>` (NL2328), and a union inside a `Secret`
+  (NL2428), a typed-JSON class (NL2486) or a C header / N-API signature
+  (NL4009), generic instance or not.
 - **Declare what you store.** A store of a value that is only some of the
   variants into a union slot is NL2534, because `tsc` would narrow the slot
   from there on. Declare the slot as the variant, or store a value of the
@@ -2242,7 +2302,9 @@ export const main = (): i32 => {
 - Functions and enums may be renamed on import; classes and interfaces may
   not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
-- **A function name is unique across the whole program**, exported or not.
+- **A function name is unique across the whole program**, exported or not
+  (a proposal to relax this for private functions is
+  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); it has not shipped).
 - An `export`ed function is an external C-ABI symbol; every other function gets
   `internal` linkage so LLVM may inline or drop it.
 - **So an exported function is not named after a C library function**
@@ -2265,7 +2327,16 @@ export const main = (): i32 => {
 - `let` / `const` need an initializer and take their type from it; an
   annotation must match **exactly**. `const` freezes the binding, not the
   contents: `xs[0] = 1` and `xs.push(1)` on a `const xs` are fine.
-- `var` is forbidden. Destructuring is not supported.
+- `var` is forbidden.
+- A local or a `for...of` head may destructure: `const { x, y: py } = p`,
+  `let [a, , c] = xs`, `for (const { x, y } of points)`. Each name is one
+  field read, or one bounds-checked element read (past the end panics; it is
+  never `undefined`). No defaults, rests, nested patterns, computed keys or
+  assignment patterns; no pattern over a `Map`, a `string` or a nullable
+  value, and no pattern as a parameter (`const { w, h } = s` over a
+  parameter `s` is fine). A module constant may not destructure either, because a
+  module constant is a compile-time value folded into each use, and a
+  pattern's names are reads of a receiver at run time.
 - **Semicolons are optional**, where TypeScript would insert one: at a line
   break, before `}` and at the end of the file. It is TypeScript's rule, so a
   line starting with `(` or `[` continues the one before it, and `return`
@@ -2717,7 +2788,9 @@ order, SameValueZero keys (`-0` is `+0`, `NaN` finds `NaN`). What they have is
 exactly `size` (a read-only `number`), `get(k)`, `set(k, v)` / `add(x)` (both
 answer the receiver, so they chain), `has(k)`, `delete(k)` (answers whether it
 was there) and `clear()`, and `keys()` / `values()` as the iterable of a
-`for...of` and nowhere else. `entries` and `forEach` are refused by name.
+`for...of` and nowhere else, and `forEach(f)`: `m.forEach((value, key) => ...)`
+and `s.forEach((x) => ...)` compile to that `for...of` walk with `f` inlined,
+and answer `void`. `entries` is refused by name.
 
 ```ts nish:ok-body
 const seen = new Set<string>();
@@ -2793,8 +2866,8 @@ console.log(`${total}`);                 // 121
 
 - An iterator is not a value: `keys()` / `values()` stored, passed, returned or
   spread are refused. Pass the map itself and walk it where it is used.
-- `for (const e of m)` over a `Map` itself is refused, because it would need
-  `[key, value]` destructuring: walk `m.keys()` and call `m.get(k)`.
+- `for (const e of m)` over a `Map` itself is refused, because its
+  `[key, value]` pairs are two-type tuples: walk `m.keys()` and call `m.get(k)`.
 
 ```ts nish:err-body NL2375
 const m = new Map<string, i32>();
@@ -2837,14 +2910,18 @@ export const main = (): i32 => {
 
 `jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
 value)` writes one; the compiler writes the code at each call from the class's
-fields. A field is `i32`, `u32`, `i64`, `u64`, `f64`, `boolean`, `string`, a
-numeric enum, a class, an array of one of those, a `Map<string, V>` of any of
+fields. A field is `i32`, `u32`, `i64`, `u64`, `f64`, `boolean`, `string`, an
+enum, a class, an array of one of those, a `Map<string, V>` of any of
 those, or a `string`, class, array or map `| null`; anything else is refused at
 the call (NL2485), a `Map` with non-`string` keys and a `Set` included, and so
 is a value that is not a class (NL2486). Decoding is strict: every field
 required, each key once, an unknown key an error unless `d.ignoreUnknown`, and
 every outcome a sticky negative code in `d.failed`, never a panic. An enum is
-its number, and a number that is no member's value is `JSON_DECODE_TYPE`; a
+read and written as a numeric one's number or a string one's string, and a
+value that is no member's is `JSON_DECODE_TYPE` (the field keeps its member) —
+so a string enum field is how a program checks a closed set of strings from
+input (`role: Role`, `{"role":"admin"}`); a `Role | null` field is NL2010 and a
+`Map` keyed by an enum NL2485; a
 `u64` is exact to 2^64 - 1, and negative is `JSON_DECODE_RANGE`; a map is
 emptied and filled in the input's key order, a repeated key an error, and
 more keys over all the maps of one decode than `d.maxMapKeys` (4,096 unless
@@ -2862,7 +2939,8 @@ a rename to a non-string (NL2496) or to a key that is not valid UTF-8
 `JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
 `f64`, `setText`). A tagged union of classes is a field, an array element or
 `jsonEncode`'s value too: the object with its tag key first, the tag the
-member's name or the variant's `tag` option. Decode one with
+member's name (a string enum's member's string) or the variant's `tag`
+option. Decode one with
 `const u = jsonDecodeUnion(d, prev)` (never `jsonDecode`, NL2719, and no type
 argument): it answers `prev` refilled when the tag matches, else a new variant,
 and `prev` on failure (only at the top: a nested union slot may hold the new
@@ -3004,7 +3082,14 @@ every pass's string, because nothing frees a value a later pass replaced:
 value with `const` inside the loop when only the pass reads it, or keep
 numbers across passes and build the value once after the loop. A server, or
 anything that runs for a long time, should compile with `--deny-retention`,
-which makes this warning and the three like it errors.
+which makes this warning and the four like it errors.
+
+**Build a request's temporaries in an arena block.** A pass of a loop with
+no bound on its passes (`while (true)`, a server's poll loop) that calls
+`accept`, `respond` or anything else that stores is refused its own scope,
+so a reply string it builds stays until the loop ends: NL9018. Build it in
+`{ using a = arena(); ... }` inside the loop body, copy what must outlive the
+block into a buffer made before the loop, and call what stores after it.
 
 Everything else is bumped from the arena, which is released when `main`
 returns. To give memory back sooner, scope it with `using a = arena()`;
@@ -3053,7 +3138,7 @@ the module (NL4015).
 
 ## Recipes for what is missing
 
-**Iterate and accumulate** — there is no `reduce` or `forEach` (`map`, `filter`, `some`, `every`, `findIndex` and `slice` work); fold in a loop:
+**Iterate and accumulate** — there is no `reduce` (`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, but a callback may not assign a local of its caller); fold in a loop:
 
 ```ts nish:ok-body
 const xs: i32[] = [1, 2, 3];

@@ -2875,6 +2875,114 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end thread-atomic -->
 
+### `nish/threads`: an atomic array
+
+`AtomicI32Array` and `AtomicI64Array` hold their length and one array,
+`values`, which no program may name (docs/LANGUAGE.md, "Atomic arrays"). The
+elements are the array's buffer, one allocation, so sixteen `i32`s are 64 contiguous
+bytes. Each method is an instance in `nish/threads`'s module, as an
+atomic's is, whose body the emitter writes: the element's address, checked as
+an array index is checked, and then the one sequentially consistent
+instruction an `AtomicI32` method is, on that element. The bounds check is an
+ordinary one, so the optimizer may drop it once the caller's index is proven
+in range:
+
+```llvm
+define noundef i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture %this, i32 noundef %i, i32 noundef %delta) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32Array, %struct.AtomicI32Array* %this, i32 0, i32 1
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !24
+  %2 = sext i32 %i to i64
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !16, !noalias !17, !tbaa !21
+  %5 = icmp ult i64 %2, %4
+  br i1 %5, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %2, i64 %4)
+  unreachable
+
+bounds.ok:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !16, !noalias !17, !tbaa !23
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 %2
+  %10 = atomicrmw add i32* %9, i32 %delta seq_cst, align 4
+  ret i32 %10
+}
+```
+
+The other methods differ only in the last instruction, which is the
+`AtomicI32` method's. No element is an object of its own, so there is no
+element pointer to load between the buffer and the `atomicrmw`.
+
+The constructor's `new Array` is the one place the lowering differs from an
+ordinary array's: the buffer is not the next bytes of the arena after the
+24-byte header, where the header, the object and whatever the program
+allocates next would share its cache line, and every core's read of the
+header would wait on the line another core's `atomicrmw` holds. It is asked
+for with 192 bytes of slack and starts on the first 64-byte boundary at least
+one line in, so the elements begin a line of their own and the allocation
+runs past the end of the line the last element is on: no other object shares a
+line with any element. Sixteen counters cost four times their bytes:
+
+```llvm
+  %7 = mul i64 %1, 4
+  %8 = add i64 %7, 192
+  %9 = call i8* @nish_alloc_struct(i64 %8)
+  %10 = ptrtoint i8* %9 to i64
+  %11 = sub i64 0, %10
+  %12 = and i64 %11, 63
+  %13 = add i64 %12, 64
+  %14 = getelementptr inbounds i8, i8* %9, i64 %13
+```
+
+Below, the caller; every instance, exactly as emitted, is in
+`tests/link/thread_atomic_array/threads.ll`.
+
+<!-- cookbook:begin thread-atomic-array -->
+```ts
+import { AtomicI32Array } from "nish/threads"
+
+export const count = (bins: AtomicI32Array, x: i32): i32 => {
+  bins.add(x & 15, 1)
+  return bins.load(0)
+}
+```
+
+```llvm
+%struct.AtomicI32Array = type { i32, %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish.AtomicI32Array.constructor(%struct.AtomicI32Array* noundef nonnull noalias align 8 dereferenceable(16) nocapture, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.load(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef) #0
+declare void @nish.AtomicI32Array.store(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.sub(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.min(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.max(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.exchange(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.AtomicI32Array.compareExchange(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+
+define noundef i32 @count(%struct.AtomicI32Array* noundef nonnull align 8 dereferenceable(16) nocapture %bins, i32 noundef %x) #0 {
+entry:
+  %0 = and i32 %x, 15
+  %1 = call i32 @nish.AtomicI32Array.add(%struct.AtomicI32Array* %bins, i32 %0, i32 1)
+  %2 = call i32 @nish.AtomicI32Array.load(%struct.AtomicI32Array* %bins, i32 0)
+  ret i32 %2
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end thread-atomic-array -->
+
 ### `nish/threads`: a channel of scalars
 
 A `Channel<T>` holds one `i64` word, `state`, that the runtime owns
@@ -5806,6 +5914,323 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !24 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end map-iter -->
+
+`m.forEach(f)` and `s.forEach(f)` are that walk with `f` called at the top of
+each pass. The checker rewrites the call to a template of
+`std/collections.ts` — `forEachEntry(m, f)` for a two-parameter callback,
+`forEachValue` for one, `forEachElement` on a `Set` — whose body is the
+`for...of` over `keys()`, reading the value from the entry the cursor stands
+on. `f` is a compile-time function parameter, so the instance calls `@show`
+with a plain `call`, and the key's value comes from `valueAt` at the cursor
+rather than a `get`: no probe. The template differs from the hand-written
+`for...of` in two more ways: the callback's own arena mark and release stand
+where `for...of` rewinds the arena once per pass, and the cursor's `i + 1` is
+a checked add. Measured on a `walk` function whose receiver is built from
+`process.argv`, so nothing folds, `opt -O2` leaves 92 instructions for
+`m.forEach((v, k) => ...)` against 112 for `for (const k of m.keys())` with
+`m.get(k) ?? 0`, a gap made of that loop's `Map.probe` call, the nullish
+branch of its `?? 0` and its arena rewind on every pass, and 78 for
+`s.forEach` against 89 for `for (const x of s)`, a gap made of the rewind.
+
+`xs.forEach(f)` on an array is the `std/array.ts` template `forEach`, a loop
+with an `i32` index that stops at the length the array had when the call
+began, as Node does, and at the current length if the callback shrinks it.
+`for (const x of xs)` keeps an `i64` index and reloads the length each pass.
+Emitted, the template compares its index twice, against the snapshot and
+the length. Under `opt -O2`, with a callback that does not write the array,
+the two compares fold into one `icmp slt` and the length and data-pointer
+loads move out of the loop, which `for...of` reloads every pass: both loops
+are 18 instructions on the same `walk`.
+
+<!-- cookbook:begin map-foreach -->
+```ts
+// `m.forEach(f)` is `forEachEntry(m, f)` from `std/collections.ts`: the same
+// walk as `for (const k of m.keys())`, with the key and value read from the
+// entry and handed to `@show` directly, so there is no `get` and no probe.
+const show = (v: i32, k: i32): void => {
+  console.log(`${k} ${v}`)
+}
+
+export const dump = (m: Map<i32, i32>): void => m.forEach(show)
+```
+
+```llvm
+%struct.Map$i32$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, i32 }
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #4
+
+define hidden void @show$(i32 noundef %v, i32 noundef %k) #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_from_i32(i32 %k)
+  %1 = call i8* @nish_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %2 = call i8* @nish_str_from_i32(i32 %v)
+  %3 = call i8* @nish_str_concat(i8* %1, i8* %2)
+  call void @nish_print(i8* %3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret void
+}
+
+define void @dump(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %m) #0 {
+entry:
+  call void @nish.forEachEntry$i32$i32$fn.4.show(%struct.Map$i32$i32* %m)
+  ret void
+}
+
+define internal noundef i32 @nish.nextLive(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, i32 noundef %from) #1 {
+entry:
+  %i.addr = alloca i32, align 4
+  store i32 %from, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  br label %for.cond
+
+for.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = icmp sge i32 %4, 0
+  br i1 %5, label %land.rhs, label %land.end
+
+land.rhs:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = trunc i64 %1 to i32
+  %8 = icmp slt i32 %6, %7
+  br label %land.end
+
+land.end:
+  %9 = phi i1 [ false, %for.cond ], [ %8, %land.rhs ]
+  br i1 %9, label %for.body, label %for.end
+
+for.body:
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = sext i32 %10 to i64
+  %12 = bitcast i8* %3 to i32*
+  %13 = getelementptr inbounds i32, i32* %12, i64 %11
+  %14 = load i32, i32* %13, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %15 = icmp ne i32 %14, 0
+  br i1 %15, label %if.then, label %if.end
+
+if.then:
+  %16 = load i32, i32* %i.addr, align 4
+  ret i32 %16
+
+if.end:
+  br label %for.inc
+
+for.inc:
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  ret i32 -1
+}
+
+define internal void @nish.Map$i32$i32.walkOpen(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
+  %1 = load i32, i32* %0, align 4, !tbaa !17
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
+  store i32 %3, i32* %5, align 4, !tbaa !17
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %from) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 6
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !18
+  %2 = call i32 @nish.nextLive(%struct.nish_array* %1, i32 %from)
+  ret i32 %2
+}
+
+define internal void @nish.Map$i32$i32.walkClose(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
+  %1 = load i32, i32* %0, align 4, !tbaa !17
+  %2 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 7
+  store i32 %3, i32* %5, align 4, !tbaa !17
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal noundef i32 @nish.Map$i32$i32.keyAt(%struct.Map$i32$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #0 {
+entry:
+  %0 = icmp slt i32 %index, 0
+  br i1 %0, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !19
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = trunc i64 %4 to i32
+  %6 = icmp sge i32 %index, %5
+  br label %lor.end
+
+lor.end:
+  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ]
+  br i1 %7, label %if.then, label %if.end
+
+if.then:
+  call void @nish_panic(i8* bitcast ({ i64, [28 x i8] }* @.str.1 to i8*))
+  unreachable
+
+if.end:
+  %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 4
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !19
+  %10 = sext i32 %index to i64
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %15
+}
+
+define internal noundef i32 @nish.Map$i32$i32.valueAt(%struct.Map$i32$i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #0 {
+entry:
+  %0 = icmp slt i32 %index, 0
+  br i1 %0, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
+  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !20
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = trunc i64 %4 to i32
+  %6 = icmp sge i32 %index, %5
+  br label %lor.end
+
+lor.end:
+  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ]
+  br i1 %7, label %if.then, label %if.end
+
+if.then:
+  call void @nish_panic(i8* bitcast ({ i64, [28 x i8] }* @.str.1 to i8*))
+  unreachable
+
+if.end:
+  %8 = getelementptr inbounds %struct.Map$i32$i32, %struct.Map$i32$i32* %this, i32 0, i32 5
+  %9 = load %struct.nish_array*, %struct.nish_array** %8, align 8, !tbaa !20
+  %10 = sext i32 %index to i64
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 %10
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %15
+}
+
+define internal void @nish.forEachEntry$i32$i32$fn.4.show(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %m) #0 {
+entry:
+  %i.addr = alloca i32, align 4
+  call void @nish.Map$i32$i32.walkOpen(%struct.Map$i32$i32* %m)
+  %0 = call i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* %m, i32 0)
+  store i32 %0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %1 = load i32, i32* %i.addr, align 4
+  %2 = icmp sge i32 %1, 0
+  br i1 %2, label %for.body, label %for.end
+
+for.body:
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = call i32 @nish.Map$i32$i32.valueAt(%struct.Map$i32$i32* %m, i32 %3)
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = call i32 @nish.Map$i32$i32.keyAt(%struct.Map$i32$i32* %m, i32 %5)
+  call void @show$(i32 %4, i32 %6)
+  br label %for.inc
+
+for.inc:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 1)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %11 = call i32 @nish.Map$i32$i32.walkNext(%struct.Map$i32$i32* %m, i32 %9)
+  store i32 %11, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  call void @nish.Map$i32$i32.walkClose(%struct.Map$i32$i32* %m)
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!21, !22, !23, !24, !25}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{!"i32", !6, i64 0}
+!15 = !{!"ptr", !6, i64 0}
+!16 = !{!"Map$i32$i32", !14, i64 0, !15, i64 8, !14, i64 16, !14, i64 20, !15, i64 24, !15, i64 32, !15, i64 40, !14, i64 48}
+!17 = !{!16, !14, i64 48}
+!18 = !{!16, !15, i64 40}
+!19 = !{!16, !15, i64 24}
+!20 = !{!16, !15, i64 32}
+!21 = !{i32 8, !"cf-protection-branch", i32 1}
+!22 = !{i32 8, !"cf-protection-return", i32 1}
+!23 = !{i32 8, !"branch-target-enforcement", i32 1}
+!24 = !{i32 8, !"sign-return-address", i32 1}
+!25 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end map-foreach -->
 
 ### Fused lookups: one probe for a key asked about twice
 
@@ -9587,6 +10012,7 @@ declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull alig
 declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8 nocapture) #0
 declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonWriter.keyBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonWriter.stringBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
@@ -9682,45 +10108,45 @@ export const messageInto = (tok: JsonTokenizer, body: u8[], out: u8[]): i32 => {
 ```
 
 ```llvm
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"message\00" }, align 8
 
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberWalk(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
 declare void @nish.JsonLimits.constructor(%struct.JsonLimits* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #1
 
-define noundef i32 @messageInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture %tok, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %body, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #0 {
+define noundef i32 @messageInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture %tok, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %body, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #0 {
 entry:
   %length.addr = alloca i32, align 4
   %k.addr = alloca i32, align 4
@@ -9744,7 +10170,7 @@ while.body:
   br i1 %7, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %8 = getelementptr inbounds %struct.JsonTokenizer, %struct.JsonTokenizer* %tok, i32 0, i32 11
+  %8 = getelementptr inbounds %struct.JsonTokenizer, %struct.JsonTokenizer* %tok, i32 0, i32 13
   %9 = load i32, i32* %8, align 4, !tbaa !16
   %10 = icmp eq i32 %9, 1
   br label %land.end.1
@@ -9839,8 +10265,8 @@ attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 !12 = !{!"i64", !6, i64 0}
 !13 = !{!"i32", !6, i64 0}
 !14 = !{!"i1", !6, i64 0}
-!15 = !{!"JsonTokenizer", !11, i64 0, !12, i64 8, !12, i64 16, !11, i64 24, !13, i64 32, !13, i64 36, !13, i64 40, !13, i64 44, !13, i64 48, !13, i64 52, !13, i64 56, !13, i64 60, !13, i64 64, !13, i64 68, !13, i64 72, !13, i64 76, !13, i64 80, !13, i64 84, !13, i64 88, !14, i64 92}
-!16 = !{!15, !13, i64 60}
+!15 = !{!"JsonTokenizer", !11, i64 0, !12, i64 8, !12, i64 16, !12, i64 24, !11, i64 32, !13, i64 40, !13, i64 44, !13, i64 48, !13, i64 52, !13, i64 56, !13, i64 60, !13, i64 64, !13, i64 68, !13, i64 72, !13, i64 76, !13, i64 80, !13, i64 84, !13, i64 88, !13, i64 92, !13, i64 96, !13, i64 100, !13, i64 104, !13, i64 108, !13, i64 112, !14, i64 116, !14, i64 117}
+!16 = !{!15, !13, i64 72}
 !17 = !{i32 8, !"cf-protection-branch", i32 1}
 !18 = !{i32 8, !"cf-protection-return", i32 1}
 !19 = !{i32 8, !"branch-target-enforcement", i32 1}
@@ -9858,17 +10284,19 @@ over the object's keys: a `switch` on `keyLength`, then, where two names share
 a length (`name` and `mood` below), a `switch` on the `keyByte` where they
 differ, with `-1` for a key written with an escape, and `keyIs` against the one
 name left; a `seen` flag per field for the duplicate and the missing checks;
-and the field's reader, whose result is stored straight into the field. An
-enum is `i32` and then a `switch` over its members' values, which stores only a
-member; a `u64` is `u64` and is written by `jsonEncodeU64`. A `Map<string, V>`
+and the field's reader, whose result is stored straight into the field. A
+numeric enum is `i32` and then a `switch` over its members' values, which
+stores only a member; a string enum is `enumString` and then its members'
+strings matched as keys are (below); a `u64` is `u64` and is written by `jsonEncodeU64`. A `Map<string, V>`
 gets a function of its own per direction, which calls the map's `clear`, `has`
 and `set`, or `walkNext`, `keyAt` and `valueAt`, copied into the module. A string's
 reader is bracketed by `nish_arena_mark` and `nish_arena_keep`, so the bytes
-it decoded through are given back. The encoding is `key` and the field's
+it decoded through are given back. The encoding is `keyQuoted` (the key and
+one constant holding it quoted, escaped and with its colon) and the field's
 writer per field, after one load of the writer's `failed` that stops a graph
 that holds itself (docs/LANGUAGE.md, "Typed JSON"). The class's `static
 readonly json` changes only constants: a renamed field's key is the string the
-dispatch switches on and the writer's `key` writes (`times` is `visits`
+dispatch switches on and the writer's `keyQuoted` writes (`times` is `visits`
 below), and an optional field's missing check branches to a store of its
 initializer instead of to `missingField`. A `JsonNumber` field is a call of a
 function of its own per direction, `.json.decode.JsonNumber` and
@@ -9923,7 +10351,7 @@ export const greet = (d: JsonDecoder, w: JsonWriter): i32 => {
 %struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i32, i32, i1, i1, i32, i32 }
 %struct.JsonNumber = type { %struct.nish_array*, i32 }
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
@@ -9935,6 +10363,12 @@ export const greet = (d: JsonDecoder, w: JsonWriter): i32 => {
 @.str.4 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"mood\00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"amount\00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"visits\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"\22id\22:\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"\22name\22:\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"\22amount\22:\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"\22visits\22:\00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"\22kind\22:\00" }, align 8
+@.str.12 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"\22mood\22:\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
@@ -9950,6 +10384,7 @@ declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull alig
 declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #1
 declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #1
 declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #1
+declare void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8 nocapture) #1
 declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #1
 declare void @nish.JsonWriter.keyBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #1
 declare void @nish.JsonWriter.stringBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #1
@@ -9964,6 +10399,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
@@ -10009,7 +10445,7 @@ declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.booleanArrayOrNull
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.stringArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #1
 declare void @nish.JsonNumber.constructor(%struct.JsonNumber* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #0
 declare noundef nonnull align 8 i8* @nish.JsonNumber.text(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
-declare noundef nonnull align 8 dereferenceable(96) %struct.JsonTokenizer* @nish.JsonNumber.reader(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
+declare noundef nonnull align 8 dereferenceable(120) %struct.JsonTokenizer* @nish.JsonNumber.reader(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noundef zeroext i1 @nish.JsonNumber.isI64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noundef i64 @nish.JsonNumber.i64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noundef zeroext i1 @nish.JsonNumber.isU64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
@@ -10018,36 +10454,36 @@ declare noundef double @nish.JsonNumber.f64(%struct.JsonNumber* noundef nonnull 
 declare noundef zeroext i1 @nish.JsonNumber.setText(%struct.JsonNumber* noundef nonnull align 8 dereferenceable(16) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #1
 declare void @nish.jsonEncodeU64(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i64 noundef) #1
 declare void @nish.jsonEncodeNumber(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
-declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
-declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #1
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #1
+declare noundef double @nish.JsonTokenizer.numberWalk(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #1
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #1
+declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #1
 declare void @nish.JsonLimits.constructor(%struct.JsonLimits* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #0
@@ -10334,27 +10770,27 @@ json.stop:
 
 json.write:
   call void @nish.JsonWriter.beginObject(%struct.JsonWriter* %r)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.7 to i8*))
   %3 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 0
   %4 = load i64, i64* %3, align 8, !tbaa !6
   call void @nish.jsonEncodeU64(%struct.JsonWriter* %r, i64 %4)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [8 x i8] }* @.str.8 to i8*))
   %5 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 1
   %6 = load i8*, i8** %5, align 8, !tbaa !7
   call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* %6)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [7 x i8] }* @.str.5 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [7 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [10 x i8] }* @.str.9 to i8*))
   %7 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 2
   %8 = load %struct.JsonNumber*, %struct.JsonNumber** %7, align 8, !tbaa !10
   call void @.json.encode.JsonNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %8)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [7 x i8] }* @.str.6 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [7 x i8] }* @.str.6 to i8*), i8* bitcast ({ i64, [10 x i8] }* @.str.10 to i8*))
   %9 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 3
   %10 = load i32, i32* %9, align 4, !tbaa !8
   call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %10)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [8 x i8] }* @.str.11 to i8*))
   %11 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 4
   %12 = load i32, i32* %11, align 4, !tbaa !9
   call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %12)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [8 x i8] }* @.str.12 to i8*))
   %13 = getelementptr inbounds %struct.Greeting, %struct.Greeting* %v, i32 0, i32 5
   %14 = load i32, i32* %13, align 4, !tbaa !11
   call void @nish.JsonWriter.i32(%struct.JsonWriter* %r, i32 %14)
@@ -10406,6 +10842,58 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end json-typed -->
 
+A **string enum** field (`role: Role = Role.Guest`, with `Admin = "admin"` and
+`Guest = "guest"`) is read by `enumString`, which leaves the string's bytes to
+compare as a key's are, unescaped and with no allocation, and then `keyIs`
+against each member's string in turn (with more members, a `switch` on
+`keyLength` and then a `keyByte` first, as for keys). A match is a `phi` of the member's ordinal, stored into the
+field; no match, or a value that is not a string, calls `wrongType`
+(`JSON_DECODE_TYPE`) and leaves the field's member as it was
+(`tests/link/json_enum_string`):
+
+```llvm
+json.take:
+  store i1 true, i1* %seen, align 1
+  %4 = call i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* %r)
+  br i1 %4, label %json.match, label %json.stored
+
+json.match:
+  %5 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
+  br i1 %5, label %json.is, label %json.next
+
+json.next:
+  %6 = call i1 @nish.JsonDecoder.keyIs(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
+  br i1 %6, label %json.is.1, label %json.other
+
+json.is:
+  br label %json.member
+
+json.is.1:
+  br label %json.member
+
+json.member:
+  %7 = phi i32 [ 0, %json.is ], [ 1, %json.is.1 ]
+  %8 = getelementptr inbounds %struct.User, %struct.User* %v, i32 0, i32 0
+  store i32 %7, i32* %8, align 4, !tbaa !15
+  br label %json.stored
+
+json.other:
+  call void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* %r)
+  br label %json.stored
+```
+
+The encoding is the load `String(r)` is, from the module's `@.enumstr.Role`,
+and one `string` call:
+
+```llvm
+  %3 = getelementptr inbounds %struct.User, %struct.User* %v, i32 0, i32 0
+  %4 = load i32, i32* %3, align 4, !tbaa !15
+  %5 = sext i32 %4 to i64
+  %6 = getelementptr inbounds [2 x i8*], [2 x i8*]* @.enumstr.Role, i64 0, i64 %5
+  %7 = load i8*, i8** %6, align 8
+  call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* %7)
+```
+
 ### Typed JSON: a tagged union
 
 `jsonDecodeUnion(d, prev)` and `jsonEncode(w, u)` over a union of classes are
@@ -10414,7 +10902,8 @@ and called from every place the union appears, so a recursive union recurses
 through them. The decoding calls `unionTag`, which finds the tag key (at once
 when it is the first key, otherwise by reading ahead and rewinding) and leaves
 the tag's string to compare, dispatched as a class's keys are: `keyIs` per
-variant's wire tag in turn, as here, and from three variants a `switch` on
+variant's wire tag (its tag member's name, or for a string enum the member's
+string, unless the variant's `tag` option names another) in turn, as here, and from three variants a `switch` on
 `keyLength` first. A match reuses `prev` when its `i32` tag is the variant's,
 and otherwise calls `.json.new.<V>`; `enterUnion` then steps into the object
 and the variant's own field loop runs with its tag already read. No match calls
@@ -10461,7 +10950,7 @@ export const writeExpr = (w: JsonWriter, e: Expr): void => {
 %struct.Neg = type { i32, double }
 %struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i32, i32, i1, i1, i32, i32 }
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1 }
 %struct.JsonNumber = type { %struct.nish_array*, i32 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
@@ -10472,6 +10961,8 @@ export const writeExpr = (w: JsonWriter, e: Expr): void => {
 @.str.1 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"Num\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"negate\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"value\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"\22kind\22:\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"\22value\22:\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
@@ -10487,6 +10978,7 @@ declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull alig
 declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8 nocapture) #0
 declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonWriter.keyBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonWriter.stringBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
@@ -10501,6 +10993,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
@@ -10544,39 +11037,39 @@ declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.u64ArrayOrNull(%st
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.f64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #0
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.booleanArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #0
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.stringArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #0
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberWalk(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
 declare void @nish.JsonNumber.constructor(%struct.JsonNumber* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #1
 declare noundef nonnull align 8 i8* @nish.JsonNumber.text(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare noundef nonnull align 8 dereferenceable(96) %struct.JsonTokenizer* @nish.JsonNumber.reader(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare noundef nonnull align 8 dereferenceable(120) %struct.JsonTokenizer* @nish.JsonNumber.reader(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
 declare noundef zeroext i1 @nish.JsonNumber.isI64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
 declare noundef i64 @nish.JsonNumber.i64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
 declare noundef zeroext i1 @nish.JsonNumber.isU64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
@@ -10885,9 +11378,9 @@ json.stop:
 
 json.write:
   call void @nish.JsonWriter.beginObject(%struct.JsonWriter* %r)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*))
   call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*))
   %3 = getelementptr inbounds %struct.Num, %struct.Num* %v, i32 0, i32 1
   %4 = load double, double* %3, align 8, !tbaa !6
   call void @nish.JsonWriter.f64(%struct.JsonWriter* %r, double %4)
@@ -10907,9 +11400,9 @@ json.stop:
 
 json.write:
   call void @nish.JsonWriter.beginObject(%struct.JsonWriter* %r)
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*))
   call void @nish.JsonWriter.string(%struct.JsonWriter* %r, i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*))
-  call void @nish.JsonWriter.key(%struct.JsonWriter* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*))
+  call void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* %r, i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*))
   %3 = getelementptr inbounds %struct.Neg, %struct.Neg* %v, i32 0, i32 1
   %4 = load double, double* %3, align 8, !tbaa !9
   call void @nish.JsonWriter.f64(%struct.JsonWriter* %r, double %4)
@@ -10977,7 +11470,7 @@ export const given = (d: JsonDecoder): boolean => {
 ```llvm
 %struct.Patch = type { i32, i1 }
 %struct.JsonDecoder = type { %struct.JsonTokenizer*, i32, i32, i32, i32, i1, i1, i32, i32 }
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1 }
 %struct.JsonNumber = type { %struct.nish_array*, i32 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
@@ -10990,6 +11483,7 @@ declare void @nish.JsonDecoder.constructor(%struct.JsonDecoder* noundef nonnull 
 declare void @nish.JsonDecoder.reset(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
 declare void @nish.JsonDecoder.fail(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, i32 noundef, i32 noundef) #1
 declare void @nish.JsonDecoder.wrongType(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #1
+declare noundef zeroext i1 @nish.JsonDecoder.enumString(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef i32 @nish.JsonDecoder.take(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.beginObject(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
 declare noundef zeroext i1 @nish.JsonDecoder.nextField(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture) #0
@@ -11033,39 +11527,39 @@ declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.u64ArrayOrNull(%st
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.f64ArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #0
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.booleanArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #0
 declare noundef align 8 %struct.nish_array* @nish.JsonDecoder.stringArrayOrNull(%struct.JsonDecoder* noundef nonnull align 8 dereferenceable(40) nocapture, %struct.nish_array* noundef align 8) #0
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberWalk(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
 declare void @nish.JsonNumber.constructor(%struct.JsonNumber* noundef nonnull noalias align 8 dereferenceable(16) nocapture) #1
 declare noundef nonnull align 8 i8* @nish.JsonNumber.text(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare noundef nonnull align 8 dereferenceable(96) %struct.JsonTokenizer* @nish.JsonNumber.reader(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare noundef nonnull align 8 dereferenceable(120) %struct.JsonTokenizer* @nish.JsonNumber.reader(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
 declare noundef zeroext i1 @nish.JsonNumber.isI64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
 declare noundef i64 @nish.JsonNumber.i64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
 declare noundef zeroext i1 @nish.JsonNumber.isU64(%struct.JsonNumber* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
@@ -11230,7 +11724,7 @@ export const userId = (doc: JsonDocument, body: u8[], n: i32): u64 => {
 ```llvm
 %struct.JsonDocument = type { %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.JsonValueRanges*, i32, i32, i32, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.JsonTokenizer*, %struct.JsonTokenizer*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
 %struct.JsonValueRanges = type { %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array*, %struct.nish_array* }
-%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1 }
+%struct.JsonTokenizer = type { %struct.nish_array*, i64, i64, i64, %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1 }
 %struct.JsonWriter = type { %struct.nish_array*, i32, i32, i32, i32, i32, i32, i32, i32, i32, i1, i1, i1 }
 %struct.JsonLimits = type { i32, i32, i32, i32 }
 %struct.nish_array = type { i64, i64, i8* }
@@ -11253,9 +11747,9 @@ declare noundef zeroext i1 @nish.JsonDocument.samePendingKey(%struct.JsonDocumen
 declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDocument.sortPending(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDocument.sortPendingRanged(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.comparePending(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonDocument.storeString(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, %struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonDocument.storeSource(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, %struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonDocument.storeSourceRanged(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, %struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
+declare noundef i32 @nish.JsonDocument.storeString(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, %struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i32 @nish.JsonDocument.storeSource(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, %struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef i32 @nish.JsonDocument.storeSourceRanged(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, %struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
 declare noundef i32 @nish.JsonDocument.newNode(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.index(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef) #2
 declare noundef i32 @nish.JsonDocument.handle(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef) #2
@@ -11291,7 +11785,9 @@ declare noundef zeroext i1 @nish.JsonDocument.hasKeyRange(%struct.JsonDocument* 
 declare noundef nonnull align 8 dereferenceable(48) %struct.JsonValueRanges* @nish.JsonDocument.rangeArrays(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture) #1
 declare void @nish.JsonDocument.ownRanges(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture) #1
 declare noundef i32 @nish.JsonDocument.setRange(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare void @nish.JsonDocument.rangeAt(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.setKeyRange(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
+declare void @nish.JsonDocument.keyRangeAt(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.keySlot(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.newNull(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture) #0
 declare noundef i32 @nish.JsonDocument.newBoolean(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i1 noundef zeroext) #0
@@ -11305,7 +11801,12 @@ declare noundef i32 @nish.JsonDocument.newObject(%struct.JsonDocument* noundef n
 declare noundef i32 @nish.JsonDocument.push(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.set(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.adoptable(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #3
-declare void @nish.JsonDocument.append(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.append(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
+declare void @nish.JsonDocument.reserve(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.storeSpan(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.copySpan(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.newStoredString(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.newStoredNumber(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.newStored(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8) #0
 declare noundef i32 @nish.JsonDocument.moveSlots(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonDocument.moveKeyRanges(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(248) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
@@ -11314,36 +11815,36 @@ declare void @nish.JsonDocument.write(%struct.JsonDocument* noundef nonnull read
 declare void @nish.JsonDocument.writeAt(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef, %struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare noundef nonnull align 8 i8* @nish.JsonDocument.stringify(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(248) nocapture, i32 noundef) #0
 declare void @nish.JsonValueRanges.constructor(%struct.JsonValueRanges* noundef nonnull noalias align 8 dereferenceable(48) nocapture) #1
-declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
-declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.top(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
-declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #2
-declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
-declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
-declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture, i32 noundef) #0
-declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare void @nish.JsonTokenizer.constructor(%struct.JsonTokenizer* noundef nonnull noalias align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef, %struct.JsonLimits* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #0
+declare void @nish.JsonTokenizer.reset(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.fail(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.next(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i32 @nish.JsonTokenizer.emit(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish.JsonTokenizer.close(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.open(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.key(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.value(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.literal(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.number(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.numberRefused(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.string(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.escapeCodePoint(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isText(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef i32 @nish.JsonTokenizer.stringInto(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.stringLength(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #2
+declare noundef zeroext i1 @nish.JsonTokenizer.keyEquals(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isInteger(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberI64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberWalk(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(120) nocapture) #0
+declare void @nish.JsonTokenizer.rewindObject(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture, i32 noundef) #0
+declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(120) nocapture) #0
 declare void @nish.JsonWriter.constructor(%struct.JsonWriter* noundef nonnull noalias align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.JsonWriter.reset(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
 declare void @nish.JsonWriter.setIndent(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i32 noundef) #1
@@ -11357,6 +11858,7 @@ declare void @nish.JsonWriter.endObject(%struct.JsonWriter* noundef nonnull alig
 declare void @nish.JsonWriter.beginArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.endArray(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
 declare void @nish.JsonWriter.key(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.JsonWriter.keyQuoted(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8 nocapture) #0
 declare void @nish.JsonWriter.string(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.JsonWriter.keyBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonWriter.stringBytes(%struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef, i32 noundef) #0
@@ -11689,7 +12191,7 @@ copies it, so nothing may free it while the task runs: `start` feeds a task a
 shared argument, and it and every caller release no arena scope over what
 they allocated (no `nish_arena` mark and reset around the call), so `tally`
 lives in `main`'s arena until the program ends. What the task allocates goes
-into its own region, freed by `nish_async_done` when it finishes; the
+into its own region, emptied by `nish_async_done` when it finishes; the
 checker refuses a store of that memory into `tally` (NL2609) and growth of a
 shared array, `Map` or `Set` (NL2615), so `count` writes only numbers
 through the pointer (`tests/cases/async_spawn_shared`,
@@ -13681,6 +14183,167 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-locals -->
 
+### Destructuring declarations
+
+A pattern over a name or a field path off one (`p`, `xs`, `this`, `o.pt`,
+`o.items`) declares each name as an ordinary local read straight off it,
+exactly as `const x = p.x` would: a field name is one `getelementptr` and one
+`load`, with no copy of the struct; an array position is the same
+bounds-checked element read as `xs[i]`, so `[a, , c]` checks `0` and `2` and
+skips the hole. Any other receiver (a call, an index, a `?.` chain, a
+`for...of` element) is evaluated once into a hidden local, a pointer, and the
+names are read off that: unoptimised that is one alloca and one store more
+than the hand-written reads, and after `opt -O2` the bodies are the same
+(`tests/cases/destructure_zero_cost`).
+
+<!-- cookbook:begin decl-destructure -->
+```ts
+class Point {
+  x: i32
+  y: i32
+  constructor(x: i32, y: i32) {
+    this.x = x
+    this.y = y
+  }
+}
+
+const pick = (p: Point): i32 => {
+  const { x, y: py } = p
+  return x - py
+}
+
+const third = (xs: i32[]): i32 => {
+  const [a, , c] = xs
+  return a + c
+}
+```
+
+```llvm
+%struct.Point = type { i32, i32 }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
+
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
+  store i32 %x, i32* %0, align 4, !tbaa !4
+  %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
+  store i32 %y, i32* %1, align 4, !tbaa !5
+  ret void
+}
+
+define internal noundef i32 @pick(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #1 {
+entry:
+  %x.addr = alloca i32, align 4
+  %py.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4, !tbaa !4
+  store i32 %1, i32* %x.addr, align 4
+  %2 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4, !tbaa !5
+  store i32 %3, i32* %py.addr, align 4
+  %4 = load i32, i32* %x.addr, align 4
+  %5 = load i32, i32* %py.addr, align 4
+  %6 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %4, i32 %5)
+  %7 = extractvalue { i32, i1 } %6, 0
+  %8 = extractvalue { i32, i1 } %6, 1
+  br i1 %8, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %7
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal noundef i32 @third(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
+entry:
+  %a.addr = alloca i32, align 4
+  %c.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %2 = icmp ult i64 0, %1
+  br i1 %2, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %1)
+  unreachable
+
+bounds.ok:
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %5 = bitcast i8* %4 to i32*
+  %6 = getelementptr inbounds i32, i32* %5, i64 0
+  %7 = load i32, i32* %6, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  store i32 %7, i32* %a.addr, align 4
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %9 = load i64, i64* %8, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %10 = icmp ult i64 2, %9
+  br i1 %10, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 2, i64 %9)
+  unreachable
+
+bounds.ok.1:
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 2
+  %15 = load i32, i32* %14, align 4, !alias.scope !10, !noalias !9, !tbaa !17
+  store i32 %15, i32* %c.addr, align 4
+  %16 = load i32, i32* %a.addr, align 4
+  %17 = load i32, i32* %c.addr, align 4
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %19
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
+!6 = !{!"nish array"}
+!7 = !{!"header", !6}
+!8 = !{!"elements", !6}
+!9 = !{!7}
+!10 = !{!8}
+!11 = !{!"header i64", !1, i64 0}
+!12 = !{!"header ptr", !1, i64 0}
+!13 = !{!"array header", !11, i64 0, !11, i64 8, !12, i64 16}
+!14 = !{!13, !11, i64 0}
+!15 = !{!13, !12, i64 16}
+!16 = !{!"element i32", !1, i64 0}
+!17 = !{!16, !16, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-destructure -->
+
 ### Module constants
 
 A top-level `const` is not a global: it emits no symbol and no initialiser.
@@ -13861,6 +14524,275 @@ not be assigned), which is what lets the page keep a view of
 `@nish_storage_0_SCORES.data` for the life of the module. The `!nish.site` tags are the
 [panic sites](#panic-sites-a-number-per-call-a-table-at-the-end). Golden:
 `tests/cases/storage_module.ll`; lending, `tests/cases/storage_lend.ll`.
+
+### Constant tables: data the binary carries
+
+A top-level `const` declared `readonly T[]` with an array literal of
+constants is a *constant table* ([LANGUAGE.md → Constant
+tables](LANGUAGE.md#constant-tables)). Like module storage it is two globals,
+named `nish_const_<module>_<name>`, and nothing runs to set either up; unlike
+storage both are `constant`. `@nish_const_0_DIGIT.data` holds the folded
+elements — a `u8` table as a `c"..."` string, an `f64` one as hex doubles —
+and is `private unnamed_addr`, so LLVM may merge it with an equal constant;
+`@nish_const_0_DIGIT` is the `%struct.nish_array` header pointing at it,
+`internal` unless the table is exported (an importer then declares it
+`external constant`). The data pointer is a `bitcast` of the data global, as
+storage's is.
+
+<!-- cookbook:begin const-table -->
+```ts
+const DIGIT: readonly u8[] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 97, 98, 99, 100, 101, 102]
+
+export const hexDigit = (n: i32): u8 => {
+  const k = n & 15
+  return DIGIT[k]
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@nish_const_0_DIGIT.data = private unnamed_addr constant [16 x i8] c"0123456789abcdef", align 16
+@nish_const_0_DIGIT = internal constant %struct.nish_array { i64 16, i64 16, i8* bitcast ([16 x i8]* @nish_const_0_DIGIT.data to i8*) }, align 8
+
+define noundef i8 @hexDigit(i32 noundef %n) #0 {
+entry:
+  %k.addr = alloca i32, align 4
+  %0 = and i32 %n, 15
+  store i32 %0, i32* %k.addr, align 4
+  %1 = load i32, i32* %k.addr, align 4
+  %2 = sext i32 %1 to i64
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_const_0_DIGIT, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = bitcast i8* %4 to i8*
+  %6 = getelementptr inbounds i8, i8* %5, i64 %2
+  %7 = load i8, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  ret i8 %7
+}
+
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !8, i64 16}
+!11 = !{!"element i8", !6, i64 0}
+!12 = !{!11, !11, i64 0}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end const-table -->
+
+A read is an ordinary array read through the header, and because the header
+is `constant` too, `opt` folds the header load away and leaves one load of the
+element. The bounds check is gone before that: `src/bounds.ts` knows the
+table's length from the checker, so an index whose range fits — `n & 15`
+here, or any `u8` into a 256-entry table — needs no compare. Goldens:
+`tests/cases/const_array_u8.ll`, `tests/cases/const_array_numeric.ll`.
+
+### Root storage: a table the keep walks
+
+Module storage whose element is `C | null` for a class is *root storage*
+([LANGUAGE.md → Root storage](LANGUAGE.md#root-storage-an-object-graph-kept-between-calls),
+`docs/wp55-persistent-root.md`): the object graph its slots reach outlives
+each export call. Natively it is the storage above and nothing more. On a page
+module three things are added, all constants:
+
+- **`%nish.trace`, one per type the roots reach**: a kind (0 a class, 1 a
+  string, 2 an array, 3 a union of classes), the size, and the count, offsets
+  and descriptors of its pointer fields. `Node`'s `next` is at
+  `getelementptr (%struct.Node, null, 0, 1)`, and its descriptor points back
+  at `Node`'s own.
+- **`%nish.root`, one per root**: the slots' address, their count and the
+  class's descriptor; `@nish.roots` gathers them.
+- **`@nish_root_keep(mark)`**, the export the loader calls in place of
+  `nish_arena_release`: it hands the table to `nish_runtime_root_keep` in
+  `runtime/runtime-wasm.c`, which traces the graph, slides it down over the
+  garbage and rewrites every pointer into it once the kept region passes
+  twice the live bytes and 64 KiB.
+
+<!-- cookbook:begin storage-root -->
+Compiled with `--target wasm32`.
+
+```ts
+class Node {
+  value: i32
+  next: Node | null = null
+
+  constructor(value: i32) {
+    this.value = value
+  }
+}
+
+const head = new Array<Node | null>(1)
+
+export const push = (value: i32): void => {
+  const n = new Node(value)
+  n.next = head[0]
+  head[0] = n
+}
+```
+
+```llvm
+target datalayout = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
+target triple = "wasm32-unknown-unknown"
+
+%struct.Node = type { i32, %struct.Node* }
+%struct.nish_array = type { i64, i64, i8* }
+%nish.trace = type { i32, i32, i32, i32*, i8** }
+%nish.root = type { i8*, i32, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_storage_0_head.data = internal global [1 x %struct.Node*] zeroinitializer, align 16
+@nish.trace.0.at = internal constant [1 x i32] [i32 ptrtoint (%struct.Node** getelementptr (%struct.Node, %struct.Node* null, i32 0, i32 1) to i32)]
+@nish.trace.0.to = internal constant [1 x i8*] [i8* bitcast (%nish.trace* @nish.trace.0 to i8*)]
+@nish.trace.0 = internal constant %nish.trace { i32 0, i32 ptrtoint (%struct.Node* getelementptr (%struct.Node, %struct.Node* null, i32 1) to i32), i32 1, i32* getelementptr inbounds ([1 x i32], [1 x i32]* @nish.trace.0.at, i32 0, i32 0), i8** getelementptr inbounds ([1 x i8*], [1 x i8*]* @nish.trace.0.to, i32 0, i32 0) }
+@nish_storage_0_head.root = constant %nish.root { i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*), i32 1, i8* bitcast (%nish.trace* @nish.trace.0 to i8*) }
+@nish.roots = internal constant [1 x %nish.root*] [%nish.root* @nish_storage_0_head.root]
+@nish_storage_0_head = internal global %struct.nish_array { i64 1, i64 1, i8* bitcast ([1 x %struct.Node*]* @nish_storage_0_head.data to i8*) }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #0
+declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #0
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+
+define void @nish_root_keep(i64 %mark) {
+  call void @nish_runtime_root_keep(i64 %mark, i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define void @nish_reset_arena() {
+  call void @nish_runtime_root_reset(i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define void @nish_free_arena() {
+  call void @nish_runtime_root_reset(i8* bitcast ([1 x %nish.root*]* @nish.roots to i8*), i32 1)
+  ret void
+}
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 1
+  store %struct.Node* null, %struct.Node** %0, align 8, !tbaa !5
+  %1 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 0
+  store i32 %value, i32* %1, align 4, !tbaa !6
+  ret void
+}
+
+define void @push(i32 noundef %value) #1 {
+entry:
+  %n.addr = alloca %struct.Node*, align 8
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Node*
+  call void @Node.constructor(%struct.Node* %1, i32 %value)
+  store %struct.Node* %1, %struct.Node** %n.addr, align 8
+  %2 = load %struct.Node*, %struct.Node** %n.addr, align 8
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
+  %4 = load i64, i64* %3, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %5 = icmp ult i64 0, %4
+  br i1 %5, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %4), !nish.site !{i32 0}
+  unreachable
+
+bounds.ok:
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !10, !noalias !11, !tbaa !16
+  %8 = bitcast i8* %7 to %struct.Node**
+  %9 = getelementptr inbounds %struct.Node*, %struct.Node** %8, i64 0
+  %10 = load %struct.Node*, %struct.Node** %9, align 8, !alias.scope !11, !noalias !10, !tbaa !18
+  %11 = getelementptr inbounds %struct.Node, %struct.Node* %2, i32 0, i32 1
+  store %struct.Node* %10, %struct.Node** %11, align 8, !tbaa !5
+  %12 = load %struct.Node*, %struct.Node** %n.addr, align 8
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !10, !noalias !11, !tbaa !15
+  %15 = icmp ult i64 0, %14
+  br i1 %15, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 0, i64 %14), !nish.site !{i32 1}
+  unreachable
+
+bounds.ok.1:
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_storage_0_head, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !10, !noalias !11, !tbaa !16
+  %18 = bitcast i8* %17 to %struct.Node**
+  %19 = getelementptr inbounds %struct.Node*, %struct.Node** %18, i64 0
+  store %struct.Node* %12, %struct.Node** %19, align 8, !alias.scope !11, !noalias !10, !tbaa !18
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"Node", !2, i64 0, !3, i64 8}
+!5 = !{!4, !3, i64 8}
+!6 = !{!4, !2, i64 0}
+!7 = !{!"nish array"}
+!8 = !{!"header", !7}
+!9 = !{!"elements", !7}
+!10 = !{!8}
+!11 = !{!9}
+!12 = !{!"header i64", !1, i64 0}
+!13 = !{!"header ptr", !1, i64 0}
+!14 = !{!"array header", !12, i64 0, !12, i64 8, !13, i64 16}
+!15 = !{!14, !12, i64 0}
+!16 = !{!14, !13, i64 16}
+!17 = !{!"element ptr", !1, i64 0}
+!18 = !{!17, !17, i64 0}
+
+```
+<!-- cookbook:end storage-root -->
+
+The functions themselves are those any program gets: `push` allocates from
+the arena and stores into `head` through the header, with no barrier and no
+count. The cost is the keep's, after the call. Golden:
+`tests/cases/root_storage_page.ll`.
 
 ### Top-level code
 
@@ -14825,9 +15757,13 @@ with no one to free it. It is declared `CPtr | null`, narrowed, and copied with
 pointer back to `free` itself. The copy is the same `@nish.ffi.str` helper a
 `string` result calls — a byte loop to the NUL, then `nish_str_new` — so
 `readCString` adds no runtime function: `runtime.c` has no room under its
-ceiling, and the helper was already in the module's reach. Here it is
-`%7 = call i8* @nish.ffi.str(i8* %6)`, with no `NULL` test, because the
-parameter is a `CPtr` and the `if (p === null)` above it is what proved it.
+ceiling, and the helper was already in the module's reach. The parameter is a
+`CPtr`, so the `if (p === null)` above it is required, but a `declare
+function` declared to answer `CPtr` may still answer `NULL`, so the call tests
+its pointer again: `icmp eq i8* %6, null` branches to `ffi.null`, which panics
+with the `ffi-null` kind (`` `readCString` read a NULL pointer ``), the test
+`readStruct` and a `string` result make, and `ffi.copy` calls
+`@nish.ffi.str(i8* %6)`, which tests nothing itself.
 
 `readCString` is a fresh allocation of the calling function, so the escape
 analysis keeps `out` past `free(p)` and returns it. The literal `null` handed
@@ -14860,7 +15796,8 @@ export const main = (): i32 => (resolve("/").length === 1 ? 0 : 1)
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [92 x i8] } { i64 91, [92 x i8] c"`realpath`: argument 1 (path) holds a NUL byte, which C would read as the end of the string\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"/\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"`readCString` read a NULL pointer\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"/\00" }, align 8
 
 declare i8* @realpath(i8*, i8*)
 declare void @free(i8*)
@@ -14914,19 +15851,27 @@ if.then:
 
 if.end:
   %6 = load i8*, i8** %p.addr, align 8
-  %7 = call i8* @nish.ffi.str(i8* %6)
-  store i8* %7, i8** %out.addr, align 8
-  %8 = load i8*, i8** %p.addr, align 8
-  call void @free(i8* %8)
-  %9 = load i8*, i8** %out.addr, align 8
-  ret i8* %9
+  %7 = icmp eq i8* %6, null
+  br i1 %7, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [34 x i8] }* @.str.3 to i8*))
+  unreachable
+
+ffi.copy:
+  %8 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %8, i8** %out.addr, align 8
+  %9 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %9)
+  %10 = load i8*, i8** %out.addr, align 8
+  ret i8* %10
 }
 
 define noundef i32 @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @resolve(i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %1 = call i8* @resolve(i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   %3 = bitcast i8* %2 to i64*
   %4 = load i64, i64* %3, align 8
@@ -14966,6 +15911,121 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-owned-string -->
+
+### `cErrno`: errno after a foreign call
+
+In a program that names `cErrno` (WP27 S5, `nish:unsafe`), every call to a
+`declare function` is bracketed by errno. Before it, `call i32*
+@nish_errno_ptr()` answers errno's address on this thread (the runtime's
+`return &errno;`, so each libc spells it its own way) and `store i32 0` clears
+it; after it, the first thing is a `load` through the same pointer and a
+`store` into `@nish_errno_slot`, a runtime global that is
+`thread_local(initialexec)` under `--threads`. Both come after the NUL check of
+a `string` argument and before anything done with the result, so a copy or an
+allocation that moves errno cannot reach the saved value. `cErrno()` itself is
+one `load i32` of the slot. `@parse` gets no `readonly`, as any caller of C
+does; a function whose only effect is `cErrno()` is `readonly`, never
+`readnone`, so it stays on its side of a foreign call. A program that never
+names `cErrno` emits none of this.
+
+<!-- cookbook:begin decl-ffi-errno -->
+```ts
+import { cErrno } from "nish:unsafe"
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10)
+  return cErrno() === 0 ? n : -1
+}
+
+export const main = (): i32 => (parse("99999999999999999999") === -1 ? 0 : 1)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [87 x i8] } { i64 86, [87 x i8] c"`strtol`: argument 1 (s) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@nish_errno_slot = external global i32, align 4
+@.str.2 = private unnamed_addr constant { i64, [21 x i8] } { i64 20, [21 x i8] c"99999999999999999999\00" }, align 8
+
+declare i64 @strtol(i8*, i8*, i32)
+declare void @nish_free_arena() #1
+declare nonnull i32* @nish_errno_ptr() #1
+declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noundef i64 @parse(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+entry:
+  %n.addr = alloca i64, align 8
+  %0 = call i64 @nish_str_index_of(i8* %s, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %1 = icmp sge i64 %0, 0
+  br i1 %1, label %ffi.nul, label %ffi.ok
+
+ffi.nul:
+  call void @nish_panic(i8* bitcast ({ i64, [87 x i8] }* @.str.1 to i8*))
+  unreachable
+
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %cond.true, label %cond.false
+
+cond.true:
+  %8 = load i64, i64* %n.addr, align 8
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %9 = phi i64 [ %8, %cond.true ], [ -1, %cond.false ]
+  ret i64 %9
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %0 = call i64 @parse(i8* bitcast ({ i64, [21 x i8] }* @.str.2 to i8*))
+  %1 = icmp eq i64 %0, -1
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  ret i32 %2
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-errno -->
 
 ### `u8[]`: a buffer and its count
 
@@ -15591,6 +16651,106 @@ attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-enum -->
 
+### String `enum`
+
+A string enum is the same **distinct type with `i32` representation**: a
+`Role` is its member's ordinal (`Role.Admin` is `0`, `Role.Guest` is `1`), the
+parameter is an `i32`, and the `switch` is the same jump table, comparing
+ordinals and never bytes. What a numeric enum does not have is one constant
+table per module, `@.enumstr.Role`, of pointers to the members' strings in
+declaration order. `String(r)` is a `getelementptr` and a `load` from it —
+no allocation and no copy — and it is the only way to a member's string:
+`r === "admin"`, `const s: string = r` and `` `${r}` `` are refused, so a
+string compare never hides behind an enum (`tests/cases/enum_string`).
+
+<!-- cookbook:begin decl-enum-string -->
+```ts
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const rank = (r: Role): i32 => {
+  switch (r) {
+    case Role.Admin:
+      return 2
+    default:
+      return 1
+  }
+}
+
+export const main = (): number => {
+  const r: Role = Role.Guest
+  console.log(`${String(r)} ${rank(r)}`)
+  return 0
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"admin\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"guest\00" }, align 8
+@.enumstr.Role = private unnamed_addr constant [2 x i8*] [i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)], align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+
+define internal noundef i32 @rank(i32 noundef %r) #0 {
+entry:
+  switch i32 %r, label %sw.default [
+    i32 0, label %sw.case
+  ]
+
+sw.case:
+  ret i32 2
+
+sw.default:
+  ret i32 1
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %r.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 1, i32* %r.addr, align 4
+  %0 = load i32, i32* %r.addr, align 4
+  %1 = sext i32 %0 to i64
+  %2 = getelementptr inbounds [2 x i8*], [2 x i8*]* @.enumstr.Role, i64 0, i64 %1
+  %3 = load i8*, i8** %2, align 8
+  %4 = call i8* @nish_str_concat(i8* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %5 = load i32, i32* %r.addr, align 4
+  %6 = call i32 @rank(i32 %5)
+  %7 = call i8* @nish_str_from_i32(i32 %6)
+  %8 = call i8* @nish_str_concat(i8* %4, i8* %7)
+  call void @nish_print(i8* %8)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-enum-string -->
+
 **An imported enum lowers exactly as this one does.** `import { Kind } from
 "./kinds"` binds the exporter's enum, so a member folds to the exporter's
 integer, a `Kind` parameter is an `i32` parameter, and neither module gains a
@@ -16171,6 +17331,203 @@ attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end union-switch -->
+
+A union as a generic's type argument is monomorphised like any other:
+`Box<Shape>` is `%struct.Box$un2.$Circle.$Square = type { %union.tagged* }`,
+the layout a class written by hand with a `Shape` field has
+(`%struct.ShapeBox` below), field for field. A variant entering a `T` slot is
+the same `bitcast` to `%union.tagged*` it is for a `Shape` parameter, and the
+two instances differ only in their names and their TBAA tag, which is one
+per class as for any two classes (`tests/cases/union_generic_class`,
+`union_generic_call`, `union_result`).
+
+<!-- cookbook:begin decl-union-generic -->
+```ts
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle
+  r: i32 = 3
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square
+  side: i32 = 4
+}
+
+type Shape = Circle | Square
+
+class Box<T> {
+  value: T
+  constructor(value: T) {
+    this.value = value
+  }
+}
+
+class ShapeBox {
+  value: Shape
+  constructor(value: Shape) {
+    this.value = value
+  }
+}
+
+const viaBox = (): Kind => new Box<Shape>(new Circle()).value.kind
+
+const viaShapeBox = (): Kind => new ShapeBox(new Circle()).value.kind
+
+export const main = (): number => {
+  console.log(viaBox() === viaShapeBox() ? "same" : "different")
+  return 0
+}
+```
+
+```llvm
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32, i32 }
+%struct.ShapeBox = type { %union.tagged* }
+%struct.Box$un2.$Circle.$Square = type { %union.tagged* }
+%union.tagged = type { i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"same\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"different\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @ShapeBox.constructor(%struct.ShapeBox* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %union.tagged* noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.ShapeBox, %struct.ShapeBox* %this, i32 0, i32 0
+  store %union.tagged* %value, %union.tagged** %0, align 8, !tbaa !4
+  ret void
+}
+
+define internal noundef i32 @viaBox() #0 {
+entry:
+  %Box$un2.$Circle.$Square.obj = alloca %struct.Box$un2.$Circle.$Square, align 8
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Circle*
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !7
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 1
+  store i32 3, i32* %3, align 4, !tbaa !8
+  %4 = bitcast %struct.Circle* %1 to %union.tagged*
+  call void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, %union.tagged* %4)
+  %5 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, i32 0, i32 0
+  %6 = load %union.tagged*, %union.tagged** %5, align 8, !tbaa !10
+  %7 = getelementptr inbounds %union.tagged, %union.tagged* %6, i32 0, i32 0
+  %8 = load i32, i32* %7, align 4
+  ret i32 %8
+}
+
+define internal noundef i32 @viaShapeBox() #0 {
+entry:
+  %ShapeBox.obj = alloca %struct.ShapeBox, align 8
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Circle*
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !7
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 1
+  store i32 3, i32* %3, align 4, !tbaa !8
+  %4 = bitcast %struct.Circle* %1 to %union.tagged*
+  call void @ShapeBox.constructor(%struct.ShapeBox* %ShapeBox.obj, %union.tagged* %4)
+  %5 = getelementptr inbounds %struct.ShapeBox, %struct.ShapeBox* %ShapeBox.obj, i32 0, i32 0
+  %6 = load %union.tagged*, %union.tagged** %5, align 8, !tbaa !4
+  %7 = getelementptr inbounds %union.tagged, %union.tagged* %6, i32 0, i32 0
+  %8 = load i32, i32* %7, align 4
+  ret i32 %8
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i32 @viaBox()
+  %1 = call i32 @viaShapeBox()
+  %2 = icmp eq i32 %0, %1
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %3 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), %cond.true ], [ bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), %cond.false ]
+  call void @nish_print(i8* %3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %union.tagged* noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %this, i32 0, i32 0
+  store %union.tagged* %value, %union.tagged** %0, align 8, !tbaa !10
+  ret void
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"ShapeBox", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"i32", !1, i64 0}
+!6 = !{!"Circle", !5, i64 0, !5, i64 4}
+!7 = !{!6, !5, i64 0}
+!8 = !{!6, !5, i64 4}
+!9 = !{!"Box$un2.$Circle.$Square", !2, i64 0}
+!10 = !{!9, !2, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-union-generic -->
 
 ### `export const main` and the entry wrapper
 
@@ -31153,7 +32510,7 @@ bounds.ok:
   %11 = bitcast i8* %10 to i8*
   %12 = getelementptr inbounds i8, i8* %11, i64 %0
   %13 = bitcast i8* %12 to <16 x i8>*
-  %14 = load <16 x i8>, <16 x i8>* %13, align 1
+  %14 = load <16 x i8>, <16 x i8>* %13, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   %15 = sext i32 %at to i64
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
   %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -31175,14 +32532,14 @@ bounds.ok.1:
   %26 = bitcast i8* %25 to i8*
   %27 = getelementptr inbounds i8, i8* %26, i64 %15
   %28 = bitcast i8* %27 to <16 x i8>*
-  store <16 x i8> %14, <16 x i8>* %28, align 1
+  store <16 x i8> %14, <16 x i8>* %28, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   ret void
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!12, !13, !14, !15, !16}
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -31195,11 +32552,13 @@ attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !8, i64 16}
-!12 = !{i32 8, !"cf-protection-branch", i32 1}
-!13 = !{i32 8, !"cf-protection-return", i32 1}
-!14 = !{i32 8, !"branch-target-enforcement", i32 1}
-!15 = !{i32 8, !"sign-return-address", i32 1}
-!16 = !{i32 4, !"probe-stack", !"inline-asm"}
+!12 = !{!"element i8", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end simd-load-store -->
 
@@ -31476,6 +32835,533 @@ instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
 `` attempt to compute with overflow in a constant ``, and
 `const OVER: i32 = wrappingAdd(2147483647, 1)` folds to `-2147483648`.
 
+#### A self-recursive sum: one loop, a sign test per step
+
+A checked `+` stops LLVM's tail-recursion elimination: it folds
+`return x + f(...)` into a loop and an accumulator only when the `+` is a plain
+`add`. So the compiler writes that loop itself (`src/accumulate.ts` chooses
+the functions, `src/emit-accumulate.ts` writes them, with the proof). A
+function qualifies when it is a plain function of its module, or a method of
+a class of its module that is neither generic nor `nish/threads`'s
+atomic `AtomicI32` or `AtomicI64` (whose methods the compiler writes
+itself), that returns a type whose `+` is checked, `i32` or `i64` (an `f64`
+sum has no overflow check to defer, and a `u8`..`u64` sum wraps by
+definition, so it has none either: `tests/cases/acc_width_unsigned`),
+every `return` that recurses is `X + self(args)`, or `self(args) + Y` with
+`Y` a number literal or a parameter (so moving `Y`
+ahead of the call cannot move an effect), at least one `return` does not, and
+the body is only blocks, `if`, declarations, expression statements and
+`return`s. It may not hold a stack-allocated local or site, or bracket a
+loop's passes with arena scopes (`scopesAnyPass`): each of those ties
+memory's lifetime to one call, which the loop's steps would share. It may
+open an arena scope (a string template does) when every step passes only
+numbers, booleans, enums, or a parameter or `this` unchanged, and nothing it
+runs reads `Arena.mark` or `Arena.used`: then nothing a step allocated is
+reachable from the next, and the loop releases the scope at the end of every
+step, before the cold call's `ret` and before the base's
+(`tests/cases/acc_arena`). A step that passes a string it built keeps the
+recursion (`tests/cases/acc_arena_ineligible`). `self(args) - X`,
+`X - self(args)` and `self(args) + f()` stay recursion.
+
+Each parameter becomes a `phi` of `rec.head`, and a step evaluates `X` and the
+arguments in the source's order and branches back. Two more `phi`s carry the
+sum before the last step, `%rec.prev`, and that step's `X`, `%rec.last`. The
+header adds them with a wrapping `add` and calls the step cold when `X` or the
+sum is negative: while no step is cold the sum is exact and in `[0, MAX]`, so
+the base's one checked add panics exactly when the recursion would. Where the
+recursion would overflow, the loop panics at the same add with the same
+output; where it would exhaust the stack, the loop instead runs on, making
+its cold call only every 2^31 or so steps. A cold
+step goes to `rec.call`, which makes the call the step replaced and adds
+`%rec.last` and `%rec.prev` to its answer, each checked, so its panic is the
+recursion's too. When the header's own code only computes, the test is folded
+into the branch that ends it (`%rec.leave`) and `rec.exit` sorts a cold step
+from a base, so the hot loop takes no branch of its own. Code with an effect
+(a call) runs after the test instead, in `rec.body`. In `fib`, `fib(n - 1)`
+stays a call and `fib(n - 2)` is the back edge. `--no-elision` and a debug or
+wasm-panic-site build keep the recursion (`tests/cases/acc_fib`, `acc_tree`,
+`acc_shapes`, `acc_overflow`, `acc_effects`, `acc_soundness`,
+`acc_width_i64`, `acc_width_unsigned`, `acc_ineligible`,
+`acc_ineligible_f64`).
+
+<!-- cookbook:begin opt-recursion-loop -->
+```ts
+const fib = (n: i32): i32 => {
+  if (n < 2) {
+    return n
+  }
+  return fib(n - 1) + fib(n - 2)
+}
+
+export const test = (): i32 => fib(30)
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @fib(i32 noundef %n.in) #0 {
+entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %6, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %5, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  %0 = icmp slt i32 %n, 2
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %n)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %2
+
+if.end:
+  %4 = sub nsw i32 %n, 1
+  %5 = call i32 @fib(i32 %4)
+  %6 = sub nsw i32 %n, 2
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %7 = call i32 @fib(i32 %n)
+  %8 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %9)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test() #0 {
+entry:
+  %0 = tail call i32 @fib(i32 30)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-loop -->
+
+An `i64` sum is the same loop at `i64`: the `phi`s, the wrapping add and the
+sign test are at the return type's width, and every checked add is
+`llvm.sadd.with.overflow.i64`, the instruction the recursion's own `+` is.
+The proof only needs MAX and MIN of the width (`src/emit-accumulate.ts`,
+"Widths").
+
+<!-- cookbook:begin opt-recursion-i64 -->
+```ts
+const total = (n: i64): i64 => {
+  if (n <= toI64(0)) {
+    return toI64(0)
+  }
+  return n + total(n - toI64(1))
+}
+
+export const test = (): i64 => total(toI64(100000))
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #2
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #2
+
+define internal noundef i64 @total(i64 noundef %n.in) #0 {
+entry:
+  br label %rec.head
+
+rec.head:
+  %n = phi i64 [ %n.in, %entry ], [ %8, %ovf.ok.1 ]
+  %rec.prev = phi i64 [ 0, %entry ], [ %rec.sum, %ovf.ok.1 ]
+  %rec.last = phi i64 [ 0, %entry ], [ %n, %ovf.ok.1 ]
+  %rec.sum = add i64 %rec.prev, %rec.last
+  %rec.signs = or i64 %rec.last, %rec.sum
+  %rec.cold = icmp slt i64 %rec.signs, 0
+  %0 = sext i32 0 to i64
+  %1 = icmp sle i64 %n, %0
+  %rec.leave = or i1 %1, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %2 = sext i32 0 to i64
+  %3 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.sum, i64 %2)
+  %4 = extractvalue { i64, i1 } %3, 0
+  %5 = extractvalue { i64, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i64 %4
+
+if.end:
+  %6 = sext i32 1 to i64
+  %7 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 %n, i64 %6)
+  %8 = extractvalue { i64, i1 } %7, 0
+  %9 = extractvalue { i64, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %10 = call i64 @total(i64 %n)
+  %11 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.last, i64 %10)
+  %12 = extractvalue { i64, i1 } %11, 0
+  %13 = extractvalue { i64, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %14 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %rec.prev, i64 %12)
+  %15 = extractvalue { i64, i1 } %14, 0
+  %16 = extractvalue { i64, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  ret i64 %15
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %if.then ], [ 1, %if.end ], [ 0, %rec.call ], [ 0, %ovf.ok.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
+}
+
+define noundef i64 @test() #0 {
+entry:
+  %0 = sext i32 100000 to i64
+  %1 = tail call i64 @total(i64 %0)
+  ret i64 %1
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-i64 -->
+
+A frame that allocates on the arena marks it once, in `entry`, and releases
+to that mark at the end of every step, before the edge back to `rec.head`,
+and before each `ret`: what a step built is garbage before the next begins,
+as it was when each frame returned. The proof is `src/emit-accumulate.ts`,
+"Arena scope".
+
+<!-- cookbook:begin opt-recursion-arena -->
+```ts
+const digits = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0
+  }
+  const s = `${n}`
+  return s.length + digits(n - 1)
+}
+
+export const test = (): i32 => digits(100000)
+```
+
+```llvm
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define internal noundef i32 @digits(i32 noundef %n.in) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  br label %rec.head
+
+rec.head:
+  %n = phi i32 [ %n.in, %entry ], [ %9, %if.end ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %if.end ]
+  %rec.last = phi i32 [ 0, %entry ], [ %8, %if.end ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  %0 = icmp sle i32 %n, 0
+  %rec.leave = or i1 %0, %rec.cold
+  br i1 %rec.leave, label %rec.exit, label %if.end
+
+if.then:
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 0)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %2
+
+if.end:
+  %4 = call i8* @nish_str_from_i32(i32 %n)
+  store i8* %4, i8** %s.addr, align 8
+  %5 = load i8*, i8** %s.addr, align 8
+  %6 = bitcast i8* %5 to i64*
+  %7 = load i64, i64* %6, align 8
+  %8 = trunc i64 %7 to i32
+  %9 = sub nsw i32 %n, 1
+  call void @nish_arena_release(i64 %arena.mark)
+  br label %rec.head
+
+rec.exit:
+  br i1 %rec.cold, label %rec.call, label %if.then
+
+rec.call:
+  %10 = call i32 @digits(i32 %n)
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %12)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %15
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test() #0 {
+entry:
+  %0 = tail call i32 @digits(i32 100000)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-arena -->
+
+A method's self call is `r.m(args)` on a receiver the checker typed as the
+method's own class, written with `.`, not `?.`. Nish binds every method call
+statically (no inheritance, no method in an interface, no method call on a
+union), so that call is this body whatever `r` holds, and `this` is one more
+parameter of the loop: `%this` is a `phi` of `rec.head`, and a step
+evaluates `X`, then the receiver, then the arguments, as the call would. A
+tree sum walks its right spine as the loop and calls itself only for the left
+subtrees. A call through a function-valued field (`this.op(x)`) is a
+dispatcher's, not a method call, and never a step (`tests/cases/acc_method`,
+`acc_method_overflow`, `acc_method_ineligible`).
+
+<!-- cookbook:begin opt-recursion-method -->
+```ts
+class TreeNode {
+  value: i32
+  left: TreeNode | null
+  right: TreeNode | null
+  constructor(value: i32, left: TreeNode | null, right: TreeNode | null) {
+    this.value = value
+    this.left = left
+    this.right = right
+  }
+
+  sum(): i32 {
+    const left = this.left
+    const right = this.right
+    const l = left === null ? 0 : left.sum()
+    if (right === null) {
+      return this.value + l
+    }
+    return this.value + l + right.sum()
+  }
+}
+
+export const test = (t: TreeNode): i32 => t.sum()
+```
+
+```llvm
+%struct.TreeNode = type { i32, %struct.TreeNode*, %struct.TreeNode* }
+
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define internal void @TreeNode.constructor(%struct.TreeNode* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i32 noundef %value, %struct.TreeNode* noundef align 8 %left, %struct.TreeNode* noundef align 8 %right) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 0
+  store i32 %value, i32* %0, align 4, !tbaa !5
+  %1 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 1
+  store %struct.TreeNode* %left, %struct.TreeNode** %1, align 8, !tbaa !6
+  %2 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 2
+  store %struct.TreeNode* %right, %struct.TreeNode** %2, align 8, !tbaa !7
+  ret void
+}
+
+define internal noundef i32 @TreeNode.sum(%struct.TreeNode* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this.in) #1 {
+entry:
+  %left.addr = alloca %struct.TreeNode*, align 8
+  %right.addr = alloca %struct.TreeNode*, align 8
+  %l.addr = alloca i32, align 4
+  br label %rec.head
+
+rec.head:
+  %this = phi %struct.TreeNode* [ %this.in, %entry ], [ %26, %ovf.ok.2 ]
+  %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %ovf.ok.2 ]
+  %rec.last = phi i32 [ 0, %entry ], [ %24, %ovf.ok.2 ]
+  %rec.sum = add i32 %rec.prev, %rec.last
+  %rec.signs = or i32 %rec.last, %rec.sum
+  %rec.cold = icmp slt i32 %rec.signs, 0
+  br i1 %rec.cold, label %rec.call, label %rec.body
+
+rec.body:
+  %0 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 1
+  %1 = load %struct.TreeNode*, %struct.TreeNode** %0, align 8, !tbaa !6
+  store %struct.TreeNode* %1, %struct.TreeNode** %left.addr, align 8
+  %2 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 2
+  %3 = load %struct.TreeNode*, %struct.TreeNode** %2, align 8, !tbaa !7
+  store %struct.TreeNode* %3, %struct.TreeNode** %right.addr, align 8
+  %4 = load %struct.TreeNode*, %struct.TreeNode** %left.addr, align 8
+  %5 = icmp eq %struct.TreeNode* %4, null
+  br i1 %5, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  %6 = load %struct.TreeNode*, %struct.TreeNode** %left.addr, align 8
+  %7 = call i32 @TreeNode.sum(%struct.TreeNode* %6)
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ 0, %cond.true ], [ %7, %cond.false ]
+  store i32 %8, i32* %l.addr, align 4
+  %9 = load %struct.TreeNode*, %struct.TreeNode** %right.addr, align 8
+  %10 = icmp eq %struct.TreeNode* %9, null
+  br i1 %10, label %if.then, label %if.end
+
+if.then:
+  %11 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 0
+  %12 = load i32, i32* %11, align 4, !tbaa !5
+  %13 = load i32, i32* %l.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %17 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %15)
+  %18 = extractvalue { i32, i1 } %17, 0
+  %19 = extractvalue { i32, i1 } %17, 1
+  br i1 %19, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %18
+
+if.end:
+  %20 = getelementptr inbounds %struct.TreeNode, %struct.TreeNode* %this, i32 0, i32 0
+  %21 = load i32, i32* %20, align 4, !tbaa !5
+  %22 = load i32, i32* %l.addr, align 4
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %26 = load %struct.TreeNode*, %struct.TreeNode** %right.addr, align 8
+  br label %rec.head
+
+rec.call:
+  %27 = call i32 @TreeNode.sum(%struct.TreeNode* %this)
+  %28 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %27)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %29)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  ret i32 %32
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @test(%struct.TreeNode* noundef nonnull readonly align 8 dereferenceable(24) nocapture %t) #1 {
+entry:
+  %0 = call i32 @TreeNode.sum(%struct.TreeNode* %t)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"TreeNode", !2, i64 0, !3, i64 8, !3, i64 16}
+!5 = !{!4, !2, i64 0}
+!6 = !{!4, !3, i64 8}
+!7 = !{!4, !3, i64 16}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end opt-recursion-method -->
+
 ### `--target`
 
 The module carries `target datalayout` and `target triple` (the strings
@@ -31554,6 +33440,8 @@ declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #2
 declare void @nish_sandbox_check() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_runtime_root_keep(i64 noundef, i8* noundef, i32 noundef) #2
+declare void @nish_runtime_root_reset(i8* noundef, i32 noundef) #2
 declare noundef i64 @nish_region_new() #2
 declare noundef i64 @nish_region_child_new() #2
 declare i8* @nish_region_enter(i64 noundef) #2
@@ -31576,6 +33464,7 @@ declare noundef i32 @nish_async_cancel_after(i64 noundef, i32 noundef) #3
 declare nonnull i8* @nish_async_copy_str(i8* nonnull) #3
 declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #3
 declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #3
+declare nonnull i32* @nish_errno_ptr() #2
 declare noundef i64 @nish_arena_used() #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2

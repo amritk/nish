@@ -2,9 +2,11 @@
 // number mode and by `tests/link/net_quic_recovery_f64` under
 // `--number-mode f64`: the module on its own in `unit.ts`, inside the
 // connection in `conn.ts`, the handshake flight under loss in
-// `handshake.ts`, and path MTU discovery in `pmtu.ts`.
+// `handshake.ts`, path MTU discovery in `pmtu.ts`, and the CUBIC
+// controller in `cubic.ts`.
 import { Suite } from "nish/testing";
 import { recoveryConnChecks } from "./conn";
+import { recoveryCubicChecks } from "./cubic";
 import { recoveryHandshakeChecks } from "./handshake";
 import { recoveryPmtuChecks } from "./pmtu";
 import { recoveryUnitChecks } from "./unit";
@@ -16,5 +18,6 @@ export const quicRecoveryChecks = (): i32 => {
   recoveryConnChecks(t);
   recoveryHandshakeChecks(t);
   recoveryPmtuChecks(t);
+  recoveryCubicChecks(t);
   return t.done();
 };

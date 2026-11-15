@@ -116,9 +116,6 @@
       "NL9007": 1,
       "NL9011": 1
     },
-    "src/statements.ts": {
-      "NL9011": 2
-    },
     "src/strings.ts": {
       "NL9007": 1,
       "NL9009": 1

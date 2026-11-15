@@ -4,6 +4,22 @@
 # a line out when its program is gone. The rewriter that wrote the store was
 # stage0's and is deleted, so a line here is coverage lost, not a task deferred:
 # the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).
+cases/acc_arena added after R6: no rewriter to freeze it with
+cases/acc_arena_ineligible added after R6: no rewriter to freeze it with
+cases/acc_arena_overflow added after R6: no rewriter to freeze it with
+cases/acc_effects added after R6: no rewriter to freeze it with
+cases/acc_fib added after R6: no rewriter to freeze it with
+cases/acc_ineligible added after R6: no rewriter to freeze it with
+cases/acc_ineligible_f64 added after R6: no rewriter to freeze it with
+cases/acc_method added after R6: no rewriter to freeze it with
+cases/acc_method_ineligible added after R6: no rewriter to freeze it with
+cases/acc_method_overflow added after R6: no rewriter to freeze it with
+cases/acc_overflow added after R6: no rewriter to freeze it with
+cases/acc_shapes added after R6: no rewriter to freeze it with
+cases/acc_soundness added after R6: no rewriter to freeze it with
+cases/acc_tree added after R6: no rewriter to freeze it with
+cases/acc_width_i64 added after R6: no rewriter to freeze it with
+cases/acc_width_unsigned added after R6: no rewriter to freeze it with
 cases/arena_placement added after R6: no rewriter to freeze it with
 cases/arena_placement_loops added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_for added after R6: no rewriter to freeze it with
@@ -55,6 +71,7 @@ cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
 cases/arr_filter added after R6: no rewriter to freeze it with
 cases/arr_find_index added after R6: no rewriter to freeze it with
+cases/arr_foreach added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
@@ -177,6 +194,8 @@ cases/cls_inline_array_order added after R6: no rewriter to freeze it with
 cases/cls_inline_array_passed added after R6: no rewriter to freeze it with
 cases/cls_inline_array_push added after R6: no rewriter to freeze it with
 cases/cls_literal_methodless added after R6: no rewriter to freeze it with
+cases/const_array_numeric added after R6: no rewriter to freeze it with
+cases/const_array_u8 added after R6: no rewriter to freeze it with
 cases/ct_asm_p256 added after R6: no rewriter to freeze it with
 cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with
@@ -190,12 +209,21 @@ cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
+cases/dbg_union_generic added after R6: no rewriter to freeze it with
 cases/deny_panics_arr_map added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
+cases/destructure_array added after R6: no rewriter to freeze it with
+cases/destructure_empty added after R6: no rewriter to freeze it with
+cases/destructure_for_of added after R6: no rewriter to freeze it with
+cases/destructure_forms added after R6: no rewriter to freeze it with
+cases/destructure_object added after R6: no rewriter to freeze it with
+cases/destructure_out_of_range added after R6: no rewriter to freeze it with
+cases/destructure_stack added after R6: no rewriter to freeze it with
+cases/destructure_zero_cost added after R6: no rewriter to freeze it with
 cases/deterministic_bits added after R6: no rewriter to freeze it with
 cases/deterministic_parse added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
@@ -281,6 +309,9 @@ cases/fnref_row_map_set added after R6: no rewriter to freeze it with
 cases/fnref_row_nullish added after R6: no rewriter to freeze it with
 cases/fnref_row_push_nullable added after R6: no rewriter to freeze it with
 cases/fnref_stores added after R6: no rewriter to freeze it with
+cases/foreach_mutate added after R6: no rewriter to freeze it with
+cases/foreach_nested added after R6: no rewriter to freeze it with
+cases/generic_interface_class_arg added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/hygiene_quiet added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
@@ -305,6 +336,7 @@ cases/map_extras_get_or_insert added after R6: no rewriter to freeze it with
 cases/map_extras_reserve added after R6: no rewriter to freeze it with
 cases/map_extras_walk added after R6: no rewriter to freeze it with
 cases/map_fingerprint_miss added after R6: no rewriter to freeze it with
+cases/map_foreach added after R6: no rewriter to freeze it with
 cases/map_fused_generic added after R6: no rewriter to freeze it with
 cases/map_fused_guard_has added after R6: no rewriter to freeze it with
 cases/map_fused_guard_not_has added after R6: no rewriter to freeze it with
@@ -507,11 +539,16 @@ cases/param_rest_escape added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_drop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_quiet added after R6: no rewriter to freeze it with
+cases/perf_arena_unbounded_pass added after R6: no rewriter to freeze it with
+cases/perf_arena_unbounded_quiet added after R6: no rewriter to freeze it with
 cases/perf_arena_using added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
+cases/perf_kept_memory added after R6: no rewriter to freeze it with
+cases/perf_kept_memory_direct added after R6: no rewriter to freeze it with
+cases/perf_kept_memory_quiet added after R6: no rewriter to freeze it with
 cases/perf_rng_counter added after R6: no rewriter to freeze it with
 cases/perf_rng_getbyte added after R6: no rewriter to freeze it with
 cases/perf_rng_loop added after R6: no rewriter to freeze it with
@@ -571,6 +608,7 @@ cases/region_child_local_map added after R6: no rewriter to freeze it with
 cases/region_child_map added after R6: no rewriter to freeze it with
 cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with
+cases/res_let_reassign added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
@@ -589,6 +627,7 @@ cases/rng_entry_range_panic added after R6: no rewriter to freeze it with
 cases/rng_generic added after R6: no rewriter to freeze it with
 cases/rng_param added after R6: no rewriter to freeze it with
 cases/rng_widen added after R6: no rewriter to freeze it with
+cases/root_storage added after R6: no rewriter to freeze it with
 cases/sandbox_hello added after R6: no rewriter to freeze it with
 cases/script_basic added after R6: no rewriter to freeze it with
 cases/script_exit added after R6: no rewriter to freeze it with
@@ -602,21 +641,36 @@ cases/secret_wipe_o2 added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_inferred added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_inferred_plain added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_plain added after R6: no rewriter to freeze it with
+cases/set_foreach added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
 cases/set_iter added after R6: no rewriter to freeze it with
 cases/set_iter_keys added after R6: no rewriter to freeze it with
 cases/set_iter_values added after R6: no rewriter to freeze it with
 cases/set_str added after R6: no rewriter to freeze it with
 cases/simd_access added after R6: no rewriter to freeze it with
+cases/simd_access_alias added after R6: no rewriter to freeze it with
 cases/simd_access_oob added after R6: no rewriter to freeze it with
+cases/simd_access_oob_alias_pop added after R6: no rewriter to freeze it with
+cases/simd_access_oob_below added after R6: no rewriter to freeze it with
+cases/simd_access_oob_field_swap added after R6: no rewriter to freeze it with
 cases/simd_access_oob_first added after R6: no rewriter to freeze it with
+cases/simd_access_oob_guard added after R6: no rewriter to freeze it with
+cases/simd_access_oob_huge_literal added after R6: no rewriter to freeze it with
+cases/simd_access_oob_huge_offset added after R6: no rewriter to freeze it with
+cases/simd_access_oob_loop_pop added after R6: no rewriter to freeze it with
 cases/simd_access_oob_negative added after R6: no rewriter to freeze it with
+cases/simd_access_oob_resized added after R6: no rewriter to freeze it with
+cases/simd_access_oob_strict added after R6: no rewriter to freeze it with
+cases/simd_access_oob_unfloored added after R6: no rewriter to freeze it with
+cases/simd_access_order added after R6: no rewriter to freeze it with
+cases/simd_access_proven added after R6: no rewriter to freeze it with
 cases/simd_chacha_quarter added after R6: no rewriter to freeze it with
 cases/simd_lanes added after R6: no rewriter to freeze it with
 cases/simd_load_field_loop added after R6: no rewriter to freeze it with
 cases/simd_ops_float added after R6: no rewriter to freeze it with
 cases/simd_ops_int added after R6: no rewriter to freeze it with
 cases/simd_shifts added after R6: no rewriter to freeze it with
+cases/simd_store_field_reload added after R6: no rewriter to freeze it with
 cases/simd_store_oob added after R6: no rewriter to freeze it with
 cases/simd_values added after R6: no rewriter to freeze it with
 cases/simd_zero_fill added after R6: no rewriter to freeze it with
@@ -642,6 +696,11 @@ cases/term_pty added after R6: no rewriter to freeze it with
 cases/term_restore added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
+cases/union_generic_call added after R6: no rewriter to freeze it with
+cases/union_generic_class added after R6: no rewriter to freeze it with
+cases/union_generic_escape added after R6: no rewriter to freeze it with
+cases/union_generic_nullable added after R6: no rewriter to freeze it with
+cases/union_map_helpers added after R6: no rewriter to freeze it with
 cases/union_map_value added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with
 cases/union_narrowing_arms added after R6: no rewriter to freeze it with
@@ -653,6 +712,7 @@ cases/union_narrowing_loop_reads added after R6: no rewriter to freeze it with
 cases/union_narrowing_paths added after R6: no rewriter to freeze it with
 cases/union_narrowing_switch_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_tested_join added after R6: no rewriter to freeze it with
+cases/union_result added after R6: no rewriter to freeze it with
 cases/union_scale added after R6: no rewriter to freeze it with
 cases/union_switch added after R6: no rewriter to freeze it with
 cases/union_switch_flow added after R6: no rewriter to freeze it with
@@ -664,6 +724,7 @@ cases/unsafe_get_set added after R6: no rewriter to freeze it with
 cases/unsafe_wrapping added after R6: no rewriter to freeze it with
 cases/wall_clock added after R6: no rewriter to freeze it with
 cases/wasm_math_std added after R6: no rewriter to freeze it with
+cases/wasm_union_generic added after R6: no rewriter to freeze it with
 cases/wipe_bytes added after R6: no rewriter to freeze it with
 corpus/bit_fnv1a stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bit_fnv1a.args` now says `(none)`
 corpus/bit_i64 stale since R6: tests/differential/corpus/bit_i64.ts changed since the rewrite was frozen (37bc5d4b4613df3f -> f7c5558235ba86d2)

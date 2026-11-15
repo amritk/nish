@@ -1,0 +1,358 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/amritk/nish/main/schemas/package.schema.json",
+  "title": "package.json",
+  "description": "Nish reads the same `package.json` npm and Node read. It looks at a handful of fields, and ignores the rest. Some are Node's own fields that Nish reads in a narrower way: `exports`, `engines` and `version`. One is Nish's own: `nish`, which only the root package's manifest may carry. This page lists every field Nish reads, what it does with each one, and the error each mistake gets.\n\nTwo kinds of `package.json` matter, and they are read differently:\n\n- **The root package's** is the `package.json` nearest above the entry file you compile. Its `nish` field grants capabilities, adds a no-panic scope and names host modules. When no `package.json` is above the entry, there is no root manifest, and nothing on this page applies to your own code.\n- **A dependency's** is the `package.json` of a package under `node_modules`. Nish reads its `exports`, `engines` and `version`: which file to compile, which compiler version the package needs, and the version to name in an error. A `nish` field in a dependency's manifest is ignored. A package cannot grant itself anything.\n\nEvery other field (`name`, `scripts`, `dependencies`, `type`, `bin` and the rest) is npm's and Node's business, and Nish leaves it alone. Install packages with npm as usual. Nish resolves imports from `node_modules` the way Node does.\n\nThe `nish` field is read **strictly**. JSON Schema cannot express two of the rules below, and the compiler holds to them anyway: a key written twice is refused, and so is a `package.json` that stops being JSON. A key is decoded as `JSON.parse` decodes it, so `\"ni\\u0073h\"` is `\"nish\"`. Each refusal is an error reported where the manifest writes the mistake, so a typo never quietly widens a policy or drops a module from a scope.\n\nThis page is generated from [`schemas/package.schema.json`](https://github.com/amritk/nish/blob/main/schemas/package.schema.json), which an editor can use to check a `package.json` and complete its `nish` field. In VS Code, add it beside the `package.json` schema the editor already applies, rather than in place of it, with a `json.schemas` entry in your settings:\n\n```json\n{\n  \"json.schemas\": [\n    {\n      \"fileMatch\": [\"package.json\"],\n      \"url\": \"https://raw.githubusercontent.com/amritk/nish/main/schemas/package.schema.json\"\n    }\n  ]\n}\n```\n\nA `\"$schema\"` key in the `package.json` itself would also work, but it replaces the editor's own schema for npm's fields.",
+  "type": "object",
+  "x-mjst": {
+    "markdown": {
+      "file": "package-json.md",
+      "sections": [
+        {
+          "id": "nish",
+          "title": "The `nish` field",
+          "description": "Settings for the program you compile, read from the root package's manifest only."
+        },
+        {
+          "id": "node",
+          "title": "Fields shared with Node",
+          "description": "Node's own fields, which Nish reads in every package under `node_modules`. Each one keeps the meaning npm and Node give it. The descriptions below say how much of that meaning Nish reads."
+        }
+      ]
+    }
+  },
+  "properties": {
+    "nish": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Nish's own settings: one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once.\n\nAny other key is refused, a misspelt `capabilites` included. So is a second `nish` field, a `nish` that is not an object, and a `package.json` that mentions `nish` but is not well-formed JSON. All of these are [NL3036](../diagnostics/nl3xxx.md#nl3036). A field the compiler cannot read in full would leave part of what the package says about itself unread, so it is refused rather than half applied.\n\nOnly the root package's manifest is read for this field. A dependency's `nish` field is ignored.",
+      "examples": [
+        {
+          "noPanic": [
+            "src/parser.ts"
+          ],
+          "capabilities": {
+            "deny": [
+              "net"
+            ],
+            "dependencies": {
+              "@amritk/vector": [
+                "fs.read",
+                "fs.write",
+                "process.spawn",
+                "net",
+                "unsafe"
+              ]
+            }
+          }
+        }
+      ],
+      "x-mjst": {
+        "markdown": {
+          "section": "nish",
+          "heading": false
+        }
+      },
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        },
+        "noPanic": {
+          "$ref": "#/$defs/noPanic"
+        },
+        "host": {
+          "$ref": "#/$defs/host"
+        }
+      }
+    },
+    "exports": {
+      "$ref": "#/$defs/exports"
+    },
+    "engines": {
+      "$ref": "#/$defs/engines"
+    },
+    "version": {
+      "type": "string",
+      "description": "The package's version, as npm writes it. Nish does not check it against anything. It is named in an error, so you know which copy of a package an error is in:\n\n- An error inside a dependency's own source carries a note naming the package and its version, `this is in the dependency pkg_broken 0.3.1, not in this program's own source`. Under `--json` the diagnostic also carries the package's name in `package`.\n- When one package name is installed at two directories, [NL3029](../diagnostics/nl3xxx.md#nl3029) names both directories and both versions. Nish compiles one copy of each package per program. A copy whose manifest has no `version` is said to have `no version`.",
+      "examples": [
+        "1.0.0"
+      ],
+      "x-mjst": {
+        "markdown": {
+          "section": "node"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "description": "A capability: a kind of effect a program can have on the world. Every builtin carries one, or a deliberate none, and the compiler works out which capabilities every function reaches, through any chain of calls and across packages. Run `nish run --capabilities main.ts` to see what a program reaches. A name that is no capability is [NL3033](../diagnostics/nl3xxx.md#nl3033).",
+      "enum": [
+        "clock",
+        "entropy",
+        "env",
+        "exit",
+        "ffi",
+        "fs.read",
+        "fs.write",
+        "net",
+        "process.spawn",
+        "signal",
+        "tty",
+        "unsafe"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the program may reach: a **capability policy** for your own code (`allow` and `deny`), and the **grants** each dependency under `node_modules` needs (`dependencies`).\n\nA capability is a kind of effect a program can have on the world. Every builtin carries one, or a deliberate none, and the compiler works out which capabilities every function reaches, through any chain of calls and across packages. Run `nish run --capabilities main.ts` to see what a program reaches.\n\n| Capability | What reaches it |\n| --- | --- |\n| `clock` | `Date.now`, `monotonicNanos`, `wallClockNanos`, `statMtimeSync` |\n| `entropy` | `crypto.getRandomValues`, `Math.random` |\n| `env` | `getenv`, `geteuid` |\n| `exit` | `process.exit`, and `exit` from `nish:process` |\n| `ffi` | any call to a `declare function`, which is C code or a host import |\n| `fs.read` | `readFileSync`, `readdirSync`, `fileOpen` and the rest of the file readers |\n| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync`, `renameSync`, `unlinkSync` and the rest of the file writers |\n| `net` | every `nish:net` export |\n| `process.spawn` | `spawnSync`, `spawnPiped`, `spawn`, `kill`, `waitPid` and the process-priority calls |\n| `signal` | `signalFd`, `readSignal` |\n| `tty` | every `nish:term` export |\n| `unsafe` | the eight `nish:unsafe` exports, such as `uncheckedGet` |\n\nThe [language specification](../language/builtins.md#capabilities) lists every builtin under its capability. A name that is no capability is [NL3033](../diagnostics/nl3xxx.md#nl3033).\n\nWithout a policy, the capabilities a program reaches are a report: `nish run --capabilities` prints them and nothing is refused. With one, a program whose entry reaches a capability the policy does not grant is refused at compile time, with the chain of calls that reaches it. Dependency grants are different: a dependency that reaches `fs.read`, `fs.write`, `net`, `process.spawn`, `ffi` or `unsafe` is refused unless `dependencies` grants it, policy or none.\n\nA policy changes no byte of the compiled program. A program inside it compiles and runs as it would with none. To hold a running program to its capabilities as well, build it with `--sandbox` (see [the sandbox guide](../../guide/using-nish/sandbox.md)).\n\nA `capabilities` that is not an object, a key other than `allow`, `deny` and `dependencies`, an `allow` or `deny` that is not an array, and a key written twice are [NL3032](../diagnostics/nl3xxx.md#nl3032).",
+      "x-mjst": {
+        "markdown": {
+          "order": 1
+        }
+      },
+      "properties": {
+        "dependencies": {
+          "type": "object",
+          "description": "The capabilities each dependency is granted, keyed by the package's name: the name you import it by, `@scope/name` for a scoped package.\n\nA dependency reaches the **gated** capabilities, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` and `unsafe`, only when this object grants them to it. It reaches every other capability without a grant. A dependency that reaches a gated capability it is not granted is refused, in the dependency's own source, naming the package, the capability, the function that reaches it and the chain of calls ([NL2576](../diagnostics/nl2xxx.md#nl2576)):\n\n```text\nnode_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with \"nish\": { \"capabilities\": { \"dependencies\": { \"pkg_http\": [\"net\"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress\n```\n\nHow a dependency's capabilities are counted:\n\n- **Every function counts**, exported or not, called or not. A package's capabilities are the union over every function its modules define.\n- **What it reaches through another dependency is its own.** If `pkg_a` calls `pkg_b`, which dials, both need `net`.\n- **A callback counts where it is instantiated.** Your function passed to a dependency's generic function makes that instantiation the dependency's, so the dependency needs a grant for what your function reaches.\n- **The standard library is never refused**, and what decides is where a module was resolved from, not its package's name. A dependency that calls itself `nish` is judged like any other.\n\nOnly this object grants. `--allow` on the command line does not, and neither does the dependency's own `package.json`. A grant never widens the root's own policy: a capability your `deny` lists is refused whoever is granted it. A grant to a package the program does not load is no error.\n\nThe value is not an object, a package is named twice, a grant is not an array, or an entry is not a string: [NL3041](../diagnostics/nl3xxx.md#nl3041).\n\nOnce the grants are right, `--update-capability-lock` records what every dependency reaches in [`nish-capabilities.lock.json`](capabilities-lock.md), so an upgrade that reaches something new stops the build.",
+          "examples": [
+            {
+              "pkg_http": [
+                "net"
+              ],
+              "@amritk/vector": [
+                "fs.read",
+                "fs.write",
+                "process.spawn",
+                "net",
+                "unsafe"
+              ]
+            },
+            {
+              "pkg_tool": [
+                "fs.read=./data",
+                "process.spawn=git",
+                "net=127.0.0.1"
+              ]
+            }
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/grant"
+          },
+          "x-mjst": {
+            "markdown": {
+              "order": 1
+            }
+          }
+        },
+        "allow": {
+          "type": "array",
+          "description": "An **allowlist** for your own code. Writing `allow` at all makes the policy an allowlist: a capability the program reaches that `allow` does not list is refused, `exit` and `signal` included. An empty list allows nothing, and no list allows everything.\n\nThe program is refused with [NL2459](../diagnostics/nl2xxx.md#nl2459), one error per capability, at the first call of the chain that reaches it:\n\n```text\nmain.ts:6:36: error: `main` reaches `net`, which the capability policy does not grant (the root package's `allow`); the chain that reaches it: main.ts:6:36 calls dial, client.ts:5:10 calls netAddress\n```\n\nWhat is judged is every function outside code can call. That is `main` alone under `nish run` or a closed `--link` build. A library build (`-o` alone, a sidecar, wasm) also judges every exported function of every module, or every function under `--no-strict-exports`.\n\n`unsafe` cannot be allowed, because importing `nish:unsafe` is already the opt-in. An allowlist never refuses it, and listing it here is [NL3034](../diagnostics/nl3xxx.md#nl3034). Use `deny` to refuse it. A capability in both `allow` and `deny` is [NL3035](../diagnostics/nl3xxx.md#nl3035).\n\n`--allow` on the command line can only narrow this list: the two allowlists intersect. Capabilities here are whole: a directory scope such as `fs.read=./data` is only for `--allow` with `--sandbox`, or for a dependency's grant.",
+          "examples": [
+            [
+              "fs.read",
+              "clock"
+            ]
+          ],
+          "items": {
+            "enum": [
+              "clock",
+              "entropy",
+              "env",
+              "exit",
+              "ffi",
+              "fs.read",
+              "fs.write",
+              "net",
+              "process.spawn",
+              "signal",
+              "tty"
+            ]
+          },
+          "x-mjst": {
+            "markdown": {
+              "order": 2
+            }
+          }
+        },
+        "deny": {
+          "type": "array",
+          "description": "Capabilities your own code may not reach. A program whose entry reaches one is refused with [NL2459](../diagnostics/nl2xxx.md#nl2459), with the chain of calls that reaches it, in source order and one error per capability.\n\n`unsafe` may be denied. `\"deny\": [\"unsafe\"]` refuses a program that reaches a `nish:unsafe` export anywhere in its closure, dependencies included, so every unchecked index in the program is visible to the policy.\n\n`--deny` on the command line adds to this list. A denial here also beats a dependency's grant: a capability denied here is refused in a dependency granted it.",
+          "examples": [
+            [
+              "net",
+              "process.spawn",
+              "unsafe"
+            ]
+          ],
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "x-mjst": {
+            "markdown": {
+              "order": 3
+            }
+          }
+        }
+      }
+    },
+    "grant": {
+      "type": "array",
+      "description": "The capabilities granted to one dependency. Each entry is a gated capability, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` or `unsafe`, granted whole, or one of them narrowed by an **argument** after an `=`:\n\n| Entry | Grants |\n| --- | --- |\n| `fs.read=<dir>`, `fs.write=<dir>` | Reading or writing under that directory. It is resolved from the root package's directory and must exist when you build ([NL3047](../diagnostics/nl3xxx.md#nl3047)). |\n| `process.spawn=<program>` | Starting that program, found on your `PATH` or as a path from the root package's directory ([NL3046](../diagnostics/nl3xxx.md#nl3046)). |\n| `process.spawn=exec:<program>` | The same, and lets that program start others under `--sandbox`. This is close to granting `process.spawn` whole for that program. `process.spawn=exec:` with no program is NL3046. |\n| `net=<host>` | Connecting to that IPv4 or IPv6 address, or that Unix socket's absolute path. A host is an address, not a name to look up ([NL3045](../diagnostics/nl3xxx.md#nl3045)). |\n\n`ffi` and `unsafe` take no argument ([NL3048](../diagnostics/nl3xxx.md#nl3048)). Every other capability needs no grant, and naming one here is [NL3042](../diagnostics/nl3xxx.md#nl3042). A capability may be named more than once, one argument each.\n\n**What the build can see, it checks.** A string literal a dependency hands `readFileSync`, `writeFileSync`, `spawnSync` or `netAddress` outside its grant stops the build at the literal ([NL2594](../diagnostics/nl2xxx.md#nl2594)):\n\n```text\nnode_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands `readFileSync` \"/etc/passwd\", which its `fs.read` grant does not cover: it is granted fs.read=data; name it in the grant, or grant `fs.read` whole\n```\n\n**What it cannot see, `--sandbox` holds.** A path or program the dependency works out while it runs is beyond the build. Under `--sandbox` the kernel restricts the process to the granted directories and programs. Addresses have no run-time check, so grant `net` only to a dependency you have read. The [sandbox guide](../../guide/using-nish/sandbox.md) has the details, and the limits.",
+      "items": {
+        "type": "string",
+        "pattern": "^(ffi|unsafe|fs\\.read|fs\\.write|net|process\\.spawn)$|^(fs\\.read|fs\\.write|net)=.+$|^process\\.spawn=(?!exec:$).+$"
+      },
+      "examples": [
+        [
+          "net"
+        ],
+        [
+          "fs.read=./data",
+          "process.spawn=git",
+          "net=127.0.0.1"
+        ],
+        [
+          "process.spawn=exec:make",
+          "process.spawn=cc"
+        ]
+      ]
+    },
+    "noPanic": {
+      "type": "array",
+      "description": "Modules that may have no panic site left. A panic site is a place a compiled program can stop with exit 1 besides a `panic` call: a bounds check, an integer division or a range entry the compiler could not prove safe, an `r.expect`, a `readFileSync` of a missing file. Each entry is a module's path, relative to this `package.json`.\n\nIn a listed module, every unproven site is an error, [NL2457](../diagnostics/nl2xxx.md#nl2457). Where a guard would let the compiler prove the site, the error says which guard. A call from a listed module into a function outside the scope that may panic, in the standard library or a dependency, is refused at the call ([NL2458](../diagnostics/nl2xxx.md#nl2458)). A module the list does not name keeps its checks and compiles as before.\n\n`--deny-panics` puts every module of the program's own package in the scope. With both, the scope is the union.\n\nAn entry that names no module of the program is [NL3031](../diagnostics/nl3xxx.md#nl3031), so a typo cannot leave the module it meant outside the scope without a word. A `noPanic` that is not an array is NL3036.\n\n`uncheckedGet` and `uncheckedSet` imported from `nish:unsafe` are allowed in the scope, because the import is the module's own statement that its indexes are in range. The [language specification](../language/semantics-decisions.md#the-no-panic-scope) lists every kind of panic site.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "examples": [
+        [
+          "src/parser.ts",
+          "src/lexer.ts"
+        ]
+      ],
+      "x-mjst": {
+        "markdown": {
+          "order": 2
+        }
+      }
+    },
+    "host": {
+      "type": "array",
+      "description": "Host modules: TypeScript files the web page owns, whose exported functions a wasm module calls back into. An import from a listed file becomes a wasm import from module `host`. An import from any other file is an ordinary Nish import. `--host <file.ts>` on the command line adds to the list.\n\nNish reads only a host module's exported signatures and skips each function body, so a body may use the DOM, closures, classes and promises. The [interop guide](../../guide/using-nish/interop.md#functions-the-page-supplies-host-modules) shows a whole page.\n\nEach entry is a path relative to this `package.json`, naming a file inside the package that exists:\n\n- a value that is not a list of strings is [NL2694](../diagnostics/nl2xxx.md#nl2694);\n- an empty entry, an absolute path (one that starts with `/`, `\\` or a drive letter), or one that climbs out of the package with `..` is [NL2695](../diagnostics/nl2xxx.md#nl2695). A `..` that only cancels a directory before it, as in `web/../host.ts`, stays inside and is fine;\n- an entry that names no file is [NL2696](../diagnostics/nl2xxx.md#nl2696).\n\nAn entry naming the program's own entry file changes nothing: the entry is compiled as Nish all the same.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!\\.\\.([/\\\\]|$)).+$"
+      },
+      "examples": [
+        [
+          "web/host.ts"
+        ]
+      ],
+      "x-mjst": {
+        "markdown": {
+          "order": 3
+        }
+      }
+    },
+    "exports": {
+      "description": "Node's `exports` map, which says which file a package offers for each import path. Nish reads it in every package under `node_modules` to find the **source** to compile, under its own conditions:\n\n| Condition | Read when |\n| --- | --- |\n| `nish-i32` | the program compiles in the default `--number-mode i32` |\n| `nish-f64` | the program compiles with `--number-mode f64` |\n| `nish` | either mode, when the mode's own condition is not there |\n\nThe mode's own condition wins wherever the package declares it, which is the one place Nish answers differently from Node's first-match order. A package that is correct in one number mode only says so with that mode's condition. Its source then fails at the import in the other mode, rather than giving a wrong answer at run time.\n\nThe value is a TypeScript file, not built JavaScript, so the package is checked and optimised as your own code is. Every other condition (`import`, `require`, `default`, `types`, `node`) is skipped, so one `exports` map can serve Node and Nish side by side. Nish reads a narrower shape than Node does:\n\n- A subpath is an exact key, `.` or `./name`. The `./*` pattern form is not read.\n- A target is a string beginning with `./`, with no `..` segment and no backslash escape. A nested condition object or an array of targets counts as no target.\n- A bare condition map for `.`, `{ \"nish\": \"./src/index.ts\" }`, is read as the map for `.`. A bare string, `\"./index.js\"`, is JavaScript and offers Nish nothing.\n\nEach way to find no file is its own error at the import. A package with no Nish condition for that entry, an ordinary npm package, is [NL3020](../diagnostics/nl3xxx.md#nl3020). A package that offers only the other mode's condition is [NL3017](../diagnostics/nl3xxx.md#nl3017). A manifest that is not well-formed JSON is [NL3021](../diagnostics/nl3xxx.md#nl3021). No `exports`, no key for the subpath, or a shape Nish does not follow is [NL3014](../diagnostics/nl3xxx.md#nl3014).\n\nThe [modules guide](../../guide/language/modules.md#packages) walks through writing a package.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/exportConditions"
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^\\."
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/exportConditions"
+              }
+            ]
+          }
+        }
+      ],
+      "examples": [
+        {
+          ".": {
+            "nish": "./src/index.ts",
+            "import": "./dist/index.js"
+          },
+          "./blake3": {
+            "nish": "./src/blake3.ts"
+          }
+        }
+      ],
+      "x-mjst": {
+        "markdown": {
+          "section": "node",
+          "type": "string | object",
+          "layout": "none"
+        }
+      }
+    },
+    "exportConditions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[^.]"
+      },
+      "properties": {
+        "nish": {
+          "$ref": "#/$defs/exportTarget"
+        },
+        "nish-i32": {
+          "$ref": "#/$defs/exportTarget"
+        },
+        "nish-f64": {
+          "$ref": "#/$defs/exportTarget"
+        }
+      }
+    },
+    "exportTarget": {
+      "type": "string",
+      "pattern": "^\\./(?!(.*/)?\\.\\.(/|$))[^\\\\]*$"
+    },
+    "engines": {
+      "type": "object",
+      "description": "Node's `engines` map. Nish reads one key, `engines.nish`: the lowest compiler version a package needs. It is checked in every package under `node_modules` the program imports, whether or not the package's entry point resolves. Other engines, such as `node`, are left to npm.",
+      "properties": {
+        "nish": {
+          "type": "string",
+          "description": "The lowest compiler version the package needs, as a floor: `>=X.Y.Z` or `>=X.Y`, with blanks allowed around the version.\n\nAn older compiler refuses the package and says which version it asked for ([NL3018](../diagnostics/nl3xxx.md#nl3018)):\n\n```text\nPackage `pkg_future` needs a newer compiler: its `engines.nish` asks for `>=999.0.0` and this is nish 0.8.0\n```\n\nAny other shape is refused rather than taken as met, because a floor the compiler cannot read is one it cannot claim to meet ([NL3019](../diagnostics/nl3xxx.md#nl3019)). That includes a caret, a tilde, an upper bound, a bare version, and a value that is not a string.",
+          "pattern": "^\\s*>=\\s*[0-9]{1,9}\\.[0-9]{1,9}(\\.[0-9]{1,9})?\\s*$",
+          "examples": [
+            ">=0.18.0"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      },
+      "x-mjst": {
+        "markdown": {
+          "section": "node"
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

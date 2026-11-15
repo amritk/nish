@@ -35,7 +35,8 @@
  *   (§2.2); whitespace before the first field or an obs-fold (§2.2, §5.2);
  *   whitespace between a field name and its colon (§5.1); a field value with a
  *   control character; a 1.1 request without exactly one `Host`, or a 1.0
- *   request with more than one (§3.2, RFC 9110 §7.2); `Content-Length` that is
+ *   request with more than one (§3.2, RFC 9110 §7.2), or a `Host` that is not
+ *   `uri-host [":" port]` (§3.2, by `urlIsHostPort`); `Content-Length` that is
  *   not one run of digits, or that appears twice (§6.3); `Transfer-Encoding`
  *   together with `Content-Length`, in a 1.0 request, or whose last coding is
  *   not `chunked` (§6.1, §6.3); a malformed chunk size, chunk extension or
@@ -81,6 +82,7 @@
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
 import { copyBytes } from "nish/bytes"
+import { urlIsHostPort } from "nish/net/url"
 import {
   and,
   any,
@@ -302,6 +304,11 @@ export class Http1Parser {
    */
   hostFields: i32 = 0
   /**
+   * The index of the last Host field, or -1.
+   * @internal Set by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  hostField: i32 = -1
+  /**
    * Content-Length fields the request's head has kept so far.
    * @internal Counted by the field-line parser in this module, and read by `http1EndOfHead`.
    */
@@ -422,15 +429,18 @@ export class Http1Parser {
     // head kept, at HTTP1_FIRST_INPUT and HTTP1_FIRST_HEAD bytes: a parser
     // that is built and never fed (a pool's spare slot) costs neither, and a
     // caller that lends them out between requests puts empty ones here.
-    // The spans are made first: the arena places each block after the last,
-    // so their header and first entries sit just behind the parser's fields
-    // rather than behind four empty arrays.
-    this.spans = new Array<i32>(64)
+    // The spans likewise wait for the first field line (`http1SpanSet`). An
+    // empty array cannot be written, only replaced, so one serves for both
+    // buffers. The lists share one only until the `restart` below, which
+    // replaces both while `keepText` is on, as it is here even for a parser
+    // `Http1Connection` turns it off on: the sharing saves one empty array,
+    // not both.
+    this.spans = []
     this.buf = []
     this.body = this.buf
-    this.head = []
+    this.head = this.buf
     this.names = []
-    this.values = []
+    this.values = this.names
     this.tally = new Http1ListTally()
     this.restart()
   }
@@ -643,6 +653,8 @@ export class Http1Parser {
 export const HTTP1_FIRST_INPUT: i32 = 1024
 /** The head buffer a parser makes for its first head. */
 export const HTTP1_FIRST_HEAD: i32 = 256
+/** The spans a parser makes at its first field line: four per field, room for sixteen. */
+const HTTP1_FIRST_SPANS: i32 = 64
 
 /** Makes room for `len` more bytes at `p.end`, moving the live bytes down first. */
 const http1Reserve = (p: Http1Parser, len: i32): void => {
@@ -710,6 +722,7 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.sectionBytes = 0
   p.fieldCount = 0
   p.hostFields = 0
+  p.hostField = -1
   p.lengthFields = 0
   p.lengthField = -1
   p.codingFields = 0
@@ -1043,11 +1056,11 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   return at
 }
 
-/** Sets `spans[at]`, growing the array when it must. */
+/** Sets `spans[at]`, growing the array when it must: first to `HTTP1_FIRST_SPANS`, then by doubling. */
 const http1SpanSet = (p: Http1Parser, at: i32, value: i32): void => {
   if (at >= toI32(p.spans.length)) {
     const old: i32[] = p.spans
-    const grown: i32[] = new Array<i32>(2 * at + 4)
+    const grown: i32[] = new Array<i32>(at < HTTP1_FIRST_SPANS ? HTTP1_FIRST_SPANS : 2 * at + 4)
     for (let k: i32 = 0; k < toI32(old.length) && k < toI32(grown.length); k += 1) {
       grown[k] = old[k]
     }
@@ -1442,6 +1455,7 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
     const kind: i32 = http1FramingField(p.head, at, nameEnd - a)
     if (kind === HTTP1_FIELD_HOST) {
       p.hostFields += 1
+      p.hostField = p.headerCount
     } else if (kind === HTTP1_FIELD_LENGTH) {
       p.lengthFields += 1
       p.lengthField = p.headerCount
@@ -1486,6 +1500,18 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
   const lengthField: i32 = p.lengthField
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return http1Fail(p, 400, "a request without exactly one Host")
+  }
+  // The one Host must be a host and an optional port (§3.2): a value such as
+  // `a@b`, `a/b` or `a, b` is read one way by this program and another by a
+  // proxy or a virtual-host table in front of it. An empty Host is allowed.
+  const hostField: i32 = p.hostField
+  if (
+    hosts === 1 &&
+    hostField >= 0 &&
+    4 * hostField + 3 < toI32(spans.length) &&
+    !urlIsHostPort(head, spans[4 * hostField + 2], spans[4 * hostField + 3])
+  ) {
+    return http1Fail(p, 400, "a Host that is not a host and port")
   }
   if (p.codingFields > 0) {
     if (lengths > 0) {
@@ -1600,9 +1626,105 @@ export const http1HexValue = (c: i32): i32 => {
 }
 
 /**
- * Reads a chunk-size line (§7.1): 1*HEXDIG, then optional whitespace and a
- * `;` extension that is read past but not interpreted. Sets `left` and answers
- * `HTTP1_NEED_MORE`, or the refusal.
+ * Where the quoted-string that opens at `bytes[from]` ends (RFC 9110 §5.6.4):
+ * the index just past its closing DQUOTE, or -1 when the line ends first or
+ * a byte inside is neither qdtext nor a quoted-pair. A backslash takes the
+ * byte after it whatever it is, a DQUOTE included, as long as that byte is
+ * HTAB, SP, VCHAR or obs-text.
+ */
+const http1QuotedStringEnd = (bytes: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from + 1
+  while (i >= 0 && i < to && i < toI32(bytes.length)) {
+    const c: i32 = toI32(bytes[i])
+    if (c === 34) {
+      return i + 1
+    }
+    if (c === 92) {
+      i += 1
+      if (i < 0 || i >= to || i >= toI32(bytes.length) || !http1IsValueByte(toI32(bytes[i]))) {
+        return -1
+      }
+    } else if (!http1IsValueByte(c)) {
+      return -1
+    }
+    i += 1
+  }
+  return -1
+}
+
+/** The first index from `from` on, before `to`, that is not OWS. */
+const http1SkipOws = (bytes: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(bytes.length) && http1IsOws(toI32(bytes[i]))) {
+    i += 1
+  }
+  return i
+}
+
+/**
+ * Whether `bytes[from .. to)`, what follows a chunk size on its line, is the
+ * chunk-ext of RFC 9112 §7.1.1 and nothing else:
+ * `*( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )`, the name
+ * a token and the value a token or a quoted-string. An empty window holds no
+ * extensions and is valid. The extensions are not interpreted, but they are
+ * parsed whole: a parser that skips to the line's end and one that reads a
+ * quoted-string across it disagree about where the chunk's data starts (the
+ * chunk-extension smuggling of Jetty's CVE-2026-2332 and Netty's
+ * CVE-2026-33870), so an unclosed quote, an empty name or value, a stray `;`
+ * or `=`, and whitespace that leads nowhere are each refused. The server's
+ * parser and the client's both read their chunk-size lines through this.
+ * @param bytes the buffer holding the chunk-size line
+ * @param from the index just past the chunk size's last hex digit
+ * @param to the index of the line's CR, exclusive
+ * @returns true when the window is zero or more well-formed chunk extensions
+ */
+export const http1ChunkExtValid = (bytes: u8[], from: i32, to: i32): boolean => {
+  const end: i32 = to < toI32(bytes.length) ? to : toI32(bytes.length)
+  let i: i32 = from
+  while (i >= 0 && i < end) {
+    i = http1SkipOws(bytes, i, end)
+    if (i < 0 || i >= end || i >= toI32(bytes.length) || toI32(bytes[i]) !== 59) {
+      return false
+    }
+    i = http1SkipOws(bytes, i + 1, end)
+    const nameStart: i32 = i
+    while (i >= 0 && i < end && i < toI32(bytes.length) && http1IsTokenByte(toI32(bytes[i]))) {
+      i += 1
+    }
+    if (i === nameStart) {
+      return false
+    }
+    const nameEnd: i32 = i
+    i = http1SkipOws(bytes, i, end)
+    if (i >= 0 && i < end && i < toI32(bytes.length) && toI32(bytes[i]) === 61) {
+      i = http1SkipOws(bytes, i + 1, end)
+      if (i >= 0 && i < end && i < toI32(bytes.length) && toI32(bytes[i]) === 34) {
+        i = http1QuotedStringEnd(bytes, i, end)
+        if (i < 0) {
+          return false
+        }
+      } else {
+        const valueStart: i32 = i
+        while (i >= 0 && i < end && i < toI32(bytes.length) && http1IsTokenByte(toI32(bytes[i]))) {
+          i += 1
+        }
+        if (i === valueStart) {
+          return false
+        }
+      }
+    } else {
+      // Whitespace after a name is BWS only before the next `;`, which the
+      // loop's next turn reads from the name's end.
+      i = nameEnd
+    }
+  }
+  return true
+}
+
+/**
+ * Reads a chunk-size line (§7.1): 1*HEXDIG, then the chunk extensions
+ * `http1ChunkExtValid` reads, parsed but not interpreted. Sets `left` and
+ * answers `HTTP1_NEED_MORE`, or the refusal.
  */
 const http1ChunkSize = (p: Http1Parser): i32 => {
   const buf: u8[] = p.buf
@@ -1647,6 +1769,9 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
       if (!http1IsValueByte(toI32(buf[k]))) {
         return http1Fail(p, 400, "a control character in a chunk extension")
       }
+    }
+    if (!http1ChunkExtValid(buf, digitsEnd, b)) {
+      return http1Fail(p, 400, "a malformed chunk extension")
     }
   }
   if (over) {

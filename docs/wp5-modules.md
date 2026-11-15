@@ -105,7 +105,9 @@ whole-program facts are keyed by symbol name, so two functions sharing one
 would get each other's attributes: a miscompile rather than a link error.
 That is why the rule does not consult the flag
 (`tests/link/duplicate_internal`; the check used to be skipped under an
-explicit `--strict-exports`).
+explicit `--strict-exports`). [wp57-module-scoped-names.md](wp57-module-scoped-names.md)
+proposes qualifying a private function's symbol by its module when it would
+clash; until it ships, the rule stands as stated.
 
 ## Output files
 

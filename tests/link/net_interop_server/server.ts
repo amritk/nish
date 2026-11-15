@@ -25,6 +25,7 @@ import { Secret } from "nish:secret";
 import { netLocalPort, pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { QUIC_CONN_STATIC_KEY_SIZE, QuicServerConfig } from "nish/net/quic";
+import { QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { H3_ALPN, Http3Config } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
@@ -158,6 +159,8 @@ export const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConf
     retryTokenKey: randomBytes(QUIC_CONN_STATIC_KEY_SIZE),
     workerIndex: toI32(-1),
     workerCount: toI32(0),
+    // Pinned to NewReno so the interop runner sees the same server as before CUBIC became the default.
+    congestion: QUIC_RECOVERY_NEWRENO,
     retry: retry,
     retryTokenLifetime: toI64(10000),
   };

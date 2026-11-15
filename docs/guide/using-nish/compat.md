@@ -104,7 +104,7 @@ Write `main(): i32` or `main(): void` instead. Types that spell their width
 
 A program whose arithmetic was written for 32-bit integers can keep them:
 `--compat --number-mode i32` is honoured. The compiler says once what that
-costs, as a performance warning (`NL9018`), because arithmetic that leaves 32
+costs, as a performance warning (`NL9020`), because arithmetic that leaves 32
 bits panics there where a double would carry on. `--no-warn-performance`
 silences it.
 

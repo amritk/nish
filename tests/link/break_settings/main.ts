@@ -1,19 +1,13 @@
 // Where `nish break` keeps its settings between runs (`src/break.ts`) and the
-// file it keeps them in (`src/break-menu.ts`): the path's rules, a save into
+// file it keeps them in (`src/break-settings-file.ts`): the path's rules, a save into
 // a directory not there yet, a round trip of every field, and the negatives —
 // a missing file, a file of garbage or of hostile values, an unknown name and
 // nowhere to save, each of which gives the defaults for what it cannot say and
 // never panics.
 // It works in a scratch directory beside its own binary and removes it.
 import { Suite } from "../../../std/testing"
-import {
-  BreakSettings,
-  breakSettingsPath,
-  formatBreakSettings,
-  loadBreakSettings,
-  parseBreakSettings,
-  saveBreakSettings,
-} from "../../../src/break-menu"
+import { BreakSettings, formatBreakSettings, parseBreakSettings } from "../../../src/break-menu"
+import { breakSettingsPath, loadBreakSettings, saveBreakSettings } from "../../../src/break-settings-file"
 import { dirname } from "../../../src/paths"
 
 /** The seven lines the defaults are kept as. */

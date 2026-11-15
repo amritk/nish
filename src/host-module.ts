@@ -21,21 +21,7 @@
 // `src/declarations.ts` once the types resolve).
 
 import { Lexer } from "./lexer"
-import {
-  FLAG_ASYNC,
-  FLAG_EXPORTED,
-  FLAG_FOREIGN,
-  N_EMPTY,
-  N_ENUM,
-  N_FUNCTION,
-  N_TYPE_ALIAS,
-  N_TYPE_ARRAY,
-  N_TYPE_FUNCTION,
-  N_TYPE_PAREN,
-  N_TYPE_READONLY,
-  N_TYPE_REF,
-  Node,
-} from "./nodes"
+import { FLAG_ASYNC, FLAG_EXPORTED, FLAG_FOREIGN, Node, NodeKind } from "./nodes"
 import { StringSet } from "./map"
 import { Parser } from "./parser"
 import { StringBuilder } from "./strings"
@@ -498,10 +484,10 @@ const blankRun = (count: i32): string => {
  */
 export const markHostFunctions = (file: Node): void => {
   for (const stmt of file.children) {
-    if (stmt.kind === N_FUNCTION && (stmt.flags & FLAG_EXPORTED) !== 0) {
+    if (stmt.kind === NodeKind.FunctionDecl && (stmt.flags & FLAG_EXPORTED) !== 0) {
       stmt.flags = stmt.flags | FLAG_FOREIGN
       const body = stmt.children[3]
-      body.kind = N_EMPTY
+      body.kind = NodeKind.Empty
       body.children = []
     }
   }
@@ -522,7 +508,7 @@ export const dropRefused = (file: Node, refusals: HostRefusal[]): void => {
   }
   const kept: Node[] = []
   for (const stmt of file.children) {
-    if (stmt.kind !== N_FUNCTION || !names.has(stmt.children[0].text)) {
+    if (stmt.kind !== NodeKind.FunctionDecl || !names.has(stmt.children[0].text)) {
       kept.push(stmt)
     }
   }
@@ -599,14 +585,14 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[]
   const problems: HostRefusal[] = []
   const local = new StringSet()
   for (const stmt of file.children) {
-    if (stmt.kind === N_ENUM || stmt.kind === N_TYPE_ALIAS) {
+    if (stmt.kind === NodeKind.Enum || stmt.kind === NodeKind.TypeAlias) {
       local.add(stmt.children[0].text)
     }
   }
   const typed = TYPED_ARRAYS()
   const scalars = SCALAR_NAMES()
   for (const stmt of file.children) {
-    if (stmt.kind !== N_FUNCTION || (stmt.flags & FLAG_EXPORTED) === 0) {
+    if (stmt.kind !== NodeKind.FunctionDecl || (stmt.flags & FLAG_EXPORTED) === 0) {
       continue
     }
     const name = stmt.children[0].text
@@ -626,7 +612,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[]
         refusalAt(
           name,
           `Host function \`${name}\` returns a \`Promise\`, which wasm cannot wait for: await it in the page and call an export with the result`,
-          result.kind === N_EMPTY ? stmt.children[0] : result
+          result.kind === NodeKind.Empty ? stmt.children[0] : result
         )
       )
       continue
@@ -638,7 +624,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[]
       k = k + 1
       const type = unparen(param.children[1])
       const p = param.children[0].text
-      if (type.kind === N_EMPTY) {
+      if (type.kind === NodeKind.Empty) {
         continue // the checker's own refusal: a parameter needs a type
       }
       if (isTypeNamed(type, "string")) {
@@ -661,7 +647,7 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[]
       }
     }
     const answer = unparen(result)
-    if (answer.kind === N_EMPTY) {
+    if (answer.kind === NodeKind.Empty) {
       continue
     }
     if (isTypeNamed(answer, "string")) {
@@ -686,11 +672,11 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[]
  * name; an array of scalars, readonly or not, names it in its element type.
  */
 const windowElement = (type: Node): string => {
-  if (type.kind === N_TYPE_READONLY) {
+  if (type.kind === NodeKind.TypeReadonly) {
     return windowElement(unparen(type.children[0]))
   }
   let element = type
-  if (type.kind === N_TYPE_ARRAY) {
+  if (type.kind === NodeKind.TypeArray) {
     element = unparen(type.children[0])
   } else if (type.text === "Array" || type.text === "ReadonlyArray") {
     element = unparen(type.children[0].children[0])
@@ -764,14 +750,14 @@ const windowMissing = (p: string, name: string, param: Node): HostRefusal =>
  * already names its element and is left as written.
  */
 const asWindow = (type: Node, parser: Parser): void => {
-  if (type.kind !== N_TYPE_REF || type.text === "Array" || type.text === "ReadonlyArray") {
+  if (type.kind !== NodeKind.TypeRef || type.text === "Array" || type.text === "ReadonlyArray") {
     return
   }
   // From the parser, so the element has an id inside the checker's tables.
-  const element = parser.node(N_TYPE_REF, type.start, type.end)
+  const element = parser.node(NodeKind.TypeRef, type.start, type.end)
   element.text = typedElement(type.text)
   element.children = [parser.list()] // a reference's type arguments, none here
-  type.kind = N_TYPE_ARRAY
+  type.kind = NodeKind.TypeArray
   type.text = ""
   type.children = [element]
 }
@@ -788,16 +774,17 @@ const windowElementProblem = (p: string, name: string, type: Node): HostRefusal 
 const typeProblem = (where: string, name: string, type: Node): HostRefusal =>
   refusalAt(name, hostTypeProblem(where, name, spell(type)), type)
 
-const unparen = (type: Node): Node => (type.kind === N_TYPE_PAREN ? unparen(type.children[0]) : type)
+const unparen = (type: Node): Node => (type.kind === NodeKind.TypeParen ? unparen(type.children[0]) : type)
 
-const isTypeNamed = (type: Node, name: string): boolean => type.kind === N_TYPE_REF && type.text === name
+const isTypeNamed = (type: Node, name: string): boolean =>
+  type.kind === NodeKind.TypeRef && type.text === name
 
 /** A typed array, or an array of scalars spelled `T[]`, `readonly T[]` or `Array<T>`. */
 const isBuffer = (type: Node, typed: StringSet, scalars: StringSet): boolean => {
-  if (type.kind === N_TYPE_READONLY) {
+  if (type.kind === NodeKind.TypeReadonly) {
     return isBuffer(unparen(type.children[0]), typed, scalars)
   }
-  if (type.kind === N_TYPE_REF) {
+  if (type.kind === NodeKind.TypeRef) {
     if (typed.has(type.text)) {
       return true
     }
@@ -807,28 +794,31 @@ const isBuffer = (type: Node, typed: StringSet, scalars: StringSet): boolean => 
     }
     return false
   }
-  return type.kind === N_TYPE_ARRAY && isScalarRef(unparen(type.children[0]), scalars)
+  return type.kind === NodeKind.TypeArray && isScalarRef(unparen(type.children[0]), scalars)
 }
 
 const isScalarRef = (type: Node, scalars: StringSet): boolean =>
-  type.kind === N_TYPE_REF && scalars.has(type.text) && type.text !== "void" && type.text !== "HostHandle"
+  type.kind === NodeKind.TypeRef &&
+  scalars.has(type.text) &&
+  type.text !== "void" &&
+  type.text !== "HostHandle"
 
 /** Whether the type is one a host signature may name: a scalar, `HostHandle<…>`, or a name the module declares. */
 const crosses = (type: Node, scalars: StringSet, local: StringSet): boolean =>
-  type.kind === N_TYPE_REF && (scalars.has(type.text) || local.has(type.text))
+  type.kind === NodeKind.TypeRef && (scalars.has(type.text) || local.has(type.text))
 
 /** A type as the page wrote it, for a message: `string[]`, `Uint8Array`, `object`. */
 const spell = (type: Node): string => {
-  if (type.kind === N_TYPE_REF) {
+  if (type.kind === NodeKind.TypeRef) {
     return `\`${type.text}\``
   }
-  if (type.kind === N_TYPE_ARRAY) {
+  if (type.kind === NodeKind.TypeArray) {
     return "an array"
   }
-  if (type.kind === N_TYPE_READONLY) {
+  if (type.kind === NodeKind.TypeReadonly) {
     return "a readonly array"
   }
-  if (type.kind === N_TYPE_FUNCTION) {
+  if (type.kind === NodeKind.TypeFunction) {
     return "a function type"
   }
   return "a type that is no scalar"

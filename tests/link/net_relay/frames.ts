@@ -1,4 +1,4 @@
-// `examples/relay/frame.ts` against the fixtures cs's `frame.rs` tests use:
+// `examples/relay/frame.ts` against the fixtures the Rust relay's `frame.rs` tests use:
 // bytes `encodeFrame` in `packages/protocol/src/session.ts` produced, pasted
 // rather than built here, because a codec that agrees with itself proves
 // nothing. Every case frame.rs tests, and a negative for each error.

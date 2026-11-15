@@ -103,6 +103,88 @@
               "panics": []
             },
             {
+              "name": "AtomicI32Array.add",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:849:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.compareExchange",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:924:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "array-length", "at": "std/threads.ts:817:19", "proven": false },
+                { "kind": "oom", "at": "std/threads.ts:817:19", "allowed": true }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.exchange",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:908:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.load",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:827:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.max",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:893:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.min",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:877:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.store",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:837:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI32Array.sub",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:863:3", "proven": false }
+              ]
+            },
+            {
               "name": "AtomicI64.add",
               "exported": true,
               "capabilities": [],
@@ -164,6 +246,88 @@
               "capabilities": [],
               "witnesses": {},
               "panics": []
+            },
+            {
+              "name": "AtomicI64Array.add",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:999:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.compareExchange",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:1074:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "array-length", "at": "std/threads.ts:967:19", "proven": false },
+                { "kind": "oom", "at": "std/threads.ts:967:19", "allowed": true }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.exchange",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:1058:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.load",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:977:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.max",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:1043:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.min",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:1027:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.store",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:987:3", "proven": false }
+              ]
+            },
+            {
+              "name": "AtomicI64Array.sub",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/threads.ts:1013:3", "proven": false }
+              ]
             },
             {
               "name": "parallelMapInto<i32, i32, square>",

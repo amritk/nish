@@ -1,0 +1,8 @@
+HEAD /page: 200 length=11 connection=
+then GET /page: 200 [text/plain; charset=utf-8] hello page!
+HEAD /form: 405 length=64 connection= allow=POST
+slow: the sleep answered false
+the second client: 201 [text/plain; charset=utf-8] posted
+draining, the slow answer: 200 length=4 connection=close
+then the connection closes: true, after the body "slow", the pipelined GET unanswered: true
+serve: 0, answered 5

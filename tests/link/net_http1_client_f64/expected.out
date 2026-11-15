@@ -159,6 +159,15 @@ PASS  refused with 9 (a chunk size with no hex digits): an empty chunk-size line
 PASS  refused with 9 (a malformed chunk size): a 0x before the chunk size
 PASS  refused with 9 (a malformed chunk size): whitespace after the chunk size with no extension
 PASS  refused with 9 (a control character in a chunk extension): a control byte in a chunk extension
+PASS  refused with 9 (a malformed chunk extension): a chunk extension with no name
+PASS  refused with 9 (a malformed chunk extension): a chunk extension name with a space in it
+PASS  refused with 9 (a malformed chunk extension): a chunk extension with an empty value
+PASS  refused with 9 (a malformed chunk extension): a chunk extension value that is not a token
+PASS  refused with 9 (a malformed chunk extension): an unclosed quoted chunk extension
+PASS  refused with 9 (a malformed chunk extension): a quoted chunk extension whose closing quote is escaped
+PASS  accepted: a chunk extension name=value
+PASS  accepted: a quoted chunk extension with BWS, a semicolon and an escaped quote
+PASS  accepted: two chunk extensions, the first with no value
 PASS  refused with 9 (chunk data not followed by CRLF): chunk data followed by something else
 PASS  refused with 3 (a line ended in a bare LF): chunk data followed by a bare LF
 PASS  refused with 3 (a line ended in a bare LF): a chunk-size line ended in a bare LF
@@ -398,4 +407,4 @@ PASS  spans mode: past the last field, a name and a value are empty
 PASS  strings mode: after reset() the next response's head reads
 PASS  strings mode: reason is what reasonText() answers
 PASS  strings mode: reset() leaves no field of the response it cut behind
-http1-client: 400 passed, 0 failed, 0 skipped
+http1-client: 409 passed, 0 failed, 0 skipped

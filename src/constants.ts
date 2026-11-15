@@ -22,24 +22,12 @@
 import { outsideAsyncMessage } from "./async-check"
 import { CheckContext } from "./context"
 import { withoutSeparators } from "./lexer"
-import {
-  N_BINARY,
-  N_CALL,
-  N_FALSE,
-  N_IDENT,
-  N_MEMBER,
-  N_NUMBER,
-  N_PAREN,
-  N_STRING,
-  N_TEMPLATE,
-  N_TRUE,
-  N_UNARY,
-  Node,
-} from "./nodes"
+import { Node, NodeKind } from "./nodes"
+import { unwrapParens } from "./emit-util"
 import { acceptStorageLength, checkStorage } from "./module-storage"
 import { ConstInfo } from "./program"
 import { StringBuilder } from "./strings"
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING } from "./types"
+import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_U16, T_U32, T_U8 } from "./types"
 
 /**
  * A folded value. One class with a type discriminant rather than the
@@ -244,6 +232,10 @@ export const foldConstant = (ctx: CheckContext, info: ConstInfo): void => {
     foldStorage(ctx, info)
     return
   }
+  if (info.table) {
+    foldTable(ctx, info)
+    return
+  }
   info.folding = true
   const initializer = info.decl.children[2]
   const value = fold(ctx, info, initializer, info.type)
@@ -300,13 +292,106 @@ const foldStorage = (ctx: CheckContext, info: ConstInfo): void => {
   acceptStorageLength(ctx, info, length, value.type === T_I32 || value.type === T_I64, value.intValue)
 }
 
+/** Whether a constant table may hold `elem`: a fixed-width number whose bytes are its value. */
+export const isTableElement = (elem: i32): boolean =>
+  elem === T_U8 || elem === T_U16 || elem === T_U32 || elem === T_I32 || elem === T_I64 || elem === T_F64
+
+/** The largest value of a table's unsigned element, or -1 for a signed one. */
+const unsignedMax = (elem: i32): i64 => {
+  if (elem === T_U8) {
+    return toI64(255)
+  }
+  if (elem === T_U16) {
+    return toI64(65535)
+  }
+  if (elem === T_U32) {
+    return (toI64(1) << toI64(32)) - toI64(1)
+  }
+  return toI64(-1)
+}
+
+/**
+ * A constant table's elements, each folded as a constant of the element type
+ * would be: a bare literal takes the element's width (`u32` folds in 64
+ * bits, so 4294967295 is written as it reads), and a value outside the
+ * element's range is an error, never a wrap. It is marked folded either way,
+ * so an error is reported once; `folding` catches a table that names itself.
+ */
+const foldTable = (ctx: CheckContext, info: ConstInfo): void => {
+  info.folding = true
+  const elem = info.storageElem
+  const max = unsignedMax(elem)
+  // The type a bare literal folds at: u32 needs 64 bits to hold 4294967295.
+  let expected = T_I32
+  if (elem === T_U32 || elem === T_I64) {
+    expected = T_I64
+  } else if (elem === T_F64) {
+    expected = T_F64
+  }
+  const elements = unwrapParens(info.decl.children[2]).children
+  const spelled = ctx.table.typeName(elem)
+  let ok = true
+  // The first element whose value is not of the table's type, and that type.
+  let mistyped = -1
+  let mistypedAs = T_ERROR
+  let i = 0
+  while (i < elements.length) {
+    const element = elements[i]
+    const value = fold(ctx, info, element, expected)
+    if (ctx.errored) {
+      info.folding = false
+      return
+    }
+    if (value.type === T_ERROR) {
+      ok = false
+    } else if (
+      elem === T_F64 ? value.type !== T_F64 : value.type !== T_I32 && (value.type !== T_I64 || elem === T_I32)
+    ) {
+      // Reported after the loop, which keeps the type's name out of each pass.
+      mistyped = i
+      mistypedAs = value.type
+      break
+    } else if (elem === T_F64) {
+      info.tableFloats.push(value.floatValue)
+    } else {
+      const v = value.intValue
+      const fits = max >= toI64(0) ? v >= toI64(0) && v <= max : elem === T_I64 || v === toI64(toI32(v))
+      if (!fits) {
+        reject(
+          ctx,
+          info,
+          element,
+          `Element ${i} of constant table \`${info.name}\` does not fit in ${spelled}: its value is ${v}`
+        )
+        ok = false
+      }
+      info.tableInts.push(v)
+    }
+    i = i + 1
+  }
+  if (mistyped >= 0) {
+    reject(
+      ctx,
+      info,
+      elements[mistyped],
+      `Element ${mistyped} of constant table \`${info.name}\` is declared ${spelled} but its value is ${ctx.table.typeName(mistypedAs)}`
+    )
+    ok = false
+  }
+  info.folding = false
+  info.folded = true
+  if (ok) {
+    info.intValue = toI64(elements.length)
+  }
+}
+
 const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   switch (expr.kind) {
-    case N_PAREN:
+    case NodeKind.Paren:
       return fold(ctx, info, expr.children[0], expected)
-    case N_STRING:
+    case NodeKind.String:
       return stringValue(expr.text)
-    case N_TEMPLATE:
+    case NodeKind.Template:
       if (expr.children.length === 1) {
         return stringValue(expr.children[0].text)
       }
@@ -316,19 +401,19 @@ const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): Co
         expr,
         "A module constant's initialiser must be a literal, another constant, or arithmetic over them"
       )
-    case N_TRUE:
+    case NodeKind.True:
       return boolValue(true)
-    case N_FALSE:
+    case NodeKind.False:
       return boolValue(false)
-    case N_NUMBER:
+    case NodeKind.Number:
       return foldNumber(ctx, info, expr, expected)
-    case N_IDENT:
+    case NodeKind.Ident:
       return foldIdentifier(ctx, info, expr)
-    case N_UNARY:
+    case NodeKind.Unary:
       return foldUnary(ctx, info, expr, expected)
-    case N_BINARY:
+    case NodeKind.Binary:
       return foldBinary(ctx, info, expr, expected)
-    case N_CALL:
+    case NodeKind.Call:
       return foldWrapping(ctx, info, expr, expected)
     default:
       return reject(
@@ -353,7 +438,7 @@ const foldWrapping = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: 
   const callee = expr.children[0]
   const args = expr.children[1].children
   let name = ""
-  if (scope !== null && callee.kind === N_IDENT) {
+  if (scope !== null && callee.kind === NodeKind.Ident) {
     const imported = scope.builtinImport(callee.text)
     name = imported === null ? "" : imported.canonical
   }
@@ -500,7 +585,7 @@ const foldBinary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
   const hint = foldsToBool(op) ? -1 : expected
   let a = new ConstValue(T_ERROR)
   let b = new ConstValue(T_ERROR)
-  if (left.kind === N_NUMBER && right.kind !== N_NUMBER) {
+  if (left.kind === NodeKind.Number && right.kind !== NodeKind.Number) {
     b = fold(ctx, info, right, hint < 0 ? T_I32 : hint)
     a = fold(ctx, info, left, hint < 0 ? b.type : hint)
   } else {
@@ -776,12 +861,12 @@ export class CaseValue {
  * whatever else it let through.
  */
 export const enumMemberValue = (expr: Node): CaseValue => {
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return isFractional(expr.text)
       ? new CaseValue(false, toI64(0))
       : new CaseValue(true, parseIntegerLiteral(expr.text))
   }
-  if (expr.kind === N_UNARY && expr.text === "-") {
+  if (expr.kind === NodeKind.Unary && expr.text === "-") {
     const operand = enumMemberValue(expr.children[0])
     return new CaseValue(operand.known, -operand.value)
   }
@@ -795,26 +880,26 @@ export const enumMemberValue = (expr: Node): CaseValue => {
  * kinds live. Anything else is a runtime value and belongs in an `if`.
  */
 export const caseValue = (ctx: CheckContext, expr: Node): CaseValue => {
-  if (expr.kind === N_PAREN) {
+  if (expr.kind === NodeKind.Paren) {
     return caseValue(ctx, expr.children[0])
   }
   // WP23: `case Kind.If:`. An enum member is a compile-time integer, and a
   // `switch` over a discriminant is the reason the language has enums at all.
-  if (expr.kind === N_MEMBER) {
+  if (expr.kind === NodeKind.Member) {
     return ctx.program.isEnumMember(ctx.table, expr)
       ? new CaseValue(true, toI64(ctx.program.nodeEnumValues[expr.id]))
       : new CaseValue(false, toI64(0))
   }
-  if (expr.kind === N_NUMBER) {
+  if (expr.kind === NodeKind.Number) {
     return isFractional(expr.text)
       ? new CaseValue(false, toI64(0))
       : new CaseValue(true, parseIntegerLiteral(expr.text))
   }
-  if (expr.kind === N_UNARY && expr.text === "-") {
+  if (expr.kind === NodeKind.Unary && expr.text === "-") {
     const operand = caseValue(ctx, expr.children[0])
     return new CaseValue(operand.known, -operand.value)
   }
-  if (expr.kind === N_IDENT) {
+  if (expr.kind === NodeKind.Ident) {
     const constant = ctx.program.nodeConstants[expr.id]
     if (constant === null || (constant.type !== T_I32 && constant.type !== T_I64)) {
       return new CaseValue(false, toI64(0))

@@ -19,10 +19,11 @@
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
 // places) but never counts: no source-level guard removes it. Nor does an
-// `unchecked` site, a `nish:unsafe` `uncheckedGet`, `uncheckedSet` or
-// `readCString`: it cannot panic, and the import its module must write is the
-// visible opt-in to the undefined behaviour an index out of range, or an
-// address that is not a C string, would be. Stack overflow
+// `unchecked` site, a `nish:unsafe` `uncheckedGet` or `uncheckedSet`: it
+// cannot panic, and the import its module must write is the visible opt-in to
+// the undefined behaviour an index out of range would be. (`readCString` and
+// `readStruct` test their pointer for `NULL`, so each is an `ffi-null` site.)
+// Stack overflow
 // is not a site at all: it has no runtime handler and no check in the IR.
 // Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
 // step, proven where the bounds walk proved the result fits and the emitter
@@ -35,7 +36,7 @@ import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
-import { N_BINARY, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
+import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
@@ -57,10 +58,10 @@ export const PANIC_PARALLEL_LENGTH: i32 = 9
 export const PANIC_CALL: i32 = 10
 const PANIC_OOM: i32 = 11
 /**
- * `uncheckedGet`, `uncheckedSet` and `readCString` from `nish:unsafe`: no
- * check, so nothing panics, but nothing is proven either, and an index out of
- * range, or a `CPtr` that is not a live C string, is undefined behaviour.
- * (`readStruct` tests its pointer for `NULL`, so it is an `ffi-null` site.) Listed so that a reader can find every one, and
+ * `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check, so nothing
+ * panics, but nothing is proven either, and an index out of range is
+ * undefined behaviour. (`readCString` and `readStruct` test their pointer for
+ * `NULL`, so each is an `ffi-null` site.) Listed so that a reader can find every one, and
  * allowed, as `oom` is: a call is accepted only through a `nish:unsafe`
  * import (`unsafeImportMessage` in `src/builtins.ts`), and that import at the
  * top of its module is the opt-in the no-panic scope asks for.
@@ -215,11 +216,12 @@ export const builtinPanicKind = (name: string): i32 => {
   ) {
     return PANIC_IO_EXIT
   }
-  if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
+  if (name === "uncheckedGet" || name === "uncheckedSet") {
     return PANIC_UNCHECKED
   }
-  // WP27 S4.2: a `NULL` pointer panics before the copy (`emitStructCopy`).
-  if (name === "readStruct") {
+  // WP27 S3.3 / S4.2: a `NULL` pointer panics before the copy
+  // (`emitFfiNullTest`).
+  if (name === "readCString" || name === "readStruct") {
     return PANIC_FFI_NULL
   }
   // `netRead` and its siblings, `readStdin`, `writeBytes` and `fileReadAt` check
@@ -740,7 +742,7 @@ const refuseSite = (
 /** The source name of the local a bare identifier binds, or `""`. */
 const siteLocalName = (program: CheckedProgram, expr: Node): string => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_IDENT) {
+  if (e.kind !== NodeKind.Ident) {
     return ""
   }
   const local = program.nodeLocals[e.id]
@@ -749,7 +751,7 @@ const siteLocalName = (program: CheckedProgram, expr: Node): string => {
 
 /** The builtin a call names, through a `nish:` import's local name; else a method's or a function's as written. */
 const calledName = (program: CheckedProgram, call: Node): string => {
-  if (call.kind !== N_CALL) {
+  if (call.kind !== NodeKind.Call) {
     return ""
   }
   const builtin = program.nodeBuiltins[call.id]
@@ -757,7 +759,7 @@ const calledName = (program: CheckedProgram, call: Node): string => {
     return builtin
   }
   const callee = unwrapBoundsParens(call.children[0])
-  return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : ""
+  return callee.kind === NodeKind.Member || callee.kind === NodeKind.Ident ? callee.text : ""
 }
 
 /**
@@ -809,10 +811,11 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "a C function reads a string to its first NUL byte, so a string that holds one panics before the call: " +
         "pass a literal with no NUL in it, which needs no check"
       )
-    case PANIC_FFI_NULL:
-      if (calledName(program, node) === "readStruct") {
+    case PANIC_FFI_NULL: {
+      const reader = calledName(program, node)
+      if (reader === "readStruct" || reader === "readCString") {
         return (
-          "`readStruct` panics on a NULL pointer, and no proof removes that check: " +
+          `\`${reader}\` panics on a NULL pointer, and no proof removes that check: ` +
           "make the call from a module outside the scope"
         )
       }
@@ -820,6 +823,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "a C function's `const char *` result may be NULL, which a `string` cannot hold: " +
         "declare the result `string | null` and narrow it with `!== null`, which needs no check"
       )
+    }
     case PANIC_FFI_LENGTH:
       return (
         "a C function reads or writes as many bytes of the buffer as the count says, so a count larger than " +
@@ -839,7 +843,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
 
 /** The guard for an element access or a `charCodeAt`, and for the second check of a compound store. */
 const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): string => {
-  if (node.kind === N_BINARY) {
+  if (node.kind === NodeKind.Binary) {
     return (
       "a compound store checks its index again after its right side, which may resize the array, and no " +
       "proof survives that call: compute the right side into a local first"
@@ -847,7 +851,7 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
   }
   let receiver = node
   let index = node
-  if (node.kind === N_INDEX) {
+  if (node.kind === NodeKind.Index) {
     receiver = node.children[0]
     index = node.children[1]
   } else {
@@ -899,7 +903,7 @@ const overflowAdvice = (program: CheckedProgram, table: TypeTable, node: Node): 
 /** The `nish:unsafe` call that computes what the operator at `node` computes, wrapping, spelled for `x` and `y`. */
 const wrappingForm = (node: Node): string => {
   const op = node.text
-  if (node.kind !== N_BINARY) {
+  if (node.kind !== NodeKind.Binary) {
     if (op === "++") {
       return "x = wrappingAdd(x, 1)"
     }

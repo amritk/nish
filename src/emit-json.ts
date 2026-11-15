@@ -52,10 +52,11 @@
 // is no more calls: `if (d.keyIs("x")) goto x; else if (d.keyIs("y")) goto y;
 // else goto unknown`.
 //
-// The encoding is `w.beginObject()`, `w.key("id")` and `w.i32(v.id)` per field
-// in declaration order, then `w.endObject()`. Every call into the decoder and
-// the writer is a call of one of their methods, and every error is theirs and
-// sticky, so this code has no error path of its own.
+// The encoding is `w.beginObject()`, `w.keyQuoted("id", "\"id\":")`
+// (`emitJsonFieldKey`) and `w.i32(v.id)` per field in declaration order, then
+// `w.endObject()`. This code only calls the decoder's and the writer's
+// methods, and every error is theirs and sticky, so it has no error path of
+// its own.
 //
 // The facts the attribute pass gives the instantiation are what this code may
 // do (`markJsonRoute` in `src/attributes.ts`), and the functions themselves
@@ -79,6 +80,7 @@ import {
 } from "./emit-classes"
 import { emitLibraryCopies, libraryReach, mapIntrinsicOf } from "./emit-map"
 import { privateAbi } from "./emit-result"
+import { emitEnumStringOf } from "./emit-strings"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRParam } from "./ir"
 import {
@@ -112,6 +114,7 @@ import {
 } from "./program"
 import { StringSet } from "./map"
 import { ARRAY_TYPE } from "./runtime"
+import { jsonQuote } from "./strings"
 import { T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
 
 /** What one written function is for. */
@@ -1044,6 +1047,64 @@ const emitJsonEnumCheck = (
   fn.emit(`switch i32 ${read}, label %${other} [ ${labels.join(" ")} ]`)
 }
 
+/** Write one enum value: a numeric enum's number with `i32`, a string enum's string, from the table `String(r)` loads, with `string`. */
+const emitJsonEncodeEnum = (emitter: Emitter, part: JsonPart, enumType: i32, value: string): void => {
+  if (emitter.table.enumStrings(enumType) === null) {
+    jsonCallMethod(emitter, part.receiver, "i32", "%r", [`i32 ${value}`])
+    return
+  }
+  jsonCallMethod(emitter, part.receiver, "string", "%r", [
+    `i8* ${emitEnumStringOf(emitter, enumType, value)}`,
+  ])
+}
+
+/**
+ * Read one enum value and go to `member` with its ordinal, which this answers
+ * and which holds in `member`; to `other` for a value no member has, and to
+ * `failed` once the decoder has failed. A numeric enum reads an `i32` and
+ * switches on the members' values. A string enum takes a string with
+ * `enumString` and tells the members' strings apart by length, then byte,
+ * then `keyIs`, as a class tells its keys apart: no allocation, and a `phi`
+ * gives the ordinal of the string it matched.
+ */
+const emitJsonEnumRead = (
+  emitter: Emitter,
+  part: JsonPart,
+  f: JsonField,
+  member: IRBlock,
+  other: string,
+  failed: string
+): string => {
+  const fn = emitter.fn
+  const texts = emitter.table.enumStrings(f.enumType)
+  if (texts === null) {
+    const read = jsonCallMethod(emitter, part.receiver, "i32", "%r", [])
+    emitJsonEnumCheck(emitter, part, f, read, member.label, other, failed)
+    fn.placeBlock(member)
+    return read
+  }
+  const ok = jsonCallMethod(emitter, part.receiver, "enumString", "%r", [])
+  const match = fn.newBlock("json.match")
+  jsonBranch(emitter, ok, match.label, failed)
+  fn.placeBlock(match)
+  const blocks: IRBlock[] = []
+  const targets: string[] = []
+  while (blocks.length < texts.length) {
+    const block = fn.newBlock("json.is")
+    blocks.push(block)
+    targets.push(block.label)
+  }
+  emitJsonDispatch(emitter, part, new JsonDispatch(texts, targets, other))
+  const incoming: string[] = []
+  for (const block of blocks) {
+    fn.placeBlock(block)
+    fn.emit(`br label %${member.label}`)
+    incoming.push(`[ ${incoming.length}, %${block.label} ]`)
+  }
+  fn.placeBlock(member)
+  return fn.emitValue(`phi i32 ${incoming.join(", ")}`)
+}
+
 /**
  * Read one value from the decoder and store it into `place`. An enum's
  * number is stored only when it is a member's; any other is
@@ -1056,12 +1117,10 @@ const emitJsonDecodeValue = (emitter: Emitter, part: JsonPart, f: JsonField, pla
     return
   }
   if (f.kind === JSON_FIELD_ENUM) {
-    const read = jsonCallMethod(emitter, part.receiver, "i32", "%r", [])
     const member = fn.newBlock("json.member")
     const other = fn.newBlock("json.other")
     const join = fn.newBlock("json.stored")
-    emitJsonEnumCheck(emitter, part, f, read, member.label, other.label, join.label)
-    fn.placeBlock(member)
+    const read = emitJsonEnumRead(emitter, part, f, member, other.label, join.label)
     jsonStore(emitter, place, read)
     fn.emit(`br label %${join.label}`)
     fn.placeBlock(other)
@@ -1493,9 +1552,7 @@ const emitJsonDecodeEnumArrayBody = (emitter: Emitter, part: JsonPart, f: JsonFi
   jsonBranch(emitter, more, element.label, done.label)
 
   fn.placeBlock(element)
-  const read = jsonCallMethod(emitter, part.receiver, "i32", "%r", [])
-  emitJsonEnumCheck(emitter, part, f, read, member.label, other.label, loop.label)
-  fn.placeBlock(member)
+  const read = emitJsonEnumRead(emitter, part, f, member, other.label, loop.label)
   emitPushValue(emitter, "%v", f.enumType, read)
   fn.emit(`br label %${loop.label}`)
   fn.placeBlock(other)
@@ -1612,6 +1669,16 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
 // ---- Encoding -----------------------------------------------------------------------------
 
 /**
+ * `w.keyQuoted(name, quoted)`: the field's key with its quoting and escaping
+ * done at compile time, by the rule `JsonWriter.key` applies at run time.
+ */
+const emitJsonFieldKey = (emitter: Emitter, part: JsonPart, wireName: string): void => {
+  const name = emitter.stringConstant(wireName)
+  const quoted = emitter.stringConstant(`${jsonQuote(wireName)}:`)
+  jsonCallMethod(emitter, part.receiver, "keyQuoted", "%r", [`i8* ${name}`, `i8* ${quoted}`])
+}
+
+/**
  * A class's object: `{`, each field's key and value, `}`. A variant's tag
  * goes first, as its string on the wire, so a decoder reads it with no
  * looking ahead.
@@ -1624,7 +1691,7 @@ const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   for (const f of fields) {
     const field = f.field
     if (field !== null && f.kind === JSON_FIELD_TAG) {
-      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
+      emitJsonFieldKey(emitter, part, field.wireName)
       const wire = emitter.stringConstant(jsonWireTag(emitter.table, info, field))
       jsonCallMethod(emitter, part.receiver, "string", "%r", [`i8* ${wire}`])
     }
@@ -1632,7 +1699,7 @@ const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   for (const f of fields) {
     const field = f.field
     if (field !== null && f.kind !== JSON_FIELD_TAG) {
-      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
+      emitJsonFieldKey(emitter, part, field.wireName)
       emitJsonEncodeValue(emitter, part, f, loadField(emitter, info, "%v", field))
     }
   }
@@ -1679,7 +1746,7 @@ const emitJsonEncodeValue = (emitter: Emitter, part: JsonPart, f: JsonField, val
     return
   }
   if (f.kind === JSON_FIELD_ENUM) {
-    jsonCallMethod(emitter, part.receiver, "i32", "%r", [`i32 ${value}`])
+    emitJsonEncodeEnum(emitter, part, f.enumType, value)
     return
   }
   let write = ""
@@ -1740,8 +1807,7 @@ const emitJsonEncodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
     const callee = jsonRequestPart(emitter, PART_ENCODE_UNION, null, f, part)
     fn.emit(`call void @${callee}(${jsonObjectType(part.receiver)} %r, ${UNION_TYPE} ${element})`)
   } else if (info === null) {
-    const element = emitElementAt(emitter, "%v", f.enumType, at)
-    jsonCallMethod(emitter, part.receiver, "i32", "%r", [`i32 ${element}`])
+    emitJsonEncodeEnum(emitter, part, f.enumType, emitElementAt(emitter, "%v", f.enumType, at))
   } else {
     const element = emitElementAt(emitter, "%v", info.type, at)
     const callee = jsonRequestPart(emitter, PART_ENCODE, info, null, part)

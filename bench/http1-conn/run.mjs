@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Http1Connection's per-request cost, an old std/net/ against the working tree's.
 //
-//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|stages|all]
+//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|stages|rss|all]
 //                                 [--rounds N] [--requests N] [--connections N]
 //                                 [--evict MiB] [--dram-requests N]
 //                                 [--base <rev>] [--compiler path] [--rss N]
@@ -30,11 +30,14 @@
 // one, and the header says whether it was. A checksum that differs between
 // binaries fails the run.
 //
-// With `--rss N` (default 5 when the idle shape runs, 0 to skip) it also runs
-// the idle pool's `rss` mode N times per build, at `--connections` and at 0
-// connections, each printing its own peak RSS (VmHWM), and reports the
-// difference divided by the connections: the peak memory one idle keep-alive
-// connection costs.
+// With `--rss N` (default 5 when the idle shape runs or `--shape rss` asks
+// for the memory alone, 0 to skip) it also runs
+// the idle pool's `rss` and `rss-kept` modes N times per build, at
+// `--connections` and at 0 connections, each printing its own peak RSS
+// (VmHWM), and reports the difference divided by the connections: the peak
+// memory one idle keep-alive connection costs, with `idleInput` on (the
+// default) and off, after one request a slot and after `--passes` (default 4),
+// when each slot has kept its response head.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -109,11 +112,24 @@ const binaries = []
 // `// sendBody only` go, and `VIA_SEND_BODY` turns false.
 const withSendBody = (std) =>
   fs.readFileSync(path.join(std, "std", "net", "http1-server.ts"), "utf8").includes("  sendBody(")
+// A base whose `Http1Connection` constructor takes no `Date` (before the
+// idle trims) gets the shared one put on each built connection instead.
+const withSharedDate = (std) =>
+  fs
+    .readFileSync(path.join(std, "std", "net", "http1-server.ts"), "utf8")
+    .includes("date: HttpDate | null = null")
+const dated = (std, text) =>
+  withSharedDate(std)
+    ? text
+    : text.replace(
+        "new Http1Connection(config, this.date) // shared date",
+        "new Http1Connection(config)\n      conn.date = this.date"
+      )
 const source = fs.readFileSync(path.join(here, "main.ts"), "utf8")
 const sourceFor = (std) =>
   withSendBody(std)
-    ? source
-    : source
+    ? dated(std, source)
+    : dated(std, source)
         .split("\n")
         .filter((line) => !line.includes("// sendBody only"))
         .join("\n")
@@ -143,7 +159,7 @@ const shapes = [
   ["direct-dram", "direct", [dramRequests, connections, batches, evict]],
   ["stages", "stages", [requests, connections, batches]],
 ].filter(([s]) => shapeFlag === "all" || shapeFlag.split(",").includes(s))
-if (shapes.length === 0) {
+if (shapes.length === 0 && shapeFlag !== "rss") {
   process.stderr.write(`bench/http1-conn: no shape called ${shapeFlag}\n`)
   process.exit(1)
 }
@@ -220,20 +236,33 @@ for (let r = 0; r < rounds; r++) {
   }
 }
 
-// The peak RSS of one `rss` run in KiB, which it prints where a time goes.
-const peak = (exe, count) =>
+// The peak RSS of one rss-shape run in KiB, which it prints where a time goes.
+const peak = (exe, shape, served, count) =>
   Number(
-    bench(exe, ["rss", "0", String(count), "0"])
+    bench(exe, [shape, String(served), String(count), "0"])
       .trim()
       .split(" ")[1]
   )
-const rssRuns = Number(flag("--rss", shapes.some(([, m]) => m === "idle" || m === "direct") ? "5" : "0"))
-// label -> bytes per idle connection, one per run
-const rss = new Map()
+const rssRuns = Number(
+  flag("--rss", shapeFlag === "rss" || shapes.some(([, m]) => m === "idle" || m === "direct") ? "5" : "0")
+)
+const passes = Number(flag("--passes", "4"))
+// [table row, main.ts shape, passes]
+const rssRows = [
+  ["idleInput, 1 request", "rss", 1],
+  [`idleInput, ${passes} requests`, "rss", passes],
+  ["idleInput off, 1 request", "rss-kept", 1],
+  [`idleInput off, ${passes} requests`, "rss-kept", passes],
+]
+// row -> label -> bytes per idle connection, one per run
+const rss = new Map(rssRows.map(([row]) => [row, new Map()]))
 for (let r = 0; r < rssRuns; r++) {
-  for (const { label, exe } of binaries) {
-    const per = ((peak(exe, Number(connections)) - peak(exe, 0)) * 1024) / Number(connections)
-    rss.set(label, [...(rss.get(label) ?? []), per])
+  for (const [row, shape, n] of rssRows) {
+    for (const { label, exe } of binaries) {
+      const per =
+        ((peak(exe, shape, n, Number(connections)) - peak(exe, shape, n, 0)) * 1024) / Number(connections)
+      rss.get(row).set(label, [...(rss.get(row).get(label) ?? []), per])
+    }
   }
 }
 
@@ -293,9 +322,11 @@ if (rssRuns > 0) {
   )
   console.log(`| | ${binaries.map((b) => b.label).join(" | ")} |`)
   console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
-  const cells = binaries.map((b) => {
-    const xs = sorted(rss.get(b.label))
-    return `${median(xs).toFixed(0)} (${xs[0].toFixed(0)}–${xs[xs.length - 1].toFixed(0)})`
-  })
-  console.log(`| rss | ${cells.join(" | ")} |`)
+  for (const [row] of rssRows) {
+    const cells = binaries.map((b) => {
+      const xs = sorted(rss.get(row).get(b.label))
+      return `${median(xs).toFixed(0)} (${xs[0].toFixed(0)}–${xs[xs.length - 1].toFixed(0)})`
+    })
+    console.log(`| ${row} | ${cells.join(" | ")} |`)
+  }
 }

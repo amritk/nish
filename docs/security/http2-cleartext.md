@@ -1,6 +1,6 @@
 # Security record: HTTP/2 over cleartext TCP (h2c)
 
-The record of WP39 G7: `nish/net/http2-cleartext`, HTTP/2 over plain TCP
+The record of `nish/net/http2-cleartext`, HTTP/2 over plain TCP
 with prior knowledge (RFC 9113 §3.3). It is `nish/net/http2-tls`'s carrier
 with a TCP socket in place of TLS and the connection preface checked by the
 carrier before HTTP/2 sees a byte. It says what the carrier refuses and how,

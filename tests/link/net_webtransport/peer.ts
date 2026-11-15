@@ -24,6 +24,7 @@ import {
 } from "nish/net/quic-frame";
 import { QuicTransportParameters, quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QuicConnection, QuicServerConfig } from "nish/net/quic";
+import { QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { QPACK_OK, QpackDecoder, QpackEncoder } from "nish/net/qpack";
@@ -110,6 +111,8 @@ export const wtQuicConfig = (limits: WtLimits): QuicServerConfig => {
     retryTokenKey: tokenKey(),
     workerIndex: toI32(-1),
     workerCount: toI32(0),
+    // Pinned to NewReno: the windows and flights these checks expect were worked out under it.
+    congestion: QUIC_RECOVERY_NEWRENO,
     retry: false,
     retryTokenLifetime: n64(10000),
   };

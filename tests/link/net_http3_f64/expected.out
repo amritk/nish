@@ -107,6 +107,15 @@ PASS  and on one with 66 bytes, the filler's length written long to fill it exac
 PASS  and on one with 300
 PASS  each arrives after its body, the padding the server wrote to be told of room skipped as an unknown frame
 PASS  every request finished
+PASS  the default budget is a hundred resets
+PASS  two requests the client resets, each with RESET_STREAM and STOP_SENDING, cost one each: the connection still answers
+PASS  rapid reset: the third the client resets, past a budget of two, closes the connection with H3_EXCESSIVE_LOAD
+PASS  RESET_STREAM alone, three times: H3_EXCESSIVE_LOAD
+PASS  STOP_SENDING alone, three times: H3_EXCESSIVE_LOAD
+PASS  two malformed requests, reset by the server, leave the connection answering
+PASS  MadeYouReset: the stream errors the client provokes are charged too, and past the budget close the connection
+PASS  a 431 is charged, and never earned back: the third closes the connection
+PASS  a response the server ends earns the budget back: a budget of one takes a reset after every answer, ten times
 PASS  a final response carries one date, straight after :status
 PASS  trailers carry none
 PASS  a head with the program's own date
@@ -132,4 +141,4 @@ PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
 PASS  and from the second on, a handshake keeps nothing either: its state is the slot's (QUIC-3)
-http3: 134 passed, 0 failed, 0 skipped
+http3: 143 passed, 0 failed, 0 skipped

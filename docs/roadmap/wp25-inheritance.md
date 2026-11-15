@@ -12,6 +12,6 @@ Nothing scheduled. Any unchecked item is deferred; the note says what would reop
 
 ## Not planned
 
-Class inheritance, dynamic dispatch, interface `extends`.
+Class inheritance, interface `extends`. Dynamic dispatch over interfaces is [WP60](wp60-dyn-dispatch.md).
 
 [All work packages](index.md)

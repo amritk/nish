@@ -1,0 +1,1 @@
+--profile wasi --emit-dts build/test/wordings/nl2770_root_storage_wasi_dts.d.ts
