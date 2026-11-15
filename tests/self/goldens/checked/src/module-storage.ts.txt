@@ -55,7 +55,7 @@ function checkStorage(ctx: CheckContext, info: ConstInfo): Node | null -> @check
   sharedWrite: +0:5
   calls: TypeTable.typeName checkStorageElement nish_panic_index nish_str_concat rootClass storageLengthShaped storageNewNode storageReport
   pointer ctx: size=344 writesThrough=false captured=false passedTo=storageReport#0 checkStorageElement#0 storageReport#0
-  pointer info: size=96 writesThrough=true captured=false passedTo=storageReport#1 checkStorageElement#1 storageLengthShaped#0 storageReport#1
+  pointer info: size=112 writesThrough=true captured=false passedTo=storageReport#1 checkStorageElement#1 storageLengthShaped#0 storageReport#1
   stackSites=0 stackLocals=0
   local -6:9 expr: Node (const)
   callee -6:16 storageNewNode -> @storageNewNode
@@ -76,7 +76,7 @@ function acceptStorageLength(ctx: CheckContext, info: ConstInfo, lengthNode: Nod
   escaping: value
   calls: elementStride nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 storageReport
   pointer ctx: size=344 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
-  pointer info: size=96 writesThrough=true captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
+  pointer info: size=112 writesThrough=true captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
   pointer lengthNode: size=40 writesThrough=false captured=false passedTo=storageReport#2 storageReport#2 storageReport#2
   stackSites=0 stackLocals=0
   callee -27:5 storageReport -> @storageReport
@@ -90,14 +90,14 @@ function storageReport(ctx: CheckContext, info: ConstInfo, node: Node, message: 
   escaping: message
   calls: DiagnosticSink.report
   pointer ctx: size=344 writesThrough=false captured=false
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 DiagnosticSink.report -> @DiagnosticSink.report
 function storageLengthShaped(info: ConstInfo, expr: Node): boolean -> @storageLengthShaped
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.constant nish_panic_index nish_str_at storageLengthShaped
-  pointer info: size=96 writesThrough=false captured=false passedTo=storageLengthShaped#0 storageLengthShaped#0 storageLengthShaped#0
+  pointer info: size=112 writesThrough=false captured=false passedTo=storageLengthShaped#0 storageLengthShaped#0 storageLengthShaped#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:44 storageLengthShaped -> @storageLengthShaped
@@ -113,7 +113,7 @@ function checkStorageElement(ctx: CheckContext, info: ConstInfo, at: Node, elem:
   escaping: elem spelled
   calls: TypeTable.typeName inlineElementStruct nish_panic_index nish_str_concat storageElementFault storageFaultReport storageRecord
   pointer ctx: size=344 writesThrough=false captured=false passedTo=storageElementFault#0 storageFaultReport#0 storageFaultReport#0 storageElementFault#0 storageFaultReport#0
-  pointer info: size=96 writesThrough=false captured=false passedTo=storageElementFault#1 storageFaultReport#1 storageFaultReport#1 storageElementFault#1 storageFaultReport#1
+  pointer info: size=112 writesThrough=false captured=false passedTo=storageElementFault#1 storageFaultReport#1 storageFaultReport#1 storageElementFault#1 storageFaultReport#1
   pointer at: size=40 writesThrough=false captured=false passedTo=storageFaultReport#2 storageFaultReport#2 storageFaultReport#2
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -149,7 +149,7 @@ function recheckStorage(ctx: CheckContext, info: ConstInfo): void -> @recheckSto
   sharedWrite: via checkRootClosure
   calls: TypeTable.typeName checkRootClosure nish_panic_index storageElementFault storageFaultReport storageNewNode storageRecord
   pointer ctx: size=344 writesThrough=false captured=false passedTo=checkRootClosure#0 storageElementFault#0 storageFaultReport#0
-  pointer info: size=96 writesThrough=false captured=false passedTo=checkRootClosure#1 storageElementFault#1 storageFaultReport#1
+  pointer info: size=112 writesThrough=false captured=false passedTo=checkRootClosure#1 storageElementFault#1 storageFaultReport#1
   stackSites=0 stackLocals=0
   local +0:9 scope: CheckedProgram | null (const)
   local +1:9 elem: i32 (const)
@@ -180,7 +180,7 @@ function checkRootClosure(ctx: CheckContext, info: ConstInfo): void -> @checkRoo
   sharedWrite: via storageReport
   calls: TypeTable.nameOf TypeTable.stripNull nish_str_concat nish_str_eq rootFault storageReport
   pointer ctx: size=344 writesThrough=false captured=false passedTo=rootFault#0 storageReport#0
-  pointer info: size=96 writesThrough=false captured=false passedTo=storageReport#1
+  pointer info: size=112 writesThrough=false captured=false passedTo=storageReport#1
   stackSites=1 stackLocals=1
   local +0:9 scope: CheckedProgram | null (const)
   local +4:9 seen: boolean[] (const)
@@ -234,7 +234,7 @@ function storageElementFault(ctx: CheckContext, info: ConstInfo, elem: i32): i32
   escaping: elem
   calls: TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isHostHandle TypeTable.isRanged isNumeric storageZeroIsMember
   pointer ctx: size=344 writesThrough=false captured=false passedTo=storageZeroIsMember#0
-  pointer info: size=96 writesThrough=false captured=false passedTo=storageZeroIsMember#1
+  pointer info: size=112 writesThrough=false captured=false passedTo=storageZeroIsMember#1
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   callee +4:7 isNumeric -> @isNumeric
@@ -248,7 +248,7 @@ function storageFaultReport(ctx: CheckContext, info: ConstInfo, at: Node, fault:
   sharedWrite: via storageReport
   calls: nish_str_concat storageReport
   pointer ctx: size=344 writesThrough=false captured=false passedTo=storageReport#0 storageReport#0 storageReport#0
-  pointer info: size=96 writesThrough=false captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
+  pointer info: size=112 writesThrough=false captured=false passedTo=storageReport#1 storageReport#1 storageReport#1
   pointer at: size=40 writesThrough=false captured=false passedTo=storageReport#2 storageReport#2 storageReport#2
   stackSites=0 stackLocals=0
   callee +0:5 storageReport -> @storageReport
@@ -259,7 +259,7 @@ function storageZeroIsMember(ctx: CheckContext, info: ConstInfo, elem: i32): boo
   escaping: elem
   calls: TypeTable.isEnumMemberType TypeTable.isRanged TypeTable.memberValue TypeTable.rangeHi TypeTable.rangeLo
   pointer ctx: size=344 writesThrough=false captured=false
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   callee +1:7 TypeTable.isRanged -> @TypeTable.isRanged
@@ -292,7 +292,7 @@ function storageHoldsRecords(ctx: CheckContext, info: ConstInfo): boolean -> @st
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isStruct
   pointer ctx: size=344 writesThrough=false captured=false
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 TypeTable.isStruct -> @TypeTable.isStruct
 function checkStorageUses(ctx: CheckContext, node: Node): void -> @checkStorageUses [exported]
@@ -344,7 +344,7 @@ function refuseElementValue(ctx: CheckContext, info: ConstInfo, node: Node): voi
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
   pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
@@ -353,7 +353,7 @@ function refuseMethod(ctx: CheckContext, info: ConstInfo, node: Node, method: st
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
   pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error

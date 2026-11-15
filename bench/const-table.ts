@@ -10,6 +10,7 @@
 //   taskset -c 2 build/const-table
 
 // 0 other, 1 white space, 2 digit, 3 identifier byte (a letter or `_`).
+// biome-ignore format: one row a line, 32 bytes each
 const CLASS: readonly u8[] = [
   0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0,

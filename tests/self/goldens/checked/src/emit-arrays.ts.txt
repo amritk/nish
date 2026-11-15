@@ -18,6 +18,7 @@ import withoutEquals from "./emit-ops" -> function @withoutEquals
 import compoundIntegerOpcode from "./emit-ops" -> function @compoundIntegerOpcode
 import emitBitwiseCombine from "./emit-ops" -> function @emitBitwiseCombine
 import emitIntBinary from "./emit-ops" -> function @emitIntBinary
+import floatText from "./emit-ops" -> function @floatText
 import isBitwiseAssignment from "./emit-ops" -> function @isBitwiseAssignment
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import isUncheckedAccess from "./emit-util" -> function @isUncheckedAccess
@@ -50,6 +51,8 @@ import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import ARRAY_TYPE from "./runtime" -> const ARRAY_TYPE
 import EFFECT_WRITE from "./runtime" -> const EFFECT_WRITE
+import irEscapeByte from "./strings" -> function @irEscapeByte
+import StringBuilder from "./strings" -> struct StringBuilder
 import elementTbaa from "./tbaa" -> function @elementTbaa
 import headerTbaa from "./tbaa" -> function @headerTbaa
 import sliceTbaa from "./tbaa" -> function @sliceTbaa
@@ -62,6 +65,7 @@ import T_F64 from "./types" -> const T_F64
 import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
 import T_U32 from "./types" -> const T_U32
+import T_U8 from "./types" -> const T_U8
 import TypeTable from "./types" -> struct TypeTable
 const HEADER: string = "%struct.nish_array"
 const HEADER_PTR: string = "%struct.nish_array*"
@@ -1885,7 +1889,7 @@ function storageGlobals(emitter: Emitter, info: ConstInfo, traces: RootTraces): 
   sharedWrite: via elementLLVMType
   calls: Emitter.declareGlobal Emitter.declareType elementLLVMType nish_str_concat nish_str_from_i64 rootTable
   pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.declareGlobal#0 rootTable#0 Emitter.declareGlobal#0
-  pointer info: size=96 writesThrough=false captured=false passedTo=rootTable#2
+  pointer info: size=112 writesThrough=false captured=false passedTo=rootTable#2
   pointer traces: size=24 writesThrough=false captured=false passedTo=rootTable#1
   stackSites=0 stackLocals=0
   local +0:9 slot: string (const)
@@ -1896,12 +1900,58 @@ function storageGlobals(emitter: Emitter, info: ConstInfo, traces: RootTraces): 
   callee +6:3 Emitter.declareGlobal -> @Emitter.declareGlobal
   callee +10:5 rootTable -> @rootTable
   callee +12:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+function tableGlobals(emitter: Emitter, info: ConstInfo): void -> @tableGlobals [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via elementLLVMType
+  calls: Emitter.declareGlobal Emitter.declareType elementLLVMType nish_str_concat nish_str_from_i64 tableInitializer
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.declareGlobal#0 Emitter.declareGlobal#0
+  pointer info: size=112 writesThrough=false captured=false passedTo=tableInitializer#0
+  stackSites=0 stackLocals=0
+  local +0:9 slot: string (const)
+  callee +0:16 elementLLVMType -> @elementLLVMType
+  local +1:9 data: string (const)
+  callee +2:3 Emitter.declareType -> @Emitter.declareType
+  callee +3:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  callee +4:76 tableInitializer -> @tableInitializer
+  callee +6:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+function tableInitializer(info: ConstInfo, slot: string): string -> @tableInitializer
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: slot
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText floatText irEscapeByte nish_panic_index nish_str_from_i64
+  pointer info: size=112 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 out: StringBuilder (const)
+  callee +0:15 new StringBuilder -> @StringBuilder.constructor
+  callee +2:5 StringBuilder.add -> @StringBuilder.add
+  local +3:16 v: i64 (const)
+  callee +4:7 irEscapeByte -> @irEscapeByte
+  callee +6:5 StringBuilder.add -> @StringBuilder.add
+  callee +7:12 StringBuilder.toText -> @StringBuilder.toText
+  callee +9:3 StringBuilder.add -> @StringBuilder.add
+  local +10:7 i: i32 (let)
+  local +11:9 n: i32 (const)
+  callee +14:7 StringBuilder.add -> @StringBuilder.add
+  callee +16:5 StringBuilder.add -> @StringBuilder.add
+  callee +17:5 StringBuilder.add -> @StringBuilder.add
+  callee +18:5 StringBuilder.add -> @StringBuilder.add
+  callee +18:42 floatText -> @floatText
+  callee +21:3 StringBuilder.add -> @StringBuilder.add
+  callee +22:10 StringBuilder.toText -> @StringBuilder.toText
+function tableDeclaration(emitter: Emitter, info: ConstInfo): void -> @tableDeclaration [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.declareType
+  calls: Emitter.declareGlobal Emitter.declareType nish_str_concat
+  pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.declareGlobal#0
+  pointer info: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 Emitter.declareType -> @Emitter.declareType
+  callee +1:3 Emitter.declareGlobal -> @Emitter.declareGlobal
 function storageDeclaration(emitter: Emitter, info: ConstInfo): void -> @storageDeclaration [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType
   calls: Emitter.declareGlobal Emitter.declareType nish_str_concat
   pointer emitter: size=392 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.declareGlobal#0
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.declareType -> @Emitter.declareType
   callee +1:3 Emitter.declareGlobal -> @Emitter.declareGlobal

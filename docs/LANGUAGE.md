@@ -3878,7 +3878,7 @@ export const main = (): void => {
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
-  (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
+  (`` Module constant `alias` must be a number, boolean, string, or a `readonly` array of numbers written out as a literal, not (i32) => i32; there is no top-level code to build anything else ``).
   An arrow argument may capture a `const` reference local like any other
   value (`fnref_capture`).
 - **What a reference does.** It is called — `h(3)`, `this.op(4)`, or

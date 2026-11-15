@@ -225,7 +225,7 @@ data in the binary: nothing runs to build it, and nothing can write it.
 ([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
 
 ```ts nish:ok
-const LIMIT = 100;
+const LIMIT: i32 = 100;
 const SCALE: readonly i32[] = [1, 10, LIMIT, LIMIT * 10];
 
 export const main = (): i32 => {

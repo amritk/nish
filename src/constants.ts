@@ -321,7 +321,13 @@ const foldTable = (ctx: CheckContext, info: ConstInfo): void => {
   info.folding = true
   const elem = info.storageElem
   const max = unsignedMax(elem)
-  const expected = elem === T_U32 || elem === T_I64 ? T_I64 : elem === T_F64 ? T_F64 : T_I32
+  // The type a bare literal folds at: u32 needs 64 bits to hold 4294967295.
+  let expected = T_I32
+  if (elem === T_U32 || elem === T_I64) {
+    expected = T_I64
+  } else if (elem === T_F64) {
+    expected = T_F64
+  }
   const elements = unwrapParens(info.decl.children[2]).children
   const spelled = ctx.table.typeName(elem)
   let ok = true

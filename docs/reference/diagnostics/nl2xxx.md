@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 777 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 781 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15181,4 +15181,36 @@ export const main = (): void => {
 
 ```text
 A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body
+```
+
+## NL2786
+
+The message of an error contains:
+
+```text
+…: a table holds u8, u16, u32, i32, i64 or f64, the numbers whose bytes are their value
+```
+
+## NL2787
+
+The message of an error contains:
+
+```text
+`: its elements are constant data that nothing may write, and a `
+```
+
+## NL2788
+
+The message of an error contains:
+
+```text
+` has no elements; a table holds at least one
+```
+
+## NL2789
+
+The message of an error contains:
+
+```text
+… of constant table `
 ```

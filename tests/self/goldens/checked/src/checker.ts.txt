@@ -15,6 +15,7 @@ import WANT_INFERRED from "./expressions" -> const WANT_INFERRED
 import checkDefiniteAssignment from "./assignment" -> function @checkDefiniteAssignment
 import enumMemberValue from "./constants" -> function @enumMemberValue
 import foldConstant from "./constants" -> function @foldConstant
+import isTableElement from "./constants" -> function @isTableElement
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import CheckContext from "./context" -> struct CheckContext
 import NUMBER_MODE_F64 from "./context" -> const NUMBER_MODE_F64
@@ -159,6 +160,7 @@ struct Checker (class) size=24 align=8 exported
   method finishPendingStructs -> @Checker.finishPendingStructs
   method checkInstanceBody -> @Checker.checkInstanceBody
   method collectConstants -> @Checker.collectConstants
+  method collectTable -> @Checker.collectTable
   method collectStorage -> @Checker.collectStorage
   method checkBodies -> @Checker.checkBodies
   method checkScript -> @Checker.checkScript
@@ -574,8 +576,8 @@ function Checker.checkInstanceBody(this: Checker, info: Instantiation): void -> 
 function Checker.collectConstants(this: Checker, stmt: Node): void -> @Checker.collectConstants [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Checker.collectStorage
-  calls: CheckContext.error CheckedProgram.addConstant Checker.collectStorage Checker.nameTaken ConstInfo.constructor TypeTable.typeName isExported nish_alloc_struct nish_panic_index nish_str_concat resolveType
-  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.collectStorage#0 Checker.nameTaken#0
+  calls: CheckContext.error CheckedProgram.addConstant Checker.collectStorage Checker.collectTable Checker.nameTaken ConstInfo.constructor TypeTable.isArray TypeTable.typeName isExported nish_alloc_struct nish_panic_index nish_str_concat resolveType unwrapParens
+  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.collectStorage#0 Checker.collectTable#0 Checker.nameTaken#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=isExported#0
   stackSites=0 stackLocals=0
   local +0:11 exported: boolean (const)
@@ -587,14 +589,43 @@ function Checker.collectConstants(this: Checker, stmt: Node): void -> @Checker.c
   callee +11:9 CheckContext.error -> @CheckContext.error
   local +14:13 type: i32 (const)
   callee +14:20 resolveType -> @resolveType
-  local +23:15 spelled: string (const)
-  callee +23:25 TypeTable.typeName -> @TypeTable.typeName
-  callee +24:9 CheckContext.error -> @CheckContext.error
-  callee +30:11 Checker.nameTaken -> @Checker.nameTaken
-  callee +31:9 CheckContext.error -> @CheckContext.error
-  local +34:13 info: ConstInfo (const)
-  callee +34:20 new ConstInfo -> @ConstInfo.constructor
-  callee +37:7 CheckedProgram.addConstant -> @CheckedProgram.addConstant
+  callee +17:9 TypeTable.isArray -> @TypeTable.isArray
+  callee +18:9 unwrapParens -> @unwrapParens
+  callee +20:9 Checker.collectTable -> @Checker.collectTable
+  local +31:15 spelled: string (const)
+  callee +31:25 TypeTable.typeName -> @TypeTable.typeName
+  callee +32:9 CheckContext.error -> @CheckContext.error
+  callee +38:11 Checker.nameTaken -> @Checker.nameTaken
+  callee +39:9 CheckContext.error -> @CheckContext.error
+  local +42:13 info: ConstInfo (const)
+  callee +42:20 new ConstInfo -> @ConstInfo.constructor
+  callee +45:7 CheckedProgram.addConstant -> @CheckedProgram.addConstant
+function Checker.collectTable(this: Checker, decl: Node, name: string, exported: boolean, type: i32): void -> @Checker.collectTable [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: exported name type
+  calls: CheckContext.error CheckedProgram.addConstant Checker.nameTaken ConstInfo.constructor TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName isTableElement nish_alloc_struct nish_panic_index nish_str_concat unwrapParens
+  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.nameTaken#0
+  pointer decl: size=40 writesThrough=true captured=true passedTo=ConstInfo.constructor#3
+  stackSites=0 stackLocals=0
+  local +0:11 table: TypeTable (const)
+  local +1:11 elem: i32 (const)
+  callee +1:18 TypeTable.refOf -> @TypeTable.refOf
+  callee +2:10 isTableElement -> @isTableElement
+  callee +3:7 CheckContext.error -> @CheckContext.error
+  callee +5:51 TypeTable.typeName -> @TypeTable.typeName
+  local +9:11 readonly: string (const)
+  callee +9:34 TypeTable.typeName -> @TypeTable.typeName
+  callee +10:10 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee +11:7 CheckContext.error -> @CheckContext.error
+  callee +13:136 TypeTable.typeName -> @TypeTable.typeName
+  callee +17:9 unwrapParens -> @unwrapParens
+  callee +18:7 CheckContext.error -> @CheckContext.error
+  callee +24:9 Checker.nameTaken -> @Checker.nameTaken
+  callee +25:7 CheckContext.error -> @CheckContext.error
+  local +28:11 info: ConstInfo (const)
+  callee +28:18 new ConstInfo -> @ConstInfo.constructor
+  callee +33:5 CheckedProgram.addConstant -> @CheckedProgram.addConstant
 function Checker.collectStorage(this: Checker, decl: Node, name: string, exported: boolean): boolean -> @Checker.collectStorage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -963,7 +994,7 @@ function Checker.bindConstantImport(this: Checker, index: i32, constant: ConstIn
   escaping: constant index
   calls: CheckContext.error StringMap.has StringMap.set StringSet.has nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=24 writesThrough=false captured=false
-  pointer constant: size=96 writesThrough=true captured=true
+  pointer constant: size=112 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -16:11 imp: ImportBinding (const)
   local -15:11 localName: string (const)

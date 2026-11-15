@@ -1,1 +1,1 @@
-Module constant `shared` must be a number, boolean, or string, not File; there is no top-level code to build anything else
+Module constant `shared` must be a number, boolean, string, or a `readonly` array of numbers written out as a literal, not File; there is no top-level code to build anything else

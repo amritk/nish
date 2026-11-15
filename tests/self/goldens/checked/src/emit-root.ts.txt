@@ -180,7 +180,7 @@ function rootTable(emitter: Emitter, traces: RootTraces, info: ConstInfo, data: 
   calls: Emitter.declareGlobal Emitter.declareType Emitter.useRuntime IRModule.addRawDefinition StringSet.add TypeTable.stripNull nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 traceOf
   pointer emitter: size=392 writesThrough=false captured=false passedTo=traceOf#0 Emitter.declareType#0 Emitter.declareGlobal#0 Emitter.declareGlobal#0 Emitter.declareGlobal#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer traces: size=24 writesThrough=false captured=false passedTo=traceOf#1
-  pointer info: size=96 writesThrough=false captured=false
+  pointer info: size=112 writesThrough=false captured=false
   stackSites=2 stackLocals=1
   local +0:9 desc: string (const)
   callee +0:16 traceOf -> @traceOf
