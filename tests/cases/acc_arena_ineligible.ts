@@ -36,7 +36,7 @@ const measured = (n: i32): i32 => {
     return 0
   }
   const s = `${n}`
-  const grew = Arena.used() > 0 ? 1 : 0
+  const grew = Arena.used() >= 0 ? 1 : 0
   return s.length + grew + measured(n - 1)
 }
 

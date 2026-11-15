@@ -127,7 +127,7 @@ if.end:
   %1 = call i8* @nish_str_from_i32(i32 %n)
   store i8* %1, i8** %s.addr, align 8
   %2 = call i64 @nish_arena_used()
-  %3 = icmp sgt i64 %2, 0
+  %3 = icmp sge i64 %2, 0
   br i1 %3, label %cond.true, label %cond.false
 
 cond.true:

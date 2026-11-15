@@ -187,7 +187,7 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %16 = phi i32 [ %15, %bounds.ok ], [ 100000, %cond.false ]
+  %16 = phi i32 [ %15, %bounds.ok ], [ 1000, %cond.false ]
   store i32 %16, i32* %many.addr, align 4
   %17 = call i32 @digits(i32 12)
   %18 = call i8* @nish_str_from_i32(i32 %17)
