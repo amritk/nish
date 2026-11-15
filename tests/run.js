@@ -26418,6 +26418,17 @@ if (dealtHere("releaseChecks")) {
         )
       }
     }
+    // docs/site/break carries the compiler's --help and --version, and the break-web
+    // section fails when they are not the compiler's. v0.40.0's train bumped the
+    // version without rebuilding it, so the tag's own CI failed and nothing was
+    // published. The rebuild has to come after the bump and before the commit.
+    const rebuild = workflow.indexOf("node examples/break-web/build.mjs\n")
+    const commit = workflow.indexOf('git commit -m "$title"')
+    check(
+      "release-pr: the train rebuilds the break game between the version bump and its commit",
+      close >= 0 && rebuild > close && commit > rebuild,
+      `bump ends at ${close}, break-web build at ${rebuild}, commit at ${commit}`
+    )
   }
 
   // ---- The seed fetch -------------------------------------------------------------------

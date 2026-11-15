@@ -946,13 +946,14 @@ function Compilation.readCompat(this: Compilation, source: SourceFile | null, ni
   stackSites=0 stackLocals=0
   local +0:13 asked: ManifestCompat (const)
   callee +0:21 manifestCompat -> @manifestCompat
-  local +1:11 i: i32 (let)
-  local +3:15 name: string (const)
-  callee +4:14 compatHasFeature -> @compatHasFeature
-  callee +5:11 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +9:150 compatKnownText -> @compatKnownText
-  callee +16:7 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
-  callee +17:9 Compilation.entry -> @Compilation.entry
+  local +1:13 known: string (const)
+  callee +1:21 compatKnownText -> @compatKnownText
+  local +2:11 i: i32 (let)
+  local +4:15 name: string (const)
+  callee +5:14 compatHasFeature -> @compatHasFeature
+  callee +6:11 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +17:7 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  callee +18:9 Compilation.entry -> @Compilation.entry
 function Compilation.rootManifest(this: Compilation): SourceFile | null -> @Compilation.rootManifest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.manifestDirAbove
