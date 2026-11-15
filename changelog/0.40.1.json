@@ -1,0 +1,49 @@
+{
+  "version": "0.40.1",
+  "date": "2026-11-15",
+  "tag": "v0.40.1",
+  "range": {
+    "from": "v0.40.0",
+    "to": "3fd48b1b"
+  },
+  "entries": [
+    {
+      "id": "rebuild-the-docs-site-s-break-game-when",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "rebuild the docs site's break game when the release train bumps the version",
+      "body": "The break game on the docs site is committed with the compiler's --help\nand --version written into it (docs/site/break/shell.mjs, its manifest,\nand examples/break-web/help.ts, which game.wasm is compiled from), and\ntests/run.js's break-web section fails when they are not the compiler's.\nThe release train bumped the version in package.json and src/branding.ts\nbut left the game saying the old one, so v0.40.0's tag failed its own CI\nand nothing was published. The train now builds the compiler from the\nbumped src/ with the last release's seed, checking its attestation, and\nrebuilds the game before it commits the release pull request. The\ncommitted game is regenerated for 0.40.0, so main passes again.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js release-pr",
+        "tests/run.js break-web",
+        "tests/fetch-seed.js"
+      ],
+      "commits": [
+        "56fc471"
+      ],
+      "pr": 1641,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "rebuild-the-docs-site-s-break-game-for",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "rebuild the docs site's break game for 0.40.0",
+      "body": "The release moved the compiler's version, so the committed shell and the game's help still answered nish 0.39.0 and break-web's --check failed on main. Rebuilt with node examples/break-web/build.mjs; only the version string in the help and the hashes that cover it change.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3fd48b1"
+      ],
+      "pr": 1642,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    }
+  ]
+}

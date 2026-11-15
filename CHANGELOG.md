@@ -16,6 +16,14 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-11-15
+
+### Fixed
+
+- cli: Rebuild the docs site's break game when the release train bumps the version ([#1641](https://github.com/amritk/nish/pull/1641))
+- cli: Rebuild the docs site's break game for 0.40.0 ([#1642](https://github.com/amritk/nish/pull/1642))
+
+
 ## [0.40.0] - 2026-11-15
 
 ### Added
@@ -1949,3 +1957,4 @@ file per release, and each release's notes and downloads are on the
 [0.38.0]: https://github.com/amritk/nish/releases/tag/v0.38.0
 [0.39.0]: https://github.com/amritk/nish/releases/tag/v0.39.0
 [0.40.0]: https://github.com/amritk/nish/releases/tag/v0.40.0
+[0.40.1]: https://github.com/amritk/nish/releases/tag/v0.40.1
