@@ -132,12 +132,13 @@ run() {
   esac
   local line
   line=$("$out/loadgen" -c "$c" -r "$rate" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
-  # The server's own count of what it holds, from its last report line(s).
+  # The server's own count of what it holds: each process's peak, since the
+  # load generator closes its connections before this runs.
   local live
   if [ "$design" = uring ]; then
-    live=$(grep '^live' "$log" | tail -1 | awk '{print $2}')
+    live=$(awk '/^live/ && $2 > m {m = $2} END {print m + 0}' "$log")
   else
-    live=$(awk '/live/ {last[$1] = $3} END {for (p in last) s += last[p]; print s}' "$log")
+    live=$(awk '/live/ && $3 > m[$1] {m[$1] = $3} END {for (p in m) s += m[p]; print s + 0}' "$log")
   fi
   echo "round=$r units=$n live=${live:-0} $line" | tee -a "$results"
   pkill -P "$server" 2>/dev/null || true

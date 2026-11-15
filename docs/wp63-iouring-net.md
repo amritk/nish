@@ -6,7 +6,13 @@ Stage A, the go/no-go measurement, is `bench/fd-limit/` and its figures are
 anchors are at `4071dda4`; kernel anchors are at Linux v6.18 unless a version
 is named.
 
-**Verdict: {{VERDICT}}.** {{VERDICT_SENTENCE}}
+**Verdict: go.** Under a hard `RLIMIT_NOFILE` of 20,000, one process held
+300,000 established sockets in 15 rings, and its own descriptor table held 35
+entries. At that C it spent 15.10 µs of CPU per request against 24.77 µs for
+the epoll design: 39.0% less, against a 2.8% noise band, and no round saved
+less than 31.9%. At 96,000 connections, where both designs run as the entry
+does with five epoll processes, the saving is 20.0% against a 1.4% band. The
+implementation stages are §10, and S1 is next.
 
 ## 1. Why this is reopened
 
@@ -154,20 +160,123 @@ design is CPU-bound and both see the same arrivals.
 
 ### 3.2 The box
 
-{{BOX}}
+| | |
+| --- | --- |
+| CPU | Intel Xeon Processor @ 2.30 GHz (family 6, model 173), 4 vCPUs, one thread a core |
+| VM | KVM (Firecracker), the programs in a container on it, 15.7 GiB |
+| Kernel | Linux 6.18.44, `io_uring_disabled` 0 |
+| Mitigations | `mitigations=auto,no_guest_host,no_guest_guest`; `spec_store_bypass`, `spectre_v1` and `spectre_v2` mitigated, the rest "Not affected" |
+| Descriptor limit | hard 20,000, no `CAP_SYS_RESOURCE`: `prlimit --nofile=65535:65535` is refused, so both designs run under `prlimit --nofile=20000:20000` |
+| Compiler | gcc 13.3, `-O2` |
+| Changed for the run | `net.ipv4.ip_local_port_range` 32768–60999 → 1024–65000; `net.core.somaxconn` 4096 → 65535; `net.ipv4.tcp_max_syn_backlog` 1024 → 65535; `net.netfilter.nf_conntrack_max` 262144 → 1048576 (count 0: nothing tracks loopback here) |
+| Load | 30,000 requests a second at every C; 3 s warm-up, then a 10 s window; 5 rounds, the order of the three designs rotated each round |
+| Commit | `d2bcd226` (`run.sh`'s live column fixed after; the figures do not use it) |
+
+Command: `bash bench/fd-limit/run.sh`, 75 runs.
 
 ### 3.3 Figures
 
-{{FIGURES}}
+Server CPU is the user plus system time of the server's own processes over
+the window, divided by the responses the clients received in it. Median of 5,
+with min–max. User and sys are means. "Box" is every CPU's non-idle time over
+the same window, client included; softirq is the box's softirq part of it.
+PSS is the server processes' proportional set size, summed. "Box memory" is
+`MemTotal − MemAvailable`: both ends of every connection, the client
+processes, and the rest of the VM. Every run held all C connections for the
+whole window. No request was ever due on a connection still waiting for its
+response, and no connect failed.
+
+| C | Design | Rings / processes | Server descriptors | Server µs/req | User / sys | Box µs/req | Softirq µs/req | Server PSS MB | Box memory MB |
+| ---: | --- | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |
+| 18,000 | io_uring | 1 | 5 | **9.10** (7.73–11.33) | 0.17 / 9.45 | 19.27 | 10.16 | 5.7 | 724 |
+| | epoll | 5 | 18,025 | **12.37** (11.17–16.13) | 0.51 / 12.66 | 25.83 | 14.53 | 0.9 | 703 |
+| | epoll copy | 5 | 18,025 | 12.37 (12.00–16.03) | 0.59 / 12.67 | 26.27 | 14.92 | 0.9 | 708 |
+| 60,000 | io_uring | 3 | 11 | **11.43** (9.87–12.47) | 0.13 / 11.01 | 21.13 | 10.49 | 16.3 | 1,014 |
+| | epoll | 5 | 60,025 | **12.47** (12.13–13.47) | 0.51 / 12.20 | 26.27 | 12.41 | 0.9 | 966 |
+| | epoll copy | 5 | 60,025 | 12.50 (11.70–13.20) | 0.49 / 11.85 | 26.07 | 11.77 | 0.9 | 975 |
+| 96,000 | io_uring | 5 | 15 | **11.60** (10.13–12.13) | 0.17 / 11.28 | 21.60 | 11.15 | 27.0 | 1,266 |
+| | epoll | 5 | 96,025 | **14.50** (12.57–15.27) | 0.57 / 13.51 | 29.43 | 12.60 | 0.8 | 1,191 |
+| | epoll copy | 5 | 96,027 | 14.70 (12.53–16.37) | 0.65 / 14.08 | 27.43 | 12.67 | 0.9 | 1,182 |
+| 120,000 | io_uring | 6 | 17 | **12.73** (11.43–13.30) | 0.18 / 12.41 | 25.73 | 12.96 | 32.3 | 1,427 |
+| | epoll | 7 † | 120,035 | **17.27** (15.30–17.60) | 0.77 / 15.83 | 33.90 | 14.65 | 1.1 | 1,351 |
+| | epoll copy | 7 † | 120,035 | 16.60 (14.67–17.33) | 0.86 / 15.27 | 32.73 | 14.41 | 1.1 | 1,332 |
+| 300,000 | io_uring | 15 | 35 | **15.10** (14.03–15.73) | 0.35 / 14.68 | 29.60 | 15.44 | 80.3 | 2,698 |
+| | epoll | 16 † | 300,080 | **24.77** (22.62–26.17) | 1.21 / 23.19 | 44.43 | 17.08 | 2.0 | 2,445 |
+| | epoll copy | 16 † | 300,080 | 24.07 (22.07–25.23) | 1.27 / 22.73 | 43.90 | 16.95 | 2.0 | 2,447 |
+
+† More than the entry's five processes. At a hard limit of 20,000, five
+processes hold at most 99,840 connections. On the box, five would hold
+327,000.
+
+The noise band is the gap between the medians of `epoll` and its
+byte-identical copy. It is also given here per round, paired, the stricter
+reading: the largest gap between the two in any one round. The saving is
+`(epoll − io_uring) / epoll`, at the medians, and in the round where it was
+smallest.
+
+| C | Saving at the medians | Band at the medians | Smallest saving in a round | Largest paired band in a round |
+| ---: | ---: | ---: | ---: | ---: |
+| 18,000 | 26.4% | 0.0% | 8.4% | 15.5% |
+| 60,000 | 8.3% | 0.2% | 3.3% | 12.0% |
+| 96,000 | 20.0% | 1.4% | 7.7% | 30.2% |
+| 120,000 | 26.3% | 3.9% | 16.8% | 15.7% |
+| 300,000 | 39.0% | 2.8% | 31.9% | 8.9% |
+
+What the rows say:
+
+- **The gap is not thin batches.** With five epoll processes throughout
+  (18k to 96k), each one's share grows from 3,600 to 19,200 connections, and
+  the io_uring server's saving stays between 8% and 26%: 26.4% at 18k and
+  20.0% at 96k. Fuller epoll batches did not close it. The brief asked
+  whether part of the entry's 22–26% at 18k was thin batches. On the
+  transport alone, little of it is.
+- **Epoll's cost grows with C, and the rings' grows more slowly.** From 18k
+  to 300k, io_uring goes from 9.10 to 15.10 µs a request (+66%), and epoll
+  from 12.37 to 24.77 µs (+100%). Above 96k, part of epoll's growth is the
+  extra processes (†).
+- **Nothing moved into softirq.** The box column, which includes the
+  client's work and all softirq time, falls by more than the server column at
+  every C: by 6.6 µs against the server's 3.3 at 18k, and by 14.8 µs against
+  9.7 at 300k.
+- **Memory.** The io_uring process is the larger one, at 80 MB at 300k. Each
+  of its 15 rings has a 4 MiB provided-buffer ring and a 1 MiB CQ, sized for
+  this benchmark. The box used 253 MB more with io_uring at 300k (2,698
+  against 2,445 MB), about 0.8 KB a connection, of which the buffer rings and
+  CQs are 75 MB. From the slope between 18k and 300k, both ends of a loopback
+  connection cost about 6.2 KB with epoll and 7.0 KB with io_uring, client
+  included.
+- **Where the saving comes from** was not profiled. The prototype makes no
+  recv syscall per request, since the multishot recv stays armed, and it
+  submits a batch's sends in one `io_uring_enter`. It also wakes one thread
+  rather than one of 5 or 16 processes. S4 re-measures this with the
+  application on top and a profile.
 
 ### 3.4 Holding more than 65,535
 
-{{HOLD}}
+Under `prlimit --nofile=20000:20000`, the io_uring server held every
+connection the clients opened, up to 300,000. That is 4.6 times the box's
+65,535, and 15 times this container's limit. Its own report during the
+300k window, from its table's live count and `/proc/self/fd`:
+
+```
+live 300000 fds 35 ring 20000/20000/20000/20000/20000/20000/20000/20000/20000/20000/20000/20000/20000/20000/20000
+```
+
+The load generator read the same 35 from `/proc/<pid>/fd`: the listener, 15
+rings, 15 eventfds, the epoll descriptor and three standard streams. The epoll
+server's table is one descriptor per connection plus five per process, which
+is why it needs a process per 19,968 connections here.
+
+Nothing capped C below the brief's 300,000. At 300k the box used 2.7 of
+15.7 GiB, and the clients connected in under 3 s. The raised port range was
+not needed: each client process has its own source address and fewer than
+19,000 connections, under even the default 28,232 ports. The raised listen
+backlog absorbs the connect burst.
 
 ### 3.5 What this does and does not show
 
 - It measures the transport alone: accept, recv, send and the wait. The
-  entry's 34.5 and 43.4 µs per request are mostly the application and SQLite.
+  entry's 34.5 and 43.4 µs per request include the application and SQLite.
   The prototype's gap is a lower bound on what the runtime can save per
   request. It is not a prediction of the entry's score.
 - Loopback puts the client's TCP work on the same four vCPUs. The server's
@@ -184,12 +293,33 @@ design is CPU-bound and both see the same arrivals.
   `ceil(C / 65,535)`. The epoll server needs `max(5, ceil(C / 19,968))`
   processes where the box would run 5 up to 327k. So above 99,840
   connections the epoll design here runs more than five processes. §3.3
-  marks those rows, and the verdict is read at the highest C where both run
-  as the entry does.
+  marks those rows, and §4 reads the verdict both at the highest C and at
+  96,000, the highest C where the epoll design runs as the entry does.
 
 ## 4. The verdict
 
-{{VERDICT_BODY}}
+**Go.** Both halves of the rule hold.
+
+1. **Past 65,535 under the limit.** One process held 300,000 established
+   sockets under a hard limit of 20,000, with 35 entries in its descriptor
+   table (§3.4).
+2. **Cheaper at the highest C reached, by more than the noise band.** At
+   300,000 the io_uring server spent 15.10 µs a request against 24.77 µs for
+   epoll: 39.0% less against a 2.8% band. Every round saved at least 31.9%,
+   and the largest paired band in any round was 8.9%.
+
+At 300k the epoll design ran 16 processes rather than the entry's 5, because
+this box's limit is 20,000 (§3.5). So the reading closest to the box's shape
+is 96,000, the largest C where five processes fit. There the saving is 20.0%
+against a 1.4% band, at the medians. The per-round reading there is weaker:
+the smallest saving in a round was 7.7%, under one noisy round's 30.2%
+paired band. Both readings clear the rule as `run.sh` states it, which
+compares medians.
+
+What the verdict does not say: that the entry will score 300k users, or
+that one process beats five on the entry's own workload. The prototype is the
+transport alone (§3.5). S4 re-measures with SQLite and the router on top,
+under the same rule, before the entry switches.
 
 ## 5. The proposed `nish:net` surface
 
@@ -479,10 +609,11 @@ io_uring:
   workers share what each now computes or caches alone. That includes
   counters, a rate limiter's buckets and a small read-mostly cache, so that
   per-process state does not multiply by five.
-- **Fewer, fuller processes.** If batch thinness is part of the 22–26% at
-  18k, the same entry with three processes at a higher per-process load
-  should close some of it. The epoll rows of §3.3 at different P show how
-  much a process costs at a fixed total.
+- **Fewer processes only where the limit allows.** On the transport alone,
+  fuller epoll batches did not close the gap (§3.3: 26.4% at 3,600
+  connections a process, 20.0% at 19,200). Running three processes rather
+  than five is therefore no substitute for rings. It is worth measuring only
+  for the SQLite cache it saves.
 
 ## 10. Stages
 
