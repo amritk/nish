@@ -1,5 +1,6 @@
-// Typed JSON reads a numeric enum as its number. An enum with one string
-// member among numeric ones is refused by Phase 0 as a string enum is.
+// Typed JSON reads a numeric enum as its number and a string enum as its
+// string. An enum with one string member among numeric ones is refused by
+// Phase 0, so typed JSON never meets one.
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";

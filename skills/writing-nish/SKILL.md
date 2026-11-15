@@ -64,7 +64,7 @@ export const main = (): i32 => {
 Top-level `const` arrows, an exported `main` returning the exit code, explicit
 types everywhere, a template literal instead of `String(n)`. A module holds only
 declarations at the top level: functions, `class`, `interface`, module `const`s,
-`type` aliases, numeric `enum`s and `import`s.
+`type` aliases, `enum`s (numeric or string) and `import`s.
 
 ## Failure is a `Result`
 

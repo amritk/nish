@@ -1,0 +1,1 @@
+An enum member's value cannot be a template literal: write it as a plain string literal, which is fixed when the enum is declared

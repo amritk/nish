@@ -297,6 +297,100 @@ const digit: integer<0, 9> = 12;
 The reference's [Types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#types) section lists every rule
 for `integer<Lo, Hi>`.
 
+## Enums
+
+An `enum` names a closed set of values. It is a type of its own: a `Kind` is
+never an `i32`, and an `i32` is never a `Kind`, so a function that takes one
+cannot be handed the other by mistake. `===`, `!==` and `switch` are the
+operations on it; there is no arithmetic.
+
+An enum whose members are numbers is a **numeric enum**. A member without a
+value counts up from the one before it, starting at `0`:
+
+```ts nish:ok
+enum Kind {
+  If = 1,
+  While = 2,
+}
+
+const weight = (k: Kind): i32 => (k === Kind.If ? 10 : 20);
+
+export const main = (): i32 => {
+  console.log(`${weight(Kind.While)}`);    // 20
+  return 0;
+};
+```
+
+An enum whose members are all strings is a **string enum**. Every member
+gives its string, and `String(r)` reads it back; it costs one load, not a
+copy:
+
+```ts nish:ok
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const greet = (r: Role): string => {
+  switch (r) {
+    case Role.Admin:
+      return "welcome back";
+    default:
+      return "hello";
+  }
+};
+
+export const main = (): i32 => {
+  const r = Role.Admin;
+  console.log(String(r));    // admin
+  console.log(greet(r));     // welcome back
+  return 0;
+};
+```
+
+One enum holds one kind of member. Mixing strings and numbers is refused:
+
+```ts nish:err NL1043
+enum Mixed {
+  A = "a",
+  B = 2,
+}
+```
+
+A string enum is still not a `string`. Comparing it with a string is refused,
+because the compiler compares members, never text; compare with a member
+instead, `r === Role.Admin`:
+
+```ts nish:err NL2788
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const isAdmin = (r: Role): boolean => r === "admin";
+```
+
+Nor does it turn into a `string` on its own. Write `String(r)` where you want
+the text:
+
+```ts nish:err NL2789
+enum Role {
+  Admin = "admin",
+  Guest = "guest",
+}
+
+const label = (r: Role): string => {
+  const s: string = r;
+  return s;
+};
+```
+
+An enum can't be `| null`; keep a `boolean` beside it, or give the enum a
+member for "none". The reference's
+[Enums](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) section lists every rule, and
+[Standard library](../using-nish/standard-library.md) shows a string enum read
+from JSON.
+
 ## Enum member types
 
 A member of an [enum](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#enums) is also a type. Written as an
