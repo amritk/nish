@@ -1,10 +1,13 @@
 # WP28: Compatibility mode, and what `async` means in each dialect
 
-**Status: in progress. All six spikes are measured (§7.4 to §7.9), and no
-compatibility construct is built.** `--compat` parses as a bare flag that
-admits nothing and changes no lowering, held to that by the erasure test
-(S3, §7.6). The rest of C0 (the allow-list, `nish.compat`, the
-`!nish.compat` metadata) and every stage after it are unbuilt. Neither
+**Status: in progress. All six spikes are measured (§7.4 to §7.9), C0 is
+built, and no compatibility construct is.** C0 is the machinery with an empty
+feature registry: `--compat` and `--compat=<feature>,...` (naming any feature
+exits 2), the `nish.compat` manifest key (NL3056, NL3057), `!nish.compat` in
+every module's IR, `--help` grouped by axis, and `--compat` implying
+`--number-mode f64` (an explicit `i32` beside it draws the performance warning NL9020). The erasure
+test (S3, §7.6) holds it to changing no lowering. C1 and every stage after it
+are unbuilt. Neither
 gating measurement stopped the package: S1 priced the function-value tier
 (§7.4), and S2 found `async` by contagion to be the majority on four
 applications, by a margin two of them do not settle (§7.5). What the
@@ -508,7 +511,7 @@ and §10 leaves with the owner.
 
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
-| **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign. The bare flag and S3's test are built (§7.6); the rest is not |
+| **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign. **Built** |
 | **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
 | **C-lib** | the library tier | `Date` objects, `JSON`, `RegExp`, `Buffer`, under WP26's rules. `Map` and `Set` are strict already | L, and per §4.1 it outranks most of what follows |
 | ~~C1, labels~~ | labelled `break`/`continue`, once a C1 entry | **Built in strict**, as direct branches with no flag; it left C1 | — |
@@ -876,8 +879,10 @@ AArch64 and macOS timings were not measured.
   benchmark programs are refused under it as written and one prints a
   different answer once it compiles. A strict program that mixes a bare
   `number` with an `i32` would not survive the implication, which §1 rule 5
-  does not allow for a program that uses no compatibility construct. The bare
-  `--compat` built today implies nothing.
+  does not allow for a program that uses no compatibility construct. C0
+  built the implication as §5.3 has it, with an explicit `--number-mode i32`
+  beside `--compat` kept and priced by the performance warning NL9020; whether it stays once
+  C1 admits programs that mix the two is what is open.
 - **Which lowering C5 uses.** S6 (§7.9) recommends the `Result` desugaring,
   for the owner to accept. The recommendation rests on WASI and the
   freestanding profiles having no unwinder; a throw costs about 770 ns
