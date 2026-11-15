@@ -22716,7 +22716,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
-      "--compat",
+      "--compat[=<feature>,...]",
       "--target",
       "--cpu",
       "--profile",
@@ -24496,8 +24496,10 @@ if (dealtHere("cliChecks")) {
     const axes = ["Dialect", "Build", "Output", "Diagnostics", "Policy"]
     const helpLines = help.stdout.split("\n")
     const axisAt = axes.map((axis) => helpLines.indexOf(axis))
-    // The axes end at "Agents", which repeats two flags as advice.
-    const axesEnd = helpLines.indexOf("Agents")
+    // The axes end at "Agents", which repeats two flags as advice, or, where
+    // no agent is detected and that section is left out, at "Exit codes".
+    const agentsAt = helpLines.indexOf("Agents")
+    const axesEnd = agentsAt >= 0 ? agentsAt : helpLines.indexOf("Exit codes")
     const flagRows = helpLines
       .map((line, i) => ({ flag: /^ {2}(-[\w-]+)/.exec(line)?.[1], i }))
       .filter((row) => row.flag !== undefined && row.i < axesEnd)
