@@ -2,6 +2,8 @@
 
 @nish_const_0_CLASS.data = private unnamed_addr constant [256 x i8] c"\00\00\00\00\00\00\00\00\00\03\03\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01\01\01\01\01\01\01\01\01\01\00\00\00\00\00\00\00\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\00\00\00\00\00\00\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\02\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00", align 16
 @nish_const_0_CLASS = internal constant %struct.nish_array { i64 256, i64 256, i8* bitcast ([256 x i8]* @nish_const_0_CLASS.data to i8*) }, align 8
+@nish_const_0_BITS.data = private unnamed_addr constant [16 x i8] c"\00\01\01\02\01\02\02\03\01\02\02\03\02\03\03\04", align 16
+@nish_const_0_BITS = internal constant %struct.nish_array { i64 16, i64 16, i8* bitcast ([16 x i8]* @nish_const_0_BITS.data to i8*) }, align 8
 @.str.0 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"Nish 0.40, tables!\0A\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
@@ -11,6 +13,8 @@ declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
@@ -23,6 +27,27 @@ entry:
   %4 = getelementptr inbounds i8, i8* %3, i64 %0
   %5 = load i8, i8* %4, align 1, !alias.scope !4, !noalias !3, !tbaa !12
   ret i8 %5
+}
+
+define internal noundef i8 @bitsOf(i8 noundef %c) #1 {
+entry:
+  %0 = zext i8 %c to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_const_0_BITS, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* @nish_const_0_BITS, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = bitcast i8* %5 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 %0
+  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  ret i8 %8
 }
 
 define void @nish_main() #1 {
@@ -186,6 +211,17 @@ forof.end:
   %98 = call i8* @nish_str_from_i32(i32 %97)
   %99 = call i8* @nish_str_concat(i8* %96, i8* %98)
   call void @nish_print(i8* %99)
+  %100 = trunc i32 11 to i8
+  %101 = call i8 @bitsOf(i8 %100)
+  %102 = zext i8 %101 to i64
+  %103 = call i8* @nish_str_from_u64(i64 %102)
+  %104 = call i8* @nish_str_concat(i8* %103, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %105 = trunc i32 15 to i8
+  %106 = call i8 @bitsOf(i8 %105)
+  %107 = zext i8 %106 to i64
+  %108 = call i8* @nish_str_from_u64(i64 %107)
+  %109 = call i8* @nish_str_concat(i8* %104, i8* %108)
+  call void @nish_print(i8* %109)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 

@@ -515,6 +515,11 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
       if (holdsVector(table, t, new StringSet())) {
         return ""
       }
+      // A returned `readonly T[]` may be a constant table in read-only memory,
+      // so the host gets a pointer it cannot write through either.
+      if (table.isReadonlyArray(t)) {
+        return "const nish_array *"
+      }
       return position === POS_PARAM && !written ? "const nish_array *" : "nish_array *"
     case T_VOID:
       return "void"

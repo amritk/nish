@@ -117,11 +117,18 @@ function typedConstant(walk: Walk, node: Node, operands: Operands): string | nul
   callee +12:88 between -> @between
 function tableElement(annotation: Node, init: Node): Node | null -> @tableElement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer annotation: size=40 writesThrough=false captured=false
+  calls: nish_panic_index nish_str_eq soleTypeArgument
+  pointer annotation: size=40 writesThrough=false captured=false passedTo=soleTypeArgument#0
   pointer init: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 array: Node (const)
+  callee +0:12 soleTypeArgument -> @soleTypeArgument
+  local +5:9 array: Node (const)
+function soleTypeArgument(ref: Node): Node | null -> @soleTypeArgument
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer ref: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 args: Node (const)
 function tableText(walk: Walk, init: Node, type: i32): string | null -> @tableText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via foldedText
@@ -148,30 +155,34 @@ function foldedText(walk: Walk, node: Node, type: i32): string | null -> @folded
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via foldedText
   escaping: type
-  calls: between bigLiteral foldedText isBig isCompound negation nish_panic_index nish_str_concat nish_str_eq operation
+  calls: CheckedProgram.constant between bigLiteral foldedText isBig isCompound negation nish_panic_index nish_str_concat nish_str_eq operation
   pointer walk: size=256 writesThrough=false captured=false passedTo=foldedText#0 between#0 between#0 foldedText#0 negation#0 foldedText#0 foldedText#0 operation#0 between#0
   pointer node: size=40 writesThrough=false captured=false passedTo=negation#1 operation#1
   stackSites=0 stackLocals=0
   callee +0:12 isBig -> @isBig
   callee +0:26 bigLiteral -> @bigLiteral
-  local +6:11 inner: string | null (const)
-  callee +6:19 foldedText -> @foldedText
-  callee +9:12 between -> @between
-  callee +9:72 between -> @between
-  local +16:11 x: string | null (const)
-  callee +16:15 foldedText -> @foldedText
-  local +20:11 negated: string | null (const)
-  callee +20:21 negation -> @negation
-  callee +23:71 isCompound -> @isCompound
-  local +24:11 left: Node (const)
-  local +25:11 right: Node (const)
-  local +26:11 a: string | null (const)
-  callee +26:15 foldedText -> @foldedText
-  local +27:11 b: string | null (const)
-  callee +27:15 foldedText -> @foldedText
-  local +31:11 written: string | null (const)
-  callee +31:21 operation -> @operation
-  callee +32:38 between -> @between
+  local +5:11 constant: ConstInfo | null (const)
+  callee +5:22 CheckedProgram.constant -> @CheckedProgram.constant
+  callee +6:12 isBig -> @isBig
+  callee +6:49 isBig -> @isBig
+  local +9:11 inner: string | null (const)
+  callee +9:19 foldedText -> @foldedText
+  callee +12:12 between -> @between
+  callee +12:72 between -> @between
+  local +19:11 x: string | null (const)
+  callee +19:15 foldedText -> @foldedText
+  local +23:11 negated: string | null (const)
+  callee +23:21 negation -> @negation
+  callee +26:71 isCompound -> @isCompound
+  local +27:11 left: Node (const)
+  local +28:11 right: Node (const)
+  local +29:11 a: string | null (const)
+  callee +29:15 foldedText -> @foldedText
+  local +30:11 b: string | null (const)
+  callee +30:15 foldedText -> @foldedText
+  local +34:11 written: string | null (const)
+  callee +34:21 operation -> @operation
+  callee +35:38 between -> @between
 function isCompound(op: string): boolean -> @isCompound
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: op

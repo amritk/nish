@@ -219,11 +219,28 @@ const typedConstant = (walk: Walk, node: Node, operands: Operands): string | nul
  * array literal (docs/LANGUAGE.md, "Constant tables"); null for anything else.
  */
 const tableElement = (annotation: Node, init: Node): Node | null => {
-  if (init.kind !== NodeKind.Array || annotation.kind !== NodeKind.TypeReadonly) {
+  if (init.kind !== NodeKind.Array) {
+    return null
+  }
+  // `ReadonlyArray<T>` is `readonly T[]` (annotations.ts), so both spellings
+  // name the table's element.
+  if (annotation.kind === NodeKind.TypeRef && annotation.text === "ReadonlyArray") {
+    return soleTypeArgument(annotation)
+  }
+  if (annotation.kind !== NodeKind.TypeReadonly) {
     return null
   }
   const array = annotation.children[0]
   return array.kind === NodeKind.TypeArray ? array.children[0] : null
+}
+
+/** The one type argument of `Name<T>`, or null for any other count. */
+const soleTypeArgument = (ref: Node): Node | null => {
+  if (ref.children.length === 0) {
+    return null
+  }
+  const args = ref.children[0]
+  return args.kind === NodeKind.List && args.children.length === 1 ? args.children[0] : null
 }
 
 /** A constant table's array literal with every element written at `type`. */
@@ -258,7 +275,10 @@ const foldedText = (walk: Walk, node: Node, type: i32): string | null => {
     return isBig(type) ? bigLiteral(node.text) : node.text
   }
   if (node.kind === NodeKind.Ident) {
-    return node.text
+    // A narrower constant read at a 64-bit type is a number in TypeScript,
+    // and arithmetic on a BigInt refuses to mix with one.
+    const constant = walk.program.constant(node.text)
+    return isBig(type) && constant !== null && !isBig(constant.type) ? `BigInt(${node.text})` : node.text
   }
   if (node.kind === NodeKind.Paren && node.children.length === 1) {
     const inner = foldedText(walk, node.children[0], type)

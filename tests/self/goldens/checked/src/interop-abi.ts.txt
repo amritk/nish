@@ -301,22 +301,23 @@ function holdsVector(table: TypeTable, t: i32, held: StringSet): boolean -> @hol
 function cType(table: TypeTable, t: i32, position: i32, written: boolean): string -> @cType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: position t
-  calls: StringSet.constructor TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue cResultName cResultWord cStructName cType holdsVector nish_str_concat
-  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 holdsVector#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
+  calls: StringSet.constructor TypeTable.isRanged TypeTable.isReadonlyArray TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue cResultName cResultWord cStructName cType holdsVector nish_str_concat
+  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.isReadonlyArray#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 holdsVector#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
   stackSites=2 stackLocals=0
   callee +0:7 TypeTable.isRanged -> @TypeTable.isRanged
   callee +3:11 TypeTable.kindOf -> @TypeTable.kindOf
   callee +34:11 holdsVector -> @holdsVector
   callee +34:33 new StringSet -> @StringSet.constructor
-  callee +44:24 cStructName -> @cStructName
-  callee +44:36 TypeTable.nameOf -> @TypeTable.nameOf
-  callee +46:14 cType -> @cType
-  callee +46:27 TypeTable.refOf -> @TypeTable.refOf
-  callee +56:11 holdsVector -> @holdsVector
-  callee +56:33 new StringSet -> @StringSet.constructor
-  callee +59:14 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +59:39 cResultWord -> @cResultWord
-  callee +59:73 cResultName -> @cResultName
+  callee +39:11 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee +49:24 cStructName -> @cStructName
+  callee +49:36 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +51:14 cType -> @cType
+  callee +51:27 TypeTable.refOf -> @TypeTable.refOf
+  callee +61:11 holdsVector -> @holdsVector
+  callee +61:33 new StringSet -> @StringSet.constructor
+  callee +64:14 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +64:39 cResultWord -> @cResultWord
+  callee +64:73 cResultName -> @cResultName
 function cResultName(table: TypeTable, t: i32): string -> @cResultName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t

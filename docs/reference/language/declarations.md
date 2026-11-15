@@ -287,7 +287,7 @@ having no top-level code and therefore no initialisation order.
 - **The type must be `i32`, `i64`, `f64`, `number`, `boolean`, or `string`.**
   A class or interface constant would need an allocation, and there is
   no code to run it (`` must be a number, boolean, string, or a `readonly`
-  array of numbers ``, `tests/cases/reject_const_refused_initializer`). There
+  array of numbers ``, `tests/cases/reject_ffi_handle_module_binding`). There
   are two exceptions with rules of their own: a `readonly` array of numbers
   written out as a literal, which is a [constant table](#constant-tables), and
   a `new Array<T>(n)` or typed-array `new` of a compile-time length, which is

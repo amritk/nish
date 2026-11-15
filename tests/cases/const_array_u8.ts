@@ -22,6 +22,11 @@ const CLASS: readonly u8[] = [
 
 const classOf = (c: u8): u8 => CLASS[c]
 
+// A `u8` index proves nothing about a 16-entry table, so this read keeps its
+// bounds check: only an index below the length drops it.
+const BITS: readonly u8[] = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4]
+const bitsOf = (c: u8): u8 => BITS[c]
+
 export const main = (): void => {
   const text = "Nish 0.40, tables!\n"
   const counts: i32[] = [0, 0, 0, 0]
@@ -34,4 +39,5 @@ export const main = (): void => {
     sum += toI32(v)
   }
   console.log(`${CLASS.length} ${counts[0]} ${counts[1]} ${counts[2]} ${counts[3]} ${sum}`)
+  console.log(`${bitsOf(toU8(11))} ${bitsOf(toU8(15))}`)
 }

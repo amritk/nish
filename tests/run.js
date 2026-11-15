@@ -20345,10 +20345,27 @@ if (dealtHere("cliChecks")) {
     check(
       "a `readonly T[]` that escapes (returned, stored in a field) keeps its `const`, and compiling it is not an internal error",
       escaped.status === 0 &&
-        escapedHeader.includes("nish_array *first(const nish_array *xs);") &&
+        escapedHeader.includes("const nish_array *first(const nish_array *xs);") &&
         escapedHeader.includes("int32_t hold(const nish_array *xs);") &&
         escapedHeader.includes("int32_t touch(const nish_array *rows, int32_t v);"),
       escapedHeader || escaped.stdout + escaped.stderr
+    )
+
+    // A returned `readonly T[]` is `const` too: it may be a constant table, whose
+    // header and data are in read-only memory, so a host handed a writable
+    // pointer to it would fault on the first store.
+    const tableSrc = path.join(interopDir, "const_table_return.ts")
+    fs.writeFileSync(
+      tableSrc,
+      "const TAB: readonly u8[] = [1, 2, 3];\nexport const table = (): readonly u8[] => TAB;\nexport const at = (i: u8): u8 => TAB[i % 3];\n"
+    )
+    const tableEmit = emit(tableSrc, ["--emit-header", sidecar("const_table_return", "h")])
+    const tableHeader =
+      tableEmit.status === 0 ? fs.readFileSync(sidecar("const_table_return", "h"), "utf8") : ""
+    check(
+      "a function returning a constant table is `const nish_array *` in the C header",
+      tableHeader.includes("const nish_array *table(void);") && !/^nish_array \*table/m.test(tableHeader),
+      tableHeader || tableEmit.stdout + tableEmit.stderr
     )
 
     // A `Secret` is opaque at the boundary, as a `Map` is: the header names its
