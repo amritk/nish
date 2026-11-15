@@ -1194,6 +1194,62 @@ under Linux 6.8 differ from this box's, so run the benchmark there with
 
 Verdict: on this box (Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44, eIBRS, no KPTI), syscall entry and exit cost 106 ns, under the 0.5 µs per syscall line, and they are about 4% of a keep-alive request's 5 µs of system time, so io_uring is not worth building on this evidence.
 
+## Descriptor limit
+
+Can one process hold more keep-alive connections than its hard
+`RLIMIT_NOFILE`, and is it cheaper per request than the five
+`SO_REUSEPORT` processes the entry runs to get past the limit?
+[`fd-limit/`](fd-limit/) answers both for the box it runs on. It is C, with no
+Nish and no liburing:
+
+- `uring-server.c`: one process, one thread, N io_uring rings, every
+  connection a direct descriptor in a ring's file table;
+- `epoll-server.c`: P epoll processes;
+- `loadgen.c`: C connections from several loopback source addresses, at a
+  fixed request rate.
+
+`run.sh` runs the three designs in interleaved rounds under one
+`prlimit --nofile=L:L`: io_uring, epoll, and a byte-identical copy of epoll
+for the noise band.
+
+```bash
+bash bench/fd-limit/run.sh            # C = 18k, 60k, 96k, 120k, 300k; 5 rounds
+bash bench/fd-limit/run.sh --quick    # C = 18k and 70k; 1 round
+```
+
+Measured 2026-11-15 at `d2bcd226`:
+
+- the box: Intel Xeon @ 2.30 GHz, 4 vCPUs, KVM (Firecracker) VM, Linux
+  6.18.44, `mitigations=auto,no_guest_host,no_guest_guest`;
+- the limit: a hard limit of 20,000 that cannot be raised, so both designs
+  ran under `prlimit --nofile=20000:20000`;
+- the load: 30,000 requests a second, a 10 s window, 5 rounds.
+
+The figures are server user plus system µs per request, median (min–max):
+
+| C | io_uring (rings) | epoll (processes) | Saving | Noise band |
+| ---: | --- | --- | ---: | ---: |
+| 18,000 | 9.10 (7.73–11.33) (1) | 12.37 (11.17–16.13) (5) | 26.4% | 0.0% |
+| 60,000 | 11.43 (9.87–12.47) (3) | 12.47 (12.13–13.47) (5) | 8.3% | 0.2% |
+| 96,000 | 11.60 (10.13–12.13) (5) | 14.50 (12.57–15.27) (5) | 20.0% | 1.4% |
+| 120,000 | 12.73 (11.43–13.30) (6) | 17.27 (15.30–17.60) (7) | 26.3% | 3.9% |
+| 300,000 | 15.10 (14.03–15.73) (15) | 24.77 (22.62–26.17) (16) | 39.0% | 2.8% |
+
+At 300,000 connections the io_uring process held every one in 15 rings of
+20,000 slots, with 35 entries in its own `/proc/<pid>/fd`. Above 99,840
+connections the epoll design needs more than five processes under this
+limit; on a box at 65,535 five would do.
+
+The note is [`docs/wp63-iouring-net.md`](../docs/wp63-iouring-net.md). It
+holds the full table (user and system time, box CPU, softirq, memory), the
+per-round band, the kernel behaviours the prototype had to work around, and
+the design.
+
+Verdict: go. One process passes 65,535 sockets under the limit, and at the
+highest C reached it beats the epoll processes by more than the noise band.
+The [syscall-cost](#syscall-cost) verdict above stands: entry cost alone does
+not pay for io_uring. The descriptor limit does.
+
 ## Unix sockets against loopback TCP
 
 What does a round trip between two processes on one machine cost over a Unix

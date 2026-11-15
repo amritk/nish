@@ -1380,7 +1380,8 @@
                   "/wp59-wasm-arena-memory": { "type": "page", "title": "WP59: The wasm arena in a second, unexported memory", "filepath": "docs/roadmap/wp59-wasm-arena-memory.md" },
                   "/wp60-dyn-dispatch": { "type": "page", "title": "WP60: Dynamic dispatch over interfaces", "filepath": "docs/roadmap/wp60-dyn-dispatch.md" },
                   "/wp61-json-typed-checks": { "type": "page", "title": "WP61: Typed JSON, constraints and coercion in one pass", "filepath": "docs/roadmap/wp61-json-typed-checks.md" },
-                  "/wp62-json-schema-classes": { "type": "page", "title": "WP62: Nish classes from a JSON Schema", "filepath": "docs/roadmap/wp62-json-schema-classes.md" }
+                  "/wp62-json-schema-classes": { "type": "page", "title": "WP62: Nish classes from a JSON Schema", "filepath": "docs/roadmap/wp62-json-schema-classes.md" },
+                  "/wp63-iouring-net": { "type": "page", "title": "WP63: io_uring direct descriptors for nish:net", "filepath": "docs/roadmap/wp63-iouring-net.md" }
                 }
               },
               "/done/..": {

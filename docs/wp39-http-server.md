@@ -269,7 +269,9 @@ landed, so G1 leads Part B, then G2's open timeouts and G7.
   request's system time and under its 0.5 µs line, so it is not worth
   building on that evidence. The reported workload's box, a Xeon Platinum
   8260 VM on Linux 6.8, was not measured; `bash bench/syscall-cost/run.sh`
-  re-measures it there.
+  re-measures it there. [WP63](wp63-iouring-net.md) reopens io_uring on a
+  different argument, the descriptor limit: one process holding more
+  sockets than its hard `RLIMIT_NOFILE`.
 - **0-RTT, connection migration beyond G5's rebinding, HTTP/2 server push,
   and WebTransport over HTTP/2.** WP34 §3 gave the reason for each, and each
   can come later on its own measurement.
