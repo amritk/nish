@@ -474,7 +474,7 @@ const preforkFreePort = (host: string): i32 => {
       return probe
     }
     const port: i32 = netLocalPort(probe)
-    // The TCP listeners bind the same port after the group, with SO_REUSEPORT.
+    // Flags 0, not SO_REUSEPORT, which would succeed beside a same-user listener.
     const listener: i32 = port > 0 ? tcpListenFlags(host, port, 1, 0) : -1
     if (listener >= 0) {
       netClose(listener)
