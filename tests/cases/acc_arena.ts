@@ -27,5 +27,9 @@ export const main = (): i32 => {
   const many: i32 = process.argv.length > 1 ? parseInt(process.argv[1]) : 100000
   console.log(`${digits(12)} ${tagged("ab", 5)} ${tagged("", 0)}`)
   console.log(`${digits(many)} ${tagged("nish", 1000)}`)
+  // A tag the caller built on the arena: it is older than tagged's mark only
+  // if the mark is taken on entry, so a mark taken too low would free it.
+  const word = `w${many % 7}`
+  console.log(`${tagged(word, 4)} ${word}`)
   return 0
 }

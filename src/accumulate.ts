@@ -76,6 +76,7 @@
 // compares every such function with its plain recursive self.
 
 import { CheckContext } from "./context"
+import { isScalarArgument } from "./escape"
 import { isGenericFunction } from "./generics"
 import { hasSpread } from "./members"
 import { FLAG_GENERATOR, FLAG_OPTIONAL, FLAG_USING, Node, NodeKind } from "./nodes"
@@ -88,7 +89,6 @@ import {
   ROLE_METHOD,
   STRUCT_CLASS,
 } from "./program"
-import { isScalarArgument } from "./escape"
 import { STORAGE_PARAM } from "./symbols"
 import { isInteger, isUnsigned } from "./types"
 

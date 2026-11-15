@@ -28,7 +28,19 @@ const named = (s: string, n: i32): i32 => {
   return 2 + named(next, n - 1)
 }
 
+// Reads the arena's bump position: a loop's per-step release would show it a
+// different `Arena.used()` from the recursion's, so it keeps its recursion
+// (`readsArenaState`) though every argument is held.
+const measured = (n: i32): i32 => {
+  if (n <= 0) {
+    return 0
+  }
+  const s = `${n}`
+  const grew = Arena.used() > 0 ? 1 : 0
+  return s.length + grew + measured(n - 1)
+}
+
 export const main = (): i32 => {
-  console.log(`${grow("", 5)} ${append("a", 4)} ${named("", 12)}`)
+  console.log(`${grow("", 5)} ${append("a", 4)} ${named("", 12)} ${measured(12)}`)
   return 0
 }

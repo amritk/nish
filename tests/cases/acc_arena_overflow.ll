@@ -75,6 +75,24 @@ cond.end.2:
   ret i32 %11
 
 if.end.2:
+  %12 = icmp eq i32 %c, 4
+  br i1 %12, label %if.then.3, label %if.end.3
+
+if.then.3:
+  %13 = icmp eq i32 %i, 1
+  br i1 %13, label %cond.true.3, label %cond.false.3
+
+cond.true.3:
+  br label %cond.end.3
+
+cond.false.3:
+  br label %cond.end.3
+
+cond.end.3:
+  %14 = phi i32 [ -10, %cond.true.3 ], [ 0, %cond.false.3 ]
+  ret i32 %14
+
+if.end.3:
   ret i32 0
 }
 
@@ -87,9 +105,9 @@ entry:
 
 rec.head:
   %c = phi i32 [ %c.in, %entry ], [ %c, %ovf.ok.1 ]
-  %i = phi i32 [ %i.in, %entry ], [ %16, %ovf.ok.1 ]
+  %i = phi i32 [ %i.in, %entry ], [ %18, %ovf.ok.1 ]
   %rec.prev = phi i32 [ 0, %entry ], [ %rec.sum, %ovf.ok.1 ]
-  %rec.last = phi i32 [ 0, %entry ], [ %15, %ovf.ok.1 ]
+  %rec.last = phi i32 [ 0, %entry ], [ %17, %ovf.ok.1 ]
   %rec.sum = add i32 %rec.prev, %rec.last
   %rec.signs = or i32 %rec.last, %rec.sum
   %rec.cold = icmp slt i32 %rec.signs, 0
@@ -105,36 +123,47 @@ cond.true:
   br label %cond.end
 
 cond.false:
+  %2 = icmp eq i32 %c, 4
+  br i1 %2, label %cond.true.1, label %cond.false.1
+
+cond.true.1:
+  br label %cond.end.1
+
+cond.false.1:
+  br label %cond.end.1
+
+cond.end.1:
+  %3 = phi i32 [ -5, %cond.true.1 ], [ 0, %cond.false.1 ]
   br label %cond.end
 
 cond.end:
-  %2 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %2)
-  %4 = extractvalue { i32, i1 } %3, 0
-  %5 = extractvalue { i32, i1 } %3, 1
-  br i1 %5, label %ovf.fail, label %ovf.ok
+  %4 = phi i32 [ 1, %cond.true ], [ %3, %cond.end.1 ]
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.sum, i32 %4)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %4
+  ret i32 %6
 
 if.end:
-  %6 = call i8* @nish_str_from_i32(i32 %i)
-  store i8* %6, i8** %s.addr, align 8
-  %7 = load i8*, i8** %s.addr, align 8
-  %8 = bitcast i8* %7 to i64*
-  %9 = load i64, i64* %8, align 8
-  %10 = trunc i64 %9 to i32
-  %11 = call i32 @bump(i32 %c, i32 %i)
-  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %11)
-  %13 = extractvalue { i32, i1 } %12, 0
-  %14 = extractvalue { i32, i1 } %12, 1
-  br i1 %14, label %ovf.fail, label %ovf.ok.1
+  %8 = call i8* @nish_str_from_i32(i32 %i)
+  store i8* %8, i8** %s.addr, align 8
+  %9 = load i8*, i8** %s.addr, align 8
+  %10 = bitcast i8* %9 to i64*
+  %11 = load i64, i64* %10, align 8
+  %12 = trunc i64 %11 to i32
+  %13 = call i32 @bump(i32 %c, i32 %i)
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %13, i32* %t.addr, align 4
-  %15 = load i32, i32* %t.addr, align 4
-  %16 = sub nsw i32 %i, 1
+  store i32 %15, i32* %t.addr, align 4
+  %17 = load i32, i32* %t.addr, align 4
+  %18 = sub nsw i32 %i, 1
   call void @nish_arena_release(i64 %arena.mark)
   br label %rec.head
 
@@ -142,21 +171,21 @@ rec.exit:
   br i1 %rec.cold, label %rec.call, label %if.then
 
 rec.call:
-  %17 = call i32 @chain(i32 %c, i32 %i)
-  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %17)
-  %19 = extractvalue { i32, i1 } %18, 0
-  %20 = extractvalue { i32, i1 } %18, 1
-  br i1 %20, label %ovf.fail, label %ovf.ok.2
+  %19 = call i32 @chain(i32 %c, i32 %i)
+  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.last, i32 %19)
+  %21 = extractvalue { i32, i1 } %20, 0
+  %22 = extractvalue { i32, i1 } %20, 1
+  br i1 %22, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %19)
-  %22 = extractvalue { i32, i1 } %21, 0
-  %23 = extractvalue { i32, i1 } %21, 1
-  br i1 %23, label %ovf.fail, label %ovf.ok.3
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %rec.prev, i32 %21)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.3
 
 ovf.ok.3:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %22
+  ret i32 %24
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -220,6 +249,9 @@ if.end:
   %26 = call i8* @nish_str_from_i32(i32 %25)
   %27 = call i8* @nish_str_concat(i8* %24, i8* %26)
   call void @nish_print(i8* %27)
+  %28 = call i32 @chain(i32 4, i32 3)
+  %29 = call i8* @nish_str_from_i32(i32 %28)
+  call void @nish_print(i8* %29)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -17,11 +17,19 @@ function named(s: string, n: i32): i32 -> @named
   stackSites=0 stackLocals=0
   local +0:9 next: string (const)
   callee +1:14 named -> @named
+function measured(n: i32): i32 -> @measured
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: measured nish_arena_mark nish_arena_release nish_arena_used nish_panic_overflow nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:9 s: string (const)
+  local +1:9 grew: i32 (const)
+  callee +2:28 measured -> @measured
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: append grow named nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  calls: append grow measured named nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   callee +0:18 grow -> @grow
   callee +0:33 append -> @append
   callee +0:51 named -> @named
+  callee +0:68 measured -> @measured

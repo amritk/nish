@@ -22,12 +22,15 @@ const bump = (c: i32, i: i32): i32 => {
   if (c === 2) {
     return i === 1 ? MAX - 3 : 0
   }
+  if (c === 4) {
+    return i === 1 ? -10 : 0
+  }
   return 0
 }
 
 const chain = (c: i32, i: i32): i32 => {
   if (i === 0) {
-    return c === 0 ? 1 : 0
+    return c === 0 ? 1 : c === 4 ? -5 : 0
   }
   const s = `${i}`
   const t = s.length + bump(c, i)
@@ -41,5 +44,9 @@ export const main = (): i32 => {
   }
   // In range: (MAX - 3 + 1) + 1 + 0, which is MAX - 1; and the lengths of 1..1000.
   console.log(`${chain(2, 2)} ${chain(3, 1000)}`)
+  // Cold and back: the deepest step's -9 turns the sum negative, so the loop
+  // leaves for the recursive call, whose base is -5; the adds fit and it
+  // returns (1 + 1 - 9) + -5, through the release before rec.call's `ret`.
+  console.log(`${chain(4, 3)}`)
   return 0
 }

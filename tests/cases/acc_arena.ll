@@ -5,6 +5,7 @@
 @.str.1 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"ab\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"nish\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"w\00" }, align 8
 
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -153,7 +154,7 @@ ovf.fail:
 define noundef i32 @nish_main() #0 {
 entry:
   %many.addr = alloca i32, align 4
-  %arena.mark = call i64 @nish_arena_mark()
+  %word.addr = alloca i8*, align 8
   %0 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
   %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -207,7 +208,18 @@ cond.end:
   %32 = call i8* @nish_str_from_i32(i32 %31)
   %33 = call i8* @nish_str_concat(i8* %30, i8* %32)
   call void @nish_print(i8* %33)
-  call void @nish_arena_release(i64 %arena.mark)
+  %34 = load i32, i32* %many.addr, align 4
+  %35 = srem i32 %34, 7
+  %36 = call i8* @nish_str_from_i32(i32 %35)
+  %37 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i8* %36)
+  store i8* %37, i8** %word.addr, align 8
+  %38 = load i8*, i8** %word.addr, align 8
+  %39 = call i32 @tagged(i8* %38, i32 4)
+  %40 = call i8* @nish_str_from_i32(i32 %39)
+  %41 = call i8* @nish_str_concat(i8* %40, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %42 = load i8*, i8** %word.addr, align 8
+  %43 = call i8* @nish_str_concat(i8* %41, i8* %42)
+  call void @nish_print(i8* %43)
   ret i32 0
 }
 

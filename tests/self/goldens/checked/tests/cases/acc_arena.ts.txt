@@ -15,9 +15,9 @@ function tagged(tag: string, n: i32): i32 -> @tagged
   local +0:9 s: string (const)
   callee +1:21 tagged -> @tagged
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: digits llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_index nish_parse_number nish_print nish_str_concat nish_str_from_i32 tagged
+  calls: digits llvm.fptosi.sat.i32.f64 nish_panic_index nish_parse_number nish_print nish_str_concat nish_str_from_i32 tagged
   stackSites=0 stackLocals=0
   local +0:9 many: i32 (const)
   callee +1:18 digits -> @digits
@@ -25,3 +25,5 @@ function main(): i32 -> @nish_main [exported entry]
   callee +1:51 tagged -> @tagged
   callee +2:18 digits -> @digits
   callee +2:34 tagged -> @tagged
+  local +5:9 word: string (const)
+  callee +6:18 tagged -> @tagged
