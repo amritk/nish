@@ -3,7 +3,7 @@
   "scalar": "2.0.0",
   "info": {
     "title": "Nish",
-    "description": "A compiler from a strictly static subset of TypeScript to native code through LLVM: the user guide."
+    "description": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector."
   },
   "navigation": {
     "header": [
@@ -22,6 +22,7 @@
             "title": "Nish",
             "filepath": "docs/guide/index.md",
             "showInSidebar": false,
+            "head": { "title": "Nish: TypeScript in, native code out" },
             "layout": {
               "toc": false,
               "pageTitle": false,
@@ -1469,6 +1470,23 @@
       "description": "Every Nish release: what changed in the compiler, the runtime and the standard library."
     },
     "head": {
+      "meta": [
+        { "name": "description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "name": "application-name", "content": "Nish" },
+        { "property": "og:site_name", "content": "Nish" },
+        { "property": "og:type", "content": "website" },
+        { "property": "og:locale", "content": "en_US" },
+        { "property": "og:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "property": "og:image", "content": "https://nishlang.com/og.png" },
+        { "property": "og:image:type", "content": "image/png" },
+        { "property": "og:image:width", "content": "1200" },
+        { "property": "og:image:height", "content": "630" },
+        { "property": "og:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." },
+        { "name": "twitter:card", "content": "summary_large_image" },
+        { "name": "twitter:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "name": "twitter:image", "content": "https://nishlang.com/og.png" },
+        { "name": "twitter:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." }
+      ],
       "scripts": [{ "path": "docs/site/site.js", "defer": true }],
       "links": [
         { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
@@ -1478,6 +1496,8 @@
         { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
     },
+    "llms": { "stripComments": true },
+    "contentSignals": { "search": "yes", "aiInput": "yes", "aiTrain": "yes" },
     "customDomain": "nishlang.com"
   }
 }

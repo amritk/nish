@@ -1,9 +1,10 @@
 /*
   The docs site's one script: it builds the animated hero on the landing page
   (the name unfolding into what it stands for, a source file compiling to its
-  targets) and gives cards a highlight that follows the pointer. Everything it draws is
-  styled, and animated, by theme.css; with this file missing the pages read
-  the same, without the hero.
+  targets), gives cards a highlight that follows the pointer, and writes the
+  pages' structured data (JSON-LD). Everything it draws is styled, and
+  animated, by theme.css; with this file missing the pages read the same,
+  without the hero.
 
   The hero's host is `<div data-nish-hero></div>` in docs/guide/index.md, left
   empty so that GitHub, which renders the same Markdown, shows nothing there.
@@ -287,6 +288,65 @@
     }
   }
 
+  const SITE = "https://nishlang.com"
+  const DESCRIPTION =
+    "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector."
+
+  /** What Nish is, the same on every page. Nothing here names a person. */
+  const PROJECT = [
+    { "@type": "WebSite", "@id": `${SITE}/#website`, url: `${SITE}/`, name: "Nish", inLanguage: "en" },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${SITE}/#software`,
+      name: "Nish",
+      alternateName: "Native Instruction Static Host",
+      description: DESCRIPTION,
+      url: `${SITE}/`,
+      applicationCategory: "DeveloperApplication",
+      applicationSubCategory: "Compiler",
+      operatingSystem: "Linux, macOS",
+      license: "https://github.com/amritk/nish/blob/main/LICENSE",
+      sameAs: ["https://github.com/amritk/nish", "https://www.npmjs.com/package/nish"],
+      isAccessibleForFree: true,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    },
+  ]
+
+  /**
+   * Structured data (schema.org JSON-LD) for search and answer engines: what
+   * Nish is on every page and, on any other page than the home page, what that
+   * page is, read from the title and description Scalar has put in the head.
+   * Scalar renders none of its own. The site is a single-page app, so the
+   * block is rewritten whenever the route or the head changes, and only when
+   * its text would differ, so its own write does not start another.
+   */
+  const structuredData = () => {
+    const path = location.pathname.replace(/\/+$/, "") || "/"
+    const graph = [...PROJECT]
+    if (path !== "/") {
+      const description = document.querySelector('meta[name="description"]')?.getAttribute("content")
+      graph.push({
+        "@type": "TechArticle",
+        "@id": `${SITE}${path}#article`,
+        url: `${SITE}${path}`,
+        headline: document.title.replace(/\s+[|·–—-]\s+Nish$/, ""),
+        ...(description ? { description } : {}),
+        inLanguage: "en",
+        isPartOf: { "@id": `${SITE}/#website` },
+        about: { "@id": `${SITE}/#software` },
+      })
+    }
+    const text = JSON.stringify({ "@context": "https://schema.org", "@graph": graph })
+    let block = document.getElementById("nish-structured-data")
+    if (!block) {
+      block = el("script", { id: "nish-structured-data", type: "application/ld+json" })
+      document.head.append(block)
+    }
+    if (block.textContent !== text) {
+      block.textContent = text
+    }
+  }
+
   let queued = false
   const observer = new MutationObserver(() => {
     if (queued) {
@@ -296,12 +356,16 @@
     requestAnimationFrame(() => {
       queued = false
       fill()
+      structuredData()
     })
   })
 
   const start = () => {
     fill()
+    structuredData()
     observer.observe(document.body, { childList: true, subtree: true })
+    // A route change retitles the page in the head, not only in the body.
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start)
