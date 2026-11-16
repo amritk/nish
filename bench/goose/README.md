@@ -29,8 +29,12 @@ cmake -S build/goose-src -B build/goose-src/build -DCMAKE_BUILD_TYPE=Release && 
 Then:
 
 ```bash
-node bench/goose/run.mjs --compiler build/seed/bin/nish
+node bench/goose/run.mjs --compiler build/nish
 ```
+
+Use `build/nish`, which `npm run build` writes from this checkout. The seed in
+`build/seed` links its own release's runtime, so it measures that release and
+not the runtime in `runtime/`.
 
 The defaults are a checkout at `build/goose-src` (pass `--goose <dir>` for
 another), the large size and the best of three timed runs after two warm-ups.
@@ -74,46 +78,62 @@ no equivalent:
 
 ## Results
 
-Large size, built by the 0.41.0 seed, on a 4-core cloud container. All five
-checksums are identical.
+Large size, on a 4-core cloud container, built by `build/nish` at this
+branch's head. All five checksums are identical.
 
 | Program | n | Nish ms | Goose ms | Goose/Nish | Nish RSS KB | Goose RSS KB | Nish bytes | Goose bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| tree | 24 | 1897 | 1362 | 0.72 | 788,252 | 395,304 | 7,800 | 18,864 |
-| bintrees | 19 | 464 | 355 | 0.77 | 33,952 | 26,476 | 12,824 | 18,880 |
-| records | 16000000 | 706 | 618 | 0.88 | 392,092 | 146,536 | 9,552 | 18,888 |
-| strlist | 8000000 | 571 | 766 | 1.34 | 358,040 | 220,712 | 8,912 | 18,888 |
-| words | 16000000 | 3812 | 1759 | 0.46 | 803,868 | 542,376 | 11,312 | 18,904 |
+| tree | 24 | 2632 | 1437 | 0.55 | 788,320 | 395,308 | 7,800 | 18,864 |
+| bintrees | 19 | 535 | 401 | 0.75 | 34,020 | 26,540 | 12,824 | 18,880 |
+| records | 16000000 | 725 | 748 | 1.03 | 179,424 | 146,604 | 9,928 | 18,888 |
+| strlist | 8000000 | 536 | 598 | 1.12 | 161,632 | 220,652 | 9,288 | 18,888 |
+| words | 16000000 | 2532 | 1628 | 0.64 | 410,852 | 542,348 | 11,752 | 18,904 |
 
-Geometric means, Goose over Nish (above 1 means Nish is ahead):
+Geometric means, Goose over Nish (above 1 means Nish ahead). The "before"
+column is the 0.41.0 seed, run on the same machine in the same session. It
+has neither fix below.
 
-| Measure | Goose/Nish | Who is ahead |
-| --- | ---: | --- |
-| Binary size | 1.90 | Nish, on every program |
-| Time | 0.78 | Goose, which is faster on four of the five; Nish wins strlist |
-| Peak RSS | 0.57 | Goose, on every program |
+| Measure | Before | After | Who is ahead |
+| --- | ---: | ---: | --- |
+| Binary size | 1.90 | 1.86 | Nish, on every program |
+| Time | 0.72 | 0.79 | Goose. Nish now wins records and strlist |
+| Peak RSS | 0.57 | 0.90 | Goose on tree, bintrees and records; Nish on strlist and words |
+
+The fixes moved these programs:
+
+| Program | Seed ms | Now ms | Seed RSS KB | Now RSS KB |
+| --- | ---: | ---: | ---: | ---: |
+| records | 886 | 725 | 392,160 | 179,424 |
+| strlist | 628 | 536 | 358,112 | 161,632 |
+| words | 3020 | 2532 | 803,936 | 410,852 |
+
+tree and bintrees build no arrays, so the fixes do not touch them. Their
+times are the same from either compiler. This machine runs tree slower
+against Goose (0.55) than the machine of the first run did (0.72), with the
+same 7,800-byte binary. Only ratios taken in one session compare. The binaries
+that grow arrays are 376 to 440 bytes larger, which is the in-place growth
+path in the runtime.
 
 ## Where Nish loses
 
 Each loss below has a measured or read cause. Each one points to a compiler
 or runtime change.
 
-- **Array growth leaves the old block behind.** `nish_array_grow`
-  (`runtime/runtime.c`) doubles the capacity and copies into a new block
-  taken from the arena, but it never gives the old block back. So an array
-  built by `push` inside one scope costs about twice its final size. records,
-  strlist and words build every column that way, which accounts for most of
-  their RSS gap. Goose's arrays grow in place.
-  - **Fix:** grow in place when the block is the last one allocated in the
-    arena, and recycle outgrown blocks otherwise.
-- **A byte append is one call per byte.** Building the words text spends
-  1,100 ms of the 3,812 ms copying a vocabulary word into the text one `push`
-  at a time. Each push reloads the length and capacity and stores the length
-  back to memory. Goose appends the word with a single `memcpy`.
-  - **Fix:** an append-a-range builtin lowered to a capacity check and a
-    `memcpy`, or a push loop that keeps the length in a register.
-- **A map probe misses the cache three times.** The words count phase takes
-  2,400 ms. Each probe touches `keyAt`, `keyLen` and `counts` in three
+- **Fixed: array growth left the old block behind.** `nish_array_grow`
+  (`runtime/runtime.c`) copied a doubled array into a new arena block and
+  never gave the old one back. So an array built by `push` cost about twice
+  its final size. It now grows in place when its block is the last one the
+  arena handed out, which is the case while one column is being built. RSS
+  fell by 54 to 55% on records, strlist and words.
+- **Fixed: a byte append was one call per byte.** A `for` loop whose body is
+  one `dst.push(src[P + j])` is now one capacity check and one `memcpy`
+  behind its range guards (`emitAppendRange`, `src/emit-arrays.ts`). It gains
+  about 11% on words: 2290 to 2370 ms against 2557 to 2640 ms at 16M words,
+  with the loop written so the rewrite does not apply. That is far less than
+  the 1,100 ms the old reading put on the append. Where the rest of that
+  time goes has not been measured.
+- **A map probe misses the cache three times.** The words count phase is
+  most of what is left of the words gap. Each probe touches `keyAt`, `keyLen` and `counts` in three
   separate columns, where Goose's `Slot` puts all three in one cache line.
   Nish keeps a `Slot[]` inline, but that version was slower still.
   - **Fix:** find out why, then make the inline record array as fast as the
