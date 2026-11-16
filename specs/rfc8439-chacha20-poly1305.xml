@@ -58,6 +58,19 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
 export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null
 ]]></sourcecode>
     </section>
+    <section anchor="the-quarter-round">
+      <name>The Quarter Round</name>
+      <blockquote anchor="R-QUARTER-ROUND">
+        <t>After running a Quarter Round on these four numbers, we get these:
+<xref section="2.1.1" sectionFormat="of" target="RFC8439"/></t>
+      </blockquote>
+      <t>Untested: the quarter round works on four 32-bit words, and std/crypto/chacha20poly1305.ts exports it only as chacha20QuarterRound over the <tt>u32[]</tt> state, which vector's types cannot express (they have <tt>u8[]</tt> and no other array); chacha20Block runs it, so the 2.3.2 and A.1 vectors test it</t>
+      <blockquote anchor="R-QUARTER-ROUND-STATE">
+        <t>We will apply the QUARTERROUND(2, 7, 8, 13) operation to this state.
+<xref section="2.2.1" sectionFormat="of" target="RFC8439"/></t>
+      </blockquote>
+      <t>Untested: the vector works on the 16-word <tt>u32[]</tt> ChaCha state, which vector's types cannot express (they have <tt>u8[]</tt> and no other array); chacha20Block runs every quarter round on that state, so the 2.3.2 and A.1 vectors test it</t>
+    </section>
     <section anchor="the-chacha20-block-function">
       <name>The ChaCha20 Block Function</name>
       <blockquote anchor="R-BLOCK">
@@ -174,20 +187,8 @@ plaintext.
     </section>
     <section anchor="out-of-scope">
       <name>Out of Scope</name>
-      <t>std/crypto/chacha20poly1305.ts exports two functions this spec does not test:</t>
-      <ul spacing="normal">
-        <li>
-          <t>chacha20QuarterRound: it takes and returns the ChaCha20 state as <tt>u32[]</tt>,
-which the spec's types cannot express. Its effect is tested through
-chacha20Block, whose 2.3.2 vector runs every quarter round.</t>
-        </li>
-        <li>
-          <t>chacha20HeaderMask: QUIC header protection, specified by RFC 9001, not by
-RFC 8439.</t>
-        </li>
-      </ul>
-      <t>vector 0.2.1 cannot declare <tt>outOfScope</tt> exports from a spec, so the contract
-does not list these two; this section is their record.</t>
+      <t>Out of scope: chacha20QuarterRound, it takes and returns the ChaCha20 state as <tt>u32[]</tt>, which the spec's types cannot express; chacha20Block runs every quarter round, so the 2.3.2 and A.1 vectors test its effect</t>
+      <t>Out of scope: chacha20HeaderMask, QUIC header protection, specified by RFC 9001, not by RFC 8439</t>
     </section>
     <section anchor="properties">
       <name>Properties</name>
@@ -261,6 +262,7 @@ forall (key: u8[] /* 0..40 */, nonce: u8[] /* 0..16 */) =>
     </section>
     <section anchor="test-vectors">
       <name>Test Vectors</name>
+      <t>Appendix A.3's eleven Poly1305 test vectors have no rows: Section A.3 has no subsections, and vector 0.3.1 reads its "Tag" and "tag" labels as one label printed 11 times against 4 and 7 printings of the inputs, so it refuses each row as unclear about which printings form one test case. The 2.5.2 and A.5 rows test poly1305.</t>
       <table>
         <thead>
           <tr>
@@ -361,6 +363,127 @@ forall (key: u8[] /* 0..40 */, nonce: u8[] /* 0..16 */) =>
               <xref section="A.5" sectionFormat="of" target="RFC8439"/></td>
             <td align="left">RFC 8439 A.5: Poly1305 over the printed AEAD buffer gives the received tag</td>
           </tr>
+          <tr>
+            <td align="left">A.1-BLOCK-1</td>
+            <td align="left">
+              <tt>chacha20Block(Key = 0000000000000000000000000000000000000000000000000000000000000000, Block Counter = 0, Nonce = 000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>Keystream = 76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586</tt></td>
+            <td align="left">R-BLOCK</td>
+            <td align="left">
+              <xref section="A.1" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.1 Test Vector #1: the ChaCha20 block function</td>
+          </tr>
+          <tr>
+            <td align="left">A.1-BLOCK-2</td>
+            <td align="left">
+              <tt>chacha20Block(Key = 0000000000000000000000000000000000000000000000000000000000000000, Block Counter = 1, Nonce = 000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>Keystream = 9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed29b721769ce64e43d57133b074d839d531ed1f28510afb45ace10a1f4b794d6f</tt></td>
+            <td align="left">R-BLOCK</td>
+            <td align="left">
+              <xref section="A.1" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.1 Test Vector #2: the ChaCha20 block function</td>
+          </tr>
+          <tr>
+            <td align="left">A.1-BLOCK-3</td>
+            <td align="left">
+              <tt>chacha20Block(Key = 0000000000000000000000000000000000000000000000000000000000000001, Block Counter = 1, Nonce = 000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>Keystream = 3aeb5224ecf849929b9d828db1ced4dd832025e8018b8160b82284f3c949aa5a8eca00bbb4a73bdad192b5c42f73f2fd4e273644c8b36125a64addeb006c13a0</tt></td>
+            <td align="left">R-BLOCK</td>
+            <td align="left">
+              <xref section="A.1" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.1 Test Vector #3: the ChaCha20 block function</td>
+          </tr>
+          <tr>
+            <td align="left">A.1-BLOCK-4</td>
+            <td align="left">
+              <tt>chacha20Block(Key = 00ff000000000000000000000000000000000000000000000000000000000000, Block Counter = 2, Nonce = 000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>Keystream = 72d54dfbf12ec44b362692df94137f328fea8da73990265ec1bbbea1ae9af0ca13b25aa26cb4a648cb9b9d1be65b2c0924a66c54d545ec1b7374f4872e99f096</tt></td>
+            <td align="left">R-BLOCK</td>
+            <td align="left">
+              <xref section="A.1" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.1 Test Vector #4: the ChaCha20 block function</td>
+          </tr>
+          <tr>
+            <td align="left">A.1-BLOCK-5</td>
+            <td align="left">
+              <tt>chacha20Block(Key = 0000000000000000000000000000000000000000000000000000000000000000, Block Counter = 0, Nonce = 000000000000000000000002)</tt></td>
+            <td align="left">
+              <tt>Keystream = c2c64d378cd536374ae204b9ef933fcd1a8b2288b3dfa49672ab765b54ee27c78a970e0e955c14f3a88e741b97c286f75f8fc299e8148362fa198a39531bed6d</tt></td>
+            <td align="left">R-BLOCK</td>
+            <td align="left">
+              <xref section="A.1" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.1 Test Vector #5: the ChaCha20 block function</td>
+          </tr>
+          <tr>
+            <td align="left">A.2-ENCRYPT-1</td>
+            <td align="left">
+              <tt>chacha20(Key = 0000000000000000000000000000000000000000000000000000000000000000, Initial Block Counter = 0, Nonce = 000000000000000000000000, Plaintext = 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>Ciphertext = 76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586</tt></td>
+            <td align="left">R-STREAM</td>
+            <td align="left">
+              <xref section="A.2" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.2 Test Vector #1: ChaCha20 encryption</td>
+          </tr>
+          <tr>
+            <td align="left">A.2-ENCRYPT-2</td>
+            <td align="left">
+              <tt>chacha20(Key = 0000000000000000000000000000000000000000000000000000000000000001, Initial Block Counter = 1, Nonce = 000000000000000000000002, Plaintext = 416e79207375626d697373696f6e20746f20746865204945544620696e74656e6465642062792074686520436f6e7472696275746f7220666f72207075626c69636174696f6e20617320616c6c206f722070617274206f6620616e204945544620496e7465726e65742d4472616674206f722052464320616e6420616e792073746174656d656e74206d6164652077697468696e2074686520636f6e74657874206f6620616e204945544620616374697669747920697320636f6e7369646572656420616e20224945544620436f6e747269627574696f6e222e20537563682073746174656d656e747320696e636c756465206f72616c2073746174656d656e747320696e20494554462073657373696f6e732c2061732077656c6c206173207772697474656e20616e6420656c656374726f6e696320636f6d6d756e69636174696f6e73206d61646520617420616e792074696d65206f7220706c6163652c207768696368206172652061646472657373656420746f)</tt></td>
+            <td align="left">
+              <tt>Ciphertext = a3fbf07df3fa2fde4f376ca23e82737041605d9f4f4f57bd8cff2c1d4b7955ec2a97948bd3722915c8f3d337f7d370050e9e96d647b7c39f56e031ca5eb6250d4042e02785ececfa4b4bb5e8ead0440e20b6e8db09d881a7c6132f420e52795042bdfa7773d8a9051447b3291ce1411c680465552aa6c405b7764d5e87bea85ad00f8449ed8f72d0d662ab052691ca66424bc86d2df80ea41f43abf937d3259dc4b2d0dfb48a6c9139ddd7f76966e928e635553ba76c5c879d7b35d49eb2e62b0871cdac638939e25e8a1e0ef9d5280fa8ca328b351c3c765989cbcf3daa8b6ccc3aaf9f3979c92b3720fc88dc95ed84a1be059c6499b9fda236e7e818b04b0bc39c1e876b193bfe5569753f88128cc08aaa9b63d1a16f80ef2554d7189c411f5869ca52c5b83fa36ff216b9c1d30062bebcfd2dc5bce0911934fda79a86f6e698ced759c3ff9b6477338f3da4f9cd8514ea9982ccafb341b2384dd902f3d1ab7ac61dd29c6f21ba5b862f3730e37cfdc4fd806c22f221</tt></td>
+            <td align="left">R-STREAM</td>
+            <td align="left">
+              <xref section="A.2" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.2 Test Vector #2: ChaCha20 encryption</td>
+          </tr>
+          <tr>
+            <td align="left">A.2-ENCRYPT-3</td>
+            <td align="left">
+              <tt>chacha20(Key = 1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0, Initial Block Counter = 42, Nonce = 000000000000000000000002, Plaintext = 2754776173206272696c6c69672c20616e642074686520736c6974687920746f7665730a446964206779726520616e642067696d626c6520696e2074686520776162653a0a416c6c206d696d737920776572652074686520626f726f676f7665732c0a416e6420746865206d6f6d65207261746873206f757467726162652e)</tt></td>
+            <td align="left">
+              <tt>Ciphertext = 62e6347f95ed87a45ffae7426f27a1df5fb69110044c0d73118effa95b01e5cf166d3df2d721caf9b21e5fb14c616871fd84c54f9d65b283196c7fe4f60553ebf39c6402c42234e32a356b3e764312a61a5532055716ead6962568f87d3f3f7704c6a8d1bcd1bf4d50d6154b6da731b187b58dfd728afa36757a797ac188d1</tt></td>
+            <td align="left">R-STREAM</td>
+            <td align="left">
+              <xref section="A.2" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.2 Test Vector #3: ChaCha20 encryption</td>
+          </tr>
+          <tr>
+            <td align="left">A.4-KEYGEN-1</td>
+            <td align="left">
+              <tt>poly1305KeyGen(The ChaCha20 Key = 0000000000000000000000000000000000000000000000000000000000000000, The nonce = 000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>Poly1305 one-time key = 76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7</tt></td>
+            <td align="left">R-KEYGEN</td>
+            <td align="left">
+              <xref section="A.4" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.4 Test Vector #1: the Poly1305 one-time key</td>
+          </tr>
+          <tr>
+            <td align="left">A.4-KEYGEN-2</td>
+            <td align="left">
+              <tt>poly1305KeyGen(The ChaCha20 Key = 0000000000000000000000000000000000000000000000000000000000000001, The nonce = 000000000000000000000002)</tt></td>
+            <td align="left">
+              <tt>Poly1305 one-time key = ecfa254f845f647473d3cb140da9e87606cb33066c447b87bc2666dde3fbb739</tt></td>
+            <td align="left">R-KEYGEN</td>
+            <td align="left">
+              <xref section="A.4" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.4 Test Vector #2: the Poly1305 one-time key</td>
+          </tr>
+          <tr>
+            <td align="left">A.4-KEYGEN-3</td>
+            <td align="left">
+              <tt>poly1305KeyGen(The ChaCha20 Key = 1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0, The nonce = 000000000000000000000002)</tt></td>
+            <td align="left">
+              <tt>Poly1305 one-time key = 965e3bc6f9ec7ed9560808f4d229f94b137ff275ca9b3fcbdd59deaad23310ae</tt></td>
+            <td align="left">R-KEYGEN</td>
+            <td align="left">
+              <xref section="A.4" sectionFormat="of" target="RFC8439"/></td>
+            <td align="left">RFC 8439 A.4 Test Vector #3: the Poly1305 one-time key</td>
+          </tr>
         </tbody>
       </table>
     </section>
@@ -411,154 +534,201 @@ forall (key: u8[] /* 0..40 */, nonce: u8[] /* 0..16 */) =>
     </references>
   </back>
   <!-- ##markdown-source:
-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
+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
+s8lNUCrbvZ7Pp/XTJ0+uhvPrRbmPd5+om9lw/uaJf2Ovy+qp1fWTey1w/8Yw
+NWdvo32xz/cZBrmdDa+u52xX7zmbYn3qkL1S1yMS32WNOSxgfTOnvNeHF+xo
+qO24tl327npSW6zshzlUPxpN3tVYzsobnc57uu90Tu0sGDsJiSRSQtUzBYmb
+LtZundSxhNkVBpxPoPtbNrWzGg0m5RxKIw0p6Hx628Gb82t0U0+q+Ts1s85Q
+VF1P9FCR8OGlC5KttyIy35rt0qp2zkOLnT03iLFq1IE90LPmEXsHmU8Wc5gS
+rGvorAvWOSZl0hyax6PhzTCMQM3d6usOOl2QyGieXXYzMcOK/rZuWdNFOYLb
+dJkZUtflYo6bNd0MgsY6nkD9tR2NOprMomZurcvZdb1TTEg2GD+IqKY70NLN
++kqGdadazMhTrWtjJhCZG/H/woroDr3uVUpLg0OZoXPMp53OBR6pcvLWurV4
+5Y4nc0w1+CUUMF1qNTyqr9VoxEobBIZxIV61spwZDV/PofihGrHpZObG21wm
+7Ovi5YCdn7y4+Lp/NmCH5+z07OSrw+eD52ynf47rnS77+vDi5cnlBcMbZ/3j
+i2/YyQvWP/6GvTo8ft5lgz+dng3Oz9nJWefw9enR4QD3Do8Pji6fHx5/yb64
+dO7Mjg5hx+j04oTRgKGrw8E5dfZ6cAbIOb7of3F4dHjxTbfz4vDimPp8cXLG
++uy0f3ZxeHB51D9jp5dnpyfnAwz/HN0eHx6/OMMog9eD44t9jIp7bPAVLjxs
+0FCd/iVmf0bzYwcnp9+cHX758oK9PDl6PsDNLwaYWf+Lo4EfCos6OOofvu6y
+5/3X/S8HrtUJejnr0Gt+duzrlwO6ReP18f/BxeHJMS3j4OT44gyXXazy7KJt
++vXh+aDL+meH5ySQF2cnr7sdEidanLhO0O544HshUbM1jeAVur48H7QdsueD
+/hH6OqfGtMTm5X3g3ZMW7zq/YYfj+WxiPHJ7SyPkp9hWsx2CWmh3p4Fc+txA
+LH12Imw/dMIb5zCFo+fLT8uWByevoYfnvjHpfO1WZ+d1/5sd71Y7J6e02v7R
+DnOgAAtvoISRP8FhnGXP7Ww6s4Q0qu4YW2v4srf0Lw5O//M/eMx+/PGfEEEE
+58XPP4eLnGcxLt5d27EfbTIe3YZLmP5tR02nVs2CvzCtpoCXEUKkAtBdT96N
+mzjy2z+TZP7ylP2+1FMe/yHcoAWv3WxktnbTyezunTuNvRC33NoyTCvNtfsb
+kl6fb/+btetG7is3f/8vo+HYsh7P/+UPnU7nIbqBSEs4UjOL+6xcDEcOqD3t
+WI3lkOQ7glb8TWBDtAJo6FEQPAdoNieM0goMAdBu27ecOQDrGpy6Ad3AWB0Y
+AfC1Zt8v8j//hf3ExovR6PvPN/sjSuAetSqfua5vWa3wZ7IfXMLOKqURTP/2
+t7+xed0btneePKFIsiBC+yA79XLwvIg1T79wYnjGduFiTxlNlKLTgjrHpRRd
+QDdIj3+05/8KS9ne4WP7QphTc/X+fls1rvd7U189vu0re/ulHW/08IHraqjo
+OUjB/T3BH5VpPk5HirT0w/zDRzmZPjTftVFqTMiarUPAVMh4CEH/uFAz6IGd
+QR+m0/kD61d0OVuMA3Vae4F52lJT+F+AzS9uSjAJUD0LAj73j56ikx9/PLcO
+phnRSB7cibzp55+B6uw3Z70/XiIODs56ZyeXiH5Xw2c7zvMc+94B3F+OPSf2
+WcFfwyxmbhaA/Dc1zcXNQopeCU7j4kA3JAzmPmvfJ4cPjo9GzrXg2M1rYbVh
+sW8Drf0eRvrnv3zv3ZuI7RCI4Sn1Z3BU5GHO/UFmqG8wQE8cb9m1emu9m3/v
+JjaesAkezBAXZup27/MNd4PUaVYtuoh9uS9cwz6E6AcMwDCck7K+Jt4JhEAQ
+wDqoSRCrk+ouPCvrsrzLuNxjBCyBeE4CEabl7G+oSzxCXb3zi/7F4L1KC2lJ
+qy26x9MeKaoVqU/3fh3J+rxt3ZTctJDxhAk8TvDeddoigR/iRUhPSS/0GGx/
+CsIPOacxQ8piJje90WTyxgWZW/S1KXm5Te5fHJ0cvNoiaeje8R4uezxxNEN5
+JGiE6II7yQ3cY2bBEYh4UApO66uR5RN5ev8UHtKxoiRrNLzyVhUUrEFDCNcV
+8hbMqknaGy3WSNkoZ/fKGo7fTrRrXt+R6mDsXJja9kdXE6SF1ze07vaFeqE1
+DGL41sL2adh6rYAQInkzga5LwdrVoyMij950nNjoo3tlrV8kJDOr6iUzCIGL
+TdUM3eCT02M7KPoHDbAzpCnDf7N+RjDbxWjuagWOHyCHfYfl0A16HFAUQ6Gj
+0XA+H9meRUpF4p0hs0awxBTmHo4x6VAOcdOhFH1MJaOxavrzK1t9qfZVArf0
+dm3towkRlJWO90kNq0tqVejWBhQJTcbsT+DwTVa9HLORM/poI92mocXbbP38
+4mzQf73F5LxltHW4NXNo787VG0sLoXAA94I92t586O3cp/pIqOtaXflMdOpS
+CdcCmORazNXV5jyTbfOkUtJWl6RZTtVwxnZn3XqP+PdiZMgBF+PhXxfBxpxj
+unvAMzPUc1WOrPNMR0SXLkFIpxyAvLu+pWD1TlEmPLwajmHst6HAAa+GPdng
+LM5GnEHvOSBAzzuzHQbmTEM6ToEcugu6C25pralDduJKDkOXmjTFGtzGpGAn
+lnpd1OTxu9QZlatmHk9UEN9Ez+18w3a9We9t0oG7En1fGHFUGn4Ao62DZKdr
+2OHNe82d2e5p79Xgmy8Hx73Dcw+iUZed9i76X9KNphiIOLGihiEWcEvLUw0P
+v20qDOi8AVZEmsYjwPhcTJiU8HjMjiz1y1CIDM7dmie4Jrt0ONJWOH0AJ7v1
+FZXhDH2JJGWlQ0g/coslpolRtMgFVdZcfS1kJWTtzJl7OyLmvCH7dJs1ezFt
+tef++HaZyvowObWaDMUPSrNAj+2Izhxe9w+QigYPdXZdT25cZuNq5t7+fT+3
+vtN2yS6Mwfj0WrAiBLmakWq2RKy7S/qgiNXOKiwsBKOui5yTkM37LMo7OC6X
+DkxOvWmLa1HG2w1IBby3ybZdQHZ0YNSWra35uHV5m79RY6CbU9awXgnGnznD
+dG50sFL8pgW9IJuDSS11uAab6Kad4TKIQF+Oca973KJubB5C1dZQ9F+rcqws
+bnO1+TbDPLnYTnyOEU+666HeLrlCG62GtV++q2GGF/z0mqDUXZlzo62tjMBb
+4dDVHpv4X1tXCuWPWsrBxRnfupapMlR14KzX83Pz1zT5xdT1n7B/s7OJZ4x+
+SpB8OcNLXsXzyRyzGtnxFVEXYJOa+UJ48Bs8vCH2MfW7Mfxxsj/tb8vJfIQL
+YwV8ogkHLKTEnRTtogGg2sFBGjtbWY8NbmoIDvvs299u6VMPp2CHbufg4e7Y
+Zn+PWRsAqnd4fHp5sR3zVkdvMJiMI0wx4O2S2bAJ2nCRu3mBQjRxIrhgSANC
+T8u9xGCmj/OEy4v7pkvCm01GvuS/MnNHcZo5OmCdUfpT075JSHLe5z2UVA69
++6wrpRvIU+vv97G8rYt5Pjg4++b0/tXAafVi5BAH0qSJQLDvhjXRlxuw7uWM
+ZlZbkAL3nmOtLcGj2S+Irs6HPpYMq2XxdOhVgUaAdjXX14+aNhXet8751bff
+HSF+Ukkm2Ijb0ZMiGO6jen/VO7onBh9/+93rw2P2zH3o/wkf+Af1fHxPz78h
+PF64sEpBYWhCdaB2TtA69ei26zfVmkDZQCaJuI3yLraFvRtvLFDVyHpOTeq6
+AXzegMR4l5hS/QXhE2NTkMcfOO9GaN+aIby4PDoiDrfdeGgoJPohEK/GW4Oo
+9ojuj096F2eXxwd9t3txn4GuEqx72LwHYDWfK/3Gzt438kORncZ4KK4jhDua
+hAeUp7Z5LiydCuGN2hA6hqSR5f6mmzgRONWmBT7uey8b1qtoANO4drUwrGqG
+tJhMgAgUQOPGUVPKJ4bjmiwKSDksZ2p2u9ywp7SzRc4DNlLjqwVW9Bn8z97o
+m+nu3seIiObgQ6YjbY6LOy0gL1KbXP1zVwtn+tpS8jucN2ULe4OIgoXcIAcj
+wekJLHmXWtRPtKotfs+//U7VN99+t6Wk2CWaXD+pg0eF4mNPWWX2b8weeduJ
+DwLnGolFpxOuarp6urX6SEcbmpwWyNXsGawBty8nqLqppjWhx8UsENp7SmiP
+LY49rhyGplVl6djH9kW9hBDs7LWq33TZHy8PD9i1u+FM04bSTJNWuFyWNl6K
+KOKehIcb7qAKxHjabpC0Ox5NrkYbHqc+1+ulMTRI8Y41JbT/+n//7tayXhUK
+4dnV6BzFcoBEgBd4XgfXtLG2rLizJ78FuO/vA+B/+2St/E5POJ5w/6Td4hji
+VTyK9vcFj7M4l2mc4Y099uwPHQbkeDdT0901ley6vCF0EMbY29sPFOTZs2eY
+r6/ib5UBUrpQS2mFEK5JCq35QFfELesGVZYVoeXQ4cPv+GoiaseBVMNE9MLx
+YD+1TystHtGPb7d2X+T3im+b5Lp+mbvjvb09J7wPELl25bXd97Zgv2O8bbW3
+X9PhjN0Id/Ye0NOfTs7ARL86Obp0AedBZQ3bipsvsz31RX+HfNDAOzpGceVK
+JGuUjJUIQd2GvL6x0/kvpqPpfNkIT6S7/SFams7XbXw6b67++Z8f18OjhwmG
+AGncrx0qEvV4ulSLq/uRUu6tObalRgDIarHRK2at0tiqYTJ/s1UN7U7mA/Js
+QhB14lqsC5CnD4PEWnlsuc5QEWoQc7MisKxVYaYeNIEkHlejv9u6wsLWt2a9
+Ar1Xvcdzo6XPts4nxUPedz7oH/XOX/ZPB8ul+0yry1aoZiMGv5+6sq2j1vKt
+mo0mVH3d9L/paHGf5j/cAdvt3WAT+Qd73up29Yp0XdcPeeDvHjamgwsypOaw
+5VKervDRSHA1ra+XyLY8Pni3COOLTg3G8k8ouviXEF1rea3gtpqtb83XEOkB
+4W4UrVes9eIVmWpb0KALqtw0Ag/5cwtXS0mv+bTb5+7TqZYprWQt0VfGKaOc
+wAb8iupf135/DCchgvvdkeX7tfJ5c5Zijta+m22K+jxw7PVX2ufdDWdYU2yL
+wxvXd1Fsz02soRWel+wiyPTc7dD//3H9u98tA9HzvW2t9PyhRiObxrvLjjce
+LNe+R1L6+QETdNv+F2eHp0vja+o4ZGx41R0XeUflfNqmCtq6j5D8uia07RDN
+XVP5YLt6BIW46L8+HZy5SDN4vhSdqyWR3KrRcDp1m3YgDPBJKnVtKYJShu9d
+eWYr2on7xXGQB06H+ayyvUJkHypWWuIXwzsM+v3idYMHIbtTS/4EHEno9wwJ
+ANvdcMj36wEY94FKoBafXuz8A8UuefEBYm8k7iRJMvy7bXur2Jdw8oDA1ytp
+rczXbt9hWaqBjYY6u1PiQTFTNXNaoYLDP8gZkOq2WoEKgb+fNEqF8PM4t9qM
+Y+E6+EOP5rqixIfB/fzwXwfnK/SfKsakHF869ppxPGFZBGyr24RN4cTB6nPI
+930KWop7Qz/Rumip1SonxdBIB12btVxH+OW+X+R0OPLPf9lj/xSEs9eeh6SC
+1le+utXp9Kf0tarhD6y/Lz+rmR3Zt3a8kvrRy00pzJ1GG0/YbPKuftpudKIh
+nlBZ0n17wTbfXiJCFc7GRftyn1Pl1tTOsncu1NWOP1U+p08jVdpRTVkFAZO7
+YtMZRVLDOHcb/nh6hdiK2cSuYeZfcBuEAcWGY6pxNRvRXivh3DNmTL0vxnpE
+x8hVSV9S8VXEZTd04MdNwC2ayqF+u0XsJ21dMHGL92+0ldFO5yd2aNhP7ID0
+/xMb/DDFuq27483tJ3buvlWFDxf05Tv2U+enHn7cr/avtY93PqCJL1GGUt9P
+7Pv1BJHOXjxjURTxSEQyiqMkSqMsyqMiUlEZ6chENqp4xDkXXPKYJzzlGc95
+wRUvueaGW151w0G/A8pGaB+my46d3buu6afwf8UqXEd739NkzpeVs+ZYNcdw
+NrOx4bJMCp4kUVQZwyslRZRxHesMF/gtpY7SnOYshFKF0tLEqY6tEblI4xir
+KCqlooLHWpgsSkyRl5FQoky4KLThxvI0tmWhSxPl0uZKJJFEe5rXWSuutSOA
+0Ohq9Z1ebE7Cu6frX9PbqKd+Vq/WCf0zr54Y6hkce8q4oqBPppvDsD9/EHLF
+bfqJNvXTZactLz1fjGs9s+58daxTyC0t0iSDQvAZdFlEcZYmqc2gAPxt6DOe
+VWkKlcVpnia4knjGM+lauScikwX+w0rjgq7jwr1VZQnejP1b+EkygV4Kuu/u
+2VRnRfiUuP6LDPLBm5V7sxkvzZIsxh+BK437MqMZylTSHT/DLFsZTbhWRRYL
+623zYMkyVwWAhlYmBcwlzasij2JeqigTuTGRSYuc2yKzmbKQfizTCCMrkalK
+68rAHm1UVgUv00QniYhhw6rMq6SQRpXapKKUScZTWeBjjNXxRLjnMtIYsYry
+lJs8yrSKTFnBL0yqUp6kSuY2ymHAAh3bRJQ64XCfFGPmcBGeawuLKLOsgPTT
+RFVFVJZVFiuZlDYt46jMrTWVyPLExiLPYuN9INRa150gftAJYnKCzd3zOpyv
+bGS4THi8/QMplxk8BN+mjOQAr9XceQ0knycmLS1mmSUwMimzKo4TUWHOBp6h
+cviJzKNcVSXkIyoTq7KqUlXFPC6qhJdd9jqwJ3+yr7+2Dw7ThmlkMCaYUJVm
+MBOeQXwwdZhs7MwLxmJElAgyfpgQxzsyzcn88QmmlAVYo/3WZwwzgsI0LYWT
+9WsoKC9VBc/lsInCS9mVTtdlnDwo44RkvFJnDaddGmboZZpCpqFYuSLRkHR7
+YIGoeC5ymcd5kqd5lud5kau8zHVucgvbBnYWAi4aF0kBxyjyoihUAcQsTGGL
+aiuGrEGVF8aJLwv6ciiGVSZRUV4WUVLlXOucJ3hfwBxLUcQZV7mUJbzUygoe
+pZIoNyUMVFAQUEAeL7V2bWsnwx6UW9oA9PYDXV5uOeRGOekqEK/RpU8lu1Bt
+CN/QqIY/WNOjb/TRyTvi85Bq1iDx4VdknUCaWMQyhtHHaZwhd6EU7BlLIgKK
+BOFQcy00YphOYGzZKoL/T8LtINkV+H7GjIRdGQm55TYFOmRlDmAAUEpbZVYL
+FStjDTGDFFBaWVVYEAWFYa1NhUmlKa2KE5trVaQZB8Wo0DwtjELeL/KSqwyE
+IkIz2D3sGHQjVUmZom8jS5kWwpjSZBWYSEZWgrghlbVSIJjzMskrVUpAflwp
+g/UXcZLAruAkcS65yUotqyo2FhHAxiWQw9gkAxKlsD1tIYYy5TztMg87XFke
+gTrFVYRVpCqzRSQs0Zw0gqD4nvegUCGlMvSdSumWWv+6p+UPelpOnnbPvzFA
+2VjdHFNq+PrG6SxKYskdQZ17J6cewrbmfmvfivCeyXUh4kgltkwSIxEMpJTw
+zjSKq7RMKli8LHimOSCnzMFLC6NVokuytChLNLyNOh1vItsGBfNvef9rR1jl
+UYi4rY+vWWIKioU4jhiG34hNaVTBhuEaCMWxLA1sLEpAFmSM3zIvwO/yNIuU
+zlKd61LAj3WleY4YCIJhLRiutUVsZS5gEGVUknFnUkvBS8w6MjADWWaVhEkV
+MbqUosplZDPYSJGBGQCyVA7wNbiOc87hCTyDFwB3AcQG8ytyUfKqkpnOkwRY
+lqkotRX6tVUKlpmnZLrEXQADOThPWkRZCbvTEDFaV7TaEviEdcB8C54CCVJ4
+YBSDsaukKBMBsmLAmiC2AkLWiQLaYaYisRa+BjYLxpvqREgLkSUyhivlslIc
+6UEZUfgFyYE3ozuQ4gzDxpgO6L1FU+QHgKwqiXOB6ALqIyRPowTNs7QATCew
+FXg4h8fI2GpblnDENDXKJooDf1SKwJ+KLMLCOdDOAg5NwY1MeQQnU6CBUVWB
+XeUZDBOmCagolbBGYYFVUUAdoGNAqwp4VqgU8U+DdIEMRNQpaMlZc1rPOzBm
+bUABs7yINGYrZCEk8BVryRMOm9jzOLeG7oVDcUJNoCuw0MQxERigaezxPvM4
+2d6lz8BiQlfjYwC9l6V4qhEl4iUypxx/DHogKmQ8BQoxAsCW5e5p5cbPV2OL
+a1M0CE3kCCNymiWekr8RjYoouqSyuRdGrCBurJiiUngfvfjo4eOEe2vL/Kl/
+PwN6m2IMPRWWopR7Uri3IC0id1nkaBv9LvzMXJvKzVbS1SPkKv1KfMSjmaSu
+pVu9b1mQTJu1+f5TklwzXp4GmS7X5j5xF43dCGC5FCq0i3xwc78GEVbgyGri
+YrQNbwYKH3Yiuk1RdxXF+xtfOFnFcDx72ny7pD0BG0om7ovVYzvvPad/sqde
+I56E2PfSzn8YWgd/2Ur7nrHSYBylikRbxFgQtaTkcQkA4yACWlUCToMkDKw9
+iauEqIBGTscRWoFrQql7Cel7BXxnu7H5XseK0O0Pik4nttLdmij9Uktb/nNC
+0DqR+PujXfP5f+Pb/8a39fi2XmGCra3/FBFfvQy1l+VJ98fFxGUuvUZmP8wf
+l27UfL29IagOCstFVeH+cud29ZR9cFAeTlnyB0qtH/WzVmp1xbzovmLeplBf
+td9DfcayFDl1pKDDiktDRkkZi00SmaelQUZjjOBFmcOZkRhxhawcPoFsvcyy
+yOjMqBgGlWmknlmc50hr4CORrErkv7GSWarg7HlFNckcZqy1zOEzaVEKJFSA
+hvuqrP2N79iv64ivbkSw3/AHC64bGhG/nkbuLa8+pJGiijKblVBBwiEsVeSl
+KrJMI6ibKIfMgTVwrwgZLNGlgguwIymRQ1qqNxpRlJkAshUaQGtjaRK4qyxB
+JUwuC5NIDj1WAu4SIXWNE6WRJipeIaEs4L7VJ9HIwyXwDY3IX0gj/BNpBBk6
+oBt2ras8LgoIuDC5yE3JtTWxgVhBzCiecaT0gNwyFyKPK6mLuFAqUTlCbAQ8
+LmOVIdIg7hSiTHQsKsA11Sctsdw4hlMBa0WiEDuNsQDMVHOpok+iEfkhGonv
+10hVfYxK7mpE/F2oJUyCmFNWXFgdIwYitygEglDMJSiAoMpNbiBthFkwYqs5
+pI8YoWxBZVfFZQkxK5EiQEHaiKmkUw5qkpRCR+CiCsEbQySxawxKHVdxngnE
+7SoqPg1qxR+ikeS/UxwRdzWigUKxkVmugTDIxmJFuVZZ2KqQstKIHDmidQ4L
+N5VCNgVWWWaQdgLuIgBuOTAuspEFSwHLr6TKcyRcnKibyKnKV+UVWEVhc07f
+DhDgREWuZAE4K61JzSfRSPIYjbR7dOux/ZOpo9ml+zvC+3ql92On8rE/d3bP
+/ruwjS37Wf0H6pj0bJNubPti6KZ5iE9vHvx+83h/ZBMbGwFNcYRKJyI1VBKh
+Qg6VcNryRyjGx1SJjuPUlxtcKQbkYrUg074pfQnIlTsElfBDKacp70duNCot
+SVcYCeP58oYrOi1LJK5clcVNmckXQpZzeago0/SRiBjp5koxarnqpggVyka+
+VJP6YkzmyjJ5KK4st0CqMGJ+/6yojOU2NVLqwxWrfLHJtyYJx6FEFDetQS6W
+q7orQS8jQeWrhLTl9hrvrqAtaUkknolfiSsTubLT/e+vzp7KXUs7wBu6LW7R
+FpHXTrimGaKXOGwXNRJO3CaSdCugTR63b+pWb1zZ0K7r3s2ilfw9hbulRYQy
+oSscZn5XlqTRFjapn7gpg3kZkw1uASMF3ADXNhUyZLAwi6iTpVoh90YCLbMo
+puzZFBUif4XE3uS6QmbLDRFl5NJaIGQVMTBLYmoFT3ReSbcbneFOFCUIZpZm
+HyMx1rKosPJIck1FrlQkkUHqL2zkdts1qKWKy7gsQSOR4UZxHEGkZWrBMiOw
+zZyrDCuXosJ6bAKXS9C6RCyFGqRB9IwSDusvJWYCQh8D/NI8gkiTRCiVaiAt
+MBQhGgMguVB5glEi8Fnk+SaHcOnUQoqgTLva6AL8JxZxqfPUgFflkQXyVrFU
+JeI51ieSwui4pFbIIXIMUHAkF8Zg9VBJaguRww4xuiwVpArhZIXB9BKDAQHH
+qSijPOPaKJ3KvJCFJQatOChAhSRF5FGlcq1A5dCGa6lhfUVe6FJDyIgLZaqB
+7kpVRSWhBg1GDTVElUZU0EViKR6AGURJAV5SgN1VBpqFVYFA5FQ2iUroRHNI
+Iy15IcsKUQjmnMgKwha51lGulCrKVCIO8ZREUAk4ick4pgH5VognBbQpdFJS
+jQYGXgmelujUSFB3UVpMFtLDc22jgmOUGLPICpV7v8iRPmSYoKwqjBNDkZJM
+SMVVoQ3ys9iqosiF1sjTJLiQkDmyDTDaiuZUZhAdR8AsqOLCS4VpgBfB6iMr
+M4ysMVoe0WmDSgj+aULfllMd20Kf3BL6Pr7Ee1/oi9+fQ2zEPsAqxB1ijnBI
+q11MyjzeeSRrcD+jrW8XDwImwcYJXyIVx2GLJMuKFn88CmYOuSjSJW2RvukP
+I9NmCFI7eFXAVOM2VaQbIfPxYSXyCIfjVZo1YyNLobZr83TbLw4t3ZmVZhum
+cjHEnWNxWzB3jzU9Yyk8UsZZ5TwnU3FSVYpiIiwrU9xUCW1ycx4BmHSEaXKe
+W7xSJGXEbaIrxFwDZi9MJoAdMGeB21XJ3WkD+DksMUY+BdemDCuXHALPKkAu
+IDaRtoQTw08jgaRYyNhKoWSSltICsSQXKuUKryH60bEo4CNFRjp2lQOKAN8g
+hxgIGR8vkWmUFVAOaMaTuEwpCeQlB+YluakwPRgeXBUiUVTg1Rx48Yl8Qz7k
+G3HzZUL+uA2RjySK922IbPw8vCHysWz9gQ2R+AGxxluLe/cf1lkRrvhVhMsf
+JVzxsHAp4gt4RA5fA/YD/YzUcJjIqIKCEoC7lBK8WVNYh/1qAQ5tjAVrKQGV
+n0a47z0JtSJc+Q/dyvsg4RZpYmWJuFhYnVlTJGmUR8gLDYhaVcQlVYmAbIlG
+gJeVhiGDz1iljJCSR8p+GuHKh4X7/wFX2T4dTmUAAA==
 
 -->
 
