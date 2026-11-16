@@ -80,7 +80,7 @@ refused the token with: `JWT_ERR_ALG`, `JWT_ERR_SIGNATURE`,
 | Code | Meaning |
 | --- | --- |
 | `OIDC_ERR_UNKNOWN_KID` | The token's `kid` is not in the key set. The next `refresh` fetches the set early |
-| `OIDC_ERR_KID_REQUIRED` | The token has no `kid` and the set holds more than one key |
+| `OIDC_ERR_KID_REQUIRED` | The token has no `kid`, or one that is not a string or is over `OIDC_MAX_KID` bytes, and the set holds more than one key |
 | `OIDC_ERR_STALE` | No key set has been taken yet, or the last one is past its hard expiry |
 
 ## What is checked
@@ -89,8 +89,8 @@ refused the token with: `JWT_ERR_ALG`, `JWT_ERR_SIGNATURE`,
 same issuer, byte for byte: `https://auth.example/` and `https://auth.example`
 are different issuers, so give the spelling your provider uses in its
 tokens' `iss`. The key set is read only from the `jwks_uri` that document
-gives. Both must be `https`, with no user name or password in the URL;
-redirects are not followed.
+gives. Both must be `https`, with no user name or password in the URL, and
+the issuer may not carry a query or a fragment; redirects are not followed.
 
 **A key set on another host is fetched as an outsider would.** Discovery,
 and a `jwks_uri` on the issuer's own origin, are fetched as `nish/net/fetch`
@@ -116,14 +116,15 @@ A token whose header names any other algorithm is refused: `none`, any
 and `RS256` on a key published for `RS384`.
 
 **The key set is read strictly.** Encryption keys (`"use":"enc"`), and keys
-with an algorithm this module does not verify (`"alg":"PS256"`), are
+with an algorithm this module does not have at all (`"alg":"PS256"`), are
 skipped, and so is a key type or curve it does not know (X25519) when the
 key has no `alg`. A set is refused whole when any key carries private
 material (`d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`) or is a symmetric `oct`
 key with its secret `k`, even an encryption key; when a key's `kid` is empty,
 longer than `OIDC_MAX_KID` (256) bytes or not printable ASCII, even an
 encryption key's; when a key of an unknown type names an algorithm this
-module verifies; when a key's `alg` disagrees with its type; when two keys
+module verifies; when a key's `alg` disagrees with its type, `HS256` on an RSA key
+included; when two keys
 share a `kid`; or when a key's material does not make a key, such as an RSA
 modulus under 2048 bits. A provider that publishes such a set is
 misconfigured, and no key from it is trusted.
@@ -153,7 +154,9 @@ the old one some time after. `OidcKeys` follows that:
 - When a refresh fails, or the provider serves a set that is refused, the
   last good set keeps verifying, for up to `OIDC_STALE_GRACE` (1 day) past
   its freshness. After that `oidcVerify` answers `OIDC_ERR_STALE` until a
-  refresh succeeds. `keys.lastError` says why the last refresh failed.
+  refresh succeeds. `keys.lastError` says why the last refresh failed, and
+  `refresh` answers `OIDC_SKIPPED` without fetching until
+  `OIDC_MIN_REFRESH_INTERVAL` has passed since the failed try.
 
 ## Refreshing from a timer
 
@@ -215,7 +218,8 @@ than the issuer.
 An `OidcKeys` sizes its token buffer once, from `options.maxToken`
 (`JWT_MAX_TOKEN`, 8 KiB, by default), and a key set is at most
 `OIDC_MAX_KEYS` (64) keys from a document of at most `OIDC_MAX_JWKS_BYTES`
-(64 KiB). Verifying allocates what the signature check needs, as in
+(64 KiB); the discovery document is at most `OIDC_MAX_DISCOVERY_BYTES`
+(64 KiB). A larger body is cut off as it arrives, never buffered whole. Verifying allocates what the signature check needs, as in
 [authentication tokens (JWT)](auth.md#cost). An `OidcKeys` holds working
 state, so it is one thread's: give each worker its own.
 

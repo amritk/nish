@@ -348,10 +348,21 @@ export const oidcParseDiscovery = (issuer: string, doc: u8[], options: OidcOptio
 }
 
 /**
- * The fetch options: no redirect followed, every wait bounded, the body
- * bounded at `limit`, and `outbound` applied when it is not null.
+ * The fetch options discovery and a refresh use: no redirect followed, the
+ * connect, each read and the whole fetch bounded by `options.timeoutMs` (by
+ * `OIDC_DEFAULT_TIMEOUT_MS` when it is 0 or less), the body bounded at
+ * `limit`, and `outbound` applied when it is not null.
+ *
+ * @param options The options.
+ * @param limit The largest body taken, in bytes.
+ * @param outbound The outbound policy the fetch runs under, or null for none.
+ * @returns The fetch options.
  */
-const oidcHttpOptions = (options: OidcOptions, limit: i32, outbound: OutboundPolicy | null): HttpOptions => {
+export const oidcHttpOptions = (
+  options: OidcOptions,
+  limit: i32,
+  outbound: OutboundPolicy | null
+): HttpOptions => {
   const http: HttpOptions = new HttpOptions()
   const timeout: i32 = options.timeoutMs > 0 ? options.timeoutMs : OIDC_DEFAULT_TIMEOUT_MS
   http.followRedirects = false
@@ -1034,8 +1045,16 @@ export class OidcKeys {
  *   or the `JWT_ERR_*` the verifier refused the token with.
  */
 export const oidcVerify = (keys: OidcKeys, token: string, audience: string, now: i64): i32 => {
-  // Every refusal, the ones decided here included, leaves no claims behind.
-  keys.verifier.claimsLen = 0
+  // Every refusal, the ones decided here included, leaves no claims behind:
+  // no payload and no exp, nbf or iat from an earlier token.
+  const v: JwtVerifier = keys.verifier
+  v.claimsLen = 0
+  v.hasExp = false
+  v.hasNbf = false
+  v.hasIat = false
+  v.exp = toI64(0)
+  v.nbf = toI64(0)
+  v.iat = toI64(0)
   const set: OidcKeySet | null = keys.set
   if (set === null || !keys.usable(now)) {
     return OIDC_ERR_STALE

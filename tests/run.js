@@ -29578,6 +29578,8 @@ if (dealtHere("runCache")) {
     }
   }
 
+  // Cost: two `nish run` compiles (the in-memory program and the loopback
+  // probe), a Node loopback server, and a 300 ms wait on its silent route.
   if (selects("oidc", "std/net/oidc")) {
     if (!HAS_CLANG) {
       skip("std/net/oidc: clang not on PATH, so the probes cannot be linked")
@@ -29667,6 +29669,15 @@ if (dealtHere("runCache")) {
             longKid: set(pub(ed, { kid: "k".repeat(257) })),
             maxKid: set(pub(ed, { kid: "k".repeat(256) })),
             ctlKid: set(pub(ed, { kid: "a\nb" })),
+            emptyKid: set(pub(ed, { kid: "" })),
+            delKid: set(pub(ed, { kid: "a\u007f" })),
+            utf8Kid: set(pub(ed, { kid: "k\u00e9" })),
+            kid31: set(pub(ed, { kid: "a\u001f" })),
+            kid32: set(pub(ed, { kid: " " })),
+            kid126: set(pub(ed, { kid: "~" })),
+            // A use other than sig skips an entry only after the private-member and kid rules.
+            encPrivate: set({ ...pub(rsa, { kid: "e", use: "enc" }), d: "AQAB" }, pub(ed, { kid: "ed" })),
+            encBadKid: set(pub(rsa, { kid: "a\nb", use: "enc" }), pub(ed, { kid: "ed" })),
             none: set(),
             tooMany: set(...Array.from({ length: 65 }, (_, i) => pub(ed, { kid: `k${i}`, use: "enc" }))),
             maxKeys: set(...Array.from({ length: 64 }, (_, i) => pub(ed, { kid: `k${i}` }))),
@@ -29698,6 +29709,8 @@ if (dealtHere("runCache")) {
             tampered: `${sign("RS256", rsaKey, { kid: "rsa" }, good).slice(0, -4)}AAAA`,
             nonAscii: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}é`,
             long: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}${"A".repeat(8192)}`,
+            longKid: sign("RS256", rsaKey, { kid: "k".repeat(300) }, good),
+            numKid: sign("RS256", rsaKey, { kid: 7 }, good),
           }
           const disc = (extra) => JSON.stringify({ issuer, jwks_uri: "https://keys.example/jwks", ...extra })
           const discovery = {
@@ -29709,6 +29722,10 @@ if (dealtHere("runCache")) {
             httpIssuer: JSON.stringify({ issuer: "http://127.0.0.1:8080", jwks_uri: "http://127.0.0.1:9/jwks" }),
             httpIssuerRemoteJwks: JSON.stringify({ issuer: "http://127.0.0.1:8080", jwks_uri: "http://keys.example/jwks" }),
             userJwks: disc({ jwks_uri: "https://u:p@keys.example/jwks" }),
+            userOnlyJwks: disc({ jwks_uri: "https://u@keys.example/jwks" }),
+            passOnlyJwks: disc({ jwks_uri: "https://:p@keys.example/jwks" }),
+            emptyHostJwks: disc({ jwks_uri: "https:///jwks" }),
+            notUrlJwks: disc({ jwks_uri: "keys" }),
             noJwks: JSON.stringify({ issuer }),
             numIssuer: JSON.stringify({ issuer: 1, jwks_uri: "https://keys.example/jwks" }),
             array: "[]",
@@ -29733,9 +29750,11 @@ if (dealtHere("runCache")) {
           OIDC_ERR_KEY, OIDC_ERR_KID_REQUIRED, OIDC_ERR_NO_KEYS, OIDC_ERR_PRIVATE, OIDC_ERR_SCHEME,
           OIDC_ERR_SIZE, OIDC_ERR_STALE, OIDC_ERR_TOO_MANY_KEYS, OIDC_ERR_UNKNOWN_KID, OIDC_MAX_JWKS_BYTES,
           OIDC_MAX_DISCOVERY_BYTES, OIDC_MAX_LIFETIME, OIDC_MIN_LIFETIME, OIDC_MIN_REFRESH_INTERVAL, OIDC_OK,
-          OIDC_SKIPPED, OIDC_STALE_GRACE, OidcKeySet, OidcKeys, OidcMetadata, OidcOptions,
-          oidcDiscoveryUrl, oidcIssuerAllowed, oidcLifetime, oidcParseDiscovery, oidcParseJwks, oidcVerify,
+          OIDC_SKIPPED, OIDC_STALE_GRACE, OIDC_DEFAULT_TIMEOUT_MS, OidcKeySet, OidcKeys, OidcMetadata, OidcOptions,
+          oidcDiscoveryUrl, oidcHttpOptions, oidcIssuerAllowed, oidcLifetime, oidcParseDiscovery, oidcParseJwks,
+          oidcVerify,
         } from "nish/net/oidc"
+        import { HttpOptions } from "nish/net/fetch"
 
         const ISSUER: string = ${lit(issuer)}
         const NOW: i64 = ${NOW}
@@ -29763,6 +29782,13 @@ if (dealtHere("runCache")) {
 
         const jwks = (doc: string): i32 => oidcParseJwks(bytes(doc)).error
 
+        /** The fetch options for a \`timeoutMs\` of \`ms\` and a 4096-byte bound. */
+        const fetchOptions = (ms: i32): HttpOptions => {
+          const x: OidcOptions = new OidcOptions()
+          x.timeoutMs = ms
+          return oidcHttpOptions(x, 4096, null)
+        }
+
         const keysWith = (doc: string, now: i64): OidcKeys => {
           const keys: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), new OidcOptions())
           keys.refreshWith(bytes(doc), null, now)
@@ -29789,14 +29815,24 @@ if (dealtHere("runCache")) {
           t.eqI32("jwks_uri http to a remote host under an http issuer refused", oidcParseDiscovery("http://127.0.0.1:8080", bytes(disc_httpIssuerRemoteJwks), loop).error, OIDC_ERR_SCHEME)
           t.eqI32("jwks_uri http to a remote host refused even with the option", oidcParseDiscovery(ISSUER, bytes(disc_httpJwks), loop).error, OIDC_ERR_SCHEME)
           t.eqI32("jwks_uri userinfo refused", oidcParseDiscovery(ISSUER, bytes(disc_userJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri user without password refused", oidcParseDiscovery(ISSUER, bytes(disc_userOnlyJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri password without user refused", oidcParseDiscovery(ISSUER, bytes(disc_passOnlyJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri empty host refused", oidcParseDiscovery(ISSUER, bytes(disc_emptyHostJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri not a URL refused", oidcParseDiscovery(ISSUER, bytes(disc_notUrlJwks), o).error, OIDC_ERR_SCHEME)
           t.eqI32("no jwks_uri", oidcParseDiscovery(ISSUER, bytes(disc_noJwks), o).error, OIDC_ERR_JSON)
           t.eqI32("issuer not a string", oidcParseDiscovery(ISSUER, bytes(disc_numIssuer), o).error, OIDC_ERR_JSON)
           t.eqI32("discovery not an object", oidcParseDiscovery(ISSUER, bytes(disc_array), o).error, OIDC_ERR_JSON)
           t.eqI32("discovery over the bound", oidcParseDiscovery(ISSUER, padded("{\\"pad\\":\\"", OIDC_MAX_DISCOVERY_BYTES, "\\"}"), o).error, OIDC_ERR_SIZE)
+          t.eqI32("discovery at the bound is read", oidcParseDiscovery(ISSUER, padded("{\\"pad\\":\\"", OIDC_MAX_DISCOVERY_BYTES - 10, "\\"}"), o).error, OIDC_ERR_JSON)
           t.ok("issuer http refused", !oidcIssuerAllowed("http://idp.example", o))
           t.ok("issuer loopback http refused by default", !oidcIssuerAllowed("http://127.0.0.1:8080", o))
           t.ok("issuer loopback http with the option", oidcIssuerAllowed("http://127.0.0.1:8080", loop))
           t.ok("issuer localhost http with the option", oidcIssuerAllowed("http://localhost:8080", loop))
+          t.ok("issuer ::1 http with the option", oidcIssuerAllowed("http://[::1]:8080", loop))
+          t.ok("issuer ::1 http refused by default", !oidcIssuerAllowed("http://[::1]:8080", o))
+          t.ok("issuer remote http refused with the option", !oidcIssuerAllowed("http://idp.example", loop))
+          t.ok("issuer userinfo refused", !oidcIssuerAllowed("https://u@idp.example", o))
+          t.ok("issuer uppercase scheme", oidcIssuerAllowed("HTTPS://idp.example", o))
           t.ok("issuer query refused", !oidcIssuerAllowed("https://idp.example?a=1", o))
           t.ok("issuer fragment refused", !oidcIssuerAllowed("https://idp.example#a", o))
           t.ok("issuer https", oidcIssuerAllowed("https://idp.example/tenant", o))
@@ -29844,10 +29880,34 @@ if (dealtHere("runCache")) {
           t.eqI32("kid over OIDC_MAX_KID refused", jwks(doc_longKid), OIDC_ERR_KEY)
           t.eqI32("kid at OIDC_MAX_KID", jwks(doc_maxKid), OIDC_OK)
           t.eqI32("kid with a control byte refused", jwks(doc_ctlKid), OIDC_ERR_KEY)
+          t.eqI32("empty kid refused", jwks(doc_emptyKid), OIDC_ERR_KEY)
+          t.eqI32("kid with 0x7f refused", jwks(doc_delKid), OIDC_ERR_KEY)
+          t.eqI32("kid with a non-ASCII byte refused", jwks(doc_utf8Kid), OIDC_ERR_KEY)
+          t.eqI32("kid with 0x1f refused", jwks(doc_kid31), OIDC_ERR_KEY)
+          t.eqI32("kid of a space (0x20)", jwks(doc_kid32), OIDC_OK)
+          t.eqI32("kid of a tilde (0x7e)", jwks(doc_kid126), OIDC_OK)
+          t.eqI32("enc entry with a private member refused", jwks(doc_encPrivate), OIDC_ERR_PRIVATE)
+          t.eqI32("enc entry with a bad kid refused", jwks(doc_encBadKid), OIDC_ERR_KEY)
           t.eqI32("empty set", jwks(doc_none), OIDC_ERR_NO_KEYS)
           t.eqI32("over OIDC_MAX_KEYS entries refused", jwks(doc_tooMany), OIDC_ERR_TOO_MANY_KEYS)
           t.eqI32("OIDC_MAX_KEYS entries", jwks(doc_maxKeys), OIDC_OK)
           t.eqI32("set over the bound", oidcParseJwks(padded("{\\"keys\\":[],\\"pad\\":\\"", OIDC_MAX_JWKS_BYTES, "\\"}")).error, OIDC_ERR_SIZE)
+          t.eqI32("set at the bound is read", oidcParseJwks(padded("{\\"keys\\":[],\\"pad\\":\\"", OIDC_MAX_JWKS_BYTES - 20, "\\"}")).error, OIDC_ERR_NO_KEYS)
+
+          // The fetch options: every wait bounded by timeoutMs, or the default for 0 or less.
+          const h: HttpOptions = fetchOptions(250)
+          t.eqI32("connect timeout", h.connectTimeoutMs, 250)
+          t.eqI32("read timeout", h.readTimeoutMs, 250)
+          t.eqI32("total timeout", h.totalTimeoutMs, 250)
+          t.ok("no redirect followed", !h.followRedirects)
+          t.eqI64("body bounded", h.maxBodyBytes, toI64(4096))
+          t.ok("no outbound policy when none is given", h.outbound === null)
+          for (const ms of [0, -5]) {
+            const d: HttpOptions = fetchOptions(ms)
+            t.eqI32(\`connect timeout default for \${ms}\`, d.connectTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+            t.eqI32(\`read timeout default for \${ms}\`, d.readTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+            t.eqI32(\`total timeout default for \${ms}\`, d.totalTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+          }
 
           // Lifetime.
           t.eqI64("no cache-control", oidcLifetime(null), OIDC_DEFAULT_LIFETIME)
@@ -29888,6 +29948,8 @@ if (dealtHere("runCache")) {
           t.eqI32("no exp", oidcVerify(k, tok_noExp, "api", NOW), JWT_ERR_CLAIMS)
           t.eqI32("no kid, several keys", oidcVerify(k, tok_noKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
           t.eqI32("unknown kid", oidcVerify(k, tok_unknownKid, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          t.eqI32("a kid over OIDC_MAX_KID reads as none", oidcVerify(k, tok_longKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("a kid that is not a string reads as none", oidcVerify(k, tok_numKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
           t.eqI32("over maxToken", oidcVerify(k, tok_long, "api", NOW), JWT_ERR_SIZE)
           t.eqI32("claims cleared after a refusal", toI32(k.claimsText().length), 0)
           // Each refusal decided before the verifier runs also leaves no claims behind.
@@ -29903,6 +29965,7 @@ if (dealtHere("runCache")) {
           t.eqI32("accept before stale", oidcVerify(k, tok_rs256, "api", NOW), JWT_OK)
           t.eqI32("stale after an accept", oidcVerify(k, tok_rs256, "api", NOW + OIDC_DEFAULT_LIFETIME + OIDC_STALE_GRACE), OIDC_ERR_STALE)
           t.eqStr("no claims after stale", k.claimsText(), "")
+          t.ok("no exp, nbf or iat after stale", !k.verifier.hasExp && !k.verifier.hasNbf && !k.verifier.hasIat)
           const one: OidcKeys = keysWith(doc_one, NOW)
           t.eqI32("no kid, one key", oidcVerify(one, tok_noKid, "api", NOW), JWT_OK)
           const never: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
@@ -29965,8 +30028,17 @@ const fs = require("fs")
 const http = require("http")
 const path = require("path")
 const dir = process.argv[2]
+let flaky = 0
 const server = http.createServer((req, res) => {
   const route = req.url
+  // Accepts and never answers: only the client's own timeouts end the fetch.
+  if (route.startsWith("/hang/")) return
+  // The first fetch of the key set answers, every later one fails.
+  if (route === "/flaky/jwks" && flaky++ > 0) {
+    res.writeHead(500)
+    res.end()
+    return
+  }
   if (route === "/redir/jwks") {
     res.writeHead(302, { location: "/good/jwks" })
     res.end()
@@ -29995,74 +30067,100 @@ server.listen(0, "127.0.0.1", () => process.stdout.write(\`\${server.address().p
           server.once("exit", fail)
           server.stdout.once("data", (d) => { clearTimeout(timer); resolve(String(d).trim()) })
         })
-        if (!/^[0-9]+$/.test(port)) throw new Error("the oidc loopback server did not start")
-        const base = `http://127.0.0.1:${port}`
-        const fx = oidcFixtures(`${base}/good`)
-        const put = (route, body) => fs.writeFileSync(path.join(served, route.replace(/[^a-z]/g, "_")), body)
-        const wk = "/.well-known/openid-configuration"
-        put(`/good${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
-        put("/good/jwks", fx.docs.all)
-        put(`/big${wk}`, JSON.stringify({ issuer: `${base}/big`, jwks_uri: `${base}/good/jwks`, pad: "x".repeat(70000) }))
-        put(`/redir${wk}`, JSON.stringify({ issuer: `${base}/redir`, jwks_uri: `${base}/redir/jwks` }))
-        put(`/bigkeys${wk}`, JSON.stringify({ issuer: `${base}/bigkeys`, jwks_uri: `${base}/bigkeys/jwks` }))
-        put("/bigkeys/jwks", fx.docs.big)
-        put(`/other${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
-        // Another origin for the same server: fetched under the outbound policy, which refuses loopback.
-        put(`/cross${wk}`, JSON.stringify({ issuer: `${base}/cross`, jwks_uri: `http://localhost:${port}/good/jwks` }))
-        const loopback = path.join(oidcDir, "loopback.ts")
-        fs.writeFileSync(
-          loopback,
-          `import { Suite } from "nish/testing"
-          import { JWT_OK } from "nish/crypto/jwt"
-          import {
-            OIDC_ERR_FETCH, OIDC_ERR_ISSUER, OIDC_ERR_SCHEME, OIDC_ERR_SIZE, OIDC_OK, OidcKeys, OidcMetadata, OidcOptions,
-            oidcDiscover, oidcVerify,
-          } from "nish/net/oidc"
+        if (!/^[0-9]+$/.test(port)) {
+          check("std/net/oidc: the loopback server started", false, "it printed no port within 10 s")
+        } else {
+          const base = `http://127.0.0.1:${port}`
+          const fx = oidcFixtures(`${base}/good`)
+          const put = (route, body) => fs.writeFileSync(path.join(served, route.replace(/[^a-z]/g, "_")), body)
+          const wk = "/.well-known/openid-configuration"
+          put(`/good${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
+          put("/good/jwks", fx.docs.all)
+          put(`/big${wk}`, JSON.stringify({ issuer: `${base}/big`, jwks_uri: `${base}/good/jwks`, pad: "x".repeat(70000) }))
+          put(`/redir${wk}`, JSON.stringify({ issuer: `${base}/redir`, jwks_uri: `${base}/redir/jwks` }))
+          put(`/bigkeys${wk}`, JSON.stringify({ issuer: `${base}/bigkeys`, jwks_uri: `${base}/bigkeys/jwks` }))
+          put("/bigkeys/jwks", fx.docs.big)
+          put(`/flaky${wk}`, JSON.stringify({ issuer: `${base}/flaky`, jwks_uri: `${base}/flaky/jwks` }))
+          put("/flaky/jwks", fx.docs.all)
+          put(`/other${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
+          // Another origin for the same server: fetched under the outbound policy, which refuses loopback.
+          put(`/cross${wk}`, JSON.stringify({ issuer: `${base}/cross`, jwks_uri: `http://localhost:${port}/good/jwks` }))
+          const loopback = path.join(oidcDir, "loopback.ts")
+          fs.writeFileSync(
+            loopback,
+            `import { Suite } from "nish/testing"
+            import { JWT_OK } from "nish/crypto/jwt"
+            import {
+              OIDC_ERR_FETCH, OIDC_ERR_ISSUER, OIDC_ERR_SCHEME, OIDC_ERR_SIZE, OIDC_OK, OIDC_SKIPPED, OidcKeys, OidcMetadata,
+              OidcOptions, oidcDiscover, oidcVerify,
+            } from "nish/net/oidc"
 
-          const BASE: string = ${JSON.stringify(base)}
-          const NOW: i64 = ${fx.NOW}
+            const BASE: string = ${JSON.stringify(base)}
+            const NOW: i64 = ${fx.NOW}
 
-          export const main = (): number => {
-            const t: Suite = new Suite("oidc loopback")
-            const o: OidcOptions = new OidcOptions()
-            o.allowLoopbackHttp = true
-            const meta: OidcMetadata = oidcDiscover(BASE + "/good", o)
-            t.eqI32("discover", meta.error, OIDC_OK)
-            const keys: OidcKeys = new OidcKeys(meta, o)
-            t.eqI32("refresh", keys.refresh(NOW), OIDC_OK)
-            t.ok("max-age from the response", !keys.due(NOW + toI64(599)) && keys.due(NOW + toI64(600)))
-            t.eqI32("verify", oidcVerify(keys, ${JSON.stringify(fx.tokens.es256)}, "api", NOW), JWT_OK)
-            t.eqI32("http refused without the option", oidcDiscover(BASE + "/good", new OidcOptions()).error, OIDC_ERR_SCHEME)
-            t.eqI32("discovery over the bound", oidcDiscover(BASE + "/big", o).error, OIDC_ERR_SIZE)
-            t.eqI32("discovery 404", oidcDiscover(BASE + "/gone", o).error, OIDC_ERR_FETCH)
-            t.eqI32("issuer mismatch", oidcDiscover(BASE + "/other", o).error, OIDC_ERR_ISSUER)
-            const redir: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/redir", o), o)
-            t.eqI32("redirect not followed", redir.refresh(NOW), OIDC_ERR_FETCH)
-            const big: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/bigkeys", o), o)
-            t.eqI32("key set over the bound", big.refresh(NOW), OIDC_ERR_SIZE)
-            const crossMeta: OidcMetadata = oidcDiscover(BASE + "/cross", o)
-            t.eqI32("cross-origin discover", crossMeta.error, OIDC_OK)
-            const cross: OidcKeys = new OidcKeys(crossMeta, o)
-            t.eqI32("cross-origin jwks_uri refused by the default outbound policy", cross.refresh(NOW), OIDC_ERR_FETCH)
-            const open: OidcOptions = new OidcOptions()
-            open.allowLoopbackHttp = true
-            open.jwksOutbound = null
-            const crossOpen: OidcKeys = new OidcKeys(crossMeta, open)
-            t.eqI32("cross-origin jwks_uri with jwksOutbound null", crossOpen.refresh(NOW), OIDC_OK)
-            const zero: OidcOptions = new OidcOptions()
-            zero.allowLoopbackHttp = true
-            zero.timeoutMs = 0
-            t.eqI32("timeoutMs 0 takes the default", oidcDiscover(BASE + "/good", zero).error, OIDC_OK)
-            return t.done()
+            export const main = (): number => {
+              const t: Suite = new Suite("oidc loopback")
+              const o: OidcOptions = new OidcOptions()
+              o.allowLoopbackHttp = true
+              const meta: OidcMetadata = oidcDiscover(BASE + "/good", o)
+              t.eqI32("discover", meta.error, OIDC_OK)
+              const keys: OidcKeys = new OidcKeys(meta, o)
+              t.eqI32("refresh", keys.refresh(NOW), OIDC_OK)
+              t.ok("max-age from the response", !keys.due(NOW + toI64(599)) && keys.due(NOW + toI64(600)))
+              t.eqI32("verify", oidcVerify(keys, ${JSON.stringify(fx.tokens.es256)}, "api", NOW), JWT_OK)
+              t.eqI32("http refused without the option", oidcDiscover(BASE + "/good", new OidcOptions()).error, OIDC_ERR_SCHEME)
+              t.eqI32("discovery over the bound", oidcDiscover(BASE + "/big", o).error, OIDC_ERR_SIZE)
+              t.eqI32("discovery 404", oidcDiscover(BASE + "/gone", o).error, OIDC_ERR_FETCH)
+              t.eqI32("issuer mismatch", oidcDiscover(BASE + "/other", o).error, OIDC_ERR_ISSUER)
+              const redir: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/redir", o), o)
+              t.eqI32("redirect not followed", redir.refresh(NOW), OIDC_ERR_FETCH)
+              const big: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/bigkeys", o), o)
+              t.eqI32("key set over the bound", big.refresh(NOW), OIDC_ERR_SIZE)
+              const crossMeta: OidcMetadata = oidcDiscover(BASE + "/cross", o)
+              t.eqI32("cross-origin discover", crossMeta.error, OIDC_OK)
+              const cross: OidcKeys = new OidcKeys(crossMeta, o)
+              t.eqI32("cross-origin jwks_uri refused by the default outbound policy", cross.refresh(NOW), OIDC_ERR_FETCH)
+              const open: OidcOptions = new OidcOptions()
+              open.allowLoopbackHttp = true
+              open.jwksOutbound = null
+              const crossOpen: OidcKeys = new OidcKeys(crossMeta, open)
+              t.eqI32("cross-origin jwks_uri with jwksOutbound null", crossOpen.refresh(NOW), OIDC_OK)
+              const zero: OidcOptions = new OidcOptions()
+              zero.allowLoopbackHttp = true
+              zero.timeoutMs = 0
+              t.eqI32("timeoutMs 0 takes the default", oidcDiscover(BASE + "/good", zero).error, OIDC_OK)
+              // A server that accepts and never answers: the fetch ends at timeoutMs, not the 10 s default.
+              const short: OidcOptions = new OidcOptions()
+              short.allowLoopbackHttp = true
+              short.timeoutMs = 300
+              const began: i64 = monotonicNanos()
+              t.eqI32("a silent server fails the fetch", oidcDiscover(BASE + "/hang", short).error, OIDC_ERR_FETCH)
+              const tookMs: i64 = (monotonicNanos() - began) / toI64(1000000)
+              t.ok(\`the silent server is given up within 5 s (\${tookMs} ms)\`, tookMs < toI64(5000))
+              // A failed fetch keeps the last set, through the real refresh.
+              const flaky: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/flaky", o), o)
+              t.eqI32("flaky: first refresh", flaky.refresh(NOW), OIDC_OK)
+              t.eqI32("flaky: a failed refresh", flaky.refresh(NOW + toI64(600)), OIDC_ERR_FETCH)
+              t.eqI32("flaky: lastError", flaky.lastError, OIDC_ERR_FETCH)
+              t.ok("flaky: the last set is kept", flaky.usable(NOW + toI64(600)) && flaky.key("p256", NOW + toI64(600)) !== null)
+              t.eqI32("flaky: no retry inside the interval", flaky.refresh(NOW + toI64(659)), OIDC_SKIPPED)
+              return t.done()
+            }
+            `,
+          )
+          // No proxy variable reaches the probe, so every fetch goes to the loopback server itself.
+          const env = { ...process.env }
+          for (const name of ["http_proxy", "https_proxy", "all_proxy", "no_proxy"]) {
+            delete env[name]
+            delete env[name.toUpperCase()]
           }
-          `,
-        )
-        const lr = spawnSync(NISH, ["run", loopback], { encoding: "utf8" })
-        check(
-          "std/net/oidc: discovery, refresh and verify over loopback http",
-          lr.status === 0 && lr.stdout.includes(" 0 failed"),
-          failures(lr),
-        )
+          const lr = spawnSync(NISH, ["run", loopback], { encoding: "utf8", env, timeout: 120000 })
+          check(
+            "std/net/oidc: discovery, refresh and verify over loopback http",
+            lr.status === 0 && lr.stdout.includes(" 0 failed"),
+            failures(lr),
+          )
+        }
       } finally {
         server.kill()
       }

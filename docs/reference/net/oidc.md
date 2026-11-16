@@ -38,6 +38,7 @@ import {
   OidcOptions,
   oidcDiscover,
   oidcDiscoveryUrl,
+  oidcHttpOptions,
   oidcIssuerAllowed,
   oidcLifetime,
   oidcParseDiscovery,
@@ -73,6 +74,12 @@ Discovery: one blocking GET of `oidcDiscoveryUrl(issuer)`, no redirect followed,
 <scalar-card title="oidc​Discovery​Url" icon="phosphor/regular/function" href="#oidcdiscoveryurl">
 
 Where discovery asks: the issuer, less one trailing `/`, with `/.well-known/openid-configuration` appended (OpenID Connect Discovery 1.0 §4.1).
+
+</scalar-card>
+
+<scalar-card title="oidc​Http​Options" icon="phosphor/regular/function" href="#oidchttpoptions">
+
+The fetch options discovery and a refresh use: no redirect followed, the connect, each read and the whole fetch bounded by `options.timeoutMs` (by `OIDC_DEFAULT_TIMEOUT_MS` when it is 0 or less), the body bounded at `limit`, and `outbound` applied when it is not null.
 
 </scalar-card>
 
@@ -216,6 +223,45 @@ The issuer identifier.
 <scalar-field name="returns" type="string">
 
 The discovery URL.
+
+</scalar-field>
+
+### oidcHttpOptions
+
+The fetch options discovery and a refresh use: no redirect followed, the
+connect, each read and the whole fetch bounded by `options.timeoutMs` (by
+`OIDC_DEFAULT_TIMEOUT_MS` when it is 0 or less), the body bounded at
+`limit`, and `outbound` applied when it is not null.
+
+```ts
+function oidcHttpOptions(
+  options: OidcOptions,
+  limit: i32,
+  outbound: OutboundPolicy | null,
+): HttpOptions
+```
+
+<scalar-field name="options" type="OidcOptions" required>
+
+The options.
+
+</scalar-field>
+
+<scalar-field name="limit" type="i32" required>
+
+The largest body taken, in bytes.
+
+</scalar-field>
+
+<scalar-field name="outbound" type="OutboundPolicy | null" required>
+
+The outbound policy the fetch runs under, or null for none.
+
+</scalar-field>
+
+<scalar-field name="returns" type="HttpOptions">
+
+The fetch options.
 
 </scalar-field>
 

@@ -32,8 +32,8 @@ internal addresses, an http `jwks_uri` was taken under an https issuer, a
 refusal decided before the verifier ran left the last token's claims behind,
 and `refreshWith` took a set under a failed discovery. Four properties are
 recorded rather than changed, OIDC-1 to OIDC-4, all Low and accepted: fetches
-block, the transport's body cap is backed by the parser's own, discovery is
-read once, and the token is read before it is verified to choose a key.
+block, a body over the bound is stopped by the transport before a parser
+sees it, discovery is read once, and the token is read before it is verified to choose a key.
 
 ## Scope
 
@@ -110,14 +110,14 @@ opts out and fetches that URL like the issuer. Every function that reads the
 clock takes it as a `now` parameter; `oidcDiscover` reads none.
 
 **Tests.** Two checks in `tests/run.js`, section `oidc`. The first runs a
-Nish program of 145 named checks, in memory: the parsers fed documents
+Nish program of 179 named checks, in memory: the parsers fed documents
 built in the test, and `OidcKeys.refreshWith` driven through rotation with
 tokens signed by keys generated in the test (RSA 2048, P-256, P-384,
-Ed25519). The second runs a program of 14 named checks against a loopback
+Ed25519). The second runs a program of 21 named checks against a loopback
 http issuer the test serves, with the option that allows it, for the paths
 that fetch. Its size checks ("discovery over the bound", "key set over the
-bound") serve bodies over the bound and cannot tell the transport's cap from
-the parser's (OIDC-2).
+bound") serve bodies over the bound, which the transport's cap stops before
+any parser runs; the parsers' own caps are pinned in memory (OIDC-2).
 
 **Mutation.** Each rule was broken in a copy of the module, one at a time,
 and the in-memory program rerun: the issuer comparison, the https and
@@ -125,7 +125,10 @@ userinfo checks, the loopback option, the size re-checks, the private
 members, each arm of the algorithm agreement, the duplicate-`kid` check, the
 key-count and `kid` limits, the clamp and its saturation, the rate limit,
 the hard expiry and the missing-`kid` rule. Every mutation failed a named
-check except the transport body cap in `oidcHttpOptions` (OIDC-2). Two
+check except, before review round 2, the transport body cap and the timeouts
+in `oidcHttpOptions`; the checks on the options it builds
+("connect timeout", "read timeout", "total timeout", "body bounded") and
+"a silent server fails the fetch" now pin both. Two
 survivors were acted on: an EC P-256 key labelled EdDSA was added, since
 ES384 on a P-256 key is refused by key construction before the agreement
 check decides it, and a branch refusing a token outside ASCII was removed,
@@ -135,12 +138,49 @@ material, the private members `q`, `dp`, `dq`, `qi` and `oth` unpinned, and
 the `max-age` saturation pinned only by a number that does not wrap; a check
 was added for each.
 
+## Limits
+
+| Limit | Value | What it bounds |
+| --- | --- | --- |
+| `OIDC_MAX_DISCOVERY_BYTES` | 65536 | the discovery document, at the transport and in `oidcParseDiscovery` |
+| `OIDC_MAX_JWKS_BYTES` | 65536 | the JWK Set, at the transport and in `oidcParseJwks` |
+| `OIDC_MAX_KEYS` | 64 | entries in `keys`, counted before any is read, so skipped entries count too |
+| `OIDC_MAX_KID` | 256 | bytes in a `kid`, each 0x20 to 0x7e (`OIDC_KID_LOW`, `OIDC_KID_HIGH`) |
+| `OidcOptions.maxToken` | `JWT_MAX_TOKEN` (8192) | bytes of a token `oidcVerify` reads |
+| `OIDC_MIN_LIFETIME`, `OIDC_MAX_LIFETIME` | 300, 86400 | a set's freshness, from `max-age`; `OIDC_DEFAULT_LIFETIME` (3600) without one |
+| `OIDC_MIN_REFRESH_INTERVAL` | 60 | seconds between two refreshes an unknown `kid` or a failure allows |
+| `OIDC_STALE_GRACE` | 86400 | seconds a set past its freshness still verifies while refreshes fail |
+| `OIDC_DEFAULT_LEEWAY` | 60 | clock skew allowed on `exp`, `nbf` and `iat` |
+| `OIDC_DEFAULT_TIMEOUT_MS` | 10000 | the connect, each read and the whole fetch, when `timeoutMs` is 0 or less |
+
+**Edges.**
+
+- `Cache-Control` is read by `oidcMaxAge`: the first `max-age` of plain
+  digits wins, saturating on a long number; `no-store`, `no-cache` and
+  `s-maxage` are not read, so the `OIDC_MIN_LIFETIME` floor holds whatever
+  the response says.
+- `iat` is checked by `JwtVerifier`, which refuses one later than `now` plus
+  the leeway ([crypto-jwt.md](crypto-jwt.md)); this module adds no rule.
+- Same origin is `urlOrigin` of both URLs compared as strings: scheme, host
+  and port as the URL parser normalizes them. A `jwks_uri` that differs in
+  any of them is cross-origin and runs under `jwksOutbound`.
+- A cross-origin fetch runs under the policy's own limits as well, so its
+  total time may be capped below `timeoutMs` (30 s by default); a fetch the
+  policy refuses shows in `lastError` only as `OIDC_ERR_FETCH`.
+- An `OidcMetadata` the caller builds by hand skips discovery's rules: the
+  issuer and `jwks_uri` checks of OIDC-P1 and OIDC-P2 apply only to a
+  document `oidcParseDiscovery` read. The cross-origin policy still applies
+  at the fetch.
+- A token `kid` that is not a string, or longer than `OIDC_MAX_KID`, reads as
+  no `kid` (OIDC-4): with one key in the set that key is tried, with several
+  the token is `OIDC_ERR_KID_REQUIRED`.
+
 ## Findings
 
 | ID | Severity | Where | Finding | Status |
 | --- | --- | --- | --- | --- |
 | OIDC-1 | Low | `oidcDiscover`, `OidcKeys.refresh`, `oidcGet` | Fetches are synchronous: each blocks the calling thread for up to `OidcOptions.timeoutMs` (10 s by default). A server that calls `refresh` from a request handler stalls that request, and every request behind it, while the issuer is slow. | Accepted: `key` and `oidcVerify` never fetch, so the blocking happens only where the caller puts it. The module comment and the guide say to call `refresh(now)` from the server's own timer, never from a request. |
-| OIDC-2 | Low | `oidcHttpOptions`, `oidcParseDiscovery`, `oidcParseJwks` | The body cap is set twice: as the HTTP client's `maxBodyBytes`, and again by each parser before it reads. Removing the transport cap fails no test, because the parser's cap refuses the same documents. | Accepted: the parsers' caps are the ones pinned ("discovery over the bound", "set over the bound", and the loopback "key set over the bound"); the transport cap is defence in depth, so the client stops reading at the limit instead of buffering a larger body. |
+| OIDC-2 | Low | `oidcHttpOptions`, `oidcGet`, `oidcParseDiscovery`, `oidcParseJwks` | The body is bounded three times. The HTTP client's `maxBodyBytes`, set by `oidcHttpOptions`, stops reading at the limit and fails the fetch with `HTTP_E_BODY_TOO_LARGE`, which `oidcFetchError` maps to `OIDC_ERR_SIZE`; `oidcGet` reads the body with `readAll(limit)`; and each parser refuses a document over its bound before it reads. On the fetch path no body over the bound reaches a parser, so the parsers' caps guard only a document the caller hands in. | Accepted: each cap is pinned where it acts. The loopback "discovery over the bound" and "key set over the bound" serve bodies over the bound and pin the transport cap (with `readAll` behind it); "body bounded" pins the `maxBodyBytes` the client is given. The in-memory "discovery over the bound" and "set over the bound" pin the parsers' caps. |
 | OIDC-3 | Low | `oidcDiscover`, `OidcKeys` | Discovery is read once. An issuer that moves its `jwks_uri` is followed only when the program discovers again; until then refreshes fail, and verification stops at the hard expiry. | Accepted: the `jwks_uri` is part of the issuer's configuration and moves rarely, and failing closed is the safe direction. The guide says to discover again at start-up. |
 | OIDC-4 | Low | `OidcKeys.peekKid`, `OidcKeys.key` | The `kid` is read before any signature is checked, so its value is the attacker's, and an unknown one marks the set as wanted. A `kid` that is not a string, or is longer than `OIDC_MAX_KID`, counts as none, so with a one-key set the token is checked under that key. | Accepted: it only chooses a key; a `kid` naming a key the attacker does not hold fails the signature, and the refreshes it can cause are limited to one per `OIDC_MIN_REFRESH_INTERVAL` (OIDC-P4). |
 | OIDC-5 | Medium | `OidcKeys.refresh`, `oidcGet`, `oidcHttpOptions` | A discovery document could name a `jwks_uri` on any host, internal ones included, and the refresh fetched it with the client's defaults: any address, through the environment's proxy. Whoever controls the document aims the program's requests. | Fixed: a `jwks_uri` on another origin than the issuer's is fetched under `OidcOptions.jwksOutbound`, by default an `OutboundPolicy` that allows public addresses only and no proxy. Before: a loopback issuer naming a `jwks_uri` on `localhost` was fetched and taken. After: "cross-origin jwks_uri refused by the default outbound policy" is `OIDC_ERR_FETCH`, and "cross-origin jwks_uri with jwksOutbound null" pins the opt-out. |
@@ -161,13 +201,20 @@ was added for each.
 ## Tests
 
 - `tests/run.js`, "std/net/oidc: discovery, the key set, rotation and
-  verification, in memory": 145 named checks, every name cited above but
+  verification, in memory": 179 named checks, every name cited above but
   those the next item lists.
 - `tests/run.js`, "std/net/oidc: discovery, refresh and verify over loopback
   http": "discover", "refresh", "max-age from the response", "verify", "http
   refused without the option", "discovery over the bound", "discovery 404",
   "issuer mismatch", "redirect not followed", "key set over the bound",
   "cross-origin discover", "cross-origin jwks_uri refused by the default
-  outbound policy", "cross-origin jwks_uri with jwksOutbound null" and
-  "timeoutMs 0 takes the default", against an issuer the test serves on
-  loopback.
+  outbound policy", "cross-origin jwks_uri with jwksOutbound null",
+  "timeoutMs 0 takes the default", "a silent server fails the fetch" and
+  "the silent server is given up within 5 s" (a `timeoutMs` of 300 against
+  a server that never answers), and "flaky: first refresh", "flaky: a failed
+  refresh", "flaky: lastError", "flaky: the last set is kept" and "flaky: no
+  retry inside the interval" (a failed fetch through `refresh()`), against
+  an issuer the test serves on loopback. The in-memory program pins
+  `oidcHttpOptions` ("connect timeout", "read timeout", "total timeout", "no
+  redirect followed", "body bounded", "no outbound policy when none is
+  given", and the default for a `timeoutMs` of 0 and -5).
