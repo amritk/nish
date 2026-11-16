@@ -278,7 +278,7 @@
           "name": "msg",
           "type": "bytes",
           "minLen": 0,
-          "maxLen": 300
+          "maxLen": 130
         }
       ],
       "assert": {
@@ -385,7 +385,7 @@
           "name": "msg",
           "type": "bytes",
           "minLen": 0,
-          "maxLen": 300
+          "maxLen": 130
         }
       ],
       "assert": {
