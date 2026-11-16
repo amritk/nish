@@ -38891,6 +38891,97 @@ if (!only || "hooks".includes(only) || "format".includes(only)) {
   check(`hooks: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
 }
 
+// ---- The spec tests: test/spec/<n>.ts, emitted by vector from contracts/<n>.json --------
+// Each test names the contract it was emitted from by hash on its one
+// `// vector-contract-sha256:` line. A test whose contract is missing or has moved
+// since is a FAIL: regenerate it (contracts/README.md). A test of a module std/ does
+// not have yet is a SKIP naming the module; otherwise the test is built and run, and
+// passes on exit 0, no FAIL line, and the `vector-done <nonce>` line its main prints
+// last, so a test that stopped early cannot pass. vector itself is not needed here.
+if (!only || "spec".includes(only)) {
+  const specDir = path.join(root, "test", "spec")
+  const tests = fs.existsSync(specDir)
+    ? fs
+        .readdirSync(specDir)
+        .filter((f) => f.endsWith(".ts"))
+        .sort()
+    : []
+  for (const file of tests) {
+    const name = file.slice(0, -".ts".length)
+    const rel = `test/spec/${file}`
+    const contractRel = `contracts/${name}.json`
+    const contractPath = path.join(root, contractRel)
+    if (!fs.existsSync(contractPath)) {
+      check(`spec: ${rel} has its contract ${contractRel}`, false, "no such file")
+      continue
+    }
+    const want = crypto.createHash("sha256").update(fs.readFileSync(contractPath)).digest("hex")
+    const pins = fs
+      .readFileSync(path.join(specDir, file), "utf8")
+      .split("\n")
+      .filter((l) => l.startsWith("// vector-contract-sha256:"))
+      .map((l) => l.slice("// vector-contract-sha256:".length).trim())
+    if (pins.length !== 1 || pins[0] !== want) {
+      check(
+        `spec: ${rel} was emitted from ${contractRel} as it is now`,
+        false,
+        `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
+      )
+      continue
+    }
+    let mod
+    try {
+      mod = JSON.parse(fs.readFileSync(contractPath, "utf8"))?.target?.module
+    } catch (e) {
+      check(`spec: ${contractRel} parses`, false, String(e))
+      continue
+    }
+    if (typeof mod !== "string" || !mod.startsWith("nish/")) {
+      check(`spec: ${contractRel} targets a nish/ module`, false, `target.module is ${JSON.stringify(mod)}`)
+      continue
+    }
+    const stdRel = `std/${mod.slice("nish/".length)}.ts`
+    if (!fs.existsSync(path.join(root, stdRel))) {
+      skip(`spec: ${rel}: ${mod} has no ${stdRel} yet`)
+      continue
+    }
+    if (!HAS_CLANG) {
+      skip(`spec: ${rel}: no clang to link it`)
+      continue
+    }
+    const dir = path.join(buildDir, "spec", name)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, name)
+    const b = spawnSync(NISH, [path.join(specDir, file), "-o", dir + path.sep, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+    })
+    if (b.status !== 0) {
+      check(`spec: ${rel} builds`, false, shown(b))
+      continue
+    }
+    const nonce = crypto.randomBytes(8).toString("hex")
+    const r = spawnSync(exe, [nonce], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    const lines = (r.stdout ?? "").split("\n")
+    check(
+      `spec: ${rel} passes against ${stdRel}`,
+      r.status === 0 &&
+        !lines.some((l) => l.startsWith("FAIL")) &&
+        lines.some((l) => l.startsWith(`vector-done ${nonce} `)),
+      shown(r)
+    )
+  }
+}
+
 // ---- The release train's version: the implied bump and the `Release-As:` trailer -----
 // `scripts/changelog-gen.mjs --next` is the number the Release PR proposes and every
 // file it bumps. Its suite builds throwaway repositories, so it needs git and nothing else.
