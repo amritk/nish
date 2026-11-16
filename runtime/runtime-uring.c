@@ -145,6 +145,7 @@ int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, co
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
 int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
 int32_t nish_uring_full(const struct nish_uring_set *s);
+int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
 int32_t nish_uring_slots(const struct nish_uring_set *s);
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 void nish_uring_destroy(struct nish_uring_set *s);
@@ -287,11 +288,12 @@ _Static_assert(sizeof(struct ur_buf_reg) == 40, "io_uring_buf_reg is 40 bytes");
  * the op, the slot's generation and the slot, and none of those ops is 3. */
 enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 
-/* A slot's state word: open, recv armed, recv parked on -ENOBUFS, and the
- * generation in the 24 bits above. */
+/* A slot's state word: open, recv armed, recv parked on -ENOBUFS, recv held
+ * by its caller (`nish_uring_hold`), and the generation in the 24 bits above. */
 #define ST_OPEN 1u
 #define ST_ARMED 2u
 #define ST_PARKED 4u
+#define ST_HELD 8u
 #define ST_GEN(st) ((st) >> 8)
 #define GEN_MASK 0xffffffu
 
@@ -784,7 +786,7 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     int wrote = 0;
     if (res >= 0 && (uint32_t)res < s->slots) {
       uint32_t at = (uint32_t)res;
-      r->st[at] = (r->st[at] & ~(ST_ARMED | ST_PARKED)) | ST_OPEN;
+      r->st[at] = (r->st[at] & ~(ST_ARMED | ST_PARKED | ST_HELD)) | ST_OPEN;
       r->live++;
       s->stats.live++;
       ur_arm(r, at);
@@ -820,11 +822,19 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     s->lent_ring[s->nlent] = (uint32_t)ri;
     s->lent_bid[s->nlent] = (uint16_t)bid;
     s->nlent++;
-    if (!more) ur_arm(r, slot);
+    if (!more && !(r->st[slot] & ST_HELD)) ur_arm(r, slot);
     ur_event(ev, NISH_URING_DATA, ri, slot, res, r->bufs + (size_t)bid * s->buf_size);
     return 1;
   }
   if (has_buf) ur_recycle(s, r, bid);
+  /* Only a hold cancels a live slot's recv (a close moves the generation on
+   * first). The recv stays down while the slot is held, and one let go before
+   * the cancel landed is armed again; a held recv out of buffers stays down. */
+  if (!more && res == -ECANCELED) {
+    if (!(r->st[slot] & ST_HELD)) ur_arm(r, slot);
+    return 0;
+  }
+  if (!more && res == -ENOBUFS && (r->st[slot] & ST_HELD)) return 0;
   if (res == -ENOBUFS) {
     s->stats.nobufs_rearms++;
     if (!more && !(r->st[slot] & ST_PARKED)) {
@@ -1006,7 +1016,7 @@ static void ur_catch_up(struct nish_uring_set *s) {
     for (uint32_t i = 0; i < n; i++) {
       uint32_t slot = r->parked[i];
       r->st[slot] &= ~ST_PARKED;
-      if ((r->st[slot] & (ST_OPEN | ST_ARMED)) == ST_OPEN) ur_arm(r, slot);
+      if ((r->st[slot] & (ST_OPEN | ST_ARMED | ST_HELD)) == ST_OPEN) ur_arm(r, slot);
     }
   }
   /* Scanning every slot of every ring costs rings * slots, but only after a
@@ -1161,6 +1171,36 @@ int32_t nish_uring_full(const struct nish_uring_set *s) {
   return 1;
 }
 
+/* Hold (`on` 1) or let go (`on` 0) a slot's receive. A hold cancels the
+ * slot's multishot recv by its tag, not by its descriptor, so the slot's sends
+ * in flight go on, and keeps it from being armed again; the bytes the kernel
+ * received before the cancel takes effect are still reported. runtime-net.c
+ * holds a slot whose receive queue reaches its bound, so a peer the program
+ * does not read cannot grow it (NURING-9). Letting go arms the recv again.
+ * -EBADF for a slot that is not open; -EAGAIN, nothing changed, when the SQ
+ * has no room for the cancel. */
+int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on) {
+  struct ur_ring *r = ur_open_slot(s, ring, slot);
+  if (!r) return -EBADF;
+  uint32_t st = r->st[slot];
+  if (!on) {
+    r->st[slot] = st & ~ST_HELD;
+    if ((st & (ST_ARMED | ST_PARKED)) == 0) ur_arm(r, (uint32_t)slot);
+    return 0;
+  }
+  if (st & ST_HELD) return 0;
+  if (st & ST_ARMED) {
+    struct ur_sqe *e = ur_sqe(r);
+    if (!e) return -EAGAIN;
+    e->opcode = UR_OP_ASYNC_CANCEL;
+    e->addr = ur_tag(UR_RECV, st, (uint32_t)slot);
+    e->flags = UR_SQE_CQE_SKIP_SUCCESS;
+    e->user_data = ur_tag(UR_CANCEL, st, (uint32_t)slot);
+  }
+  r->st[slot] = st | ST_HELD;
+  return 0;
+}
+
 /* The file-table slots each ring holds. */
 int32_t nish_uring_slots(const struct nish_uring_set *s) { return (int32_t)s->slots; }
 
@@ -1228,6 +1268,13 @@ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t 
 int32_t nish_uring_full(const struct nish_uring_set *s) {
   (void)s;
   return 0;
+}
+int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on) {
+  (void)s;
+  (void)ring;
+  (void)slot;
+  (void)on;
+  return -38;
 }
 int32_t nish_uring_slots(const struct nish_uring_set *s) {
   (void)s;

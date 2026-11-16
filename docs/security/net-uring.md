@@ -1,7 +1,8 @@
 # Security record: the io_uring ring layer
 
 The record of `runtime/runtime-uring.c`, the io_uring rings that WP63 puts
-under `nish:net`: one accepting job spread over a set of rings, each ring
+under `nish:net`, and of the slot layer in `runtime/runtime-net.c` that gives
+them to a program: one accepting job spread over a set of rings, each ring
 holding up to `slots` connections as direct descriptors, a provided-buffer
 ring for receives, and queued sends. Every byte a connection carries comes
 from a remote peer, and every completion the layer reads comes from the
@@ -11,9 +12,11 @@ It says what is checked, what each failure answers, and the test that pins
 each answer. The design is
 [`wp63-iouring-net.md`](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md).
 It was written on top of `main` at `307dcca`, in the change that adds the
-layer (WP63 S1), and names functions rather than lines, so it has no
-`file:line` anchors to move. In this stage nothing in `nish:net` calls the
-layer: it is linked into every Linux runtime and reached only by its C test.
+layer (WP63 S1), and extended in WP63 S2, which makes the layer reachable from
+a program: a listener made with `tcpListenFlags(..., NET_LISTEN_RING)` accepts
+into ring slots, and `tcpAccept`, `netRead`, `netWrite`, `netClose`,
+`pollAdd`, `pollModify` and `pollWait` take the slot handles it answers. It
+names functions rather than lines, so it has no `file:line` anchors to move.
 
 **Result.** No completion the kernel writes and no byte or reset a peer
 sends can make the layer index outside its tables: an accepted slot, a
@@ -26,11 +29,14 @@ fixed before landing, and so was a wait that could return with a ring's new
 accepts still queued in user space, so a caller sleeping on the set's
 descriptor left new peers in the backlog (NURING-7), and a sleep on that
 descriptor while the kernel held a ring's accept as task work it never
-signalled (NURING-8, on CI's 7.0 kernel). Two findings are open, both for
-S2's surface: queued sends to a peer that never reads are not bounded
-(NURING-2), and a set that cannot grow stops accepting without telling its
-caller (NURING-6). Eight findings (NURING-1 to NURING-8): three fixed, two
-open, three decided. The
+signalled (NURING-8, on CI's 7.0 kernel). S2 closes the two findings S1 left
+for it: a slot's queued sends are bounded at 256 KiB, past which `netWrite`
+answers -11 (NURING-2), and a full set answers -23 from `tcpAccept` (NURING-6).
+S2's review found that the multishot receive went on taking a peer's bytes
+into the slot's queue while the program read none of them, so a peer could
+grow the queue without bound (NURING-9); the slot's receive is now held at
+256 KiB and the peer stalls in the kernel's buffers. Nine findings (NURING-1
+to NURING-9): six fixed, none open, three decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -39,10 +45,14 @@ fix them, are under "The kernel's record" below.
 | File | What |
 | --- | --- |
 | `runtime/runtime-uring.c` | the probe (`nish_uring_probe`, `ur_probe_once`, `ur_setup_flags`); the set and its rings (`nish_uring_open` and its option checks, `ur_add_ring`, `ur_free_ring`, `nish_uring_destroy`); the accepting job (`ur_top_up`); completions (`ur_complete`, `ur_reap`, `ur_service`, `ur_catch_up`, `nish_uring_wait`); receives and buffers (`ur_arm`, `ur_recycle`); sends (`nish_uring_send`, `ur_send_head`, `ur_drop_sends`, `ur_unlink_all`); slots (`ur_open_slot`, `nish_uring_close`); and the stubs a native build off Linux links (a wasm build compiles none of the file) |
+| `runtime/runtime-uring.c`, for S2 | what S2 adds for the slot layer: the bytes a slot has queued (`nish_uring_queued`), whether the set can take no more (`nish_uring_full`), and holding a slot's receive (`nish_uring_hold`, with `ur_complete`'s and `ur_catch_up`'s handling of a held slot) |
+| `runtime/runtime-net.c` | the slot layer: the handle encoding and its checks (`nr_encode`, `nr_decode`, `nr_listener`, `nr_vent_for` and the routing in each `nish_net_*` entry), a ring listener's set (`nr_open`, `nr_close_listener`), accepting (`nr_accept`), the events a wait takes in (`nr_pump`, `nr_pump_all`, `nr_dispatch`), a slot's receive and send queues (`nr_read`, `nr_send`), its close and its lingering sends (`nr_close`, `nr_finish`), readiness in a poll loop (`nr_ctl`, `nr_collect`, `nr_poll_wait` and the readiness list, `nr_append`, `nr_unlist`, `nr_touch`, `nr_unregister`, `nr_bits`), and `nish_net_ring_state` |
+| `tests/link/net_ring_*` | the S2 tests: Nish programs on ring listeners, each judged by its own exit status, and `client.mjs`, the node client that drives them from outside their descriptor limit |
 | `tests/runtime/uring-test.c` | the test: an echo server on the layer in a forked child, driven by plain-socket clients, one mode a check; and the `UR_SYS_SETUP` and `UR_SYS_REGISTER` hooks it compiles the layer with, which stand in for the two syscalls to force the answers a seccomp filter cannot |
 
-Out of scope: `runtime/runtime-net.c`, whose epoll path does not call the
-layer, and `bench/fd-limit/`, the prototype the design measured. The rule for
+Out of scope: `runtime/runtime-net.c`'s descriptor and epoll paths, which a
+slot handle never reaches (`net.md` holds them), and `bench/fd-limit/`, the
+prototype the design measured. The rule for
 rings under `--sandbox` is S3's and lands with `sandbox.md`.
 
 ## Threat model
@@ -69,13 +79,14 @@ authenticated or encrypted; that is TLS's job, above this.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | NURING-1 | High | `runtime/runtime-uring.c` (`ur_complete`) | A send that failed for good (a peer's reset answers `-ECONNRESET` or `-EPIPE`) cleared the record's in-flight mark and then called `ur_drop_sends`, which frees every queued record that is not in flight, the failed one included, and then freed the record a second time with `ur_unlink_all`. A peer could cause it by resetting while a large send was in the kernel: heap corruption from the network. | **Fixed before landing**: the second free is gone, and `ur_drop_sends` frees the record with the rest of the slot's queue. Before: the "reset" mode's server died of a signal (glibc's double-free abort) on every run. After: "uring: runtime-uring.c reset: a send the peer resets fails once as SEND_FAILED, and its record is freed once". |
-| NURING-2 | Low | `runtime/runtime-uring.c` (`nish_uring_send`) | Each send copies its bytes into a record that is queued until the kernel takes them. A peer that never reads leaves every later send for its slot queued, so a server that keeps answering it grows without bound. | **Open**, for S2: the layer reports nothing a caller could use as backpressure, and `nish:net`'s surface must bound the bytes queued per connection, or expose them, before a program can reach the layer. Tracked in #1648. |
+| NURING-2 | Low | `runtime/runtime-uring.c` (`nish_uring_send`), `runtime/runtime-net.c` (`nr_send`) | Each send copies its bytes into a record that is queued until the kernel takes them. A peer that never reads leaves every later send for its slot queued, so a server that keeps answering it grows without bound. | **Fixed in S2.** `nr_send` reads the slot's queued bytes (`nish_uring_queued`) and copies at most what fits under `NR_AREA`, 256 KiB; a full area answers -11, and the slot is reported writable again once the kernel has taken enough, the descriptor contract. Before: S1's layer reported nothing, and with the bound mutated out the sink program's netWrite took all 64 MiB and never answered -11 ("netWrite took all 67108864 bytes and never answered -11"). After: "net_ring: writes to a peer that does not read answer -11 within the kernel's buffers and the send area, and every byte arrives", the first -11 after 4,172,800 bytes on 6.18.44. Tracked in #1648. |
 | NURING-3 | Low | `runtime/runtime-uring.c` (`ur_complete`, `nish_uring_wait`) | A DATA event's bytes are the provided buffer the kernel filled, lent, not copied: they are given back to the kernel at the start of the next `nish_uring_wait`, and a caller that keeps the pointer past it reads bytes another connection's receive may have written. | **Decided.** The copy would cost every receive; the contract is in the header comment ("valid until the next wait"), and S2's surface copies the bytes into the program's array before the next wait. |
 | NURING-4 | Low | `runtime/runtime-uring.c` (`ur_tag`, `nish_uring_close`) | A slot's generation is 24 bits, so a recv's completion that arrives after 2^24 closes of the same slot would match a newer connection's generation. | **Decided.** `nish_uring_close` cancels the slot's recv before it closes it, in the same submission, so no recv of the slot outlives the close by more than one completion; 2^24 closes and re-accepts of one slot in that window cannot happen. |
 | NURING-5 | Low | `runtime/runtime-uring.c` (`ur_complete`) | A send the kernel answers with 0 bytes, for a record with bytes left, is taken as complete, and the bytes left are not sent. | **Decided.** A stream socket's send does not answer 0 for a non-empty buffer; re-arming on 0 would spin on a kernel that did. The connection's next send or recv reports any real failure. |
-| NURING-6 | Low | `runtime/runtime-uring.c` (`ur_top_up`) | A set whose every ring is full and that cannot open another (`ur_add_ring` answers `-ENOSPC` at `rings_max`, or its setup fails for want of memory or descriptors) stops queuing accepts and says nothing: no event tells the caller, so new peers wait in the listener's backlog until the kernel drops them there. No connection already accepted is lost. | **Open**, for S2: the surface must report a full set to the program as `-ENFILE` (-23), the answer a full table gives, without dropping or closing any accepted connection, and take accepting up again when a slot closes. Tracked in #1648. |
+| NURING-6 | Low | `runtime/runtime-uring.c` (`ur_top_up`, `nish_uring_full`), `runtime/runtime-net.c` (`nr_accept`) | A set whose every ring is full and that cannot open another (`ur_add_ring` answers `-ENOSPC` at `rings_max`, or its setup fails for want of memory or descriptors) stops queuing accepts and says nothing: no event tells the caller, so new peers wait in the listener's backlog until the kernel drops them there. No connection already accepted is lost. | **Fixed in S2.** `nish_uring_full` answers whether the set can take no more, and `tcpAccept` on a ring listener with nothing accepted answers -23 (`ENFILE`) then, not -11, without dropping or closing an accepted connection; a close frees the slot and accepting goes on. Before: S1 had no answer to give. After: "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again", under a descriptor limit of 32, where the set's rings cannot grow. Tracked in #1648. |
 | NURING-7 | Medium | `runtime/runtime-uring.c` (`nish_uring_wait`, `ur_top_up`) | A wait serviced each ring and submitted that ring's own queue, but an accept or a close on one ring can move the accepting job to a ring the wait already passed (or will not reach: `cap` full, or not ready). That ring's new accepts sat in user space while the caller slept on `nish_uring_fd`, which nothing would signal: new peers waited in the backlog until some other event woke the caller. A peer cannot cause it alone, but any server whose set grows past one ring could stop accepting. | **Fixed before landing**: `nish_uring_wait` hands every ring's queued submissions to the kernel before it returns or sleeps (`ur_submit_queued`), so a wait returns with nothing queued unless the kernel refuses the submission (-EBUSY while completions overflow, which leaves completions for the eventfd to signal, or a transient -EAGAIN or -ENOMEM); the next wait submits it again. Before: "uring: runtime-uring.c move" failed on every run (5 of 5 on 6.18.44) with "a wait returned 1 events with 1 submissions still queued on ring 0". After: "uring: runtime-uring.c move: an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns". |
 | NURING-8 | Medium | `runtime/runtime-uring.c` (`nish_uring_wait`, `nish_uring_fd`, `nish_uring_sleep_ms`) | The layer and its callers slept on the set's epoll descriptor and trusted each ring's eventfd to say the kernel had queued work. On CI's kernel (7.0.0-1019-azure) a client's accept completed in the kernel and waited as deferred task work, with IORING_SQ_TASKRUN up, while the eventfd was never signalled: the caller slept with a peer accepted but not reaped. The mechanism, at v7.0: `io_req_local_work_add` signals the eventfd only when the task-work list was empty (`io_uring/tw.c:223-236`), and a signal raised in a nested context is deferred by `__io_eventfd_signal`, which first sets `IO_EVENTFD_OP_SIGNAL_BIT` with `atomic_fetch_or` (`io_uring/eventfd.c:53-64`, line 59) and skips the signal if the bit was already set; `io_eventfd_do_signal` (`eventfd.c:42`) signals and never clears it, and only registering the eventfd again resets `ops` (`eventfd.c:153`). After the first deferred signal every later one is lost, for the life of the registration. 6.1 clears the bit (`atomic_xchg(&ev_fd->ops, 0)` in `io_eventfd_ops`, `io_uring/io_uring.c:495`) and signals and wakes on every first add (`io_uring.c:1108-1128`). No other kernel wake is sure: the submitter is woken only when `nr_tw >= cq_wait_nr`, and outside `io_uring_enter` that is `IO_CQ_WAKE_INIT` (`io_uring.c:250`); polling the ring's own descriptor sleeps on `poll_wq` (`io_uring_poll`, `io_uring.c:2240-2276`), which only `__io_commit_cqring_flush` wakes when completions post (`io_uring.c:478-485`), and under DEFER_TASKRUN they post only when the submitter runs the task work; re-registering the eventfd each wait would cost two syscalls a wait and still leaves no way to see the bit. A peer cannot cause it alone, but any server could stop accepting until another event woke it. | **Fixed before landing**: no sleep on a ring set is longer than `UR_SLEEP_MAX_MS` (10 ms), so the hrtimer is the wake the kernel guarantees, on every version. `nish_uring_wait` sleeps for `nish_uring_sleep_ms`, which answers 0 while a ring is flagged IORING_SQ_TASKRUN or IORING_SQ_CQ_OVERFLOW, has completions not reaped, or has parked recvs, stalled sends or lent buffers that a free submission queue could take, and otherwise the caller's timeout capped at 10 ms; a wait of -1 that wakes with nothing goes round again, and every wake services every flagged ring, ready or not. `nish_uring_fd`'s contract says a caller that sleeps on the descriptor, alone or beside other sources, sleeps no longer than `nish_uring_sleep_ms` answers and then waits with 0. S2's `pollWait` over rings must keep the rule. Cost, measured on 6.18.44 (one-ring set, idle, 3 runs of 5 s, 4-core container): 98.6 to 98.8 wakes a second, 0.348% to 0.365% of one core, 35 to 37 µs a wake; a busy set never reaches the bound. Before, on 7.0.0-1019-azure (CI shard 5, job 133074815366): "uring-test: ring 0: live 1 accepting 1 to_submit 0 sq_flags 0x4 sq head 3 tail 3 cq head 1 tail 1 efd readable 0", fdinfo showing the accept (op 13) in the poll list and no overflow. After: "uring: runtime-uring.c nowake: a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)", which unregisters the eventfd to stand for the lost signal; a mutant whose `nish_uring_sleep_ms` answers the caller's timeout hangs it to its 10 s alarm on 6.18.44. The "move" check sleeps on `nish_uring_fd` for as long as `nish_uring_sleep_ms` answers. |
+| NURING-9 | Medium | `runtime/runtime-net.c` (`nr_dispatch`, `nr_read`), `runtime/runtime-uring.c` (`ur_complete`) | A slot's multishot receive goes on taking a peer's bytes whether the program reads them or not, and each wait copies them into the slot's receive queue so the ring's buffer can go back. A peer that writes faster than the program reads, or a program that reads one connection while another floods, grew that queue without bound: the kernel's socket buffers never filled, so TCP never told the peer to stop. Found in S2's review. | **Fixed in S2.** Once a slot has `NR_AREA` (256 KiB) queued, `nish_uring_hold` cancels its receive by the receive's tag, so the slot's sends in flight go on, and the kernel's buffers fill and stall the peer; a read that takes the queue below 128 KiB lets the hold go and arms the receive again. A queue past `NR_RECV_MAX` (16 MiB), which only bytes already in flight when the hold lands could reach, ends the connection with -105 (`ENOBUFS`) as a backstop. Before (the hold mutated out): "flood: 67108864 bytes before the stall", the peer's 64 MiB all taken in, and the backstop then ended the connection with "read 16777196 bytes of 67108864". After: "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads", the peer stalling after 4,849,664 bytes on 6.18.44 and all 64 MiB read. |
 
 ## Properties verified
 
@@ -159,6 +170,37 @@ where the probe says it is refused.
   `.text` budget, "runtime-uring.c: .text* at -Oz fits the 6144 byte
   budget".
 
+### What S2 adds
+
+S2's tests are Nish programs in `tests/link/net_ring_*`, run by `tests/run.js`'s
+`net_ring` section under `client.mjs`, each judged by its own exit status and
+its last line. A program that finds rings refused exits 2, which the section
+counts as a skip, never a pass.
+
+- **Past the descriptor limit, from a program.** "net_ring: a ring listener
+  serves 3,000 connections under a limit of 1,024 with fewer than 64
+  descriptors": `echo.ts` echoes five bytes on each of 3,000 connections
+  through `pollWait`, `netRead` and `netWrite`, counts `/proc/self/fd` with
+  all of them open, and requires every handle to be at 2^20 or above, where
+  no descriptor is.
+- **A full set and a stale handle.** "net_ring: a full set answers -23, a
+  closed handle -9, and the freed slot is taken again" (NURING-6).
+- **Sends are bounded.** "net_ring: writes to a peer that does not read
+  answer -11 within the kernel's buffers and the send area, and every byte
+  arrives" (NURING-2): the first -11 must come before 32 MiB of the 64 MiB
+  the program writes, and the peer must then receive exactly 64 MiB.
+- **Receives are bounded.** "net_ring: a peer the program does not read
+  stalls within the kernel's buffers, and every byte arrives once it reads"
+  (NURING-9): the peer must stall before 32 MiB of its 64 MiB, and the
+  program must then read all 64 MiB, so the held receive went again.
+- **Refused io_uring, from a program.** "net_ring: with io_uring_setup
+  refused, a ring listener serves descriptors and netRingState() is -1":
+  under a seccomp filter that answers io_uring_setup with EPERM, the same
+  listener accepts descriptors, and `netRingState()` says why.
+- **The calls a ring handle takes.** `tests/cases/net_ring_calls` pins the IR
+  of `NET_LISTEN_RING` and `netRingState()`, and `reject_net_ring_arity` and
+  `reject_net_ring_wasm` the programs the checker refuses.
+
 ## The kernel's record
 
 The layer's safety rests on the kernel's io_uring as much as on its own
@@ -212,6 +254,21 @@ A deployment that must pin a kernel should take a 6.1-or-later stable
 release with the current stable fixes, since the CNA's record keeps adding
 fixes to the multishot receive, provided-buffer and fixed-file code.
 
+**S2's second look.** S2, which makes the layer reachable from a program,
+looked again on 2026-11-16, by a web search of the CVE aggregators for 2026
+io_uring records in the provided-buffer, receive, accept and fixed-file
+code; these were not checked against `cvelistV5` as the rows above were. It
+found three, none in code the layer reaches: CVE-2026-53191 (a bundle
+receive's `BUF_MORE` flag carried across retries in incremental mode),
+CVE-2026-99264 (a retried receive leaving buffers it mapped but did not
+commit, with `IOU_PBUF_RING_INC`) and CVE-2026-97618 (a receive with
+`MSG_TRUNC` advancing the buffer ring past the bytes written; rejected by its
+CNA since). The layer's receive is a multishot `RECV` of one buffer at a
+time: it sets no `IORING_RECVSEND_BUNDLE`, registers its buffer ring without
+`IOU_PBUF_RING_INC` and passes no `msg_flags`. A use after free in
+`io_ring_buffers_peek` posted to the io_uring list in July 2026 is in the
+bundle path too.
+
 **What S3 adds.** The framing of this record around a restricted ring is
 S3's, with `sandbox.md` (the design's §6.2): under `--sandbox` each ring is
 created with `IORING_SETUP_R_DISABLED` and given
@@ -238,9 +295,21 @@ retried only as task work on the thread that owns the ring, which is the one
 running `destroy`. This rests on one assumption about the kernel: that
 closing a ring cancels the task work still queued on it rather than running
 it, from a fallback worker, after `close` returns. The code cannot show that
-window closed on every kernel the probe accepts; S2, which makes `destroy`
-reachable from a program, revisits it.
+window closed on every kernel the probe accepts. S2 makes `destroy`
+reachable from a program, as `netClose` of a ring listener
+(`nr_close_listener`), and keeps the assumption's premise: the set has one
+owning thread (the design's D3), the one that made it, and `nr_close_listener`
+runs on it. It takes every slot out of the program's poll loops first, so no
+later `pollWait` reaches a freed slot, and a handle of the closed set answers
+-9, because the set's record stays, marked dead.
 
 **Options.** `nish_uring_open` refuses a `buf_count` that is not a power of
 two or is past 32,768, a `buf_size` past 1 MiB, a `rings_max` past 4,096
 and `slots` past 2^20, with `-EINVAL`, before it maps anything.
+
+**A wait interrupted by task work.** On a `DEFER_TASKRUN` ring, the kernel's
+task work can end an `epoll_wait` on the program's poll loop with `EINTR` when
+no signal was delivered. `nr_poll_wait` takes `EINTR` as a wake, takes in the
+rings' events and waits again for what is left of its timeout, so a program's
+`pollWait` does not answer -4 for an event of the layer's own. Found by
+`echo.ts` while S2 was written.

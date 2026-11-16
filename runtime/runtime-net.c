@@ -291,13 +291,18 @@ int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, co
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
 int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
 int32_t nish_uring_full(const struct nish_uring_set *s);
+int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
 void nish_uring_destroy(struct nish_uring_set *s);
 
 #define NR_BASE (1 << 20)
 #define NR_RINGS 64
 #define NR_SETS 31
-/* The most bytes one slot may have queued and not yet sent (NURING-2). */
+/* The most bytes one slot may have queued and not yet sent (NURING-2), and
+   the receive queue at which the slot's receive is held (NURING-9). */
 #define NR_AREA (256 * 1024)
+/* What a held slot's queue may still take from the kernel before the cancel
+   lands; past it the connection ends with -105 (ENOBUFS). */
+#define NR_RECV_MAX (16 * 1024 * 1024)
 /* The most slots per ring: a table is the kernel's memory, sized up front. */
 #define NR_SLOTS_MAX 16384
 #define NR_EVENTS 256
@@ -317,7 +322,7 @@ struct nr_vent {
 struct nr_conn {
   struct nr_vent v;
   uint32_t gen;
-  uint8_t open, lingering, hup, wblocked;
+  uint8_t open, lingering, hup, wblocked, rheld;
   int32_t hup_res, werr;
   uint8_t *rbuf;
   uint32_t rlen, roff, rcap;
@@ -480,6 +485,12 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
     if (c->lingering || e->res <= 0) return;
     uint32_t n = (uint32_t)e->res;
     if (c->roff == c->rlen) c->roff = c->rlen = 0;
+    if ((uint64_t)(c->rlen - c->roff) + n > NR_RECV_MAX) {
+      c->hup = 1;
+      c->hup_res = -105;
+      nr_touch(&c->v);
+      return;
+    }
     if (c->rlen + n > c->rcap) {
       if (c->roff > 0) {
         memmove(c->rbuf, c->rbuf + c->roff, c->rlen - c->roff);
@@ -502,6 +513,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
     }
     memcpy(c->rbuf + c->rlen, e->data, n);
     c->rlen += n;
+    if (!c->rheld && c->rlen - c->roff >= NR_AREA && nish_uring_hold(S->u, e->ring, e->slot, 1) == 0) c->rheld = 1;
   } else if (e->kind == 3) {
     c->hup = 1;
     c->hup_res = e->res;
@@ -637,13 +649,16 @@ static int32_t nr_accept(struct nr_set *S, nish_array *peer) {
   return nish_uring_full(S->u) ? -23 : -11;
 }
 
-static int32_t nr_read(struct nr_set *S, struct nr_conn *c, nish_array *buf, int64_t off, int64_t len) {
+static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot, nish_array *buf, int64_t off,
+                       int64_t len) {
   if (c->rlen == c->roff && !c->hup) nr_pump(S);
   uint32_t have = c->rlen - c->roff;
   if (have > 0) {
     uint32_t n = len < (int64_t)have ? (uint32_t)len : have;
     memcpy(buf->data + off, c->rbuf + c->roff, n);
     c->roff += n;
+    /* A held receive goes again once the program has read half the queue. */
+    if (c->rheld && c->rlen - c->roff < NR_AREA / 2 && nish_uring_hold(S->u, ring, slot, 0) == 0) c->rheld = 0;
     return (int32_t)n;
   }
   if (c->hup) return c->hup_res < 0 ? c->hup_res : 0;
@@ -1089,7 +1104,7 @@ int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len) {
     struct nr_set *S;
     int32_t ring, slot;
     struct nr_conn *c = nr_decode(fd, &S, &ring, &slot);
-    return c ? nr_read(S, c, buf, off, len) : -9;
+    return c ? nr_read(S, c, ring, slot, buf, off, len) : -9;
   }
 #endif
   ssize_t n = recv(fd, buf->data + off, (size_t)len, 0);

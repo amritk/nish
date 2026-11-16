@@ -30428,13 +30428,18 @@ if (!only || "net_fd_limit".includes(only)) {
 }
 
 // WP63 S2: a `NET_LISTEN_RING` listener accepts into io_uring slots, not
-// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Three
+// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Five
 // programs in tests/link/net_ring_*, each judged by its own exit status:
 // `echo.ts` serves 3,000 connections under a descriptor limit of 1,024 with
 // fewer than 64 descriptors open; `full.ts`, under a limit of 32, takes
 // connections until tcpAccept answers -23 (NURING-6), then checks that the
-// handle it closed answers -9 and that the freed slot is taken again; and
-// `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
+// handle it closed answers -9 and that the freed slot is taken again;
+// `flood.ts` takes a connection that writes 64 MiB and does not read it until
+// the writer stalls, which a held receive makes it do within the kernel's
+// socket buffers (NURING-9), then reads all 64 MiB; `sink.ts` writes 64 MiB
+// to a connection that reads nothing for a second, and netWrite must answer
+// -11 once the kernel's buffers and the slot's 256 KiB send area are full
+// (NURING-2); and `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
 // io_uring_setup, and must serve descriptors with netRingState() at -1. The
 // clients run in node (`client.mjs`), outside the limit. A ring program that
 // exits 2 found rings refused here, and the deny wrapper exits 3 where the
@@ -30473,7 +30478,7 @@ if (!only || "net_ring".includes(only)) {
       }
       check(
         name,
-        r !== null && r.status === 0 && r.stdout.includes(want),
+        r !== null && r.status === 0 && (typeof want === "string" ? r.stdout.includes(want) : want(r.stdout)),
         r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
       )
     }
@@ -30494,6 +30499,30 @@ if (!only || "net_ring".includes(only)) {
       800,
       "hold",
       "answered -23, then reused the freed slot\n"
+    )
+    ring(
+      "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads",
+      "net_ring_flood",
+      "flood.ts",
+      64,
+      1,
+      "flood",
+      (out) => {
+        const m = /^flood: (\d+) bytes before the stall$/m.exec(out)
+        return m !== null && Number(m[1]) < 32 * 1024 * 1024 && out.includes("read all 67108864 bytes after the hold\n")
+      }
+    )
+    ring(
+      "net_ring: writes to a peer that does not read answer -11 within the kernel's buffers and the send area, and every byte arrives",
+      "net_ring_sink",
+      "sink.ts",
+      64,
+      1,
+      "sink",
+      (out) => {
+        const m = /^sink: the first -11 came after (\d+) bytes$/m.exec(out)
+        return m !== null && Number(m[1]) < 32 * 1024 * 1024 && out.includes("sink: received 67108864 bytes\n")
+      }
     )
     const deny = path.join(dir, "deny")
     const d = spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
