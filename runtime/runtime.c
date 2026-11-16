@@ -569,7 +569,66 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * the extra compare moved register allocation in the hot loops around them
  * (+0.2% to +2% instructions over bench/instructions.json's map rows). Out of
  * line, every one of those rows runs fewer instructions than it did before, and
- * the call costs nothing on a path that runs once per doubling. */
+ * the call costs nothing on a path that runs once per doubling.
+ *
+ * A normal build first tries to grow the block where it is
+ * (`nish_array_grow_here`), so that an array built by `push` costs its final
+ * size rather than the sum of every size it passed through. */
+#ifndef NISH_ASAN
+/* How many chunks `nish_array_grow_here` looks through for the one an array
+   fills: a program building a few large columns at once keeps each in a chunk
+   of its own near the head of the list, and a longer walk would cost more than
+   the copy it might save on a small array. */
+#define NISH_GROW_WALK 16
+
+/* Grow `a`'s block from `old` to `want` bytes (both 8-rounded) without moving
+ * its elements to a fresh block, or answer 0 to have the caller copy them. Two
+ * cases are cheap and safe:
+ *
+ *   - The block is the last one bumped from the current chunk, with room
+ *     behind it: bump `off` past the new bytes. Nothing lies after the block,
+ *     so nothing is overwritten.
+ *   - The block is the whole of a malloc'd chunk, as every block over 64 KB is
+ *     (`nish_arena_grow` gives it an exact chunk): `realloc` the chunk, which
+ *     for a large block remaps its pages rather than copying them and returns
+ *     the old block's memory, and relink it where it was in the list. The order
+ *     of the list is what `nish_arena_release` and runtime-cross.c's
+ *     `nish_since` read, and it is unchanged.
+ *
+ * Both are sound because no pointer into `data` is held across a push (the
+ * comment above), and because a scope that releases its arena never pushes on
+ * an array older than its mark (docs/LANGUAGE.md, "Memory model"), so the bytes
+ * a grow takes past the old block are never below a mark that is still to be
+ * released. A carved chunk (`NISH_CHUNK_CARVED`) lies inside an older one and
+ * is never reallocated; an array whose block is anywhere else -- a literal on
+ * the stack or in a constant, a shared-memory array, a block another thread's
+ * or region's arena handed out, one in the middle of a chunk -- simply takes
+ * the copy. */
+static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
+  char *data = a->data, *buf = nish_arena.buf;
+  uint64_t more = want - old;
+  if (buf && data >= buf && data + old == buf + nish_arena.off && more <= nish_arena.cap - nish_arena.off) {
+    nish_arena.off += more;
+    return 1;
+  }
+  nish_chunk **link = &nish_arena.chunks;
+  for (int i = 0; *link && i < NISH_GROW_WALK; i++, link = &(*link)->next) {
+    nish_chunk *c = *link;
+    if ((char *)(c + 1) != data) continue;
+    if ((c->cap & NISH_CHUNK_CARVED) || c->cap != old) return 0;
+    if (want > (uint64_t)(SIZE_MAX - sizeof(nish_chunk))) nish_oom();
+    nish_chunk *n = realloc(c, sizeof *n + (size_t)want);
+    if (!n) nish_oom();
+    n->cap = want;
+    *link = n;
+    if (buf == data) nish_arena = (struct nish_arena){ (char *)(n + 1), want, want, nish_arena.chunks };
+    a->data = (char *)(n + 1);
+    return 1;
+  }
+  return 0;
+}
+#endif
+
 __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size) {
 #ifdef NISH_ASAN
   /* One more slot, not double (see `nish_grown`): in place while a normal build
@@ -599,6 +658,10 @@ __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size
   char *data = nish_alloc_struct(room * elem_size);
   NISH_POISON(data + cap * elem_size, (room - cap) * elem_size);
 #else
+  if (a->cap && nish_array_grow_here(a, (a->cap * elem_size + 7) & ~(uint64_t)7, (cap * elem_size + 7) & ~(uint64_t)7)) {
+    a->cap = cap;
+    return;
+  }
   char *data = nish_alloc_struct(cap * elem_size);
 #endif
   if (a->len) memcpy(data, a->data, a->len * elem_size);
