@@ -1,4 +1,4 @@
-# WP64: The surface a lexer port asked for
+# WP65: The surface a lexer port asked for
 
 **Status: proposed, design only; nothing in `runtime/`, `src/` or `std/` is
 built.** [LANGUAGE.md](LANGUAGE.md) stays normative. The anchors are at

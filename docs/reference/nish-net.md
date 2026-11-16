@@ -6,6 +6,7 @@ Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain soc
 
 ```ts
 import {
+  NET_LISTEN_RING,
   NET_SO_KEEPALIVE,
   NET_SO_RCVBUF,
   NET_SO_SNDBUF,
@@ -20,6 +21,7 @@ import {
   netLocalPort,
   netMss,
   netRead,
+  netRingState,
   netSetOption,
   netShutdown,
   netWrite,
@@ -98,6 +100,12 @@ The maximum segment size a connected TCP socket sends, the payload bytes one seg
 <scalar-card title="net​Read" icon="phosphor/regular/function" href="#netread">
 
 Read at most `len` bytes into `buf[off, off + len)`.
+
+</scalar-card>
+
+<scalar-card title="net​Ring​State" icon="phosphor/regular/function" href="#netringstate">
+
+Whether `NET_LISTEN_RING` listeners accept into rings.
 
 </scalar-card>
 
@@ -493,6 +501,22 @@ The count, `0` at the end of the stream, `-11` when nothing is
 
 </scalar-field>
 
+### netRingState
+
+Whether `NET_LISTEN_RING` listeners accept into rings.
+
+```ts
+function netRingState(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+`1` when they do, `0` until a listener has found rings or a
+  refusal, or the negative errno rings were refused with, in which case
+  they serve descriptors.
+
+</scalar-field>
+
 ### netSetOption
 
 Set one socket option from a whitelist. There is no way to pass a raw
@@ -751,7 +775,9 @@ An `i32` of the program's choosing that comes back as it went
 <scalar-field name="returns" type="i32">
 
 `0`, `-17` for a descriptor the loop already watches (on Darwin
-  it is left under the new token), or `-22` for an event bit past `2`.
+  it is left under the new token) or for a slot handle another loop
+  watches (a slot is in one loop at a time), or `-22` for an event bit
+  past `2`.
 
 </scalar-field>
 
@@ -846,7 +872,9 @@ Wait until a watched descriptor is ready or the timeout passes, and write
 one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
 its events, `1` readable and `2` writable, with `4` added for a hang-up or
 an error. A signal that interrupts the wait answers `0`, as a timeout
-does. Not `willreturn`, because it can wait forever. Nothing allocates,
+does, until the process opens a `NET_LISTEN_RING` listener with rings:
+from then on, for the rest of its life, the wait goes on to its deadline, and `signalFd()` is how a loop sees a signal. Not
+`willreturn`, because it can wait forever. Nothing allocates,
 and `ready` is never written past its length.
 
 ```ts
@@ -1028,9 +1056,16 @@ The array the peer's address form is written into.
 
 <scalar-field name="returns" type="i32">
 
-The connection's descriptor, `-11` when none is waiting, `-22`
-  for a `peer` shorter than 18 bytes before anything is accepted (so no
-  connection is taken and lost), or `-95` for a datagram socket.
+The connection's descriptor (a slot handle from a
+  `NET_LISTEN_RING` listener, whose `peer` is written as zeros), `-11`
+  when none is waiting, `-23` when a ring listener's slots are all
+  taken, `-22` for a `peer` shorter than 18 bytes before anything is
+  accepted (so no connection is taken and lost), or `-95` for a
+  datagram socket. A ring listener whose accept found memory short
+  answers `-12` or `-105` once, pauses for a back-off (10 ms, doubling
+  to 640 ms while it recurs) and accepts again. Any other errno but
+  `-11`, `-4`, `-103` or `-71` stops it accepting and is answered from
+  then on; close it and listen again.
 
 </scalar-field>
 
@@ -1127,6 +1162,18 @@ Flag 4, with flag 1 and on Linux only, attaches a classic BPF program
 the index of the CPU that received it, in the order the group's listeners
 were bound; a CPU past the group's size falls back to the hash.
 
+Flag 8, `NET_LISTEN_RING`, accepts into io_uring slots on Linux: each
+connection is a slot handle at or above 2^20 rather than a descriptor, so
+a listener holds connections past `RLIMIT_NOFILE`. `netRead`, `netWrite`,
+`netWrite2`, `netClose`, `netLocalPort` and the poll loop take a slot
+handle; `netSetOption` answers `-95`, and calls that need a descriptor,
+`sendFd` among them, answer `-9`.
+The first listener that finds rings or a refusal decides for the process:
+where the kernel refuses rings it serves descriptors, and `netRingState`
+answers the errno. A listener whose rings fail for want of descriptors or
+memory serves descriptors itself, and a later listener asks again. Off
+Linux the flag is accepted and does nothing.
+
 ```ts
 function tcpListenFlags(
   host: string,
@@ -1156,8 +1203,8 @@ The length of the accept queue.
 
 <scalar-field name="flags" type="i32" required>
 
-The sum of the flags: `3` is both, `5` and `7` steer, and `0`
-  is `tcpListen` exactly.
+The sum of the flags: `3` is both, `5` and `7` steer, `8`
+  accepts into rings, and `0` is `tcpListen` exactly.
 
 </scalar-field>
 
@@ -1165,7 +1212,8 @@ The sum of the flags: `3` is both, `5` and `7` steer, and `0`
 
 The listener's descriptor or the failure: `-22` for any other
   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
-  `-95` for flag 4 off Linux.
+  `-95` for flag 4 off Linux; `-23` once the process has opened 31 ring
+  listeners, closed or not.
 
 </scalar-field>
 
@@ -1528,6 +1576,14 @@ The array the two descriptors are written into, as `fds[0]`
 ## Constants
 
 <scalar-grid cols="2">
+
+<scalar-card title="NET_​LISTEN_​RING" icon="phosphor/regular/hash">
+
+`NET_LISTEN_RING: i32`
+
+`tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors.
+
+</scalar-card>
 
 <scalar-card title="NET_​SO_​KEEPALIVE" icon="phosphor/regular/hash">
 

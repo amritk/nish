@@ -1,0 +1,185 @@
+{
+  "version": "0.41.0",
+  "date": "2026-11-16",
+  "tag": "v0.41.0",
+  "range": {
+    "from": "v0.40.1",
+    "to": "eac052ad"
+  },
+  "entries": [
+    {
+      "id": "re-measure-wp49-stage-6-s-gate-after",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "re-measure WP49 stage 6's gate after the resume build",
+      "body": "* docs(runtime): re-measure WP49 stage 6's gate after the resume build (skeleton)\n\n* docs(runtime): re-measure WP49 stage 6's gate after the resume build\n\nRe-runs bench/techempower/run.sh unchanged on main before (79b2ea4e) and\nafter (798636cb) #1621, plaintext, json and db, each test re-run once on\nboth sides because each had a bimodal judged cell. Four of the eleven\njudged cells are inside after (json 64 and 128, db 64 and 256), five are\noutside (plaintext 256/1024/4096, json 16 and 256) and two are not\njudgeable (json 32 and 512), so stage 6 stays measured, gate not met.\nThe async entry's peak RSS at plaintext 16,384 connections fell from\n32.4 to 26.9 MiB. WP49's status, section 6, section 10 and the roadmap\npoint at the new measurement and record the gap by cell and by frame.\n\nMeasured: plaintext async vs entry after -24.2% (band 5.0%), -28.7% (21.9%), -26.7% (0.2%) at 256/1024/4096; json -14.8% (13.3%) at 16, -0.6% (11.4%) at 64, -4.6% (9.8%) at 128, -28.0% (14.8%) at 256; db +9.6% (10.8%) at 64, -3.4% (7.0%) at 256; peak RSS at plaintext c=16384 32.4 -> 26.9 MiB (re-runs 32.5 -> 27.0)\nRefs: docs/BENCHMARKS.md#techempower-the-gate-after-the-resume-build-wp49-stage-6\n\n* docs(runtime): correct the before plaintext range in the WP49 regate section\n\nThe four before readings at plaintext 256 and 1,024 connections span 16% to 34%, not 20% to 34%: the 1,024 re-run read -16.0%.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "93522a6"
+      ],
+      "pr": 1636,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "install-sh-recognises-its-wrapper-by-its-first",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "install.sh recognises its wrapper by its first two lines, so an arm or Apple-silicon compiler that names the marker is not overwritten",
+      "body": "The install's wrapper step moved `bin/nish` to `libexec/nish` unless the\nfile contained \"Written by install.sh\" anywhere. The compiler names that\nmarker itself (`nish upgrade` looks for it in a wrapper), and 0.40.1's\naarch64 Linux and macOS builds carry the string literally, so the step took\nthe fresh compiler for its own wrapper, skipped the move and wrote the\nwrapper over it. Installing or upgrading to 0.40.1 on those machines failed\nwith \"the compiler ... did not run on this machine\", and so did every CI\njob that seeds from it there. A wrapper is now a `#!/bin/sh` script whose\nsecond line is the marker, and nothing else.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js seed-targets (\"a compiler whose text names the wrapper's marker still moves to libexec/\")"
+      ],
+      "commits": [
+        "7d1b69e"
+      ],
+      "pr": 1645,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "compatibility-mode-s-machinery-with-no-feature-the",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "compatibility mode's machinery with no feature — the allow-list, nish.compat and the dialect in the IR (WP28 C0)",
+      "body": "`--compat` and `--compat=<feature>,...` now parse against an empty feature\nregistry, so naming any feature exits 2. A package's `nish.compat` key lists\nthe features it may use: an unknown one is NL3056, and the root package's\nceiling is NL3057. Every module's IR carries a `!nish.compat` mark, and\n`--emit-checked` prints the dialect. `--compat` implies `--number-mode f64`,\nand an explicit `--number-mode i32` beside it draws the performance warning\nNL9020. `--help` groups its flags by axis. The erasure test holds the dialect\nto changing no lowering: a build without `--compat` writes the same IR as\nbefore.",
+      "metrics": [],
+      "refs": [
+        "docs/wp28-compatibility-mode.md#73-the-stages"
+      ],
+      "tests": [
+        "node tests/run.js compat; tests/cases/perf_compat_number_i32; tests/link/compat_*"
+      ],
+      "commits": [
+        "4071dda"
+      ],
+      "pr": 1497,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "wp28-s-spikes-and-c0-recorded-in-the",
+      "type": "docs",
+      "breaking": false,
+      "title": "WP28's spikes and C0 recorded in the note and the roadmap",
+      "body": "The compatibility-mode design note now records spikes S2 to S6, each with its figures, noise band and machine, and C0 as built. The WP28 roadmap page reads Done 5 of 13 with C1 next, and lists the questions the spikes measured but left open: whether C3 stays, which Promise.all C4 forks, how C5 lowers, and whether --compat keeps implying --number-mode f64. None of them blocks C1.\n\nPart of #1474",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "414b4fb"
+      ],
+      "pr": 1499,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "a-prefork-udp-group-on-port-0-never",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "a prefork UDP group on port 0 never joins another reuseport group's port",
+      "body": "On Linux a port-0 UDP bind with SO_REUSEPORT can be handed a port another same-user reuseport socket holds, so two prefork groups merged and received each other's datagrams; under CI's parallel network tests this hung link/net_quic_prefork. A UDP group asked for port 0 now takes its port from a plain UDP bind whose TCP side also listens plainly, then binds the group there.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_quic_prefork"
+      ],
+      "commits": [
+        "4e19a8b"
+      ],
+      "pr": 1646,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "wp63-s-note-io-uring-direct-descriptors-for",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP63's note — io_uring direct descriptors for nish:net, measured go",
+      "body": "A C prototype in bench/fd-limit/ shows one process holding 300,000\nestablished sockets under a hard RLIMIT_NOFILE of 20,000, every connection\na direct descriptor in one of 15 io_uring rings, with 35 entries in its own\ndescriptor table. At a fixed 30,000 requests a second it spent less CPU per\nrequest than the SO_REUSEPORT epoll processes at every connection count,\nso the go/no-go rule passes. The note proposes slot handles behind a\ntcpListenFlags bit, pollWait over rings and descriptors, the epoll\nfallback, and restricted rings under --sandbox, and records four kernel\nbehaviours the runtime must handle: the per-ring table cap, multishot\naccept dropping connections at a full table, exclusive accept wake-ups,\nand DEFER_TASKRUN's 20-item run.",
+      "metrics": [
+        "server µs/request, io_uring vs epoll, median of 5 interleaved rounds: 9.10 vs 12.37 at 18k (band 0.0%), 11.60 vs 14.50 at 96k with 5 epoll processes (band 1.4%), 15.10 vs 24.77 at 300k with 16 (band 2.8%); 4-vCPU Xeon @ 2.30 GHz KVM VM, Linux 6.18.44"
+      ],
+      "refs": [
+        "docs/wp63-iouring-net.md",
+        "bench/README.md#descriptor-limit",
+        "#1543",
+        "#1092"
+      ],
+      "tests": [],
+      "commits": [
+        "307dcca"
+      ],
+      "pr": 1647,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "wp63-s1-the-io-uring-ring-layer-with",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP63 S1 — the io_uring ring layer, with no surface",
+      "body": "runtime/runtime-uring.c is a new runtime unit that drives io_uring rings with direct descriptors through raw syscall(), with no liburing. Each ring is set up with SINGLE_ISSUER, DEFER_TASKRUN, TASKRUN_FLAG and SUBMIT_ALL, and has a sparse file table sized to RLIMIT_NOFILE, a provided-buffer ring and one eventfd. Accepts are single-shot into IORING_FILE_INDEX_ALLOC, never more in flight than a ring has free slots, on one accepting ring at a time. Recv is multishot and re-armed on -ENOBUFS. Send and close work on fixed files, and a short or failed send's remainder is re-queued. The layer enters the kernel again while IORING_SQ_TASKRUN is set, drains an overflowed CQ, and answers the probe's fallback (ENOSYS, EPERM, EINVAL or a missing feature) with what sends a caller to epoll. Nothing in nish:net calls it yet; S2 adds the slot handles.\n\nA wait submits every ring's queued work before it returns. Every sleep on a ring set is bounded at 10 ms, because on 6.18 and 7.0 a DEFER_TASKRUN ring's eventfd can stop signalling for good once a deferred signal leaves IO_EVENTFD_OP_SIGNAL_BIT set. Its security record is docs/security/net-uring.md (NURING-1 to NURING-8). It covers the kernel's io_uring CVEs since 5.10, checked against cvelistV5.",
+      "metrics": [
+        "an idle one-ring set wakes 98.6–98.8 times a second, 0.35–0.37% of one core (Linux 6.18.44); the unit is 6,299 bytes of .text at -Oz against a 6,400 budget"
+      ],
+      "refs": [
+        "docs/wp63-iouring-net.md#10-stages",
+        "docs/security/net-uring.md",
+        "#1648"
+      ],
+      "tests": [
+        "tests/runtime/uring-test.c (beyond",
+        "bound",
+        "move",
+        "nowake",
+        "taskrun",
+        "overflow",
+        "nobufs",
+        "short",
+        "reset",
+        "fallback)",
+        "node tests/run.js uring"
+      ],
+      "commits": [
+        "7c7d58f"
+      ],
+      "pr": 1649,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    },
+    {
+      "id": "nish-temporal-tc39-temporal-s-dates-times-instants",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/temporal, TC39 Temporal's dates, times, instants and durations (WP64 S1)",
+      "body": "nish/temporal gives Nish dates and times under JavaScript's Temporal names and rules, in the ISO 8601 calendar.\n\nPlainDate, PlainTime, PlainDateTime, Duration and Instant are immutable classes, and each field reads as Temporal's getter of the same name. Temporal's statics are free functions named after the class, because Nish has no static members: plainDateFrom is Temporal.PlainDate.from, and nowInstant is Temporal.Now.instant.\n\n- add, subtract, until, since, equals, toString and toJSON follow the specification's defaults.\n- Strings are read and written as RFC 9557.\n- A string Temporal refuses panics with \"RangeError:\", or answers null from the ...OrNull twin.\n\nEvery case in tests/link/std_temporal is also answered by Node's own Temporal, and three known engine differences are held to Node's answers. Formatting uses SIMD, and the canonical strings are read on a fast path that allocates no general reader.\n\nNot yet: time zones other than UTC, the global Temporal, option bags, bigint epochNanoseconds, and calendars other than iso8601. docs/wp64-temporal.md stages each one and records the research behind choosing Temporal.",
+      "metrics": [
+        "ns/op, median of 13 interleaved rounds on a 4-core 2.10 GHz Xeon, noise band ±4% (±11% parse-date, ±6% until-instant): against the first version, parse-date 151.3 -> 55.2 (2.74x), string-datetime 413.7 -> 30.9 (13.39x), string-instant 457.7 -> 54.6 (8.38x), add-datetime 711.2 -> 101.8 (6.99x); every workload in bench/README.md#temporal"
+      ],
+      "refs": [
+        "docs/wp64-temporal.md"
+      ],
+      "tests": [
+        "tests/link/std_temporal"
+      ],
+      "commits": [
+        "eac052a"
+      ],
+      "pr": 1650,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-15"
+    }
+  ]
+}

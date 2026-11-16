@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.40.1",
+  "version": "0.41.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -42,13 +42,16 @@
     "./*": "./std/*.ts"
   },
   "bin": {
-    "nish": "bin/nish"
+    "nish": "bin/nish",
+    "nish-skills": "bin/nish-skills.js"
   },
   "files": [
     "bin",
     "runtime",
     "scripts/build.sh",
+    "scripts/link-skills.mjs",
     "scripts/postinstall.mjs",
+    "skills",
     "std",
     "README.md",
     "LICENSE",

@@ -1230,6 +1230,19 @@ export class Http1Connection {
     )
   }
 
+  /**
+   * Whether the connection is between requests, so that a server draining
+   * gracefully may close it without cutting a request short: it speaks HTTP,
+   * not upgraded or closing, no request is open, no next head has begun to
+   * arrive (its `headTimeout` clock has not started), and every byte of the
+   * last response is sent.
+   *
+   * @returns true while closing the connection loses nothing its client sent or is owed
+   */
+  betweenRequests(): boolean {
+    return this.state === H1_S_HTTP && !this.requestOpen && !this.headTimed && !this.wantsWrite()
+  }
+
   /** The room at the end of the output, once what was sent is moved out of the way. */
   private room(): i32 {
     // Tested here, so that the usual case, an output already held, is no call.

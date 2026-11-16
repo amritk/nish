@@ -236,6 +236,29 @@ connection, which closes once its streams are done. A request already read is
 still handed over, so answer what `take` gives you until `connections()` is
 0.
 
+`HttpServer` decides this for its own connections. A program that carries
+its own HTTP/1.1 bytes drives an `Http1Connection` from
+`nish/net/http1-server` itself, and its own drain asks each connection
+before closing it:
+
+```ts
+conn.feed(buf, 0, n);
+conn.headArrived(monotonicNanos()); // after every feed, so a begun head counts
+// ... turn and flush the connection as usual ...
+if (draining && conn.betweenRequests()) {
+  close(fd); // nothing read is unanswered, nothing owed is unsent
+}
+```
+
+`betweenRequests()` is true while the connection speaks HTTP (not upgraded to
+a WebSocket, not closing), no request is open, no next head has begun to
+arrive, and every byte of the last response has been sent. A head has begun
+only once `headArrived` has seen its bytes, so a program that feeds the
+connection itself calls `headArrived` after each `feed`; skip it and
+`betweenRequests()` can answer true while a head waits unread. When it is
+false, keep turning the connection and ask again after the next flush; one
+that is closing is yours to close once `isDone()` says everything is sent.
+
 The library reference lists every declaration:
 [`nish/net/http-server`](../../reference/net/http-server.md). What the
 module was reviewed for is its

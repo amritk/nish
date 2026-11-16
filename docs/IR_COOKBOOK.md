@@ -33559,6 +33559,7 @@ declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocaptur
 declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #3
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare noundef i32 @nish_poll_create() #2
+declare noundef i32 @nish_net_ring_state() #2
 declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #2

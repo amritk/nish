@@ -537,6 +537,11 @@ const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
   )
+const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
+const betweenRequests = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: BETWEEN_REQUESTS, why }))
+  )
 const ASYNC_TRIM = "the async request path's instructions per request"
 const asyncTrim = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1287,6 +1292,28 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
+  // the 0.41.0 seed refuses the program that calls them.
+  {
+    program: "tests/cases/net_ring_calls.ts",
+    file: "exit",
+    changelog: "io_uring slot handles in nish:net",
+    why: "`NET_LISTEN_RING` is new to `nish:net` in this release, so the 0.41.0 seed has no such export and refuses the program (WP63 S2)",
+  },
+  // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
+  // library has none and refuses the program that tests it.
+  {
+    program: "tests/link/std_temporal/main.ts",
+    file: "exit",
+    changelog: "TC39 Temporal's dates, times, instants and durations",
+    why: "`nish/temporal` is new in this release, so the 0.40.1 seed's standard library has no such module (WP64 S1)",
+  },
+  {
+    program: "bench/temporal.ts",
+    file: "exit",
+    changelog: "TC39 Temporal's dates, times, instants and durations",
+    why: "the bench imports `nish/temporal`, which is new in this release, so the 0.40.1 seed refuses it (WP64 S1)",
+  },
   // WP28 C0: `nish.compat` and the `!nish.compat` metadata are new, so the
   // 0.39.0 seed refuses the key, reads no dependency's `nish` field, and
   // writes no dialect into the IR of a `--compat` build.
@@ -2632,6 +2659,144 @@ const DECLARED = [
         "postgres-carrier.ll",
       ],
       "tests/link/tfb_entry/main.ts": ["bench_techempower_server.ll", "http1-server.ll", "main.ll"],
+    }
+  ),
+  // `Http1Connection` gains `betweenRequests()`, so every module of a program
+  // that reaches std/net/http1-server.ts declares one more method and the
+  // declarations after it move down a line.
+  ...betweenRequests(
+    "Http1Connection gains betweenRequests(), so a graceful drain can ask whether closing a connection cuts a request short; every module declaring the class's methods moves",
+    {
+      "tests/link/net_http_server/main.ts": ["handler.ll", "http-server.ll", "main.ll", "server.ll"],
+      "tests/link/net_http_server_bad_limit/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_bad_param/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_bad_watch/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_caps/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_carriers/main.ts": [
+        "client.ll",
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "rig.ll",
+      ],
+      "tests/link/net_http_server_end_short/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_end_unstarted/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_foreign/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_fields/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_connect/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_h2_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_refused/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+      ],
+      "tests/link/net_http_server_h2_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_webtransport/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_lifecycle/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_matrix/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_start_fields/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_length/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_refused/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_status/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_twice/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_take_none/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_timeouts/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_unbegun/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_wait_tls/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_write_long/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_write_unstarted/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_write_window/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
     }
   ),
   {

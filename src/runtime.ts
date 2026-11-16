@@ -1082,6 +1082,10 @@ export class RuntimeTable {
     // negative one, so it is `nounwind` alone; it writes `ready`, which
     // therefore loses `readonly`.
     this.add(plain("nish_poll_create", "declare noundef i32 @nish_poll_create()", EFFECT_WRITE))
+    // `netRingState` reads what the first ring listen decided, which a later
+    // `tcpListenFlags` changes, so it is a write as `netLocalPort` is: never
+    // hoisted or merged across a listen.
+    this.add(plain("nish_net_ring_state", "declare noundef i32 @nish_net_ring_state()", EFFECT_WRITE))
     this.add(
       plain(
         "nish_poll_add",

@@ -1,0 +1,1902 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc8439-chacha20-poly1305",
+  "source": {
+    "rfc": 8439,
+    "title": "ChaCha20 and Poly1305 for IETF Protocols",
+    "sha256": "25bef70fbf7a07ff45c2fe4cb7c6ce954eac687413d8610603268b4e4415324c"
+  },
+  "sources": [
+    {
+      "id": "rfc8439",
+      "rfc": 8439,
+      "file": "rfcs/rfc8439.txt",
+      "sha256": "25bef70fbf7a07ff45c2fe4cb7c6ce954eac687413d8610603268b4e4415324c"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/chacha20poly1305"
+  },
+  "requirements": [
+    {
+      "id": "R-BLOCK",
+      "section": "2.3",
+      "level": "DEFINITION",
+      "quote": "The output is 64 random-looking bytes."
+    },
+    {
+      "id": "R-STREAM",
+      "section": "2.4",
+      "level": "DEFINITION",
+      "quote": "ChaCha20 successively calls the ChaCha20 block function, with the same key and nonce, and with successively increasing block counter parameters. ChaCha20 then serializes the resulting state by writing the numbers in little-endian order, creating a keystream block. Concatenating the keystream blocks from the successive blocks forms a keystream. The ChaCha20 function then performs an XOR of this keystream with the plaintext."
+    },
+    {
+      "id": "R-POLY",
+      "section": "2.5",
+      "level": "DEFINITION",
+      "quote": "Poly1305 takes a 32-byte one-time key and a message and produces a 16-byte tag."
+    },
+    {
+      "id": "R-KEYGEN",
+      "section": "2.6",
+      "level": "DEFINITION",
+      "quote": "We take the first 256 bits of the serialized state, and use those as the one- time Poly1305 key"
+    },
+    {
+      "id": "R-OTK",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "First, a Poly1305 one-time key is generated from the 256-bit key and nonce using the procedure described in Section 2.6."
+    },
+    {
+      "id": "R-CTR1",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "Next, the ChaCha20 encryption function is called to encrypt the plaintext, using the same key and nonce, and with the initial counter set to 1."
+    },
+    {
+      "id": "R-PAD",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "padding1 -- the padding is up to 15 zero bytes, and it brings the total length so far to an integral multiple of 16."
+    },
+    {
+      "id": "R-MAC-INPUT",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "The length of the additional data in octets (as a 64-bit little-endian integer). * The length of the ciphertext in octets (as a 64-bit little- endian integer)."
+    },
+    {
+      "id": "R-OUTPUT",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "A ciphertext of the same length as the plaintext. o A 128-bit tag, which is the output of the Poly1305 function."
+    },
+    {
+      "id": "R-DECRYPT",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "The roles of ciphertext and plaintext are reversed, so the ChaCha20 encryption function is applied to the ciphertext, producing the plaintext."
+    },
+    {
+      "id": "R-AUTH",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "The calculated tag is bitwise compared to the received tag. The message is authenticated if and only if the tags match."
+    },
+    {
+      "id": "R-K-LEN",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "K_LEN (key length) is 32 octets."
+    },
+    {
+      "id": "R-N-LEN",
+      "section": "2.8",
+      "level": "DEFINITION",
+      "quote": "N_MIN = N_MAX = 12 octets."
+    },
+    {
+      "id": "R-FULL-TAG",
+      "section": "4",
+      "level": "MUST",
+      "quote": "Additionally, any protocol using this algorithm MUST include the complete tag to minimize the opportunity for forgery."
+    },
+    {
+      "id": "R-NO-TRUNCATION",
+      "section": "4",
+      "level": "MUST NOT",
+      "quote": "Tag truncation MUST NOT be done."
+    }
+  ],
+  "exclusions": [
+    {
+      "section": "2.3",
+      "quote": "Words 13-15 are a nonce, which MUST not be repeated for the same key.",
+      "reason": "an obligation on the caller: a pure function cannot see its other invocations"
+    },
+    {
+      "section": "2.5",
+      "quote": "The pair (r,s) should be unique, and MUST be unpredictable for each invocation (that is why it was originally obtained by encrypting a nonce), while \"r\" MAY be constant, but needs to be modified as follows before being used: (\"r\" is treated as a 16-octet little-endian number):",
+      "reason": "the AEAD derives (r,s) per invocation from key and nonce (P-KEYGEN-IS-BLOCK0, P-TAG-IS-POLY1305); unpredictability is a property of the key, which no functional test observes"
+    },
+    {
+      "section": "2.6",
+      "quote": "Any document that specifies the use of Poly1305 as a MAC algorithm for some protocol MUST specify that 256 bits are allocated for the integrity key.",
+      "reason": "an obligation on protocol specifications, not on this module"
+    },
+    {
+      "section": "2.6",
+      "quote": "This MUST be unique per invocation with the same key, so it MUST NOT be randomly generated.",
+      "reason": "nonce management is the caller's"
+    },
+    {
+      "section": "4",
+      "quote": "The Poly1305 key MUST be unpredictable to an attacker.",
+      "reason": "key management is the caller's"
+    },
+    {
+      "section": "4",
+      "quote": "For this reason, with online protocols, implementation MUST use a constant-time comparison function rather than relying on optimized but insecure library functions such as the C language's memcmp().",
+      "reason": "timing is not observable by a functional test; nish checks it on the emitted machine code (tests/cases/ct_asm_chacha20poly1305.ts, docs/security/crypto-aead.md)"
+    }
+  ],
+  "functions": [
+    {
+      "name": "chacha20Block",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "counter",
+          "type": "u32"
+        },
+        {
+          "name": "nonce",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "chacha20",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "counter",
+          "type": "u32"
+        },
+        {
+          "name": "nonce",
+          "type": "bytes"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "poly1305",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "msg",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "poly1305KeyGen",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "nonce",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "chacha20Poly1305Seal",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "nonce",
+          "type": "bytes"
+        },
+        {
+          "name": "aad",
+          "type": "bytes"
+        },
+        {
+          "name": "plaintext",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "chacha20Poly1305Open",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "nonce",
+          "type": "bytes"
+        },
+        {
+          "name": "aad",
+          "type": "bytes"
+        },
+        {
+          "name": "sealed",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "2.3.2-BLOCK",
+      "title": "RFC 8439 2.3.2: the ChaCha20 block function's serialized block",
+      "covers": ["R-BLOCK"],
+      "source": {
+        "cite": {
+          "section": "2.3.2"
+        }
+      },
+      "call": "chacha20Block",
+      "args": [
+        {
+          "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+          "label": "Key"
+        },
+        {
+          "int": 1,
+          "label": "Block Count"
+        },
+        {
+          "hex": "000000090000004a00000000",
+          "label": "Nonce"
+        }
+      ],
+      "expect": {
+        "hex": "10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4ed2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e",
+        "label": "Serialized Block"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "2.4.2-ENCRYPT",
+      "title": "RFC 8439 2.4.2: ChaCha20 encrypts the sunscreen plaintext",
+      "covers": ["R-STREAM"],
+      "source": {
+        "cite": {
+          "section": "2.4.2"
+        }
+      },
+      "call": "chacha20",
+      "args": [
+        {
+          "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+          "label": "Key"
+        },
+        {
+          "int": 1,
+          "label": "Initial Counter"
+        },
+        {
+          "hex": "000000000000004a00000000",
+          "label": "Nonce"
+        },
+        {
+          "hex": "4c616469657320616e642047656e746c656d656e206f662074686520636c617373206f66202739393a204966204920636f756c64206f6666657220796f75206f6e6c79206f6e652074697020666f7220746865206675747572652c2073756e73637265656e20776f756c642062652069742e",
+          "label": "Plaintext Sunscreen"
+        }
+      ],
+      "expect": {
+        "hex": "6e2e359a2568f98041ba0728dd0d6981e97e7aec1d4360c20a27afccfd9fae0bf91b65c5524733ab8f593dabcd62b3571639d624e65152ab8f530c359f0861d807ca0dbf500d6a6156a38e088a22b65e52bc514d16ccf806818ce91ab77937365af90bbf74a35be6b40b8eedf2785e42874d",
+        "label": "Ciphertext Sunscreen"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "2.5.2-POLY1305",
+      "title": "RFC 8439 2.5.2: Poly1305 tags the message",
+      "covers": ["R-POLY"],
+      "source": {
+        "cite": {
+          "section": "2.5.2"
+        }
+      },
+      "call": "poly1305",
+      "args": [
+        {
+          "hex": "85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b",
+          "label": "Key Material"
+        },
+        {
+          "hex": "43727970746f6772617068696320466f72756d2052657365617263682047726f7570",
+          "label": "Message to be Authenticated"
+        }
+      ],
+      "expect": {
+        "hex": "a8061dc1305136c6c22b8baf0c0127a9",
+        "label": "Tag"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "2.6.2-KEYGEN",
+      "title": "RFC 8439 2.6.2: the Poly1305 one-time key",
+      "covers": ["R-KEYGEN"],
+      "source": {
+        "cite": {
+          "section": "2.6.2"
+        }
+      },
+      "call": "poly1305KeyGen",
+      "args": [
+        {
+          "hex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+          "label": "Key"
+        },
+        {
+          "hex": "000000000001020304050607",
+          "label": "Nonce"
+        }
+      ],
+      "expect": {
+        "hex": "8ad5a08b905f81cc815040274ab29471a833b637e3fd0da508dbb8e2fdd1a646",
+        "label": "Output bytes"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "2.8.2-SEAL",
+      "title": "RFC 8439 2.8.2: AEAD_CHACHA20_POLY1305 seals to the printed ciphertext and tag",
+      "covers": ["R-OTK", "R-CTR1", "R-MAC-INPUT", "R-OUTPUT", "R-FULL-TAG"],
+      "source": {
+        "cite": {
+          "section": "2.8.2"
+        }
+      },
+      "call": "chacha20Poly1305Seal",
+      "args": [
+        {
+          "hex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+          "label": "Key"
+        },
+        {
+          "concat": [
+            {
+              "hex": "07000000",
+              "label": "32-bit fixed-common part"
+            },
+            {
+              "hex": "4041424344454647",
+              "label": "IV"
+            }
+          ]
+        },
+        {
+          "hex": "50515253c0c1c2c3c4c5c6c7",
+          "label": "AAD"
+        },
+        {
+          "hex": "4c616469657320616e642047656e746c656d656e206f662074686520636c617373206f66202739393a204966204920636f756c64206f6666657220796f75206f6e6c79206f6e652074697020666f7220746865206675747572652c2073756e73637265656e20776f756c642062652069742e",
+          "label": "Plaintext"
+        }
+      ],
+      "expect": {
+        "concat": [
+          {
+            "hex": "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b6116",
+            "label": "Ciphertext"
+          },
+          {
+            "hex": "1ae10b594f09e26a7e902ecbd0600691",
+            "label": "Tag"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.5-OPEN",
+      "title": "RFC 8439 A.5: AEAD decryption of the Internet-Drafts message",
+      "covers": ["R-DECRYPT", "R-AUTH"],
+      "source": {
+        "cite": {
+          "section": "A.5"
+        }
+      },
+      "call": "chacha20Poly1305Open",
+      "args": [
+        {
+          "hex": "1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0",
+          "label": "The ChaCha20 Key"
+        },
+        {
+          "hex": "000000000102030405060708",
+          "label": "The nonce"
+        },
+        {
+          "hex": "f33388860000000000004e91",
+          "label": "The AAD"
+        },
+        {
+          "concat": [
+            {
+              "hex": "64a0861575861af460f062c79be643bd5e805cfd345cf389f108670ac76c8cb24c6cfc18755d43eea09ee94e382d26b0bdb7b73c321b0100d4f03b7f355894cf332f830e710b97ce98c8a84abd0b948114ad176e008d33bd60f982b1ff37c8559797a06ef4f0ef61c186324e2b3506383606907b6a7c02b0f9f6157b53c867e4b9166c767b804d46a59b5216cde7a4e99040c5a40433225ee282a1b0a06c523eaf4534d7f83fa1155b0047718cbc546a0d072b04b3564eea1b422273f548271a0bb2316053fa76991955ebd63159434ecebb4e466dae5a1073a6727627097a1049e617d91d361094fa68f0ff77987130305beaba2eda04df997b714d6c6f2c29a6ad5cb4022b02709b",
+              "label": "Ciphertext"
+            },
+            {
+              "hex": "eead9d67890cbb22392336fea1851f38",
+              "label": "Received Tag"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "hex": "496e7465726e65742d4472616674732061726520647261667420646f63756d656e74732076616c696420666f722061206d6178696d756d206f6620736978206d6f6e74687320616e64206d617920626520757064617465642c207265706c616365642c206f72206f62736f6c65746564206279206f7468657220646f63756d656e747320617420616e792074696d652e20497420697320696e617070726f70726961746520746f2075736520496e7465726e65742d447261667473206173207265666572656e6365206d6174657269616c206f7220746f2063697465207468656d206f74686572207468616e206173202fe2809c776f726b20696e2070726f67726573732e2fe2809d",
+        "label": "Plaintext"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.5-KEYGEN",
+      "title": "RFC 8439 A.5: the one-time key for the decryption example",
+      "covers": ["R-KEYGEN"],
+      "source": {
+        "cite": {
+          "section": "A.5"
+        }
+      },
+      "call": "poly1305KeyGen",
+      "args": [
+        {
+          "hex": "1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0",
+          "label": "The ChaCha20 Key"
+        },
+        {
+          "hex": "000000000102030405060708",
+          "label": "The nonce"
+        }
+      ],
+      "expect": {
+        "hex": "bdf04aa95ce4de8995b14bb6a18fecaf26478f50c054f563dbc0a21e261572aa",
+        "label": "Poly1305 one-time key"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.5-POLY1305",
+      "title": "RFC 8439 A.5: Poly1305 over the printed AEAD buffer gives the received tag",
+      "covers": ["R-POLY", "R-MAC-INPUT"],
+      "source": {
+        "cite": {
+          "section": "A.5"
+        }
+      },
+      "call": "poly1305",
+      "args": [
+        {
+          "hex": "bdf04aa95ce4de8995b14bb6a18fecaf26478f50c054f563dbc0a21e261572aa",
+          "label": "Poly1305 one-time key"
+        },
+        {
+          "hex": "f33388860000000000004e910000000064a0861575861af460f062c79be643bd5e805cfd345cf389f108670ac76c8cb24c6cfc18755d43eea09ee94e382d26b0bdb7b73c321b0100d4f03b7f355894cf332f830e710b97ce98c8a84abd0b948114ad176e008d33bd60f982b1ff37c8559797a06ef4f0ef61c186324e2b3506383606907b6a7c02b0f9f6157b53c867e4b9166c767b804d46a59b5216cde7a4e99040c5a40433225ee282a1b0a06c523eaf4534d7f83fa1155b0047718cbc546a0d072b04b3564eea1b422273f548271a0bb2316053fa76991955ebd63159434ecebb4e466dae5a1073a6727627097a1049e617d91d361094fa68f0ff77987130305beaba2eda04df997b714d6c6f2c29a6ad5cb4022b02709b000000000000000c000000000000000901000000000000",
+          "label": "Poly1305 Input"
+        }
+      ],
+      "expect": {
+        "hex": "eead9d67890cbb22392336fea1851f38",
+        "label": "Calculated Tag"
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-BLOCK-64",
+      "title": "the block function outputs 64 bytes for any counter",
+      "covers": ["R-BLOCK"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "counter",
+          "type": "i32",
+          "min": 0,
+          "max": 2147483647
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20Block",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "var": "counter"
+                      },
+                      {
+                        "var": "nonce"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 64
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-KEYSTREAM",
+      "title": "ChaCha20 of zeros is the blocks for counter, counter+1 serialized end to end, cut to length",
+      "covers": ["R-STREAM"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "counter",
+          "type": "i32",
+          "min": 0,
+          "max": 100000
+        },
+        {
+          "name": "n",
+          "type": "i32",
+          "min": 0,
+          "max": 128
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "chacha20",
+                "args": [
+                  {
+                    "var": "key"
+                  },
+                  {
+                    "var": "counter"
+                  },
+                  {
+                    "var": "nonce"
+                  },
+                  {
+                    "op": "zeros",
+                    "args": [
+                      {
+                        "var": "n"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "slice",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "chacha20Block",
+                        "args": [
+                          {
+                            "var": "key"
+                          },
+                          {
+                            "var": "counter"
+                          },
+                          {
+                            "var": "nonce"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "chacha20Block",
+                        "args": [
+                          {
+                            "var": "key"
+                          },
+                          {
+                            "op": "+",
+                            "args": [
+                              {
+                                "var": "counter"
+                              },
+                              {
+                                "int": 1
+                              }
+                            ]
+                          },
+                          {
+                            "var": "nonce"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 0
+              },
+              {
+                "var": "n"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-XOR-INVOLUTION",
+      "title": "ChaCha20 is an XOR stream: applying it twice gives the plaintext back, length kept",
+      "covers": ["R-STREAM"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "counter",
+          "type": "i32",
+          "min": 0,
+          "max": 100000
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "chacha20",
+                        "args": [
+                          {
+                            "var": "key"
+                          },
+                          {
+                            "var": "counter"
+                          },
+                          {
+                            "var": "nonce"
+                          },
+                          {
+                            "var": "pt"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "pt"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "var": "counter"
+                      },
+                      {
+                        "var": "nonce"
+                      },
+                      {
+                        "op": "unwrap",
+                        "args": [
+                          {
+                            "call": "chacha20",
+                            "args": [
+                              {
+                                "var": "key"
+                              },
+                              {
+                                "var": "counter"
+                              },
+                              {
+                                "var": "nonce"
+                              },
+                              {
+                                "var": "pt"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "var": "pt"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-POLY-16",
+      "title": "Poly1305 takes a 32-byte key and any message and gives a 16-byte tag",
+      "covers": ["R-POLY"],
+      "forall": [
+        {
+          "name": "otk",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "poly1305",
+                    "args": [
+                      {
+                        "var": "otk"
+                      },
+                      {
+                        "var": "msg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 16
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-KEYGEN-IS-BLOCK0",
+      "title": "the one-time key is the first 32 bytes of block 0",
+      "covers": ["R-KEYGEN"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "poly1305KeyGen",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "nonce"
+              }
+            ]
+          },
+          {
+            "op": "slice",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20Block",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "int": 0
+                      },
+                      {
+                        "var": "nonce"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 0
+              },
+              {
+                "int": 32
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-SEAL-SHAPE",
+      "title": "the sealed output is a ciphertext as long as the plaintext plus a 16-byte tag",
+      "covers": ["R-OUTPUT", "R-FULL-TAG"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 80
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20Poly1305Seal",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "var": "nonce"
+                      },
+                      {
+                        "var": "aad"
+                      },
+                      {
+                        "var": "pt"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "+",
+            "args": [
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "pt"
+                  }
+                ]
+              },
+              {
+                "int": 16
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-CT-IS-CHACHA20",
+      "title": "the ciphertext is ChaCha20 under the same key and nonce from counter 1",
+      "covers": ["R-CTR1"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "slice",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20Poly1305Seal",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "var": "nonce"
+                      },
+                      {
+                        "var": "aad"
+                      },
+                      {
+                        "var": "pt"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 0
+              },
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "pt"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "chacha20",
+                "args": [
+                  {
+                    "var": "key"
+                  },
+                  {
+                    "int": 1
+                  },
+                  {
+                    "var": "nonce"
+                  },
+                  {
+                    "var": "pt"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAG-IS-POLY1305",
+      "title": "the tag is Poly1305 under the one-time key over AAD, pad, ciphertext, pad and both lengths",
+      "covers": ["R-OTK", "R-MAC-INPUT", "R-PAD"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 80
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "sealed",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "chacha20Poly1305Seal",
+                  "args": [
+                    {
+                      "var": "key"
+                    },
+                    {
+                      "var": "nonce"
+                    },
+                    {
+                      "var": "aad"
+                    },
+                    {
+                      "var": "pt"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "ct",
+            "value": {
+              "op": "slice",
+              "args": [
+                {
+                  "var": "sealed"
+                },
+                {
+                  "int": 0
+                },
+                {
+                  "op": "len",
+                  "args": [
+                    {
+                      "var": "pt"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "==",
+          "args": [
+            {
+              "op": "slice",
+              "args": [
+                {
+                  "var": "sealed"
+                },
+                {
+                  "op": "len",
+                  "args": [
+                    {
+                      "var": "pt"
+                    }
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "len",
+                      "args": [
+                        {
+                          "var": "pt"
+                        }
+                      ]
+                    },
+                    {
+                      "int": 16
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "poly1305",
+                  "args": [
+                    {
+                      "op": "unwrap",
+                      "args": [
+                        {
+                          "call": "poly1305KeyGen",
+                          "args": [
+                            {
+                              "var": "key"
+                            },
+                            {
+                              "var": "nonce"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "op": "concat",
+                              "args": [
+                                {
+                                  "op": "concat",
+                                  "args": [
+                                    {
+                                      "op": "concat",
+                                      "args": [
+                                        {
+                                          "var": "aad"
+                                        },
+                                        {
+                                          "op": "zeros",
+                                          "args": [
+                                            {
+                                              "op": "%",
+                                              "args": [
+                                                {
+                                                  "op": "-",
+                                                  "args": [
+                                                    {
+                                                      "int": 16
+                                                    },
+                                                    {
+                                                      "op": "%",
+                                                      "args": [
+                                                        {
+                                                          "op": "len",
+                                                          "args": [
+                                                            {
+                                                              "var": "aad"
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "int": 16
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "int": 16
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "var": "ct"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "zeros",
+                                  "args": [
+                                    {
+                                      "op": "%",
+                                      "args": [
+                                        {
+                                          "op": "-",
+                                          "args": [
+                                            {
+                                              "int": 16
+                                            },
+                                            {
+                                              "op": "%",
+                                              "args": [
+                                                {
+                                                  "op": "len",
+                                                  "args": [
+                                                    {
+                                                      "var": "ct"
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "int": 16
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "int": 16
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "le64",
+                              "args": [
+                                {
+                                  "op": "len",
+                                  "args": [
+                                    {
+                                      "var": "aad"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "le64",
+                          "args": [
+                            {
+                              "op": "len",
+                              "args": [
+                                {
+                                  "var": "pt"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-ROUNDTRIP",
+      "title": "opening what was sealed gives the plaintext back",
+      "covers": ["R-DECRYPT"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 80
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "chacha20Poly1305Open",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "nonce"
+              },
+              {
+                "var": "aad"
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20Poly1305Seal",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "var": "nonce"
+                      },
+                      {
+                        "var": "aad"
+                      },
+                      {
+                        "var": "pt"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "var": "pt"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAMPER-SEALED",
+      "title": "flipping any one bit of the ciphertext or tag is refused",
+      "covers": ["R-AUTH"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        },
+        {
+          "name": "bit",
+          "type": "i32",
+          "min": 0,
+          "max": 927
+        }
+      ],
+      "where": {
+        "op": "<",
+        "args": [
+          {
+            "var": "bit"
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "int": 8
+              },
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "pt"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 16
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "assert": {
+        "op": "isNull",
+        "args": [
+          {
+            "call": "chacha20Poly1305Open",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "nonce"
+              },
+              {
+                "var": "aad"
+              },
+              {
+                "op": "flipBit",
+                "args": [
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "chacha20Poly1305Seal",
+                        "args": [
+                          {
+                            "var": "key"
+                          },
+                          {
+                            "var": "nonce"
+                          },
+                          {
+                            "var": "aad"
+                          },
+                          {
+                            "var": "pt"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "var": "bit"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAMPER-AAD",
+      "title": "flipping any one bit of the AAD is refused",
+      "covers": ["R-AUTH"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 40
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        },
+        {
+          "name": "bit",
+          "type": "i32",
+          "min": 0,
+          "max": 319
+        }
+      ],
+      "where": {
+        "op": "<",
+        "args": [
+          {
+            "var": "bit"
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "int": 8
+              },
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "aad"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "assert": {
+        "op": "isNull",
+        "args": [
+          {
+            "call": "chacha20Poly1305Open",
+            "args": [
+              {
+                "var": "key"
+              },
+              {
+                "var": "nonce"
+              },
+              {
+                "op": "flipBit",
+                "args": [
+                  {
+                    "var": "aad"
+                  },
+                  {
+                    "var": "bit"
+                  }
+                ]
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "chacha20Poly1305Seal",
+                    "args": [
+                      {
+                        "var": "key"
+                      },
+                      {
+                        "var": "nonce"
+                      },
+                      {
+                        "var": "aad"
+                      },
+                      {
+                        "var": "pt"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-NO-TRUNCATION",
+      "title": "a sealed message missing any part of its tag is refused",
+      "covers": ["R-NO-TRUNCATION", "R-FULL-TAG"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 12,
+          "maxLen": 12
+        },
+        {
+          "name": "aad",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "pt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        },
+        {
+          "name": "cut",
+          "type": "i32",
+          "min": 1,
+          "max": 16
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "sealed",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "chacha20Poly1305Seal",
+                  "args": [
+                    {
+                      "var": "key"
+                    },
+                    {
+                      "var": "nonce"
+                    },
+                    {
+                      "var": "aad"
+                    },
+                    {
+                      "var": "pt"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "isNull",
+          "args": [
+            {
+              "call": "chacha20Poly1305Open",
+              "args": [
+                {
+                  "var": "key"
+                },
+                {
+                  "var": "nonce"
+                },
+                {
+                  "var": "aad"
+                },
+                {
+                  "op": "slice",
+                  "args": [
+                    {
+                      "var": "sealed"
+                    },
+                    {
+                      "int": 0
+                    },
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "len",
+                          "args": [
+                            {
+                              "var": "sealed"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "cut"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-SIZES",
+      "title": "a key other than 32 octets or a nonce other than 12 is refused",
+      "covers": ["R-K-LEN", "R-N-LEN"],
+      "forall": [
+        {
+          "name": "key",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "nonce",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 16
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "key"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 32
+                  }
+                ]
+              },
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "nonce"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 12
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "notNull",
+            "args": [
+              {
+                "call": "chacha20Poly1305Seal",
+                "args": [
+                  {
+                    "var": "key"
+                  },
+                  {
+                    "var": "nonce"
+                  },
+                  {
+                    "hex": ""
+                  },
+                  {
+                    "hex": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

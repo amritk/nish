@@ -153,6 +153,11 @@
                 "title": "The CLI",
                 "filepath": "docs/guide/using-nish/cli.md"
               },
+              "/agent-skills": {
+                "type": "page",
+                "title": "Agent skills",
+                "filepath": "docs/guide/using-nish/agent-skills.md"
+              },
               "/compat": {
                 "type": "page",
                 "title": "The compatibility dialect",
@@ -267,6 +272,11 @@
                 "type": "page",
                 "title": "PostgreSQL",
                 "filepath": "docs/guide/using-nish/postgres.md"
+              },
+              "/dates-and-times": {
+                "type": "page",
+                "title": "Dates and times",
+                "filepath": "docs/guide/using-nish/dates-and-times.md"
               },
               "/compression": {
                 "type": "page",
@@ -428,6 +438,11 @@
                         "filepath": "docs/reference/random.md"
                       },
                       "/sort": { "type": "page", "title": "sort", "filepath": "docs/reference/sort.md" },
+                      "/temporal": {
+                        "type": "page",
+                        "title": "temporal",
+                        "filepath": "docs/reference/temporal.md"
+                      },
                       "/testing": {
                         "type": "page",
                         "title": "testing",
@@ -1382,7 +1397,8 @@
                   "/wp61-json-typed-checks": { "type": "page", "title": "WP61: Typed JSON, constraints and coercion in one pass", "filepath": "docs/roadmap/wp61-json-typed-checks.md" },
                   "/wp62-json-schema-classes": { "type": "page", "title": "WP62: Nish classes from a JSON Schema", "filepath": "docs/roadmap/wp62-json-schema-classes.md" },
                   "/wp63-iouring-net": { "type": "page", "title": "WP63: io_uring direct descriptors for nish:net", "filepath": "docs/roadmap/wp63-iouring-net.md" },
-                  "/wp64-lexer-surface": { "type": "page", "title": "WP64: The surface a lexer port asked for", "filepath": "docs/roadmap/wp64-lexer-surface.md" }
+                  "/wp64-temporal": { "type": "page", "title": "WP64: Temporal — dates, times and time zones", "filepath": "docs/roadmap/wp64-temporal.md" },
+                  "/wp65-lexer-surface": { "type": "page", "title": "WP65: The surface a lexer port asked for", "filepath": "docs/roadmap/wp65-lexer-surface.md" }
                 }
               },
               "/done/..": {
@@ -1444,7 +1460,7 @@
   "assetsDir": "docs/site",
   "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
-    "isPrivate": true,
+    "isPrivate": false,
     "agent": { "enabled": false },
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
@@ -1462,6 +1478,7 @@
         { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" },
         { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
-    }
+    },
+    "customDomain": "nishlang.com"
   }
 }

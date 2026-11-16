@@ -1,6 +1,6 @@
-# WP64: The surface a lexer port asked for
+# WP65: The surface a lexer port asked for
 
-**State:** Proposed · **Done:** 1 of 5 · **Design note:** [`docs/wp64-lexer-surface.md`](https://github.com/amritk/nish/blob/main/docs/wp64-lexer-surface.md)
+**State:** Proposed · **Done:** 1 of 5 · **Design note:** [`docs/wp65-lexer-surface.md`](https://github.com/amritk/nish/blob/main/docs/wp65-lexer-surface.md)
 
 ## Stages
 
@@ -12,11 +12,11 @@
 
 ## Next
 
-S1: [§2](https://github.com/amritk/nish/blob/main/docs/wp64-lexer-surface.md#2-byte-search-on-u8-s1). S1, S2 and S3 do not depend on one another and can land in any order.
+S1: [§2](https://github.com/amritk/nish/blob/main/docs/wp65-lexer-surface.md#2-byte-search-on-u8-s1). S1, S2 and S3 do not depend on one another and can land in any order.
 
 ## Open questions
 
-Whether to build `n.toString()` (and `String(n)`), which LANGUAGE.md refuses on purpose today, or keep the rule and make the refusal name the template literal (D1). [§5](https://github.com/amritk/nish/blob/main/docs/wp64-lexer-surface.md#5-tostring-on-a-number-s4-open-question).
+Whether to build `n.toString()` (and `String(n)`), which LANGUAGE.md refuses on purpose today, or keep the rule and make the refusal name the template literal (D1). [§5](https://github.com/amritk/nish/blob/main/docs/wp65-lexer-surface.md#5-tostring-on-a-number-s4-open-question).
 
 ## Not planned
 

@@ -11,7 +11,7 @@
 // A leading dot (`.github`, `.gitignore`) and a leading `@` (an npm scope) are
 // dropped before the check.
 //
-// Three kinds of name are exempt, because the spelling carries meaning:
+// Five kinds of name are exempt, because the spelling carries meaning:
 //   - An ALL-CAPS file is a document convention every reader knows to look for:
 //     `README.md`, `LICENSE`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`,
 //     `docs/LANGUAGE.md`.
@@ -23,6 +23,9 @@
 //   - The per-module checked goldens under `tests/self/goldens/checked/`, whose
 //     paths mirror the corpus module each one dumps
 //     (`tests/cases/add_plain.ts.txt`), fixture names and all.
+//   - The kramdown-rfc reference cache under `.refcache/`, whose file names
+//     (`reference.RFC.4648.xml`) are the names kramdown-rfc looks them up by
+//     when `scripts/build-spec.sh` builds a spec offline.
 //   - A directory whose name a tool looks for, in TOOL_DIRECTORIES: package
 //     resolution reads `node_modules`, so the cookbook's package example has
 //     to live under one, and GitHub reads issue forms only from
@@ -41,6 +44,7 @@ const FIXTURE_ROOTS = [
   "tests/link/",
   "tests/differential/corpus/",
   "tests/self/goldens/checked/",
+  ".refcache/",
 ]
 
 const TOOL_DIRECTORIES = ["node_modules", "ISSUE_TEMPLATE"]

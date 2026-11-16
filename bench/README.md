@@ -626,6 +626,83 @@ to 7% on the Xeon and about 1% on the ARM runner. The reading is in
 | gzip-compress-1m | 58,558,905 | 59,432,084 | 59,025,291 | 35,006,497 | 35,008,259 | 35,259,514 |
 | gzip-decompress-1m | 4,541,521 | 4,866,916 | 5,066,379 | 2,314,526 | 2,313,356 | 2,574,127 |
 
+## Temporal
+
+`temporal.ts` times `nish/temporal` (WP64) on what a program repeats: reading
+each type from a string, writing it back, building a `PlainDate`, adding to a
+date and a date-time, and the differences `until` answers. Each workload is in
+ns/op, over 1,024 distinct inputs made before the clock starts, and every
+answer is folded into a printed checksum. `temporal.mjs` builds it with one
+`nish` per column. Each compiler reads `std/` from beside its own binary, so to
+compare two versions of the module, put a copy of `build/nish` in each tree's
+`build/` and name both. Two columns naming the same compiler give the noise
+band:
+
+```bash
+npm run build
+git worktree add /tmp/base <base> && mkdir -p /tmp/base/build && cp build/nish /tmp/base/build/
+node bench/temporal.mjs --check --column base=/tmp/base/build/nish --column head=build/nish
+node bench/temporal.mjs --runs 11 --column base=/tmp/base/build/nish --column head=build/nish
+```
+
+Three versions of the module side by side, the median (min–max) ns/op of 13
+interleaved rounds on a 4-core x86-64 Xeon at 2.10 GHz:
+
+- **v1** is the first version.
+- **pass 1** writes each string from one byte buffer, builds a date without
+  recomputing its epoch day and leap year, and does its time arithmetic on
+  integers rather than on allocated spans.
+- **now** adds three things:
+  - SIMD formatting. A date or a date-time's two-digit groups are lanes of one
+    `u16x8`, split into tens and ones by a multiply and a shift, interleaved
+    by one shuffle, and written with one or two vector stores.
+  - Fast paths that read the form `toString` writes (`YYYY-MM-DD`,
+    `THH:MM:SS.f`, `Z` or `±HH:MM`) without the general reader.
+  - Fields ordered widest first, as the compiler's NL9010 asks, which makes a
+    `PlainDate` 72 bytes and a `PlainDateTime` 104.
+
+An A-against-A run puts the noise band at ±4%: ±11% on parse-date, which runs
+first and takes the program's warm-up, and ±6% on until-instant.
+
+| Workload | v1 | pass 1 | now | now against v1 |
+| --- | --- | --- | --- | --- |
+| parse-date | 151.3 (138.5–244.4) | 103.7 (90.9–143.3) | 55.2 (52.3–85.9) | 2.74x |
+| parse-datetime | 186.5 (180.7–311.6) | 154.8 (135.1–167.9) | 94.6 (91.7–153.4) | 1.97x |
+| parse-instant | 52.4 (48.6–89.9) | 40.4 (39.7–43.4) | 32.4 (31.2–56.9) | 1.62x |
+| parse-duration | 108.0 (104.8–198.7) | 69.2 (67.4–78.9) | 71.0 (66.0–119.1) | 1.52x |
+| string-date | 77.2 (75.6–80.6) | 28.5 (27.8–31.4) | 19.2 (18.5–26.3) | 4.02x |
+| string-datetime | 413.7 (387.9–513.9) | 66.2 (64.8–77.6) | 30.9 (29.6–48.1) | 13.39x |
+| string-instant | 457.7 (424.9–574.5) | 78.0 (75.7–117.5) | 54.6 (53.4–77.1) | 8.38x |
+| string-duration | 197.5 (193.4–264.8) | 55.8 (54.4–64.0) | 56.2 (54.7–59.7) | 3.51x |
+| new-date | 63.3 (61.0–84.2) | 17.6 (16.9–19.2) | 17.5 (16.7–27.7) | 3.62x |
+| add-date | 256.2 (234.9–354.7) | 91.0 (87.5–93.8) | 88.1 (85.3–104.9) | 2.91x |
+| add-datetime | 711.2 (645.7–815.3) | 107.8 (101.2–113.6) | 101.8 (99.2–128.3) | 6.99x |
+| until-date | 51.5 (49.8–58.4) | 14.3 (14.0–15.1) | 14.5 (13.9–27.1) | 3.55x |
+| until-datetime | 133.6 (126.5–156.5) | 80.9 (77.7–86.0) | 80.7 (77.4–117.8) | 1.66x |
+| until-instant | 123.8 (116.0–157.8) | 71.9 (69.1–77.8) | 71.6 (69.3–99.9) | 1.73x |
+
+Peak RSS for the whole run went from 296 MB at pass 1 to 227 MB now, from the
+smaller values and the reader the fast paths no longer allocate. Under
+callgrind at `scale` 20, v1 executed 446 million instructions and pass 1 197
+million.
+
+What was tried and what it showed:
+
+- **Code placement.** Once, at pass 1, parse-instant executed the same
+  instructions, with fewer data references and fewer simulated branch
+  mispredictions, yet ran 10% slower by the clock. Restoring the code that had
+  changed did not bring the time back, so the slowdown came from where the
+  larger module's code landed, not from the work. Removing the instant parse's
+  four `TemporalSpan` allocations is what made it faster.
+- **The field order** alone moved no workload outside the noise band. It is
+  kept for the memory.
+- **SIMD on parsing** is not used. A vector loads from a `u8[]`, and a string
+  has no view of its bytes, so a vector parse would first copy the string one
+  `charCodeAt` at a time, which is the scalar parser's own loop. Formatting is
+  different, because it writes into a `u8[]` already.
+- **On wasm32,** `llc` scalarises the vectors when `simd128` is off, and lowers
+  them to `i8x16.shuffle` and `v128.store` when it is on.
+
 ## Adler-32
 
 `adler32.ts` times `adler32Update` on 64 KiB and 1 MiB windows, 64 MiB of
