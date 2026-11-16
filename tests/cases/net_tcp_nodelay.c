@@ -34,7 +34,7 @@ int main(void) {
   nodelay(3);
   printf("flags 4: %d\n", opened(4));
   printf("flags 6: %d\n", opened(6));
-  printf("flags 8: %d\n", opened(8));
+  printf("flags 16: %d\n", opened(16));
   printf("flags -1: %d\n", opened(-1));
   int32_t fd = connecting();
   int on = -1;

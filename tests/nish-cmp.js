@@ -1292,6 +1292,14 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
+  // the 0.41.0 seed refuses the program that calls them.
+  {
+    program: "tests/cases/net_ring_calls.ts",
+    file: "exit",
+    changelog: "io_uring slot handles in nish:net",
+    why: "`NET_LISTEN_RING` is new to `nish:net` in this release, so the 0.41.0 seed has no such export and refuses the program (WP63 S2)",
+  },
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
   {
