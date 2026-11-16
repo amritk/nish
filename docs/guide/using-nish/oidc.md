@@ -122,8 +122,8 @@ key has no `alg`. A set is refused whole when any key carries private
 material (`d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`) or is a symmetric `oct`
 key with its secret `k`, even an encryption key; when a key's `kid` is empty,
 longer than `OIDC_MAX_KID` (256) bytes or not printable ASCII, even an
-encryption key's; when a key of an unknown type names an algorithm this
-module verifies; when a key's `alg` disagrees with its type, `HS256` on an RSA key
+encryption key's; when a key of an unknown type names any algorithm the
+JWT module knows, `HS*` included; when a key's `alg` disagrees with its type, `HS256` on an RSA key
 included; when two keys
 share a `kid`; or when a key's material does not make a key, such as an RSA
 modulus under 2048 bits. A provider that publishes such a set is
@@ -157,12 +157,19 @@ the old one some time after. `OidcKeys` follows that:
   refresh succeeds. `keys.lastError` says why the last refresh failed, and
   `refresh` answers `OIDC_SKIPPED` without fetching until
   `OIDC_MIN_REFRESH_INTERVAL` has passed since the failed try.
+- That interval holds for every refresh, whatever made it due: one the
+  set's lifetime ending calls for also waits until a minute has passed since
+  the last fetch began.
+- A token whose `kid` is the empty string is refused as an unknown `kid`,
+  even against a set of one key, and marks the set as wanted like any other
+  unknown `kid`.
 
 ## Refreshing from a timer
 
 `oidcDiscover` and `refresh` each make one blocking request, bounded by
 `options.timeoutMs` (10 seconds by default; 0 or less also means 10
-seconds, so no setting waits forever). `oidcVerify` and `keys.key`
+seconds, so no setting leaves a fetch unbounded, though the largest,
+2^31-1 ms, waits about 24 days). `oidcVerify` and `keys.key`
 never fetch. So call `refresh` where blocking is harmless: from your
 server's own loop or timer, never inside a request. `refresh(now)` answers
 `OIDC_SKIPPED` and does nothing while the set is fresh and no token has
