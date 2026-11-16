@@ -5351,7 +5351,8 @@ if (dealtHere("diagnostics")) {
     if (!tool) {
       skip("-g: neither llvm-dwarfdump nor objdump is installed; line table not inspected")
     } else {
-      const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" })
+      // The table covers every runtime unit linked in, past spawnSync's 1 MiB default.
+      const dump = spawnSync(tool[0], tool[1], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
       const out = dump.stdout
       // A row of the line table for our file: `<address> <line> <column> ...` (dwarfdump) or `dbg_main.ts <line> <addr>` (objdump).
       const hasRow =
@@ -5378,7 +5379,10 @@ if (dealtHere("diagnostics")) {
   const speedTable = speed.status === 0 ? lineTableOf(`${exe}.speed`) : null
   const symbols =
     speedTable !== null && has("llvm-dwarfdump")
-      ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], { encoding: "utf8" }).stdout
+      ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+          }).stdout
       : ""
   check(
     "-g --link (speed profile) is not stripped: the line table survives " +
