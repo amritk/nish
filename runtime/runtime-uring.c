@@ -42,11 +42,13 @@
  * one epoll descriptor watches. A DEFER_TASKRUN ring's work runs only when
  * this thread enters the ring, so a set belongs to the thread that opened it
  * (the kernel refuses another thread's submissions under SINGLE_ISSUER). The
- * kernel signals the eventfd when it queues work on an empty list, but that
- * signal can be missed (NURING-8: 7.0 left an accept queued, IORING_SQ_TASKRUN
- * up and the eventfd unread), so nothing sleeps while a ring's flags say the
- * kernel holds work: a wait services such a ring instead, and a caller that
- * sleeps on `nish_uring_fd` asks `nish_uring_pending` first.
+ * kernel signals the eventfd when it queues work on an empty list, but on 7.0
+ * (and 6.18) that signal can be lost for good (NURING-8: a deferred signal
+ * sets a bit nothing clears), and polling the ring's own descriptor is no
+ * better, so no sleep on the set is longer than UR_SLEEP_MAX_MS: the timer is
+ * the wake the kernel guarantees, and a wait that wakes by it services every
+ * flagged ring. A caller that sleeps on `nish_uring_fd` sleeps no longer than
+ * `nish_uring_sleep_ms` answers.
  *
  * **A connection is a (ring, slot) pair.** Its recv is multishot; a recv the
  * kernel ends with -ENOBUFS (every buffer lent out) is parked and re-armed on
@@ -137,7 +139,7 @@ struct nish_uring_set;
 int32_t nish_uring_probe(void);
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
 int32_t nish_uring_fd(const struct nish_uring_set *s);
-int32_t nish_uring_pending(const struct nish_uring_set *s);
+int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
@@ -945,8 +947,10 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
  *
  * Readable is not the whole answer: the kernel can hold a ring's work with
  * IORING_SQ_TASKRUN up and its eventfd never signalled (NURING-8). A caller
- * that sleeps on this descriptor calls `nish_uring_pending` right before it
- * sleeps, and calls wait (with a timeout of 0) instead while that answers 1. */
+ * that sleeps on this descriptor, alone or beside other sources, asks
+ * `nish_uring_sleep_ms` right before it sleeps and sleeps no longer than it
+ * answers, then calls wait (with a timeout of 0) whether or not the
+ * descriptor became readable. */
 int32_t nish_uring_fd(const struct nish_uring_set *s) { return s->ep; }
 
 /* Whether the kernel holds work for one of the ring's completions to post:
@@ -956,18 +960,30 @@ static int ur_flagged(const struct ur_ring *r) {
   return (__atomic_load_n(r->sq_flags, __ATOMIC_ACQUIRE) & (UR_SQ_TASKRUN | UR_SQ_CQ_OVERFLOW)) != 0;
 }
 
-/* Answers 1 when a wait has work it would do now without sleeping: a ring
- * the kernel flagged, completions not yet reaped, submissions still queued,
- * or buffers, parked recvs or stalled sends the last wait left. Answers 0
- * when the set may sleep on `nish_uring_fd`. */
-int32_t nish_uring_pending(const struct nish_uring_set *s) {
-  if (s->nlent || s->stalled_sends) return 1;
+/* The longest sleep on a set: the kernel's eventfd signal can be lost
+ * (NURING-8), so the timer is what wakes a sleeper to service a ring the
+ * kernel flagged. 10 ms bounds a lost wake's delay; idle, it costs a set 100
+ * wakes a second. */
+#define UR_SLEEP_MAX_MS 10
+
+/* How long a caller may sleep on `nish_uring_fd` before it calls wait, given
+ * the longest it wants (`timeout_ms`, -1 for ever). Answers 0 while a wait has
+ * work it can do now: a ring the kernel flagged, completions not yet reaped,
+ * buffers the last wait lent, or recvs parked or sends stalled on a full SQ
+ * that every ring has room for again. Otherwise answers `timeout_ms` cut to
+ * UR_SLEEP_MAX_MS. Submissions the kernel refused, and what waits on them, are
+ * retried after that bound, not at once, so a refusal that persists does not
+ * spin the caller. */
+int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms) {
+  int room = 1, parked = 0;
   for (int ri = 0; ri < s->nrings; ri++) {
     const struct ur_ring *r = s->rings[ri];
-    if (r->to_submit || r->nparked || ur_flagged(r) || *r->cq_head != __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE))
-      return 1;
+    if (ur_flagged(r) || *r->cq_head != __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE)) return 0;
+    if (r->to_submit) room = 0;
+    if (r->nparked) parked = 1;
   }
-  return 0;
+  if (s->nlent || (room && (parked || s->stalled_sends))) return 0;
+  return timeout_ms < 0 || timeout_ms > UR_SLEEP_MAX_MS ? UR_SLEEP_MAX_MS : timeout_ms;
 }
 
 /* What the last wait left to do: give back the buffers it lent, re-arm the
@@ -1007,23 +1023,27 @@ static void ur_submit_queued(struct nish_uring_set *s) {
     if (s->rings[ri]->to_submit) (void)ur_flush(s->rings[ri]);
 }
 
-/* Wait up to `timeout_ms` (-1 for ever, 0 not at all) for events, and write
- * at most `cap` of them, at most 256. Answers the count or a negative errno.
- * A DATA event's bytes are the set's buffer until the next wait. */
+/* Wait for events and write at most `cap` of them, at most 256. Answers the
+ * count or a negative errno. A DATA event's bytes are the set's buffer until
+ * the next wait. A `timeout_ms` of -1 waits until there are events (or answers
+ * 0 when a signal interrupts it); 0 does not sleep. Any other timeout is a
+ * most, not a least: the wait sleeps no longer than `nish_uring_sleep_ms`
+ * answers (NURING-8), so it can answer 0 early, while work is pending or
+ * after UR_SLEEP_MAX_MS, and a caller that wants the whole timeout waits again
+ * for what is left of it. */
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap) {
   if (cap <= 0) return -EINVAL;
   if (cap > EVENTS_MAX) cap = EVENTS_MAX;
+again:
   ur_catch_up(s);
   int n = 0;
   for (int ri = 0; ri < s->nrings && n < cap; ri++) n += ur_service(s, ri, ev + n, cap - n);
   ur_submit_queued(s);
   if (n > 0) return n;
-  /* A ring flagged now holds work its eventfd may never signal (NURING-8),
-   * and a recv parked by this wait's reap waits for the next: look, do not
-   * sleep, and service the flagged rings below. */
-  if (nish_uring_pending(s)) timeout_ms = 0;
+  /* No eventfd is trusted to end the sleep (NURING-8): the bound does, and the
+   * flagged rings are serviced below whether an eventfd was read or not. */
   struct epoll_event ready[64];
-  int k = epoll_wait(s->ep, ready, 64, timeout_ms);
+  int k = epoll_wait(s->ep, ready, 64, nish_uring_sleep_ms(s, timeout_ms));
   if (k < 0) return errno == EINTR ? 0 : -errno;
   for (int i = 0; i < k && n < cap; i++) {
     uint32_t ri = ready[i].data.u32;
@@ -1037,6 +1057,7 @@ int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nis
   for (int ri = 0; ri < s->nrings && n < cap; ri++)
     if (ur_flagged(s->rings[ri])) n += ur_service(s, ri, ev + n, cap - n);
   ur_submit_queued(s);
+  if (n == 0 && timeout_ms < 0) goto again;
   return n;
 }
 
@@ -1139,9 +1160,9 @@ int32_t nish_uring_fd(const struct nish_uring_set *s) {
   (void)s;
   return -38;
 }
-int32_t nish_uring_pending(const struct nish_uring_set *s) {
+int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms) {
   (void)s;
-  return 0;
+  return timeout_ms;
 }
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap) {
   (void)s;

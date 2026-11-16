@@ -757,9 +757,9 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * the completion drain with its DEFER_TASKRUN re-entry and overflow catch-up, the
  * send queue with its short-send requeue, and the slot close with its generation.
  *
- * Measured **6,259 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
- * `nish_uring_pending` and the wait's look at flagged rings before it sleeps
- * (NURING-8, a wake 7.0 missed); 6,045 before. The budget is the 256-byte boundary
+ * Measured **6,299 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
+ * `nish_uring_sleep_ms`, the bound on every sleep on a set (NURING-8, a wake 7.0
+ * loses); 6,045 before NURING-8. The budget is the 256-byte boundary
  * above it. A unit of its own beside runtime-net.c, so that the epoll path links none
  * of it: nothing in `nish:net` calls it until S2.
  */

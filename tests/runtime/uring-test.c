@@ -6,10 +6,10 @@
  *
  * The layer is included rather than linked so the test reaches it without a
  * header (S2 adds the declarations to runtime-net.c). Each mode but
- * `fallback` and `move` forks an echo server that drives one set on a
- * listener the parent made, and the parent plays every client; `move` drives
- * its set and its clients in one process, so it can check the set between
- * waits. The server sets its own
+ * `fallback`, `move` and `nowake` forks an echo server that drives one set on
+ * a listener the parent made, and the parent plays every client; `move`
+ * drives its set and its clients in one process, so it can check the set
+ * between waits, and `nowake` forks only its client. The server sets its own
  * RLIMIT_NOFILE, so what the check proves does not depend on the runner's
  * limits, only on the hard limit letting the parent hold its clients.
  *
@@ -35,8 +35,12 @@
  *    accepting job back to ring 0, which that wait had already serviced; the
  *    wait still hands ring 0's new accepts to the kernel before it returns,
  *    no ring holds a submission after any wait, and the next client is
- *    accepted while the caller sleeps on `nish_uring_fd`, asking
- *    `nish_uring_pending` before each sleep as its contract says.
+ *    accepted while the caller sleeps on `nish_uring_fd` for as long as
+ *    `nish_uring_sleep_ms` answers, as its contract says.
+ *  - `nowake`: ring 0's eventfd is unregistered, as a signal the kernel lost
+ *    for good would leave it (NURING-8). A client that connects while a wait
+ *    of -1 sleeps is still accepted, within a second: the sleep's bound, not
+ *    the eventfd, ends it.
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer
@@ -71,6 +75,7 @@ static long test_register(int fd, unsigned op, void *arg, unsigned nr);
 #include <time.h>
 
 #define SKIP 77
+#define UR_UNREGISTER_EVENTFD 5 /* IORING_UNREGISTER_EVENTFD, which only `nowake` calls */
 
 /* What the hooks force. HOOK_NONE passes every call to the kernel. */
 enum hook { HOOK_NONE, HOOK_EINVAL, HOOK_WANT_COOP, HOOK_NO_NODROP, HOOK_NO_SEND };
@@ -618,8 +623,8 @@ static int move_wait(struct nish_uring_set *s, int *ring, int *slot) {
 static void move_dump(struct nish_uring_set *s, int client) {
   struct utsname u;
   if (uname(&u) != 0) strcpy(u.release, "?");
-  fprintf(stderr, "uring-test: kernel %s, client %d of 5, acceptor %d, accept_stopped %d, rings %d of %d, pending %d\n",
-          u.release, client + 1, s->acceptor, s->accept_stopped, s->nrings, s->rings_max, nish_uring_pending(s));
+  fprintf(stderr, "uring-test: kernel %s, client %d of 5, acceptor %d, accept_stopped %d, rings %d of %d, sleep %d\n",
+          u.release, client + 1, s->acceptor, s->accept_stopped, s->nrings, s->rings_max, nish_uring_sleep_ms(s, -1));
   for (int ri = 0; ri < s->nrings; ri++) {
     struct ur_ring *r = s->rings[ri];
     struct pollfd q = {r->efd, POLLIN, 0};
@@ -655,32 +660,41 @@ static void move_dump(struct nish_uring_set *s, int client) {
           (long)st.accept_errors, (long)st.bound_violations);
 }
 
+static long long now_ms(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (long long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
 /* Connect one client and sleep on the set's descriptor, as a caller's own
- * loop would, until the set accepts it. It asks `nish_uring_pending` before
- * each sleep and waits with 0 instead while that answers 1, because 7.0 can
- * hold the accept as task work without signalling the eventfd (NURING-8).
- * The set is idle first, so the wait that takes the accept runs it before
- * any eventfd is read. A set that stays pending without giving the accept
- * fails as a sleep that timed out would. */
+ * loop would, until the set accepts it. Each sleep is as long as
+ * `nish_uring_sleep_ms` answers, and a wait of 0 follows it whether or not the
+ * descriptor became readable, because 7.0 can hold the accept as task work
+ * without signalling the eventfd (NURING-8). The set is idle first: a wait
+ * found nothing, the descriptor is not readable and the set asks for no wait
+ * now, and a set that never gets there in 100 waits fails. A client the set
+ * has not accepted within 5 seconds fails as a lost wake. */
 static int move_accept(struct nish_uring_set *s, int client, const struct sockaddr_in *a, int *fd, int *ring,
                        int *slot) {
-  int r = -1, sl = -1;
-  for (int i = 0; i < 100; i++) {
+  int r = -1, sl = -1, idle = 0;
+  for (int i = 0; i < 100 && !idle; i++) {
     struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
     int n = move_wait(s, &r, &sl);
     if (n < 0) return 1;
-    if (n == 0 && poll(&q, 1, 0) == 0 && !nish_uring_pending(s)) break;
+    idle = n == 0 && poll(&q, 1, 0) == 0 && nish_uring_sleep_ms(s, -1) > 0;
   }
   if (r >= 0) return fail("an accept arrived with no client connecting");
+  if (!idle) return fail("the set asked for a wait after each of 100 waits with no client connecting");
   *fd = socket(AF_INET, SOCK_STREAM, 0);
   if (*fd < 0 || connect(*fd, (const struct sockaddr *)a, sizeof *a) != 0) return fail("client connect");
-  for (int spins = 0; r < 0; spins++) {
-    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
-    int busy = nish_uring_pending(s);
-    if (spins > 100000 || (!busy && poll(&q, 1, 5000) != 1)) {
+  long long deadline = now_ms() + 5000;
+  while (r < 0) {
+    if (now_ms() > deadline) {
       move_dump(s, client);
       return fail("a client waited in the backlog with no accept in the kernel");
     }
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    if (poll(&q, 1, nish_uring_sleep_ms(s, -1)) < 0) return fail("poll on the set's descriptor");
     if (move_wait(s, &r, &sl) < 0) return 1;
   }
   *ring = r;
@@ -734,12 +748,76 @@ static int move(void) {
   return 0;
 }
 
+/* A ring whose eventfd says nothing: a client that connects while a wait of
+ * -1 sleeps must still be accepted, by the wait's own bound. Without it the
+ * wait would sleep until the alarm. */
+static int nowake(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(10);
+  int l = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+  socklen_t al = sizeof a;
+  if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 64) != 0 ||
+      getsockname(l, (struct sockaddr *)&a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_set *s;
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  int rc = nish_uring_open(&s, l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  struct nish_uring_event ev[EVENTS_MAX];
+  if (nish_uring_wait(s, 0, ev, EVENTS_MAX) != 0) return fail("a wait found events with no client connecting");
+  rc = ur_register(s->rings[0]->fd, UR_UNREGISTER_EVENTFD, NULL, 0);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: unregistering the eventfd answered %d\n", rc);
+    return 1;
+  }
+  pid_t kid = fork();
+  if (kid < 0) return fail("fork");
+  if (kid == 0) {
+    /* Connect once the parent sleeps, and hold the connection until killed. */
+    struct timespec d = {0, 200 * 1000 * 1000};
+    nanosleep(&d, NULL);
+    int c = socket(AF_INET, SOCK_STREAM, 0);
+    if (c < 0 || connect(c, (const struct sockaddr *)&a, sizeof a) != 0) _exit(1);
+    pause();
+    _exit(0);
+  }
+  /* A wait of -1 answers 0 when something interrupts its sleep, which here
+   * can be task work the kernel queues on this thread with no signal sent:
+   * wait again. */
+  long long t0 = now_ms(), took = 0;
+  int n = 0;
+  while (n == 0 && took <= 1200) {
+    n = nish_uring_wait(s, -1, ev, EVENTS_MAX);
+    took = now_ms() - t0;
+  }
+  kill(kid, SIGKILL);
+  waitpid(kid, NULL, 0);
+  if (n != 1 || ev[0].kind != NISH_URING_ACCEPTED) {
+    fprintf(stderr, "uring-test: a wait of -1 answered %d (first kind %d), not one accept\n", n, n > 0 ? (int)ev[0].kind : -1);
+    return 1;
+  }
+  if (took > 1200) {
+    fprintf(stderr, "uring-test: the accept took %lld ms for a client that connected after 200\n", took);
+    return 1;
+  }
+  nish_uring_destroy(s);
+  close(l);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
   signal(SIGPIPE, SIG_IGN);
   if (argc != 2) return fail("usage: uring-test <mode>");
   if (strcmp(argv[1], "fallback") == 0) return fallback();
   if (strcmp(argv[1], "move") == 0) return move();
+  if (strcmp(argv[1], "nowake") == 0) return nowake();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},
