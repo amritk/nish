@@ -805,6 +805,36 @@ int32_t nish_uring_pooled(void) {
   return ur_pool.rc > 0 ? (int32_t)ur_pool.z.slots : -1;
 }
 
+#ifdef NISH_URING_TEST_HOOKS
+/* Test-only: tests/run.js's sandbox section builds the runtime with
+ * -DNISH_URING_TEST_HOOKS to ask the kernel what a premade ring takes, and
+ * scripts/build.sh never passes it. Submits one entry of opcode `op` with
+ * submission flags `flags`, on no file, to premade ring `i` before a listener
+ * has taken it, and answers its completion's res: -EACCES is the ring's
+ * restriction. -ENOENT when no such ring was made. */
+int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags);
+int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) {
+  if (!ur_pool.made || ur_pool.rc <= 0 || i < 0 || i >= ur_pool.n) return -ENOENT;
+  struct ur_ring *r = ur_pool.rings[i];
+  struct ur_sqe *e = ur_sqe(r);
+  if (e == NULL) return -EBUSY;
+  e->opcode = (uint8_t)op;
+  e->flags = (uint8_t)flags;
+  e->fd = -1;
+  e->user_data = 1;
+  int rc;
+  do rc = ur_enter(r, r->to_submit, 1, UR_ENTER_GETEVENTS);
+  while (rc == -EINTR);
+  if (rc < 0) return rc;
+  r->to_submit = 0;
+  uint32_t head = *r->cq_head;
+  if (head == __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE)) return -EAGAIN;
+  int32_t res = r->cqes[head & *r->cq_mask].res;
+  __atomic_store_n(r->cq_head, head + 1, __ATOMIC_RELEASE);
+  return res;
+}
+#endif
+
 static int64_t ur_now_ms(void) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);

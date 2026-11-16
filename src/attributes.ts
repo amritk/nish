@@ -7215,10 +7215,10 @@ const listenFlagsValue = (program: CheckedProgram, node: Node): i32 => {
 /** Whether a `tcpListenFlags` call may set the ring bit (8): its flags fold to a value that has it, or fold to nothing. */
 const listenFlagsMayRing = (program: CheckedProgram, call: Node): boolean => {
   const args = call.children[1].children
-  if (args.length < 3) {
+  if (args.length < 4) {
     return true
   }
-  const flags = listenFlagsValue(program, args[2])
+  const flags = listenFlagsValue(program, args[3])
   return flags < 0 || (flags & 8) !== 0
 }
 

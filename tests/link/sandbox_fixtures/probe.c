@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -30,6 +31,11 @@
 #include <sys/xattr.h>
 #include <termios.h>
 #include <unistd.h>
+
+/* The runtime's test-only submit hook, there only in a runtime built with
+ * -DNISH_URING_TEST_HOOKS (runtime/runtime-uring.c), and its probe. */
+extern int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) __attribute__((weak));
+extern int32_t nish_uring_probe(void);
 
 static int ctor_errno = -1;
 static int preinit_errno = -1;
@@ -99,6 +105,46 @@ int sb_probe(const char *op, const char *path) {
     char params[120];
     memset(params, 0, sizeof params);
     say(op, syscall(425, 1, params));
+  } else if (strcmp(op, "io_uring_register") == 0) {
+    start(op);
+    say(op, syscall(427, -1, 0, NULL, 0));
+  } else if (strcmp(op, "io_uring_enter") == 0) {
+    /* On no ring: the filter lets it through to the kernel, which answers
+     * EBADF, so a kill here is the filter's own. */
+    start(op);
+    say(op, syscall(426, -1, 0, 0, 0, NULL, 0));
+  } else if (strcmp(op, "ring-sqe") == 0) {
+    /* `path` is `<opcode>:<sqe flags>`, submitted to premade ring 0 through
+     * the runtime's test hook; prints the completion's res. */
+    start(op);
+    int code = atoi(path), flags = 0;
+    const char *colon = strchr(path, ':');
+    if (colon != NULL) flags = atoi(colon + 1);
+    if (nish_uring_test_submit == NULL) {
+      printf("%s: no hook\n", op);
+      fflush(stdout);
+      return 1;
+    }
+    int32_t res = nish_uring_test_submit(0, code, flags);
+    if (res < 0) errno = -res;
+    say(op, res);
+  } else if (strcmp(op, "ring-count") == 0) {
+    /* How many io_uring descriptors the process holds, by their link text. */
+    int count = 0;
+    char link[64], at[32];
+    for (int fd = 0; fd < 1024; fd++) {
+      snprintf(at, sizeof at, "/proc/self/fd/%d", fd);
+      ssize_t n = readlink(at, link, sizeof link - 1);
+      if (n <= 0) continue;
+      link[n] = 0;
+      if (strcmp(link, "anon_inode:[io_uring]") == 0) count++;
+    }
+    printf("%s: %d\n", op, count);
+    fflush(stdout);
+  } else if (strcmp(op, "ring-probe") == 0) {
+    start(op);
+    printf("%s: %d\n", op, nish_uring_probe());
+    fflush(stdout);
   } else if (strcmp(op, "process_vm_writev") == 0 || strcmp(op, "process_vm_readv") == 0) {
     start(op);
     char byte = 0;
