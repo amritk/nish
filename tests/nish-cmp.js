@@ -1287,6 +1287,14 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
+  // library has none and refuses the program that tests it.
+  {
+    program: "tests/link/std_temporal/main.ts",
+    file: "exit",
+    changelog: "TC39 Temporal's dates, times, instants and durations",
+    why: "`nish/temporal` is new in this release, so the 0.40.1 seed's standard library has no such module (WP64 S1)",
+  },
   // WP28 C0: `nish.compat` and the `!nish.compat` metadata are new, so the
   // 0.39.0 seed refuses the key, reads no dependency's `nish` field, and
   // writes no dialect into the IR of a `--compat` build.

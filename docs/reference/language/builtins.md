@@ -2080,7 +2080,9 @@ so the name does. An elapsed time measured from a wall clock has to survive that
 clock being corrected mid-run, and it cannot: the difference can come out
 negative. The wall clock is `Date.now()`, below, and it is the only part of
 `Date` there is: a program that formats a date needs a calendar, a time zone
-database and a locale, none of which this language has.
+database and a locale, none of which the language has. The ISO calendar is a
+library instead: `nish/temporal` is TC39 `Temporal`'s dates, times, instants
+and durations, with no zone but UTC yet ([`nish/temporal`](../temporal.md)).
 
 The effect is `write` rather than `none` for the reason `getenv` is not
 `readnone`: the clock is not memory LLVM is tracking, so two reads with work

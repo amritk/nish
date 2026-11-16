@@ -1302,10 +1302,10 @@ const routeTitle = (p) => (p.spec === null ? "Globals" : p.title)
 const AREAS = [
   {
     title: "Core",
-    about: "Numbers, bytes, array loops, sorting, randomness and the test runner",
+    about: "Numbers, bytes, array loops, sorting, randomness, dates and times, and the test runner",
     key: "/core/..",
     icon: "atom",
-    names: ["array", "base64", "bytes", "math", "pair", "random", "sort", "testing"],
+    names: ["array", "base64", "bytes", "math", "pair", "random", "sort", "temporal", "testing"],
   },
   {
     title: "Collections",
