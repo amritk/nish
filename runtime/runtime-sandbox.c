@@ -31,6 +31,10 @@
  * child's whole subtree to the one exec ("One exec per spawn" below). A
  * program granted `process.spawn=exec:<program>` is written `///<path>`, and
  * its identity is recorded too: its child is spared the one exec.
+ * `net_rings` is how many restricted io_uring rings to make before the
+ * filter loads (WP63 S3): the root package.json's `nish.netRings`, 1 to 64,
+ * when `main` reaches `tcpListenFlags` with `NET_LISTEN_RING` and `net` is
+ * granted, and 0 otherwise.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -43,8 +47,13 @@
  *   4. Landlock: handle every filesystem right the running ABI knows, then
  *      grant back beneath `/` exactly what the mask grants whole, and beneath
  *      each scope directory what its capability grants;
- *   5. the seccomp filter of the note's section 4, a denylist;
- *   6. set the flag `nish_sandbox_check` reads at the top of `main`, so a C
+ *   5. unless `net` and `process.spawn` are both granted, make the
+ *      `net_rings` rings runtime-uring.c's set will take, each restricted to
+ *      a listener's opcodes and flags before it is enabled, or tell the ring
+ *      layer it may make none (docs/security/net-uring.md);
+ *   6. the seccomp filter of the note's section 4, a denylist, which then
+ *      kills io_uring_setup and io_uring_register unless both are granted;
+ *   7. set the flag `nish_sandbox_check` reads at the top of `main`, so a C
  *      library that never ran `.preinit_array` (musl) refuses to run rather
  *      than running unconfined.
  *
@@ -61,8 +70,10 @@
  * `-DNISH_SANDBOX_SIMULATE_ABI=<n>`, makes the ABI probe answer `n` in a
  * test-only build of this file; scripts/build.sh never passes it.
  *
- * Messages go through write(2) rather than stdio: nothing here may allocate or
- * touch a `FILE` before libc has finished its own start-up. */
+ * Messages go through write(2) rather than stdio: nothing here may touch a
+ * `FILE` before libc has finished its own start-up. Step 5 is the one
+ * allocation: a ring's slot tables are calloc'd, which glibc serves in
+ * `.preinit_array`, and musl, the C library that might not, never runs it. */
 #define _GNU_SOURCE
 #include "nish.h"
 
@@ -197,7 +208,7 @@ static const uint16_t nish_sb_uring[] = {425, 426, 427}; /* io_uring_setup, _ent
 static const uint16_t nish_sb_uring_make[] = {425, 427}; /* io_uring_setup, _register */
 #define NISH_SB_CLONE3 435
 
-/* Set by step 6 and read by `nish_sandbox_check`. */
+/* Set by step 7 and read by `nish_sandbox_check`. */
 static int nish_sb_applied = 0;
 
 /* The errno a failure prints, as the line's parenthesized tail: its name, or
