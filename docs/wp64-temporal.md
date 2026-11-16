@@ -130,7 +130,7 @@ Each stage is one PR.
      with Temporal's defaults. `Duration` also has `negated` and `abs`.
      `Instant` also has `fromEpochMilliseconds` and `Now.instant()` (as
      `nowInstant`).
-   - It lands with `tests/link/std_temporal`: 186 cases, held natively to
+   - It lands with `tests/link/std_temporal`: 199 cases, held natively to
      `expected.out` and by `check.mjs` to Node's own `Temporal`.
 2. **S2: the global `Temporal`.**
    - The checker binds `Temporal.PlainDate.from(...)`, `new
@@ -198,22 +198,30 @@ Three checks were made outside CI:
 
 - the date fields, day differences and epoch milliseconds were checked against
   Python's `datetime` for every year it can hold;
-- the module was run under Node, by type stripping, with `judge` given the
-  module itself in place of `Temporal`, and gave the same 186 lines;
+- the program was written out with `--emit-ts` and run under Node, and gave
+  the same lines as the native build, the SIMD formatting included;
 - every case gives the same answers under `--number-mode f64`.
 
 ### Performance
 
 `bench/temporal.ts` times the operations a program repeats, and
 `bench/README.md` → "Temporal" has the figures and how to reproduce them.
-On this module's first version, `toString` built its text from template parts,
-a `PlainDate` worked out its epoch day three times, and every time
-calculation allocated six spans. Making each of those integer work that writes
-one buffer made every workload 1.4 to 6.1 times faster. On a 2.10 GHz Xeon, a
-date now parses in 100 ns, a date-time is written in 67 ns, and
-`PlainDateTime.add` takes 108 ns. Every later stage keeps this budget: the
-bench runs before and after, and a stage moves no workload's median outside
-the noise band in the wrong direction.
+
+Against this module's first version, every workload is 1.5 to 13.4 times
+faster. On a 2.10 GHz Xeon, a date now parses in 55 ns, a date-time is written
+in 31 ns, and `PlainDateTime.add` takes 102 ns. The changes:
+
+- every string is written into one byte buffer, its dates and times by SIMD
+  formatting, two-digit groups as `u16x8` lanes written with one shuffle and
+  store;
+- the canonical strings are read by fast paths that do not allocate the
+  general reader;
+- time arithmetic is done on integers rather than on allocated spans;
+- every field is ordered widest first.
+
+Every later stage keeps this budget: the bench runs before and after, and a
+stage moves no workload's median outside the noise band in the wrong
+direction.
 
 ## 8. Where S1 differs from Temporal
 

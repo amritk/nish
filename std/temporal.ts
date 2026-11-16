@@ -46,6 +46,19 @@
  * importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e).
  */
 
+import {
+  addWrapping,
+  asU8x16,
+  mulWrapping,
+  shr,
+  shuffle,
+  splatU16x8,
+  store,
+  subWrapping,
+  u8x16,
+  u16x8,
+} from "nish:simd"
+
 /** Nanoseconds in a second. */
 const TEMPORAL_NS_PER_SECOND: i64 = 1000000000
 
@@ -118,6 +131,9 @@ const TEMPORAL_TEXT_MAX: i32 = 256
 
 /** Write the ASCII byte `c` at `at`. */
 const temporalPutByte = (out: u8[], at: i32, c: i32): i32 => {
+  if (at < 0 || at >= toI32(out.length)) {
+    return at
+  }
   out[at] = toU8(c)
   return at + 1
 }
@@ -141,61 +157,224 @@ const temporalPutNumber = (out: u8[], at: i32, n: i64, width: i32): i32 => {
   return at + count
 }
 
+// The fixed-width writers: a date or a time is always the same digits, so
+// they are written two at a time, with one bounds test that covers both, and
+// no count of digits first. `n / 10` of an `i32` is a multiply and a shift.
+
+/** Write `n`, 0 to 99, as two digits. */
+const temporalPut2 = (out: u8[], at: i32, n: i32): i32 => {
+  if (at < 0 || at > toI32(out.length) - 2) {
+    return at
+  }
+  const tens: i32 = toI32(n / 10)
+  out[at] = toU8(48 + tens)
+  out[at + 1] = toU8(48 + n - tens * 10)
+  return at + 2
+}
+
+/** Write `n`, 0 to 9999, as four digits. */
+const temporalPut4 = (out: u8[], at: i32, n: i32): i32 => {
+  const high: i32 = toI32(n / 100)
+  return temporalPut2(out, temporalPut2(out, at, high), n - high * 100)
+}
+
 /** Write a year as Temporal does: four digits for 0 to 9999, otherwise a sign and six digits. */
 const temporalPutYear = (out: u8[], at: i32, year: i32): i32 => {
   if (year >= 0 && year <= 9999) {
-    return temporalPutNumber(out, at, toI64(year), 4)
+    return temporalPut4(out, at, year)
   }
+  const magnitude: i32 = year < 0 ? -year : year
+  const high: i32 = toI32(magnitude / 10000)
   const signed: i32 = temporalPutByte(out, at, year < 0 ? 45 : 43)
-  return temporalPutNumber(out, signed, temporalAbs(toI64(year)), 6)
+  return temporalPut4(out, temporalPut2(out, signed, high), magnitude - high * 10000)
+}
+
+/**
+ * Write `YYYY-MM-DD` for a year from 0 to 9999 in one vector store: the four
+ * two-digit groups are lanes of a `u16x8`, each lane's tens are
+ * `(v * 103) >> 10` (exact below 100), one shuffle interleaves the tens and
+ * ones bytes with a zero byte where each `-` goes, and adding a template of
+ * `0` and `-` makes the text. `out` must have 16 bytes from `at`.
+ */
+const temporalPutDate4 = (out: u8[], at: i32, year: i32, month: i32, day: i32): i32 => {
+  const century: i32 = toI32(year / 100)
+  const v: u16x8 = u16x8(
+    toU16(century),
+    toU16(year - century * 100),
+    toU16(month),
+    toU16(day),
+    toU16(0),
+    toU16(0),
+    toU16(0),
+    toU16(0)
+  )
+  const tens: u16x8 = shr(mulWrapping(v, splatU16x8(toU16(103))), 10)
+  const ones: u16x8 = subWrapping(v, mulWrapping(tens, splatU16x8(toU16(10))))
+  // Byte 2k of a little-endian u16x8 is lane k's low byte; 8 is lane 4, a zero.
+  const digits: u8x16 = shuffle(
+    asU8x16(tens),
+    asU8x16(ones),
+    0,
+    16,
+    2,
+    18,
+    8,
+    4,
+    20,
+    8,
+    6,
+    22,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8
+  )
+  const template: u8x16 = u8x16(
+    toU8(48),
+    toU8(48),
+    toU8(48),
+    toU8(48),
+    toU8(45),
+    toU8(48),
+    toU8(48),
+    toU8(45),
+    toU8(48),
+    toU8(48),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0)
+  )
+  store(addWrapping(digits, template), out, at)
+  return at + 10
+}
+
+/**
+ * Write `YYYY-MM-DDTHH:MM:SS` for a year from 0 to 9999 in two vector stores,
+ * as `temporalPutDate4` writes a date: seven two-digit groups in one `u16x8`,
+ * the first sixteen bytes of text from one shuffle and the last three from a
+ * second. `out` must have 32 bytes from `at`; the bytes past the nineteenth
+ * are zeros for the caller to write over.
+ */
+const temporalPutDateTime4 = (
+  out: u8[],
+  at: i32,
+  year: i32,
+  month: i32,
+  day: i32,
+  hour: i32,
+  minute: i32,
+  second: i32
+): i32 => {
+  const century: i32 = toI32(year / 100)
+  const v: u16x8 = u16x8(
+    toU16(century),
+    toU16(year - century * 100),
+    toU16(month),
+    toU16(day),
+    toU16(hour),
+    toU16(minute),
+    toU16(second),
+    toU16(0)
+  )
+  const tens: u16x8 = shr(mulWrapping(v, splatU16x8(toU16(103))), 10)
+  const ones: u16x8 = subWrapping(v, mulWrapping(tens, splatU16x8(toU16(10))))
+  const t: u8x16 = asU8x16(tens)
+  const o: u8x16 = asU8x16(ones)
+  // Byte 14 is lane 7's tens, a zero, where each separator goes.
+  const head: u8x16 = shuffle(t, o, 0, 16, 2, 18, 14, 4, 20, 14, 6, 22, 14, 8, 24, 14, 10, 26)
+  const tail: u8x16 = shuffle(t, o, 14, 12, 28, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14)
+  const headText: u8x16 = u8x16(
+    toU8(48),
+    toU8(48),
+    toU8(48),
+    toU8(48),
+    toU8(45),
+    toU8(48),
+    toU8(48),
+    toU8(45),
+    toU8(48),
+    toU8(48),
+    toU8(84),
+    toU8(48),
+    toU8(48),
+    toU8(58),
+    toU8(48),
+    toU8(48)
+  )
+  const tailText: u8x16 = u8x16(
+    toU8(58),
+    toU8(48),
+    toU8(48),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0),
+    toU8(0)
+  )
+  store(addWrapping(head, headText), out, at)
+  store(addWrapping(tail, tailText), out, at + 16)
+  return at + 19
 }
 
 /** Write `YYYY-MM-DD`. */
 const temporalPutDate = (out: u8[], at: i32, year: i32, month: i32, day: i32): i32 => {
   let i: i32 = temporalPutYear(out, at, year)
-  i = temporalPutByte(out, i, 45)
-  i = temporalPutNumber(out, i, toI64(month), 2)
-  i = temporalPutByte(out, i, 45)
-  return temporalPutNumber(out, i, toI64(day), 2)
+  i = temporalPut2(out, temporalPutByte(out, i, 45), month)
+  return temporalPut2(out, temporalPutByte(out, i, 45), day)
 }
 
 /**
  * Write `ns` nanoseconds of a second as Temporal's automatic precision does:
  * nothing for zero, otherwise a `.` and up to nine digits with the trailing
- * zeros dropped.
+ * zeros dropped. All nine are written and the zeros then given back, which
+ * is one pass rather than a division per zero first.
  */
 const temporalPutFraction = (out: u8[], at: i32, ns: i32): i32 => {
   if (ns === 0) {
     return at
   }
-  let digits: i32 = 9
-  let v: i32 = ns
-  while (v % 10 === 0) {
-    v = toI32(v / 10)
-    digits = digits - 1
+  const head: i32 = toI32(ns / 100000000)
+  const rest: i32 = ns - head * 100000000
+  const middle: i32 = toI32(rest / 10000)
+  let end: i32 = temporalPutByte(out, temporalPutByte(out, at, 46), 48 + head)
+  end = temporalPut4(out, temporalPut4(out, end, middle), rest - middle * 10000)
+  while (end > at + 2 && end <= toI32(out.length) && out[end - 1] === 48) {
+    end = end - 1
   }
-  return temporalPutNumber(out, temporalPutByte(out, at, 46), toI64(v), digits)
+  return end
 }
 
 /** Write `HH:MM:SS` and the fraction of the second. */
 const temporalPutTime = (out: u8[], at: i32, hour: i32, minute: i32, second: i32, sub: i32): i32 => {
-  let i: i32 = temporalPutNumber(out, at, toI64(hour), 2)
-  i = temporalPutByte(out, i, 58)
-  i = temporalPutNumber(out, i, toI64(minute), 2)
-  i = temporalPutByte(out, i, 58)
-  i = temporalPutNumber(out, i, toI64(second), 2)
+  let i: i32 = temporalPut2(out, at, hour)
+  i = temporalPut2(out, temporalPutByte(out, i, 58), minute)
+  i = temporalPut2(out, temporalPutByte(out, i, 58), second)
   return temporalPutFraction(out, i, sub)
 }
 
 /** Write the time of day `ns` nanoseconds after midnight. */
 const temporalPutNanoOfDay = (out: u8[], at: i32, ns: i64): i32 => {
-  const secs: i64 = toI64(ns / TEMPORAL_NS_PER_SECOND)
+  const secs: i32 = toI32(ns / TEMPORAL_NS_PER_SECOND)
+  const minutes: i32 = toI32(secs / 60)
   return temporalPutTime(
     out,
     at,
-    toI32(secs / 3600),
-    toI32(toI64(secs / 60) % 60),
-    toI32(secs % 60),
+    toI32(minutes / 60),
+    minutes % 60,
+    secs - minutes * 60,
     toI32(ns % TEMPORAL_NS_PER_SECOND)
   )
 }
@@ -625,27 +804,30 @@ const temporalBalance = (span: TemporalSpan, largest: i32): Duration => {
 class TemporalReader {
   /** The text being read. */
   readonly text: string
+  /** The offset's nanoseconds east of UTC, when `hasOffset`. */
+  offsetNanos: i64
   /** The index of the next character. */
   at: i32
-  /** Whether the text has parsed so far. */
-  ok: boolean
-  /** The date read, when `hasDate`. */
-  hasDate: boolean
+  /** The date's fields, when `hasDate`. */
   year: i32
   month: i32
   day: i32
-  /** The time read, when `hasTime`; midnight otherwise. */
-  hasTime: boolean
+  /** The time's fields, when `hasTime`; midnight otherwise. */
   hour: i32
   minute: i32
   second: i32
   /** The nanoseconds past `second`. */
   fraction: i32
+  /** Whether the text has parsed so far. */
+  ok: boolean
+  /** Whether a date was read. */
+  hasDate: boolean
+  /** Whether a time was read. */
+  hasTime: boolean
   /** Whether a `Z` was read in the offset's place. */
   utc: boolean
-  /** Whether a numeric offset was read, and its nanoseconds east of UTC. */
+  /** Whether a numeric offset was read. */
   hasOffset: boolean
-  offsetNanos: i64
   /** Whether a bracketed time zone annotation was read. */
   hasZone: boolean
 
@@ -893,7 +1075,7 @@ class TemporalReader {
           return
         }
         this.hasZone = true
-      } else {
+      } else if (eq < toI32(body.length)) {
         const key: string = body.substring(0, eq)
         const value: string = body.substring(eq + 1, toI32(body.length))
         if (!temporalIsAnnotationKey(key) || value.length === 0) {
@@ -966,7 +1148,7 @@ const temporalIsIsoCalendar = (value: string): boolean => {
   if (value.length !== want.length) {
     return false
   }
-  for (let i: i32 = 0; i < toI32(want.length); i++) {
+  for (let i: i32 = 0; i < toI32(want.length) && i < toI32(value.length); i++) {
     let c: i32 = toI32(value.charCodeAt(i))
     if (c >= 65 && c <= 90) {
       c = c + 32
@@ -976,6 +1158,101 @@ const temporalIsIsoCalendar = (value: string): boolean => {
     }
   }
   return true
+}
+
+// The fast paths. Nearly every string a program reads is in the one form
+// `toString` writes: `YYYY-MM-DD`, then `THH:MM`, `:SS` and a fraction. These
+// read exactly that form, straight from the string, with no reader to
+// allocate and no range to check (a four-digit year is always inside it).
+// Anything else, valid or not, answers -1 and goes to `TemporalReader`, so a
+// fast path accepts only strings the reader would read the same way.
+
+/** The character code at `at`, or -1 outside the text. */
+const temporalCharAt = (text: string, at: i32): i32 =>
+  at >= 0 && at < toI32(text.length) ? toI32(text.charCodeAt(at)) : -1
+
+/** Whether `c` is `T`, `t` or a space, which may stand between a date and a time. */
+const temporalIsTimeDesignator = (c: i32): boolean => c === 84 || c === 116 || c === 32
+
+/** The two decimal digits at `at` as a number, or -1 when either is not a digit. */
+const temporalFastTwo = (text: string, at: i32): i32 => {
+  const high: i32 = temporalCharAt(text, at) - 48
+  const low: i32 = temporalCharAt(text, at + 1) - 48
+  if (high < 0 || high > 9 || low < 0 || low > 9) {
+    return -1
+  }
+  return high * 10 + low
+}
+
+/**
+ * The date `YYYY-MM-DD` at the start of `text`, packed as
+ * `temporalCivilOfEpochDay` packs one, or -1 when the text does not start
+ * with one in exactly that form or the date does not exist.
+ */
+const temporalFastDate = (text: string): i64 => {
+  const century: i32 = temporalFastTwo(text, 0)
+  const yy: i32 = temporalFastTwo(text, 2)
+  const month: i32 = temporalFastTwo(text, 5)
+  const day: i32 = temporalFastTwo(text, 8)
+  if (century < 0 || yy < 0 || month < 1 || month > 12 || day < 1) {
+    return -1
+  }
+  if (temporalCharAt(text, 4) !== 45 || temporalCharAt(text, 7) !== 45) {
+    return -1
+  }
+  const year: i32 = century * 100 + yy
+  if (day > temporalDaysInMonth(toI64(year), month)) {
+    return -1
+  }
+  return (toI64(year) + 400000) * 512 + toI64(month) * 32 + toI64(day)
+}
+
+/**
+ * The time `HH:MM`, `HH:MM:SS` or `HH:MM:SS.f` that runs from `at` to
+ * exactly `end`, as nanoseconds since midnight, or -1 when it is not in that
+ * form. Second 60 reads as 59, as the reader reads it.
+ */
+const temporalFastTime = (text: string, at: i32, end: i32): i64 => {
+  const hour: i32 = temporalFastTwo(text, at)
+  const minute: i32 = temporalFastTwo(text, at + 3)
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || temporalCharAt(text, at + 2) !== 58) {
+    return -1
+  }
+  let second: i32 = 0
+  let fraction: i32 = 0
+  let i: i32 = at + 5
+  if (i < end) {
+    second = temporalFastTwo(text, i + 1)
+    if (temporalCharAt(text, i) !== 58 || second < 0 || second > 60) {
+      return -1
+    }
+    if (second === 60) {
+      second = 59
+    }
+    i = i + 3
+    if (i < end) {
+      const dot: i32 = temporalCharAt(text, i)
+      const digits: i32 = end - i - 1
+      if ((dot !== 46 && dot !== 44) || digits < 1 || digits > 9) {
+        return -1
+      }
+      for (let k: i32 = i + 1; k < end; k++) {
+        const d: i32 = temporalCharAt(text, k) - 48
+        if (d < 0 || d > 9) {
+          return -1
+        }
+        fraction = fraction * 10 + d
+      }
+      for (let k: i32 = digits; k < 9; k++) {
+        fraction = fraction * 10
+      }
+      i = end
+    }
+  }
+  if (i !== end) {
+    return -1
+  }
+  return (toI64(hour) * 3600 + toI64(minute) * 60 + toI64(second)) * TEMPORAL_NS_PER_SECOND + toI64(fraction)
 }
 
 /**
@@ -1008,16 +1285,18 @@ const temporalReadDateTime = (text: string): TemporalReader => {
  * ISO 8601 calendar. Every field is Temporal's getter of the same name.
  */
 export class PlainDate {
+  /** The month as Temporal codes it: `M01` to `M12`. */
+  readonly monthCode: string
+  /** The calendar, always `iso8601`. */
+  readonly calendarId: string
+  /** @internal The days since 1970-01-01; not part of Temporal. */
+  readonly epochDay: i64
   /** The year; negative before 1 BCE's year 0. */
   readonly year: i32
   /** The month, 1 to 12. */
   readonly month: i32
   /** The day of the month, from 1. */
   readonly day: i32
-  /** The month as Temporal codes it: `M01` to `M12`. */
-  readonly monthCode: string
-  /** The calendar, always `iso8601`. */
-  readonly calendarId: string
   /** The weekday, 1 for Monday to 7 for Sunday. */
   readonly dayOfWeek: i32
   /** The day of the year, 1 for 1 January. */
@@ -1036,8 +1315,6 @@ export class PlainDate {
   readonly monthsInYear: i32
   /** Whether this date's year is a leap year. */
   readonly inLeapYear: boolean
-  /** @internal The days since 1970-01-01; not part of Temporal. */
-  readonly epochDay: i64
 
   /**
    * The date `isoYear-isoMonth-isoDay`, as `new Temporal.PlainDate(y, m, d)`.
@@ -1094,6 +1371,9 @@ export class PlainDate {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    if (this.year >= 0 && this.year <= 9999) {
+      return String.fromBytes(out, 0, temporalPutDate4(out, 0, this.year, this.month, this.day))
+    }
     const end: i32 = temporalPutDate(out, 0, this.year, this.month, this.day)
     return String.fromBytes(out, 0, end)
   }
@@ -1223,6 +1503,12 @@ export const plainDateFrom = (text: string): PlainDate => {
  * @returns the date, or `null`
  */
 export const plainDateFromOrNull = (text: string): PlainDate | null => {
+  if (text.length === 10) {
+    const civil: i64 = temporalFastDate(text)
+    if (civil >= 0) {
+      return new PlainDate(temporalCivilYear(civil), temporalCivilMonth(civil), temporalCivilDay(civil))
+    }
+  }
   const r: TemporalReader = temporalReadDateTime(text)
   if (!r.ok || r.utc || !temporalReadInRange(r, false)) {
     return null
@@ -1308,7 +1594,8 @@ export class PlainTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    const end: i32 = temporalPutNanoOfDay(out, 0, this.nanoOfDay)
+    const sub: i32 = this.millisecond * 1000000 + this.microsecond * 1000 + this.nanosecond
+    const end: i32 = temporalPutTime(out, 0, this.hour, this.minute, this.second, sub)
     return String.fromBytes(out, 0, end)
   }
 
@@ -1499,16 +1786,20 @@ export const plainTimeCompare = (a: PlainTime, b: PlainTime): i32 => temporalSig
  * ISO 8601 calendar. It has every field of `PlainDate` and of `PlainTime`.
  */
 export class PlainDateTime {
+  /** The month as Temporal codes it: `M01` to `M12`. */
+  readonly monthCode: string
+  /** The calendar, always `iso8601`. */
+  readonly calendarId: string
+  /** @internal The days since 1970-01-01; not part of Temporal. */
+  readonly epochDay: i64
+  /** @internal Nanoseconds since midnight; not part of Temporal. */
+  readonly nanoOfDay: i64
   /** The year. */
   readonly year: i32
   /** The month, 1 to 12. */
   readonly month: i32
   /** The day of the month, from 1. */
   readonly day: i32
-  /** The month as Temporal codes it: `M01` to `M12`. */
-  readonly monthCode: string
-  /** The calendar, always `iso8601`. */
-  readonly calendarId: string
   /** The weekday, 1 for Monday to 7 for Sunday. */
   readonly dayOfWeek: i32
   /** The day of the year, 1 for 1 January. */
@@ -1525,8 +1816,6 @@ export class PlainDateTime {
   readonly daysInYear: i32
   /** Months in a year: 12. */
   readonly monthsInYear: i32
-  /** Whether this date's year is a leap year. */
-  readonly inLeapYear: boolean
   /** The hour, 0 to 23. */
   readonly hour: i32
   /** The minute, 0 to 59. */
@@ -1539,10 +1828,8 @@ export class PlainDateTime {
   readonly microsecond: i32
   /** The nanosecond, 0 to 999. */
   readonly nanosecond: i32
-  /** @internal The days since 1970-01-01; not part of Temporal. */
-  readonly epochDay: i64
-  /** @internal Nanoseconds since midnight; not part of Temporal. */
-  readonly nanoOfDay: i64
+  /** Whether this date's year is a leap year. */
+  readonly inLeapYear: boolean
 
   /**
    * The date-time, as `new Temporal.PlainDateTime(...)`; the time fields
@@ -1617,8 +1904,29 @@ export class PlainDateTime {
    */
   toString(): string {
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    const sub: i32 = this.millisecond * 1000000 + this.microsecond * 1000 + this.nanosecond
+    if (this.year >= 0 && this.year <= 9999) {
+      const seconds: i32 = temporalPutDateTime4(
+        out,
+        0,
+        this.year,
+        this.month,
+        this.day,
+        this.hour,
+        this.minute,
+        this.second
+      )
+      return String.fromBytes(out, 0, temporalPutFraction(out, seconds, sub))
+    }
     const date: i32 = temporalPutDate(out, 0, this.year, this.month, this.day)
-    const end: i32 = temporalPutNanoOfDay(out, temporalPutByte(out, date, 84), this.nanoOfDay)
+    const end: i32 = temporalPutTime(
+      out,
+      temporalPutByte(out, date, 84),
+      this.hour,
+      this.minute,
+      this.second,
+      sub
+    )
     return String.fromBytes(out, 0, end)
   }
 
@@ -1784,6 +2092,26 @@ export const plainDateTimeFrom = (text: string): PlainDateTime => {
  * @returns the date-time, or `null`
  */
 export const plainDateTimeFromOrNull = (text: string): PlainDateTime | null => {
+  const length: i32 = toI32(text.length)
+  if (length >= 16 && temporalIsTimeDesignator(temporalCharAt(text, 10))) {
+    const civil: i64 = temporalFastDate(text)
+    const nanoOfDay: i64 = civil < 0 ? -1 : temporalFastTime(text, 11, length)
+    if (nanoOfDay >= 0) {
+      const secs: i32 = toI32(nanoOfDay / TEMPORAL_NS_PER_SECOND)
+      const sub: i32 = toI32(nanoOfDay % TEMPORAL_NS_PER_SECOND)
+      return new PlainDateTime(
+        temporalCivilYear(civil),
+        temporalCivilMonth(civil),
+        temporalCivilDay(civil),
+        toI32(secs / 3600),
+        toI32(secs / 60) % 60,
+        secs % 60,
+        toI32(sub / 1000000),
+        toI32(sub / 1000) % 1000,
+        sub % 1000
+      )
+    }
+  }
   const r: TemporalReader = temporalReadDateTime(text)
   if (!r.ok || r.utc || !temporalReadInRange(r, true)) {
     return null
@@ -2197,7 +2525,7 @@ export const durationFromOrNull = (text: string): Duration | null => {
     const unit: i32 = r.peek(toI32(0)) | 32 // lowercased
     r.at = r.at + 1
     const slot: i32 = temporalDurationSlot(unit, inTime)
-    if (slot < 0 || slot <= rank || !r.ok) {
+    if (slot < 0 || slot >= toI32(values.length) || slot <= rank || !r.ok) {
       return null
     }
     rank = slot
@@ -2345,15 +2673,27 @@ export class Instant {
     const secondOfDay: i64 = temporalFloorMod(this.epochSeconds, TEMPORAL_SECONDS_PER_DAY)
     const civil: i64 = temporalCivilOfEpochDay(day)
     const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
-    let i: i32 = temporalPutDate(
-      out,
-      0,
-      temporalCivilYear(civil),
-      temporalCivilMonth(civil),
-      temporalCivilDay(civil)
-    )
-    i = temporalPutByte(out, i, 84)
-    i = temporalPutNanoOfDay(out, i, secondOfDay * TEMPORAL_NS_PER_SECOND + toI64(this.nanosecondOfSecond))
+    const year: i32 = temporalCivilYear(civil)
+    const nanoOfDay: i64 = secondOfDay * TEMPORAL_NS_PER_SECOND + toI64(this.nanosecondOfSecond)
+    let i: i32 = 0
+    if (year >= 0 && year <= 9999) {
+      const secs: i32 = toI32(secondOfDay)
+      const minutes: i32 = toI32(secs / 60)
+      i = temporalPutDateTime4(
+        out,
+        0,
+        year,
+        temporalCivilMonth(civil),
+        temporalCivilDay(civil),
+        toI32(minutes / 60),
+        minutes % 60,
+        secs - minutes * 60
+      )
+      i = temporalPutFraction(out, i, this.nanosecondOfSecond)
+    } else {
+      i = temporalPutDate(out, 0, year, temporalCivilMonth(civil), temporalCivilDay(civil))
+      i = temporalPutNanoOfDay(out, temporalPutByte(out, i, 84), nanoOfDay)
+    }
     return String.fromBytes(out, 0, temporalPutByte(out, i, 90))
   }
 
@@ -2471,6 +2811,44 @@ export const instantFrom = (text: string): Instant => {
  * @returns the instant, or `null`
  */
 export const instantFromOrNull = (text: string): Instant | null => {
+  const length: i32 = toI32(text.length)
+  const last: i32 = temporalCharAt(text, length - 1)
+  // `Z`, or a `±HH:MM` offset, ends the string: the two forms RFC 3339 writes.
+  let timeEnd: i32 = -1
+  let offsetSeconds: i64 = 0
+  if (last === 90 || last === 122) {
+    timeEnd = length - 1
+  } else {
+    const sign: i32 = temporalCharAt(text, length - 6)
+    const hours: i32 = temporalFastTwo(text, length - 5)
+    const minutes: i32 = temporalFastTwo(text, length - 2)
+    if (
+      (sign === 43 || sign === 45) &&
+      temporalCharAt(text, length - 3) === 58 &&
+      hours >= 0 &&
+      hours <= 23
+    ) {
+      if (minutes >= 0 && minutes <= 59) {
+        timeEnd = length - 6
+        offsetSeconds = toI64(hours * 3600 + minutes * 60) * (sign === 43 ? 1 : -1)
+      }
+    }
+  }
+  if (timeEnd >= 16 && temporalIsTimeDesignator(temporalCharAt(text, 10))) {
+    const civil: i64 = temporalFastDate(text)
+    const nanoOfDay: i64 = civil < 0 ? -1 : temporalFastTime(text, 11, timeEnd)
+    if (nanoOfDay >= 0) {
+      const day: i64 = temporalEpochDay(
+        toI64(temporalCivilYear(civil)),
+        temporalCivilMonth(civil),
+        temporalCivilDay(civil)
+      )
+      return new Instant(
+        day * TEMPORAL_SECONDS_PER_DAY + toI64(nanoOfDay / TEMPORAL_NS_PER_SECOND) - offsetSeconds,
+        nanoOfDay % TEMPORAL_NS_PER_SECOND
+      )
+    }
+  }
   const r: TemporalReader = temporalReadDateTime(text)
   if (!r.ok || !r.hasTime || (!r.utc && !r.hasOffset)) {
     return null
