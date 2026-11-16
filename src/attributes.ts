@@ -3433,7 +3433,10 @@ class FactCollector {
     if (label !== CAP_NONE) {
       this.facts.offerCapability(label, name, call, 0)
     }
-    if ((name === "tcpListenFlags" || name.endsWith(".tcpListenFlags")) && listenFlagsMayRing(this.unit.program, call)) {
+    if (
+      (name === "tcpListenFlags" || name.endsWith(".tcpListenFlags")) &&
+      listenFlagsMayRing(this.unit.program, call)
+    ) {
       this.facts.ringListen = true
     }
   }
