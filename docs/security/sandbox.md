@@ -83,7 +83,11 @@ first as well, and the program then refuses to run (§3, §7).
 
 **What the adversary keeps.** Under the mask it was given, it keeps:
 
-- descriptors open before the call, and any it receives over `SCM_RIGHTS`;
+- descriptors open before the call, and any it receives over `SCM_RIGHTS`
+  (from Linux 6.7 the kernel refuses to send an io_uring descriptor that
+  way; one inherited across `exec` still arrives, and the filter refuses
+  `io_uring_enter` on it unless it is moved onto a premade ring's number,
+  [NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md));
 - of `/proc/self`, what needs no open: `stat` and `readlink` on its
   entries, and descriptors to it already open; opening its files needs
   `fs.read` (open question 6);
@@ -96,7 +100,9 @@ first as well, and the program then refuses to run (§3, §7).
 - the metadata reads of §4: `stat`, `lstat`, `statx`, `readlink`, `access`,
   `getxattr`, `listxattr`, `O_PATH`, `chdir`, `inotify` and `fanotify`;
 - io_uring, when both `net` and `process.spawn` are granted; with `net`
-  without `process.spawn`, `io_uring_enter` on the rings step 5 made, each
+  without `process.spawn`, `io_uring_enter` only on the descriptor numbers
+  of the rings step 5 made (the filter compares `args[0]` with each; with
+  none made, `io_uring_enter` kills like the other two), each ring
   restricted to ACCEPT, RECV, SEND, CLOSE, ASYNC_CANCEL and NOP, with no
   SQE flag but FIXED_FILE, BUFFER_SELECT and CQE_SKIP_SUCCESS, and no
   register call after it was enabled; what those opcodes reach in the kernel
@@ -203,8 +209,10 @@ constructor, and applies, in order:
      `accept`, `accept4` kill;
    - io_uring, the same in both modes: without `net`, `io_uring_setup`,
      `_enter` and `_register` kill; with `net` and without `process.spawn`,
-     `io_uring_setup` and `io_uring_register` kill and `io_uring_enter`, the
-     one call a premade ring needs, is let through; with both, none kills;
+     `io_uring_setup` and `io_uring_register` kill, and `io_uring_enter`,
+     the one call a premade ring needs, is let through only when its first
+     argument is one of the descriptors step 5 wrote back, and kills
+     otherwise, or always when no ring was made; with both, none kills;
    - without `fs.write`, or with it only beneath directories: the mode,
      owner, times and extended-attribute writes answer `EPERM`;
    - without `process.spawn`: `execve`, `execveat`, `fork`, `vfork` kill,
@@ -256,6 +264,12 @@ counted. One finding is counted, and it is fixed:
   premake failure (NURING-32). The probe still holds a premade set to the
   unsandboxed floor (NURING-33), and a spent set answers without counting
   (NURING-34).
+- **`io_uring_enter` is matched by descriptor number.** The filter lets it
+  take only the numbers of the rings step 5 made (NURING-35), but seccomp
+  cannot see the file behind a number: code holding a ring made outside the
+  sandbox, inherited across `exec`, can `dup2` it onto a premade ring's
+  number, or onto one a closed ring listener freed, and enter it (NURING-36,
+  open). Landlock's rules still bound what that ring reaches.
 - **A pathname Unix listener needs `fs.write`.** Landlock counts binding a
   socket file as MAKE_SOCK, a write, so `unixListen` on a path under `net`
   alone is -13 and leaves no file. The capability pass grants `net` for the
@@ -566,7 +580,11 @@ mode:
 - `sandbox: io_uring_register from ffi with net and without process.spawn dies of SIGSYS (<mode>)`
 - `sandbox: io_uring_register from ffi without net dies of SIGSYS (<mode>)`
 - `sandbox: io_uring_enter from ffi without net dies of SIGSYS (<mode>)`
-- `sandbox: io_uring_enter from ffi with net reaches the kernel (<mode>)`
+- `sandbox: io_uring_enter from ffi with net on a descriptor that is no premade ring dies of SIGSYS (<mode>)`
+- `sandbox: io_uring_enter from ffi with net and no ring premade dies of SIGSYS (<mode>)`
+- `sandbox: with net and process.spawn io_uring_enter from ffi reaches the kernel (<mode>)`
+- `sandbox: without --sandbox a ring inherited across exec is entered (the control)`
+- `sandbox: a ring a parent made unconfined and passed across exec cannot be entered: SIGSYS (<mode>)`
 - `sandbox: without net the ring probe answers the refusal, not SIGSYS (<mode>)`
 - `sandbox: a main without net, or with net and never the ring bit, makes no ring (<mode>)`
 - `sandbox: with net and process.spawn io_uring_setup from ffi is not killed and no ring is premade (<mode>)`

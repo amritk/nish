@@ -1,6 +1,6 @@
 # WP63: io_uring direct descriptors for `nish:net`
 
-**State:** In progress · **Done:** 3 of 6 · **Design note:** [`docs/wp63-iouring-net.md`](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md)
+**State:** In progress · **Done:** 4 of 6 · **Design note:** [`docs/wp63-iouring-net.md`](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md)
 
 ## Stages
 
@@ -13,7 +13,7 @@
 
 ## Next
 
-S3: [§10](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#10-stages); restricted rings made before the sandbox filter, so a `--sandbox` program keeps the ring bit. S5 does not depend on S1 to S4 and can land first.
+S4: [§10](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#10-stages); `nish/net/handler` past the descriptor limit, and the entry re-measured with SQLite on top, under the same sandbox rule S3 landed. S5 does not depend on S1 to S4 and can land in parallel.
 
 ## Open questions
 

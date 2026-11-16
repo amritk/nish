@@ -5180,7 +5180,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities`, `host` and `compat` — is NL3036
+  than `noPanic`, `capabilities`, `host`, `compat` and `netRings` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as
@@ -5279,9 +5279,11 @@ without one grants the capability whole, as before:
   row records narrowed — is NL2593 until the lock is updated; a row that
   records the capability whole accepts any argument (`caps_lock_args`).
 - `@nish_sandbox` takes a fifth operand for the programs a
-  `process.spawn=<program>` grant allows, null when none is named:
-  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
-  The four-operand call in "The sandbox" below predates it.
+  `process.spawn=<program>` grant allows, null when none is named, and a
+  sixth, the number of restricted rings to make before the filter (WP63 S3;
+  0 unless `main` reaches `net` with `NET_LISTEN_RING` and not
+  `process.spawn`):
+  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null, i32 0)`.
 - `process.spawn=exec:<program>` grants the program as `process.spawn=<program>`
   does, and lets it start others: under `--sandbox` a granted program is held
   to its own start (no program it starts may exec again), and an `exec:` one
@@ -5409,7 +5411,7 @@ program's code does not reach, `ffi` callees and constructors included
 
 define internal void @.sandbox.apply() {
 entry:
-  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null)
+  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null, i8* null, i32 0)
   ret void
 }
 

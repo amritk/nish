@@ -1486,7 +1486,7 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic`, `capabilities`, `host` and `compat`, each written once**, and anything
+  keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once**, and anything
   else is an error (NL3036) where `package.json` writes it: a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a

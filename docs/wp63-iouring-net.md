@@ -499,7 +499,9 @@ runtime restricted before the filter loaded.
    `recvfrom`, `sendto` or `close` on a socket the process holds. The ring
    adds where a connection lives, not what the program may do with it.
 4. **The filter then kills `io_uring_setup` and `io_uring_register`.** It
-   allows `io_uring_enter`. Without `net`, all three stay killed, as now. With
+   allows `io_uring_enter` only when its first argument, the low word of
+   `args[0]`, is the descriptor of a ring step 1 made, and kills it on any
+   other descriptor, or always when no ring was made. Without `net`, all three stay killed, as now. With
    `net` and `process.spawn`, nothing changes. A program cannot make a ring of
    its own, cannot lift a ring's restrictions (they are set once, before the
    ring is enabled: `io_register_restrictions` requires
@@ -510,8 +512,12 @@ runtime restricted before the filter loaded.
 write and close sockets. A restricted ring can do those things and nothing
 else, and only on slots that hold sockets from the process's own listeners.
 `io_uring_enter` on a descriptor that is not one of the runtime's rings
-answers `-EOPNOTSUPP` (`io_uring/io_uring.c:3484`), and the program cannot
-make another ring. A program that gets hold of a ring's descriptor through
+dies of SIGSYS: the kernel's own answer, `-EOPNOTSUPP` for a file that is
+no ring (`io_uring/io_uring.c:3484`), would not stop a ring made outside
+the sandbox and inherited across `exec` (NURING-35), and the program cannot
+make another ring. The filter matches numbers, not files, so code that
+`dup2`s such a ring onto a premade ring's number still enters it; that is
+recorded open (NURING-36). A program that gets hold of a ring's descriptor through
 `nish:ffi` can submit only what the restrictions allow, which is what
 `nish:net` does anyway. A `SEND` with a destination address is a `sendto`
 with one. On a TCP socket the address is ignored, and on a UDP socket it is

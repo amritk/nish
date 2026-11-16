@@ -138,7 +138,7 @@ granted `process.spawn=true`, on x86-64 Debian):
 ```llvm
 @.sandbox.exec = private unnamed_addr constant [63 x i8] c"/usr/bin/true\00//usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"
 
-  call void @nish_sandbox(i32 256, i32 1, i8* null, i8* null, i8* getelementptr inbounds ([63 x i8], [63 x i8]* @.sandbox.exec, i64 0, i64 0))
+  call void @nish_sandbox(i32 256, i32 1, i8* null, i8* null, i8* getelementptr inbounds ([63 x i8], [63 x i8]* @.sandbox.exec, i64 0, i64 0), i32 0)
 ```
 
 An interpreter the grant does not name is written with a second leading
@@ -358,7 +358,7 @@ arguments: the wrapper emits it only when `this.program.usesArgv`
 
 define internal void @.sandbox.apply() {
 entry:
-  call void @nish_sandbox(i32 33, i32 1, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.sandbox.read, i64 0, i64 0), i8* null, i8* null)
+  call void @nish_sandbox(i32 33, i32 1, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.sandbox.read, i64 0, i64 0), i8* null, i8* null, i32 0)
   ret void
 }
 
@@ -371,7 +371,7 @@ entry:
   ret i32 %0
 }
 
-declare void @nish_sandbox(i32, i32, i8*, i8*, i8*)
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*, i32)
 declare void @nish_sandbox_check()
 ```
 
