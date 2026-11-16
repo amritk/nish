@@ -1045,9 +1045,18 @@ export class OidcKeys {
  *   or the `JWT_ERR_*` the verifier refused the token with.
  */
 export const oidcVerify = (keys: OidcKeys, token: string, audience: string, now: i64): i32 => {
-  // Every refusal, the ones decided here included, leaves no claims behind:
-  // no payload and no exp, nbf or iat from an earlier token.
-  const v: JwtVerifier = keys.verifier
+  // Every refusal leaves no claims behind: no payload and no exp, nbf or iat,
+  // neither an earlier token's nor, when the verifier refuses, this one's.
+  oidcClearClaims(keys.verifier)
+  const code: i32 = oidcPick(keys, token, audience, now)
+  if (code !== OIDC_OK) {
+    oidcClearClaims(keys.verifier)
+  }
+  return code
+}
+
+// Forgets the last token's payload and its exp, nbf and iat.
+const oidcClearClaims = (v: JwtVerifier): void => {
   v.claimsLen = 0
   v.hasExp = false
   v.hasNbf = false
@@ -1055,6 +1064,10 @@ export const oidcVerify = (keys: OidcKeys, token: string, audience: string, now:
   v.exp = toI64(0)
   v.nbf = toI64(0)
   v.iat = toI64(0)
+}
+
+// Chooses the token's key and verifies the token with it.
+const oidcPick = (keys: OidcKeys, token: string, audience: string, now: i64): i32 => {
   const set: OidcKeySet | null = keys.set
   if (set === null || !keys.usable(now)) {
     return OIDC_ERR_STALE

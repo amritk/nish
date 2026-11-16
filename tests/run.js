@@ -29744,6 +29744,8 @@ if (dealtHere("runCache")) {
             nonAscii: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}é`,
             long: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}${"A".repeat(8192)}`,
             longKid: sign("RS256", rsaKey, { kid: "k".repeat(300) }, good),
+            kid256: sign("RS256", rsaKey, { kid: "k".repeat(256) }, good),
+            kid257: sign("RS256", rsaKey, { kid: "k".repeat(257) }, good),
             numKid: sign("RS256", rsaKey, { kid: 7 }, good),
             emptyKid: sign("RS256", rsaKey, { kid: "" }, good),
           }
@@ -29990,6 +29992,7 @@ if (dealtHere("runCache")) {
           t.eqI64("max-age, space after =", oidcLifetime("max-age= 7200"), toI64(7200))
           t.eqI64("max-age with a sign", oidcLifetime("max-age=+7200"), OIDC_DEFAULT_LIFETIME)
           t.eqI64("max-age with a byte below 0 after the digits", oidcLifetime("max-age=700/"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age with a byte above 9 after the digits", oidcLifetime("max-age=700:"), OIDC_DEFAULT_LIFETIME)
           t.eqI64("s-maxage ignored", oidcLifetime("s-maxage=7200"), OIDC_DEFAULT_LIFETIME)
           t.eqI64("no-store", oidcLifetime("no-store"), OIDC_DEFAULT_LIFETIME)
 
@@ -30022,6 +30025,9 @@ if (dealtHere("runCache")) {
           const solo: OidcKeys = keysWith(doc_one, NOW)
           t.eqI32("an empty kid is unknown, even against one key", oidcVerify(solo, tok_emptyKid, "api", NOW), OIDC_ERR_UNKNOWN_KID)
           t.ok("an empty kid marks the set as wanted", solo.due(NOW + OIDC_MIN_REFRESH_INTERVAL))
+          const known: OidcKeys = keysWith(doc_all, NOW)
+          t.eqI32("a known kid verifies", oidcVerify(known, tok_rs256, "api", NOW), JWT_OK)
+          t.ok("a known kid does not mark the set as wanted", !known.due(NOW + OIDC_MIN_REFRESH_INTERVAL + toI64(1)))
           const atMax: OidcOptions = new OidcOptions()
           atMax.maxToken = ${tokens.rs256.length}
           const km: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), atMax)
@@ -30038,15 +30044,17 @@ if (dealtHere("runCache")) {
           ks.refreshWith(bytes(doc_all), null, NOW)
           t.eqI32("leeway 0 is taken", oidcVerify(ks, tok_expiredInLeeway, "api", NOW), JWT_ERR_EXPIRED)
           t.eqI32("a kid over OIDC_MAX_KID reads as none", oidcVerify(k, tok_longKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("a kid of OIDC_MAX_KID bytes is read", oidcVerify(k, tok_kid256, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          t.eqI32("a kid of OIDC_MAX_KID + 1 bytes reads as none", oidcVerify(k, tok_kid257, "api", NOW), OIDC_ERR_KID_REQUIRED)
           t.eqI32("a kid that is not a string reads as none", oidcVerify(k, tok_numKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
           t.eqI32("over maxToken", oidcVerify(k, tok_long, "api", NOW), JWT_ERR_SIZE)
           t.eqI32("claims cleared after a refusal", toI32(k.claimsText().length), 0)
-          // Each refusal decided before the verifier runs also leaves no claims behind: each follows
-          // an accepted token that carries exp, nbf and iat, and every one of them is cleared.
-          const refusals: string[] = ["oversize", "kid required", "unknown kid", "stale"]
-          const refused: string[] = [tok_long, tok_noKid, tok_unknownKid, tok_rs256]
-          const codes: i32[] = [JWT_ERR_SIZE, OIDC_ERR_KID_REQUIRED, OIDC_ERR_UNKNOWN_KID, OIDC_ERR_STALE]
-          for (let i: i32 = 0; i < 4; i += 1) {
+          // Every refusal leaves no claims behind, whether decided before the verifier runs or inside
+          // it: each follows an accepted token that carries exp, nbf and iat, and every one is cleared.
+          const refusals: string[] = ["oversize", "kid required", "unknown kid", "stale", "wrong aud", "wrong iss", "expired"]
+          const refused: string[] = [tok_long, tok_noKid, tok_unknownKid, tok_rs256, tok_wrongAud, tok_wrongIss, tok_expired]
+          const codes: i32[] = [JWT_ERR_SIZE, OIDC_ERR_KID_REQUIRED, OIDC_ERR_UNKNOWN_KID, OIDC_ERR_STALE, JWT_ERR_AUDIENCE, JWT_ERR_ISSUER, JWT_ERR_EXPIRED]
+          for (let i: i32 = 0; i < 7; i += 1) {
             const name: string = refusals[i]
             t.eqI32(\`accept before \${name}\`, oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
             t.ok(\`exp, nbf and iat set before \${name}\`, k.verifier.hasExp && k.verifier.hasNbf && k.verifier.hasIat)

@@ -80,7 +80,7 @@ refused the token with: `JWT_ERR_ALG`, `JWT_ERR_SIGNATURE`,
 | Code | Meaning |
 | --- | --- |
 | `OIDC_ERR_UNKNOWN_KID` | The token's `kid` is not in the key set. The next `refresh` fetches the set early |
-| `OIDC_ERR_KID_REQUIRED` | The token has no `kid`, or one that is not a string or is over `OIDC_MAX_KID` bytes, and the set holds more than one key |
+| `OIDC_ERR_KID_REQUIRED` | The token has no `kid`, or one that is not a string or is over `OIDC_MAX_KID` bytes, or its header cannot be read, and the set holds more than one key |
 | `OIDC_ERR_STALE` | No key set has been taken yet, or the last one is past its hard expiry |
 
 ## What is checked
@@ -89,13 +89,14 @@ refused the token with: `JWT_ERR_ALG`, `JWT_ERR_SIGNATURE`,
 same issuer, byte for byte: `https://auth.example/` and `https://auth.example`
 are different issuers, so give the spelling your provider uses in its
 tokens' `iss`. The key set is read only from the `jwks_uri` that document
-gives. Both must be `https`, with no user name or password in the URL, and
+gives. Both must be `https` (or loopback `http`, with the option
+[below](#local-development)), with no user name or password in the URL, and
 the issuer may not carry a query or a fragment; redirects are not followed.
 
-**A key set on another host is fetched as an outsider would.** Discovery,
+**A key set on another origin is fetched as an outsider would.** Discovery,
 and a `jwks_uri` on the issuer's own origin, are fetched as `nish/net/fetch`
 fetches by default, through any proxy the environment names. A `jwks_uri` on
-another origin is fetched under `options.jwksOutbound`, by default a
+another origin (another scheme, host or port) is fetched under `options.jwksOutbound`, by default a
 `new OutboundPolicy()` from `nish/net/outbound`: public addresses only, no
 proxy. So a discovery document cannot point your program at an internal
 address. Set `options.jwksOutbound = null` to fetch it like the issuer, if
@@ -115,7 +116,8 @@ A token whose header names any other algorithm is refused: `none`, any
 `HS*` algorithm (so the public key can never be used as an HMAC secret),
 and `RS256` on a key published for `RS384`.
 
-**The key set is read strictly.** Encryption keys (`"use":"enc"`), and keys
+**The key set is read strictly.** Keys with any `use` other than `"sig"`
+(encryption keys, `"use":"enc"`, among them), and keys
 with an algorithm this module does not have at all (`"alg":"PS256"`), are
 skipped, and so is a key type or curve it does not know (X25519) when the
 key has no `alg`. A set is refused whole when any key carries private
@@ -127,12 +129,14 @@ JWT module knows, `HS*` included; when a key's `alg` disagrees with its type, `H
 included; when two keys
 share a `kid`; or when a key's material does not make a key, such as an RSA
 modulus under 2048 bits. A provider that publishes such a set is
-misconfigured, and no key from it is trusted.
+misconfigured, and no key from it is trusted. Two keys without a `kid` also
+refuse the set: a key with no `kid` is usable only when it is the only key.
 
 **The claims are checked by `nish/crypto/jwt`.** `iss` must be the issuer,
 `aud` must be `audience` or an array holding it, and `exp` is required;
 `exp`, `nbf` and `iat` are allowed `options.leeway` seconds of clock skew
-(60 by default).
+(60 by default, held between 0 and 2^31-1). A refused token leaves no claims
+behind: `keys.claimsText()` is empty and `exp`, `nbf` and `iat` are 0.
 
 ## Key rotation
 
@@ -145,7 +149,8 @@ the old one some time after. `OidcKeys` follows that:
 - A token whose `kid` the set lacks makes the next `refresh` fetch at once,
   however fresh the set is, but never more than once per
   `OIDC_MIN_REFRESH_INTERVAL` (one minute). A flood of tokens with made-up
-  `kid`s costs the provider one request a minute.
+  `kid`s costs the provider one request a minute from each `OidcKeys`: N
+  workers that each hold one make up to N requests a minute.
 - A key the provider removed stops verifying once a set without it is
   taken. A token naming a key the set holds never makes a refresh due, so
   that happens when the set's lifetime ends: at most `OIDC_MAX_LIFETIME`
@@ -223,8 +228,9 @@ than the issuer.
 ## Cost
 
 An `OidcKeys` sizes its token buffer once, from `options.maxToken`
-(`JWT_MAX_TOKEN`, 8 KiB, by default), and a key set is at most
-`OIDC_MAX_KEYS` (64) keys from a document of at most `OIDC_MAX_JWKS_BYTES`
+(`JWT_MAX_TOKEN`, 8 KiB, by default; `new OidcKeys` panics on a value
+outside 16 bytes to 1 MiB), and a key set is at most
+`OIDC_MAX_KEYS` (64) entries, skipped ones counted, from a document of at most `OIDC_MAX_JWKS_BYTES`
 (64 KiB); the discovery document is at most `OIDC_MAX_DISCOVERY_BYTES`
 (64 KiB). A larger body is cut off as it arrives, never buffered whole. Verifying allocates what the signature check needs, as in
 [authentication tokens (JWT)](auth.md#cost). An `OidcKeys` holds working
