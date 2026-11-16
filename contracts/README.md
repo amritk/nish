@@ -45,7 +45,8 @@ paragraph, which extracts to `outOfScope`; and a vector run many times over is
 declared with an `Iterate:` paragraph after its table. An iterated vector
 marked `slow` is emitted skipped unless `spec emit` is given `--slow`, and the
 committed tests are emitted without it: run one by hand with `spec run --slow`;
-`node tests/run.js spec` prints a SKIP line for each clause a test skipped.
+`node tests/run.js spec` prints a SKIP line for each clause a test skipped, and
+fails a test that passed no clause.
 The syntax: vector's `docs/guide/guides/writing-a-spec.md`, in `build/vector/`.
 
 A spec that cites a reference not yet in `.refcache/` fails to build: run
