@@ -7366,12 +7366,12 @@ const DECLARED = [
     changelog: "HandlerLimits listen on io_uring rings",
     why: "the bench prints `netRingState()`, which is new to `nish:net` in this release, so the 0.41.0 seed refuses it (WP63 S4)",
   },
-  ...["handler.ll", "main.h", "main.ll"].map((file) => ({
+  {
     program: "tests/link/net_handler_rest_close/main.ts",
-    file,
+    file: "exit",
     changelog: "HandlerLimits listen on io_uring rings",
-    why: "a probe new with this change: its handler's `forget` ends the accept rest and `HandlerLimits` gains `ring` and `listen`, which the seed's handler lacks (WP63 S4)",
-  })),
+    why: "a probe new with this change: it reads `HttpHandler.resting()`, which the seed's handler lacks, so the 0.41.0 seed refuses it (WP63 S4)",
+  },
   ...[
     "tests/link/net_http_server/main.ts",
     "tests/link/net_http_server_bad_limit/main.ts",
