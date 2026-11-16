@@ -16,6 +16,26 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-16
+
+### Added
+
+- cli: Compatibility mode's machinery with no feature — the allow-list, nish.compat and the dialect in the IR (WP28 C0) ([#1497](https://github.com/amritk/nish/pull/1497))
+- runtime: WP63 S1 — the io_uring ring layer, with no surface ([#1649](https://github.com/amritk/nish/pull/1649))
+- std: Nish/temporal, TC39 Temporal's dates, times, instants and durations (WP64 S1) ([#1650](https://github.com/amritk/nish/pull/1650))
+
+### Fixed
+
+- cli: Install.sh recognises its wrapper by its first two lines, so an arm or Apple-silicon compiler that names the marker is not overwritten ([#1645](https://github.com/amritk/nish/pull/1645))
+- net: A prefork UDP group on port 0 never joins another reuseport group's port ([#1646](https://github.com/amritk/nish/pull/1646))
+
+### Documentation
+
+- runtime: Re-measure WP49 stage 6's gate after the resume build ([#1636](https://github.com/amritk/nish/pull/1636))
+- WP28's spikes and C0 recorded in the note and the roadmap ([#1499](https://github.com/amritk/nish/pull/1499))
+- runtime: WP63's note — io_uring direct descriptors for nish:net, measured go ([#1647](https://github.com/amritk/nish/pull/1647))
+
+
 ## [0.40.1] - 2026-11-15
 
 ### Fixed
@@ -1958,3 +1978,4 @@ file per release, and each release's notes and downloads are on the
 [0.39.0]: https://github.com/amritk/nish/releases/tag/v0.39.0
 [0.40.0]: https://github.com/amritk/nish/releases/tag/v0.40.0
 [0.40.1]: https://github.com/amritk/nish/releases/tag/v0.40.1
+[0.41.0]: https://github.com/amritk/nish/releases/tag/v0.41.0
