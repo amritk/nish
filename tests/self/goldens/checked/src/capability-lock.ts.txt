@@ -55,6 +55,7 @@ struct CapabilityLock (class) size=72 align=8 exported
   method string -> @CapabilityLock.string
   method read -> @CapabilityLock.read
   method separator -> @CapabilityLock.separator
+  method spells -> @CapabilityLock.spells
   method readVersion -> @CapabilityLock.readVersion
   method readPackages -> @CapabilityLock.readPackages
   method readRow -> @CapabilityLock.readRow
@@ -185,14 +186,21 @@ function CapabilityLock.separator(this: CapabilityLock, close: i32): boolean -> 
   callee +1:5 CapabilityLock.skipBlank -> @CapabilityLock.skipBlank
   callee +2:9 CapabilityLock.peek -> @CapabilityLock.peek
   callee +3:7 CapabilityLock.broken -> @CapabilityLock.broken
+function CapabilityLock.spells(this: CapabilityLock, start: i32, want: string): boolean -> @CapabilityLock.spells [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer this: size=72 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 i: i32 (let)
 function CapabilityLock.readVersion(this: CapabilityLock): void -> @CapabilityLock.readVersion [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CapabilityLock.fail lockNumberByte nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=72 writesThrough=true captured=false passedTo=CapabilityLock.fail#0
+  calls: CapabilityLock.fail CapabilityLock.spells lockNumberByte nish_panic_index nish_panic_overflow nish_str_concat
+  pointer this: size=72 writesThrough=true captured=false passedTo=CapabilityLock.spells#0 CapabilityLock.fail#0
   stackSites=0 stackLocals=0
   local -2:11 start: i32 (const)
   callee -1:42 lockNumberByte -> @lockNumberByte
+  callee +2:10 CapabilityLock.spells -> @CapabilityLock.spells
   callee +3:7 CapabilityLock.fail -> @CapabilityLock.fail
 function CapabilityLock.readPackages(this: CapabilityLock): void -> @CapabilityLock.readPackages [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
