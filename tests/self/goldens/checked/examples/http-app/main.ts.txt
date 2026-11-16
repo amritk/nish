@@ -184,6 +184,7 @@ struct HttpHandler (class) size=264 align=8 exported
   method live -> @nish.HttpHandler.live
   method pooled -> @nish.HttpHandler.pooled
   method connections -> @nish.HttpHandler.connections
+  method resting -> @nish.HttpHandler.resting
   method start -> @nish.HttpHandler.start
   method write -> @nish.HttpHandler.write
   method put -> @nish.HttpHandler.put
@@ -702,6 +703,10 @@ function HttpHandler.connections(this: HttpHandler): i32 -> @nish.HttpHandler.co
   pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 Http1Server.busy -> @nish.Http1Server.busy
+function HttpHandler.resting(this: HttpHandler): boolean -> @nish.HttpHandler.resting [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=264 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function HttpHandler.start(this: HttpHandler, r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 -> @nish.HttpHandler.start [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
