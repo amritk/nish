@@ -1478,6 +1478,6 @@
         { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
     },
-    "customDomain": "docs.nishlang.com"
+    "customDomain": "nishlang.com"
   }
 }
