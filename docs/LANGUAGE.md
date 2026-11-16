@@ -15071,6 +15071,31 @@ by the caller.
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
 
+### The debug arena
+
+- **`--debug-arena`** links the program against a runtime compiled with
+  `-DNISH_ARENA_DEBUG` (`scripts/build.sh --debug-arena`). The IR is byte for
+  byte the IR without it. Under it every arena block is a chunk of its own,
+  on pages no earlier block had, with `cap` exact, so the inline bump never
+  fits again and every allocation and every scope's release reaches the
+  runtime. A release or reset retires each chunk it frees: its pages become
+  `PROT_NONE` and go back to the system, but their addresses stay reserved,
+  so a read or write through a reference that outlived its scope faults at
+  that access. The runtime writes `nish: --debug-arena: stale arena reference
+  at 0x…` to stderr, and the program dies of `SIGSEGV`. A fault elsewhere
+  goes to the handler that was installed before.
+- **It needs a link and a native profile.** Without `--link` and outside
+  `nish run` it is a usage error (exit 2), and so is `--profile wasi`;
+  `scripts/build.sh` refuses it with the `wasm`, `wasm-host`, `wasi` and
+  `napi` profiles. `nish run` takes it, and the run and runtime caches key on
+  it, so a debug-arena build never reuses a normal binary or runtime.
+- **It is for tests, never a release.** Each block takes at least a page and
+  no address is reused, so memory only grows; a process at its limit of
+  mappings fills a retired chunk with `0xDB` instead of unmapping it. The
+  rules in *Memory model* mean no correct program reads released memory, so a
+  trap under the mode is a compiler or runtime bug
+  ([security/runtime.md](security/runtime.md#the-debug-arena)).
+
 ### Diagnostics and debugging flags
 
 - **Errors are collected, not thrown on the first.** Phase 0 reports every

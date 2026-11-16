@@ -177,6 +177,12 @@ void nish_cross_end(void *state) {
  * in no chunk below the newest leaves the arena as it was, as the release
  * does. */
 static void nish_rewind(uint64_t mark) {
+#ifdef NISH_ARENA_DEBUG
+  /* Keeping a chunk to bump in would let the next element's rewind stay in
+     compiled code, and never retire what it gave back. */
+  nish_arena_release(mark);
+  return;
+#endif
   struct nish_arena *a = &nish_arena;
   nish_xchunk *top = a->chunks;
   char *buf = (char *)(top + 1);

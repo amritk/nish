@@ -719,6 +719,9 @@ const commandMain = (): number => {
   // `--cpu`: empty for the baseline CPU, else CPU_LEVEL. Driver-level like
   // the profile: it changes the link, never a byte of the IR.
   let cpu = ""
+  // `--debug-arena`: link the runtime whose arena traps a stale reference.
+  // Driver-level like `--cpu`: it changes the runtime, never the IR.
+  let debugArena = false
   let json = false
   let emitChecked = false
   let emitAst = false
@@ -973,6 +976,8 @@ const commandMain = (): number => {
       return 2
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false
+    } else if (value === "--debug-arena") {
+      debugArena = true
     } else if (value === "--threads") {
       irFlag = irFlag.length === 0 ? value : irFlag
       opts.threads = true
@@ -1072,6 +1077,22 @@ const commandMain = (): number => {
   if (roots.length === 0) {
     console.error(usageText(2))
     return 2
+  }
+  // The debug arena is a runtime, so it needs a link; it maps pages and
+  // catches SIGSEGV, which wasm has neither of.
+  if (debugArena) {
+    if (!runMode && link.length === 0) {
+      console.error(
+        `compile: --debug-arena changes the runtime a binary links, so it needs --link or \`${CLI} run\``
+      )
+      return 2
+    }
+    if (profile === "wasi") {
+      console.error(
+        "compile: --debug-arena maps pages and catches SIGSEGV, so it cannot be used with --profile wasi"
+      )
+      return 2
+    }
   }
   // After the loop, because `--profile` and `--target` may follow `--cpu`.
   // The level is an x86-64 one, so a module for another machine, or for
@@ -1569,6 +1590,7 @@ const commandMain = (): number => {
       cpu,
       opts.debugInfo,
       opts.threads,
+      debugArena,
       json
     )
     if (cached.status === 0) {
@@ -1585,6 +1607,7 @@ const commandMain = (): number => {
       cpu,
       opts.debugInfo,
       opts.threads,
+      debugArena,
       json,
       runArgsFrom
     )
@@ -1629,6 +1652,7 @@ const commandMain = (): number => {
     cpu,
     opts.debugInfo,
     opts.threads,
+    debugArena,
     anyCallsSqlite(emitted),
     "",
     json,
@@ -1993,10 +2017,11 @@ const runProgram = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   json: boolean,
   argsFrom: i32
 ): number => {
-  const cached = cachedBinary(emitted, pkg, name, profile, cpu, debugInfo, threads, json)
+  const cached = cachedBinary(emitted, pkg, name, profile, cpu, debugInfo, threads, debugArena, json)
   if (cached.status !== 0) {
     return cached.status
   }
@@ -2034,6 +2059,7 @@ const cachedBinary = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   json: boolean
 ): CachedBinary => {
   const cached = new CachedBinary()
@@ -2054,7 +2080,18 @@ const cachedBinary = (
   const sqlite = anyCallsSqlite(emitted)
   // Hashed once, for this key and for the SQLite entry's below it.
   const sqliteLines = sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
-  const key = runCacheKey(emitted, file, pkg.root, profile, cpu, debugInfo, threads, cCompiler(), sqliteLines)
+  const key = runCacheKey(
+    emitted,
+    file,
+    pkg.root,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    debugArena,
+    cCompiler(),
+    sqliteLines
+  )
   cached.entry = `${cacheRoot}/${sha256Hex(key)}`
   cached.binary = `${cached.entry}/${file}`
   const keyFile = `${cached.entry}/key`
@@ -2071,6 +2108,7 @@ const cachedBinary = (
       cpu,
       debugInfo,
       threads,
+      debugArena,
       sqlite,
       sqliteLines,
       json
@@ -2161,7 +2199,17 @@ const cachedTool = (
     tool.status = internalErrorFor(`${what} did not compile`, json)
     return tool
   }
-  const built = cachedBinary(compilation.emit(), pkg, `${CLI}-${name}`, "debug", "", false, false, json)
+  const built = cachedBinary(
+    compilation.emit(),
+    pkg,
+    `${CLI}-${name}`,
+    "debug",
+    "",
+    false,
+    false,
+    false,
+    json
+  )
   tool.binary = built.binary
   tool.entry = built.entry
   tool.status = built.status
@@ -2312,6 +2360,7 @@ const buildIntoCache = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   sqlite: boolean,
   sqliteLines: string,
   json: boolean
@@ -2347,6 +2396,7 @@ const buildIntoCache = (
     cpu,
     debugInfo,
     threads,
+    debugArena,
     sqlite,
     sqliteLines,
     json,
@@ -2391,6 +2441,7 @@ const linkProgram = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   sqlite: boolean,
   sqliteLines: string,
   json: boolean,
@@ -2415,6 +2466,7 @@ const linkProgram = (
     cpu,
     debugInfo,
     threads,
+    debugArena,
     sqlite,
     sqliteLines,
     json
@@ -2458,7 +2510,7 @@ const linkProgram = (
   }
   argv.push("-o")
   argv.push(link)
-  pushRecipeFlags(argv, profile, cpu, debugInfo, threads)
+  pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena)
   const status = spawnSync(argv)
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
@@ -2487,7 +2539,8 @@ const pushRecipeFlags = (
   profile: string,
   cpu: string,
   debugInfo: boolean,
-  threads: boolean
+  threads: boolean,
+  debugArena: boolean
 ): void => {
   argv.push("--profile")
   argv.push(profile)
@@ -2508,6 +2561,11 @@ const pushRecipeFlags = (
   // mismatch is a link error rather than a program with two arenas.
   if (threads) {
     argv.push("--threads")
+  }
+  // `--debug-arena` changes only the runtime, which build.sh compiles with
+  // -DNISH_ARENA_DEBUG: the IR is the same either way.
+  if (debugArena) {
+    argv.push("--debug-arena")
   }
 }
 
@@ -2576,6 +2634,7 @@ const cachedRuntime = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   sqlite: boolean,
   sqliteLines: string,
   json: boolean
@@ -2612,7 +2671,7 @@ const cachedRuntime = (
   if (answered !== 0 || version === null || runtimeDir === null) {
     return none
   }
-  const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, cc, version)
+  const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, debugArena, cc, version)
   const recipe: string[] = [`${root}/runtime/runtime.c`, "--runtime-objects"]
   const runtime = cachedEntry(
     root,
@@ -2626,6 +2685,7 @@ const cachedRuntime = (
     cpu,
     debugInfo,
     threads,
+    debugArena,
     json
   )
   if (runtime === null) {
@@ -2662,6 +2722,8 @@ const cachedRuntime = (
     cpu,
     debugInfo,
     threads,
+    // SQLite reads no arena: its objects are the same with the debug arena.
+    false,
     json
   )
   return objects === null ? null : new CachedObjects(runtime, objects, key)
@@ -2835,6 +2897,7 @@ const cachedEntry = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   json: boolean
 ): string | null => {
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
@@ -2853,7 +2916,7 @@ const cachedEntry = (
     argv.push(arg)
   }
   argv.push(work)
-  pushRecipeFlags(argv, profile, cpu, debugInfo, threads)
+  pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena)
   const status = spawnSync(argv)
   // A compiler that answers 0 and writes no object (`CC=true`, which turns a
   // link into a no-op) leaves nothing to move, and the entry then gets no key:

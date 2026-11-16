@@ -394,12 +394,20 @@ const addUnitFingerprints = (
 }
 
 /**
- * The recipe flags of every key: the profile, then `--cpu`, `-g` and
- * `--threads` each only when set, so a key for the baseline recipe is the
+ * The recipe flags of every key: the profile, then `--cpu`, `-g`,
+ * `--threads` and `--debug-arena` each only when set, so a key for the baseline recipe is the
  * bytes it was before any of them existed.
  */
-const profileLine = (profile: string, cpu: string, debugInfo: boolean, threads: boolean): string =>
-  `profile ${profile}${cpu.length > 0 ? ` --cpu ${cpu}` : ""}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`
+const profileLine = (
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean,
+  debugArena: boolean
+): string =>
+  `profile ${profile}${cpu.length > 0 ? ` --cpu ${cpu}` : ""}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}${
+    debugArena ? " --debug-arena" : ""
+  }\n`
 
 /**
  * Everything a link's result depends on, as one text: a header line per
@@ -422,13 +430,14 @@ export const runCacheKey = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   cc: string,
   sqlite: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add(`run ${name}\n`)
-  key.add(profileLine(profile, cpu, debugInfo, threads))
+  key.add(profileLine(profile, cpu, debugInfo, threads, debugArena))
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
   key.add(sqlite)
@@ -449,7 +458,9 @@ export const runCacheKey = (
  * The flags each profile compiles with are `scripts/build.sh`'s, whose bytes
  * are fingerprinted; it reads no variable but `CC` for the runtime's units. A
  * `--cpu` level is on the profile line, as in `runCacheKey`: objects compiled
- * for x86-64-v3 are never handed to a baseline link, nor the other way round.
+ * for x86-64-v3 are never handed to a baseline link, nor the other way round,
+ * and `--debug-arena` is there likewise. The SQLite key below never names it:
+ * SQLite reads no arena, and its objects are compiled without the flag.
  */
 export const runtimeCacheKey = (
   root: string,
@@ -458,13 +469,14 @@ export const runtimeCacheKey = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  debugArena: boolean,
   cc: string,
   ccVersion: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add("runtime-objects\n")
-  key.add(profileLine(profile, cpu, debugInfo, threads))
+  key.add(profileLine(profile, cpu, debugInfo, threads, debugArena))
   key.add(`cc ${cc}\n`)
   key.add(`cc-version ${ccVersion.length}\n`)
   key.add(ccVersion)
@@ -496,7 +508,7 @@ export const sqliteCacheKey = (
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add("sqlite-objects\n")
-  key.add(profileLine(profile, cpu, debugInfo, threads))
+  key.add(profileLine(profile, cpu, debugInfo, threads, false))
   key.add(`cc ${cc}\n`)
   key.add(`cc-version ${ccVersion.length}\n`)
   key.add(ccVersion)
