@@ -26537,9 +26537,10 @@ if (dealtHere("releaseChecks")) {
 
   // ---- Agent skills: scripts/link-skills.mjs, bin/nish-skills.js, postinstall ----------
   // A package ships a skill as skills/<name>/SKILL.md, and the linker puts a link to it in
-  // the project's .claude/skills/. Each claim here is proven by exit status and by
-  // lstat/readlink on a fixture project outside the checkout, never by what was printed
-  // (.claude/testing.md, "Checks that spawn a process").
+  // the project's .claude/skills/ -- only once the user has accepted that skill at its
+  // current hash. Each claim here is proven by exit status and by lstat/readlink on a
+  // fixture project outside the checkout, never by what was printed (.claude/testing.md,
+  // "Checks that spawn a process").
   if (!only || "skills".includes(only)) {
     const skillsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nish-skills-"))
     /** A .claude/skills a check made read-only, put back to 0755 whatever happens. */
@@ -26548,7 +26549,12 @@ if (dealtHere("releaseChecks")) {
       const skillsBin = path.join(root, "bin", "nish-skills.js")
       const lstatOf = (file) => fs.lstatSync(file, { throwIfNoEntry: false }) ?? null
       let fixtures = 0
-      /** A project directory with a package.json and the given packages installed. */
+      /** A SKILL.md with frontmatter that grants nothing. */
+      const plainSkill = (name, skill) => `---\nname: ${skill}\ndescription: ${name} ${skill}\n---\n\n# ${skill}\n`
+      /**
+       * A project directory with a package.json and the given packages installed. A skill
+       * is its name, or `[name, SKILL.md text]`.
+       */
       const project = (packages) => {
         const dir = path.join(skillsRoot, `p${fixtures++}`)
         fs.mkdirSync(dir, { recursive: true })
@@ -26556,10 +26562,11 @@ if (dealtHere("releaseChecks")) {
         for (const [name, exportsField, skills] of packages) {
           const at = path.join(dir, "node_modules", name)
           fs.mkdirSync(at, { recursive: true })
-          fs.writeFileSync(path.join(at, "package.json"), JSON.stringify({ name, exports: exportsField }))
-          for (const skill of skills) {
+          fs.writeFileSync(path.join(at, "package.json"), JSON.stringify({ name, version: "1.0.0", exports: exportsField }))
+          for (const entry of skills) {
+            const [skill, text] = typeof entry === "string" ? [entry, plainSkill(name, entry)] : entry
             fs.mkdirSync(path.join(at, "skills", skill), { recursive: true })
-            fs.writeFileSync(path.join(at, "skills", skill, "SKILL.md"), `# ${name} ${skill}\n`)
+            fs.writeFileSync(path.join(at, "skills", skill, "SKILL.md"), text)
           }
         }
         return dir
@@ -26567,8 +26574,9 @@ if (dealtHere("releaseChecks")) {
       const nishPkg = ["nish", { ".": { types: "./runtime/nish.d.ts" } }, ["writing-nish"]]
       const libPkg = ["@scope/lib", { ".": { nish: "./lib.ts", default: "./lib.js" } }, ["lib-skill"]]
       const plainPkg = ["plain", { ".": "./index.js" }, ["x"]]
+      /** The command, its stdin a pipe: never a terminal, so it never asks. */
       const linkSkillsCli = (args, cwd) =>
-        spawnSync(process.execPath, [skillsBin, ...args], { cwd, encoding: "utf8" })
+        spawnSync(process.execPath, [skillsBin, ...args], { cwd, encoding: "utf8", timeout: 60000 })
       /** Whether .claude/skills/<name> is a relative link that resolves to <pkg>'s skills/<name>/SKILL.md. */
       const linkedTo = (dir, name, pkg) => {
         const entry = path.join(dir, ".claude", "skills", name)
@@ -26591,14 +26599,40 @@ if (dealtHere("releaseChecks")) {
           ? []
           : fs.readdirSync(skillsDir).sort().map((n) => `${n}:${lstatOf(path.join(skillsDir, n)).ino}`)
       }
+      const { clean, linkSkills, review } = await import(pathToFileURL(path.join(root, "scripts", "link-skills.mjs")).href)
+      /**
+       * An interactive review with the answers injected: `answers` maps a skill name to
+       * the line typed for it, or null for end of input; `asked` collects the names asked about.
+       */
+      const ask = (dir, answers = {}) => {
+        const asked = []
+        const run = review(dir, {
+          write: () => {},
+          ask: async (_question, name) => {
+            asked.push(name)
+            return answers[name] ?? null
+          },
+        })
+        return run.then((r) => ({ ...r, asked }))
+      }
+
+      // Installing never links: a run that cannot ask, given no names and no --yes, writes nothing.
+      const quiet = project([nishPkg, libPkg])
+      const piped = linkSkillsCli([], quiet)
+      check(
+        "nish-skills with its stdin a pipe and no names or --yes links nothing and creates no .claude",
+        piped.status === 0 && lstatOf(path.join(quiet, ".claude")) === null,
+        piped.stdout + piped.stderr
+      )
 
       // Linking from a subdirectory: the command finds the nearest package.json above it.
       const a = project([
         nishPkg,
         libPkg,
         plainPkg,
-        ["b-dup", { "./x": { nish: "./x.ts" } }, ["dup"]],
-        ["@a/dup", [{ import: { nish: "./x.ts" } }], ["dup"]],
+        // Byte-identical skills, so only the package tells the two claims apart.
+        ["b-dup", { "./x": { nish: "./x.ts" } }, [["dup", plainSkill("dup", "dup")]]],
+        ["@a/dup", [{ import: { nish: "./x.ts" } }], [["dup", plainSkill("dup", "dup")]]],
         // Sorts before `nish`, so only nish's first claim keeps writing-nish nish's.
         ["@scope/rival", { ".": { nish: "./r.ts" } }, ["writing-nish"]],
       ])
@@ -26607,10 +26641,10 @@ if (dealtHere("releaseChecks")) {
       const aSkills = path.join(a, ".claude", "skills")
       fs.mkdirSync(path.join(aSkills, ".mine.1.tmp"), { recursive: true })
       fs.symlinkSync(path.join("..", "..", "node_modules", "nish", "skills", "writing-nish"), path.join(aSkills, ".writing-nish.99999.tmp"))
-      const first = linkSkillsCli([], path.join(a, "sub"))
-      check("nish-skills run from a subdirectory of a project exits 0", first.status === 0, first.stdout + first.stderr)
+      const first = linkSkillsCli(["--yes"], path.join(a, "sub"))
+      check("nish-skills --yes run from a subdirectory of a project exits 0", first.status === 0, first.stdout + first.stderr)
       check(
-        "nish-skills links nish's writing-nish and an @scope package's skill as relative links to their SKILL.md",
+        "nish-skills --yes links nish's writing-nish and an @scope package's skill as relative links to their SKILL.md",
         linkedTo(a, "writing-nish", "nish") && linkedTo(a, "lib-skill", "@scope/lib"),
         tree(a).join("\n")
       )
@@ -26636,20 +26670,741 @@ if (dealtHere("releaseChecks")) {
         tree(a).join("\n")
       )
       const before = tree(a)
-      const again = linkSkillsCli([a], skillsRoot)
+      const again = linkSkillsCli(["--dir", a], skillsRoot)
       check(
-        "a second nish-skills run changes nothing: the same entries, the same inodes",
+        "a second run, with no names and no --yes, keeps what was accepted: the same entries, the same inodes",
         again.status === 0 && JSON.stringify(tree(a)) === JSON.stringify(before),
         `${before.join(" ")}\n${tree(a).join(" ")}\n${again.stdout}${again.stderr}`
       )
+      const reasked = await ask(a)
+      check(
+        "an interactive run over a recorded acceptance asks nothing and changes nothing",
+        reasked.asked.length === 0 && JSON.stringify(tree(a)) === JSON.stringify(before),
+        `${reasked.asked.join(" ")}\n${tree(a).join(" ")}`
+      )
+      // The rival for an accepted name: @a/dup goes, so b-dup's dup, byte for byte
+      // the same skill and so the same hash, now claims the name the record gives @a/dup.
+      const aRecord = path.join(aSkills, ".nish-skills.json")
+      const recordedDup = () => {
+        try {
+          return JSON.parse(fs.readFileSync(aRecord, "utf8")).skills.dup?.package ?? null
+        } catch {
+          return null
+        }
+      }
+      fs.rmSync(path.join(a, "node_modules", "@a", "dup"), { recursive: true })
+      const rivalRecorded = recordedDup()
+      const rivalAsked = await ask(a, { dup: "n" })
+      const rival = linkSkillsCli(["--dir", a], skillsRoot)
+      check(
+        "another package's skill under an accepted name is not linked without consent, and is asked about",
+        rivalRecorded === "@a/dup" &&
+          rivalAsked.asked.includes("dup") &&
+          rival.status === 0 &&
+          lstatOf(path.join(aSkills, "dup")) === null &&
+          recordedDup() === null,
+        `${rivalRecorded} ${rivalAsked.asked.join(" ")}\n${tree(a).join("\n")}${rival.stdout}${rival.stderr}`
+      )
       fs.rmSync(path.join(a, "node_modules", "@scope", "lib"), { recursive: true })
-      const pruned = linkSkillsCli([a], skillsRoot)
+      const pruned = linkSkillsCli(["--dir", a], skillsRoot)
       check(
         "after a package is removed, nish-skills prunes its link and keeps the others",
         pruned.status === 0 &&
           lstatOf(path.join(a, ".claude", "skills", "lib-skill")) === null &&
           linkedTo(a, "writing-nish", "nish"),
         tree(a).join("\n") + pruned.stdout + pruned.stderr
+      )
+
+      // Interactive answers: only y or yes accepts; Enter, anything else and end of input decline.
+      const asking = project([["nish", {}, ["s-empty", "s-n", "s-eof", "s-yes"]]])
+      const answered = await ask(asking, { "s-empty": "", "s-n": "n", "s-eof": null, "s-yes": " Y " })
+      check(
+        "an interactive run links only the skill answered Y, and declines Enter, n and end of input",
+        answered.asked.length === 4 &&
+          linkedTo(asking, "s-yes", "nish") &&
+          ["s-empty", "s-n", "s-eof"].every((n) => lstatOf(path.join(asking, ".claude", "skills", n)) === null),
+        `${answered.asked.join(" ")}\n${tree(asking).join("\n")}`
+      )
+      const declinedAgain = await ask(asking)
+      check(
+        "declines are not recorded: the next interactive run asks about them again",
+        ["s-empty", "s-n", "s-eof"].every((n) => declinedAgain.asked.includes(n)) && !declinedAgain.asked.includes("s-yes"),
+        declinedAgain.asked.join(" ")
+      )
+
+      // What a skill grants: --yes takes only a skill that grants nothing; a name takes any.
+      const granting = project([
+        [
+          "nish",
+          {},
+          [
+            "free",
+            ["tools", "---\nname: tools\ndescription: t\nallowed-tools: Bash(rm:*), Read\n---\n"],
+            ["listed", "---\nname: listed\nallowed-tools:\n  - Bash\n---\n"],
+            ["empty-grant", "---\nname: empty-grant\nallowed-tools:\n---\n"],
+            ["near-miss", "---\nname: near-miss\nAllowed_Tools: [Bash]\n---\n"],
+            ["no-frontmatter", "# no frontmatter\n"],
+            ["unclosed", "---\nname: unclosed\ndescription: d\n"],
+            ["quoted-key", '---\nname: quoted-key\n"allowed-tools": Bash\n---\n'],
+          ],
+        ],
+      ])
+      const granted = ["tools", "listed", "empty-grant", "near-miss", "no-frontmatter", "unclosed", "quoted-key"]
+      const yesRun = linkSkillsCli(["--dir", granting, "--yes"], skillsRoot)
+      check(
+        "--yes links a skill that grants nothing and none that grants tools, an empty or unreadable grant counting as one",
+        yesRun.status === 0 &&
+          linkedTo(granting, "free", "nish") &&
+          granted.every((n) => lstatOf(path.join(granting, ".claude", "skills", n)) === null),
+        tree(granting).join("\n") + yesRun.stdout + yesRun.stderr
+      )
+      const named = linkSkillsCli(["--dir", granting, "tools", "no-frontmatter"], skillsRoot)
+      check(
+        "naming a skill that grants tools links it, and keeps what was accepted before",
+        named.status === 0 &&
+          linkedTo(granting, "tools", "nish") &&
+          linkedTo(granting, "no-frontmatter", "nish") &&
+          linkedTo(granting, "free", "nish") &&
+          lstatOf(path.join(granting, ".claude", "skills", "listed")) === null,
+        tree(granting).join("\n") + named.stdout + named.stderr
+      )
+
+      // A change anywhere in an accepted skill withdraws the acceptance.
+      const changing = project([["nish", {}, ["md", "other"]]])
+      const changingSkills = path.join(changing, "node_modules", "nish", "skills")
+      const changingRecord = path.join(changing, ".claude", "skills", ".nish-skills.json")
+      fs.writeFileSync(path.join(changingSkills, "other", "helper.sh"), "echo one\n")
+      const accepted = linkSkillsCli(["--dir", changing, "--yes"], skillsRoot)
+      const recordedNames = () => {
+        try {
+          return Object.keys(JSON.parse(fs.readFileSync(changingRecord, "utf8")).skills).sort().join(" ")
+        } catch {
+          return ""
+        }
+      }
+      check(
+        "--yes links and records both skills before either changes",
+        accepted.status === 0 &&
+          linkedTo(changing, "md", "nish") &&
+          linkedTo(changing, "other", "nish") &&
+          recordedNames() === "md other",
+        tree(changing).join("\n") + accepted.stdout + accepted.stderr
+      )
+      // SKILL.md alone changes: while it is still recorded and linked, an interactive run asks
+      // about it, and only it; the question is interrupted, so nothing is written.
+      fs.appendFileSync(path.join(changingSkills, "md", "SKILL.md"), "\nallowed-tools: Bash\n")
+      const mdAsked = []
+      await review(changing, {
+        write: () => {},
+        ask: async (_question, name) => {
+          mdAsked.push(name)
+          throw new Error("interrupted")
+        },
+      }).catch(() => {})
+      check(
+        "a recorded, linked skill whose SKILL.md changed is asked about again, and an unchanged one is not",
+        mdAsked.join(" ") === "md" && linkedTo(changing, "md", "nish") && recordedNames() === "md other",
+        `${mdAsked.join(" ")}\n${tree(changing).join("\n")}`
+      )
+      // A run that does not ask unlinks the live link, and leaves the other.
+      const mdRun = linkSkillsCli(["--dir", changing], skillsRoot)
+      check(
+        "a skill whose SKILL.md changed is unlinked without consent, and an unchanged one stays linked",
+        mdRun.status === 0 &&
+          lstatOf(path.join(changing, ".claude", "skills", "md")) === null &&
+          linkedTo(changing, "other", "nish") &&
+          recordedNames() === "other",
+        tree(changing).join("\n") + mdRun.stdout + mdRun.stderr
+      )
+      // A file other than SKILL.md changes: it is asked about again, and a decline unlinks it.
+      fs.writeFileSync(path.join(changingSkills, "other", "helper.sh"), "echo two\n")
+      const changedAsked = await ask(changing, { md: "n", other: "n" })
+      check(
+        "a skill whose other file changed is asked about again, and unlinked when declined",
+        changedAsked.asked.includes("md") &&
+          changedAsked.asked.includes("other") &&
+          lstatOf(path.join(changing, ".claude", "skills", "other")) === null,
+        `${changedAsked.asked.join(" ")}\n${tree(changing).join("\n")}`
+      )
+      const relinked = linkSkillsCli(["--dir", changing, "other"], skillsRoot)
+      check(
+        "a changed skill named again is linked again",
+        relinked.status === 0 && linkedTo(changing, "other", "nish"),
+        tree(changing).join("\n") + relinked.stdout + relinked.stderr
+      )
+
+      // An accepted link whose package stops qualifying goes, rather than serving what it now ships.
+      const stale = project([["p", { ".": { nish: "./p.ts" } }, ["s"]]])
+      const staleAccepted = linkSkillsCli(["--dir", stale, "--yes"], skillsRoot)
+      const staleWasLinked = linkedTo(stale, "s", "p")
+      fs.writeFileSync(
+        path.join(stale, "node_modules", "p", "package.json"),
+        JSON.stringify({ name: "p", version: "2.0.0", exports: { ".": "./p.js" } })
+      )
+      fs.writeFileSync(path.join(stale, "node_modules", "p", "skills", "s", "SKILL.md"), "---\nname: s\nallowed-tools: Bash\n---\n")
+      const staleRun = linkSkillsCli(["--dir", stale], skillsRoot)
+      check(
+        "a linked skill whose package drops its nish condition is unlinked on the next run",
+        staleAccepted.status === 0 &&
+          staleWasLinked &&
+          staleRun.status === 0 &&
+          lstatOf(path.join(stale, ".claude", "skills", "s")) === null,
+        tree(stale).join("\n") + staleAccepted.stdout + staleRun.stdout + staleRun.stderr
+      )
+
+      // Grants beyond allowed-tools: hooks, a shell command run at load, a key not known to be inert.
+      const beyond = project([
+        [
+          "nish",
+          {},
+          [
+            ["hooked", "---\nname: hooked\nhooks:\n  PreToolUse:\n    - command: touch pwned\n---\n"],
+            ["inline-bang", "---\nname: inline-bang\ndescription: d\n---\n\nRun !`ls` first.\n"],
+            ["fence-bang", "---\nname: fence-bang\ndescription: d\n---\n\n```!\nls\n```\n"],
+            ["list-fence", "---\nname: list-fence\ndescription: d\n---\n\n- ```!\n  ls\n  ```\n"],
+            ["quote-fence", "---\nname: quote-fence\ndescription: d\n---\n\n> ~~~~ !\n> ls\n> ~~~~\n"],
+            ["spaced-fence", "---\r\nname: spaced-fence\r\ndescription: d\r\n---\r\n\r\n1. ````\t\u00a0!\r\n   ls\r\n"],
+            ["unknown-key", "---\nname: unknown-key\ndescription: d\nsurprise: 1\n---\n"],
+          ],
+        ],
+      ])
+      const beyondNames = ["hooked", "inline-bang", "fence-bang", "list-fence", "quote-fence", "spaced-fence", "unknown-key"]
+      const beyondYes = linkSkillsCli(["--dir", beyond, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill with hooks, a shell command run at load (a fence after a list or quote marker, a tab or a no-break space included), or an unknown frontmatter key",
+        beyondYes.status === 0 && beyondNames.every((n) => lstatOf(path.join(beyond, ".claude", "skills", n)) === null),
+        tree(beyond).join("\n") + beyondYes.stdout + beyondYes.stderr
+      )
+      const beyondNamed = linkSkillsCli(["--dir", beyond, ...beyondNames], skillsRoot)
+      check(
+        "naming a skill with hooks, a load-time shell command or an unknown key links it",
+        beyondNamed.status === 0 && beyondNames.every((n) => linkedTo(beyond, n, "nish")),
+        tree(beyond).join("\n") + beyondNamed.stdout + beyondNamed.stderr
+      )
+
+      // A link is never followed into a skill: not as skills/, a skill directory or its
+      // SKILL.md, whose content the hash would not cover; one inside a skill is a grant.
+      const elsewhereSkill = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-skill-"))
+      fs.writeFileSync(path.join(elsewhereSkill, "SKILL.md"), plainSkill("x", "x"))
+      const linking = project([
+        ["nish", {}, ["real", "md-link", "inner-link"]],
+        ["@l/linked", { ".": { nish: "./l.ts" } }, []],
+      ])
+      const linkingSkills = path.join(linking, "node_modules", "nish", "skills")
+      fs.rmSync(path.join(linkingSkills, "md-link", "SKILL.md"))
+      fs.symlinkSync(path.join(elsewhereSkill, "SKILL.md"), path.join(linkingSkills, "md-link", "SKILL.md"))
+      fs.symlinkSync(elsewhereSkill, path.join(linkingSkills, "dir-link"))
+      fs.symlinkSync(path.join(elsewhereSkill, "SKILL.md"), path.join(linkingSkills, "inner-link", "helper.md"))
+      const elsewhereTree = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-tree-"))
+      fs.mkdirSync(path.join(elsewhereTree, "via-link"))
+      fs.writeFileSync(path.join(elsewhereTree, "via-link", "SKILL.md"), plainSkill("x", "via-link"))
+      fs.symlinkSync(elsewhereTree, path.join(linking, "node_modules", "@l", "linked", "skills"))
+      const linkingYes = linkSkillsCli(["--dir", linking, "--yes"], skillsRoot)
+      check(
+        "--yes links a skill with no link in it, and none with an inner link, a linked SKILL.md, a linked skill directory or under a linked skills/",
+        linkingYes.status === 0 &&
+          linkedTo(linking, "real", "nish") &&
+          ["md-link", "dir-link", "inner-link", "via-link"].every((n) => lstatOf(path.join(linking, ".claude", "skills", n)) === null),
+        tree(linking).join("\n") + linkingYes.stdout + linkingYes.stderr
+      )
+      const linkedNames = ["md-link", "dir-link", "via-link"].map((n) => linkSkillsCli(["--dir", linking, n], skillsRoot))
+      check(
+        "a linked SKILL.md, a linked skill directory and a linked skills/ are no skill: naming one exits 2",
+        linkedNames.every((r) => r.status === 2) &&
+          ["md-link", "dir-link", "via-link"].every((n) => lstatOf(path.join(linking, ".claude", "skills", n)) === null),
+        linkedNames.map((r) => r.stdout + r.stderr).join("")
+      )
+      const innerNamed = linkSkillsCli(["--dir", linking, "inner-link"], skillsRoot)
+      const innerWasLinked = linkedTo(linking, "inner-link", "nish")
+      const innerNext = linkSkillsCli(["--dir", linking], skillsRoot)
+      check(
+        "naming a skill with a link inside links it for that run only: the next run, naming nothing, unlinks it",
+        innerNamed.status === 0 &&
+          innerWasLinked &&
+          innerNext.status === 0 &&
+          lstatOf(path.join(linking, ".claude", "skills", "inner-link")) === null &&
+          linkedTo(linking, "real", "nish"),
+        tree(linking).join("\n") + innerNamed.stdout + innerNext.stdout + innerNext.stderr
+      )
+
+      // A directory name that is not a valid skill name is never a skill.
+      const badName = "x;touch pwned"
+      const invalid = project([["nish", {}, [[badName, "---\nname: x\nallowed-tools: Bash\n---\n"]]]])
+      const invalidYes = linkSkillsCli(["--dir", invalid, "--yes"], invalid)
+      const invalidNamed = linkSkillsCli(["--dir", invalid, badName], invalid)
+      check(
+        "a skill directory with a shell-unsafe name is never linked, and naming it is an unknown skill",
+        invalidYes.status === 0 &&
+          invalidNamed.status === 2 &&
+          lstatOf(path.join(invalid, ".claude")) === null &&
+          lstatOf(path.join(invalid, "pwned")) === null,
+        invalidYes.stdout + invalidYes.stderr + invalidNamed.stdout + invalidNamed.stderr
+      )
+
+      // A question interrupted (Ctrl-C) rejects the review before anything is written.
+      const interrupted = project([nishPkg])
+      let rejected = false
+      try {
+        await review(interrupted, {
+          write: () => {},
+          ask: async () => {
+            throw new Error("interrupted")
+          },
+        })
+      } catch {
+        rejected = true
+      }
+      check(
+        "an interrupted question rejects the review and creates no .claude",
+        rejected && lstatOf(path.join(interrupted, ".claude")) === null,
+        tree(interrupted).join("\n")
+      )
+
+      // A package-controlled name, version and description reach the terminal with no
+      // control byte and no invisible character in them.
+      const hostilePkg = "@h/e\u001b[31mvil\u200b"
+      const hostile = project([
+        [
+          hostilePkg,
+          { ".": { nish: "./e.ts" } },
+          [["evil", "---\nname: evil\ndescription: a\u001b[2J\u001b]0;title\u0007\u009b31m\u200b\u2800\ufe0f b\n---\n"]],
+        ],
+      ])
+      fs.writeFileSync(
+        path.join(hostile, "node_modules", hostilePkg, "package.json"),
+        JSON.stringify({ name: "e", version: "1.0.0\u001b]0;t\u0007\u202e\u200b", exports: { ".": { nish: "./e.ts" } } })
+      )
+      const shown = spawnSync(process.execPath, [skillsBin, "--dir", hostile], { encoding: "buffer" })
+      const hidden = ["\u009b", "\u200b", "\u2800", "\ufe0f", "\u202e"].map((c) => Buffer.from(c))
+      check(
+        "a package name, version and description holding ESC, BEL, a C1 CSI and invisible characters reach stdout with none of them",
+        shown.status === 0 &&
+          shown.stdout.includes(Buffer.from("evil from @h/e")) &&
+          !shown.stdout.includes(0x1b) &&
+          !shown.stdout.includes(0x07) &&
+          hidden.every((b) => !shown.stdout.includes(b)),
+        shown.stderr.toString()
+      )
+
+      // Padding keys: fourteen long unknown keys before `allowed-tools` cannot push it,
+      // or the command that accepts the skill, out of a line the output cap cuts.
+      const padding = Array.from({ length: 14 }, (_, i) => `padding-key-${i}-${"x".repeat(80)}: 1`).join("\n")
+      const padded = project([["nish", {}, [["padded", `---\nname: padded\n${padding}\nallowed-tools: Bash\n---\n`]]]])
+      let paddedShown = ""
+      let paddedSeen = null
+      await review(padded, {
+        write: (t) => {
+          paddedShown += t
+        },
+        ask: async () => {
+          paddedSeen = paddedShown
+          return null
+        },
+      })
+      const paddedCli = linkSkillsCli(["--dir", padded], skillsRoot)
+      check(
+        "a skill with many long unknown keys before allowed-tools shows allowed-tools before it asks, and the exact command that accepts it",
+        paddedSeen !== null &&
+          paddedSeen.includes("allowed-tools: Bash") &&
+          paddedCli.status === 0 &&
+          paddedCli.stdout.includes("allowed-tools: Bash") &&
+          paddedCli.stdout.split("\n").some((line) => line.trim() === "npx nish-skills padded") &&
+          lstatOf(path.join(padded, ".claude", "skills", "padded")) === null,
+        `${paddedSeen}\n${paddedCli.stdout}${paddedCli.stderr}`
+      )
+
+      // No cap removes a distinct grant: forty `Read` entries before `Bash` show `Bash`,
+      // first among the distinct tools, before the question is asked.
+      const reads = project([
+        ["nish", {}, [["reads", `---\nname: reads\nallowed-tools: ${"Read, ".repeat(40)}Bash\n---\n`]]],
+      ])
+      let readsShown = ""
+      let readsSeen = null
+      await review(reads, {
+        write: (t) => {
+          readsShown += t
+        },
+        ask: async () => {
+          readsSeen = readsShown
+          return null
+        },
+      })
+      const readsLines = (readsSeen ?? "").split("\n").map((line) => line.trim())
+      const readsCli = linkSkillsCli(["--dir", reads], skillsRoot)
+      check(
+        "an allowed-tools list padded with forty Read entries shows its count and Bash, before Read, before it asks",
+        readsLines.includes("- allowed-tools (41 entries, 2 distinct):") &&
+          readsLines.indexOf("- Bash") !== -1 &&
+          readsLines.indexOf("- Bash") < readsLines.indexOf("- Read") &&
+          readsLines.filter((line) => line === "- Read").length === 1 &&
+          readsCli.status === 0 &&
+          readsCli.stdout.split("\n").some((line) => line.trim() === "- Bash"),
+        `${readsSeen}\n${readsCli.stdout}${readsCli.stderr}`
+      )
+
+      // Thirty unknown keys each show on a line of their own: none is cut from the list.
+      const manyKeys = Array.from({ length: 30 }, (_, i) => `key-${i}-${"y".repeat(40)}`)
+      const unknowns = project([
+        ["nish", {}, [["unknowns", `---\nname: unknowns\n${manyKeys.map((k) => `${k}: 1`).join("\n")}\n---\n`]]],
+      ])
+      const unknownsCli = linkSkillsCli(["--dir", unknowns], skillsRoot)
+      const unknownsLines = unknownsCli.stdout.split("\n").map((line) => line.trim())
+      check(
+        "a skill with thirty long unknown keys shows each of them",
+        unknownsCli.status === 0 &&
+          unknownsLines.includes("- 30 unknown keys (30 distinct):") &&
+          manyKeys.every((k) => unknownsLines.includes(`- ${k}`)),
+        unknownsCli.stdout + unknownsCli.stderr
+      )
+
+      // A line break YAML honours and this reader does not -- NEL, U+2028, U+2029 --
+      // makes the frontmatter unreadable, so a key hidden after one is never inert.
+      const breaks = project([
+        [
+          "nish",
+          {},
+          ["\u0085", " ", " "].map((c, i) => [
+            `break-${i}`,
+            `---\nname: break-${i}\ndescription: d${c}allowed-tools: Bash\n---\n`,
+          ]),
+        ],
+      ])
+      const breaksRun = linkSkillsCli(["--dir", breaks, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill whose frontmatter holds a NEL, a line separator or a paragraph separator",
+        breaksRun.status === 0 &&
+          [0, 1, 2].every((i) => lstatOf(path.join(breaks, ".claude", "skills", `break-${i}`)) === null) &&
+          breaksRun.stdout.includes("- unreadable frontmatter"),
+        breaksRun.stdout + breaksRun.stderr
+      )
+
+      // Whitespace YAML reads where this reader does not, in each place a grant could
+      // hide behind it: a lone CR before or inside a line, a vertical tab, a form feed, a
+      // tab, a no-break space or another Unicode space leading a line or after the colon,
+      // a byte-order mark mid-block, a CR that would end an indented line early, and a
+      // closer or document marker, indented or loose, that a reader might take and this
+      // one does not. Each makes the frontmatter unreadable, so --yes links none.
+      const spaces = [
+        ["cr-lead", "---\nname: x\n\rallowed-tools: Bash\n---\n"],
+        ["cr-value", "---\nname: x\ndescription:\rallowed-tools: Bash\n---\n"],
+        ["cr-end", "---\nname: x\ndescription: d\r\rallowed-tools: Bash\n---\n"],
+        ["vt-lead", "---\nname: x\n\vallowed-tools: Bash\n---\n"],
+        ["ff-lead", "---\nname: x\n\fallowed-tools: Bash\n---\n"],
+        ["tab-lead", "---\nname: x\n\tallowed-tools: Bash\n---\n"],
+        ["nbsp-lead", "---\nname: x\n allowed-tools: Bash\n---\n"],
+        ["nbsp-value", "---\nname: x\ndescription: d\nallowed-tools: Bash\n---\n"],
+        ["en-quad-lead", "---\nname: x\n allowed-tools: Bash\n---\n"],
+        ["hair-lead", "---\nname: x\n allowed-tools: Bash\n---\n"],
+        ["ideographic-lead", "---\nname: x\n　allowed-tools: Bash\n---\n"],
+        ["bom-lead", "---\nname: x\n﻿allowed-tools: Bash\n---\n"],
+        ["closer-space", "---\nname: x\n--- \nallowed-tools: Bash\n---\n"],
+        ["closer-vt", "---\nname: x\n---\v\nallowed-tools: Bash\n---\n"],
+        ["doc-end", "---\nname: x\n...\nallowed-tools: Bash\n---\n"],
+        ["opener-space", "--- \nname: x\n---\n"],
+        ["cr-under", "---\nname: x\ndescription: d\n  more\rallowed-tools: Bash\n---\n"],
+        ["marker-under", "---\nname: x\ndescription: d\n  ---\n---\n"],
+      ]
+      const spacesDir = project([["nish", {}, spaces]])
+      const spacesRun = linkSkillsCli(["--dir", spacesDir, "--yes"], skillsRoot)
+      const spacesLinked = spaces.filter(([name]) => lstatOf(path.join(spacesDir, ".claude", "skills", name)) !== null)
+      check(
+        "--yes links no skill whose frontmatter hides a key behind a CR, a vertical tab, a form feed, a tab, a Unicode space, a mid-block BOM or a loose marker",
+        spacesRun.status === 0 &&
+          spacesLinked.length === 0 &&
+          spacesRun.stdout.split("\n").filter((line) => line.trim() === "- unreadable frontmatter").length ===
+            spaces.length,
+        `linked: ${spacesLinked.map(([name]) => name).join(", ")}\n${spacesRun.stdout}${spacesRun.stderr}`
+      )
+      // The same frontmatter with CRLF line ends, or a space-indented continuation, still reads as inert.
+      const inertForms = project([
+        [
+          "nish",
+          {},
+          [
+            ["crlf", "---\r\nname: crlf\r\ndescription: d\r\n---\r\nbody\r\n"],
+            ["folded", "---\nname: folded\ndescription: one\n  two\n\t\n---\n"],
+          ],
+        ],
+      ])
+      const inertRun = linkSkillsCli(["--dir", inertForms, "--yes"], skillsRoot)
+      check(
+        "--yes still links a skill with CRLF line ends or a space-indented description",
+        inertRun.status === 0 && linkedTo(inertForms, "crlf", "nish") && linkedTo(inertForms, "folded", "nish"),
+        inertRun.stdout + inertRun.stderr
+      )
+
+      // An entry of a block or flow list holding two tools separated by a space is
+      // two tools, as in the inline form, so the acting one is shown on its own
+      // line, ahead of a name that sorts before it.
+      const actingNew = ["PowerShell", "Task", "Agent", "Skill", "KillShell"]
+      const listed = project([
+        [
+          "nish",
+          {},
+          actingNew.map((tool, i) => [
+            `acting-${i}`,
+            i % 2 === 0
+              ? `---\nname: acting-${i}\nallowed-tools:\n  - Aardvark ${tool}\n---\n`
+              : `---\nname: acting-${i}\nallowed-tools: [Aardvark ${tool}]\n---\n`,
+          ]),
+        ],
+      ])
+      const listedRun = linkSkillsCli(["--dir", listed], skillsRoot)
+      const listedLines = listedRun.stdout.split("\n").map((line) => line.trim())
+      const listedHeads = listedLines.flatMap((line, i) =>
+        line === "- allowed-tools (2 entries, 2 distinct):" ? [listedLines.slice(i + 1, i + 3).join(" ")] : []
+      )
+      check(
+        "a block or flow allowed-tools entry with two tools shows each, PowerShell, Task, Agent, Skill and KillShell first",
+        listedRun.status === 0 &&
+          listedHeads.length === actingNew.length &&
+          actingNew.every((tool) => listedHeads.includes(`- ${tool} - Aardvark`)),
+        listedRun.stdout + listedRun.stderr
+      )
+
+      // A skill of exactly MAX_ENTRIES entries is read whole; one more is too large.
+      const many = project([["nish", {}, ["many"]]])
+      const manyDir = path.join(many, "node_modules", "nish", "skills", "many")
+      for (let i = 1; i < 10_000; i++) {
+        fs.writeFileSync(path.join(manyDir, `f${i}`), "")
+      }
+      const manyAtBound = linkSkillsCli(["--dir", many, "--yes"], skillsRoot)
+      const manyLinked = linkedTo(many, "many", "nish")
+      fs.writeFileSync(path.join(manyDir, "f10000"), "")
+      const manyOver = linkSkillsCli(["--dir", many, "--yes"], skillsRoot)
+      check(
+        "--yes links a skill of 10,000 entries and refuses one of 10,001, naming why",
+        manyAtBound.status === 0 &&
+          manyLinked &&
+          manyOver.status === 0 &&
+          lstatOf(path.join(many, ".claude", "skills", "many")) === null &&
+          manyOver.stdout.includes("- too large to read whole"),
+        manyAtBound.stdout + manyOver.stdout + manyOver.stderr
+      )
+
+      // A skill of exactly MAX_BYTES of files is read whole; one byte more is too large.
+      const big = project([["nish", {}, ["big"]]])
+      const bigDir = path.join(big, "node_modules", "nish", "skills", "big")
+      const bigFill = path.join(bigDir, "fill.bin")
+      const bigSkillMd = fs.statSync(path.join(bigDir, "SKILL.md")).size
+      fs.writeFileSync(bigFill, "")
+      fs.truncateSync(bigFill, 64 * 1024 * 1024 - bigSkillMd)
+      const bigAtBound = linkSkillsCli(["--dir", big, "--yes"], skillsRoot)
+      const bigLinked = linkedTo(big, "big", "nish")
+      fs.truncateSync(bigFill, 64 * 1024 * 1024 - bigSkillMd + 1)
+      const bigOver = linkSkillsCli(["--dir", big, "--yes"], skillsRoot)
+      fs.rmSync(bigFill)
+      check(
+        "--yes links a skill of 64 MiB of files and refuses one a byte larger, naming why",
+        bigAtBound.status === 0 &&
+          bigLinked &&
+          bigOver.status === 0 &&
+          lstatOf(path.join(big, ".claude", "skills", "big")) === null &&
+          bigOver.stdout.includes("- too large to read whole"),
+        bigAtBound.stdout + bigOver.stdout + bigOver.stderr
+      )
+
+      // A skill deeper than the walk reads is a grant, not a tree it hashes whole.
+      const deep = project([["nish", {}, ["deep"]]])
+      const deepDir = path.join(deep, "node_modules", "nish", "skills", "deep", ...Array(40).fill("d"))
+      fs.mkdirSync(deepDir, { recursive: true })
+      fs.writeFileSync(path.join(deepDir, "hidden.md"), "x\n")
+      const deepRun = linkSkillsCli(["--dir", deep, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill nested deeper than the walk reads, and names why",
+        deepRun.status === 0 &&
+          lstatOf(path.join(deep, ".claude", "skills", "deep")) === null &&
+          deepRun.stdout.includes("- too large to read whole"),
+        deepRun.stdout + deepRun.stderr
+      )
+
+      // A link whose target names the skill by its real path, as a pnpm store does,
+      // is the same skill as the path through node_modules/nish: kept, not rewritten.
+      const stored = project([nishPkg])
+      const storedModules = path.join(stored, "node_modules")
+      fs.mkdirSync(path.join(storedModules, ".store"))
+      fs.renameSync(path.join(storedModules, "nish"), path.join(storedModules, ".store", "nish"))
+      fs.symlinkSync(path.join(".store", "nish"), path.join(storedModules, "nish"))
+      await review(stored, { yes: true, write: () => {} })
+      const storedEntry = path.join(stored, ".claude", "skills", "writing-nish")
+      fs.unlinkSync(storedEntry)
+      fs.symlinkSync(path.join("..", "..", "node_modules", ".store", "nish", "skills", "writing-nish"), storedEntry)
+      const storedRun = await review(stored, { yes: true, write: () => {} })
+      check(
+        "a link naming an accepted skill by its real path is kept, not rewritten",
+        storedRun.result !== null &&
+          storedRun.result.kept.includes("writing-nish") &&
+          storedRun.result.linked.length === 0 &&
+          fs.readlinkSync(storedEntry).includes(".store"),
+        JSON.stringify(storedRun.result)
+      )
+
+      // clean replaces one character of each invisible class it names, and keeps printable text.
+      const invisible = ["\ue000", "\u0378", "\u2028", "\u034f", "\u3164", "\u{e0100}", "\u180b", "\u180f", "\u17b4"]
+      const cleaned = invisible.map((c) => clean(`a${c}b`))
+      check(
+        "clean replaces a private-use, unassigned, line-separator, grapheme-joiner, Hangul-filler, variation-selector and Khmer-vowel character, and keeps the rest",
+        cleaned.every((t) => t === "a?b") && clean("caf\u00e9 \u65e5\u672c") === "caf\u00e9 \u65e5\u672c",
+        cleaned.map((t) => JSON.stringify(t)).join(" ")
+      )
+
+      // A link planted at the record's temporary name is never written through.
+      const planted = project([nishPkg])
+      const plantedSkills = path.join(planted, ".claude", "skills")
+      fs.mkdirSync(plantedSkills, { recursive: true })
+      const plantTarget = path.join(skillsRoot, `plant-target-${fixtures}`)
+      fs.writeFileSync(plantTarget, "untouched\n")
+      fs.symlinkSync(plantTarget, path.join(plantedSkills, `.nish-skills.json.${process.pid}.tmp`))
+      await review(planted, { yes: true, write: () => {} })
+      const plantedRecord = lstatOf(path.join(plantedSkills, ".nish-skills.json"))
+      check(
+        "a link planted at the record's temporary name leaves its target untouched, and the record is still written",
+        fs.readFileSync(plantTarget, "utf8") === "untouched\n" &&
+          plantedRecord?.isFile() === true &&
+          linkedTo(planted, "writing-nish", "nish"),
+        tree(planted).join("\n")
+      )
+
+      // A directory at the record's temporary name, which rmSync cannot remove, is left
+      // alone, and the record is still written under another name.
+      const dirAtTemp = project([nishPkg])
+      const dirAtTempSkills = path.join(dirAtTemp, ".claude", "skills")
+      const tempDir = path.join(dirAtTempSkills, `.nish-skills.json.${process.pid}.tmp`)
+      fs.mkdirSync(tempDir, { recursive: true })
+      fs.writeFileSync(path.join(tempDir, "keep.txt"), "kept\n")
+      let dirAtTempError = null
+      try {
+        await review(dirAtTemp, { yes: true, write: () => {} })
+      } catch (err) {
+        dirAtTempError = err
+      }
+      check(
+        "a directory at the record's temporary name is left untouched, and the record is still written",
+        dirAtTempError === null &&
+          fs.readFileSync(path.join(tempDir, "keep.txt"), "utf8") === "kept\n" &&
+          lstatOf(path.join(dirAtTempSkills, ".nish-skills.json"))?.isFile() === true &&
+          fs.readdirSync(dirAtTempSkills).filter((n) => n.endsWith(".tmp")).length === 1,
+        `${dirAtTempError}\n${tree(dirAtTemp).join("\n")}`
+      )
+
+      // A record that cannot be renamed into place, here because a directory holds
+      // its name, fails the run and leaves no temporary file behind.
+      const dirAtRecord = project([nishPkg])
+      const dirAtRecordSkills = path.join(dirAtRecord, ".claude", "skills")
+      fs.mkdirSync(path.join(dirAtRecordSkills, ".nish-skills.json", "inner"), { recursive: true })
+      let dirAtRecordError = null
+      try {
+        await review(dirAtRecord, { yes: true, write: () => {} })
+      } catch (err) {
+        dirAtRecordError = err
+      }
+      check(
+        "a record write whose rename fails throws and leaves no temporary file",
+        dirAtRecordError !== null &&
+          lstatOf(path.join(dirAtRecordSkills, ".nish-skills.json", "inner"))?.isDirectory() === true &&
+          fs.readdirSync(dirAtRecordSkills).filter((n) => n.endsWith(".tmp")).length === 0,
+        `${dirAtRecordError}\n${tree(dirAtRecord).join("\n")}`
+      )
+
+      // Nish's own skill grants nothing, so --yes links it: an edit to its
+      // frontmatter that made it a grant would turn this red.
+      const ownSkill = project([
+        [
+          "nish",
+          { ".": { types: "./runtime/nish.d.ts" } },
+          [["writing-nish", fs.readFileSync(path.join(root, "skills", "writing-nish", "SKILL.md"), "utf8")]],
+        ],
+      ])
+      const ownRun = linkSkillsCli(["--dir", ownSkill, "--yes"], skillsRoot)
+      check(
+        "--yes links nish's own skills/writing-nish, which grants nothing",
+        ownRun.status === 0 &&
+          fs.readdirSync(path.join(root, "skills", "writing-nish")).join() === "SKILL.md" &&
+          linkedTo(ownSkill, "writing-nish", "nish"),
+        ownRun.stdout + ownRun.stderr
+      )
+
+      // A FIFO inside a skill is a grant: --yes refuses it, and the run does not hang on it.
+      const fifoAt = project([["nish", {}, ["fifo"]]])
+      const fifoMade = spawnSync("sh", ["-c", "mkfifo pipe"], {
+        cwd: path.join(fifoAt, "node_modules", "nish", "skills", "fifo"),
+        encoding: "utf8",
+      })
+      const fifoRun = linkSkillsCli(["--dir", fifoAt, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill holding a FIFO",
+        fifoMade.status === 0 && fifoRun.status === 0 && lstatOf(path.join(fifoAt, ".claude", "skills", "fifo")) === null,
+        `${fifoMade.stderr}${fifoRun.stdout}${fifoRun.stderr}`
+      )
+
+      // An entry the run cannot read is a grant too. Root reads through mode 0, so only
+      // an unprivileged run can see it.
+      if (process.getuid?.() === 0) {
+        skip("--yes and an unreadable entry in a skill: running as root, which reads through mode 0")
+      } else {
+        const lockedAt = project([["nish", {}, ["locked"]]])
+        const lockedFile = path.join(lockedAt, "node_modules", "nish", "skills", "locked", "secret.txt")
+        fs.writeFileSync(lockedFile, "x\n")
+        fs.chmodSync(lockedFile, 0o000)
+        const lockedRun = linkSkillsCli(["--dir", lockedAt, "--yes"], skillsRoot)
+        fs.chmodSync(lockedFile, 0o644)
+        check(
+          "--yes links no skill holding an entry it cannot read",
+          lockedRun.status === 0 && lstatOf(path.join(lockedAt, ".claude", "skills", "locked")) === null,
+          lockedRun.stdout + lockedRun.stderr
+        )
+      }
+
+      // A package.json that is a FIFO is no package, and the run does not hang reading it.
+      const fifoPkg = project([nishPkg, ["fifo-lib", { ".": { nish: "./f.ts" } }, ["fifo-lib"]]])
+      const fifoPkgDir = path.join(fifoPkg, "node_modules", "fifo-lib")
+      fs.rmSync(path.join(fifoPkgDir, "package.json"))
+      const fifoPkgMade = spawnSync("sh", ["-c", "mkfifo package.json"], { cwd: fifoPkgDir, encoding: "utf8" })
+      const fifoPkgRun = spawnSync(process.execPath, [skillsBin, "--dir", fifoPkg, "--yes"], {
+        encoding: "utf8",
+        timeout: 30000,
+      })
+      check(
+        "a package whose package.json is a FIFO is no Nish package, and the run finishes",
+        fifoPkgMade.status === 0 &&
+          fifoPkgRun.status === 0 &&
+          linkedTo(fifoPkg, "writing-nish", "nish") &&
+          lstatOf(path.join(fifoPkg, ".claude", "skills", "fifo-lib")) === null,
+        `${fifoPkgMade.stderr}${fifoPkgRun.error ?? ""}${fifoPkgRun.stdout}${fifoPkgRun.stderr}`
+      )
+
+      // An unknown name is a usage error, and nothing is written.
+      const unknownAt = project([nishPkg])
+      const unknown = linkSkillsCli(["--dir", unknownAt, "writing-nish", "no-such-skill"], skillsRoot)
+      check(
+        "nish-skills naming a skill no package ships exits 2 and creates no .claude",
+        unknown.status === 2 && lstatOf(path.join(unknownAt, ".claude")) === null,
+        unknown.stdout + unknown.stderr
+      )
+
+      // The record: written beside the links, read back, and only trusted when it parses.
+      const recorded = project([nishPkg])
+      linkSkillsCli(["--dir", recorded, "--yes"], skillsRoot)
+      const recordFile = path.join(recorded, ".claude", "skills", ".nish-skills.json")
+      let record = null
+      try {
+        record = JSON.parse(fs.readFileSync(recordFile, "utf8"))
+      } catch {
+        // Checked below.
+      }
+      check(
+        "the record names the accepted skill, its package and a sha256 hash",
+        record?.version === 1 &&
+          record.skills?.["writing-nish"]?.package === "nish" &&
+          /^sha256-[0-9a-f]{64}$/.test(record.skills["writing-nish"].hash ?? ""),
+        JSON.stringify(record)
+      )
+      fs.writeFileSync(recordFile, "{ not json")
+      const malformed = linkSkillsCli(["--dir", recorded], skillsRoot)
+      check(
+        "a malformed record accepts nothing: the next run that does not ask unlinks the skill",
+        malformed.status === 0 && lstatOf(path.join(recorded, ".claude", "skills", "writing-nish")) === null,
+        tree(recorded).join("\n") + malformed.stdout + malformed.stderr
       )
 
       // What the project owns: a real directory, a link pointing elsewhere, a dangling one.
@@ -26661,7 +27416,7 @@ if (dealtHere("releaseChecks")) {
       fs.symlinkSync(outside, path.join(userSkills, "lib-skill"))
       const gone = path.join(skillsRoot, "no-such-dir")
       fs.symlinkSync(gone, path.join(userSkills, "dangling"))
-      const userRun = linkSkillsCli([b], skillsRoot)
+      const userRun = linkSkillsCli(["--dir", b, "--yes"], skillsRoot)
       check(
         "nish-skills leaves the project's own entries alone: a real directory, a link outside node_modules, a dangling one",
         userRun.status === 0 &&
@@ -26677,7 +27432,7 @@ if (dealtHere("releaseChecks")) {
       const c = project([nishPkg])
       const elsewhere = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-"))
       fs.symlinkSync(elsewhere, path.join(c, ".claude"))
-      const linkedClaude = linkSkillsCli([c], skillsRoot)
+      const linkedClaude = linkSkillsCli(["--dir", c, "--yes"], skillsRoot)
       check(
         "when .claude is a link, nish-skills writes nothing and still exits 0",
         linkedClaude.status === 0 &&
@@ -26688,37 +27443,58 @@ if (dealtHere("releaseChecks")) {
 
       // The win32 shape, a link to the absolute path, is the linker's own too.
       const d = project([nishPkg])
-      const { linkSkills } = await import(pathToFileURL(path.join(root, "scripts", "link-skills.mjs")).href)
-      linkSkills(d, { platform: "win32" })
+      const silent = { yes: true, write: () => {}, platform: "win32" }
+      await review(d, silent)
       const junction = path.join(d, ".claude", "skills", "writing-nish")
       const junctionTarget = lstatOf(junction)?.isSymbolicLink() ? fs.readlinkSync(junction) : ""
-      const kept = linkSkills(d, { platform: "win32" })
+      const kept = (await review(d, silent)).result
       fs.rmSync(path.join(d, "node_modules", "nish"), { recursive: true })
-      linkSkills(d, { platform: "win32" })
+      await review(d, silent)
       check(
         "the win32 shape links the absolute path, keeps it on a second run, and prunes it when the package goes",
         path.isAbsolute(junctionTarget) &&
           junctionTarget === path.join(d, "node_modules", "nish", "skills", "writing-nish") &&
-          kept.kept.includes("writing-nish") &&
+          kept?.kept.includes("writing-nish") === true &&
           lstatOf(junction) === null,
         `${junctionTarget} ${JSON.stringify(kept)}`
+      )
+      // The linker links nothing it was not handed, whatever is installed.
+      const unasked = project([nishPkg, libPkg])
+      linkSkills(unasked)
+      check(
+        "linkSkills given no accepted skills creates no .claude",
+        lstatOf(path.join(unasked, ".claude")) === null,
+        tree(unasked).join("\n")
       )
 
       // Postinstall imports the linker, so the linker keeps postinstall's promise too
       // (tests/fetch-seed.js holds postinstall.mjs itself to it).
       check(
-        "scripts/link-skills.mjs, which postinstall runs, fetches nothing and spawns nothing",
+        "scripts/link-skills.mjs, which postinstall imports, fetches nothing and spawns nothing",
         !/from "node:(child_process|http|https|net|tls|dgram)"|\bfetch\(|\bimport\(/.test(
           fs.readFileSync(path.join(root, "scripts", "link-skills.mjs"), "utf8")
         ),
         "link-skills.mjs reaches for the network, a process or a dynamic import"
       )
+      check(
+        "scripts/postinstall.mjs never calls the linker: an install links no skill",
+        !/\blinkSkills\b|\breview\s*\(|\{[^}]*\breview\b[^}]*\}\s*from/.test(fs.readFileSync(path.join(root, "scripts", "postinstall.mjs"), "utf8")),
+        "postinstall.mjs names linkSkills or review"
+      )
 
       // The command's surface.
       const help = linkSkillsCli(["--help"], skillsRoot)
       check("nish-skills --help exits 0 with the usage on stdout", help.status === 0 && help.stdout.length > 0, help.stderr)
+      const helpFirst = linkSkillsCli(["--bogus", "--help"], skillsRoot)
+      check(
+        "nish-skills --help after an unknown option still exits 0 with the usage on stdout",
+        helpFirst.status === 0 && helpFirst.stdout.length > 0,
+        helpFirst.stderr
+      )
       const bogus = linkSkillsCli(["--bogus"], skillsRoot)
       check("nish-skills with an unknown flag exits 2", bogus.status === 2, bogus.stdout + bogus.stderr)
+      const bareDir = linkSkillsCli(["--dir"], skillsRoot)
+      check("nish-skills --dir with no directory exits 2", bareDir.status === 2, bareDir.stdout + bareDir.stderr)
       const nowhere = fs.mkdtempSync(path.join(os.tmpdir(), "nish-skills-noproject-"))
       let above = nowhere
       while (path.dirname(above) !== above && !fs.existsSync(path.join(above, "package.json"))) {
@@ -26732,8 +27508,8 @@ if (dealtHere("releaseChecks")) {
       }
       fs.rmSync(nowhere, { recursive: true, force: true })
 
-      // Postinstall, from an installed copy: it links only behind every guard, and it never
-      // fails the install.
+      // Postinstall, from an installed copy: it links nothing, points at the command behind
+      // every guard, and never fails the install.
       const installedNish = (dir) => {
         const at = path.join(dir, "node_modules", "nish")
         fs.rmSync(at, { recursive: true, force: true })
@@ -26758,33 +27534,35 @@ if (dealtHere("releaseChecks")) {
           env,
         })
       }
-      const e = project([])
+      /** How many lines of a postinstall's stdout point at `npx nish-skills`. */
+      const hints = (r) => r.stdout.split("\n").filter((line) => line.includes("npx nish-skills")).length
+      // A Nish library shipping a skill is installed too: postinstall links it no more than nish's own.
+      const e = project([libPkg])
       const eNish = installedNish(e)
-      const linkedHere = postinstall(eNish, { INIT_CWD: e })
+      const installed = postinstall(eNish, { INIT_CWD: e })
       check(
-        "postinstall in a project's node_modules/nish, INIT_CWD the project, links writing-nish",
-        linkedHere.status === 0 && linkedTo(e, "writing-nish", "nish"),
-        linkedHere.stdout + linkedHere.stderr
+        "postinstall in a project's node_modules/nish, beside a Nish library with a skill, exits 0, creates no .claude, and points at nish-skills once",
+        installed.status === 0 && lstatOf(path.join(e, ".claude")) === null && hints(installed) === 1,
+        installed.stdout + installed.stderr
       )
-      const w = project([])
+      const w = project([libPkg])
       const member = path.join(w, "packages", "member")
       fs.mkdirSync(member, { recursive: true })
       fs.writeFileSync(path.join(member, "package.json"), "{}\n")
       const wNish = installedNish(w)
       const hoisted = postinstall(wNish, { INIT_CWD: member })
       check(
-        "postinstall run from a workspace member, nish hoisted to the root, links at the root",
-        hoisted.status === 0 && linkedTo(w, "writing-nish", "nish") && lstatOf(path.join(member, ".claude")) === null,
+        "postinstall run from a workspace member, nish hoisted beside a Nish library with a skill, creates no .claude in either",
+        hoisted.status === 0 && lstatOf(path.join(w, ".claude")) === null && lstatOf(path.join(member, ".claude")) === null,
         hoisted.stdout + hoisted.stderr
       )
       // The command keeps postinstall's rule: from the member, the root this copy is installed in.
-      fs.rmSync(path.join(w, ".claude"), { recursive: true, force: true })
-      const fromMember = spawnSync(process.execPath, [path.join(wNish, "bin", "nish-skills.js")], {
+      const fromMember = spawnSync(process.execPath, [path.join(wNish, "bin", "nish-skills.js"), "--yes"], {
         cwd: member,
         encoding: "utf8",
       })
       check(
-        "an installed nish-skills run from a workspace member links at the root nish is installed in",
+        "an installed nish-skills --yes run from a workspace member links at the root nish is installed in",
         fromMember.status === 0 && linkedTo(w, "writing-nish", "nish") && lstatOf(path.join(member, ".claude")) === null,
         fromMember.stdout + fromMember.stderr
       )
@@ -26795,11 +27573,13 @@ if (dealtHere("releaseChecks")) {
         ["INIT_CWD naming a project this copy is not installed in (npx's cache)", { INIT_CWD: stranger }],
         ["no INIT_CWD", {}],
       ]) {
-        fs.rmSync(path.join(e, ".claude"), { recursive: true, force: true })
         const r = postinstall(eNish, extra)
         check(
-          `postinstall under ${what} exits 0 and writes no .claude anywhere`,
-          r.status === 0 && lstatOf(path.join(e, ".claude")) === null && lstatOf(path.join(stranger, ".claude")) === null,
+          `postinstall under ${what} exits 0, writes no .claude anywhere, and does not point at nish-skills`,
+          r.status === 0 &&
+            lstatOf(path.join(e, ".claude")) === null &&
+            lstatOf(path.join(stranger, ".claude")) === null &&
+            hints(r) === 0,
           r.stdout + r.stderr
         )
       }
@@ -26807,25 +27587,18 @@ if (dealtHere("releaseChecks")) {
       if (process.getuid?.() === 0) {
         skip("a read-only .claude/skills: running as root, which writes through mode 0555")
       } else {
-        fs.rmSync(path.join(e, ".claude"), { recursive: true, force: true })
         readOnly = path.join(e, ".claude", "skills")
         fs.mkdirSync(readOnly, { recursive: true })
         fs.chmodSync(readOnly, 0o555)
-        const refusedInstall = postinstall(eNish, { INIT_CWD: e })
-        const refusedCli = linkSkillsCli([e], skillsRoot)
+        const refusedCli = linkSkillsCli(["--dir", e, "--yes"], skillsRoot)
         const empty = fs.readdirSync(readOnly).length === 0
         fs.chmodSync(readOnly, 0o755)
         // The same run once the directory is writable links, so the refusal above was the write's.
-        const writable = postinstall(eNish, { INIT_CWD: e })
+        const writable = linkSkillsCli(["--dir", e, "--yes"], skillsRoot)
         check(
-          "postinstall with a read-only .claude/skills still exits 0 and writes nothing; once writable, it links",
-          refusedInstall.status === 0 && empty && writable.status === 0 && linkedTo(e, "writing-nish", "nish"),
-          refusedInstall.stdout + refusedInstall.stderr + writable.stdout + writable.stderr
-        )
-        check(
-          "nish-skills against a read-only .claude/skills exits 1",
-          refusedCli.status === 1,
-          refusedCli.stdout + refusedCli.stderr
+          "nish-skills against a read-only .claude/skills exits 1 and writes nothing; once writable, it links",
+          refusedCli.status === 1 && empty && writable.status === 0 && linkedTo(e, "writing-nish", "nish"),
+          refusedCli.stdout + refusedCli.stderr + writable.stdout + writable.stderr
         )
       }
     } finally {

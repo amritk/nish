@@ -45,11 +45,14 @@
  * postinstall that can break `npm ci` is a worse bug than the startup cost it
  * exists to remove.
  *
- * **Its second half links the package's agent skills** into the installing
- * project's `.claude/skills/`, through `scripts/link-skills.mjs` (the rules of
- * what it owns are there). It runs only for a local install into the project
+ * **Its second half points at the package's agent skills**, and links none:
+ * a skill can grant an agent tools, so it is linked only when the user accepts
+ * it, by running `npx nish-skills` (`bin/nish-skills.js`, whose rules are
+ * `scripts/link-skills.mjs`'s). Postinstall writes nothing under `.claude/`; it
+ * prints one line saying so, and only for a local install into the project
  * `INIT_CWD` names -- not for `-g`, not for npx's cache, not with
- * `NISH_NO_SKILLS` set -- and it too only reports a failure, never raises one.
+ * `NISH_NO_SKILLS` set. It imports the linker for `projectOf` alone, a read,
+ * and like the first half it only reports a failure, never raises one.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -139,16 +142,16 @@ const swap = async () => {
   return `bin/nish now execs the native compiler in ${name}`
 }
 
-/** Link the installed Nish packages' skills into the project, when every guard passes. */
+/** The line that points the user at `nish-skills`, when every guard passes. */
 const skills = async () => {
   if (fs.existsSync(path.join(root, "src", "compile.ts"))) {
-    return "a checkout, so no skills are linked"
+    return "a checkout, so there are no skills to review"
   }
   if (process.env.npm_config_global === "true") {
     return "a global install has no project to link skills into"
   }
   if ((process.env.NISH_NO_SKILLS ?? "") !== "") {
-    return "NISH_NO_SKILLS is set, so no skills are linked"
+    return "NISH_NO_SKILLS is set, so skills are not mentioned"
   }
   const initCwd = process.env.INIT_CWD ?? ""
   if (initCwd === "") {
@@ -156,15 +159,13 @@ const skills = async () => {
   }
   const linker = path.join(root, "scripts", "link-skills.mjs")
   if (!fs.existsSync(linker)) {
-    return "scripts/link-skills.mjs is missing, so no skills are linked"
+    return "scripts/link-skills.mjs is missing, so there are no skills to review"
   }
-  const { linkSkills, projectOf } = await import(pathToFileURL(linker).href)
-  const project = projectOf(initCwd, root)
-  if (project === null) {
-    return "not installed in INIT_CWD's project, so no skills are linked"
+  const { projectOf } = await import(pathToFileURL(linker).href)
+  if (projectOf(initCwd, root) === null) {
+    return "not installed in INIT_CWD's project, so there are no skills to review"
   }
-  const r = linkSkills(project)
-  return `skills: ${r.linked.length} linked, ${r.kept.length} unchanged, ${r.pruned.length} pruned, ${r.skipped.length} skipped in .claude/skills (npx nish-skills to relink)`
+  return "run 'npx nish-skills' to review and link the agent skills of installed Nish packages"
 }
 
 try {
@@ -174,10 +175,10 @@ try {
   console.log(`nish: keeping the node launcher (${err instanceof Error ? err.message : String(err)})`)
 }
 
-// Its own try, so either half failing leaves the other intact; a skill that
-// could not be linked is never a reason to fail the install.
+// Its own try, so either half failing leaves the other intact; nothing about
+// skills is ever a reason to fail the install.
 try {
   console.log(`nish: ${await skills()}`)
 } catch (err) {
-  console.log(`nish: no skills linked (${err instanceof Error ? err.message : String(err)})`)
+  console.log(`nish: skills not checked (${err instanceof Error ? err.message : String(err)})`)
 }
