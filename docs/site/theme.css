@@ -397,6 +397,17 @@ table.t-editor__table {
   border: 1px solid var(--scalar-border-color);
   border-radius: 14px;
 }
+/* A table sizes its columns to what they hold, and the name in the first
+   column (a module, a flag, a type) breaks only at a space, never inside a
+   word: `nish:async` stays one line. Scalar fixes the layout and lets code
+   wrap anywhere, which split names across two lines in a narrow column. A
+   table too wide for its column scrolls inside its frame. */
+table.t-editor__table {
+  table-layout: auto;
+}
+table.t-editor__table td:first-child code {
+  overflow-wrap: normal;
+}
 table.t-editor__table th {
   background: color-mix(in srgb, var(--nish-violet), transparent 90%);
   border-top: 0;

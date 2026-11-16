@@ -7,10 +7,9 @@
   },
   "navigation": {
     "header": [
+      { "type": "link", "title": "Get started", "icon": "phosphor/regular/rocket-launch", "to": "/getting-started/installation" },
       { "type": "link", "title": "GitHub", "icon": "phosphor/regular/github-logo", "to": "https://github.com/amritk/nish", "newTab": true },
-      { "type": "link", "title": "Roadmap", "icon": "phosphor/regular/map-trifold", "to": "/roadmap" },
-      { "type": "link", "title": "Language reference", "icon": "phosphor/regular/book-open", "to": "/reference/language" },
-      { "type": "link", "title": "Changelog", "icon": "phosphor/regular/clock-counter-clockwise", "to": "/reference/changelog" }
+      { "type": "link", "title": "Language reference", "icon": "phosphor/regular/book-open", "to": "/reference/language" }
     ],
     "routes": {
       "/": {
