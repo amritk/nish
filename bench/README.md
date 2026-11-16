@@ -626,6 +626,57 @@ to 7% on the Xeon and about 1% on the ARM runner. The reading is in
 | gzip-compress-1m | 58,558,905 | 59,432,084 | 59,025,291 | 35,006,497 | 35,008,259 | 35,259,514 |
 | gzip-decompress-1m | 4,541,521 | 4,866,916 | 5,066,379 | 2,314,526 | 2,313,356 | 2,574,127 |
 
+## Temporal
+
+`temporal.ts` times `nish/temporal` (WP64) on what a program repeats: reading
+each type from a string, writing it back, building a `PlainDate`, adding to a
+date and a date-time, and the differences `until` answers. Each workload is in
+ns/op, over 1,024 distinct inputs made before the clock starts, and every
+answer is folded into a printed checksum. `temporal.mjs` builds it with one
+`nish` per column. Each compiler reads `std/` from beside its own binary, so to
+compare two versions of the module, put a copy of `build/nish` in each tree's
+`build/` and name both. Two columns naming the same compiler give the noise
+band:
+
+```bash
+npm run build
+git worktree add /tmp/base <base> && mkdir -p /tmp/base/build && cp build/nish /tmp/base/build/
+node bench/temporal.mjs --check --column base=/tmp/base/build/nish --column head=build/nish
+node bench/temporal.mjs --runs 11 --column base=/tmp/base/build/nish --column head=build/nish
+```
+
+The first version of the module, against the one that wrote each string from
+one byte buffer, built dates without recomputing their epoch day and leap year,
+and did its time arithmetic on integers rather than on allocated spans. The
+figures are the median (min–max) ns/op of 11 interleaved rounds on a 4-core
+x86-64 Xeon at 2.10 GHz, with an A-against-A noise band of ±4% (±12% on
+parse-date, the first workload, which takes the program's warm-up):
+
+| Workload | First version | Now | |
+| --- | --- | --- | --- |
+| parse-date | 150.6 (142.2–249.9) | 100.2 (94.8–156.5) | 1.50x |
+| parse-datetime | 200.3 (185.7–275.8) | 140.3 (135.7–225.1) | 1.43x |
+| parse-instant | 57.1 (51.5–70.0) | 41.2 (40.0–67.5) | 1.39x |
+| parse-duration | 114.9 (107.2–185.2) | 70.9 (68.1–97.2) | 1.62x |
+| string-date | 79.9 (77.5–108.8) | 29.3 (27.6–45.9) | 2.73x |
+| string-datetime | 409.6 (390.4–449.9) | 67.1 (64.9–109.0) | 6.11x |
+| string-instant | 445.4 (426.6–550.0) | 79.0 (75.1–94.2) | 5.64x |
+| string-duration | 206.6 (196.9–277.4) | 57.3 (54.3–80.9) | 3.61x |
+| new-date | 64.6 (61.6–90.9) | 18.2 (17.0–18.5) | 3.56x |
+| add-date | 246.8 (233.2–414.3) | 93.0 (90.1–96.8) | 2.65x |
+| add-datetime | 656.5 (621.1–822.7) | 108.0 (104.0–139.3) | 6.08x |
+| until-date | 53.1 (50.7–89.5) | 14.8 (14.1–19.8) | 3.59x |
+| until-datetime | 124.2 (118.6–169.1) | 82.4 (79.8–122.6) | 1.51x |
+| until-instant | 109.9 (107.2–140.3) | 73.3 (71.3–83.8) | 1.50x |
+
+Under callgrind, the whole run at `scale` 20 went from 446 million instructions
+to 197 million. One step on the way is worth recording. Making the date
+helpers cheaper left parse-instant executing the same instructions, with fewer
+data references and fewer simulated branch mispredictions, but 10% slower by
+the clock. Restoring the old helpers did not bring the time back, so it was
+where the larger module's code landed, not the work. Taking the four
+`TemporalSpan` allocations out of the instant parse is what made it faster.
+
 ## Adler-32
 
 `adler32.ts` times `adler32Update` on 64 KiB and 1 MiB windows, 64 MiB of

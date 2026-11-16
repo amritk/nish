@@ -108,43 +108,101 @@ const temporalSign = (a: i64): i32 => {
   return a > 0 ? 1 : 0
 }
 
-/** `n` in decimal, left-padded with zeros to `width` digits; `n` is not negative. */
-const temporalPad = (n: i64, width: i32): string => {
-  let text: string = `${n}`
-  while (toI32(text.length) < width) {
-    text = `0${text}`
-  }
-  return text
+// The writers. Every `toString` fills one byte buffer and makes one string of
+// it, rather than joining a template's parts: each `${n}` and each join is an
+// allocation and a copy, and they were a fifth of the time `toString` took.
+// Each writer puts its text at `at` and answers the index just past it.
+
+/** The most bytes any `toString` here writes: a `Duration` of ten 19-digit fields. */
+const TEMPORAL_TEXT_MAX: i32 = 256
+
+/** Write the ASCII byte `c` at `at`. */
+const temporalPutByte = (out: u8[], at: i32, c: i32): i32 => {
+  out[at] = toU8(c)
+  return at + 1
 }
 
-/**
- * A year as Temporal writes it: four digits for 0 to 9999, otherwise a sign
- * and six digits.
- */
-const temporalYearString = (year: i32): string => {
+/** Write `n`, which is not negative, in decimal, zero-padded to at least `width` digits. */
+const temporalPutNumber = (out: u8[], at: i32, n: i64, width: i32): i32 => {
+  let count: i32 = 1
+  let rest: i64 = n
+  while (rest >= 10) {
+    rest = toI64(rest / 10)
+    count = count + 1
+  }
+  if (count < width) {
+    count = width
+  }
+  let v: i64 = n
+  for (let i: i32 = count - 1; i >= 0; i--) {
+    out[at + i] = toU8(48 + toI32(v % 10))
+    v = toI64(v / 10)
+  }
+  return at + count
+}
+
+/** Write a year as Temporal does: four digits for 0 to 9999, otherwise a sign and six digits. */
+const temporalPutYear = (out: u8[], at: i32, year: i32): i32 => {
   if (year >= 0 && year <= 9999) {
-    return temporalPad(toI64(year), 4)
+    return temporalPutNumber(out, at, toI64(year), 4)
   }
-  return `${year < 0 ? "-" : "+"}${temporalPad(temporalAbs(toI64(year)), 6)}`
+  const signed: i32 = temporalPutByte(out, at, year < 0 ? 45 : 43)
+  return temporalPutNumber(out, signed, temporalAbs(toI64(year)), 6)
+}
+
+/** Write `YYYY-MM-DD`. */
+const temporalPutDate = (out: u8[], at: i32, year: i32, month: i32, day: i32): i32 => {
+  let i: i32 = temporalPutYear(out, at, year)
+  i = temporalPutByte(out, i, 45)
+  i = temporalPutNumber(out, i, toI64(month), 2)
+  i = temporalPutByte(out, i, 45)
+  return temporalPutNumber(out, i, toI64(day), 2)
 }
 
 /**
- * `ns` nanoseconds of a second as Temporal's automatic precision writes them:
+ * Write `ns` nanoseconds of a second as Temporal's automatic precision does:
  * nothing for zero, otherwise a `.` and up to nine digits with the trailing
  * zeros dropped.
  */
-const temporalFraction = (ns: i32): string => {
+const temporalPutFraction = (out: u8[], at: i32, ns: i32): i32 => {
   if (ns === 0) {
-    return ""
+    return at
   }
-  let digits: string = temporalPad(toI64(ns), 9)
-  let end: i32 = 9
-  while (end > 1 && toI32(digits.charCodeAt(end - 1)) === 48) {
-    end = end - 1
+  let digits: i32 = 9
+  let v: i32 = ns
+  while (v % 10 === 0) {
+    v = toI32(v / 10)
+    digits = digits - 1
   }
-  digits = digits.substring(0, end)
-  return `.${digits}`
+  return temporalPutNumber(out, temporalPutByte(out, at, 46), toI64(v), digits)
 }
+
+/** Write `HH:MM:SS` and the fraction of the second. */
+const temporalPutTime = (out: u8[], at: i32, hour: i32, minute: i32, second: i32, sub: i32): i32 => {
+  let i: i32 = temporalPutNumber(out, at, toI64(hour), 2)
+  i = temporalPutByte(out, i, 58)
+  i = temporalPutNumber(out, i, toI64(minute), 2)
+  i = temporalPutByte(out, i, 58)
+  i = temporalPutNumber(out, i, toI64(second), 2)
+  return temporalPutFraction(out, i, sub)
+}
+
+/** Write the time of day `ns` nanoseconds after midnight. */
+const temporalPutNanoOfDay = (out: u8[], at: i32, ns: i64): i32 => {
+  const secs: i64 = toI64(ns / TEMPORAL_NS_PER_SECOND)
+  return temporalPutTime(
+    out,
+    at,
+    toI32(secs / 3600),
+    toI32(toI64(secs / 60) % 60),
+    toI32(secs % 60),
+    toI32(ns % TEMPORAL_NS_PER_SECOND)
+  )
+}
+
+/** Write `n` and the designator `c`, as a duration field is written. */
+const temporalPutField = (out: u8[], at: i32, n: i64, c: i32): i32 =>
+  temporalPutByte(out, temporalPutNumber(out, at, n, 1), c)
 
 /** Panic with Temporal's `RangeError`, naming `what`. */
 const temporalRangeError = (what: string): void => {
@@ -157,18 +215,54 @@ const temporalRangeError = (what: string): void => {
 // ---------------------------------------------------------------------------
 
 /** Whether `year` is a leap year of the proleptic Gregorian calendar. */
-const temporalIsLeapYear = (year: i64): boolean =>
-  temporalFloorMod(year, 4) === 0 && (temporalFloorMod(year, 100) !== 0 || temporalFloorMod(year, 400) === 0)
+const temporalIsLeapYear = (year: i64): boolean => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
 
 /** The days in `month` (1 to 12) of `year`. */
-const temporalDaysInMonth = (year: i64, month: i32): i32 => {
+const temporalDaysInMonth = (year: i64, month: i32): i32 =>
+  temporalMonthLength(month, month === 2 && temporalIsLeapYear(year))
+
+/** The days in `month` (1 to 12) of a year that is a leap year when `leap`. */
+const temporalMonthLength = (month: i32, leap: boolean): i32 => {
   if (month === 2) {
-    return temporalIsLeapYear(year) ? 29 : 28
+    return leap ? 29 : 28
   }
   if (month === 4 || month === 6 || month === 9 || month === 11) {
     return 30
   }
   return 31
+}
+
+/** The days of a common year before the first of each month. */
+const TEMPORAL_DAYS_BEFORE_MONTH: readonly i32[] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+
+/** The month as Temporal codes it, `M01` to `M12`, without building a string. */
+const temporalMonthCode = (month: i32): string => {
+  switch (month) {
+    case 1:
+      return "M01"
+    case 2:
+      return "M02"
+    case 3:
+      return "M03"
+    case 4:
+      return "M04"
+    case 5:
+      return "M05"
+    case 6:
+      return "M06"
+    case 7:
+      return "M07"
+    case 8:
+      return "M08"
+    case 9:
+      return "M09"
+    case 10:
+      return "M10"
+    case 11:
+      return "M11"
+    default:
+      return "M12"
+  }
 }
 
 /** The days from 1970-01-01 to the given date, negative before it. */
@@ -182,9 +276,11 @@ const temporalEpochDay = (year: i64, month: i32, day: i32): i64 => {
   return era * 146097 + doe - 719468
 }
 
-/** The days from 1 January of `year` to the given date, plus one. */
-const temporalDayOfYear = (year: i64, month: i32, day: i32): i32 =>
-  toI32(temporalEpochDay(year, month, day) - temporalEpochDay(year, 1, 1)) + 1
+/** The days from 1 January to the given date, plus one, in a year that is a leap year when `leap`. */
+const temporalDayOfYear = (month: i32, day: i32, leap: boolean): i32 => {
+  const before: i32 = month >= 1 && month <= 12 ? TEMPORAL_DAYS_BEFORE_MONTH[month - 1] : 0
+  return before + day + (leap && month > 2 ? 1 : 0)
+}
 
 /** The ISO weekday of an epoch day: 1 for Monday to 7 for Sunday. */
 const temporalDayOfWeek = (epochDay: i64): i32 => toI32(temporalFloorMod(epochDay + 3, 7)) + 1
@@ -241,11 +337,36 @@ const temporalCheckTime = (
   }
 }
 
+/** The nanoseconds since midnight of a time of day whose fields are in range. */
+const temporalNanoOfDay = (
+  hour: i32,
+  minute: i32,
+  second: i32,
+  millisecond: i32,
+  microsecond: i32,
+  nanosecond: i32
+): i64 =>
+  (toI64(hour) * 3600 + toI64(minute) * 60 + toI64(second)) * TEMPORAL_NS_PER_SECOND +
+  toI64(millisecond) * 1000000 +
+  toI64(microsecond) * 1000 +
+  toI64(nanosecond)
+
 /** A date on an epoch day, after checking the day is inside Temporal's range. */
 const temporalDateOfEpochDay = (epochDay: i64): PlainDate => {
   if (epochDay < TEMPORAL_MIN_EPOCH_DAY || epochDay > TEMPORAL_MAX_EPOCH_DAY) {
     temporalRangeError("PlainDate: the date is outside Temporal's range")
   }
+  const civil: i64 = temporalCivilOfEpochDay(epochDay)
+  return new PlainDate(temporalCivilYear(civil), temporalCivilMonth(civil), temporalCivilDay(civil))
+}
+
+/**
+ * The year, month and day of an epoch day, packed into one integer so that
+ * nothing is allocated: `(year + 400000) * 512 + month * 32 + day`, which
+ * stays below 2^31 over Temporal's whole range. `temporalCivilYear`,
+ * `temporalCivilMonth` and `temporalCivilDay` take it apart.
+ */
+const temporalCivilOfEpochDay = (epochDay: i64): i64 => {
   const z: i64 = epochDay + 719468
   const era: i64 = temporalFloorDiv(z, 146097)
   const doe: i64 = z - era * 146097
@@ -258,8 +379,17 @@ const temporalDateOfEpochDay = (epochDay: i64): PlainDate => {
   const day: i64 = doy - temporalTruncDiv(153 * mp + 2, 5) + 1
   const month: i64 = mp < 10 ? mp + 3 : mp - 9
   const year: i64 = yoe + era * 400 + (month <= 2 ? 1 : 0)
-  return new PlainDate(toI32(year), toI32(month), toI32(day))
+  return (year + 400000) * 512 + month * 32 + day
 }
+
+/** The year of a packed civil date. */
+const temporalCivilYear = (civil: i64): i32 => toI32(toI64(civil / 512) - 400000)
+
+/** The month of a packed civil date. */
+const temporalCivilMonth = (civil: i64): i32 => toI32(toI64(civil / 32) % 16)
+
+/** The day of a packed civil date. */
+const temporalCivilDay = (civil: i64): i32 => toI32(civil % 32)
 
 /** The time of day `ns` nanoseconds after midnight, `0 <= ns < 86,400 s`. */
 const temporalTimeOfNanos = (ns: i64): PlainTime => {
@@ -344,29 +474,89 @@ class TemporalSpan {
   }
 }
 
-/** The span of one field of `count` units, each `unitNanos` nanoseconds and `unitNanos <= 10^9` or a whole number of seconds. */
-const temporalSpanOf = (count: i64, unitSeconds: i64, unitNanos: i64): TemporalSpan => {
-  if (unitSeconds > 0) {
-    return new TemporalSpan(count * unitSeconds, 0)
+/** The time fields of `d` as one span; its days too, each 24 hours, when `withDays`. */
+const temporalSpanOfDuration = (d: Duration, withDays: boolean): TemporalSpan =>
+  new TemporalSpan(temporalDurationSeconds(d, withDays), temporalDurationNanos(d))
+
+/**
+ * The whole seconds of `d`'s time fields, and of its days when `withDays`,
+ * with each sub-second field's whole seconds; `temporalDurationNanos` is the
+ * rest. Arithmetic on the fields, so that nothing is allocated: the sum stays
+ * below 2^53 for every valid duration.
+ */
+const temporalDurationSeconds = (d: Duration, withDays: boolean): i64 => {
+  let seconds: i64 = d.hours * 3600 + d.minutes * 60 + d.seconds
+  if (withDays) {
+    seconds = seconds + d.days * TEMPORAL_SECONDS_PER_DAY
   }
-  // A sub-second unit: split the count into whole seconds first, so that the
-  // product stays below 2^53.
-  const per: i64 = temporalTruncDiv(TEMPORAL_NS_PER_SECOND, unitNanos)
-  return new TemporalSpan(temporalFloorDiv(count, per), temporalFloorMod(count, per) * unitNanos)
+  if (d.milliseconds !== 0) {
+    seconds = seconds + temporalFloorDiv(d.milliseconds, 1000)
+  }
+  if (d.microseconds !== 0) {
+    seconds = seconds + temporalFloorDiv(d.microseconds, 1000000)
+  }
+  if (d.nanoseconds !== 0) {
+    seconds = seconds + temporalFloorDiv(d.nanoseconds, TEMPORAL_NS_PER_SECOND)
+  }
+  return seconds
 }
 
-/** The time fields of `d` as one span; its days too, each 24 hours, when `withDays`. */
-const temporalSpanOfDuration = (d: Duration, withDays: boolean): TemporalSpan => {
-  let span: TemporalSpan = temporalSpanOf(d.hours, 3600, 0)
-  span = span.plus(temporalSpanOf(d.minutes, 60, 0))
-  span = span.plus(temporalSpanOf(d.seconds, 1, 0))
-  span = span.plus(temporalSpanOf(d.milliseconds, 0, 1000000))
-  span = span.plus(temporalSpanOf(d.microseconds, 0, 1000))
-  span = span.plus(temporalSpanOf(d.nanoseconds, 0, 1))
-  if (withDays) {
-    span = span.plus(temporalSpanOf(d.days, TEMPORAL_SECONDS_PER_DAY, 0))
+/** The nanoseconds `temporalDurationSeconds` leaves out, each field's in `[0, 10^9)`, so below 3 × 10^9. */
+const temporalDurationNanos = (d: Duration): i64 => {
+  let nanos: i64 = 0
+  if (d.milliseconds !== 0) {
+    nanos = temporalFloorMod(d.milliseconds, 1000) * 1000000
   }
-  return span
+  if (d.microseconds !== 0) {
+    nanos = nanos + temporalFloorMod(d.microseconds, 1000000) * 1000
+  }
+  if (d.nanoseconds !== 0) {
+    nanos = nanos + temporalFloorMod(d.nanoseconds, TEMPORAL_NS_PER_SECOND)
+  }
+  return nanos
+}
+
+/** Whether every time field of `d`, hours to nanoseconds, is zero. */
+const temporalNoTime = (d: Duration): boolean =>
+  d.hours === 0 &&
+  d.minutes === 0 &&
+  d.seconds === 0 &&
+  d.milliseconds === 0 &&
+  d.microseconds === 0 &&
+  d.nanoseconds === 0
+
+/**
+ * The epoch day `(year, month, day)` lands on after `years` and `months`,
+ * with the day constrained to the new month, then `days` more; `epochDay` is
+ * where it starts, used as it is when there are no years or months. Panics
+ * with a `RangeError` outside Temporal's range.
+ */
+const temporalAddToDate = (
+  year0: i32,
+  month0: i32,
+  day0: i32,
+  epochDay: i64,
+  years: i64,
+  months: i64,
+  days: i64
+): i64 => {
+  let start: i64 = epochDay
+  if (years !== 0 || months !== 0) {
+    let year: i64 = toI64(year0) + years
+    let month: i64 = toI64(month0) + months
+    year = year + temporalFloorDiv(month - 1, 12)
+    month = temporalFloorMod(month - 1, 12) + 1
+    if (year < -271821 || year > 275760) {
+      temporalRangeError("PlainDate: the date is outside Temporal's range")
+    }
+    const most: i32 = temporalDaysInMonth(year, toI32(month))
+    start = temporalEpochDay(year, toI32(month), day0 > most ? most : day0)
+  }
+  const result: i64 = start + days
+  if (result < TEMPORAL_MIN_EPOCH_DAY || result > TEMPORAL_MAX_EPOCH_DAY) {
+    temporalRangeError("PlainDate: the date is outside Temporal's range")
+  }
+  return result
 }
 
 /**
@@ -865,31 +1055,34 @@ export class PlainDate {
       temporalRangeError("PlainDate: the date is outside Temporal's range")
     }
     const y: i64 = toI64(isoYear)
-    const doy: i32 = temporalDayOfYear(y, isoMonth, isoDay)
+    const leap: boolean = temporalIsLeapYear(y)
+    const doy: i32 = temporalDayOfYear(isoMonth, isoDay, leap)
     const dow: i32 = temporalDayOfWeek(epochDay)
-    let week: i32 = toI32(temporalTruncDiv(toI64(doy - dow + 10), 7))
+    let week: i32 = toI32((doy - dow + 10) / 7)
     let weekYear: i32 = isoYear
+    // Only the first and last days of a year can be in another year's week, so
+    // the 52-or-53 question is asked only there.
     if (week < 1) {
       weekYear = isoYear - 1
       week = temporalWeeksInYear(y - 1)
-    } else if (week > temporalWeeksInYear(y)) {
+    } else if (week === 53 && temporalWeeksInYear(y) === 52) {
       weekYear = isoYear + 1
       week = 1
     }
     this.year = isoYear
     this.month = isoMonth
     this.day = isoDay
-    this.monthCode = `M${temporalPad(toI64(isoMonth), 2)}`
+    this.monthCode = temporalMonthCode(isoMonth)
     this.calendarId = "iso8601"
     this.dayOfWeek = dow
     this.dayOfYear = doy
     this.weekOfYear = week
     this.yearOfWeek = weekYear
     this.daysInWeek = 7
-    this.daysInMonth = temporalDaysInMonth(y, isoMonth)
-    this.daysInYear = temporalIsLeapYear(y) ? 366 : 365
+    this.daysInMonth = temporalMonthLength(isoMonth, leap)
+    this.daysInYear = leap ? 366 : 365
     this.monthsInYear = 12
-    this.inLeapYear = temporalIsLeapYear(y)
+    this.inLeapYear = leap
     this.epochDay = epochDay
   }
 
@@ -900,7 +1093,9 @@ export class PlainDate {
    * @returns the ISO 8601 form
    */
   toString(): string {
-    return `${temporalYearString(this.year)}-${temporalPad(toI64(this.month), 2)}-${temporalPad(toI64(this.day), 2)}`
+    const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    const end: i32 = temporalPutDate(out, 0, this.year, this.month, this.day)
+    return String.fromBytes(out, 0, end)
   }
 
   /**
@@ -933,17 +1128,20 @@ export class PlainDate {
    * @returns the new date
    */
   add(duration: Duration): PlainDate {
-    let year: i64 = toI64(this.year) + duration.years
-    let month: i64 = toI64(this.month) + duration.months
-    year = year + temporalFloorDiv(month - 1, 12)
-    month = temporalFloorMod(month - 1, 12) + 1
-    if (year < -271821 || year > 275760) {
-      temporalRangeError("PlainDate: the date is outside Temporal's range")
+    let days: i64 = duration.weeks * 7 + duration.days
+    if (!temporalNoTime(duration)) {
+      days = days + temporalSpanOfDuration(duration, false).truncDays()
     }
-    const most: i32 = temporalDaysInMonth(year, toI32(month))
-    const day: i32 = this.day > most ? most : this.day
-    const days: i64 = duration.weeks * 7 + duration.days + temporalSpanOfDuration(duration, false).truncDays()
-    return temporalDateOfEpochDay(temporalEpochDay(year, toI32(month), day) + days)
+    const epochDay: i64 = temporalAddToDate(
+      this.year,
+      this.month,
+      this.day,
+      this.epochDay,
+      duration.years,
+      duration.months,
+      days
+    )
+    return temporalDateOfEpochDay(epochDay)
   }
 
   /**
@@ -1099,11 +1297,7 @@ export class PlainTime {
     this.millisecond = millisecond
     this.microsecond = microsecond
     this.nanosecond = nanosecond
-    this.nanoOfDay =
-      (toI64(hour) * 3600 + toI64(minute) * 60 + toI64(second)) * TEMPORAL_NS_PER_SECOND +
-      toI64(millisecond) * 1000000 +
-      toI64(microsecond) * 1000 +
-      toI64(nanosecond)
+    this.nanoOfDay = temporalNanoOfDay(hour, minute, second, millisecond, microsecond, nanosecond)
   }
 
   /**
@@ -1113,8 +1307,9 @@ export class PlainTime {
    * @returns the ISO 8601 form
    */
   toString(): string {
-    const sub: i32 = this.millisecond * 1000000 + this.microsecond * 1000 + this.nanosecond
-    return `${temporalPad(toI64(this.hour), 2)}:${temporalPad(toI64(this.minute), 2)}:${temporalPad(toI64(this.second), 2)}${temporalFraction(sub)}`
+    const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    const end: i32 = temporalPutNanoOfDay(out, 0, this.nanoOfDay)
+    return String.fromBytes(out, 0, end)
   }
 
   /**
@@ -1377,8 +1572,17 @@ export class PlainDateTime {
     nanosecond: i32 = 0
   ) {
     const date: PlainDate = new PlainDate(isoYear, isoMonth, isoDay)
-    const time: PlainTime = new PlainTime(hour, minute, second, millisecond, microsecond, nanosecond)
-    if (date.epochDay === TEMPORAL_MIN_EPOCH_DAY && time.nanoOfDay === 0) {
+    temporalCheckTime(
+      "PlainDateTime",
+      toI64(hour),
+      toI64(minute),
+      toI64(second),
+      toI64(millisecond),
+      toI64(microsecond),
+      toI64(nanosecond)
+    )
+    const nanoOfDay: i64 = temporalNanoOfDay(hour, minute, second, millisecond, microsecond, nanosecond)
+    if (date.epochDay === TEMPORAL_MIN_EPOCH_DAY && nanoOfDay === 0) {
       temporalRangeError("PlainDateTime: the date-time is outside Temporal's range")
     }
     this.year = isoYear
@@ -1402,7 +1606,7 @@ export class PlainDateTime {
     this.microsecond = microsecond
     this.nanosecond = nanosecond
     this.epochDay = date.epochDay
-    this.nanoOfDay = time.nanoOfDay
+    this.nanoOfDay = nanoOfDay
   }
 
   /**
@@ -1412,7 +1616,10 @@ export class PlainDateTime {
    * @returns the ISO 8601 form
    */
   toString(): string {
-    return `${this.toPlainDate().toString()}T${this.toPlainTime().toString()}`
+    const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    const date: i32 = temporalPutDate(out, 0, this.year, this.month, this.day)
+    const end: i32 = temporalPutNanoOfDay(out, temporalPutByte(out, date, 84), this.nanoOfDay)
+    return String.fromBytes(out, 0, end)
   }
 
   /**
@@ -1479,20 +1686,40 @@ export class PlainDateTime {
    * @returns the new date-time
    */
   add(duration: Duration): PlainDateTime {
-    const span: TemporalSpan = temporalSpanOfDuration(duration, false)
-    const carried: TemporalSpan = span.plus(new TemporalSpan(0, this.nanoOfDay))
-    const carryDays: i64 = temporalFloorDiv(carried.seconds, TEMPORAL_SECONDS_PER_DAY)
-    const nanoOfDay: i64 =
-      temporalFloorMod(carried.seconds, TEMPORAL_SECONDS_PER_DAY) * TEMPORAL_NS_PER_SECOND +
-      toI64(carried.nanos)
-    const dateOnly: Duration = new Duration(
+    let carryDays: i64 = 0
+    let nanoOfDay: i64 = this.nanoOfDay
+    if (!temporalNoTime(duration)) {
+      const seconds: i64 = temporalDurationSeconds(duration, false)
+      const nanos: i64 = temporalDurationNanos(duration) + this.nanoOfDay
+      const total: i64 = seconds + temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)
+      carryDays = temporalFloorDiv(total, TEMPORAL_SECONDS_PER_DAY)
+      nanoOfDay =
+        temporalFloorMod(total, TEMPORAL_SECONDS_PER_DAY) * TEMPORAL_NS_PER_SECOND +
+        temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND)
+    }
+    const epochDay: i64 = temporalAddToDate(
+      this.year,
+      this.month,
+      this.day,
+      this.epochDay,
       duration.years,
       duration.months,
-      duration.weeks,
-      duration.days + carryDays
+      duration.weeks * 7 + duration.days + carryDays
     )
-    const date: PlainDate = this.toPlainDate().add(dateOnly)
-    return date.toPlainDateTime(temporalTimeOfNanos(nanoOfDay))
+    const civil: i64 = temporalCivilOfEpochDay(epochDay)
+    const secs: i64 = toI64(nanoOfDay / TEMPORAL_NS_PER_SECOND)
+    const sub: i32 = toI32(nanoOfDay % TEMPORAL_NS_PER_SECOND)
+    return new PlainDateTime(
+      temporalCivilYear(civil),
+      temporalCivilMonth(civil),
+      temporalCivilDay(civil),
+      toI32(secs / 3600),
+      toI32(toI64(secs / 60) % 60),
+      toI32(secs % 60),
+      toI32(sub / 1000000),
+      toI32(sub / 1000) % 1000,
+      sub % 1000
+    )
   }
 
   /**
@@ -1651,28 +1878,16 @@ export class Duration {
     microseconds: i64 = 0,
     nanoseconds: i64 = 0
   ) {
-    let sign: i32 = 0
-    const fields: i64[] = [
-      years,
-      months,
-      weeks,
-      days,
-      hours,
-      minutes,
-      seconds,
-      milliseconds,
-      microseconds,
-      nanoseconds,
-    ]
-    for (let i: i32 = 0; i < 10; i++) {
-      const s: i32 = temporalSign(fields[i])
-      if (s !== 0) {
-        if (sign !== 0 && s !== sign) {
-          temporalRangeError("Duration: the fields have mixed signs")
-        }
-        sign = s
-      }
-    }
+    let sign: i32 = temporalSignOf(0, years)
+    sign = temporalSignOf(sign, months)
+    sign = temporalSignOf(sign, weeks)
+    sign = temporalSignOf(sign, days)
+    sign = temporalSignOf(sign, hours)
+    sign = temporalSignOf(sign, minutes)
+    sign = temporalSignOf(sign, seconds)
+    sign = temporalSignOf(sign, milliseconds)
+    sign = temporalSignOf(sign, microseconds)
+    sign = temporalSignOf(sign, nanoseconds)
     if (
       temporalAbs(years) >= TEMPORAL_MAX_CALENDAR_FIELD ||
       temporalAbs(months) >= TEMPORAL_MAX_CALENDAR_FIELD ||
@@ -1701,8 +1916,24 @@ export class Duration {
     this.nanoseconds = nanoseconds
     this.sign = sign
     this.blank = sign === 0
-    const total: TemporalSpan = temporalSpanOfDuration(this, true)
-    const whole: i64 = total.sign() < 0 ? -total.negated().seconds : total.seconds
+    // Every field has one sign, so the whole seconds of the total, rounded
+    // toward zero, are the fields' own, each rounded toward zero, plus the
+    // seconds their remainders carry.
+    const carry: i64 = toI64(
+      (toI64(milliseconds % 1000) * 1000000 +
+        toI64(microseconds % 1000000) * 1000 +
+        (nanoseconds % 1000000000)) /
+        1000000000
+    )
+    const whole: i64 =
+      days * TEMPORAL_SECONDS_PER_DAY +
+      hours * 3600 +
+      minutes * 60 +
+      seconds +
+      toI64(milliseconds / 1000) +
+      toI64(microseconds / 1000000) +
+      toI64(nanoseconds / 1000000000) +
+      carry
     if (temporalAbs(whole) > TEMPORAL_MAX_DURATION_SECONDS) {
       temporalRangeError("Duration: the time fields come to 2^53 seconds or more")
     }
@@ -1717,30 +1948,24 @@ export class Duration {
    */
   toString(): string {
     const k: i64 = toI64(this.sign < 0 ? -1 : 1)
-    let date: string = ""
+    const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    let i: i32 = 0
+    if (this.sign < 0) {
+      i = temporalPutByte(out, i, 45)
+    }
+    i = temporalPutByte(out, i, 80)
     if (this.years !== 0) {
-      date = `${date}${this.years * k}Y`
+      i = temporalPutField(out, i, this.years * k, 89)
     }
     if (this.months !== 0) {
-      date = `${date}${this.months * k}M`
+      i = temporalPutField(out, i, this.months * k, 77)
     }
     if (this.weeks !== 0) {
-      date = `${date}${this.weeks * k}W`
+      i = temporalPutField(out, i, this.weeks * k, 87)
     }
     if (this.days !== 0) {
-      date = `${date}${this.days * k}D`
+      i = temporalPutField(out, i, this.days * k, 68)
     }
-    let time: string = ""
-    if (this.hours !== 0) {
-      time = `${time}${this.hours * k}H`
-    }
-    if (this.minutes !== 0) {
-      time = `${time}${this.minutes * k}M`
-    }
-    const secs: TemporalSpan = temporalSpanOf(this.seconds * k, 1, 0)
-      .plus(temporalSpanOf(this.milliseconds * k, 0, 1000000))
-      .plus(temporalSpanOf(this.microseconds * k, 0, 1000))
-      .plus(temporalSpanOf(this.nanoseconds * k, 0, 1))
     const zeroAbove: boolean =
       this.years === 0 &&
       this.months === 0 &&
@@ -1748,10 +1973,35 @@ export class Duration {
       this.days === 0 &&
       this.hours === 0 &&
       this.minutes === 0
-    if (secs.sign() !== 0 || zeroAbove) {
-      time = `${time}${secs.seconds}${temporalFraction(secs.nanos)}S`
+    // The seconds and their fractions are one decimal number, balanced. Every
+    // field times `k` is not negative, so each division here truncates as a
+    // floor would.
+    const ms: i64 = this.milliseconds * k
+    const us: i64 = this.microseconds * k
+    const ns: i64 = this.nanoseconds * k
+    let fraction: i64 = (ms % 1000) * 1000000 + (us % 1000000) * 1000 + (ns % TEMPORAL_NS_PER_SECOND)
+    const wholeSeconds: i64 =
+      this.seconds * k +
+      toI64(ms / 1000) +
+      toI64(us / 1000000) +
+      toI64(ns / TEMPORAL_NS_PER_SECOND) +
+      toI64(fraction / TEMPORAL_NS_PER_SECOND)
+    fraction = fraction % TEMPORAL_NS_PER_SECOND
+    const withSeconds: boolean = wholeSeconds !== 0 || fraction !== 0 || zeroAbove
+    if (this.hours !== 0 || this.minutes !== 0 || withSeconds) {
+      i = temporalPutByte(out, i, 84)
     }
-    return `${this.sign < 0 ? "-" : ""}P${date}${time.length > 0 ? "T" : ""}${time}`
+    if (this.hours !== 0) {
+      i = temporalPutField(out, i, this.hours * k, 72)
+    }
+    if (this.minutes !== 0) {
+      i = temporalPutField(out, i, this.minutes * k, 77)
+    }
+    if (withSeconds) {
+      i = temporalPutNumber(out, i, wholeSeconds, 1)
+      i = temporalPutByte(out, temporalPutFraction(out, i, toI32(fraction)), 83)
+    }
+    return String.fromBytes(out, 0, i)
   }
 
   /**
@@ -1827,6 +2077,18 @@ export class Duration {
   subtract(other: Duration): Duration {
     return this.add(other.negated())
   }
+}
+
+/** `sign` after a field `n`: its sign, or a `RangeError` when it differs from a non-zero `sign`. */
+const temporalSignOf = (sign: i32, n: i64): i32 => {
+  if (n === 0) {
+    return sign
+  }
+  const s: i32 = n < 0 ? -1 : 1
+  if (sign !== 0 && s !== sign) {
+    temporalRangeError("Duration: the fields have mixed signs")
+  }
+  return s
 }
 
 /** The largest unit `d` has a non-zero field in, or nanoseconds when it is blank. */
@@ -2058,14 +2320,18 @@ export class Instant {
    * @param nanoseconds nanoseconds to add, of any sign below 2^53
    */
   constructor(epochSeconds: i64, nanoseconds: i64 = 0) {
-    const span: TemporalSpan = new TemporalSpan(epochSeconds, nanoseconds)
-    const limit: i64 = TEMPORAL_MAX_EPOCH_DAY * TEMPORAL_SECONDS_PER_DAY
-    if (span.seconds < -limit || span.seconds > limit || (span.seconds === limit && span.nanos > 0)) {
+    let seconds: i64 = epochSeconds
+    let nanos: i64 = nanoseconds
+    if (nanos < 0 || nanos >= TEMPORAL_NS_PER_SECOND) {
+      seconds = seconds + temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)
+      nanos = temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND)
+    }
+    if (!temporalInstantInRange(seconds, nanos)) {
       temporalRangeError("Instant: the instant is outside Temporal's range")
     }
-    this.epochSeconds = span.seconds
-    this.nanosecondOfSecond = span.nanos
-    this.epochMilliseconds = toF64(span.seconds * 1000 + toI64(span.nanos / 1000000))
+    this.epochSeconds = seconds
+    this.nanosecondOfSecond = toI32(nanos)
+    this.epochMilliseconds = toF64(seconds * 1000 + toI64(nanos / 1000000))
   }
 
   /**
@@ -2077,11 +2343,18 @@ export class Instant {
   toString(): string {
     const day: i64 = temporalFloorDiv(this.epochSeconds, TEMPORAL_SECONDS_PER_DAY)
     const secondOfDay: i64 = temporalFloorMod(this.epochSeconds, TEMPORAL_SECONDS_PER_DAY)
-    const date: PlainDate = temporalDateOfEpochDayUnchecked(day)
-    const time: PlainTime = temporalTimeOfNanos(
-      secondOfDay * TEMPORAL_NS_PER_SECOND + toI64(this.nanosecondOfSecond)
+    const civil: i64 = temporalCivilOfEpochDay(day)
+    const out: u8[] = new Array<u8>(TEMPORAL_TEXT_MAX)
+    let i: i32 = temporalPutDate(
+      out,
+      0,
+      temporalCivilYear(civil),
+      temporalCivilMonth(civil),
+      temporalCivilDay(civil)
     )
-    return `${date.toString()}T${time.toString()}Z`
+    i = temporalPutByte(out, i, 84)
+    i = temporalPutNanoOfDay(out, i, secondOfDay * TEMPORAL_NS_PER_SECOND + toI64(this.nanosecondOfSecond))
+    return String.fromBytes(out, 0, temporalPutByte(out, i, 90))
   }
 
   /**
@@ -2156,14 +2429,6 @@ const temporalInstantSpan = (a: Instant, b: Instant): TemporalSpan =>
   new TemporalSpan(b.epochSeconds - a.epochSeconds, toI64(b.nanosecondOfSecond) - toI64(a.nanosecondOfSecond))
 
 /**
- * The date on an epoch day that may be one past Temporal's last date — an
- * instant at the very end of the range, written in UTC, is on it. Only
- * `Instant.toString` asks for one.
- */
-const temporalDateOfEpochDayUnchecked = (epochDay: i64): PlainDate =>
-  temporalDateOfEpochDay(epochDay < TEMPORAL_MIN_EPOCH_DAY ? TEMPORAL_MIN_EPOCH_DAY : epochDay)
-
-/**
  * `Temporal.Instant.fromEpochMilliseconds(ms)`: the instant `ms` milliseconds
  * after 1970-01-01T00:00:00Z. Panics with a `RangeError` when `ms` is not a
  * whole number or is outside ±8.64 × 10^15.
@@ -2213,14 +2478,20 @@ export const instantFromOrNull = (text: string): Instant | null => {
   const day: i64 = temporalEpochDay(toI64(r.year), r.month, r.day)
   const seconds: i64 =
     day * TEMPORAL_SECONDS_PER_DAY + toI64(r.hour) * 3600 + toI64(r.minute) * 60 + toI64(r.second)
-  const offset: TemporalSpan = new TemporalSpan(0, r.offsetNanos)
-  const local: TemporalSpan = new TemporalSpan(seconds, toI64(r.fraction))
-  const exact: TemporalSpan = local.plus(offset.negated())
-  const limit: i64 = TEMPORAL_MAX_EPOCH_DAY * TEMPORAL_SECONDS_PER_DAY
-  if (exact.seconds < -limit || exact.seconds > limit || (exact.seconds === limit && exact.nanos > 0)) {
+  // The offset is below a day, so its nanoseconds stay below 2^53.
+  const nanos: i64 = toI64(r.fraction) - r.offsetNanos
+  const exactSeconds: i64 = seconds + temporalFloorDiv(nanos, TEMPORAL_NS_PER_SECOND)
+  const exactNanos: i64 = temporalFloorMod(nanos, TEMPORAL_NS_PER_SECOND)
+  if (!temporalInstantInRange(exactSeconds, exactNanos)) {
     return null
   }
-  return new Instant(exact.seconds, toI64(exact.nanos))
+  return new Instant(exactSeconds, exactNanos)
+}
+
+/** Whether `seconds` and `nanos` (in `[0, 10^9)`) past the epoch are within Temporal's ±10^8 days. */
+const temporalInstantInRange = (seconds: i64, nanos: i64): boolean => {
+  const limit: i64 = TEMPORAL_MAX_EPOCH_DAY * TEMPORAL_SECONDS_PER_DAY
+  return seconds >= -limit && seconds <= limit && !(seconds === limit && nanos > 0)
 }
 
 /**
