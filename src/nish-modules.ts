@@ -286,7 +286,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnPipedWithin, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET, netRingState, NET_LISTEN_RING"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -305,7 +305,7 @@ export const nishModuleExports = (specifier: string): string => {
 
 /**
  * WP34 N5: the parameters of a `nish:net` function, one letter each, or "" for
- * a name `nish:net` does not export (and for `pollCreate`, which takes none). Every one answers an `i32`. The checker,
+ * a name `nish:net` does not export (and for `pollCreate` and `netRingState`, which take none). Every one answers an `i32`. The checker,
  * the emitter and the written-argument rule all read this one string, through
  * the letters below, so the three cannot disagree about which argument is
  * which.
@@ -313,9 +313,9 @@ export const nishModuleExports = (specifier: string): string => {
  * Each name is a global too, as every `nish:` export is, and each carries a
  * `net`, `tcp`, `udp`, `unix`, `poll` or `connect` prefix, or is one of the
  * three descriptor calls (`sendFd`, `recvFd`, `peerCredentials`), so that none
- * of them collides with a global that already exists (`write`). `pollCreate` takes
- * nothing, so its signature is the one empty answer that is an export
- * (`isNetExport`).
+ * of them collides with a global that already exists (`write`). `pollCreate` and
+ * `netRingState` take nothing, so theirs are the empty answers that are
+ * exports (`isNetExport`).
  */
 export const netSignature = (name: string): string => {
   if (name === "netAddress") {
@@ -491,6 +491,8 @@ export const netSymbol = (name: string): string => {
  * runtime-net.c's switch over them is the whole of what a program can set,
  * with no raw `setsockopt`. The `NET_UNIX_` ones are `unixListen`'s flag and
  * `unixSocketPair`'s two kinds, which share 1 because no call takes both.
+ * `NET_LISTEN_RING` is `tcpListenFlags`'s ring bit (WP63 S2), 8 because 1, 2
+ * and 4 are the bits before it.
  */
 export const netOption = (name: string): i32 => {
   if (name === "NET_TCP_NODELAY") {
@@ -514,11 +516,18 @@ export const netOption = (name: string): i32 => {
   if (name === "NET_UNIX_SEQPACKET") {
     return 2
   }
+  if (name === "NET_LISTEN_RING") {
+    return 8
+  }
   return 0
 }
 
-/** Whether `nish:net` exports `name`: every name with a signature, and `pollCreate`, whose is empty. */
-export const isNetExport = (name: string): boolean => netSignature(name).length > 0 || name === "pollCreate"
+/**
+ * Whether `nish:net` exports `name`: every name with a signature, and
+ * `pollCreate` and `netRingState`, whose are empty.
+ */
+export const isNetExport = (name: string): boolean =>
+  netSignature(name).length > 0 || name === "pollCreate" || name === "netRingState"
 
 /**
  * `nish:term`: the terminal a program runs in (docs/LANGUAGE.md, "Terminal

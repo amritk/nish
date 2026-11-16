@@ -235,6 +235,9 @@ export const main = (): i32 => {
 - `engines.nish` is the lowest compiler version the package needs, written
   `>=X.Y.Z` or `>=X.Y`. An older compiler refuses the package and says which version it
   asked for.
+- A package can ship agent skills in `skills/<name>/SKILL.md`, and
+  `npx nish-skills` links them into the project's `.claude/skills/`
+  ([Agent skills](../using-nish/agent-skills.md)).
 - The [`package.json` reference](../../reference/config/package-json.md)
   lists every field Nish reads in a package's manifest, and the error each
   mistake in one gets.

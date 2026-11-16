@@ -153,6 +153,11 @@
                 "title": "The CLI",
                 "filepath": "docs/guide/using-nish/cli.md"
               },
+              "/agent-skills": {
+                "type": "page",
+                "title": "Agent skills",
+                "filepath": "docs/guide/using-nish/agent-skills.md"
+              },
               "/compat": {
                 "type": "page",
                 "title": "The compatibility dialect",
@@ -1454,7 +1459,7 @@
   "assetsDir": "docs/site",
   "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
-    "isPrivate": true,
+    "isPrivate": false,
     "agent": { "enabled": false },
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
@@ -1472,6 +1477,7 @@
         { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" },
         { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
-    }
+    },
+    "customDomain": "nishlang.com"
   }
 }

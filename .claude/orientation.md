@@ -89,10 +89,16 @@ docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
 ```
 
 A `std/` module can land **spec-first**, in two pull requests: the first adds
-`specs/<name>.md`, the contract `contracts/<name>.json` that quotes it, and the
-Nish test `test/spec/<name>.ts` that vector emits from the contract; the second
-adds the module, and touches none of those. vector's gates (`check`, `frozen`,
-`stale`, `run`, `exports`, `mutate`) judge both and are run by hand, not by CI;
+`specs/<name>.md` (kramdown-rfc, built to `specs/<name>.xml`), the contract
+`contracts/<name>.json` extracted from it, and the Nish test
+`test/spec/<name>.ts` that vector emits from the contract; the second adds the
+module, and touches none of those. CI runs two of vector's gates without
+vector, in `node tests/run.js spec`: a test whose contract is missing or no
+longer matches its `// vector-contract-sha256:` line fails (`stale`), and a
+test whose module is in `std/` is built and run (`run`); one whose module is
+not there yet is a SKIP. The rest are run by hand: `build-spec`, `extract`,
+`check`, `frozen` and `mutate`, with the vector that `.vector-version` pins
+(`bash scripts/fetch-vector.sh`); `contracts/README.md` has the commands and
 the `vector-spec` skill is the walkthrough. Knip takes `test/spec/*.ts` as
 entries, because the module it imports does not exist until the second PR.
 

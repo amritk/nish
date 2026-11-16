@@ -1621,6 +1621,10 @@ const DEALT_SECTIONS = {
   termWasi: { name: "the nish:term section under --profile wasi", selected: selects("term_wasi", "wasi") },
   netTcp: { name: "the net_tcp section", selected: selects("net_tcp") },
   netUnix: { name: "the net_unix section", selected: selects("net_unix") },
+  h1Between: {
+    name: "the Http1Connection.betweenRequests section",
+    selected: selects("http1_between", "net_http1_server"),
+  },
   netMss: { name: "the net_mss section", selected: selects("net_mss", "wasi") },
   fileWasi: {
     name: "the file_ programs under --profile wasi",
@@ -3217,6 +3221,122 @@ if (dealtHere("netUnix")) {
       ran.status === 0 && ran.stdout === fs.readFileSync(path.join(fdsDir, "expected.out"), "utf8"),
       shown(ran)
     )
+  }
+}
+
+// `Http1Connection.betweenRequests`, the question a graceful drain asks before
+// it closes a keep-alive connection, read in each state it tells apart with no
+// socket: a connection fed by hand, as a program that carries its own bytes
+// feeds one. Each clause of the answer is what turns one line false: the head
+// clock (a head partly read, and the next one begun), the open request (its
+// head read, unanswered), the unsent output (an exchange over whose bytes still
+// wait) and the state (a connection closing, or upgraded, with nothing left).
+if (dealtHere("h1Between")) {
+  const betweenDir = path.join(buildDir, "http1-between")
+  fs.rmSync(betweenDir, { recursive: true, force: true })
+  fs.mkdirSync(betweenDir, { recursive: true })
+  const entry = path.join(betweenDir, "between.ts")
+  fs.writeFileSync(
+    entry,
+    String.raw`import { HTTP1_NO_BODY } from "nish/net/http1-codec";
+import { H1_END, H1_NEED_MORE, H1_REQUEST, Http1Config, Http1Connection } from "nish/net/http1-server";
+
+/** Feeds \`text\` to \`conn\` and starts its head clock, as a carrier does after a read. */
+const feedText = (conn: Http1Connection, text: string): void => {
+  const bytes: u8[] = [];
+  for (let k: i32 = 0; k < toI32(text.length); k++) {
+    bytes.push(toU8(text.charCodeAt(k)));
+  }
+  conn.feed(bytes, 0, toI32(bytes.length));
+  conn.headArrived(toI64(1));
+};
+
+const say = (label: string, conn: Http1Connection): void => {
+  console.log(label + ": " + (conn.betweenRequests() ? "true" : "false"));
+};
+
+/** Reads the head fed, answers it 204 and ends the exchange, its bytes unsent. */
+const answer = (conn: Http1Connection): boolean => {
+  const none: u8[][] = [];
+  const read: boolean = conn.next() === H1_REQUEST;
+  conn.respond(204, none, none, HTTP1_NO_BODY);
+  conn.end();
+  return read && conn.next() === H1_END && conn.next() === H1_NEED_MORE;
+};
+
+const flush = (conn: Http1Connection): void => {
+  conn.consume(conn.outputEnd - conn.outputStart);
+};
+
+export const main = (): i32 => {
+  const none: u8[][] = [];
+  const conn = new Http1Connection(new Http1Config());
+  say("fresh", conn);
+  feedText(conn, "GET / HTTP/1.1\r\nHo");
+  say("head partly read", conn);
+  feedText(conn, "st: a\r\n\r\n");
+  console.log("read: " + (conn.next() === H1_REQUEST ? "true" : "false"));
+  say("request open", conn);
+  conn.respond(204, none, none, HTTP1_NO_BODY);
+  conn.end();
+  say("answered, request open", conn);
+  console.log("over: " + (conn.next() === H1_END && conn.next() === H1_NEED_MORE ? "true" : "false"));
+  say("response being written", conn);
+  flush(conn);
+  say("response flushed", conn);
+  feedText(conn, "G");
+  say("next head begun", conn);
+
+  const closing = new Http1Connection(new Http1Config());
+  feedText(closing, "GET / HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
+  console.log("closing answered: " + (answer(closing) ? "true" : "false"));
+  flush(closing);
+  say("closing, flushed", closing);
+
+  const upgraded = new Http1Connection(new Http1Config());
+  feedText(
+    upgraded,
+    "GET /ws HTTP/1.1\r\nHost: a\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+  );
+  upgraded.next();
+  upgraded.acceptWebSocket("");
+  upgraded.next();
+  upgraded.next();
+  flush(upgraded);
+  console.log("upgraded: " + (upgraded.isWebSocket() ? "true" : "false"));
+  say("upgraded, flushed", upgraded);
+  return 0;
+};
+`
+  )
+  const exe = path.join(betweenDir, "between")
+  const built = spawnSync(NISH, [entry, "-o", betweenDir + path.sep, "--link", exe], {
+    cwd: root,
+    encoding: "utf8",
+    ...NATIVE_RUN_LIMIT,
+  })
+  const ran = built.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8", ...NATIVE_RUN_LIMIT }) : built
+  const lines = ran.status === 0 ? ran.stdout.split("\n") : []
+  const said = (label, answer) => lines.includes(`${label}: ${answer}`)
+  check("http1_between: between.ts links and runs", ran.status === 0, shown(ran))
+  check(
+    "http1_between: the program reads, answers and upgrades as it means to",
+    ["read", "over", "closing answered", "upgraded"].every((label) => said(label, "true")),
+    ran.stdout
+  )
+  const states = [
+    ["a fresh connection is between requests", "fresh", "true"],
+    ["a connection whose head has partly arrived is not", "head partly read", "false"],
+    ["nor one whose request is open, unanswered", "request open", "false"],
+    ["nor one answered while its request is open", "answered, request open", "false"],
+    ["nor one whose exchange is over while its response waits to be sent", "response being written", "false"],
+    ["and it is again once that response is flushed", "response flushed", "true"],
+    ["until the next head begins to arrive", "next head begun", "false"],
+    ["a connection closing after its answer, with nothing left to send, is not", "closing, flushed", "false"],
+    ["nor one upgraded to a WebSocket, with nothing left to send", "upgraded, flushed", "false"],
+  ]
+  for (const [claim, label, answer] of states) {
+    check(`http1_between: ${claim}`, said(label, answer), ran.stdout)
   }
 }
 
@@ -16810,6 +16930,8 @@ if (dealtHere("runtimeChecks")) {
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
+        ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
+        ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
@@ -25556,6 +25678,9 @@ if (dealtHere("releaseChecks")) {
         /^runtime\//,
         /^scripts\//,
         /^std\//,
+        // Every Nish package's agent skills, as skills/<name>/SKILL.md; the
+        // linker in scripts/ puts them in a project's .claude/skills/.
+        /^skills\//,
         /^README\.md$/,
         /^LICENSE$/,
         /^llms\.txt$/,
@@ -25672,10 +25797,16 @@ if (dealtHere("releaseChecks")) {
         "llms.txt",
         "docs/AI.md",
         "docs/INSTALL.md",
+        // The agent skill for writing Nish, and the two ways it reaches a
+        // project's .claude/skills/: postinstall's call into the linker, and the
+        // `nish-skills` command for a library installed later.
+        "skills/writing-nish/SKILL.md",
+        "scripts/link-skills.mjs",
+        "bin/nish-skills.js",
       ]
       const absent = required.filter((f) => !files.includes(f))
       check(
-        "npm pack includes everything --link and `node --import` need (runtime.c, runtime-os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md and INSTALL.md",
+        "npm pack includes everything --link and `node --import` need (runtime.c, runtime-os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md, INSTALL.md and the writing-nish skill with its linker",
         absent.length === 0,
         absent.join("\n")
       )
@@ -25785,6 +25916,11 @@ if (dealtHere("releaseChecks")) {
         `bin.nish is ${JSON.stringify(manifest.bin)}, bin/nish ${
           files.includes("bin/nish") ? "ships" : "does not ship"
         }, and bin/launcher.js ${files.includes("bin/launcher.js") ? "ships" : "does not ship"}`
+      )
+      check(
+        "npm pack ships the `nish-skills` command `bin` names",
+        manifest.bin?.["nish-skills"] === "bin/nish-skills.js" && files.includes("bin/nish-skills.js"),
+        `bin is ${JSON.stringify(manifest.bin)}`
       )
       // `bin/nish` is a node shim in the tarball and a native binary after
       // postinstall has run on a machine that got one. Packing the *binary* is a
@@ -26435,6 +26571,307 @@ if (dealtHere("releaseChecks")) {
           )
         }
       }
+    }
+  }
+
+  // ---- Agent skills: scripts/link-skills.mjs, bin/nish-skills.js, postinstall ----------
+  // A package ships a skill as skills/<name>/SKILL.md, and the linker puts a link to it in
+  // the project's .claude/skills/. Each claim here is proven by exit status and by
+  // lstat/readlink on a fixture project outside the checkout, never by what was printed
+  // (.claude/testing.md, "Checks that spawn a process").
+  if (!only || "skills".includes(only)) {
+    const skillsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nish-skills-"))
+    /** A .claude/skills a check made read-only, put back to 0755 whatever happens. */
+    let readOnly = null
+    try {
+      const skillsBin = path.join(root, "bin", "nish-skills.js")
+      const lstatOf = (file) => fs.lstatSync(file, { throwIfNoEntry: false }) ?? null
+      let fixtures = 0
+      /** A project directory with a package.json and the given packages installed. */
+      const project = (packages) => {
+        const dir = path.join(skillsRoot, `p${fixtures++}`)
+        fs.mkdirSync(dir, { recursive: true })
+        fs.writeFileSync(path.join(dir, "package.json"), "{}\n")
+        for (const [name, exportsField, skills] of packages) {
+          const at = path.join(dir, "node_modules", name)
+          fs.mkdirSync(at, { recursive: true })
+          fs.writeFileSync(path.join(at, "package.json"), JSON.stringify({ name, exports: exportsField }))
+          for (const skill of skills) {
+            fs.mkdirSync(path.join(at, "skills", skill), { recursive: true })
+            fs.writeFileSync(path.join(at, "skills", skill, "SKILL.md"), `# ${name} ${skill}\n`)
+          }
+        }
+        return dir
+      }
+      const nishPkg = ["nish", { ".": { types: "./runtime/nish.d.ts" } }, ["writing-nish"]]
+      const libPkg = ["@scope/lib", { ".": { nish: "./lib.ts", default: "./lib.js" } }, ["lib-skill"]]
+      const plainPkg = ["plain", { ".": "./index.js" }, ["x"]]
+      const linkSkillsCli = (args, cwd) =>
+        spawnSync(process.execPath, [skillsBin, ...args], { cwd, encoding: "utf8" })
+      /** Whether .claude/skills/<name> is a relative link that resolves to <pkg>'s skills/<name>/SKILL.md. */
+      const linkedTo = (dir, name, pkg) => {
+        const entry = path.join(dir, ".claude", "skills", name)
+        const st = lstatOf(entry)
+        if (st === null || !st.isSymbolicLink() || path.isAbsolute(fs.readlinkSync(entry))) {
+          return false
+        }
+        try {
+          return (
+            fs.realpathSync(path.join(entry, "SKILL.md")) ===
+            fs.realpathSync(path.join(dir, "node_modules", pkg, "skills", name, "SKILL.md"))
+          )
+        } catch {
+          return false
+        }
+      }
+      const tree = (dir) => {
+        const skillsDir = path.join(dir, ".claude", "skills")
+        return lstatOf(skillsDir) === null
+          ? []
+          : fs.readdirSync(skillsDir).sort().map((n) => `${n}:${lstatOf(path.join(skillsDir, n)).ino}`)
+      }
+
+      // Linking from a subdirectory: the command finds the nearest package.json above it.
+      const a = project([
+        nishPkg,
+        libPkg,
+        plainPkg,
+        ["b-dup", { "./x": { nish: "./x.ts" } }, ["dup"]],
+        ["@a/dup", [{ import: { nish: "./x.ts" } }], ["dup"]],
+        // Sorts before `nish`, so only nish's first claim keeps writing-nish nish's.
+        ["@scope/rival", { ".": { nish: "./r.ts" } }, ["writing-nish"]],
+      ])
+      fs.mkdirSync(path.join(a, "sub"))
+      // A temporary link a killed run left, owned and live, and a user's entry of the same shape.
+      const aSkills = path.join(a, ".claude", "skills")
+      fs.mkdirSync(path.join(aSkills, ".mine.1.tmp"), { recursive: true })
+      fs.symlinkSync(path.join("..", "..", "node_modules", "nish", "skills", "writing-nish"), path.join(aSkills, ".writing-nish.99999.tmp"))
+      const first = linkSkillsCli([], path.join(a, "sub"))
+      check("nish-skills run from a subdirectory of a project exits 0", first.status === 0, first.stdout + first.stderr)
+      check(
+        "nish-skills links nish's writing-nish and an @scope package's skill as relative links to their SKILL.md",
+        linkedTo(a, "writing-nish", "nish") && linkedTo(a, "lib-skill", "@scope/lib"),
+        tree(a).join("\n")
+      )
+      check(
+        "nish-skills leaves a package whose exports use no nish condition unlinked, skills/ or not",
+        lstatOf(path.join(a, ".claude", "skills", "x")) === null,
+        tree(a).join("\n")
+      )
+      check(
+        "two packages shipping one skill name: the first in sort order is linked and the second is not",
+        linkedTo(a, "dup", "@a/dup"),
+        tree(a).join("\n")
+      )
+      check(
+        "nish claims its own skill names first: an @scope package shipping writing-nish does not shadow it",
+        linkedTo(a, "writing-nish", "nish"),
+        tree(a).join("\n")
+      )
+      check(
+        "nish-skills removes a temporary link a killed run left, and keeps a user's entry with a temporary name",
+        lstatOf(path.join(aSkills, ".writing-nish.99999.tmp")) === null &&
+          lstatOf(path.join(aSkills, ".mine.1.tmp"))?.isDirectory() === true,
+        tree(a).join("\n")
+      )
+      const before = tree(a)
+      const again = linkSkillsCli([a], skillsRoot)
+      check(
+        "a second nish-skills run changes nothing: the same entries, the same inodes",
+        again.status === 0 && JSON.stringify(tree(a)) === JSON.stringify(before),
+        `${before.join(" ")}\n${tree(a).join(" ")}\n${again.stdout}${again.stderr}`
+      )
+      fs.rmSync(path.join(a, "node_modules", "@scope", "lib"), { recursive: true })
+      const pruned = linkSkillsCli([a], skillsRoot)
+      check(
+        "after a package is removed, nish-skills prunes its link and keeps the others",
+        pruned.status === 0 &&
+          lstatOf(path.join(a, ".claude", "skills", "lib-skill")) === null &&
+          linkedTo(a, "writing-nish", "nish"),
+        tree(a).join("\n") + pruned.stdout + pruned.stderr
+      )
+
+      // What the project owns: a real directory, a link pointing elsewhere, a dangling one.
+      const b = project([nishPkg, libPkg])
+      const outside = fs.mkdtempSync(path.join(skillsRoot, "outside-"))
+      const userSkills = path.join(b, ".claude", "skills")
+      fs.mkdirSync(path.join(userSkills, "writing-nish"), { recursive: true })
+      fs.writeFileSync(path.join(userSkills, "writing-nish", "SKILL.md"), "mine\n")
+      fs.symlinkSync(outside, path.join(userSkills, "lib-skill"))
+      const gone = path.join(skillsRoot, "no-such-dir")
+      fs.symlinkSync(gone, path.join(userSkills, "dangling"))
+      const userRun = linkSkillsCli([b], skillsRoot)
+      check(
+        "nish-skills leaves the project's own entries alone: a real directory, a link outside node_modules, a dangling one",
+        userRun.status === 0 &&
+          lstatOf(path.join(userSkills, "writing-nish")).isDirectory() &&
+          fs.readFileSync(path.join(userSkills, "writing-nish", "SKILL.md"), "utf8") === "mine\n" &&
+          fs.readlinkSync(path.join(userSkills, "lib-skill")) === outside &&
+          fs.readlinkSync(path.join(userSkills, "dangling")) === gone &&
+          fs.readdirSync(outside).length === 0,
+        tree(b).join("\n") + userRun.stdout + userRun.stderr
+      )
+
+      // `.claude` itself a link: nothing is written, through it or beside it.
+      const c = project([nishPkg])
+      const elsewhere = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-"))
+      fs.symlinkSync(elsewhere, path.join(c, ".claude"))
+      const linkedClaude = linkSkillsCli([c], skillsRoot)
+      check(
+        "when .claude is a link, nish-skills writes nothing and still exits 0",
+        linkedClaude.status === 0 &&
+          fs.readdirSync(elsewhere).length === 0 &&
+          lstatOf(path.join(c, ".claude")).isSymbolicLink(),
+        linkedClaude.stdout + linkedClaude.stderr
+      )
+
+      // The win32 shape, a link to the absolute path, is the linker's own too.
+      const d = project([nishPkg])
+      const { linkSkills } = await import(pathToFileURL(path.join(root, "scripts", "link-skills.mjs")).href)
+      linkSkills(d, { platform: "win32" })
+      const junction = path.join(d, ".claude", "skills", "writing-nish")
+      const junctionTarget = lstatOf(junction)?.isSymbolicLink() ? fs.readlinkSync(junction) : ""
+      const kept = linkSkills(d, { platform: "win32" })
+      fs.rmSync(path.join(d, "node_modules", "nish"), { recursive: true })
+      linkSkills(d, { platform: "win32" })
+      check(
+        "the win32 shape links the absolute path, keeps it on a second run, and prunes it when the package goes",
+        path.isAbsolute(junctionTarget) &&
+          junctionTarget === path.join(d, "node_modules", "nish", "skills", "writing-nish") &&
+          kept.kept.includes("writing-nish") &&
+          lstatOf(junction) === null,
+        `${junctionTarget} ${JSON.stringify(kept)}`
+      )
+
+      // Postinstall imports the linker, so the linker keeps postinstall's promise too
+      // (tests/fetch-seed.js holds postinstall.mjs itself to it).
+      check(
+        "scripts/link-skills.mjs, which postinstall runs, fetches nothing and spawns nothing",
+        !/from "node:(child_process|http|https|net|tls|dgram)"|\bfetch\(|\bimport\(/.test(
+          fs.readFileSync(path.join(root, "scripts", "link-skills.mjs"), "utf8")
+        ),
+        "link-skills.mjs reaches for the network, a process or a dynamic import"
+      )
+
+      // The command's surface.
+      const help = linkSkillsCli(["--help"], skillsRoot)
+      check("nish-skills --help exits 0 with the usage on stdout", help.status === 0 && help.stdout.length > 0, help.stderr)
+      const bogus = linkSkillsCli(["--bogus"], skillsRoot)
+      check("nish-skills with an unknown flag exits 2", bogus.status === 2, bogus.stdout + bogus.stderr)
+      const nowhere = fs.mkdtempSync(path.join(os.tmpdir(), "nish-skills-noproject-"))
+      let above = nowhere
+      while (path.dirname(above) !== above && !fs.existsSync(path.join(above, "package.json"))) {
+        above = path.dirname(above)
+      }
+      if (fs.existsSync(path.join(above, "package.json"))) {
+        skip(`nish-skills with no project: ${above} holds a package.json above the temporary directory`)
+      } else {
+        const none = linkSkillsCli([], nowhere)
+        check("nish-skills with no package.json above the cwd exits 2", none.status === 2, none.stdout + none.stderr)
+      }
+      fs.rmSync(nowhere, { recursive: true, force: true })
+
+      // Postinstall, from an installed copy: it links only behind every guard, and it never
+      // fails the install.
+      const installedNish = (dir) => {
+        const at = path.join(dir, "node_modules", "nish")
+        fs.rmSync(at, { recursive: true, force: true })
+        fs.mkdirSync(path.join(at, "scripts"), { recursive: true })
+        fs.mkdirSync(path.join(at, "bin"))
+        for (const f of ["package.json", "scripts/postinstall.mjs", "scripts/link-skills.mjs", "bin/nish-skills.js"]) {
+          fs.copyFileSync(path.join(root, f), path.join(at, f))
+        }
+        fs.cpSync(path.join(root, "skills"), path.join(at, "skills"), { recursive: true })
+        return at
+      }
+      const postinstall = (at, extra) => {
+        const env = { ...process.env, ...extra }
+        for (const k of ["INIT_CWD", "npm_config_global", "NISH_NO_SKILLS"]) {
+          if (!(k in extra)) {
+            delete env[k]
+          }
+        }
+        return spawnSync(process.execPath, [path.join(at, "scripts", "postinstall.mjs")], {
+          cwd: at,
+          encoding: "utf8",
+          env,
+        })
+      }
+      const e = project([])
+      const eNish = installedNish(e)
+      const linkedHere = postinstall(eNish, { INIT_CWD: e })
+      check(
+        "postinstall in a project's node_modules/nish, INIT_CWD the project, links writing-nish",
+        linkedHere.status === 0 && linkedTo(e, "writing-nish", "nish"),
+        linkedHere.stdout + linkedHere.stderr
+      )
+      const w = project([])
+      const member = path.join(w, "packages", "member")
+      fs.mkdirSync(member, { recursive: true })
+      fs.writeFileSync(path.join(member, "package.json"), "{}\n")
+      const wNish = installedNish(w)
+      const hoisted = postinstall(wNish, { INIT_CWD: member })
+      check(
+        "postinstall run from a workspace member, nish hoisted to the root, links at the root",
+        hoisted.status === 0 && linkedTo(w, "writing-nish", "nish") && lstatOf(path.join(member, ".claude")) === null,
+        hoisted.stdout + hoisted.stderr
+      )
+      // The command keeps postinstall's rule: from the member, the root this copy is installed in.
+      fs.rmSync(path.join(w, ".claude"), { recursive: true, force: true })
+      const fromMember = spawnSync(process.execPath, [path.join(wNish, "bin", "nish-skills.js")], {
+        cwd: member,
+        encoding: "utf8",
+      })
+      check(
+        "an installed nish-skills run from a workspace member links at the root nish is installed in",
+        fromMember.status === 0 && linkedTo(w, "writing-nish", "nish") && lstatOf(path.join(member, ".claude")) === null,
+        fromMember.stdout + fromMember.stderr
+      )
+      const stranger = project([])
+      for (const [what, extra] of [
+        ["a global install (npm_config_global=true)", { INIT_CWD: e, npm_config_global: "true" }],
+        ["NISH_NO_SKILLS=1", { INIT_CWD: e, NISH_NO_SKILLS: "1" }],
+        ["INIT_CWD naming a project this copy is not installed in (npx's cache)", { INIT_CWD: stranger }],
+        ["no INIT_CWD", {}],
+      ]) {
+        fs.rmSync(path.join(e, ".claude"), { recursive: true, force: true })
+        const r = postinstall(eNish, extra)
+        check(
+          `postinstall under ${what} exits 0 and writes no .claude anywhere`,
+          r.status === 0 && lstatOf(path.join(e, ".claude")) === null && lstatOf(path.join(stranger, ".claude")) === null,
+          r.stdout + r.stderr
+        )
+      }
+      // Root writes through 0555, so only an unprivileged run can see a write refused.
+      if (process.getuid?.() === 0) {
+        skip("a read-only .claude/skills: running as root, which writes through mode 0555")
+      } else {
+        fs.rmSync(path.join(e, ".claude"), { recursive: true, force: true })
+        readOnly = path.join(e, ".claude", "skills")
+        fs.mkdirSync(readOnly, { recursive: true })
+        fs.chmodSync(readOnly, 0o555)
+        const refusedInstall = postinstall(eNish, { INIT_CWD: e })
+        const refusedCli = linkSkillsCli([e], skillsRoot)
+        const empty = fs.readdirSync(readOnly).length === 0
+        fs.chmodSync(readOnly, 0o755)
+        // The same run once the directory is writable links, so the refusal above was the write's.
+        const writable = postinstall(eNish, { INIT_CWD: e })
+        check(
+          "postinstall with a read-only .claude/skills still exits 0 and writes nothing; once writable, it links",
+          refusedInstall.status === 0 && empty && writable.status === 0 && linkedTo(e, "writing-nish", "nish"),
+          refusedInstall.stdout + refusedInstall.stderr + writable.stdout + writable.stderr
+        )
+        check(
+          "nish-skills against a read-only .claude/skills exits 1",
+          refusedCli.status === 1,
+          refusedCli.stdout + refusedCli.stderr
+        )
+      }
+    } finally {
+      if (readOnly !== null) {
+        fs.chmodSync(readOnly, 0o755)
+      }
+      fs.rmSync(skillsRoot, { recursive: true, force: true })
     }
   }
 
@@ -30438,9 +30875,11 @@ if (!only || "net_http_server_deep".includes(only)) {
 // answers -24 near 61. A host whose hard limit is under 256 cannot show the
 // raise, so the section skips there. The verdict is the program's exit status
 // and its line, never a message of bash's.
+/** The hard descriptor limit `ulimit -H -n` reported, Infinity for unlimited, 0 when it was not read. */
+const hardNofile = (hard) => (hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout))
 if (!only || "net_fd_limit".includes(only)) {
   const hard = process.platform === "win32" ? null : spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" })
-  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  const room = hardNofile(hard)
   if (!HAS_CLANG || hard === null) {
     skip("net_fd_limit: the raise is read under bash's ulimit, and this host has no clang or is Windows")
   } else if (!(room >= 256)) {
@@ -30463,6 +30902,194 @@ if (!only || "net_fd_limit".includes(only)) {
       r !== null && r.status === 0 && r.stdout === "held 200 descriptors past a soft limit of 64\n",
       r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
     )
+  }
+}
+
+// WP63 S2: a `NET_LISTEN_RING` listener accepts into io_uring slots, not
+// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Seven
+// programs in tests/link/net_ring_*, each judged by its own exit status:
+// `echo.ts` serves 3,000 connections under a descriptor limit of 1,024 with
+// fewer than 64 descriptors open; `full.ts`, under a limit of 32, takes
+// connections until tcpAccept answers -23 (NURING-6), then checks that the
+// handle it closed answers -9 and that the freed slot is taken again;
+// `flood.ts` takes a connection that writes 64 MiB and does not read it until
+// the writer stalls, which a held receive makes it do within the kernel's
+// socket buffers (NURING-9), then reads all 64 MiB; `sink.ts` writes 64 MiB
+// to a connection that reads nothing for a second, and netWrite must answer
+// -11 once the kernel's buffers and the slot's 256 KiB send area are full
+// (NURING-2), as must netWrite2 with an empty first range (NURING-21);
+// `halfclose.ts` closes a slot whose peer has sent its FIN while
+// 256 KiB are still queued, and every byte must reach the peer, and checks
+// that a slot in a loop the program closed joins a new one; `starve.ts`
+// holds 80 slots that are always ready to write in one loop beside one
+// descriptor, which waits with room for 64 and with room for one must still
+// report (NURING-18); `reset.ts` reads a slot whose peer reset it until
+// netRead answers the reset, and netWrite must then answer an errno
+// (NURING-23); `transient.ts` runs under `ulimit -n 32` with one
+// descriptor free, so the io_uring probe answers -24, and netRingState() must
+// stay 0 and the next ring listen open rings (NURING-20), and with rings open
+// a later set whose open answers -24 must fall back to descriptors
+// (NURING-22); and `fallback.ts` runs under `deny.c`'s seccomp filter, which
+// refuses io_uring_setup, and must serve descriptors with netRingState() at
+// -1. The clients run in node (`client.mjs`), outside the limit. A ring
+// program that exits 2 found rings refused here, the deny wrapper exits 3
+// where the kernel takes no filter, and `deny.c` names io_uring_setup only on
+// x86_64 and aarch64, so another architecture skips it: each is a counted
+// skip, never a pass.
+if (!only || "net_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const room = hardNofile(hard)
+  if (!HAS_CLANG || hard === null) {
+    skip("net_ring: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else {
+    const dir = path.join(buildDir, "net_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const client = path.join(linkDir, "net_ring_beyond_limit", "client.mjs")
+    const build = (sub, file) => {
+      const exe = path.join(dir, file.replace(/\.ts$/, ""))
+      const c = spawnSync(NISH, [path.join(linkDir, sub, file), "--link", exe], { cwd: root, encoding: "utf8" })
+      return c.status === 0 ? { exe, c } : { exe: null, c }
+    }
+    const ring = (name, sub, file, limit, count, mode, want) => {
+      if (!(room >= limit)) {
+        skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the ${limit} the check sets`)
+        return
+      }
+      const b = build(sub, file)
+      const r =
+        b.exe === null
+          ? null
+          : spawnSync(process.execPath, [client, b.exe, String(limit), String(count), mode], {
+              encoding: "utf8",
+              timeout: 180000,
+            })
+      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+        skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+        return
+      }
+      check(
+        name,
+        r !== null && r.status === 0 && (typeof want === "string" ? r.stdout.includes(want) : want(r.stdout)),
+        r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+    ring(
+      "net_ring: a ring listener serves 3,000 connections under a limit of 1,024 with fewer than 64 descriptors",
+      "net_ring_beyond_limit",
+      "echo.ts",
+      1024,
+      3000,
+      "echo",
+      "served 3000 connections with fewer than 64 descriptors\n"
+    )
+    ring(
+      "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
+      "net_ring_full",
+      "full.ts",
+      32,
+      800,
+      "hold",
+      "answered -23, then reused the freed slot\n"
+    )
+    ring(
+      "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads",
+      "net_ring_flood",
+      "flood.ts",
+      64,
+      1,
+      "flood",
+      (out) => {
+        const m = /^flood: (\d+) bytes before the stall$/m.exec(out)
+        return m !== null && Number(m[1]) < 32 * 1024 * 1024 && out.includes("read all 67108864 bytes after the hold\n")
+      }
+    )
+    ring(
+      "net_ring: writes to a peer that does not read answer -11 within the kernel's buffers and the send area, and every byte arrives",
+      "net_ring_sink",
+      "sink.ts",
+      64,
+      1,
+      "sink",
+      (out) => {
+        const m = /^sink: the first -11 came after (\d+) bytes$/m.exec(out)
+        return (
+          m !== null &&
+          Number(m[1]) < 32 * 1024 * 1024 &&
+          out.includes("sink: netWrite2 with an empty first range answered -11\n") &&
+          out.includes("sink: received 67108864 bytes\n")
+        )
+      }
+    )
+    ring(
+      "net_ring: a close after the peer's FIN still sends every queued byte, and a closed loop lets its slots go",
+      "net_ring_halfclose",
+      "halfclose.ts",
+      64,
+      1,
+      "halfclose",
+      (out) => {
+        const sent = /^halfclose: wrote (\d+) bytes after the client's end and closed$/m.exec(out)
+        const got = /^halfclose: received (\d+) bytes$/m.exec(out)
+        return sent !== null && got !== null && sent[1] === got[1]
+      }
+    )
+    ring(
+      "net_ring: a slot whose peer reset it answers netWrite with an errno",
+      "net_ring_reset",
+      "reset.ts",
+      64,
+      1,
+      "reset",
+      (out) => /^reset: netRead answered -\d+ and netWrite -\d+$/m.test(out)
+    )
+    ring(
+      "net_ring: a descriptor is reported beside more ready slots than one wait holds",
+      "net_ring_starve",
+      "starve.ts",
+      256,
+      80,
+      "hold",
+      (out) => /^starve: the descriptor came after \d+ and \d+ waits beside 80 ready slots$/m.test(out)
+    )
+    const t = build("net_ring_transient", "transient.ts")
+    const tr =
+      t.exe === null
+        ? null
+        : spawnSync("bash", ["-c", 'ulimit -n 32 && exec "$0"', t.exe], { encoding: "utf8", timeout: 60000 })
+    if (tr !== null && tr.status === 2 && tr.stdout.includes("rings refused: ")) {
+      skip(`net_ring: the transient probe check needs io_uring, and this kernel refuses it (${tr.stdout.trim()})`)
+    } else {
+      check(
+        "net_ring: a probe or first set that fails for want of a descriptor is not kept, the next ring listen opens rings, and a later set that fails for one falls back",
+        tr !== null &&
+          tr.status === 0 &&
+          tr.stdout.includes(
+            "transient: neither the probe's -24 nor the first set's was kept, the next listen opened rings, and a later set's -24 fell back to descriptors\n"
+          ),
+        tr === null ? `does not compile and link\n${shown(t.c)}` : `signal ${tr.signal}\n${shown(tr)}`
+      )
+    }
+    const deny = path.join(dir, "deny")
+    const known = process.arch === "x64" || process.arch === "arm64"
+    const d = known
+      ? spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
+          encoding: "utf8",
+        })
+      : null
+    const b = d !== null && d.status === 0 ? build("net_ring_fallback", "fallback.ts") : { exe: null, c: d }
+    const r = b.exe === null ? null : spawnSync(deny, [b.exe], { encoding: "utf8", timeout: 60000 })
+    if (!known) {
+      skip(`net_ring: deny.c names io_uring_setup on x86_64 and aarch64 only, not ${process.arch}`)
+    } else if (r !== null && r.status === 3) {
+      skip("net_ring: the fallback needs a seccomp filter, and this kernel takes none")
+    } else {
+      check(
+        "net_ring: with io_uring_setup refused, a ring listener serves descriptors and netRingState() is -1",
+        r !== null && r.status === 0 && r.stdout.startsWith("rings refused with -1; served descriptor "),
+        r === null ? `does not build\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
   }
 }
 
@@ -38928,6 +39555,97 @@ if (!only || "hooks".includes(only) || "format".includes(only)) {
   const suite = ".claude/hooks/format-edited.test.mjs"
   const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
   check(`hooks: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
+}
+
+// ---- The spec tests: test/spec/<n>.ts, emitted by vector from contracts/<n>.json --------
+// Each test names the contract it was emitted from by hash on its one
+// `// vector-contract-sha256:` line. A test whose contract is missing or has moved
+// since is a FAIL: regenerate it (contracts/README.md). A test of a module std/ does
+// not have yet is a SKIP naming the module; otherwise the test is built and run, and
+// passes on exit 0, no FAIL line, and the `vector-done <nonce>` line its main prints
+// last, so a test that stopped early cannot pass. vector itself is not needed here.
+if (!only || "spec".includes(only)) {
+  const specDir = path.join(root, "test", "spec")
+  const tests = fs.existsSync(specDir)
+    ? fs
+        .readdirSync(specDir)
+        .filter((f) => f.endsWith(".ts"))
+        .sort()
+    : []
+  for (const file of tests) {
+    const name = file.slice(0, -".ts".length)
+    const rel = `test/spec/${file}`
+    const contractRel = `contracts/${name}.json`
+    const contractPath = path.join(root, contractRel)
+    if (!fs.existsSync(contractPath)) {
+      check(`spec: ${rel} has its contract ${contractRel}`, false, "no such file")
+      continue
+    }
+    const want = crypto.createHash("sha256").update(fs.readFileSync(contractPath)).digest("hex")
+    const pins = fs
+      .readFileSync(path.join(specDir, file), "utf8")
+      .split("\n")
+      .filter((l) => l.startsWith("// vector-contract-sha256:"))
+      .map((l) => l.slice("// vector-contract-sha256:".length).trim())
+    if (pins.length !== 1 || pins[0] !== want) {
+      check(
+        `spec: ${rel} was emitted from ${contractRel} as it is now`,
+        false,
+        `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
+      )
+      continue
+    }
+    let mod
+    try {
+      mod = JSON.parse(fs.readFileSync(contractPath, "utf8"))?.target?.module
+    } catch (e) {
+      check(`spec: ${contractRel} parses`, false, String(e))
+      continue
+    }
+    if (typeof mod !== "string" || !mod.startsWith("nish/")) {
+      check(`spec: ${contractRel} targets a nish/ module`, false, `target.module is ${JSON.stringify(mod)}`)
+      continue
+    }
+    const stdRel = `std/${mod.slice("nish/".length)}.ts`
+    if (!fs.existsSync(path.join(root, stdRel))) {
+      skip(`spec: ${rel}: ${mod} has no ${stdRel} yet`)
+      continue
+    }
+    if (!HAS_CLANG) {
+      skip(`spec: ${rel}: ${stdRel} is there, but this environment has no clang to link the test`)
+      continue
+    }
+    const dir = path.join(buildDir, "spec", name)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, name)
+    const b = spawnSync(NISH, [path.join(specDir, file), "-o", dir + path.sep, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+    })
+    if (b.status !== 0) {
+      check(`spec: ${rel} builds`, false, shown(b))
+      continue
+    }
+    const nonce = crypto.randomBytes(8).toString("hex")
+    const r = spawnSync(exe, [nonce], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 300_000,
+      killSignal: "SIGKILL",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    const lines = (r.stdout ?? "").split("\n")
+    check(
+      `spec: ${rel} passes against ${stdRel}`,
+      r.status === 0 &&
+        !lines.some((l) => l.startsWith("FAIL")) &&
+        lines.some((l) => l.startsWith(`vector-done ${nonce} `)),
+      shown(r)
+    )
+  }
 }
 
 // ---- The release train's version: the implied bump and the `Release-As:` trailer -----
