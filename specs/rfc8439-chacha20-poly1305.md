@@ -76,13 +76,13 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
 > {{Section 2.1.1 of RFC8439}}
 {: #R-QUARTER-ROUND gi="blockquote"}
 
-Untested: the quarter round works on four 32-bit words, and std/crypto/chacha20poly1305.ts exports it only as chacha20QuarterRound over the `u32[]` state, which vector's types cannot express (they have `u8[]` and no other array); chacha20Block runs it, so the 2.3.2 and A.1 vectors test it
+Untested: the quarter round is exported only as chacha20QuarterRound, over a `u32[]` state, and vector's only array type is `u8[]`; chacha20Block runs it, so the 2.3.2 and A.1 vectors test it
 
 > We will apply the QUARTERROUND(2, 7, 8, 13) operation to this state.
 > {{Section 2.2.1 of RFC8439}}
 {: #R-QUARTER-ROUND-STATE gi="blockquote"}
 
-Untested: the vector works on the 16-word `u32[]` ChaCha state, which vector's types cannot express (they have `u8[]` and no other array); chacha20Block runs every quarter round on that state, so the 2.3.2 and A.1 vectors test it
+Untested: the vector works on the 16-word `u32[]` state, for the same reason as Section 2.1.1's; the 2.3.2 and A.1 vectors test it through chacha20Block
 
 # The ChaCha20 Block Function
 
@@ -200,7 +200,7 @@ Untested: timing is not observable by a functional test; nish checks it on the e
 
 # Out of Scope
 
-Out of scope: chacha20QuarterRound, it takes and returns the ChaCha20 state as `u32[]`, which the spec's types cannot express; chacha20Block runs every quarter round, so the 2.3.2 and A.1 vectors test its effect
+Out of scope: chacha20QuarterRound, its `u32[]` state is a type the spec cannot express; the 2.3.2 and A.1 vectors test it through chacha20Block
 
 Out of scope: chacha20HeaderMask, QUIC header protection, specified by RFC 9001, not by RFC 8439
 
@@ -288,7 +288,7 @@ forall (key: u8[] /* 0..40 */, nonce: u8[] /* 0..16 */) =>
 
 # Test Vectors
 
-Appendix A.3's eleven Poly1305 test vectors have no rows: Section A.3 has no subsections, and vector 0.3.1 reads its "Tag" and "tag" labels as one label printed 11 times against 4 and 7 printings of the inputs, so it refuses each row as unclear about which printings form one test case. The 2.5.2 and A.5 rows test poly1305.
+Appendix A.3's eleven Poly1305 test vectors have no rows: Section A.3 has no subsections, and vector 0.3.1 reads its "Tag" and "tag" labels as one label printed 11 times against 4 and 7 printings of the inputs, so it refuses each row. The 2.5.2 and A.5 rows test poly1305.
 
 | Id | Call | Expected | Covers | Source | Title |
 |----|------|----------|--------|--------|-------|

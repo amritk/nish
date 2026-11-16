@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: e3dd567f4dc81a8f18725ef3ada361e697ee2e5fbdfc821d26c9928f7695bd1e
+// vector-contract-sha256: 5365f17f8d634690ef4e9e18fcdf6695f88ce6628d1da35e5f427f5544560a53
 
 import { Suite } from "nish/testing";
 import { chacha20, chacha20Block, chacha20Poly1305Open, chacha20Poly1305Seal, poly1305, poly1305KeyGen } from "nish/crypto/chacha20poly1305";

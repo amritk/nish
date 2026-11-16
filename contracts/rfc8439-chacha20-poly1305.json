@@ -113,12 +113,12 @@
     {
       "section": "2.1.1",
       "quote": "After running a Quarter Round on these four numbers, we get these:",
-      "reason": "the quarter round works on four 32-bit words, and std/crypto/chacha20poly1305.ts exports it only as chacha20QuarterRound over the u32[] state, which vector's types cannot express (they have u8[] and no other array); chacha20Block runs it, so the 2.3.2 and A.1 vectors test it"
+      "reason": "the quarter round is exported only as chacha20QuarterRound, over a u32[] state, and vector's only array type is u8[]; chacha20Block runs it, so the 2.3.2 and A.1 vectors test it"
     },
     {
       "section": "2.2.1",
       "quote": "We will apply the QUARTERROUND(2, 7, 8, 13) operation to this state.",
-      "reason": "the vector works on the 16-word u32[] ChaCha state, which vector's types cannot express (they have u8[] and no other array); chacha20Block runs every quarter round on that state, so the 2.3.2 and A.1 vectors test it"
+      "reason": "the vector works on the 16-word u32[] state, for the same reason as Section 2.1.1's; the 2.3.2 and A.1 vectors test it through chacha20Block"
     },
     {
       "section": "2.3",
@@ -2242,7 +2242,7 @@
   "outOfScope": [
     {
       "name": "chacha20QuarterRound",
-      "reason": "it takes and returns the ChaCha20 state as u32[], which the spec's types cannot express; chacha20Block runs every quarter round, so the 2.3.2 and A.1 vectors test its effect"
+      "reason": "its u32[] state is a type the spec cannot express; the 2.3.2 and A.1 vectors test it through chacha20Block"
     },
     {
       "name": "chacha20HeaderMask",
