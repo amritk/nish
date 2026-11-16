@@ -85,7 +85,8 @@ const parse = (args) => {
     if (arg === "--") {
       options.names.push(...args.slice(i + 1))
       break
-    } else if (arg === "-h" || arg === "--help") {
+    }
+    if (arg === "-h" || arg === "--help") {
       options.help = true
     } else if (arg === "-y" || arg === "--yes") {
       options.yes = true
@@ -146,7 +147,10 @@ const run = async (args) => {
     }
   }
   const interactive =
-    options.names.length === 0 && !options.yes && process.stdin.isTTY === true && process.stdout.isTTY === true
+    options.names.length === 0 &&
+    !options.yes &&
+    process.stdin.isTTY === true &&
+    process.stdout.isTTY === true
   const terminal = interactive ? terminalAsk() : null
   try {
     const { unknown } = await review(project, {
@@ -155,7 +159,9 @@ const run = async (args) => {
       ask: terminal?.ask ?? null,
     })
     if (unknown.length > 0) {
-      usageError(`no installed Nish package ships a skill named ${unknown.map((n) => JSON.stringify(n)).join(", ")}`)
+      usageError(
+        `no installed Nish package ships a skill named ${unknown.map((n) => JSON.stringify(n)).join(", ")}`
+      )
     }
   } catch (err) {
     process.stderr.write(`nish-skills: ${err instanceof Error ? err.message : String(err)}\n`)

@@ -166,7 +166,6 @@ export const projectOf = (start, nishRoot) => {
   }
 }
 
-
 /** Code-unit order, not the locale's, so every machine sorts the same way. */
 const byCodeUnit = (a, b) => Number(a > b) - Number(a < b)
 
@@ -208,8 +207,7 @@ const hashSkill = (dir) => {
 const UNREADABLE = "<unreadable frontmatter>"
 
 /** A YAML scalar with its quotes taken off. */
-const unquote = (value) =>
-  /^"[^"]*"$|^'[^']*'$/.test(value) ? value.slice(1, -1) : value
+const unquote = (value) => (/^"[^"]*"$|^'[^']*'$/.test(value) ? value.slice(1, -1) : value)
 
 /**
  * The description and `allowed-tools` of a `SKILL.md`, read from its leading
@@ -272,7 +270,12 @@ const frontmatter = (text) => {
       if (!value.endsWith("]")) {
         tools.push(UNREADABLE)
       } else {
-        tools.push(...value.slice(1, -1).split(",").map((t) => unquote(t.trim())))
+        tools.push(
+          ...value
+            .slice(1, -1)
+            .split(",")
+            .map((t) => unquote(t.trim()))
+        )
       }
     } else {
       tools.push(...unquote(value).split(/[,\s]+/))
@@ -416,7 +419,9 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
   const { skills: all, skipped } = found ?? findSkills(root)
   const result = { linked: [], kept: [], unlinked: [], pruned: [], skipped: [...skipped] }
   const nodeModules = path.join(root, "node_modules")
-  const yes = all.filter((s) => accepted.some((a) => a.name === s.name && a.pkg === s.pkg && a.hash === s.hash))
+  const yes = all.filter((s) =>
+    accepted.some((a) => a.name === s.name && a.pkg === s.pkg && a.hash === s.hash)
+  )
   const previous = readRecord(root)
 
   const claude = path.join(root, ".claude")
@@ -534,7 +539,10 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
  */
 const clean = (text, max = 300) => {
   const safe = Array.from(
-    String(text).replace(/[\t\n\r]/g, " ").replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069]/g, "?")
+    String(text)
+      .replace(/[\t\n\r]/g, " ")
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the control characters is the point
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069]/g, "?")
   )
   return safe.length > max ? `${safe.slice(0, max).join("")}...` : safe.join("")
 }
@@ -557,12 +565,16 @@ const grantOf = (skill) =>
  * only when named. Declines are not recorded, so an interactive run asks again.
  *
  * @param {string} project The project root.
- * @param {{ names?: string[], yes?: boolean, ask?: ((question: string) => Promise<string | null>) | null, write?: (text: string) => void, platform?: string }} [options]
- *   `ask` returns the answer line, or null at end of input; `write` receives the output.
+ * @param {{ names?: string[], yes?: boolean, ask?: ((question: string, name: string) => Promise<string | null>) | null, write?: (text: string) => void, platform?: string }} [options]
+ *   `ask` is given the question and the skill's name, and returns the answer line, or
+ *   null at end of input; `write` receives the output.
  * @returns {Promise<{ unknown: string[], result: ReturnType<typeof linkSkills> | null }>}
  *   `unknown` holds the names no found skill has, and then nothing was written and `result` is null.
  */
-export const review = async (project, { names = [], yes = false, ask = null, write = (t) => process.stdout.write(t), platform } = {}) => {
+export const review = async (
+  project,
+  { names = [], yes = false, ask = null, write = (t) => process.stdout.write(t), platform } = {}
+) => {
   const say = (line) => write(`${clean(line, 1000)}\n`)
   const found = findSkills(project)
   const unknown = names.filter((n) => !found.skills.some((s) => s.name === n))
@@ -579,7 +591,7 @@ export const review = async (project, { names = [], yes = false, ask = null, wri
       say(`${clean(skill.name, 100)} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}`)
       say(`  ${clean(skill.description) || "(no description)"}`)
       say(`  ${grantOf(skill)}`)
-      const answer = await ask(`Link ${clean(skill.name, 100)}? [y/N] `)
+      const answer = await ask(`Link ${clean(skill.name, 100)}? [y/N] `, skill.name)
       if (answer !== null && /^y(es)?$/i.test(answer.trim())) {
         accepted.push(skill)
       }
@@ -592,7 +604,9 @@ export const review = async (project, { names = [], yes = false, ask = null, wri
   const result = linkSkills(project, { accepted, platform, found })
   for (const skill of waiting) {
     const name = clean(skill.name, 100)
-    say(`found   ${name} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}: ${clean(skill.description) || "(no description)"}`)
+    say(
+      `found   ${name} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}: ${clean(skill.description) || "(no description)"}`
+    )
     say(
       skill.allowedTools === null
         ? `        not linked; accept it with 'npx nish-skills ${name}' or 'npx nish-skills --yes'`
