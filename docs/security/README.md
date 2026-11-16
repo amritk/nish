@@ -69,7 +69,7 @@ the record that found it. The notes below the table name each such finding.
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 6 | 0 / 0 / 1 / 8 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
-| OpenID Connect discovery and the JWK Set | [oidc.md](oidc.md) | `std/net/oidc.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 0 ²⁹ |
+| OpenID Connect discovery and the JWK Set | [oidc.md](oidc.md) | `std/net/oidc.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ²⁹ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | Async server | [serve.md](serve.md) | `std/net/serve.ts` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 1 |
 | One HTTP server for HTTP/1.1, 2 and 3 | [http-server.md](http-server.md) | `std/net/http-server.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 1 |
@@ -77,7 +77,7 @@ the record that found it. The notes below the table name each such finding.
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 5 ²⁸ | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
-| **Total** ⁸ | | | **3 / 17 / 89 / 200** | **0 / 0 / 2 / 40** |
+| **Total** ⁸ | | | **3 / 17 / 89 / 201** | **0 / 0 / 2 / 40** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -438,13 +438,13 @@ the record that found it. The notes below the table name each such finding.
     was left open by WP55 and fixed by bounding every pointer and length the
     trace reads to the arena; it is counted as a fixed Low.
 29. Fixed in review: OIDC-5 (Medium, a cross-origin `jwks_uri` reached
-    internal addresses) and OIDC-6 to OIDC-8 (Low). OIDC-1 to OIDC-4 (Low)
+    internal addresses) and OIDC-6 to OIDC-9 (Low). OIDC-1 to OIDC-4 (Low)
     are accepted, with the reason in their record, and are not counted:
     fetches block where the caller calls them, a body over the bound is
     stopped by the transport's cap before any parser sees it, discovery is
     read once, and the `kid` is read unauthenticated to choose a key.
     OIDC-P1 to OIDC-P5 are properties checked and found to hold.
-    The Total adds this row's `0 / 0 / 1 / 3` to the Total it found on
+    The Total adds this row's `0 / 0 / 1 / 4` to the Total it found on
     `main`, which did not already sum the rows above it; this record does
     not reconcile the other rows.
 

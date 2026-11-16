@@ -621,7 +621,10 @@ The shortest a key set is fresh, in seconds, whatever `max-age` says.
 
 `OIDC_MIN_REFRESH_INTERVAL: i64`
 
-The least time between two fetches of the key set, in seconds.
+The least time between two fetches of the key set, in seconds. A fetch
+clears the unknown-`kid` mark as it begins, so one that fails is tried
+again only when another unknown `kid` arrives or the set's lifetime ends,
+not merely once this interval has passed.
 
 </scalar-card>
 

@@ -29742,6 +29742,16 @@ if (dealtHere("runCache")) {
             rotated: sign("RS256", rsa2.privateKey, { kid: "rsa2" }, good),
             tampered: `${sign("RS256", rsaKey, { kid: "rsa" }, good).slice(0, -4)}AAAA`,
             nonAscii: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}é`,
+            // Each code unit of this token's header is the signed one plus 0x100, so its low byte is
+            // the signed byte, a base64url character: cut to a byte per unit, it reads as the signed
+            // token. Natively each is two UTF-8 bytes, and without the guard the header is unreadable,
+            // its kid none, and the refusal OIDC_ERR_KID_REQUIRED, not JWT_ERR_FORMAT.
+            lowByte: (() => {
+              const tk = sign("RS256", rsaKey, { kid: "rsa" }, good)
+              const at = tk.indexOf(".")
+              return [...tk.slice(0, at)].map((c) => String.fromCharCode(0x100 + c.charCodeAt(0))).join("") + tk.slice(at)
+            })(),
+            iatFuture: sign("RS256", rsaKey, { kid: "rsa" }, claims({ iat: NOW + 61 })),
             long: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}${"A".repeat(8192)}`,
             longKid: sign("RS256", rsaKey, { kid: "k".repeat(300) }, good),
             kid256: sign("RS256", rsaKey, { kid: "k".repeat(256) }, good),
@@ -29780,7 +29790,7 @@ if (dealtHere("runCache")) {
           for (const [k, v] of Object.entries(discovery)) consts.push(`const disc_${k}: string = ${lit(v)}`)
           const src = `import { Suite } from "nish/testing"
         import {
-          JWT_ERR_ALG, JWT_ERR_AUDIENCE, JWT_ERR_CLAIMS, JWT_ERR_EXPIRED, JWT_ERR_FORMAT, JWT_ERR_ISSUER,
+          JWT_ERR_ALG, JWT_ERR_AUDIENCE, JWT_ERR_CLAIMS, JWT_ERR_EXPIRED, JWT_ERR_FORMAT, JWT_ERR_IAT, JWT_ERR_ISSUER,
           JWT_ERR_NOT_YET, JWT_ERR_SIGNATURE, JWT_ERR_SIZE, JWT_OK,
         } from "nish/crypto/jwt"
         import {
@@ -30010,6 +30020,7 @@ if (dealtHere("runCache")) {
           t.eqI32("alg none", oidcVerify(k, tok_none, "api", NOW), JWT_ERR_ALG)
           t.eqI32("tampered", oidcVerify(k, tok_tampered, "api", NOW), JWT_ERR_SIGNATURE)
           t.eqI32("a non-ASCII token refused", oidcVerify(k, tok_nonAscii, "api", NOW), JWT_ERR_FORMAT)
+          t.eqI32("a code unit above 0x7f whose low byte is base64url refused", oidcVerify(k, tok_lowByte, "api", NOW), JWT_ERR_FORMAT)
           t.eqI32("wrong iss", oidcVerify(k, tok_wrongIss, "api", NOW), JWT_ERR_ISSUER)
           t.eqI32("wrong aud", oidcVerify(k, tok_wrongAud, "api", NOW), JWT_ERR_AUDIENCE)
           t.eqI32("aud array holds it", oidcVerify(k, tok_audArray, "api", NOW), JWT_OK)
@@ -30051,10 +30062,19 @@ if (dealtHere("runCache")) {
           t.eqI32("claims cleared after a refusal", toI32(k.claimsText().length), 0)
           // Every refusal leaves no claims behind, whether decided before the verifier runs or inside
           // it: each follows an accepted token that carries exp, nbf and iat, and every one is cleared.
-          const refusals: string[] = ["oversize", "kid required", "unknown kid", "stale", "wrong aud", "wrong iss", "expired"]
-          const refused: string[] = [tok_long, tok_noKid, tok_unknownKid, tok_rs256, tok_wrongAud, tok_wrongIss, tok_expired]
-          const codes: i32[] = [JWT_ERR_SIZE, OIDC_ERR_KID_REQUIRED, OIDC_ERR_UNKNOWN_KID, OIDC_ERR_STALE, JWT_ERR_AUDIENCE, JWT_ERR_ISSUER, JWT_ERR_EXPIRED]
-          for (let i: i32 = 0; i < 7; i += 1) {
+          const refusals: string[] = [
+            "oversize", "kid required", "unknown kid", "stale", "wrong aud", "wrong iss", "expired",
+            "not yet", "iat in the future", "a code unit above 0x7f",
+          ]
+          const refused: string[] = [
+            tok_long, tok_noKid, tok_unknownKid, tok_rs256, tok_wrongAud, tok_wrongIss, tok_expired,
+            tok_nbf, tok_iatFuture, tok_lowByte,
+          ]
+          const codes: i32[] = [
+            JWT_ERR_SIZE, OIDC_ERR_KID_REQUIRED, OIDC_ERR_UNKNOWN_KID, OIDC_ERR_STALE, JWT_ERR_AUDIENCE, JWT_ERR_ISSUER, JWT_ERR_EXPIRED,
+            JWT_ERR_NOT_YET, JWT_ERR_IAT, JWT_ERR_FORMAT,
+          ]
+          for (let i: i32 = 0; i < 10; i += 1) {
             const name: string = refusals[i]
             t.eqI32(\`accept before \${name}\`, oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
             t.ok(\`exp, nbf and iat set before \${name}\`, k.verifier.hasExp && k.verifier.hasNbf && k.verifier.hasIat)
@@ -30068,6 +30088,10 @@ if (dealtHere("runCache")) {
             t.eqI64(\`nbf 0 after \${name}\`, k.verifier.nbf, toI64(0))
             t.eqI64(\`iat 0 after \${name}\`, k.verifier.iat, toI64(0))
           }
+          // An accepted token's claims are its own: one without nbf, after one with it, leaves none.
+          t.eqI32("accept with nbf", oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("accept without nbf after one with it", oidcVerify(k, tok_rs256, "api", NOW), JWT_OK)
+          t.ok("no nbf left from the token before", !k.verifier.hasNbf)
           const one: OidcKeys = keysWith(doc_one, NOW)
           t.eqI32("no kid, one key", oidcVerify(one, tok_noKid, "api", NOW), JWT_OK)
           const never: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)

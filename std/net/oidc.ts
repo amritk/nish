@@ -49,6 +49,7 @@ import {
   JWT_ALG_RS256,
   JWT_ALG_RS384,
   JWT_ALG_RS512,
+  JWT_ERR_FORMAT,
   JWT_ERR_SIZE,
   JWT_MAX_TOKEN,
   JwtKey,
@@ -123,7 +124,12 @@ export const OIDC_MIN_LIFETIME: i64 = 300
 export const OIDC_MAX_LIFETIME: i64 = 86400
 /** How long a key set is fresh when its response has no usable `max-age`, in seconds. */
 export const OIDC_DEFAULT_LIFETIME: i64 = 3600
-/** The least time between two fetches of the key set, in seconds. */
+/**
+ * The least time between two fetches of the key set, in seconds. A fetch
+ * clears the unknown-`kid` mark as it begins, so one that fails is tried
+ * again only when another unknown `kid` arrives or the set's lifetime ends,
+ * not merely once this interval has passed.
+ */
 export const OIDC_MIN_REFRESH_INTERVAL: i64 = 60
 /** How long past its freshness a key set still verifies while refreshes fail, in seconds. */
 export const OIDC_STALE_GRACE: i64 = 86400
@@ -960,7 +966,8 @@ export class OidcKeys {
    * The token's bytes in the verifier's buffer, for `oidcVerify`.
    *
    * @param token The compact token.
-   * @returns Its length, or `JWT_ERR_SIZE` when it is too long.
+   * @returns Its length, `JWT_ERR_SIZE` when it is too long, or
+   *   `JWT_ERR_FORMAT` when a code unit is above 0x7F.
    */
   load(token: string): i32 {
     const n: i32 = toI32(token.length)
@@ -968,7 +975,14 @@ export class OidcKeys {
       return JWT_ERR_SIZE
     }
     for (let i: i32 = 0; i < n; i += 1) {
-      this.text[i] = toU8(token.charCodeAt(i))
+      const c: i32 = toI32(token.charCodeAt(i))
+      // No token character is above 0x7F. Cut to its low byte, a code unit
+      // such as U+0141 would read as `A`, and one signed token would verify
+      // under many spellings.
+      if (c > 0x7f) {
+        return JWT_ERR_FORMAT
+      }
+      this.text[i] = toU8(c)
     }
     return n
   }
@@ -1055,7 +1069,7 @@ export const oidcVerify = (keys: OidcKeys, token: string, audience: string, now:
   return code
 }
 
-// Forgets the last token's payload and its exp, nbf and iat.
+/** Forgets the last token's payload and its exp, nbf and iat. */
 const oidcClearClaims = (v: JwtVerifier): void => {
   v.claimsLen = 0
   v.hasExp = false
@@ -1066,7 +1080,7 @@ const oidcClearClaims = (v: JwtVerifier): void => {
   v.iat = toI64(0)
 }
 
-// Chooses the token's key and verifies the token with it.
+/** Chooses the token's key and verifies the token with it. */
 const oidcPick = (keys: OidcKeys, token: string, audience: string, now: i64): i32 => {
   const set: OidcKeySet | null = keys.set
   if (set === null || !keys.usable(now)) {

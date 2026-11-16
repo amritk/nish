@@ -161,10 +161,19 @@ the old one some time after. `OidcKeys` follows that:
   its freshness. After that `oidcVerify` answers `OIDC_ERR_STALE` until a
   refresh succeeds. `keys.lastError` says why the last refresh failed, and
   `refresh` answers `OIDC_SKIPPED` without fetching until
-  `OIDC_MIN_REFRESH_INTERVAL` has passed since the failed try.
+  `OIDC_MIN_REFRESH_INTERVAL` has passed since the failed try. A failed
+  fetch that an unknown `kid` called for is not tried again on its own once
+  the interval passes: the next token with an unknown `kid`, or the end of
+  the set's lifetime, makes it due again.
 - That interval holds for every refresh, whatever made it due: one the
   set's lifetime ending calls for also waits until a minute has passed since
   the last fetch began.
+- A token holding a character above 0x7F is refused with
+  `JWT_ERR_FORMAT` before its `kid` is read: no token character is
+  outside ASCII.
+- After a refusal `keys.claimsText()` is empty, and `exp`, `nbf` and `iat`
+  are unset. The bytes of `keys.verifier.claims` past `claimsLen` are not
+  wiped, so read the claims only through `claimsText()`.
 - A token whose `kid` is the empty string is refused as an unknown `kid`,
   even against a set of one key, and marks the set as wanted like any other
   unknown `kid`.
