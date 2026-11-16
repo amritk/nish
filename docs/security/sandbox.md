@@ -267,9 +267,10 @@ counted. One finding is counted, and it is fixed:
 - **`io_uring_enter` is matched by descriptor number.** The filter lets it
   take only the numbers of the rings step 5 made (NURING-35), but seccomp
   cannot see the file behind a number: code holding a ring made outside the
-  sandbox, inherited across `exec`, can `dup2` it onto a premade ring's
-  number, or onto one a closed ring listener freed, and enter it (NURING-36,
-  open). Landlock's rules still bound what that ring reaches.
+  sandbox, inherited across `exec`, can `dup2` or `dup3` it onto a premade
+  ring's number, or onto one a closed ring listener freed, or close that
+  number and take it with `dup` or `fcntl(F_DUPFD)`, which reuse the lowest
+  free descriptor, and enter it (NURING-36, open). Landlock's rules still bound what that ring reaches.
 - **A pathname Unix listener needs `fs.write`.** Landlock counts binding a
   socket file as MAKE_SOCK, a write, so `unixListen` on a path under `net`
   alone is -13 and leaves no file. The capability pass grants `net` for the

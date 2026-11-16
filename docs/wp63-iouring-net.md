@@ -516,7 +516,8 @@ dies of SIGSYS: the kernel's own answer, `-EOPNOTSUPP` for a file that is
 no ring (`io_uring/io_uring.c:3484`), would not stop a ring made outside
 the sandbox and inherited across `exec` (NURING-35), and the program cannot
 make another ring. The filter matches numbers, not files, so code that
-`dup2`s such a ring onto a premade ring's number still enters it; that is
+`dup2`s such a ring onto a premade ring's number, or closes that number and
+takes it with `dup` or `fcntl(F_DUPFD)`, still enters it; that is
 recorded open (NURING-36). A program that gets hold of a ring's descriptor through
 `nish:ffi` can submit only what the restrictions allow, which is what
 `nish:net` does anyway. A `SEND` with a destination address is a `sendto`

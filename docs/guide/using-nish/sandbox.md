@@ -84,8 +84,9 @@ writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
 of another architecture (a 32-bit `int 0x80`), and io_uring unless the
 program reaches `net` (and then only `io_uring_enter`, and only on the rings
-made at start for ring listeners, unless it reaches `process.spawn` too; see
-[Ring listeners](#ring-listeners)). On a kernel whose Landlock
+made at start for ring listeners, matched by descriptor number, unless it
+reaches `process.spawn` too; see [Ring listeners](#ring-listeners) and
+[NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)). On a kernel whose Landlock
 is ABI 6 or later, so is signalling a process outside the sandbox and
 connecting to an abstract Unix socket created outside it, even when `main`
 reaches `signal`; the program can still signal itself. The other
@@ -320,7 +321,16 @@ with, at most 16,384, and a busy listener takes another ring each time the
 ones it holds are full, so one listener can use several. Once every ring
 made is in use, a listener whose rings are full answers `-23` from
 `tcpAccept` until a connection closes, and a ring listener opened after
-that serves through plain descriptors.
+that serves through plain descriptors. To size it, divide the connections
+the process will hold at once by the smaller of `ulimit -n` and 16,384, and
+round up: 40,000 connections under a limit of 65,536 need 3 rings.
+
+A ring a closed listener held is not given back to the pool, so a program
+that closes and reopens ring listeners spends rings each time
+([NURING-31](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
+The rings' memory is held for the life of the process whether a listener
+uses them or not
+([NURING-32](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
 
 Each premade ring takes only accepting, receiving, sending, closing and
 cancelling; anything else submitted to it fails with `-13`. When a kernel

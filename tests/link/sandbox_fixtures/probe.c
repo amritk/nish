@@ -115,11 +115,11 @@ int sb_probe(const char *op, const char *path) {
     start(op);
     say(op, syscall(427, -1, 0, NULL, 0));
   } else if (strcmp(op, "io_uring_enter") == 0) {
-    /* On no ring: unconfined, or with both net and process.spawn, the
-     * kernel answers EBADF; any other sandbox kills it, since -1 is none of
-     * the rings made before the filter. */
+    /* On stderr, an open descriptor that is no ring: unconfined, or with
+     * both net and process.spawn, the kernel refuses it; any other sandbox
+     * kills it, since 2 is none of the rings made before the filter. */
     start(op);
-    say(op, syscall(426, -1, 0, 0, 0, NULL, 0));
+    say(op, syscall(426, 2, 0, 0, 0, NULL, 0));
   } else if (strcmp(op, "inherit-ring") == 0) {
     /* Run unconfined: makes an unrestricted ring, clears its close-on-exec
      * flag and runs `path foreign-enter <ring>`, which inherits it; prints

@@ -14543,8 +14543,9 @@ entry:
   quota.
 - **Always.** `ptrace`, `process_vm_readv`, `process_vm_writev` and
   `pidfd_getfd` kill; io_uring kills without `net`, and with `net` but not
-  `process.spawn` only `io_uring_enter` is let through (see the premade
-  rings below); on x86-64 a system call numbered with bit 30 (x32) kills, and
+  `process.spawn` only `io_uring_enter` is let through, on the premade
+  rings' descriptors, matched by descriptor number (see the premade rings
+  below, and NURING-36 in `docs/security/net-uring.md`); on x86-64 a system call numbered with bit 30 (x32) kills, and
   a call from any other architecture's entry kills. A killed process ends by
   `SIGSYS`, exit status 159 from a shell. From Landlock ABI 6 a sandboxed
   process cannot signal or reach the abstract sockets of a process outside
@@ -14556,10 +14557,12 @@ entry:
   NL3058) restricted rings, each taking only `ACCEPT`, `RECV`, `SEND`,
   `CLOSE`, `ASYNC_CANCEL` and `NOP`, with the submission flags
   `FIXED_FILE`, `BUFFER_SELECT` and `CQE_SKIP_SUCCESS`; any other
-  submission completes with `-13`. The first ring listener takes them; a
-  listener needing more serves descriptors (its open answers `-23`), and a
-  kernel or limit that refuses them leaves the process on descriptors for
-  good, which `netRingState()` reports.
+  submission completes with `-13`. Ring listeners take them as they fill:
+  once every ring made is in use, a listener whose rings are full answers
+  `-23` from `tcpAccept` until a connection closes, a ring listener opened
+  after that serves descriptors, and a kernel or limit that refuses them
+  leaves the process on descriptors for good, which `netRingState()`
+  reports.
 - **Refusals.** A program whose sandbox cannot be applied prints one line,
   `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
   kernel without Landlock, and one below ABI 3 when `fs.write` is not
