@@ -534,10 +534,14 @@ Copied from vector (https://github.com/amritk/vector), scripts/build-spec.sh at 
 
 ## IETF RFCs
 
-`rfcs/rfc4648.txt`, `rfcs/rfc5869.txt` and `rfcs/rfc8439.txt` are complete,
+`rfcs/rfc4231.txt`, `rfcs/rfc4648.txt`, `rfcs/rfc5869.txt`,
+`rfcs/rfc7748.txt`, `rfcs/rfc8032.txt` and `rfcs/rfc8439.txt` are complete,
 unmodified copies of the RFC Editor's plain-text publications, byte-identical
-to <https://www.rfc-editor.org/rfc/rfc4648.txt>,
-<https://www.rfc-editor.org/rfc/rfc5869.txt> and
+to <https://www.rfc-editor.org/rfc/rfc4231.txt>,
+<https://www.rfc-editor.org/rfc/rfc4648.txt>,
+<https://www.rfc-editor.org/rfc/rfc5869.txt>,
+<https://www.rfc-editor.org/rfc/rfc7748.txt>,
+<https://www.rfc-editor.org/rfc/rfc8032.txt> and
 <https://www.rfc-editor.org/rfc/rfc8439.txt>, with their copyright notices,
 legends and authors' addresses intact. vector's `spec check` reads them, and
 every contract in `contracts/` records the SHA-256 of the RFC it was checked
@@ -545,8 +549,11 @@ against, so a modified copy is caught.
 
 | RFC | Title | Stream | Copyright |
 | --- | --- | --- | --- |
+| 4231 | Identifiers and Test Vectors for HMAC-SHA-224, HMAC-SHA-256, HMAC-SHA-384, and HMAC-SHA-512 | IETF | © The Internet Society (2005) |
 | 4648 | The Base16, Base32, and Base64 Data Encodings | IETF | © The Internet Society (2006) |
 | 5869 | HMAC-based Extract-and-Expand Key Derivation Function (HKDF) | IETF | © 2010 IETF Trust and the persons identified as the document authors |
+| 7748 | Elliptic Curves for Security | IRTF | © 2016 IETF Trust and the persons identified as the document authors |
+| 8032 | Edwards-Curve Digital Signature Algorithm (EdDSA) | IRTF | © 2017 IETF Trust and the persons identified as the document authors |
 | 8439 | ChaCha20 and Poly1305 for IETF Protocols | IRTF | © 2018 IETF Trust and the persons identified as the document authors |
 
 They are redistributed under BCP 78 and the IETF Trust's Legal Provisions
@@ -577,11 +584,14 @@ Trust's Legal Provisions Relating to IETF Documents
 (http://trustee.ietf.org/license-info).
 ```
 
-RFC 8439 is an IRTF-stream document, for which TLP §4's BSD grant may not
-apply (§8); its excerpts rely on §3.c.iii alone. These portions are derived
-from IETF RFC 4648, 5869 and 8439; please reproduce this note if possible.
+RFC 7748, 8032 and 8439 are IRTF-stream documents, for which TLP §4's BSD
+grant may not apply (§8); their excerpts rely on §3.c.iii alone, as do those of
+RFC 4231 and 4648, which were published before the IETF Trust's Legal
+Provisions and carry The Internet Society's notice. These portions are derived
+from IETF RFC 4231, 4648, 5869, 7748, 8032 and 8439; please reproduce this note
+if possible.
 
-`.refcache/reference.RFC.{2119,4648,5869,8174,8439}.xml` are the `<reference>`
+`.refcache/reference.RFC.{2119,4231,4648,5869,7748,8032,8174,8439}.xml` are the `<reference>`
 elements kramdown-rfc fetched from the IETF BibXML Service
 (<https://bib.ietf.org/>), kept unedited so `scripts/build-spec.sh` builds
 offline; `specs/*.xml` embeds them in its back matter. Each is bibliographic
