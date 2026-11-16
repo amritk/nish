@@ -244,6 +244,8 @@ loop written for descriptors runs unchanged. What differs:
 - `tcpAccept` writes the peer's address as zeros.
 - When every slot the process may hold is taken, `tcpAccept` answers `-23`.
   Close a connection and the next waiting one takes its slot.
+- A process opens at most 31 ring listeners in its life, closed ones
+  included; the 32nd `tcpListenFlags` with `NET_LISTEN_RING` answers `-23`.
 - Each connection holds at most 256 KiB that the peer has not taken yet. A
   `netWrite` past that copies what fits; a full connection answers `-11`
   until the peer reads, as a full socket buffer does.

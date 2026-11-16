@@ -1652,7 +1652,7 @@ declare function tcpListen(host: string, port: i32, backlog: i32): i32;
  * @param flags 1, 2, 4 and 8 as above.
  * @returns the listener's descriptor, or a negative errno: -22 for any other bit (a negative
  *   `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
- *   for a port in use; -23 when every ring a process may hold is taken.
+ *   for a port in use; -23 once the process has opened 31 ring listeners, closed or not.
  */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
 /**
@@ -1936,9 +1936,10 @@ declare function pollRemove(loop: i32, fd: i32): i32;
  * `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer
  * 0, as a timeout does, rather than wait past the deadline; the descriptor
  * `signalFd()` answers can be added to the loop, and is readable when SIGTERM
- * or SIGINT arrives. Once a `NET_LISTEN_RING` listener has rings, an
- * interrupted wait goes on to its deadline, since the rings' own work
- * interrupts it too: watch `signalFd()` to see a signal.
+ * or SIGINT arrives. Once the process has opened a `NET_LISTEN_RING`
+ * listener with rings, for the rest of its life, an interrupted wait goes on
+ * to its deadline, since the rings' own work interrupts it too: watch
+ * `signalFd()` to see a signal.
  *
  * A UDP socket is always writable, and on Linux one whose both sides are shut
  * is readable, writable and hung up, 7. On Darwin a descriptor both readable
@@ -3158,8 +3159,8 @@ declare module "nish:net" {
    *   accepts into rings, and `0` is `tcpListen` exactly.
    * @returns The listener's descriptor or the failure: `-22` for any other
    *   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
-   *   `-95` for flag 4 off Linux; `-23` when every ring a process may hold is
-   *   taken.
+   *   `-95` for flag 4 off Linux; `-23` once the process has opened 31 ring
+   *   listeners, closed or not.
    */
   export function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
   /**
@@ -3382,8 +3383,8 @@ declare module "nish:net" {
    * one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
    * its events, `1` readable and `2` writable, with `4` added for a hang-up or
    * an error. A signal that interrupts the wait answers `0`, as a timeout
-   * does, until a `NET_LISTEN_RING` listener has rings: then the wait goes on
-   * to its deadline, and `signalFd()` is how a loop sees a signal. Not
+   * does, until the process opens a `NET_LISTEN_RING` listener with rings:
+   * from then on, for the rest of its life, the wait goes on to its deadline, and `signalFd()` is how a loop sees a signal. Not
    * `willreturn`, because it can wait forever. Nothing allocates,
    * and `ready` is never written past its length.
    *

@@ -869,8 +869,8 @@ Wait until a watched descriptor is ready or the timeout passes, and write
 one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
 its events, `1` readable and `2` writable, with `4` added for a hang-up or
 an error. A signal that interrupts the wait answers `0`, as a timeout
-does, until a `NET_LISTEN_RING` listener has rings: then the wait goes on
-to its deadline, and `signalFd()` is how a loop sees a signal. Not
+does, until the process opens a `NET_LISTEN_RING` listener with rings:
+from then on, for the rest of its life, the wait goes on to its deadline, and `signalFd()` is how a loop sees a signal. Not
 `willreturn`, because it can wait forever. Nothing allocates,
 and `ready` is never written past its length.
 
@@ -1203,8 +1203,8 @@ The sum of the flags: `3` is both, `5` and `7` steer, `8`
 
 The listener's descriptor or the failure: `-22` for any other
   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
-  `-95` for flag 4 off Linux; `-23` when every ring a process may hold is
-  taken.
+  `-95` for flag 4 off Linux; `-23` once the process has opened 31 ring
+  listeners, closed or not.
 
 </scalar-field>
 

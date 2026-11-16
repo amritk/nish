@@ -2295,9 +2295,10 @@ Wait for readiness, filling pairs: `ready[2k]` token, `ready[2k + 1]` events
 `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer
 0, as a timeout does, rather than wait past the deadline; the descriptor
 `signalFd()` answers can be added to the loop, and is readable when SIGTERM
-or SIGINT arrives. Once a `NET_LISTEN_RING` listener has rings, an
-interrupted wait goes on to its deadline, since the rings' own work
-interrupts it too: watch `signalFd()` to see a signal.
+or SIGINT arrives. Once the process has opened a `NET_LISTEN_RING`
+listener with rings, for the rest of its life, an interrupted wait goes on
+to its deadline, since the rings' own work interrupts it too: watch
+`signalFd()` to see a signal.
 
 A UDP socket is always writable, and on Linux one whose both sides are shut
 is readable, writable and hung up, 7. On Darwin a descriptor both readable
@@ -3577,7 +3578,7 @@ the kernel's queue of unaccepted connections.
 
 the listener's descriptor, or a negative errno: -22 for any other bit (a negative
   `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
-  for a port in use; -23 when every ring a process may hold is taken.
+  for a port in use; -23 once the process has opened 31 ring listeners, closed or not.
 
 </scalar-field>
 

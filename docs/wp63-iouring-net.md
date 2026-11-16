@@ -361,8 +361,8 @@ taken (`SO_REUSEPORT`, `TCP_NODELAY`, steering), so the ring bit is 8, and
 `runtime/runtime-net.c`). A runtime from before S2 refuses 8, so a program
 built for the new runtime and run on an old one fails closed with -22.
 
-`netRead`, `netWrite`, `netClose`, `netSetOption` and `netLocalPort` take
-either kind. A slot handle keeps the readiness contract every `nish:net`
+`netRead`, `netWrite`, `netClose` and `netLocalPort` take either kind
+(`netSetOption` was planned to as well; S2 has it answer -95, below). A slot handle keeps the readiness contract every `nish:net`
 caller is written against:
 
 - **`netRead(conn, buf, off, n)`** copies out of the bytes the ring's
