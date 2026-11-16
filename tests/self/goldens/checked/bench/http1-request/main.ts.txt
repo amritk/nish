@@ -1255,6 +1255,7 @@ struct Http1Connection (class) size=280 align=8 exported
   method consume -> @nish.Http1Connection.consume
   method wantsWrite -> @nish.Http1Connection.wantsWrite
   method isDone -> @nish.Http1Connection.isDone
+  method betweenRequests -> @nish.Http1Connection.betweenRequests
   method room -> @nish.Http1Connection.room
   method bodyRoom -> @nish.Http1Connection.bodyRoom
   method next -> @nish.Http1Connection.next
@@ -1654,6 +1655,12 @@ function Http1Connection.isDone(this: Http1Connection): boolean -> @nish.Http1Co
   pointer this: size=280 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
   stackSites=0 stackLocals=0
   callee +0:71 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+function Http1Connection.betweenRequests(this: Http1Connection): boolean -> @nish.Http1Connection.betweenRequests [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.Http1Connection.wantsWrite
+  pointer this: size=280 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
+  stackSites=0 stackLocals=0
+  callee +0:81 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
 function Http1Connection.room(this: Http1Connection): i32 -> @nish.Http1Connection.room [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

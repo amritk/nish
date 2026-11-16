@@ -1621,6 +1621,10 @@ const DEALT_SECTIONS = {
   termWasi: { name: "the nish:term section under --profile wasi", selected: selects("term_wasi", "wasi") },
   netTcp: { name: "the net_tcp section", selected: selects("net_tcp") },
   netUnix: { name: "the net_unix section", selected: selects("net_unix") },
+  h1Between: {
+    name: "the Http1Connection.betweenRequests section",
+    selected: selects("http1_between", "net_http1_server"),
+  },
   netMss: { name: "the net_mss section", selected: selects("net_mss", "wasi") },
   fileWasi: {
     name: "the file_ programs under --profile wasi",
@@ -3217,6 +3221,122 @@ if (dealtHere("netUnix")) {
       ran.status === 0 && ran.stdout === fs.readFileSync(path.join(fdsDir, "expected.out"), "utf8"),
       shown(ran)
     )
+  }
+}
+
+// `Http1Connection.betweenRequests`, the question a graceful drain asks before
+// it closes a keep-alive connection, read in each state it tells apart with no
+// socket: a connection fed by hand, as a program that carries its own bytes
+// feeds one. Each clause of the answer is what turns one line false: the head
+// clock (a head partly read, and the next one begun), the open request (its
+// head read, unanswered), the unsent output (an exchange over whose bytes still
+// wait) and the state (a connection closing, or upgraded, with nothing left).
+if (dealtHere("h1Between")) {
+  const betweenDir = path.join(buildDir, "http1-between")
+  fs.rmSync(betweenDir, { recursive: true, force: true })
+  fs.mkdirSync(betweenDir, { recursive: true })
+  const entry = path.join(betweenDir, "between.ts")
+  fs.writeFileSync(
+    entry,
+    String.raw`import { HTTP1_NO_BODY } from "nish/net/http1-codec";
+import { H1_END, H1_NEED_MORE, H1_REQUEST, Http1Config, Http1Connection } from "nish/net/http1-server";
+
+/** Feeds \`text\` to \`conn\` and starts its head clock, as a carrier does after a read. */
+const feedText = (conn: Http1Connection, text: string): void => {
+  const bytes: u8[] = [];
+  for (let k: i32 = 0; k < toI32(text.length); k++) {
+    bytes.push(toU8(text.charCodeAt(k)));
+  }
+  conn.feed(bytes, 0, toI32(bytes.length));
+  conn.headArrived(toI64(1));
+};
+
+const say = (label: string, conn: Http1Connection): void => {
+  console.log(label + ": " + (conn.betweenRequests() ? "true" : "false"));
+};
+
+/** Reads the head fed, answers it 204 and ends the exchange, its bytes unsent. */
+const answer = (conn: Http1Connection): boolean => {
+  const none: u8[][] = [];
+  const read: boolean = conn.next() === H1_REQUEST;
+  conn.respond(204, none, none, HTTP1_NO_BODY);
+  conn.end();
+  return read && conn.next() === H1_END && conn.next() === H1_NEED_MORE;
+};
+
+const flush = (conn: Http1Connection): void => {
+  conn.consume(conn.outputEnd - conn.outputStart);
+};
+
+export const main = (): i32 => {
+  const none: u8[][] = [];
+  const conn = new Http1Connection(new Http1Config());
+  say("fresh", conn);
+  feedText(conn, "GET / HTTP/1.1\r\nHo");
+  say("head partly read", conn);
+  feedText(conn, "st: a\r\n\r\n");
+  console.log("read: " + (conn.next() === H1_REQUEST ? "true" : "false"));
+  say("request open", conn);
+  conn.respond(204, none, none, HTTP1_NO_BODY);
+  conn.end();
+  say("answered, request open", conn);
+  console.log("over: " + (conn.next() === H1_END && conn.next() === H1_NEED_MORE ? "true" : "false"));
+  say("response being written", conn);
+  flush(conn);
+  say("response flushed", conn);
+  feedText(conn, "G");
+  say("next head begun", conn);
+
+  const closing = new Http1Connection(new Http1Config());
+  feedText(closing, "GET / HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
+  console.log("closing answered: " + (answer(closing) ? "true" : "false"));
+  flush(closing);
+  say("closing, flushed", closing);
+
+  const upgraded = new Http1Connection(new Http1Config());
+  feedText(
+    upgraded,
+    "GET /ws HTTP/1.1\r\nHost: a\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+  );
+  upgraded.next();
+  upgraded.acceptWebSocket("");
+  upgraded.next();
+  upgraded.next();
+  flush(upgraded);
+  console.log("upgraded: " + (upgraded.isWebSocket() ? "true" : "false"));
+  say("upgraded, flushed", upgraded);
+  return 0;
+};
+`
+  )
+  const exe = path.join(betweenDir, "between")
+  const built = spawnSync(NISH, [entry, "-o", betweenDir + path.sep, "--link", exe], {
+    cwd: root,
+    encoding: "utf8",
+    ...NATIVE_RUN_LIMIT,
+  })
+  const ran = built.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8", ...NATIVE_RUN_LIMIT }) : built
+  const lines = ran.status === 0 ? ran.stdout.split("\n") : []
+  const said = (label, answer) => lines.includes(`${label}: ${answer}`)
+  check("http1_between: between.ts links and runs", ran.status === 0, shown(ran))
+  check(
+    "http1_between: the program reads, answers and upgrades as it means to",
+    ["read", "over", "closing answered", "upgraded"].every((label) => said(label, "true")),
+    ran.stdout
+  )
+  const states = [
+    ["a fresh connection is between requests", "fresh", "true"],
+    ["a connection whose head has partly arrived is not", "head partly read", "false"],
+    ["nor one whose request is open, unanswered", "request open", "false"],
+    ["nor one answered while its request is open", "answered, request open", "false"],
+    ["nor one whose exchange is over while its response waits to be sent", "response being written", "false"],
+    ["and it is again once that response is flushed", "response flushed", "true"],
+    ["until the next head begins to arrive", "next head begun", "false"],
+    ["a connection closing after its answer, with nothing left to send, is not", "closing, flushed", "false"],
+    ["nor one upgraded to a WebSocket, with nothing left to send", "upgraded, flushed", "false"],
+  ]
+  for (const [claim, label, answer] of states) {
+    check(`http1_between: ${claim}`, said(label, answer), ran.stdout)
   }
 }
 
