@@ -323,7 +323,7 @@ export const oidcParseDiscovery = (issuer: string, doc: u8[], options: OidcOptio
     return new OidcMetadata(OIDC_ERR_SIZE, "", "")
   }
   const json: JsonDocument = oidcDocument(OIDC_MAX_DISCOVERY_BYTES)
-  const root: JsonValue = json.parse(doc, 0, toI32(doc.length))
+  const root: JsonValue = json.parse(doc, toI32(0), toI32(doc.length))
   if (root < 0 || json.kind(root) !== JSON_VALUE_OBJECT) {
     return new OidcMetadata(OIDC_ERR_JSON, "", "")
   }
@@ -492,7 +492,7 @@ const oidcKidAllowed = (kid: string): boolean => {
     return false
   }
   for (let i: i32 = 0; i < n; i += 1) {
-    const c: i32 = kid.charCodeAt(i)
+    const c: i32 = toI32(kid.charCodeAt(i))
     if (c < OIDC_KID_LOW || c > OIDC_KID_HIGH) {
       return false
     }
@@ -679,7 +679,7 @@ export const oidcParseJwks = (doc: u8[]): OidcKeySet => {
     return oidcRefused(OIDC_ERR_SIZE)
   }
   const json: JsonDocument = oidcDocument(OIDC_MAX_JWKS_BYTES)
-  const root: JsonValue = json.parse(doc, 0, toI32(doc.length))
+  const root: JsonValue = json.parse(doc, toI32(0), toI32(doc.length))
   if (root < 0 || json.kind(root) !== JSON_VALUE_OBJECT) {
     return oidcRefused(OIDC_ERR_JSON)
   }
@@ -716,7 +716,7 @@ export const oidcParseJwks = (doc: u8[]): OidcKeySet => {
 
 /** The seconds of one `max-age=<digits>` directive, or -1 when `directive` is not one. */
 const oidcMaxAge = (directive: string): i64 => {
-  const eq: i32 = directive.indexOf(String.fromCharCode(OIDC_CH_EQUALS))
+  const eq: i32 = toI32(directive.indexOf(String.fromCharCode(OIDC_CH_EQUALS)))
   if (eq < 1 || asciiLower(trim(directive.slice(0, eq))) !== "max-age") {
     return toI64(-1)
   }
@@ -727,7 +727,7 @@ const oidcMaxAge = (directive: string): i64 => {
   }
   let age: i64 = toI64(0)
   for (let i: i32 = 0; i < n; i += 1) {
-    const c: i32 = value.charCodeAt(i)
+    const c: i32 = toI32(value.charCodeAt(i))
     if (c < OIDC_CH_0 || c > OIDC_CH_9) {
       return toI64(-1)
     }
@@ -756,7 +756,7 @@ export const oidcLifetime = (cacheControl: string | null): i64 => {
   const n: i32 = toI32(cacheControl.length)
   let from: i32 = 0
   for (let i: i32 = 0; i <= n; i += 1) {
-    if (i === n || cacheControl.charCodeAt(i) === OIDC_CH_COMMA) {
+    if (i === n || toI32(cacheControl.charCodeAt(i)) === OIDC_CH_COMMA) {
       const age: i64 = oidcMaxAge(trim(cacheControl.slice(from, i)))
       if (age >= toI64(0)) {
         if (age < OIDC_MIN_LIFETIME) {
@@ -972,7 +972,7 @@ export class OidcKeys {
    *   naming no `kid`.
    */
   peekKid(n: i32): string | null {
-    const k: i32 = this.verifier.peekKid(this.text, 0, n, this.kidBytes)
+    const k: i32 = this.verifier.peekKid(this.text, toI32(0), n, this.kidBytes)
     return k < 0 ? null : String.fromBytes(this.kidBytes, 0, k)
   }
 
@@ -990,7 +990,7 @@ export class OidcKeys {
     v.issuer = this.meta.issuer
     v.audience = audience
     v.leeway = this.options.leeway
-    return v.verify(key, this.text, 0, n, now)
+    return v.verify(key, this.text, toI32(0), n, now)
   }
 
   /** Record a fetch begun at `now`. */
