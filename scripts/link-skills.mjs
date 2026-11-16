@@ -294,8 +294,16 @@ const readSkill = (dir) => {
     if (stat.size > room) {
       return null
     }
-    const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0))
+    // A FIFO swapped in after the lstat must not block the open, and what was
+    // opened is checked again before a byte is read.
+    const fd = fs.openSync(
+      file,
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0)
+    )
     try {
+      if (!fs.fstatSync(fd).isFile()) {
+        throw new Error(`${file} changed while it was read`)
+      }
       const chunks = []
       let total = 0
       const chunk = Buffer.alloc(Math.min(room + 1, 1 << 20))

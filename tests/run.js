@@ -27285,6 +27285,43 @@ if (dealtHere("releaseChecks")) {
         `${dirAtTempError}\n${tree(dirAtTemp).join("\n")}`
       )
 
+      // A record that cannot be renamed into place, here because a directory holds
+      // its name, fails the run and leaves no temporary file behind.
+      const dirAtRecord = project([nishPkg])
+      const dirAtRecordSkills = path.join(dirAtRecord, ".claude", "skills")
+      fs.mkdirSync(path.join(dirAtRecordSkills, ".nish-skills.json", "inner"), { recursive: true })
+      let dirAtRecordError = null
+      try {
+        await review(dirAtRecord, { yes: true, write: () => {} })
+      } catch (err) {
+        dirAtRecordError = err
+      }
+      check(
+        "a record write whose rename fails throws and leaves no temporary file",
+        dirAtRecordError !== null &&
+          lstatOf(path.join(dirAtRecordSkills, ".nish-skills.json", "inner"))?.isDirectory() === true &&
+          fs.readdirSync(dirAtRecordSkills).filter((n) => n.endsWith(".tmp")).length === 0,
+        `${dirAtRecordError}\n${tree(dirAtRecord).join("\n")}`
+      )
+
+      // Nish's own skill grants nothing, so --yes links it: an edit to its
+      // frontmatter that made it a grant would turn this red.
+      const ownSkill = project([
+        [
+          "nish",
+          { ".": { types: "./runtime/nish.d.ts" } },
+          [["writing-nish", fs.readFileSync(path.join(root, "skills", "writing-nish", "SKILL.md"), "utf8")]],
+        ],
+      ])
+      const ownRun = linkSkillsCli(["--dir", ownSkill, "--yes"], skillsRoot)
+      check(
+        "--yes links nish's own skills/writing-nish, which grants nothing",
+        ownRun.status === 0 &&
+          fs.readdirSync(path.join(root, "skills", "writing-nish")).join() === "SKILL.md" &&
+          linkedTo(ownSkill, "writing-nish", "nish"),
+        ownRun.stdout + ownRun.stderr
+      )
+
       // A FIFO inside a skill is a grant: --yes refuses it, and the run does not hang on it.
       const fifoAt = project([["nish", {}, ["fifo"]]])
       const fifoMade = spawnSync("sh", ["-c", "mkfifo pipe"], {
