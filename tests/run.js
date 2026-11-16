@@ -11900,14 +11900,20 @@ if (dealtHere("fileServer")) {
 // `tests/link/nl9018_server/leaky.ts` builds its reply text in the event loop
 // and warns; `flat.ts` builds it in a `using a = arena()` block and compiles
 // clean, refused nothing; `examples/file-server.ts`, which allocates nothing per
-// request in its own code, stays quiet.
+// request in its own code, stays quiet. `helper_leaky.ts` moves that work into
+// a `readPost` helper that also answers, so the helper is refused a scope of
+// its own and leaves the string in the loop's memory; `method_leaky.ts` reaches
+// the same helper through two methods of a class. Both warn at the loop and
+// name the line that leaves the string behind; `helper_flat.ts` and
+// `method_flat.ts`, with the arena block inside the helper, stay quiet.
 //
 // Then each server answers 2,000 requests on one keep-alive connection, one
 // at a time, and 20,000 more; its VmRSS is read from /proc after each batch.
 // Ten runs of each (Linux x64, `--profile speed`) read flat's at the same kB
-// after both batches and leaky's 1,252 kB higher after the second, every time.
-// The band is 256 kB, a fifth of what leaky gains, so flat must stay within it
-// and leaky must leave it: the second says the measure can see the pile the
+// after both batches and leaky's 1,252 kB higher after the second, every time;
+// five runs of the helper and method pairs read the same, to the kB. The band is 256 kB, a fifth of
+// what a leaky server gains, so each flat server must stay within it and each
+// leaky one must leave it: the second says the measure can see the pile the
 // warning names.
 if (dealtHere("unboundedPass")) {
   const UNBOUNDED_RSS_BAND = 256
@@ -11993,6 +11999,33 @@ if (dealtHere("unboundedPass")) {
     flat.status === 0 && !flat.stderr.includes("performance:") && !flat.stderr.includes("error"),
     shown(flat)
   )
+  // A pile left by a helper the loop calls: the warning is at the loop, names
+  // the call that leaves it and the line it is built on, and sends the arena
+  // block into the function that builds it.
+  for (const [name, at, leaves, built] of [
+    ["helper_leaky", "100:9", "`readPost` leaves behind on line 102", "(the string built on line 69, in `readPost`)"],
+    ["method_leaky", "126:9", "`App.ready` leaves behind on line 127", "(the string built on line 70, in `readPost`)"],
+  ]) {
+    const r = build(name, path.join(serverDir, `${name}.ts`), [])
+    const hits = nl9018Lines(r.stderr)
+    check(
+      `nl9018: ${name}.ts, whose reply text is built in a helper that also answers, warns at the event loop`,
+      r.status === 0 &&
+        hits.length === 1 &&
+        hits[0].includes(`${name}.ts:${at}: `) &&
+        hits[0].includes(`what ${leaves} ${built} piles up`) &&
+        hits[0].includes("into a block inside `readPost` that opens with `using a = arena()`"),
+      shown(r)
+    )
+  }
+  for (const name of ["helper_flat", "method_flat"]) {
+    const r = build(name, path.join(serverDir, `${name}.ts`), [])
+    check(
+      `nl9018: ${name}.ts, with the arena block inside the helper, compiles with no warning and no refusal`,
+      r.status === 0 && !r.stderr.includes("performance:") && !r.stderr.includes("error"),
+      shown(r)
+    )
+  }
   const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
@@ -12077,7 +12110,8 @@ if (dealtHere("unboundedPass")) {
         })
       })
     const peaks = {}
-    for (const name of ["leaky", "flat"]) {
+    const SERVERS = ["leaky", "flat", "helper_leaky", "helper_flat", "method_leaky", "method_flat"]
+    for (const name of SERVERS) {
       const exe = path.join(srvDir, name, "server")
       const linked = build(`${name}-exe`, path.join(serverDir, `${name}.ts`), [
         "--link",
@@ -12100,17 +12134,22 @@ if (dealtHere("unboundedPass")) {
         peaks[name] = r.readings
       }
     }
-    if (peaks.flat !== undefined && peaks.leaky !== undefined) {
-      const grew = (name) => peaks[name][1] - peaks[name][0]
+    const grew = (name) => peaks[name][1] - peaks[name][0]
+    for (const prefix of ["", "helper_", "method_"]) {
+      const flatName = `${prefix}flat`
+      const leakyName = `${prefix}leaky`
+      if (peaks[flatName] === undefined || peaks[leakyName] === undefined) {
+        continue
+      }
       check(
-        `nl9018: the arena-block server's RSS stays within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
-        grew("flat") <= UNBOUNDED_RSS_BAND,
-        `VmRSS ${peaks.flat[0]} kB after 2,000 requests, ${peaks.flat[1]} kB after 20,000 more`
+        `nl9018: ${flatName}.ts, the arena-block server, keeps its RSS within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
+        grew(flatName) <= UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks[flatName][0]} kB after 2,000 requests, ${peaks[flatName][1]} kB after 20,000 more`
       )
       check(
-        `nl9018: the warned server's RSS grows past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
-        grew("leaky") > UNBOUNDED_RSS_BAND,
-        `VmRSS ${peaks.leaky[0]} kB after 2,000 requests, ${peaks.leaky[1]} kB after 20,000 more`
+        `nl9018: ${leakyName}.ts, the warned server, grows its RSS past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
+        grew(leakyName) > UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks[leakyName][0]} kB after 2,000 requests, ${peaks[leakyName][1]} kB after 20,000 more`
       )
     }
   }

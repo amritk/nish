@@ -295,13 +295,33 @@ export class CapabilityLock {
     return true
   }
 
+  /**
+   * True when the text from `start` to the cursor is `want`, read in place: a
+   * copy to compare would be built once per key the read loop meets (NL9018).
+   *
+   * @param start Where the text to compare starts.
+   * @param want The spelling it must have.
+   * @returns Whether it is spelled `want`.
+   */
+  spells(start: i32, want: string): boolean {
+    if (this.at - start !== want.length) {
+      return false
+    }
+    for (let i: i32 = 0; i < want.length; i++) {
+      if (this.text.charCodeAt(start + i) !== want.charCodeAt(i)) {
+        return false
+      }
+    }
+    return true
+  }
+
   /** `version`'s value, which is the number 1 written as `1`. */
   readVersion(): void {
     const start = this.at
     while (this.at < this.text.length && lockNumberByte(this.text.charCodeAt(this.at))) {
       this.at = this.at + 1
     }
-    if (this.text.substring(start, this.at) !== LOCK_VERSION) {
+    if (!this.spells(start, LOCK_VERSION)) {
       this.fail(`\`version\` is not ${LOCK_VERSION}`, start, this.at)
     }
   }
