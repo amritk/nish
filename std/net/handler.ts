@@ -597,7 +597,9 @@ export class HttpHandler {
    * A handler over `listener`, a listening socket the program made
    * (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of
    * `nish/net/prefork`), routing through `router`, whose routes are added
-   * before the first `wait`.
+   * before the first `wait`. `limits.ring` acts only through the listener:
+   * open it with `limits.listen`, since a listener from `tcpListen` stays on
+   * descriptors whatever `ring` says.
    * @param limits the caps and timeouts. `slots`, `jsonBytes`, `maxEvents`
    *   and `bodyTimeout` are read once here, so changing them later has no
    *   effect; `http` is kept by the carrier, which reads its timeouts and
@@ -1239,6 +1241,16 @@ export class HttpHandler {
    */
   connections(): i32 {
     return this.server.busy()
+  }
+
+  /**
+   * Whether the listener is resting: an accept failed for want of a resource
+   * (EMFILE for descriptors, ENFILE for ring slots, ENOMEM), so the handler
+   * takes no connection until one closes or the 100 ms rest ends.
+   * @returns true while the listener is out of the loop for such a rest
+   */
+  resting(): boolean {
+    return this.acceptRestUntil > 0
   }
 
   // ---- Responses ------------------------------------------------------------------
