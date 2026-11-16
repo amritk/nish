@@ -3,8 +3,9 @@
 // connection taken from a flag-0 or flag-1 listener has it off as before. Each
 // call opens a loopback listener with `flags`, connects to it, waits for the
 // connection and answers the accepted descriptor; `net_tcp_nodelay.c` reads
-// the option back from that descriptor with `getsockopt` and prints it. Bit 4
-// and up, and a negative word, are still -22. `connecting` answers the socket
+// the option back from that descriptor with `getsockopt` and prints it.
+// Steering (4) without flag 1, bit 16 and up (8 is `NET_LISTEN_RING`), and a
+// negative word are still -22. `connecting` answers the socket
 // `tcpConnect` made, which holds `TCP_NODELAY` whatever the listener's flags
 // (#942), the way libpq and Go's net package set it on every client socket.
 import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, tcpAccept, tcpConnect, tcpListenFlags } from "nish:net";

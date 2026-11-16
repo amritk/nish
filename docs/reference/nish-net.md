@@ -6,6 +6,7 @@ Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain soc
 
 ```ts
 import {
+  NET_LISTEN_RING,
   NET_SO_KEEPALIVE,
   NET_SO_RCVBUF,
   NET_SO_SNDBUF,
@@ -20,6 +21,7 @@ import {
   netLocalPort,
   netMss,
   netRead,
+  netRingState,
   netSetOption,
   netShutdown,
   netWrite,
@@ -98,6 +100,12 @@ The maximum segment size a connected TCP socket sends, the payload bytes one seg
 <scalar-card title="net​Read" icon="phosphor/regular/function" href="#netread">
 
 Read at most `len` bytes into `buf[off, off + len)`.
+
+</scalar-card>
+
+<scalar-card title="net​Ring​State" icon="phosphor/regular/function" href="#netringstate">
+
+Whether `NET_LISTEN_RING` listeners accept into rings.
 
 </scalar-card>
 
@@ -490,6 +498,21 @@ The most bytes read; a `len` of `0` answers `0`, so ask for at
 
 The count, `0` at the end of the stream, `-11` when nothing is
   waiting, or the failure.
+
+</scalar-field>
+
+### netRingState
+
+Whether `NET_LISTEN_RING` listeners accept into rings.
+
+```ts
+function netRingState(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+`1` when they do, `0` before any listener asked, or the negative
+  errno rings were refused with, in which case they serve descriptors.
 
 </scalar-field>
 
@@ -1028,9 +1051,12 @@ The array the peer's address form is written into.
 
 <scalar-field name="returns" type="i32">
 
-The connection's descriptor, `-11` when none is waiting, `-22`
-  for a `peer` shorter than 18 bytes before anything is accepted (so no
-  connection is taken and lost), or `-95` for a datagram socket.
+The connection's descriptor (a slot handle from a
+  `NET_LISTEN_RING` listener, whose `peer` is written as zeros), `-11`
+  when none is waiting, `-23` when a ring listener's slots are all
+  taken, `-22` for a `peer` shorter than 18 bytes before anything is
+  accepted (so no connection is taken and lost), or `-95` for a
+  datagram socket.
 
 </scalar-field>
 
@@ -1127,6 +1153,16 @@ Flag 4, with flag 1 and on Linux only, attaches a classic BPF program
 the index of the CPU that received it, in the order the group's listeners
 were bound; a CPU past the group's size falls back to the hash.
 
+Flag 8, `NET_LISTEN_RING`, accepts into io_uring slots on Linux: each
+connection is a slot handle at or above 2^20 rather than a descriptor, so
+a listener holds connections past `RLIMIT_NOFILE`. `netRead`, `netWrite`,
+`netWrite2`, `netClose`, `netLocalPort` and the poll loop take a slot
+handle; `netSetOption` answers `-95`, and calls that need a descriptor,
+`sendFd` among them, answer `-9`.
+The first listener that sets the flag decides for the process: where the
+kernel refuses rings it serves descriptors, and `netRingState` answers the
+errno. Off Linux the flag is accepted and does nothing.
+
 ```ts
 function tcpListenFlags(
   host: string,
@@ -1156,8 +1192,8 @@ The length of the accept queue.
 
 <scalar-field name="flags" type="i32" required>
 
-The sum of the flags: `3` is both, `5` and `7` steer, and `0`
-  is `tcpListen` exactly.
+The sum of the flags: `3` is both, `5` and `7` steer, `8`
+  accepts into rings, and `0` is `tcpListen` exactly.
 
 </scalar-field>
 
@@ -1165,7 +1201,8 @@ The sum of the flags: `3` is both, `5` and `7` steer, and `0`
 
 The listener's descriptor or the failure: `-22` for any other
   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
-  `-95` for flag 4 off Linux.
+  `-95` for flag 4 off Linux; `-23` when every ring a process may hold is
+  taken.
 
 </scalar-field>
 
@@ -1528,6 +1565,14 @@ The array the two descriptors are written into, as `fds[0]`
 ## Constants
 
 <scalar-grid cols="2">
+
+<scalar-card title="NET_​LISTEN_​RING" icon="phosphor/regular/hash">
+
+`NET_LISTEN_RING: i32`
+
+`tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors.
+
+</scalar-card>
 
 <scalar-card title="NET_​SO_​KEEPALIVE" icon="phosphor/regular/hash">
 

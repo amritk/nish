@@ -2204,9 +2204,9 @@ declare const NET_UNIX_SEQPACKET: i32;
 /**
  * `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors (WP63 S2, Linux). A
  * connection accepted from such a listener is a slot handle, a number at or above 2^20 that
- * `netRead`, `netWrite`, `netClose`, `netSetOption`, `netLocalPort` and `pollWait` take as they
- * take a descriptor, and that no other call takes (each answers -9), so a program can hold more
- * connections than its descriptor limit. Where the kernel refuses rings the listener serves
+ * `netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort` and the poll loop take as they
+ * take a descriptor; `netSetOption` answers -95 and every other call -9. A program can so hold
+ * more connections than its descriptor limit. Where the kernel refuses rings the listener serves
  * descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
  */
 declare const NET_LISTEN_RING: i32;
@@ -3139,18 +3139,19 @@ declare module "nish:net" {
    * the index of the CPU that received it, in the order the group's listeners
    * were bound; a CPU past the group's size falls back to the hash.
    *
-   * @param host A numeric host, as for `tcpListen`.
-   * @param port The port.
-   * @param backlog The length of the accept queue.
    * Flag 8, `NET_LISTEN_RING`, accepts into io_uring slots on Linux: each
    * connection is a slot handle at or above 2^20 rather than a descriptor, so
    * a listener holds connections past `RLIMIT_NOFILE`. `netRead`, `netWrite`,
    * `netWrite2`, `netClose`, `netLocalPort` and the poll loop take a slot
-   * handle; calls that need a descriptor, `sendFd` among them, answer `-9`.
+   * handle; `netSetOption` answers `-95`, and calls that need a descriptor,
+   * `sendFd` among them, answer `-9`.
    * The first listener that sets the flag decides for the process: where the
    * kernel refuses rings it serves descriptors, and `netRingState` answers the
    * errno. Off Linux the flag is accepted and does nothing.
    *
+   * @param host A numeric host, as for `tcpListen`.
+   * @param port The port.
+   * @param backlog The length of the accept queue.
    * @param flags The sum of the flags: `3` is both, `5` and `7` steer, `8`
    *   accepts into rings, and `0` is `tcpListen` exactly.
    * @returns The listener's descriptor or the failure: `-22` for any other

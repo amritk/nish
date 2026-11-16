@@ -198,6 +198,12 @@ Up to `len` bytes into `buf[off, off + len)`.
 
 </scalar-card>
 
+<scalar-card title="net​Ring​State" icon="phosphor/regular/function" href="#netringstate">
+
+Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 before any listener has asked, or the negative errno the kernel refused rings with (-1 when a seccomp filter refuses `io_uring_setup`, -38 for a kernel without it), in which case they serve descriptors.
+
+</scalar-card>
+
 <scalar-card title="net​Set​Option" icon="phosphor/regular/function" href="#netsetoption">
 
 Set one socket option from a whitelist: there is no raw level and option number, so a program cannot pass a level, a name and a length through to the kernel.
@@ -1790,6 +1796,24 @@ the most bytes read; a `len` of 0 answers 0 too, so ask for at least one byte.
 <scalar-field name="returns" type="i32">
 
 the count, 0 at end of stream, or -11 when nothing is waiting.
+
+</scalar-field>
+
+### netRingState
+
+Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 before any
+listener has asked, or the negative errno the kernel refused rings with (-1 when a seccomp filter
+refuses `io_uring_setup`, -38 for a kernel without it), in which case they serve descriptors.
+Decided once per process, on the first listener that sets the bit. -95 on Darwin. Refused at
+compile time on wasm32 and the WASI profile (NL2404). Capability: net.
+
+```ts
+function netRingState(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+1, 0 or the negative errno.
 
 </scalar-field>
 
@@ -3509,6 +3533,11 @@ other way round. Refused at compile time on wasm32 and the WASI profile
 (NL2404). Not callable in a `scope()` task or a parallel body. Capability:
 net.
 
+Flag 8 (`NET_LISTEN_RING` in `nish:net`) accepts into io_uring slots on
+Linux, so connections are not bound by the descriptor limit; where rings are
+refused the listener serves descriptors and `netRingState` says why. Elsewhere
+the flag is accepted and does nothing.
+
 ```ts
 function tcpListenFlags(
   host: string,
@@ -3538,7 +3567,7 @@ the kernel's queue of unaccepted connections.
 
 <scalar-field name="flags" type="i32" required>
 
-1, 2 and 4 as above.
+1, 2, 4 and 8 as above.
 
 </scalar-field>
 
@@ -3546,7 +3575,7 @@ the kernel's queue of unaccepted connections.
 
 the listener's descriptor, or a negative errno: -22 for any other bit (a negative
   `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
-  for a port in use.
+  for a port in use; -23 when every ring a process may hold is taken.
 
 </scalar-field>
 
@@ -5310,6 +5339,19 @@ type u8 = number
 ## Constants
 
 <scalar-grid cols="2">
+
+<scalar-card title="NET_​LISTEN_​RING" icon="phosphor/regular/hash">
+
+`NET_LISTEN_RING: i32`
+
+`tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors (WP63 S2, Linux). A
+connection accepted from such a listener is a slot handle, a number at or above 2^20 that
+`netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort` and the poll loop take as they
+take a descriptor; `netSetOption` answers -95 and every other call -9. A program can so hold
+more connections than its descriptor limit. Where the kernel refuses rings the listener serves
+descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
+
+</scalar-card>
 
 <scalar-card title="NET_​SO_​KEEPALIVE" icon="phosphor/regular/hash">
 

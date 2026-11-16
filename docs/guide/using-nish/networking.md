@@ -159,7 +159,9 @@ Past the hard limit is the operator's to set: `ulimit -Hn` in the shell that
 starts the server, `LimitNOFILE=` in a systemd unit, or the container's
 `nofile` limit (`docker run --ulimit nofile=…`). At the limit, a call that
 wants a descriptor answers -24 (`EMFILE`), and `nish/net/handler` waits for
-one to close rather than spin.
+one to close rather than spin. On Linux a listener can serve past the limit
+instead: see
+[More connections than descriptors](#more-connections-than-descriptors-net_listen_ring).
 
 A child the program starts with `spawn` inherits the raised soft limit, as
 it would under Node. A child that relies on the lower one should lower it
@@ -190,7 +192,9 @@ A socket `tcpConnect` opens holds `TCP_NODELAY` already, as libpq and Go set
 it on every client socket: a client sends a whole request and waits on the
 answer, so there is nothing for Nagle to save.
 
-Flag `0` is `tcpListen` exactly, `3` is both, and any other bit answers `-22`.
+Flag `0` is `tcpListen` exactly and `3` is both. Flag `4` steers connections
+for [`nish/net/prefork`](#a-server-on-every-core-nishnetprefork), and flag
+`8` is the next section's. Any other bit answers `-22`.
 A listener without flag `1` cannot open a port a listener with it holds, nor
 the other way round: both answer `-98`.
 
@@ -216,6 +220,64 @@ export const main = (): i32 => {
 A program can watch both listeners in one loop, as in the server above, and
 accept from whichever is ready. A server that wants both the shared port and
 its small answers sent at once opens each listener with `3`.
+
+<a id="more-connections-than-descriptors-net_listen_ring"></a>
+
+## More connections than descriptors: `NET_LISTEN_RING`
+
+On Linux a listener opened with the flag `NET_LISTEN_RING` (`8`) takes its
+connections into io_uring rings instead of the descriptor table. What
+`tcpAccept` answers is then a **slot handle**, a number from `1048576` up,
+and the descriptor limit no longer bounds how many a process holds: one
+listener serves thousands of connections under a `nofile` limit of 1024,
+with only a few dozen descriptors open.
+
+A slot handle goes wherever a server loop puts a connection. `netRead`,
+`netWrite`, `netWrite2`, `netClose`, `netLocalPort` and the poll calls take
+it as they take a descriptor, with the same answers: `-11` until `pollWait`
+reports the handle ready, then progress, and `0` at the end of the stream. A
+loop written for descriptors runs unchanged. What differs:
+
+- `netSetOption` answers `-95`, and every call that needs a real descriptor
+  (`sendFd`, `netMss`, `netShutdown`, `peerCredentials`) answers `-9`, as
+  does any call on a handle after its `netClose`.
+- `tcpAccept` writes the peer's address as zeros.
+- When every slot the process may hold is taken, `tcpAccept` answers `-23`.
+  Close a connection and the next waiting one takes its slot.
+- Each connection holds at most 256 KiB that the peer has not taken yet. A
+  `netWrite` past that copies what fits; a full connection answers `-11`
+  until the peer reads, as a full socket buffer does.
+
+The kernel may refuse rings: a seccomp filter (some container runtimes), a
+kernel without io_uring, or `io_uring_disabled` set. Then the listener
+serves descriptors as if the flag were not there, and `netRingState()` says
+what happened: `1` for rings, `0` before any listener asked, or the refusal
+as a negative errno (`-1` when a filter or `io_uring_disabled` forbids it,
+`-38` for a kernel without io_uring). The first listener with the flag decides for the whole process.
+On macOS the flag is accepted and does nothing.
+
+```ts nish:ok
+import { NET_LISTEN_RING, netClose, netRingState, tcpListenFlags } from "nish:net";
+
+export const main = (): i32 => {
+  const listener = tcpListenFlags("127.0.0.1", 0, 1024, 1 | NET_LISTEN_RING);
+  if (listener < 0) {
+    return 1;
+  }
+  const state = netRingState();
+  if (state === 1) {
+    console.log("connections go into rings");
+  } else {
+    console.log(`descriptors, because rings answered ${state}`);
+  }
+  netClose(listener);
+  return 0;
+};
+```
+
+Use the flag when a server needs more connections than its limit allows and
+nothing it does with a connection needs a descriptor. A server that hands
+connections to another process with `sendFd` keeps descriptors.
 
 ## Socket options: `netSetOption`
 

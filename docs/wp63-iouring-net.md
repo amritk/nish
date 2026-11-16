@@ -348,17 +348,18 @@ A listener opts in with one new `tcpListenFlags` bit:
 ```typescript
 import { tcpListenFlags, tcpAccept, NET_LISTEN_RING } from "nish:net"
 
-// Bit 4: accept connections into io_uring slots where the kernel allows it.
+// Bit 8: accept connections into io_uring slots where the kernel allows it.
 const listener: i32 = tcpListenFlags("0.0.0.0", 8080, 4096, 1 | NET_LISTEN_RING)
 const conn: i32 = tcpAccept(listener, peer) // a slot handle, or a descriptor on fallback
 ```
 
 The bit is opt-in because a slot handle is not a descriptor (`sendFd`, FFI),
 and because a program that never needs more than `RLIMIT_NOFILE`
-connections gains nothing measurable from it (#1543). Today
-`(uint32_t)flags > 3` answers -22 (`runtime/runtime-net.c:347`). Bit 4 is the
-next free bit, so a program built for the new runtime and run on an old one
-fails closed with -22.
+connections gains nothing measurable from it (#1543). Bits 1, 2 and 4 were
+taken (`SO_REUSEPORT`, `TCP_NODELAY`, steering), so the ring bit is 8, and
+`(uint32_t)flags > 15` answers -22 (`nish_tcp_listen_flags` in
+`runtime/runtime-net.c`). A runtime from before S2 refuses 8, so a program
+built for the new runtime and run on an old one fails closed with -22.
 
 `netRead`, `netWrite`, `netClose`, `netSetOption` and `netLocalPort` take
 either kind. A slot handle keeps the readiness contract every `nish:net`
@@ -375,6 +376,12 @@ caller is written against:
   backpressure, as a full socket buffer is today.
 - **`netClose(conn)`** queues `IORING_OP_CLOSE` on the slot
   (`file_index = slot + 1`) and frees the handle.
+
+*As built in S2:* `netWrite2` takes either kind too, and `netSetOption`
+answers -95 for a slot handle: the socket is the ring's fixed file, and no
+`setsockopt` reaches it from the caller. The send area is 256 KiB a slot
+(`NR_AREA`), and a slot's received bytes queue to the same bound before its
+recv is cancelled until `netRead` drains half of them (NURING-9).
 
 ### 5.2 `pollCreate`
 
@@ -659,7 +666,7 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
 - **D1: opt-in or default.** This note makes the ring bit opt-in (§5.1). If
   S4 shows the ring path no dearer at low C, the bit could become the default
   for listeners on Linux, with descriptors as the fallback. The cost is the
-  `sendFd` and FFI difference.
+  `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The
   rings must exist before the filter loads, so their number is fixed at
   start-up, and the runtime must know before `main` that the program uses
@@ -672,4 +679,4 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   keeps the single-threaded `nish:net` model WP42 §1 fixed. The top entry
   runs a ring per thread. Rings per thread would need `nish:net` inside
   `scope()` tasks, which WP42 refuses on purpose. That decision belongs to
-  another note.
+  another note. *Decided in S2: one thread with N rings.*
