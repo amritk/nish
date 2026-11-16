@@ -146,7 +146,6 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
 int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
 int32_t nish_uring_full(const struct nish_uring_set *s);
 int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
-int32_t nish_uring_slots(const struct nish_uring_set *s);
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 void nish_uring_destroy(struct nish_uring_set *s);
 
@@ -1208,9 +1207,6 @@ int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, in
   return 0;
 }
 
-/* The file-table slots each ring holds. */
-int32_t nish_uring_slots(const struct nish_uring_set *s) { return (int32_t)s->slots; }
-
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) { *st = s->stats; }
 
 /* Close every ring, which ends whatever the kernel still held, and free the
@@ -1282,10 +1278,6 @@ int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, in
   (void)slot;
   (void)on;
   return -38;
-}
-int32_t nish_uring_slots(const struct nish_uring_set *s) {
-  (void)s;
-  return 0;
 }
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) {
   (void)s;

@@ -2623,8 +2623,9 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
   other call that takes a descriptor (`netShutdown`, `sendFd`, `netMss`,
   `peerCredentials`, FFI) answers `-9`, and so does every call on a handle
   after its `netClose`.
-- `tcpAccept` answers `-23` when every slot the process may hold is taken; a
-  slot freed by `netClose` takes a waiting connection again.
+- `tcpAccept` answers `-23` when every slot its listener may hold is taken:
+  up to 64 rings, each of as many slots as the soft descriptor limit, at most
+  16,384. A slot freed by `netClose` takes a waiting connection again.
 - A ring listener whose accept fails with any errno but `-11`, `-4`, `-103`
   or `-71` stops accepting: `tcpAccept` answers that errno from then on,
   where a descriptor answers it once. Close the listener and listen again.

@@ -766,13 +766,13 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  *
  * Measured **6,299 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
  * `nish_uring_sleep_ms`, the bound on every sleep on a set (NURING-8, a wake 7.0
- * loses); 6,045 before NURING-8. **6,856 bytes** on 2026-11-16 once S2 called it
+ * loses); 6,045 before NURING-8. **6,852 bytes** on 2026-11-16 once S2 called it
  * from `nish:net` (6,400 to 6,912): `nish_uring_hold`, which cancels a slot's receive
  * and arms it again so a peer the program does not read cannot grow its queue
  * (NURING-9), `nish_uring_queued`, the unsent bytes that bound a send area (NURING-2),
- * `nish_uring_full`, the full-set check behind tcpAccept's -23 (NURING-6), and
- * `nish_uring_slots`. The budget is the 256-byte boundary
- * above it. A unit of its own beside runtime-net.c, so that a build whose probe fails
+ * and `nish_uring_full`, the full-set check behind tcpAccept's -23 (NURING-6). The
+ * budget is the 256-byte boundary above it. A unit of its own beside runtime-net.c,
+ * so that a build whose probe fails
  * runs the epoll path alone.
  */
 const RUNTIME_URING_TEXT_BUDGET = 6912

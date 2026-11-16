@@ -248,8 +248,10 @@ loop written for descriptors runs unchanged. What differs:
   `netWrite` answers the errno (`-104` for a reset), and `netRead` answers it
   on every read once the queued bytes are read, where a descriptor answers it
   once and then `0`.
-- When every slot the process may hold is taken, `tcpAccept` answers `-23`.
-  Close a connection and the next waiting one takes its slot.
+- When every slot the listener may hold is taken, `tcpAccept` answers `-23`.
+  Each ring listener holds up to 64 rings of as many slots as the descriptor
+  limit, at most 16,384 a ring. Close a connection and the next waiting one
+  takes its slot.
 - If the listener's accept fails with any error but `-11`, `-4`, `-103` or
   `-71`, the listener stops accepting and `tcpAccept` answers that error from
   then on. Close the listener and listen again.
