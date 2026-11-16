@@ -757,12 +757,13 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * the completion drain with its DEFER_TASKRUN re-entry and overflow catch-up, the
  * send queue with its short-send requeue, and the slot close with its generation.
  *
- * Measured **6,045 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after the
- * review round dropped two unused fields; 6,138 before. The budget is the 256-byte
- * boundary above the first measurement, kept. A unit of its own beside runtime-net.c, so
- * that the epoll path links none of it: nothing in `nish:net` calls it until S2.
+ * Measured **6,259 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
+ * `nish_uring_pending` and the wait's look at flagged rings before it sleeps
+ * (NURING-8, a wake 7.0 missed); 6,045 before. The budget is the 256-byte boundary
+ * above it. A unit of its own beside runtime-net.c, so that the epoll path links none
+ * of it: nothing in `nish:net` calls it until S2.
  */
-const RUNTIME_URING_TEXT_BUDGET = 6144
+const RUNTIME_URING_TEXT_BUDGET = 6400
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle

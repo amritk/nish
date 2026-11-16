@@ -35,7 +35,8 @@
  *    accepting job back to ring 0, which that wait had already serviced; the
  *    wait still hands ring 0's new accepts to the kernel before it returns,
  *    no ring holds a submission after any wait, and the next client is
- *    accepted while the caller sleeps on `nish_uring_fd`.
+ *    accepted while the caller sleeps on `nish_uring_fd`, asking
+ *    `nish_uring_pending` before each sleep as its contract says.
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer
@@ -617,8 +618,8 @@ static int move_wait(struct nish_uring_set *s, int *ring, int *slot) {
 static void move_dump(struct nish_uring_set *s, int client) {
   struct utsname u;
   if (uname(&u) != 0) strcpy(u.release, "?");
-  fprintf(stderr, "uring-test: kernel %s, client %d of 5, acceptor %d, accept_stopped %d, rings %d of %d\n", u.release,
-          client + 1, s->acceptor, s->accept_stopped, s->nrings, s->rings_max);
+  fprintf(stderr, "uring-test: kernel %s, client %d of 5, acceptor %d, accept_stopped %d, rings %d of %d, pending %d\n",
+          u.release, client + 1, s->acceptor, s->accept_stopped, s->nrings, s->rings_max, nish_uring_pending(s));
   for (int ri = 0; ri < s->nrings; ri++) {
     struct ur_ring *r = s->rings[ri];
     struct pollfd q = {r->efd, POLLIN, 0};
@@ -655,8 +656,12 @@ static void move_dump(struct nish_uring_set *s, int client) {
 }
 
 /* Connect one client and sleep on the set's descriptor, as a caller's own
- * loop would, until the set accepts it. The set is idle first, so the wait
- * that takes the accept runs it before any eventfd is read. */
+ * loop would, until the set accepts it. It asks `nish_uring_pending` before
+ * each sleep and waits with 0 instead while that answers 1, because 7.0 can
+ * hold the accept as task work without signalling the eventfd (NURING-8).
+ * The set is idle first, so the wait that takes the accept runs it before
+ * any eventfd is read. A set that stays pending without giving the accept
+ * fails as a sleep that timed out would. */
 static int move_accept(struct nish_uring_set *s, int client, const struct sockaddr_in *a, int *fd, int *ring,
                        int *slot) {
   int r = -1, sl = -1;
@@ -664,14 +669,15 @@ static int move_accept(struct nish_uring_set *s, int client, const struct sockad
     struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
     int n = move_wait(s, &r, &sl);
     if (n < 0) return 1;
-    if (n == 0 && poll(&q, 1, 0) == 0) break;
+    if (n == 0 && poll(&q, 1, 0) == 0 && !nish_uring_pending(s)) break;
   }
   if (r >= 0) return fail("an accept arrived with no client connecting");
   *fd = socket(AF_INET, SOCK_STREAM, 0);
   if (*fd < 0 || connect(*fd, (const struct sockaddr *)a, sizeof *a) != 0) return fail("client connect");
-  while (r < 0) {
+  for (int spins = 0; r < 0; spins++) {
     struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
-    if (poll(&q, 1, 5000) != 1) {
+    int busy = nish_uring_pending(s);
+    if (spins > 100000 || (!busy && poll(&q, 1, 5000) != 1)) {
       move_dump(s, client);
       return fail("a client waited in the backlog with no accept in the kernel");
     }

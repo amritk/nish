@@ -39,10 +39,14 @@
  * SUBMIT_ALL, with COOP_TASKRUN added where a kernel refuses TASKRUN_FLAG
  * without it; a sparse file table; a provided-buffer ring that every
  * connection's multishot recv draws from; and one eventfd, which the set's
- * one epoll descriptor watches. A DEFER_TASKRUN ring signals its eventfd
- * when work is queued for it, and the work runs only when this thread
- * enters the ring, so a set belongs to the thread that opened it (the
- * kernel refuses another thread's submissions under SINGLE_ISSUER).
+ * one epoll descriptor watches. A DEFER_TASKRUN ring's work runs only when
+ * this thread enters the ring, so a set belongs to the thread that opened it
+ * (the kernel refuses another thread's submissions under SINGLE_ISSUER). The
+ * kernel signals the eventfd when it queues work on an empty list, but that
+ * signal can be missed (NURING-8: 7.0 left an accept queued, IORING_SQ_TASKRUN
+ * up and the eventfd unread), so nothing sleeps while a ring's flags say the
+ * kernel holds work: a wait services such a ring instead, and a caller that
+ * sleeps on `nish_uring_fd` asks `nish_uring_pending` first.
  *
  * **A connection is a (ring, slot) pair.** Its recv is multishot; a recv the
  * kernel ends with -ENOBUFS (every buffer lent out) is parked and re-armed on
@@ -133,6 +137,7 @@ struct nish_uring_set;
 int32_t nish_uring_probe(void);
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
 int32_t nish_uring_fd(const struct nish_uring_set *s);
+int32_t nish_uring_pending(const struct nish_uring_set *s);
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
@@ -936,8 +941,34 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
  * left queued unless the kernel refused the submission (-EBUSY while
  * completions overflow, -EAGAIN or -ENOMEM for memory): then the ring has
  * completions to reap or the refusal is transient, and the next wait
- * submits them again. */
+ * submits them again.
+ *
+ * Readable is not the whole answer: the kernel can hold a ring's work with
+ * IORING_SQ_TASKRUN up and its eventfd never signalled (NURING-8). A caller
+ * that sleeps on this descriptor calls `nish_uring_pending` right before it
+ * sleeps, and calls wait (with a timeout of 0) instead while that answers 1. */
 int32_t nish_uring_fd(const struct nish_uring_set *s) { return s->ep; }
+
+/* Whether the kernel holds work for one of the ring's completions to post:
+ * deferred task work (IORING_SQ_TASKRUN) or completions the CQ had no room
+ * for (IORING_SQ_CQ_OVERFLOW). Its eventfd may say nothing of either. */
+static int ur_flagged(const struct ur_ring *r) {
+  return (__atomic_load_n(r->sq_flags, __ATOMIC_ACQUIRE) & (UR_SQ_TASKRUN | UR_SQ_CQ_OVERFLOW)) != 0;
+}
+
+/* Answers 1 when a wait has work it would do now without sleeping: a ring
+ * the kernel flagged, completions not yet reaped, submissions still queued,
+ * or buffers, parked recvs or stalled sends the last wait left. Answers 0
+ * when the set may sleep on `nish_uring_fd`. */
+int32_t nish_uring_pending(const struct nish_uring_set *s) {
+  if (s->nlent || s->stalled_sends) return 1;
+  for (int ri = 0; ri < s->nrings; ri++) {
+    const struct ur_ring *r = s->rings[ri];
+    if (r->to_submit || r->nparked || ur_flagged(r) || *r->cq_head != __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE))
+      return 1;
+  }
+  return 0;
+}
 
 /* What the last wait left to do: give back the buffers it lent, re-arm the
  * recvs it parked, and submit the sends that found the SQ full. */
@@ -987,6 +1018,10 @@ int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nis
   for (int ri = 0; ri < s->nrings && n < cap; ri++) n += ur_service(s, ri, ev + n, cap - n);
   ur_submit_queued(s);
   if (n > 0) return n;
+  /* A ring flagged now holds work its eventfd may never signal (NURING-8),
+   * and a recv parked by this wait's reap waits for the next: look, do not
+   * sleep, and service the flagged rings below. */
+  if (nish_uring_pending(s)) timeout_ms = 0;
   struct epoll_event ready[64];
   int k = epoll_wait(s->ep, ready, 64, timeout_ms);
   if (k < 0) return errno == EINTR ? 0 : -errno;
@@ -999,6 +1034,8 @@ int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nis
     (void)ur_enter(r, 0, 0, UR_ENTER_GETEVENTS);
     n += ur_service(s, (int)ri, ev + n, cap - n);
   }
+  for (int ri = 0; ri < s->nrings && n < cap; ri++)
+    if (ur_flagged(s->rings[ri])) n += ur_service(s, ri, ev + n, cap - n);
   ur_submit_queued(s);
   return n;
 }
@@ -1101,6 +1138,10 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
 int32_t nish_uring_fd(const struct nish_uring_set *s) {
   (void)s;
   return -38;
+}
+int32_t nish_uring_pending(const struct nish_uring_set *s) {
+  (void)s;
+  return 0;
 }
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap) {
   (void)s;

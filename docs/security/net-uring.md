@@ -24,10 +24,13 @@ checked before use and answers `-EBADF`. A double free a peer could cause by
 resetting a connection during a send (NURING-1) was found in review and
 fixed before landing, and so was a wait that could return with a ring's new
 accepts still queued in user space, so a caller sleeping on the set's
-descriptor left new peers in the backlog (NURING-7). Two findings are open, both for S2's surface: queued
-sends to a peer that never reads are not bounded (NURING-2), and a set that
-cannot grow stops accepting without telling its caller (NURING-6). Seven
-findings (NURING-1 to NURING-7): two fixed, two open, three decided. The
+descriptor left new peers in the backlog (NURING-7), and a sleep on that
+descriptor while the kernel held a ring's accept as task work it never
+signalled (NURING-8, on CI's 7.0 kernel). Two findings are open, both for
+S2's surface: queued sends to a peer that never reads are not bounded
+(NURING-2), and a set that cannot grow stops accepting without telling its
+caller (NURING-6). Eight findings (NURING-1 to NURING-8): three fixed, two
+open, three decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -72,6 +75,7 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-5 | Low | `runtime/runtime-uring.c` (`ur_complete`) | A send the kernel answers with 0 bytes, for a record with bytes left, is taken as complete, and the bytes left are not sent. | **Decided.** A stream socket's send does not answer 0 for a non-empty buffer; re-arming on 0 would spin on a kernel that did. The connection's next send or recv reports any real failure. |
 | NURING-6 | Low | `runtime/runtime-uring.c` (`ur_top_up`) | A set whose every ring is full and that cannot open another (`ur_add_ring` answers `-ENOSPC` at `rings_max`, or its setup fails for want of memory or descriptors) stops queuing accepts and says nothing: no event tells the caller, so new peers wait in the listener's backlog until the kernel drops them there. No connection already accepted is lost. | **Open**, for S2: the surface must report a full set to the program as `-ENFILE` (-23), the answer a full table gives, without dropping or closing any accepted connection, and take accepting up again when a slot closes. Tracked in #1648. |
 | NURING-7 | Medium | `runtime/runtime-uring.c` (`nish_uring_wait`, `ur_top_up`) | A wait serviced each ring and submitted that ring's own queue, but an accept or a close on one ring can move the accepting job to a ring the wait already passed (or will not reach: `cap` full, or not ready). That ring's new accepts sat in user space while the caller slept on `nish_uring_fd`, which nothing would signal: new peers waited in the backlog until some other event woke the caller. A peer cannot cause it alone, but any server whose set grows past one ring could stop accepting. | **Fixed before landing**: `nish_uring_wait` hands every ring's queued submissions to the kernel before it returns or sleeps (`ur_submit_queued`), so a wait returns with nothing queued unless the kernel refuses the submission (-EBUSY while completions overflow, which leaves completions for the eventfd to signal, or a transient -EAGAIN or -ENOMEM); the next wait submits it again. Before: "uring: runtime-uring.c move" failed on every run (5 of 5 on 6.18.44) with "a wait returned 1 events with 1 submissions still queued on ring 0". After: "uring: runtime-uring.c move: an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns". |
+| NURING-8 | Medium | `runtime/runtime-uring.c` (`nish_uring_wait`, `nish_uring_fd`) | The layer and its callers slept on the set's epoll descriptor and trusted each ring's eventfd to say the kernel had queued work. On CI's kernel (7.0.0-1019-azure) a client's accept completed in the kernel and waited as deferred task work, with IORING_SQ_TASKRUN up, while the eventfd was never signalled: the caller slept with a peer accepted but not reaped. The cause in the kernel is not proven: 7.0 signals the eventfd only when task work is added to an empty list, and an eventfd signal deferred under `in_eventfd` sets `IO_EVENTFD_OP_SIGNAL_BIT`, which 6.8 cleared and 6.18 and 7.0 do not; neither reproduces on 6.18.44 here. A peer cannot cause it alone, but any server could stop accepting until another event woke it. | **Fixed before landing**: nothing sleeps while a ring is flagged. `nish_uring_wait` asks `nish_uring_pending` before `epoll_wait` and looks without sleeping while it answers 1 (a ring flagged IORING_SQ_TASKRUN or IORING_SQ_CQ_OVERFLOW, completions not reaped, submissions or parked recvs or lent buffers left), then services every flagged ring, ready or not. `nish_uring_fd`'s contract says a caller that sleeps on the descriptor itself asks `nish_uring_pending` first and waits with 0 while it answers 1. S2's `pollWait` over rings must keep the rule: it may not sleep on a ring set's descriptor, alone or beside other sources, without that question. Before, on 7.0.0-1019-azure (CI shard 5, job 133074815366): "uring-test: ring 0: live 1 accepting 1 to_submit 0 sq_flags 0x4 sq head 3 tail 3 cq head 1 tail 1 efd readable 0", fdinfo showing the accept (op 13) in the poll list and no overflow, and "a wait of 0 after the timeout found kind 1 ring 0 slot 1 res 0": the accept was there for the first wait that looked. After: the "move" check, which asks `nish_uring_pending` before each sleep as the contract says. A mutant that drops the look before `epoll_wait` passes on 6.18.44, where the signal is not missed; CI's 7.0 runners are the evidence. |
 
 ## Properties verified
 
@@ -117,7 +121,10 @@ where the probe says it is refused.
   the ring's eventfd is level-triggered and still readable after the wait
   that left the accept queued, so the next wait submits it (a mutant without
   the queued check passed 3 of 3). The invariant after every wait is the
-  check.
+  check. Before each sleep the server asks `nish_uring_pending`, as the
+  descriptor's contract says (NURING-8), and a sleep of 5 seconds with
+  nothing pending, or a set that stays pending without giving the accept,
+  prints the kernel, each ring's flags, heads and fdinfo, and fails.
 - **Buffers run out.** "uring: runtime-uring.c nobufs: a recv that runs out
   of provided buffers is re-armed, not closed": a peer that fills every
   buffer delays the others' receives and closes nothing.
