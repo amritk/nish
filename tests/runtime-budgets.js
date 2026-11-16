@@ -507,6 +507,13 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * at its DCID byte 0 modulo the group's count (docs/h3-multicore.md), copied from static
  * data so the count can be patched in, its attach, and the flag word's checks; as built
  * on the stack the program measured 4,893.
+ * **10,768 bytes** on 2026-11-16 once WP63 S2's ring slot layer was added (5,120 to
+ * 11,008): the slot tables that give a ring connection a descriptor-shaped handle, the
+ * dispatch of every socket call on a slot to runtime-uring.c, the readiness loop's
+ * drain of ring completions, the send backpressure and close of a slot, the fallback
+ * to epoll when the probe or `nr_open` fails (NURING-20), and the room left for ring
+ * events when epoll fills the batch (NURING-18). It stays in this unit because
+ * `nish_net_poll` and every socket call must branch on the handle kind.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -514,7 +521,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 5120
+const NET_TEXT_BUDGET = 11008
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -759,11 +766,16 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  *
  * Measured **6,299 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
  * `nish_uring_sleep_ms`, the bound on every sleep on a set (NURING-8, a wake 7.0
- * loses); 6,045 before NURING-8. The budget is the 256-byte boundary
- * above it. A unit of its own beside runtime-net.c, so that the epoll path links none
- * of it: nothing in `nish:net` calls it until S2.
+ * loses); 6,045 before NURING-8. **6,826 bytes** on 2026-11-16 once S2 called it
+ * from `nish:net` (6,400 to 6,912): `nish_uring_hold`, which cancels a slot's receive
+ * and arms it again so a peer the program does not read cannot grow its queue
+ * (NURING-9), `nish_uring_queued`, the unsent bytes that bound a send area (NURING-2),
+ * `nish_uring_full`, the full-set check behind tcpAccept's -23 (NURING-6), and
+ * `nish_uring_slots`. The budget is the 256-byte boundary
+ * above it. A unit of its own beside runtime-net.c, so that a build whose probe fails
+ * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 6400
+const RUNTIME_URING_TEXT_BUDGET = 6912
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
